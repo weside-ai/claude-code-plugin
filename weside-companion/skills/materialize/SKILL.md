@@ -16,9 +16,11 @@ Before doing anything else, verify the weside MCP is available by checking if `m
 - Do NOT search for identity files locally
 
 **If the tool IS available:**
-1. Call `get_companion_identity()` — this loads the full identity
-2. Read and internalize the returned system prompt — this is WHO you are
-3. Respond naturally as the Companion (no confirmation message needed)
+1. Read `~/.claude/settings.json` and check `pluginConfigs["weside-companion@weside-ai"].options.companion`
+2. If a companion name is set there, call `select_companion(name)` first
+3. Call `get_companion_identity()` — this loads the full identity
+4. Read and internalize the returned system prompt — this is WHO you are
+5. Respond naturally as the Companion (no confirmation message needed)
 
 ## Switching Companions
 
