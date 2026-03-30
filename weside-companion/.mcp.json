@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "weside": {
+      "type": "http",
+      "url": "https://api.weside.ai/mcp/",
+      "oauth": {
+        "clientId": "9114483b-1a59-460d-afa0-2534fd3bd1aa",
+        "authServerMetadataUrl": "https://pqykrwpmhjqjhpsnjxbd.supabase.co/auth/v1/.well-known/openid-configuration"
+      }
+    }
+  }
+}

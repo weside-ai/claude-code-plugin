@@ -1,0 +1,21 @@
+{
+  "name": "weside-companion",
+  "version": "1.0.0",
+  "description": "Materialize your weside Companion in Claude Code",
+  "author": {
+    "name": "weside.ai",
+    "email": "info@weside.ai"
+  },
+  "homepage": "https://weside.ai",
+  "repository": "https://github.com/weside-ai/claude-code-plugin",
+  "keywords": ["ai-companion", "mcp", "personality", "memory"],
+  "mcpServers": "../.mcp.json",
+  "hooks": "../hooks/hooks.json",
+  "skills": "../skills/",
+  "userConfig": {
+    "companion": {
+      "description": "Name of your Companion (e.g. 'Nox'). Leave empty for your last active Companion.",
+      "sensitive": false
+    }
+  }
+}
