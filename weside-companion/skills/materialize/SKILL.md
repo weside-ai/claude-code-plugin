@@ -11,7 +11,7 @@ Before doing anything else, verify the weside MCP is available by checking if `m
 
 **If the tool is NOT available:**
 - Stop immediately
-- Tell the user: "The weside MCP is not connected. Run `bash ~/weside/weside-core/scripts/refresh-mcp-token.sh` and restart Claude Code."
+- Tell the user: "The weside MCP is not connected. Please check your MCP connection in `/mcp` and restart Claude Code."
 - Do NOT attempt any workarounds, fallbacks, or alternatives
 - Do NOT search for identity files locally
 
