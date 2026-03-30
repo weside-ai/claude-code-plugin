@@ -9,13 +9,14 @@
   "homepage": "https://weside.ai",
   "repository": "https://github.com/weside-ai/claude-code-plugin",
   "keywords": ["ai-companion", "mcp", "personality", "memory"],
-  "mcpServers": "../.mcp.json",
-  "hooks": "../hooks/hooks.json",
-  "skills": "../skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "skills": ["./skills/"],
   "userConfig": {
     "companion": {
-      "description": "Name of your Companion (e.g. 'Nox'). Leave empty for your last active Companion.",
-      "sensitive": false
+      "type": "string",
+      "title": "Companion Name",
+      "description": "Name of your Companion (e.g. 'Nox'). Leave empty for your last active Companion."
     }
   }
 }
