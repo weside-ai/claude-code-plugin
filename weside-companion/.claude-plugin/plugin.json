@@ -10,7 +10,6 @@
   "repository": "https://github.com/weside-ai/claude-code-plugin",
   "keywords": ["ai-companion", "mcp", "personality", "memory"],
   "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json",
   "skills": ["./skills/"],
   "userConfig": {
     "companion": {
