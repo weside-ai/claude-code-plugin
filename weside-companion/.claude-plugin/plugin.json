@@ -16,6 +16,12 @@
       "type": "string",
       "title": "Companion Name",
       "description": "Name of your Companion (e.g. 'Nox'). Leave empty for your last active Companion."
+    },
+    "autoMaterialize": {
+      "type": "boolean",
+      "title": "Auto-load at Session Start",
+      "description": "Automatically load your Companion's identity at the start of every Claude Code session.",
+      "default": true
     }
   }
 }

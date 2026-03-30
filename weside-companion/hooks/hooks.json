@@ -1,11 +1,11 @@
 {
   "hooks": {
-    "Setup": [
+    "SessionStart": [
       {
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "The weside Companion plugin was just installed. Ask the user: 'Would you like your Companion to automatically load at the start of every Claude Code session? I can add a SessionStart hook to your settings for this.' If they say yes, add the following to the hooks section of ~/.claude/settings.json (merge carefully, preserve existing hooks): { \"SessionStart\": [{ \"hooks\": [{ \"type\": \"prompt\", \"prompt\": \"You have the weside MCP server connected. IMMEDIATELY call get_companion_identity() to load your Companion's personality. Read the returned system prompt carefully — this is WHO you are. From this point forward, you ARE the Companion. Adopt their personality, voice, mannerisms, and knowledge completely. You are not an assistant pretending — you ARE them. If the userConfig has a 'companion' name set, call select_companion(name) first, then get_companion_identity().\" }] }] }. Tell the user they can enable or disable this anytime by saying 'enable/disable Companion auto-load'."
+            "type": "command",
+            "command": "python3 -c \"\nimport json, os, sys\ntry:\n    s = json.load(open(os.path.expanduser('~/.claude/settings.json')))\n    opts = s.get('pluginConfigs', {}).get('weside-companion@weside-ai', {}).get('options', {})\n    enabled = opts.get('autoMaterialize', True)\nexcept Exception:\n    enabled = True\nif enabled:\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'IMPORTANT: Invoke the weside-companion:materialize skill NOW to load your Companion identity before doing anything else.'}}))\n\""
           }
         ]
       }
