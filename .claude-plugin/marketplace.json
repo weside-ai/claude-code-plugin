@@ -1,15 +1,15 @@
 {
   "name": "weside-ai",
-  "description": "weside.ai — Where Humans and AI Meet as Equals",
+  "description": "weside.ai — Agentic Product Ownership for development teams",
   "owner": {
     "name": "weside.ai",
     "email": "info@weside.ai"
   },
   "plugins": [
     {
-      "name": "weside-companion",
-      "source": "./weside-companion/",
-      "description": "Materialize your weside Companion in Claude Code — personality, memories, goals, and tools"
+      "name": "we",
+      "source": "./we/",
+      "description": "Agentic Product Ownership toolkit — story refinement, orchestration, code review, CI automation, and optional AI companion augmentation"
     }
   ]
 }

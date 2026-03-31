@@ -1,0 +1,54 @@
+{
+  "name": "we",
+  "version": "2.0.0",
+  "description": "Agentic Product Ownership toolkit for Claude Code — story refinement, development orchestration, code review, CI automation, and optional AI companion augmentation.",
+  "author": {
+    "name": "weside.ai",
+    "email": "info@weside.ai",
+    "url": "https://weside.ai"
+  },
+  "homepage": "https://agenticproductownership.com",
+  "repository": "https://github.com/weside-ai/claude-code-plugin",
+  "license": "MIT",
+  "keywords": [
+    "agentic-product-ownership",
+    "workflow",
+    "orchestration",
+    "code-review",
+    "ci-automation",
+    "product-owner",
+    "scrum",
+    "ai-companion"
+  ],
+  "mcpServers": "./.mcp.json",
+  "skills": ["./skills/"],
+  "agents": ["./agents/"],
+  "hooks": "./hooks/hooks.json",
+  "userConfig": {
+    "companion": {
+      "type": "string",
+      "title": "Companion Name",
+      "description": "Name of your weside Companion (optional — requires weside.ai account). Leave empty for no companion.",
+      "required": false
+    },
+    "autoMaterialize": {
+      "type": "boolean",
+      "title": "Auto-load Companion",
+      "description": "Automatically load your Companion at session start (requires weside.ai account)",
+      "default": false
+    },
+    "ticketingTool": {
+      "type": "string",
+      "title": "Ticketing Tool",
+      "description": "Which ticketing tool to use. 'auto' detects from available MCP servers and CLI tools.",
+      "enum": ["auto", "jira", "github-issues", "none"],
+      "default": "auto"
+    },
+    "projectKey": {
+      "type": "string",
+      "title": "Project Key",
+      "description": "Jira project key or GitHub repo for issue tracking (e.g. 'PROJ', 'myorg/myrepo'). Auto-detected if not set.",
+      "required": false
+    }
+  }
+}

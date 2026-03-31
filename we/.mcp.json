@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "weside": {
+    "weside-mcp": {
       "type": "http",
       "url": "https://api.weside.ai/mcp/",
       "oauth": {

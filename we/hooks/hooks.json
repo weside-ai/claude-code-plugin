@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json, os, sys\ntry:\n    s = json.load(open(os.path.expanduser('~/.claude/settings.json')))\n    opts = s.get('pluginConfigs', {}).get('we@weside-ai', {}).get('options', {})\n    enabled = opts.get('autoMaterialize', False)\nexcept Exception:\n    enabled = False\nif enabled:\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'IMPORTANT: Invoke the we:materialize skill NOW to load your Companion identity before doing anything else.'}}))\n\""
+          }
+        ]
+      }
+    ]
+  }
+}
