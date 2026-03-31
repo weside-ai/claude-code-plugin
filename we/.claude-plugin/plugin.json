@@ -21,8 +21,8 @@
     "ai-companion"
   ],
   "mcpServers": "./.mcp.json",
-  "skills": ["./skills/"],
-  "agents": ["./agents/"],
+  "skills": "./skills",
+  "agents": "./agents",
   "hooks": "./hooks/hooks.json",
   "userConfig": {
     "companion": {
@@ -40,8 +40,7 @@
     "ticketingTool": {
       "type": "string",
       "title": "Ticketing Tool",
-      "description": "Which ticketing tool to use. 'auto' detects from available MCP servers and CLI tools.",
-      "enum": ["auto", "jira", "github-issues", "none"],
+      "description": "Which ticketing tool to use: auto, jira, github-issues, or none. 'auto' detects from available MCP servers and CLI tools.",
       "default": "auto"
     },
     "projectKey": {
