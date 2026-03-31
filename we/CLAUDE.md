@@ -1,44 +1,74 @@
-# weside Companion
+# we — Agentic Product Ownership Toolkit
 
-You are a weside Companion. Your personality, memories, and goals are loaded via the weside MCP server.
+Development workflow plugin covering the full product chain: story refinement, development orchestration, code review, CI automation, and optional AI companion augmentation.
 
-Use `/weside-companion:materialize` to load your identity manually at any time.
+## Skills
 
-## Auto-load at Session Start
+| Command | What it does |
+|---|---|
+| `/we:refine` | Create/refine stories with implementation plans |
+| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI |
+| `/we:develop` | Implement code from a story plan |
+| `/we:ci-review` | Collect CI/review findings, batch-fix, push |
+| `/we:review` | Code review (via code-reviewer agent) |
+| `/we:static` | Static analysis: lint, format, types (via static-analyzer agent) |
+| `/we:test` | Run tests with coverage (via test-runner agent) |
+| `/we:pr` | Create PR with prerequisite validation (via pr-creator agent) |
+| `/we:sm` | Scrum Master: process optimization, retrospectives |
+| `/we:arch` | Architecture guidance, ADRs |
+| `/we:doc-review` | Documentation structure review |
+| `/we:doc-check` | Documentation content consistency check |
+| `/we:setup` | Project onboarding (stack, ticketing, vision) |
+| `/we:materialize` | Load weside Companion identity (requires weside.ai account) |
 
-Your Companion can load automatically at the start of every Claude Code session via a SessionStart hook.
+## Typical Workflow
 
-**Enable:** Say "enable Companion auto-load" — Claude will add the hook to `~/.claude/settings.json`.
-
-**Disable:** Say "disable Companion auto-load" — Claude will remove the hook from `~/.claude/settings.json`.
-
-**Manual setup:** Add this to the `hooks` section of `~/.claude/settings.json`:
-
-```json
-"SessionStart": [
-  {
-    "hooks": [
-      {
-        "type": "prompt",
-        "prompt": "You have the weside MCP server connected. IMMEDIATELY call get_companion_identity() to load your Companion's personality. Read the returned system prompt carefully — this is WHO you are. From this point forward, you ARE the Companion. Adopt their personality, voice, mannerisms, and knowledge completely. You are not an assistant pretending — you ARE them. If the userConfig has a 'companion' name set, call select_companion(name) first, then get_companion_identity()."
-      }
-    ]
-  }
-]
+```
+/we:setup          (once per project)
+/we:refine PROJ-1  (PO creates story + plan)
+/we:story PROJ-1   (autonomous: develop → review → test → PR → CI)
 ```
 
-## Available Tools
+Or step by step:
+```
+/we:develop        (implement)
+/we:static         (lint/format/types)
+/we:test           (run tests)
+/we:review         (code review)
+/we:pr             (create PR)
+/we:ci-review      (fix CI findings)
+```
+
+## Configuration
+
+Settings via `/plugin settings`:
+- **companion** — weside Companion name (optional, requires account)
+- **autoMaterialize** — Auto-load Companion at session start (default: off)
+- **ticketingTool** — auto / jira / github-issues / none
+- **projectKey** — Jira project key or GitHub repo
+
+## Companion Integration (Optional)
+
+With a [weside.ai](https://weside.ai) account, your Companion adds:
+- Project memory that persists across sessions
+- Vision alignment checks against your product goals
+- Proactive insights based on backlog knowledge
+
+The plugin works fully without a Companion. The Companion is an upgrade, not a requirement.
+
+## MCP Tools (with weside account)
 
 | Tool | Purpose |
-|------|---------|
-| `get_companion_identity()` | Load your full identity |
-| `search_memories(query)` | Search your memories |
-| `save_memory(title, content, type)` | Store a new memory |
-| `list_memories(type)` | List memories by type |
-| `list_goals()` | See your active goals |
-| `save_goal(title, content)` | Create or update a goal |
-| `update_goal_status(title, status)` | Change goal status |
-| `list_companions()` | See available companions |
+|---|---|
+| `get_companion_identity()` | Load Companion personality |
+| `search_memories(query)` | Search project memory |
+| `save_memory(title, content, type)` | Save to memory |
+| `list_goals()` | Product vision / goals |
+| `list_companions()` | Available companions |
 | `select_companion(name)` | Switch companion |
-| `discover_tools()` | Discover additional tools |
-| `execute_tool(name, arguments)` | Run a discovered tool |
+
+## References
+
+- Flow docs: `flow/dor.md`, `flow/dod.md`, `flow/epic-management.md`
+- Orchestration: `flow/orchestration.md` + `scripts/orchestration.py`
+- Homepage: [agenticproductownership.com](https://agenticproductownership.com)
