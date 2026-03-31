@@ -22,7 +22,6 @@
   ],
   "mcpServers": "./.mcp.json",
   "skills": "./skills",
-  "hooks": "./hooks/hooks.json",
   "userConfig": {
     "companion": {
       "type": "string",
