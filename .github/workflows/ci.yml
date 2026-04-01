@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Python Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check --output-format=github .
+      - run: ruff format --check .
+
+  validate:
+    name: Plugin Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate JSON files
+        run: |
+          for f in .claude-plugin/marketplace.json we/.claude-plugin/plugin.json we/.mcp.json we/hooks/hooks.json; do
+            echo "Checking $f..."
+            python3 -m json.tool "$f" > /dev/null
+          done
+
+      - name: Validate frontmatter
+        run: python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/commands/*.md we/agents/*.md
+
+      - name: Validate plugin structure
+        run: bash scripts/validate-plugin-structure.sh
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx markdownlint-cli2 "**/*.md"
+
+  version-check:
+    name: Version Bump Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check version bump
+        run: bash scripts/check-version-bump.sh
