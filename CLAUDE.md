@@ -138,9 +138,23 @@ Skill(skill="we:{name}", args="$ARGUMENTS")
 Agents in `we/agents/{name}.md` run in the background.
 Use `/plugin-dev:agent-development` for agent frontmatter and structure.
 
+### Versioning (CRITICAL)
+
+**Every push to main MUST bump the version in `we/.claude-plugin/plugin.json`.**
+
+`/plugin update` compares versions — if the version hasn't changed, it won't pull new commits. This means changes are invisible to users until the version bumps.
+
+```
+Patch (2.1.0 → 2.1.1):  Bugfixes, typos, command fixes, doc updates
+Minor (2.1.0 → 2.2.0):  New skills, new agents, new commands, behavior changes
+Major (2.1.0 → 3.0.0):  Breaking changes (renamed skills, removed commands, new plugin.json schema)
+```
+
+**Workflow:** Make changes → bump version → commit all together → push.
+
 ### Testing Changes
 
-After changes, update the plugin cache:
+After pushing, update the plugin cache:
 ```bash
 # From any Claude Code session:
 /plugin update we@weside-ai
