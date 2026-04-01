@@ -4,7 +4,8 @@
       "type": "http",
       "url": "https://api.weside.ai/mcp/",
       "oauth": {
-        "clientId": "9114483b-1a59-460d-afa0-2534fd3bd1aa"
+        "clientId": "9114483b-1a59-460d-afa0-2534fd3bd1aa",
+        "callbackPort": 8080
       }
     }
   }
