@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Agentic Product Ownership toolkit for Claude Code — story refinement, development orchestration, code review, CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",

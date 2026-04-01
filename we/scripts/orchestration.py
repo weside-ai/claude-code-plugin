@@ -81,22 +81,16 @@ WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 # Development phases (during /story):
 #   - git_prepared through jira_transitioned
 STORY_PHASES = [
-    "refined",  # /refine done - PO refinement complete
-    "architected",  # /arch done - Technical notes complete
-    "git_prepared",  # Git branch created
-    "story_loaded",  # Story loaded from Jira, DoR checked
-    "implementation_complete",  # /develop done - Code + tests written
-    "ac_verified",  # Orchestrator AC verification gate passed (v6.0)
-    "simplified",  # /simplify done - Code reuse, quality & efficiency fixed
-    "review_passed",  # /review passed
-    "static_analysis_passed",  # /static-code-analysis passed (lint, format, types)
-    "test_passed",  # /test passed
-    "coderabbit_passed",  # coderabbit pre-push review (catches MAJOR findings before CI)
-    "docs_updated",  # /docs updated (optional)
-    "pr_created",  # PR created
-    "reviews_passed",  # Post-PR review-fix loop completed (v5.0)
-    "ci_passed",  # CI checks passed
-    "jira_transitioned",  # Ticket → IN REVIEW
+    "refined",  # /we:refine — Story + Plan created
+    "git_prepared",  # /we:develop — Branch created, story loaded
+    "implementation_complete",  # /we:develop — Code + tests committed
+    "ac_verified",  # /we:story — All ACs verified with evidence
+    "simplified",  # /we:story — Code simplified
+    "review_passed",  # /we:review — Code review passed
+    "static_analysis_passed",  # /we:static — Lint/format/types passed
+    "test_passed",  # /we:test — Tests + coverage passed
+    "pr_created",  # /we:pr — PR created
+    "ci_passed",  # /we:story — CI/Reviews green
 ]
 
 # Stale checkpoint threshold in hours
