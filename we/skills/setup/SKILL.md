@@ -33,10 +33,14 @@ Scan the project to detect:
 - `go.mod` → Go
 - Multiple → Monorepo
 
-**Ticketing Tool:**
-- Atlassian MCP available → Jira
+**Ticketing Tool (check in order):**
+- weside MCP JIRA tools available (`execute_tool` with `JIRA_*`) → Jira via Composio (preferred)
+- Atlassian MCP available (`jira_*` tools) → Jira direct (fallback)
 - `gh` CLI available → GitHub Issues
 - Neither → Plan-only mode
+
+**If weside MCP is connected but Jira tools are missing:** Tell the user:
+> "Jira is not connected via your weside Companion. To enable it: go to weside.ai → Integrations → connect Jira, then activate it for your Companion."
 
 **Existing Config:**
 - `.weside/` directory exists → already configured

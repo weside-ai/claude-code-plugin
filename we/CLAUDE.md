@@ -146,13 +146,16 @@ Monorepos with multiple stacks are detected and each component is checked indepe
 
 ## Ticketing Abstraction
 
-Skills detect the available ticketing tool automatically:
+Skills detect the available ticketing tool automatically (in priority order):
 
-1. Atlassian MCP available → Jira
-2. `gh` CLI available → GitHub Issues
-3. Neither → Plan-only mode (no ticket, just `docs/plans/`)
+1. **weside MCP** (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
+2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
+3. `gh` CLI → GitHub Issues
+4. Neither → Plan-only mode (no ticket, just `docs/plans/`)
 
-Skills use generic actions ("Create ticket", "Move to In Progress") — never tool-specific API calls.
+**How Composio Jira works:** Tools are called via `execute_tool(name="JIRA_CREATE_ISSUE", arguments='{...}')`. Tool names use `JIRA_` prefix (uppercase). Schemas are self-describing — use `get_tool_schema(name="JIRA_...")` to inspect parameters.
+
+Skills use generic actions ("Create ticket", "Move to In Progress") — never tool-specific API calls. Claude maps generic actions to the best available tool.
 
 ---
 

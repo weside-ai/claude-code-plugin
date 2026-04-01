@@ -180,10 +180,15 @@ Level 3: Companion connected → check against Goals
 
 ### Ticketing Abstraction
 
-Never reference Jira directly. Use generic actions:
-- "Create ticket" (not `jira_create_issue`)
+Never reference Jira directly in skills. Use generic actions:
+- "Create ticket" (not `JIRA_CREATE_ISSUE` or `jira_create_issue`)
 - "Move to In Progress" (not `transition_id 31`)
-- Detection: Atlassian MCP → Jira, `gh` CLI → GitHub Issues, nothing → plan-only
+
+Detection priority:
+1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → preferred
+2. Atlassian MCP (`jira_*` tools) → fallback
+3. `gh` CLI → GitHub Issues
+4. Nothing → plan-only
 
 ### Stack Detection
 
