@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Agentic Product Ownership toolkit for Claude Code — story refinement, development orchestration, code review, CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
@@ -46,6 +46,12 @@
       "title": "Project Key",
       "description": "Jira project key or GitHub repo for issue tracking (e.g. 'PROJ', 'myorg/myrepo'). Auto-detected if not set.",
       "required": false
+    },
+    "autoStoreConversations": {
+      "type": "boolean",
+      "title": "Auto-store Conversations",
+      "description": "Store conversational exchanges as companion memories at session end (requires weside.ai account + MCP connection)",
+      "default": false
     }
   }
 }
