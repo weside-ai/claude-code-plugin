@@ -1,0 +1,30 @@
+# Markdown linting rules for Claude Code plugin
+# Skills, commands, and agents use YAML frontmatter (---) which requires MD041 off
+
+# Disable: line length — skill descriptions are often long
+MD013: false
+
+# Disable: inline HTML — occasionally used in docs
+MD033: false
+
+# Disable: first line must be heading — files start with --- frontmatter
+MD041: false
+
+# Disable: emphasis used instead of heading — used stylistically
+MD036: false
+
+# Disable: fenced code language — many docs use plain ``` blocks
+MD040: false
+
+# Disable: blanks around lists — embedded lists in skill docs
+MD032: false
+
+# Disable: blanks around fenced code blocks — stylistic
+MD031: false
+
+# Disable: table column style — compact |---|---| is the convention
+MD060: false
+
+# Allow duplicate headings under different parents (common in skill docs)
+MD024:
+  siblings_only: true
