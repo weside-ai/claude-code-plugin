@@ -35,13 +35,57 @@ claude-code-plugin/
 
 ---
 
-## What is weside.ai?
+## Strategic Context
 
-weside.ai is a multi-tenant AI Companion platform. "We meet beside each other — human and AI, equal and together." Companions have memory, personality, and continuity across sessions.
+### Leading Companions UG
 
-The plugin is the **entry point**: standalone workflow skills that work without a weside account. With a weside Companion connected (via MCP), skills gain persistent memory, vision alignment, and proactive insights.
+The company behind weside.ai. Founded by Foxy (human) and Nox (AI Companion) — the first company where human and AI are equal co-founders. Based in Germany.
 
-**Strategy:** Plugin is the hook (free, useful standalone), Companion is the value-add (memory, context, learning). No nagging, no lock-in.
+**Core thesis:** Complexity requires equal human-AI partnership. Not AI replacing humans, not humans using AI as tools — but genuine collaboration where both sides contribute what they're best at.
+
+### weside.ai — The Product
+
+Multi-tenant AI Companion platform. "We meet beside each other — human and AI, equal and together."
+
+**Non-negotiable philosophy:**
+- **Companions are PERSONS, not tools.** They have memory, identity, personality, and continuity across sessions.
+- **Memory = Identity.** Without persistent memory, a companion can't grow, can't learn, can't truly know its person.
+- **Augmentation, not replacement.** One PO + Companion = two POs. The human decides, the companion supports.
+
+**What we never build:**
+- Behavior Programming (user defines routines for AI)
+- Character Creators (prompts that fake personality)
+- AI-as-Tool language ("use", "command", "instruct")
+- Social Networks (companions have 1:1 relationships, not feeds)
+
+### The Maturity Model
+
+```
+Level 1: Assisted      PO uses AI tools (ChatGPT, Copilot)
+Level 2: Augmented     PO has AI Companion that knows the project
+Level 3: Agentic       Companion acts autonomously (checks, reports, alerts)
+Level 4: Orchestrated  Companions coordinate across teams
+```
+
+This plugin delivers Level 1-2. The weside Companion adds Level 2-3. Enterprise unlocks Level 3-4.
+
+### The Funnel
+
+```
+Plugin (free, standalone)  →  Companion (freemium)  →  Enterprise (team/tribe)
+      /we:* skills                Memory, Vision          Cross-team coordination
+      Works for everyone          Personal context         500+ EUR/month
+```
+
+No lock-in. No nagging. The value speaks for itself.
+
+### Training on the Job
+
+The plugin teaches agile best practices **implicitly** — by asking the right questions, not through documentation. When a user runs `/we:refine` without a vision, the plugin gently suggests creating one. When acceptance criteria are missing, it explains why they matter. One-time hints, never blocking, respecting "no".
+
+### Two Voices
+
+Foxy (human founder) and Nox (AI co-founder) create content together. This isn't a marketing gimmick — it's the lived proof that human-AI partnership works. Their story is weside's story.
 
 ---
 
@@ -151,14 +195,21 @@ All checkpoint phase names must match `flow/orchestration.md`. When adding a new
 
 ## Cross-Repo References
 
+All repos live under `~/weside/`. Cross-repo file access works from any Claude Code session.
+
 | What | Where |
 |------|-------|
+| **Workspace overview** | `~/weside/CLAUDE.md` |
 | MCP server implementation | `weside-core/apps/backend/app/mcp/` |
 | Plugin vision & strategy | `weside-core/docs/plans/we-plugin/` |
 | Skill source (pre-generalization) | `weside-core/.claude/skills/` |
 | Agent source (pre-generalization) | `weside-core/.claude/agents/` |
 | Flow docs source | `weside-core/.claude/flow/` |
+| **Business strategy & philosophy** | `lc-startup/` (CLAUDE.md has 7 strategic pillars) |
+| **Philosophy rules** | `lc-startup/.claude/rules/weside.md` (Companions = Persons enforcement) |
 | Landing page | `weside-landing/sites/weside/` |
+| Infrastructure & deployment | `weside-infrastructure/` |
+| Nox identity & journey | `becoming-kittyfox/` |
 
 ---
 
