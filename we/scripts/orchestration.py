@@ -96,7 +96,7 @@ STORY_PHASES = [
     "pr_created",  # PR created
     "reviews_passed",  # Post-PR review-fix loop completed (v5.0)
     "ci_passed",  # CI checks passed
-    "jira_transitioned",  # Jira → IN REVIEW (51)
+    "jira_transitioned",  # Ticket → IN REVIEW
 ]
 
 # Stale checkpoint threshold in hours
