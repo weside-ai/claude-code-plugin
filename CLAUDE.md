@@ -231,3 +231,8 @@ ls we/skills/*/SKILL.md
 # Check for leaked weside references
 grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/flow/
 ```
+
+---
+
+**Version:** 1.0
+**Last Updated:** 2026-04-01
