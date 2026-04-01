@@ -180,10 +180,7 @@ DB_PATH = Path.home() / ".claude" / "we" / "orchestration.db"
 
 # Legacy path for migration
 _LEGACY_DB_PATH = (
-    Path(__file__).parent.parent.parent
-    / ".claude"
-    / "orchestration"
-    / "orchestration.db"
+    Path(__file__).parent.parent.parent / ".claude" / "orchestration" / "orchestration.db"
 )
 
 # Worker timeout in minutes (tasks from offline workers get released)
@@ -448,9 +445,7 @@ def task_create(
         conn.commit()
 
         # Log event
-        _log_event(
-            conn, "task_created", f"Task {tid} created for {story_key}", task_id=tid
-        )
+        _log_event(conn, "task_created", f"Task {tid} created for {story_key}", task_id=tid)
         conn.commit()
 
         return {"success": True, "task_id": tid, "story_key": story_key}
@@ -458,9 +453,7 @@ def task_create(
         conn.close()
 
 
-def task_list(
-    status: str | None = None, story_key: str | None = None
-) -> list[dict[str, Any]]:
+def task_list(status: str | None = None, story_key: str | None = None) -> list[dict[str, Any]]:
     """List tasks with optional filters."""
     conn = get_db()
     try:
@@ -772,6 +765,7 @@ def _remove_worktree(worktree_path: str) -> bool:
         # Try git worktree remove first
         result = subprocess.run(
             ["git", "worktree", "remove", str(path), "--force"],
+            check=False,
             capture_output=True,
             text=True,
             cwd=workspace_root,
@@ -807,9 +801,7 @@ def worker_heartbeat(worker_id: str) -> dict[str, Any]:
         conn.close()
 
 
-def worker_list(
-    active_only: bool = False, headless_only: bool = False
-) -> list[dict[str, Any]]:
+def worker_list(active_only: bool = False, headless_only: bool = False) -> list[dict[str, Any]]:
     """List workers with optional filters."""
     conn = get_db()
     try:
@@ -845,9 +837,7 @@ def worker_status() -> dict[str, Any]:
 
         for w in workers:
             heartbeat = (
-                datetime.fromisoformat(w["last_heartbeat"])
-                if w["last_heartbeat"]
-                else None
+                datetime.fromisoformat(w["last_heartbeat"]) if w["last_heartbeat"] else None
             )
             is_stale = heartbeat and heartbeat < timeout if heartbeat else True
 
@@ -1045,11 +1035,15 @@ def cleanup(
             )
 
             # Remove worktree if requested and worker is headless
-            if remove_worktrees and worker["worktree_path"] and worker["is_headless"]:
-                if _remove_worktree(worker["worktree_path"]):
-                    removed_worktrees.append(worker["worktree_path"])
-                    # Also delete the worker record since worktree is gone
-                    conn.execute("DELETE FROM workers WHERE id = ?", (worker["id"],))
+            if (
+                remove_worktrees
+                and worker["worktree_path"]
+                and worker["is_headless"]
+                and _remove_worktree(worker["worktree_path"])
+            ):
+                removed_worktrees.append(worker["worktree_path"])
+                # Also delete the worker record since worktree is gone
+                conn.execute("DELETE FROM workers WHERE id = ?", (worker["id"],))
 
         conn.commit()
         return {
@@ -1121,9 +1115,7 @@ def story_checkpoint(
             (story_key, phase, branch, pr_number),
         )
 
-        _log_event(
-            conn, "story_checkpoint", f"Story {story_key} checkpointed at phase {phase}"
-        )
+        _log_event(conn, "story_checkpoint", f"Story {story_key} checkpointed at phase {phase}")
         conn.commit()
 
         return {
@@ -1159,9 +1151,7 @@ def story_resume(story_key: str) -> dict[str, Any]:
 
         # Parse JSON fields
         if checkpoint_data.get("files_modified"):
-            checkpoint_data["files_modified"] = json.loads(
-                checkpoint_data["files_modified"]
-            )
+            checkpoint_data["files_modified"] = json.loads(checkpoint_data["files_modified"])
         if checkpoint_data.get("commits"):
             checkpoint_data["commits"] = json.loads(checkpoint_data["commits"])
         if checkpoint_data.get("extra_data"):
@@ -1216,9 +1206,7 @@ def story_list(active_only: bool = False) -> list[dict[str, Any]]:
 
             # Check if stale
             last_cp = datetime.fromisoformat(story["last_checkpoint"])
-            story["is_stale"] = datetime.now() - last_cp > timedelta(
-                hours=STALE_CHECKPOINT_HOURS
-            )
+            story["is_stale"] = datetime.now() - last_cp > timedelta(hours=STALE_CHECKPOINT_HOURS)
 
             if active_only and story["is_complete"]:
                 continue
@@ -1248,9 +1236,7 @@ def story_clear(story_key: str, keep_latest: bool = False) -> dict[str, Any]:
                 (story_key, story_key),
             )
         else:
-            conn.execute(
-                "DELETE FROM story_checkpoints WHERE story_key = ?", (story_key,)
-            )
+            conn.execute("DELETE FROM story_checkpoints WHERE story_key = ?", (story_key,))
 
         deleted = conn.total_changes
         conn.commit()
@@ -1332,9 +1318,7 @@ def story_status(story_key: str) -> dict[str, Any]:
             result["status"] = "not_started"
 
         # Check for blocking circuit breakers
-        open_circuits = [
-            cb for cb in result["circuit_breakers"] if cb["state"] == "open"
-        ]
+        open_circuits = [cb for cb in result["circuit_breakers"] if cb["state"] == "open"]
         if open_circuits:
             result["blocked"] = True
             result["blocked_by"] = [cb["phase"] for cb in open_circuits]
@@ -1410,9 +1394,7 @@ def circuit_check(story_key: str, phase: str) -> dict[str, Any]:
         if state == CIRCUIT_STATE_OPEN:
             # Check if cooldown has passed
             opened_at = (
-                datetime.fromisoformat(circuit["opened_at"])
-                if circuit["opened_at"]
-                else None
+                datetime.fromisoformat(circuit["opened_at"]) if circuit["opened_at"] else None
             )
             if opened_at:
                 elapsed = (datetime.now() - opened_at).total_seconds()
@@ -1448,16 +1430,15 @@ def circuit_check(story_key: str, phase: str) -> dict[str, Any]:
                         "failure_count": failure_count,
                         "message": f"Cooldown passed ({int(elapsed)}s), testing recovery",
                     }
-                else:
-                    remaining = int(cooldown - elapsed)
-                    return {
-                        "allowed": False,
-                        "state": state,
-                        "failure_count": failure_count,
-                        "remaining_cooldown": remaining,
-                        "message": f"Circuit OPEN, {remaining}s remaining in cooldown",
-                        "last_error": circuit.get("last_error"),
-                    }
+                remaining = int(cooldown - elapsed)
+                return {
+                    "allowed": False,
+                    "state": state,
+                    "failure_count": failure_count,
+                    "remaining_cooldown": remaining,
+                    "message": f"Circuit OPEN, {remaining}s remaining in cooldown",
+                    "last_error": circuit.get("last_error"),
+                }
 
             return {
                 "allowed": False,
@@ -1694,9 +1675,7 @@ def circuit_reset(story_key: str, phase: str | None = None) -> dict[str, Any]:
         conn.close()
 
 
-def circuit_list(
-    story_key: str | None = None, state: str | None = None
-) -> list[dict[str, Any]]:
+def circuit_list(story_key: str | None = None, state: str | None = None) -> list[dict[str, Any]]:
     """List circuit breakers with optional filters."""
     conn = get_db()
     try:
@@ -1884,9 +1863,7 @@ def dor_build_refined_description(
     sections: list[str] = []
 
     # Add auto-refine header
-    sections.append(
-        "*⚠️ AUTO-REFINED: Some sections were auto-generated and require review.*\n"
-    )
+    sections.append("*⚠️ AUTO-REFINED: Some sections were auto-generated and require review.*\n")
 
     # Preserve existing content or add User Story
     if "User Story" not in check_result["sections_found"]:
@@ -1923,9 +1900,7 @@ def dor_build_refined_description(
     }
 
 
-def _perform_rollback(
-    conn: sqlite3.Connection, story_key: str, phase: str
-) -> dict[str, Any]:
+def _perform_rollback(conn: sqlite3.Connection, story_key: str, phase: str) -> dict[str, Any]:
     """
     Perform rollback to the last successful checkpoint.
 
@@ -1961,9 +1936,7 @@ def _perform_rollback(
         }
 
     checkpoint_data = dict(checkpoint)
-    commits = (
-        json.loads(checkpoint_data["commits"]) if checkpoint_data.get("commits") else []
-    )
+    commits = json.loads(checkpoint_data["commits"]) if checkpoint_data.get("commits") else []
     branch = checkpoint_data.get("branch")
 
     rollback_commit = commits[-1] if commits else None
@@ -1985,6 +1958,7 @@ def _perform_rollback(
             # Check for uncommitted changes first (with timeout to prevent hangs)
             status_result = subprocess.run(
                 ["git", "status", "--porcelain"],
+                check=False,
                 capture_output=True,
                 text=True,
                 cwd=workspace_root,
@@ -2002,6 +1976,7 @@ def _perform_rollback(
                         "-m",
                         f"Auto-stash before rollback for {story_key}",
                     ],
+                    check=False,
                     capture_output=True,
                     text=True,
                     cwd=workspace_root,
@@ -2019,6 +1994,7 @@ def _perform_rollback(
             # Reset to the checkpoint commit (with timeout)
             reset_result = subprocess.run(
                 ["git", "reset", "--hard", rollback_commit],
+                check=False,
                 capture_output=True,
                 text=True,
                 cwd=workspace_root,
@@ -2342,9 +2318,7 @@ def cifix_attempt(
         if command:
             recommendation = f"Run: {command} (success rate: {success_rate:.0%})"
         else:
-            recommendation = (
-                f"Analyze and fix manually (success rate: {success_rate:.0%})"
-            )
+            recommendation = f"Analyze and fix manually (success rate: {success_rate:.0%})"
 
         return {
             "success": True,
@@ -2544,9 +2518,7 @@ def cifix_reset(story_key: str) -> dict[str, Any]:
         conn.close()
 
 
-def cifix_list(
-    story_key: str | None = None, active_only: bool = False
-) -> dict[str, Any]:
+def cifix_list(story_key: str | None = None, active_only: bool = False) -> dict[str, Any]:
     """
     List CI-fix sessions.
 
@@ -2637,9 +2609,7 @@ def main() -> None:
     worker_reg_p.add_argument("worker_id")
     worker_reg_p.add_argument("--terminal")
     worker_reg_p.add_argument("--worktree", help="Path to git worktree")
-    worker_reg_p.add_argument(
-        "--headless", action="store_true", help="Mark as headless instance"
-    )
+    worker_reg_p.add_argument("--headless", action="store_true", help="Mark as headless instance")
 
     worker_unreg_p = worker_sub.add_parser("unregister")
     worker_unreg_p.add_argument("worker_id")
@@ -2691,9 +2661,7 @@ def main() -> None:
     story_resume_p.add_argument("story_key")
 
     story_list_p = story_sub.add_parser("list")
-    story_list_p.add_argument(
-        "--active", action="store_true", help="Only show incomplete stories"
-    )
+    story_list_p.add_argument("--active", action="store_true", help="Only show incomplete stories")
 
     story_clear_p = story_sub.add_parser("clear")
     story_clear_p.add_argument("story_key")
@@ -2701,9 +2669,7 @@ def main() -> None:
         "--keep-latest", action="store_true", help="Keep latest checkpoint per phase"
     )
 
-    story_status_p = story_sub.add_parser(
-        "status", help="Get comprehensive story status"
-    )
+    story_status_p = story_sub.add_parser("status", help="Get comprehensive story status")
     story_status_p.add_argument("story_key")
 
     story_sub.add_parser("phases", help="List valid story phases")
@@ -2727,9 +2693,7 @@ def main() -> None:
 
     circuit_reset_p = circuit_sub.add_parser("reset", help="Reset circuit breaker(s)")
     circuit_reset_p.add_argument("story_key")
-    circuit_reset_p.add_argument(
-        "--phase", choices=STORY_PHASES, help="Specific phase to reset"
-    )
+    circuit_reset_p.add_argument("--phase", choices=STORY_PHASES, help="Specific phase to reset")
 
     circuit_list_p = circuit_sub.add_parser("list", help="List circuit breakers")
     circuit_list_p.add_argument("--story", help="Filter by story key")
@@ -2748,9 +2712,7 @@ def main() -> None:
     dor_check_p = dor_sub.add_parser("check", help="Check if description meets DoR")
     dor_check_p.add_argument("description", help="Story description to check")
 
-    dor_generate_p = dor_sub.add_parser(
-        "generate", help="Generate DoR sections from summary"
-    )
+    dor_generate_p = dor_sub.add_parser("generate", help="Generate DoR sections from summary")
     dor_generate_p.add_argument("summary", help="Story summary")
     dor_generate_p.add_argument("--description", help="Existing description (optional)")
 
@@ -2772,14 +2734,18 @@ def main() -> None:
     cifix_attempt_p.add_argument("story_key", help="Story/ticket key")
     cifix_attempt_p.add_argument(
         "fix_type",
-        choices=["lint", "format", "type_error", "test_failure", "build_error"]
-        + list(CIFIX_CONFIG["non_fixable"]),
+        choices=[
+            "lint",
+            "format",
+            "type_error",
+            "test_failure",
+            "build_error",
+            *CIFIX_CONFIG["non_fixable"],
+        ],
         help="Type of fix being attempted",
     )
     cifix_attempt_p.add_argument("--error", help="Error message from CI")
-    cifix_attempt_p.add_argument(
-        "--fix", dest="fix_applied", help="Description of fix applied"
-    )
+    cifix_attempt_p.add_argument("--fix", dest="fix_applied", help="Description of fix applied")
 
     cifix_success_p = cifix_sub.add_parser("success", help="Mark CI as passing")
     cifix_success_p.add_argument("story_key", help="Story/ticket key")
@@ -2792,9 +2758,7 @@ def main() -> None:
 
     cifix_list_p = cifix_sub.add_parser("list", help="List CI-fix sessions")
     cifix_list_p.add_argument("--story", help="Filter by story key")
-    cifix_list_p.add_argument(
-        "--active", action="store_true", help="Only show active sessions"
-    )
+    cifix_list_p.add_argument("--active", action="store_true", help="Only show active sessions")
 
     cifix_sub.add_parser("config", help="Show CI-fix configuration")
 
@@ -2827,9 +2791,7 @@ def main() -> None:
     elif args.command == "task":
         if args.action == "create":
             deps = args.deps.split(",") if args.deps else None
-            result = task_create(
-                args.story_key, args.description, args.phase, deps, args.task_id
-            )
+            result = task_create(args.story_key, args.description, args.phase, deps, args.task_id)
         elif args.action == "list":
             result = task_list(args.status, args.story)
         elif args.action == "get":
@@ -2841,9 +2803,7 @@ def main() -> None:
 
     elif args.command == "worker":
         if args.action == "register":
-            result = worker_register(
-                args.worker_id, args.terminal, args.worktree, args.headless
-            )
+            result = worker_register(args.worker_id, args.terminal, args.worktree, args.headless)
         elif args.action == "unregister":
             result = worker_unregister(args.worker_id, args.cleanup_worktree)
         elif args.action == "heartbeat":
@@ -2917,17 +2877,13 @@ def main() -> None:
             result = dor_auto_generate(args.summary)
         elif args.action == "refine":
             check_result = dor_check(args.description or "")
-            result = dor_build_refined_description(
-                args.description, args.summary, check_result
-            )
+            result = dor_build_refined_description(args.description, args.summary, check_result)
 
     elif args.command == "cifix":
         if args.action == "start":
             result = cifix_start(args.story_key, args.pr_number)
         elif args.action == "attempt":
-            result = cifix_attempt(
-                args.story_key, args.fix_type, args.error, args.fix_applied
-            )
+            result = cifix_attempt(args.story_key, args.fix_type, args.error, args.fix_applied)
         elif args.action == "success":
             result = cifix_success(args.story_key)
         elif args.action == "status":

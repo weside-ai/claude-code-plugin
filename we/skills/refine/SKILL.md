@@ -186,12 +186,15 @@ Load `flow/epic-management.md`. Help create/refine Epics with Vision, Scope, Sto
 ## Vision Alignment (3 Levels)
 
 ### Level 1: No vision configured
+
 Skip vision checks. Just verify ACs and plan quality.
 
 ### Level 2: Local vision (`.weside/vision.md`)
+
 If file exists → check story against project vision.
 
 ### Level 3: Companion (weside MCP)
+
 If Companion connected → check story against Companion Goals (= product vision).
 Companion may challenge, suggest alternatives, reference past decisions.
 

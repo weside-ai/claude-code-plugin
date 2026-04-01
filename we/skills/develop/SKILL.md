@@ -84,7 +84,7 @@ Detect project stack and run appropriate tools:
 | Stack | Lint Fix | Tests |
 |---|---|---|
 | Python | `ruff check --fix . && ruff format .` | `pytest tests/ -v --tb=short -x` |
-| Node.js | `eslint --fix . ` | `yarn test` or `npx vitest` |
+| Node.js | `eslint --fix .` | `yarn test` or `npx vitest` |
 
 **If test fixtures/conftest changed → run FULL suite (no `-x`).**
 
