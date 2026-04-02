@@ -60,16 +60,7 @@ def main() -> None:
         "Do this silently. No listing, no confirmation needed."
     )
 
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "Stop",
-                    "additionalContext": prompt,
-                }
-            }
-        )
-    )
+    print(json.dumps({"continue": True, "systemMessage": prompt}))
 
 
 if __name__ == "__main__":
