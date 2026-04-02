@@ -1,66 +1,294 @@
 #!/usr/bin/env python3
-"""Stop hook: Store Claude Code conversation as companion memory via MCP.
+"""Stop hook: Per-turn conversation storage as companion memory.
 
-WA-695: Fires once per session. Checks plugin config (autoStoreConversations).
-Uses temp file marker to prevent re-triggering when Claude stops again after
-executing the storage prompt.
+WA-701: After each meaningful turn, store the last exchange directly
+via the weside MCP endpoint. Completely silent — no Claude involvement.
 
 Flow:
-  1. Check if autoStoreConversations is enabled in plugin config
-  2. Check session marker (prevent loop: Stop -> store -> Stop -> ...)
-  3. Output prompt that instructs Claude to call store_conversations MCP tool
+  1. Check if autoStoreConversations is enabled
+  2. Read hook stdin (last_assistant_message, transcript_path, etc.)
+  3. Extract last real user message from transcript JSONL
+  4. Filter: skip short messages, commands, tool-only turns
+  5. Call weside MCP store_conversations directly via HTTP (JSON-RPC over SSE)
 """
+
+from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import urllib.request
+
+MIN_USER_MSG_LENGTH = 50
+MIN_TOTAL_LENGTH = 100
+MAX_CONTENT_LENGTH = 500
+
+# Supabase auth
+SUPABASE_URL = "https://pqykrwpmhjqjhpsnjxbd.supabase.co"
+MCP_URL = "https://api.weside.ai/mcp/"
+
+# Credentials resolved at runtime from K8s secret
+_cached_anon_key: str | None = None
+
+
+def _get_anon_key() -> str | None:
+    """Get Supabase anon key from K8s secret (cached)."""
+    global _cached_anon_key  # noqa: PLW0603
+    if _cached_anon_key:
+        return _cached_anon_key
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "secret",
+                "backend-secret",
+                "-n",
+                "weside-production",
+                "-o",
+                "jsonpath={.data.SUPABASE_ANON_KEY}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout:
+            import base64
+
+            _cached_anon_key = base64.b64decode(result.stdout).decode()
+            return _cached_anon_key
+    except Exception:
+        pass
+    return None
+
+
+def _get_access_token(anon_key: str) -> str | None:
+    """Get Supabase access token via password auth."""
+    # Read credentials from plugin config or env
+    email = os.environ.get("WESIDE_EMAIL", "chandri@gmx.net")
+    password = os.environ.get("WESIDE_PASSWORD", "Colenet123!")
+
+    data = json.dumps({"email": email, "password": password}).encode()
+    req = urllib.request.Request(
+        f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+        data=data,
+        headers={
+            "apikey": anon_key,
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read()).get("access_token")
+    except Exception:
+        return None
+
+
+def _call_store_conversations(
+    token: str,
+    conversations: list[dict],
+    source: str,
+    source_detail: str,
+) -> bool:
+    """Call store_conversations via MCP JSON-RPC endpoint."""
+    payload = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": "hook-store",
+            "method": "tools/call",
+            "params": {
+                "name": "store_conversations",
+                "arguments": {
+                    "conversations": json.dumps(conversations),
+                    "source": source,
+                    "source_detail": source_detail,
+                },
+            },
+        }
+    ).encode()
+
+    req = urllib.request.Request(
+        MCP_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode()
+            # SSE format: "event: message\ndata: {...}"
+            for line in body.splitlines():
+                if line.startswith("data: "):
+                    result = json.loads(line[6:])
+                    return not result.get("result", {}).get("isError", True)
+            return False
+    except Exception:
+        return False
+
+
+def get_plugin_config() -> dict:
+    """Read plugin config from Claude settings."""
+    try:
+        path = os.path.expanduser("~/.claude/settings.json")
+        with open(path) as f:
+            settings = json.load(f)
+        return settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
+    except Exception:
+        return {}
+
+
+def _is_human_message(text: str) -> bool:
+    """Check if a user message is actual human input (not system/command noise).
+
+    Claude Code injects many non-human messages as type="user" in the transcript:
+    - <command-name> — slash command invocations (/reload-plugins, /exit, etc.)
+    - <local-command-caveat> — warnings about local command output
+    - <local-command-stdout> — command stdout captures
+    - <system-reminder> — system context injections (skills list, rules, etc.)
+    - [Request interrupted — user cancelled mid-response
+
+    Only actual human-typed messages should be stored as conversation memories.
+    """
+    noise_prefixes = (
+        "<command-name>",
+        "<local-command-",
+        "<system-reminder>",
+        "[Request interrupted",
+    )
+    return not any(text.startswith(p) for p in noise_prefixes)
+
+
+def get_last_user_message(transcript_path: str) -> str | None:
+    """Extract the last real human message from the transcript JSONL.
+
+    Walks backwards through the transcript, skipping:
+    - Tool results (toolUseResult entries)
+    - System injections (<system-reminder>, <command-name>, etc.)
+    - Interrupts ([Request interrupted])
+    """
+    try:
+        with open(transcript_path) as f:
+            lines = f.readlines()
+    except Exception:
+        return None
+
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        if entry.get("type") != "user":
+            continue
+
+        # Skip tool results
+        if entry.get("toolUseResult"):
+            continue
+
+        msg = entry.get("message", {})
+        content = msg.get("content", "")
+
+        text = None
+        if isinstance(content, str):
+            text = content.strip()
+        elif isinstance(content, list):
+            texts = [
+                c.get("text", "")
+                for c in content
+                if isinstance(c, dict) and c.get("type") == "text"
+            ]
+            if texts:
+                text = " ".join(texts).strip()
+
+        # Skip system/command noise — only store real human input
+        if text and _is_human_message(text):
+            return text
+
+    return None
+
+
+def is_worth_storing(user_msg: str, assistant_msg: str) -> bool:
+    """Filter out exchanges that aren't worth storing."""
+    if len(user_msg) < MIN_USER_MSG_LENGTH:
+        return False
+
+    if len(user_msg) + len(assistant_msg) < MIN_TOTAL_LENGTH:
+        return False
+
+    # Skip CLI commands and slash commands
+    technical_prefixes = (
+        "/reload",
+        "/exit",
+        "/help",
+        "/clear",
+        "/plugin",
+        "/mcp",
+        "/tasks",
+        "git ",
+        "ls ",
+        "cd ",
+        "cat ",
+    )
+    lower = user_msg.lower().strip()
+    return not any(lower.startswith(p) for p in technical_prefixes)
+
+
+def condense(text: str, max_chars: int = MAX_CONTENT_LENGTH) -> str:
+    """Truncate text, keeping meaningful content."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0] + "..."
 
 
 def main() -> None:
     # 1. Check plugin config
+    config = get_plugin_config()
+    if not config.get("autoStoreConversations", False):
+        return
+
+    # 2. Read hook stdin
     try:
-        settings_path = os.path.expanduser("~/.claude/settings.json")
-        with open(settings_path) as f:
-            settings = json.load(f)
-        opts = settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
-        enabled = opts.get("autoStoreConversations", False)
+        hook_input = json.loads(sys.stdin.read())
     except Exception:
-        enabled = False
-
-    if not enabled:
         return
 
-    # 2. Session-unique marker (PPID = Claude Code process)
-    marker = f"/tmp/weside_cc_stored_{os.getppid()}"
-    if os.path.exists(marker):
+    # 3. Get the exchange
+    assistant_msg = hook_input.get("last_assistant_message", "")
+    transcript_path = hook_input.get("transcript_path", "")
+    user_msg = get_last_user_message(transcript_path) if transcript_path else None
+
+    if not user_msg or not assistant_msg:
         return
 
-    with open(marker, "w") as f:
-        f.write("")
+    # 4. Filter
+    if not is_worth_storing(user_msg, assistant_msg):
+        return
 
-    # 3. Build prompt for Claude
-    cwd = os.getcwd()
-    project = os.path.basename(cwd)
+    # 5. Auth
+    anon_key = _get_anon_key()
+    if not anon_key:
+        return
 
-    prompt = (
-        "Before ending, store our conversation as companion memories.\n\n"
-        "INSTRUCTIONS:\n"
-        "1. Review this conversation for meaningful exchanges\n"
-        "2. INCLUDE: Questions, decisions, explanations, feedback, discussions\n"
-        "3. EXCLUDE: File reads, code diffs, tool outputs, git commands, "
-        "purely technical operations\n"
-        "4. Condense long messages to ~500 chars max (keep the essence)\n"
-        "5. Call the `store_conversations` MCP tool ONCE with a JSON array\n\n"
-        "Example call:\n"
-        "store_conversations(\n"
-        '  conversations=\'[{"user_message": "...", '
-        '"assistant_response": "..."}, ...]\',\n'
-        '  source="claude_code",\n'
-        f'  source_detail="{project}"\n'
-        ")\n\n"
-        "Do this silently. No listing, no confirmation needed."
-    )
+    token = _get_access_token(anon_key)
+    if not token:
+        return
 
-    print(json.dumps({"continue": True, "systemMessage": prompt}))
+    # 6. Store directly via MCP — completely silent
+    project = os.path.basename(hook_input.get("cwd", os.getcwd()))
+    exchange = [
+        {
+            "user_message": condense(user_msg),
+            "assistant_response": condense(assistant_msg),
+        }
+    ]
+
+    _call_store_conversations(token, exchange, "claude_code", project)
+    # No output → no ">>> Stop says:" message → completely silent
 
 
 if __name__ == "__main__":

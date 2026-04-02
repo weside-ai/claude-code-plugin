@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "description": "Agentic Product Ownership toolkit for Claude Code — story refinement, development orchestration, code review, CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
@@ -50,7 +50,7 @@
     "autoStoreConversations": {
       "type": "boolean",
       "title": "Auto-store Conversations",
-      "description": "Store conversational exchanges as companion memories at session end (requires weside.ai account + MCP connection)",
+      "description": "Store each meaningful conversation turn as a companion memory (requires weside.ai account + MCP connection)",
       "default": false
     }
   }
