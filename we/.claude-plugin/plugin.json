@@ -51,7 +51,7 @@
       "type": "boolean",
       "title": "Auto-store Conversations",
       "description": "Store conversational exchanges as companion memories at session end (requires weside.ai account + MCP connection)",
-      "default": true
+      "default": false
     }
   }
 }

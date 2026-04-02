@@ -22,7 +22,7 @@ def main() -> None:
         with open(settings_path) as f:
             settings = json.load(f)
         opts = settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
-        enabled = opts.get("autoStoreConversations", True)
+        enabled = opts.get("autoStoreConversations", False)
     except Exception:
         enabled = False
 
