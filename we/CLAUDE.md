@@ -124,11 +124,22 @@ Level 4: Orchestrated  Companions coordinate across teams (enterprise)
 | Tool | Purpose |
 |---|---|
 | `get_companion_identity()` | Load Companion personality |
-| `search_memories(query)` | Search project memory |
-| `save_memory(title, content, type)` | Save to persistent memory |
-| `list_goals()` | Product vision / goals |
 | `list_companions()` | Available companions |
 | `select_companion(name)` | Switch companion |
+| `search_memories(query)` | Search project memory |
+| `save_memory(title, content, type)` | Save to persistent memory |
+| `list_memories(memory_type, limit)` | List memories |
+| `list_goals(status)` | Product vision / goals |
+| `save_goal(title, content, tags)` | Create or update a goal |
+| `update_goal_status(title, status)` | Change goal status |
+| `list_threads(limit)` | List conversation threads |
+| `show_thread(thread_id)` | Show messages in a thread |
+| `delete_thread(thread_id)` | Delete a thread |
+| `show_provider()` | Current LLM provider config |
+| `list_provider_presets()` | Available regional presets |
+| `set_provider(preset_id)` | Set LLM provider preset |
+| `discover_tools(category)` | Discover available tools |
+| `execute_tool(name, arguments)` | Execute a tool |
 
 **The plugin works fully without a Companion. The Companion is an upgrade, not a requirement. No nagging, no lock-in.**
 

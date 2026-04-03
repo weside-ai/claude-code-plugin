@@ -170,6 +170,20 @@ With a [weside.ai](https://weside.ai) account, add an AI Companion that:
 
 The Companion integrates via MCP. The same API is available through the [weside CLI](https://github.com/weside-ai/weside-cli) — see [API Concepts](https://github.com/weside-ai/weside-cli#api-concepts) for details on companions, memories, goals, and tools.
 
+### MCP Tools
+
+With a weside account, these tools are available:
+
+| Tool | Purpose |
+|---|---|
+| `list_companions()` / `select_companion(name)` | Manage companions |
+| `search_memories(query)` / `save_memory(...)` | Semantic memory search and creation |
+| `list_goals()` / `save_goal(...)` | Goal management |
+| `list_threads()` / `show_thread(id)` | Browse conversation history |
+| `show_provider()` / `set_provider(id)` | LLM provider configuration |
+| `discover_tools()` / `execute_tool(name, args)` | External tool execution |
+| `get_companion_identity()` | Load Companion's full personality |
+
 **The plugin works fully without a Companion. It's an upgrade, not a requirement.**
 
 ## Requirements
