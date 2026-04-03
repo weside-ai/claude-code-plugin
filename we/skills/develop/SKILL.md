@@ -32,7 +32,9 @@ Full reference: `flow/orchestration.md`
 
 ### 1. Git Preparation
 
-Check if on a feature branch. If not, create one from `origin/main`:
+Check if already in a worktree (orchestrator creates one in Step 1). If yes → you're already on the right branch, skip branch creation.
+
+If NOT in a worktree (called directly via `/we:develop`): check if on a feature branch. If not, create one from `origin/main`:
 
 ```bash
 git checkout -b feat/{TICKET}-short-description origin/main

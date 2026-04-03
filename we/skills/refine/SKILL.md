@@ -140,7 +140,13 @@ Write(file_path="docs/plans/{TICKET}-plan.md", content=approved_plan)
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined
 ```
 
-### Step 7: Output
+### Step 7: Output + STOP
+
+⛔ **Nach Plan-Approval NUR Steps 5.5-6 ausführen, dann SOFORT STOPPEN!**
+
+⛔ **KEINE Implementierung! KEIN /we:story! KEIN Branch! KEIN Code!**
+
+Output the summary, then **return control to the user:**
 
 ```
 Story {TICKET} + Plan complete!
@@ -150,6 +156,8 @@ SQLite: phase=refined
 
 /we:refine is DONE. User decides when to run /we:story.
 ```
+
+**STOP HERE. Do not continue. Do not suggest next steps. Do not start implementation.**
 
 ---
 
@@ -230,5 +238,7 @@ Detect available ticketing tool (in priority order):
 - ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write()
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS ask when unclear
-- NEVER start implementation — your job is ONLY Story + Plan
-- NEVER auto-continue to /we:story — user decides
+- ⛔ NEVER start implementation — your job is ONLY Story + Plan
+- ⛔ NEVER auto-continue to /we:story — user decides when
+- ⛔ NEVER create branches, write code, or run tests after plan approval
+- ⛔ After Step 7: STOP IMMEDIATELY — do not continue under any circumstances

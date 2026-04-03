@@ -70,6 +70,16 @@ Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans
 
 **Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.
 
+### Worktree (Default)
+
+**Unless the user explicitly says otherwise**, create a git worktree for isolated development:
+
+```
+EnterWorktree(name="{type}/{TICKET}-short-description")
+```
+
+This gives the story an isolated copy of the repo. The worktree is kept on completion (user decides cleanup). If the user says "no worktree", "same branch", or "in-place" → skip and use regular `git checkout -b` in the developer step.
+
 Move ticket to "In Progress". Write checkpoint `git_prepared`.
 
 ## Step 2: Develop
@@ -168,6 +178,7 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 
 - Always create todo-list before starting
 - Always check DoR and load plan first
+- Always use `EnterWorktree` for isolation (unless user opts out)
 - Always save checkpoints after each phase
 - Always run quality gates before creating PR
 - Never skip test quality gate
