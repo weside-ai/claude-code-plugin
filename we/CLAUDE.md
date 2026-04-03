@@ -50,6 +50,8 @@ User         → reviews PR, merges, closes ticket
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-review` | Documentation structure review |
 | `/we:doc-check` | Documentation content consistency check |
+| `/we:docs` | Auto-detect and update changed documentation |
+| `/we:find-dead-code` | Find and remove dead code from Python backends |
 | `/we:materialize` | Load weside Companion identity (requires weside.ai account) |
 
 ### Agents (run in background, called by skills)
@@ -60,6 +62,7 @@ User         → reviews PR, merges, closes ticket
 | `static-analyzer` | Lint, format, types — auto-detects stack |
 | `test-runner` | Tests + coverage — auto-detects framework |
 | `pr-creator` | PR with prerequisite checkpoint validation |
+| `doc-manager` | Auto-detect and update project documentation |
 
 ---
 

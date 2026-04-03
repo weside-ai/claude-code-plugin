@@ -115,15 +115,20 @@ Launch all agents with `run_in_background=True` in a single message:
 
 Wait for all. Verify checkpoints: `review_passed`, `static_analysis_passed`, `test_passed`. If any fail → fix and re-run. Circuit breaker opens after 3 failures.
 
-## Step 6: Documentation
+## Step 6: Documentation (/we:docs)
 
-Check what changed and update relevant docs:
+**Always run.** Launch the doc-manager agent to auto-detect and update affected documentation:
 
-| Files Changed | Check |
-|---|---|
-| API endpoints | Types/docs regeneration needed? |
-| Database schema | Architecture docs outdated? |
-| New patterns | Rules need updating? |
+```
+Agent(
+    subagent_type="we:doc-manager",
+    description="Update documentation for {TICKET}",
+    prompt="Update documentation for the changes in {TICKET}. Context: [summarize what changed]",
+    run_in_background=True
+)
+```
+
+Wait for completion. If docs were updated → commit. Write checkpoint `docs_updated`.
 
 ## Step 7: PR
 
@@ -159,6 +164,7 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 | Code complete | `implementation_complete` | develop |
 | ACs verified | `ac_verified` | story |
 | Simplified | `simplified` | story |
+| Docs updated | `docs_updated` | docs |
 | Review passed | `review_passed` | review |
 | Static passed | `static_analysis_passed` | static |
 | Tests passed | `test_passed` | test |

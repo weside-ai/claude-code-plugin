@@ -28,24 +28,93 @@ Unlike AI coding assistants that help developers write code, Agentic Product Own
 /we:story PROJ-1
 ```
 
-## What's Included
+---
 
-### Skills (invoke with `/we:*`)
+## The Development Pipeline
 
-| Skill | Purpose |
+Three phases, clear responsibilities:
+
+```
+Idea → /we:refine → /we:story → User merges → Done
+         (manual)    (autonomous)   (manual)
+```
+
+| Phase | Who | What | Command |
+|-------|-----|------|---------|
+| **Planning** | User + Claude (interactive) | Story + Plan | `/we:refine` |
+| **Development** | Claude (autonomous) | Code → Review → Test → Docs → PR → CI | `/we:story` |
+| **Delivery** | User (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
+
+### Phase 1: Planning
+
+`/we:refine` is interactive. Claude asks questions, you make decisions. The output is:
+
+- **Ticket** (minimal): "As X I want Y so that Z" + link to plan
+- **Plan** (detailed): `docs/plans/{TICKET}-plan.md` with acceptance criteria, phases, tests, security review
+
+### Phase 2: Development
+
+`/we:story` runs autonomously — you sit back and watch:
+
+```
+/we:story {TICKET}
+  ├── Load story + plan, create worktree
+  ├── /we:develop (implement phase by phase)
+  ├── AC Verification (every criterion checked with evidence)
+  ├── Simplify (code quality pass)
+  ├── Quality Gates in PARALLEL:
+  │     /we:review + /we:static + /we:test + CodeRabbit
+  ├── /we:docs (auto-update documentation)
+  ├── /we:pr (prerequisite check: all gates passed?)
+  ├── /we:ci-review (collect → fix → push, max 3 cycles)
+  └── Ticket → "In Review"
+```
+
+Every step writes a checkpoint to SQLite. If interrupted, `/we:story` resumes from where it left off.
+
+### Phase 3: Delivery
+
+You get a PR with all ACs implemented, tests passing, code reviewed, docs updated, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.**
+
+### Robustness
+
+| Feature | What it does |
+|---------|-------------|
+| **Checkpoints** | Resume after interruption (SQLite) |
+| **Circuit Breaker** | 3 failures in same phase → stop and ask |
+| **Batch-Fix** | Collect ALL findings, fix in one commit, push once |
+| **Reality Check** | Warn if plan is stale vs. recent code changes |
+
+---
+
+## All Skills
+
+### Pipeline Skills (called by `/we:story`)
+
+| Skill | What it does |
 |---|---|
-| **refine** | Create stories with Given/When/Then acceptance criteria and implementation plans |
-| **story** | Full pipeline: git → develop → review → test → PR → CI fix |
-| **develop** | Phase-by-phase implementation with auto-fix and local tests |
-| **ci-review** | Collect ALL CI/review findings, batch-fix in one commit |
-| **sm** | Process optimization, retrospectives, skill quality |
-| **arch** | Architecture guidance, ADR creation |
-| **doc-review** | Documentation structure and quality review |
-| **doc-check** | Documentation content consistency check |
-| **setup** | Project onboarding (3 questions, auto-detection) |
-| **materialize** | Load weside Companion identity (optional) |
+| `/we:develop` | Implement code from plan, phase by phase |
+| `/we:review` | Code review (runs as background agent) |
+| `/we:static` | Lint, format, type check (auto-detects stack) |
+| `/we:test` | Run tests with coverage (auto-detects framework) |
+| `/we:docs` | Auto-detect and update affected documentation |
+| `/we:pr` | Create PR (validates all quality gates passed) |
+| `/we:ci-review` | Collect CI/review findings, batch-fix, push |
 
-### Agents (run in background)
+### Standalone Skills
+
+| Skill | What it does |
+|---|---|
+| `/we:setup` | Project onboarding (3 questions, auto-detection) |
+| `/we:refine` | Create stories with acceptance criteria and plans |
+| `/we:arch` | Architecture guidance, ADR creation |
+| `/we:sm` | Process optimization, retrospectives |
+| `/we:doc-review` | Documentation structure and quality review |
+| `/we:doc-check` | Documentation content consistency check |
+| `/we:find-dead-code` | Remove dead code from Python backends |
+| `/we:materialize` | Load weside Companion identity (optional) |
+
+### Background Agents (called by skills)
 
 | Agent | Purpose |
 |---|---|
@@ -53,12 +122,30 @@ Unlike AI coding assistants that help developers write code, Agentic Product Own
 | **static-analyzer** | Lint, format, types — auto-detects your stack |
 | **test-runner** | Tests with coverage gates — auto-detects framework |
 | **pr-creator** | PR with prerequisite checkpoint validation |
+| **doc-manager** | Auto-detect and update project documentation |
 
-### Infrastructure
+---
 
-- **SQLite orchestration** — Checkpoints, circuit breaker, resume after interruption
-- **Stack detection** — Auto-detects Python, Node.js, Rust, Go
-- **Ticketing abstraction** — Works with Jira, GitHub Issues, or standalone
+## Stack Detection
+
+Skills auto-detect the project stack:
+
+| File | Stack | Lint | Types | Tests |
+|---|---|---|---|---|
+| `pyproject.toml` | Python | ruff | mypy | pytest |
+| `package.json` | Node.js | eslint | tsc | jest/vitest |
+| `Cargo.toml` | Rust | clippy | (built-in) | cargo test |
+| `go.mod` | Go | golangci-lint | (built-in) | go test |
+
+## Ticketing
+
+Skills detect the available ticketing tool automatically:
+
+1. Atlassian MCP → Jira
+2. `gh` CLI → GitHub Issues
+3. Neither → Plan-only mode (no ticket, just `docs/plans/`)
+
+---
 
 ## Configuration
 
@@ -71,6 +158,8 @@ After install, configure via `/plugin settings`:
 | `companion` | (empty) | weside Companion name (optional) |
 | `autoMaterialize` | `false` | Auto-load Companion at session start |
 
+---
+
 ## Optional: weside Companion
 
 With a [weside.ai](https://weside.ai) account, add an AI Companion that:
@@ -79,7 +168,9 @@ With a [weside.ai](https://weside.ai) account, add an AI Companion that:
 - **Challenges** new stories against your product vision
 - **Surfaces** context proactively ("Story X has been stalled for 3 weeks")
 
-The plugin works fully without a Companion. It's an upgrade, not a requirement.
+The Companion integrates via MCP. The same API is available through the [weside CLI](https://github.com/weside-ai/weside-cli) — see [API Concepts](https://github.com/weside-ai/weside-cli#api-concepts) for details on companions, memories, goals, and tools.
+
+**The plugin works fully without a Companion. It's an upgrade, not a requirement.**
 
 ## Requirements
 
@@ -92,7 +183,7 @@ The plugin works fully without a Companion. It's an upgrade, not a requirement.
 
 - [agenticproductownership.com](https://agenticproductownership.com) — The concept
 - [weside.ai](https://weside.ai) — AI Companion platform
-- [weside.ai/enterprise](https://weside.ai/enterprise) — Enterprise use cases
+- [weside CLI](https://github.com/weside-ai/weside-cli) — Terminal interface (shared API)
 
 ---
 

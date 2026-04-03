@@ -72,7 +72,7 @@ SQLite: phase=refined
   │     ├── /we:test    → test-runner agent
   │     └── CodeRabbit   (if available)
   │
-  ├── Step 6: Documentation check
+  ├── Step 6: /we:docs (auto-update documentation)
   │
   ├── Step 7: /we:pr
   │     └── Prerequisite check: review + static + test all passed?
@@ -94,6 +94,7 @@ Each step writes a checkpoint to SQLite. If interrupted, `/we:story` resumes fro
 | `implementation_complete` | /we:develop | Code committed |
 | `ac_verified` | /we:story | All ACs verified |
 | `simplified` | /we:story | Code simplified |
+| `docs_updated` | /we:docs | Documentation updated |
 | `review_passed` | /we:review | Code review passed |
 | `static_analysis_passed` | /we:static | Lint/format/types passed |
 | `test_passed` | /we:test | Tests + coverage passed |
@@ -155,6 +156,8 @@ Claude outputs a PR with:
 | `/we:arch` | Ad-hoc | Architecture guidance, ADRs |
 | `/we:doc-review` | Ad-hoc | Documentation structure review |
 | `/we:doc-check` | Ad-hoc | Documentation content consistency |
+| `/we:docs` | Development | Auto-update documentation (called by story Step 6) |
+| `/we:find-dead-code` | Ad-hoc | Remove dead code from Python backends |
 | `/we:materialize` | Session | Load weside Companion (optional) |
 
 ### Agents (background, called by skills)
@@ -165,6 +168,7 @@ Claude outputs a PR with:
 | `static-analyzer` | /we:story Step 5 | Lint, format, types |
 | `test-runner` | /we:story Step 5 | Tests + coverage |
 | `pr-creator` | /we:story Step 7 | PR with prerequisite check |
+| `doc-manager` | /we:story Step 6 | Auto-detect and update docs |
 
 ### Reference Documents (flow/)
 
@@ -174,7 +178,7 @@ Claude outputs a PR with:
 | `dod.md` | Definition of Done checklist |
 | `orchestration.md` | SQLite CLI reference |
 | `epic-management.md` | Epic lifecycle and templates |
-| `development-process.md` | This document — full pipeline reference |
+| `development-process.md` | Pipeline reference for agents |
 
 ---
 
@@ -223,8 +227,10 @@ Review: Each agent loads ONLY its rules (~3k tokens each)
 # Process & quality
 /we:sm                               # Process optimization
 /we:arch                             # Architecture guidance
+/we:docs                             # Auto-update documentation
 /we:doc-review                       # Documentation review
 /we:doc-check                        # Documentation consistency
+/we:find-dead-code                   # Remove dead Python code
 
 # Setup & companion
 /we:setup                            # Project onboarding
