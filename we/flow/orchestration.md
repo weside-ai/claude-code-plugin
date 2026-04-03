@@ -95,7 +95,7 @@ cifix status {TICKET}
 
 ## Database Location
 
-`~/.claude/we/orchestration.db` — Shared across worktrees via home directory.
+`~/.claude/weside/orchestration.db` — Shared across worktrees via home directory.
 
 ## Initialize
 

@@ -174,52 +174,41 @@ DOR_IMPLEMENTATION_MARKERS = [
     "pattern:",
 ]
 
-# Database location - in ~/.claude/we/ (shared across worktrees)
+# Database location - in ~/.claude/weside/ (shared across worktrees)
 # Using home directory ensures all worktrees share the same database
-DB_PATH = Path.home() / ".claude" / "we" / "orchestration.db"
+DB_PATH = Path.home() / ".claude" / "weside" / "orchestration.db"
 
-# Legacy path for migration
-_LEGACY_DB_PATH = (
-    Path(__file__).parent.parent.parent / ".claude" / "orchestration" / "orchestration.db"
-)
+# Legacy paths for migration (oldest first)
+_LEGACY_DB_PATHS = [
+    Path(__file__).parent.parent.parent / ".claude" / "orchestration" / "orchestration.db",
+    Path.home() / ".claude" / "we" / "orchestration.db",
+]
 
 # Worker timeout in minutes (tasks from offline workers get released)
 DEFAULT_WORKER_TIMEOUT = 10
 
 
 def _migrate_legacy_db() -> None:
-    """Migrate database from legacy location to new home directory location.
+    """Migrate database from legacy locations to ~/.claude/weside/.
 
-    Legacy: .claude/orchestration/orchestration.db (per-worktree)
-    New: ~/.claude/we/orchestration.db (shared across worktrees)
+    Legacy paths (checked newest-first):
+    1. ~/.claude/we/orchestration.db
+    2. .claude/orchestration/orchestration.db (per-worktree)
     """
-    if _LEGACY_DB_PATH.exists() and not DB_PATH.exists():
-        # Ensure parent directory exists
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if DB_PATH.exists():
+        return
 
-        # Copy database and WAL files
-        shutil.copy2(_LEGACY_DB_PATH, DB_PATH)
-        wal_path = _LEGACY_DB_PATH.with_suffix(".db-wal")
-        shm_path = _LEGACY_DB_PATH.with_suffix(".db-shm")
-        if wal_path.exists():
-            shutil.copy2(wal_path, DB_PATH.with_suffix(".db-wal"))
-        if shm_path.exists():
-            shutil.copy2(shm_path, DB_PATH.with_suffix(".db-shm"))
-
-        print(f"✓ Migrated orchestration DB from {_LEGACY_DB_PATH} to {DB_PATH}")
-
-        # Remove legacy files
-        _LEGACY_DB_PATH.unlink()
-        if wal_path.exists():
-            wal_path.unlink()
-        if shm_path.exists():
-            shm_path.unlink()
-
-        # Remove legacy directory if empty
-        legacy_dir = _LEGACY_DB_PATH.parent
-        if legacy_dir.exists() and not any(legacy_dir.iterdir()):
-            legacy_dir.rmdir()
-            print(f"✓ Removed empty legacy directory: {legacy_dir}")
+    # Try legacy paths newest-first (prefer most recent data)
+    for legacy_path in reversed(_LEGACY_DB_PATHS):
+        if legacy_path.exists():
+            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy_path, DB_PATH)
+            for suffix in (".db-wal", ".db-shm"):
+                aux = legacy_path.with_suffix(suffix)
+                if aux.exists():
+                    shutil.copy2(aux, DB_PATH.with_suffix(suffix))
+            print(f"✓ Migrated orchestration DB from {legacy_path} to {DB_PATH}")
+            return
 
 
 def get_db() -> sqlite3.Connection:
