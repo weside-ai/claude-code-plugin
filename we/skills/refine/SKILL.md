@@ -126,30 +126,37 @@ status: draft
 
 User reviews plan. On feedback → adjust. On approval → continue.
 
-### Step 5.5: Save Plan (CRITICAL)
+### Step 6: Post-Approval Checklist (MANDATORY, IN THIS ORDER)
 
-**EnterPlanMode saves to `~/.claude/plans/` with a random name — that is NOT permanent.**
+⛔ **After ExitPlanMode approval, execute EXACTLY these steps IN ORDER. No skipping.**
 
+**6a. Jira first** (need ticket number for plan filename):
+
+- If ticket already exists → update description with plan link
+- If no ticket yet → create now (minimal), get `{TICKET}` number
+
+**6b. Save plan to repo** (uses ticket number from 6a):
+
+EnterPlanMode saves to `~/.claude/plans/{random-codename}.md` — that is NOT permanent.
+
+```python
+# 1. Read the approved plan from ~/.claude/plans/
+Read(file_path="~/.claude/plans/{codename}.md")
+# 2. Update frontmatter: story: {TICKET}, status: approved
+# 3. Write to permanent location
+Write(file_path="docs/plans/{TICKET}-plan.md", content=updated_plan)
 ```
-Write(file_path="docs/plans/{TICKET}-plan.md", content=approved_plan)
-```
 
-### Step 6: Save Checkpoint
+**6c. Checkpoint:**
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined
 ```
 
-### Step 7: Output + STOP
-
-⛔ **Nach Plan-Approval NUR Steps 5.5-6 ausführen, dann SOFORT STOPPEN!**
-
-⛔ **KEINE Implementierung! KEIN /we:story! KEIN Branch! KEIN Code!**
-
-Output the summary, then **return control to the user:**
+**6d. Output + STOP:**
 
 ```
-Story {TICKET} + Plan complete!
+Story {TICKET} + Plan saved to docs/plans/{TICKET}-plan.md
 
 DoR: User Story, Plan created, ACs defined
 SQLite: phase=refined
@@ -157,7 +164,7 @@ SQLite: phase=refined
 /we:refine is DONE. User decides when to run /we:story.
 ```
 
-**STOP HERE. Do not continue. Do not suggest next steps. Do not start implementation.**
+⛔ **STOP HERE. KEINE Implementierung! KEIN /we:story! KEIN Branch! KEIN Code!**
 
 ---
 
@@ -235,10 +242,11 @@ Detect available ticketing tool (in priority order):
 - ALWAYS load DoR first
 - ALWAYS create MINIMAL ticket + DETAILED plan
 - ALWAYS use EnterPlanMode for plan creation
-- ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write()
+- ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
+- ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS ask when unclear
 - ⛔ NEVER start implementation — your job is ONLY Story + Plan
 - ⛔ NEVER auto-continue to /we:story — user decides when
 - ⛔ NEVER create branches, write code, or run tests after plan approval
-- ⛔ After Step 7: STOP IMMEDIATELY — do not continue under any circumstances
+- ⛔ After Step 6d: STOP IMMEDIATELY — do not continue under any circumstances
