@@ -147,10 +147,10 @@ Wait for completion. If docs were updated → commit. Write checkpoint `docs_upd
 
 ## Step 7: PR
 
-Verify `test_passed` checkpoint. Call PR creator:
+Verify `test_passed` checkpoint. Call PR creator agent:
 
 ```
-Skill(skill="pr-creator")
+Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
 ```
 
 Extract PR number. Write checkpoint `pr_created`.
