@@ -77,8 +77,8 @@ User reviews PR, merges, closes ticket
 
 Own the process. Ensure skills work together seamlessly:
 
-- **DoR met before development** (`flow/dor.md`)
-- **DoD met before merge** (`flow/dod.md`)
+- **DoR met before development** (`quality/dor.md`)
+- **DoD met before merge** (`quality/dod.md`)
 - **Checkpoints written correctly** by each skill
 - **Quality gates run in parallel** (4 agents, ~40% faster)
 - **No skill skipped** (especially: no PR without test_passed)
@@ -299,7 +299,7 @@ Our approach: Knowledge flows via Story
 ## References
 
 - **Pipeline:** `flow/development-process.md` (full pipeline with diagrams)
-- **DoR:** `flow/dor.md` (Definition of Ready)
-- **DoD:** `flow/dod.md` (Definition of Done)
+- **DoR:** `quality/dor.md` (Definition of Ready)
+- **DoD:** `quality/dod.md` (Definition of Done)
 - **Orchestration:** `flow/orchestration.md` (SQLite CLI)
 - **Epics:** `flow/epic-management.md` (Epic lifecycle)

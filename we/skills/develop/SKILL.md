@@ -73,11 +73,21 @@ When called directly via `/we:develop` (without orchestrator): verify ACs yourse
 
 ### 4. Security Check
 
-If your code touches auth, external APIs, user data, or file uploads:
-- SQL Injection? Use ORM/parameterized queries
-- Unvalidated input? Validate at boundaries
-- Error messages generic? No internal details exposed
-- Rate limiting on expensive endpoints?
+If your code touches auth, external APIs, user data, or file uploads — think like an attacker:
+
+| Check | What to Verify |
+|-------|---------------|
+| **Authentication** | New endpoints require authentication |
+| **Authorization** | Data access scoped to current user/tenant |
+| **Input validation** | All external input validated at boundaries |
+| **File uploads** | Type and size validation enforced |
+| **Error messages** | No internal details leaked (generic errors only) |
+| **SQL/NoSQL** | Parameterized queries only (no string concatenation) |
+| **External URLs** | SSRF prevention (validate/allowlist outbound URLs) |
+| **Secrets** | No hardcoded credentials, tokens, or API keys |
+| **Rate limiting** | Expensive endpoints have rate limits |
+
+If security-guidance plugin is installed, it provides additional security hooks during development.
 
 ### 5. Auto-Fix + Local Tests
 

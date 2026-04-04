@@ -41,7 +41,7 @@ SQLite: phase=refined
 - Ticket: "As X I want Y so that Z" + link to plan
 - Plan: `docs/plans/{TICKET}-plan.md` with ACs, phases, tests, security review
 
-**DoR must be met** before development starts (`flow/dor.md`).
+**DoR must be met** before development starts (`quality/dor.md`).
 
 ---
 
@@ -170,12 +170,17 @@ Claude outputs a PR with:
 | `pr-creator` | /we:story Step 7 | PR with prerequisite check |
 | `doc-manager` | /we:story Step 6 | Auto-detect and update docs |
 
+### Quality Definitions
+
+| Document | Content |
+|----------|---------|
+| `quality/dor.md` | Definition of Ready checklist |
+| `quality/dod.md` | Definition of Done checklist |
+
 ### Reference Documents (flow/)
 
 | Document | Content |
 |----------|---------|
-| `dor.md` | Definition of Ready checklist |
-| `dod.md` | Definition of Done checklist |
 | `orchestration.md` | SQLite CLI reference |
 | `epic-management.md` | Epic lifecycle and templates |
 | `development-process.md` | Pipeline reference for agents |

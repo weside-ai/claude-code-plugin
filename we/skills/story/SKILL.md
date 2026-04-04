@@ -18,8 +18,8 @@ You orchestrate the entire development pipeline in a single skill invocation —
 ## Prerequisites
 
 ```
-Read("flow/dor.md")
-Read("flow/dod.md")
+Read("quality/dor.md")
+Read("quality/dod.md")
 ```
 
 ---
@@ -102,7 +102,7 @@ Only write checkpoint `ac_verified` when ALL items pass. If items fail → call 
 
 ## Step 4: Simplify
 
-Check `ac_verified` exists. Run code simplification. If changes made → commit. Write checkpoint `simplified`.
+Check `ac_verified` exists. Run `/simplify` skill (from code-simplifier plugin). If code-simplifier plugin is not installed, skip with warning: "code-simplifier plugin not available — skipping simplification. Install with: `/install code-simplifier@claude-plugins-official`". If changes made → commit. Write checkpoint `simplified`.
 
 ## Step 5: Quality Gates (PARALLEL)
 

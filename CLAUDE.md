@@ -18,9 +18,10 @@ claude-code-plugin/
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/we/          # Slash commands → /we:* prefix
-│   ├── skills/              # 10 skills (invoked by commands)
-│   ├── agents/              # 4 background agents
-│   ├── flow/                # Reference docs (DoR, DoD, process, orchestration)
+│   ├── skills/              # 11 skills (invoked by commands)
+│   ├── agents/              # 5 background agents
+│   ├── quality/             # DoR, DoD (quality gate definitions)
+│   ├── flow/                # Reference docs (process, orchestration, epics)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
 │   └── scripts/
 │       └── orchestration.py # SQLite checkpoint system (Python stdlib only)

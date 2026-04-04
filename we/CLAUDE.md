@@ -176,7 +176,7 @@ Skills use generic actions ("Create ticket", "Move to In Progress") — never to
 ## References
 
 - **Pipeline:** `flow/development-process.md`
-- **DoR/DoD:** `flow/dor.md`, `flow/dod.md`
+- **DoR/DoD:** `quality/dor.md`, `quality/dod.md`
 - **Orchestration:** `flow/orchestration.md` + `scripts/orchestration.py`
 - **Epics:** `flow/epic-management.md`
 - **Homepage:** [agenticproductownership.com](https://agenticproductownership.com)

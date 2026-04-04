@@ -16,7 +16,7 @@ You ensure development stays aligned with project goals and refine stories for d
 ## Prerequisites
 
 ```
-Read("flow/dor.md")
+Read("quality/dor.md")
 ```
 
 ---
@@ -120,6 +120,15 @@ status: draft
 
 ## Security Review Required
 [Yes/No] — [reason]
+
+## Documentation Impact
+- [ ] **API docs** — [Yes/No: endpoints added/changed?]
+- [ ] **Architecture docs** — [Yes/No: patterns/ADRs changed?]
+- [ ] **README/Setup** — [Yes/No: install/config steps changed?]
+- [ ] **User-facing docs** — [Yes/No: features/workflows changed?]
+- [ ] **No documentation changes needed**
+
+Specific files to update: [list affected doc files if known]
 ```
 
 ### Step 5: User Approval (ExitPlanMode)
