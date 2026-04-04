@@ -86,6 +86,7 @@ STORY_PHASES = [
     "implementation_complete",  # /we:develop — Code + tests committed
     "ac_verified",  # /we:story — All ACs verified with evidence
     "simplified",  # /we:story — Code simplified
+    "docs_updated",  # /we:docs — Documentation updated
     "review_passed",  # /we:review — Code review passed
     "static_analysis_passed",  # /we:static — Lint/format/types passed
     "test_passed",  # /we:test — Tests + coverage passed

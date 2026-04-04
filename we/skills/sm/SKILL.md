@@ -162,8 +162,8 @@ python3 $CLI story list
 # Specific story
 python3 $CLI story status {TICKET}
 
-# Stories pending retrospective
-python3 $CLI story list --completed
+# All stories (including completed)
+python3 $CLI story list
 ```
 
 ### Key Metrics

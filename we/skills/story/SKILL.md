@@ -45,7 +45,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
 
 **DB location:** `~/.claude/weside/orchestration.db` — Never access directly, always use CLI.
 
-**Phases:** refined → git_prepared → implementation_complete → ac_verified → simplified → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
+**Phases:** refined → git_prepared → implementation_complete → ac_verified → simplified → docs_updated → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Professional code review — diff-based, AC-aligned, max 10 issues. Use when reviewing code, checking pull requests, or when user mentions code review.
+description: Professional code review — diff-based, AC-aligned, max 10 issues. This agent should be used when reviewing code, checking pull requests, or when the user mentions code review.
 color: purple
 ---
 

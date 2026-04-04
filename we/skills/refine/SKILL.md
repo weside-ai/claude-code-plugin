@@ -186,7 +186,7 @@ Trigger: `/we:refine "Feature description"`
 1. Design session — ask clarifying questions
 2. Create ticket via ticketing tool (minimal)
 3. Link to Epic (if applicable)
-4. Continue as MODE 1 (Steps 4-7)
+4. Continue as MODE 1 (Steps 4-6)
 
 ---
 

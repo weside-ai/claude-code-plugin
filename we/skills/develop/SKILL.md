@@ -1,9 +1,9 @@
 ---
 name: develop
 description: >
-  Developer skill for implementing code. Handles branch creation, coding,
-  testing, and commits. Called by /we:story orchestrator or directly via
-  /we:develop. Use when user says "/we:develop" or when /we:story calls this skill.
+  Developer skill for implementing code. This skill should be used when
+  the user asks to "implement", "develop", "code", "build feature", or
+  says "/we:develop". Also called by /we:story orchestrator.
 ---
 
 # Developer
