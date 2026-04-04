@@ -83,7 +83,9 @@ Implementation Plan: docs/plans/{TICKET}-plan.md
 
 ### Step 4: Create Plan (EnterPlanMode)
 
-Research codebase, then create detailed plan:
+Research codebase thoroughly, then create detailed plan.
+
+**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 ```markdown
 ---

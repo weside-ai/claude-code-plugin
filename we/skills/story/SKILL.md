@@ -79,6 +79,8 @@ If interrupted → ask user whether to resume from last checkpoint.
 
 Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-plan.md`).
 
+**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
+
 **Reality Check:** If plan exists, check creation date against recent git changes. Warn if code changed significantly since plan was written.
 
 **Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.
