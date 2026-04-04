@@ -4,60 +4,118 @@
 After each meaningful turn, store the last exchange directly
 via the weside MCP endpoint. Completely silent — no Claude involvement.
 
+Auth: Reads token from ~/.weside/credentials.json (written by `weside auth login`).
+Auto-refreshes expired tokens via Supabase refresh_token endpoint.
+
 Flow:
   1. Check if autoStoreConversations is enabled
   2. Read hook stdin (last_assistant_message, transcript_path, etc.)
   3. Extract last real user message from transcript JSONL
   4. Filter: skip short messages, commands, tool-only turns
-  5. Call weside MCP store_conversations directly via HTTP (JSON-RPC over SSE)
+  5. Auth via CLI credentials file (with auto-refresh)
+  6. Call weside MCP store_conversations directly via HTTP (JSON-RPC over SSE)
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
+import time
 import urllib.request
 
 MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
 MAX_CONTENT_LENGTH = 500
 
-# Auth config — all values from environment, no defaults
-SUPABASE_URL = os.environ.get("WESIDE_SUPABASE_URL", "")
-MCP_URL = os.environ.get("WESIDE_MCP_URL", "https://api.weside.ai/mcp/")
-SUPABASE_ANON_KEY = os.environ.get("WESIDE_SUPABASE_ANON_KEY", "")
-
-_cached_token: str | None = None
+SUPABASE_URL = "https://pqykrwpmhjqjhpsnjxbd.supabase.co"
+MCP_URL = "https://api.weside.ai/mcp/"
+CREDENTIALS_PATH = os.path.expanduser("~/.weside/credentials.json")
 
 
-def _get_access_token() -> str | None:
-    """Get Supabase access token via password auth. Requires env vars."""
-    global _cached_token  # noqa: PLW0603
-    if _cached_token:
-        return _cached_token
-
-    email = os.environ.get("WESIDE_EMAIL", "")
-    password = os.environ.get("WESIDE_PASSWORD", "")
-
-    if not all([SUPABASE_URL, SUPABASE_ANON_KEY, email, password]):
+def _decode_jwt_exp(token: str) -> int | None:
+    """Extract expiry timestamp from JWT without verification."""
+    try:
+        payload = token.split(".")[1]
+        # Fix base64 padding
+        payload += "=" * (4 - len(payload) % 4)
+        data = json.loads(base64.urlsafe_b64decode(payload))
+        return data.get("exp")
+    except Exception:
         return None
 
-    data = json.dumps({"email": email, "password": password}).encode()
+
+def _load_credentials() -> dict | None:
+    """Load tokens from CLI credentials file."""
+    try:
+        with open(CREDENTIALS_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _save_credentials(creds: dict) -> None:
+    """Save updated tokens back to CLI credentials file."""
+    try:
+        os.makedirs(os.path.dirname(CREDENTIALS_PATH), mode=0o700, exist_ok=True)
+        with open(CREDENTIALS_PATH, "w") as f:
+            json.dump(creds, f, indent=2)
+        os.chmod(CREDENTIALS_PATH, 0o600)
+    except Exception:
+        pass
+
+
+def _refresh_token(refresh_token: str) -> dict | None:
+    """Refresh access token via Supabase (same as Go CLI — no anon key needed)."""
+    data = urllib.parse.urlencode(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }
+    ).encode()
+
     req = urllib.request.Request(
-        f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+        f"{SUPABASE_URL}/auth/v1/token?grant_type=refresh_token",
         data=data,
-        headers={
-            "apikey": SUPABASE_ANON_KEY,
-            "Content-Type": "application/json",
-        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
-            _cached_token = json.loads(resp.read()).get("access_token")
-            return _cached_token
+            return json.loads(resp.read())
     except Exception:
         return None
+
+
+def _get_valid_token() -> str | None:
+    """Get a valid access token, refreshing if expired."""
+    creds = _load_credentials()
+    if not creds or not creds.get("access_token"):
+        return None
+
+    token = creds["access_token"]
+    exp = _decode_jwt_exp(token)
+
+    # Token still valid (with 60s buffer)
+    if exp and exp > time.time() + 60:
+        return token
+
+    # Try refresh
+    refresh = creds.get("refresh_token")
+    if not refresh:
+        return None
+
+    result = _refresh_token(refresh)
+    if not result or not result.get("access_token"):
+        return None
+
+    # Save refreshed tokens
+    creds["access_token"] = result["access_token"]
+    if result.get("refresh_token"):
+        creds["refresh_token"] = result["refresh_token"]
+    _save_credentials(creds)
+
+    return result["access_token"]
 
 
 def _call_store_conversations(
@@ -243,8 +301,8 @@ def main() -> None:
     if not is_worth_storing(user_msg, assistant_msg):
         return
 
-    # 5. Auth (requires WESIDE_* env vars)
-    token = _get_access_token()
+    # 5. Auth via CLI credentials (~/.weside/credentials.json)
+    token = _get_valid_token()
     if not token:
         return
 
