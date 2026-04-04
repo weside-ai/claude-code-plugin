@@ -203,7 +203,29 @@ Trigger: `/we:refine` (no argument)
 
 Trigger: `/we:refine {EPIC-KEY}` (when key is an Epic)
 
-Load `flow/epic-management.md`. Help create/refine Epics with Vision, Scope, Stories, Success Metrics.
+Help create/refine Epics.
+
+**Epic = finite initiative** (not a permanent category). 1-3 months, stories emerge progressively.
+
+| Create Epic when | Do NOT create when |
+|-----|------|
+| Initiative > 2 sprints | Permanent category ("Mobile", "Backend") |
+| Multiple related stories | Only 2-3 small stories |
+| Clear end foreseeable | No clear end |
+
+**Epic Template:**
+```markdown
+## Vision
+[Why? What problem?]
+## Scope
+[IN / OUT]
+## Stories
+[First 2-3 stories]
+## Success Metrics
+[When is Epic DONE?]
+```
+
+**Epic Status = Project Focus:** In Progress (actively working) → Selected (up next) → Backlog (paused) → Done (all stories done AND no further scope). Stories emerge during work — this is normal.
 
 ---
 

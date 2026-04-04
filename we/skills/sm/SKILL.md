@@ -47,7 +47,7 @@ that remembers, challenges, and grows with the project.
 
 ## The Pipeline You Own
 
-**Full reference:** `flow/development-process.md`
+**Three phases:** /we:refine (interactive) → /we:story (autonomous) → User merges (manual)
 
 ```
 /we:setup          (once per project — detect stack, ticketing, vision)
@@ -90,7 +90,7 @@ Keep skills lean, focused, effective:
 | Check | What to Look For |
 |-------|-----------------|
 | Focus | Each skill does ONE thing well |
-| Duplication | No repeated content across skills (use flow/ references) |
+| Duplication | No repeated content across skills (inline or use quality/ references) |
 | Consistency | Same terms, same patterns, same checkpoint names |
 | Token efficiency | Minimal but complete knowledge per skill |
 | Examples | Generic (not project-specific) |
@@ -101,7 +101,7 @@ Keep skills lean, focused, effective:
 Identify and remove blockers:
 
 - Broken references between skills
-- Missing flow/ documents
+- Missing quality/ or reference documents
 - Process bottlenecks (e.g., quality gate taking too long)
 - Token waste patterns
 - Unclear skill boundaries
@@ -132,7 +132,7 @@ Per skill: Purpose? Audience? Duplicates with other skills?
 ### Phase 2: Token Optimization
 
 - Remove duplicates → keep one source, reference elsewhere
-- Consolidate into flow/ docs when multiple skills need the same info
+- Consolidate shared knowledge into quality/ docs or inline where needed
 - Check if architecture docs duplicate skill content
 
 ### Phase 3: Professional Examples
@@ -248,8 +248,7 @@ description: >            # max 1024 chars: WHAT + WHEN + trigger keywords
 - [ ] description: specific, < 1024 chars, includes trigger keywords
 - [ ] Steps are numbered and clear
 - [ ] Examples are generic (not project-specific)
-- [ ] References use `flow/` docs (not inline duplication)
-- [ ] Checkpoint name matches `flow/orchestration.md` phases
+- [ ] Checkpoint phases: refined → git_prepared → implementation_complete → ac_verified → simplified → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
 
 ---
 
@@ -298,8 +297,6 @@ Our approach: Knowledge flows via Story
 
 ## References
 
-- **Pipeline:** `flow/development-process.md` (full pipeline with diagrams)
 - **DoR:** `quality/dor.md` (Definition of Ready)
 - **DoD:** `quality/dod.md` (Definition of Done)
-- **Orchestration:** `flow/orchestration.md` (SQLite CLI)
-- **Epics:** `flow/epic-management.md` (Epic lifecycle)
+- **Orchestration CLI:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py`

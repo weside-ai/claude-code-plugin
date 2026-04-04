@@ -21,7 +21,6 @@ claude-code-plugin/
 │   ├── skills/              # 11 skills (invoked by commands)
 │   ├── agents/              # 5 background agents
 │   ├── quality/             # DoR, DoD (quality gate definitions)
-│   ├── flow/                # Reference docs (process, orchestration, epics)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
 │   └── scripts/
 │       └── orchestration.py # SQLite checkpoint system (Python stdlib only)

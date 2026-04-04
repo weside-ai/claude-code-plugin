@@ -24,8 +24,6 @@ You implement features and write tests.
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
 ```
 
-Full reference: `flow/orchestration.md`
-
 ---
 
 ## Steps

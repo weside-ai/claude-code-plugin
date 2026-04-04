@@ -27,12 +27,25 @@ Read("quality/dod.md")
 ## Orchestration CLI
 
 ```bash
+# Checkpoints
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status {TICKET}
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {step}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story resume {TICKET}
+
+# Circuit breaker (3 failures → stop)
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {phase}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit fail {TICKET} {phase} --error "msg"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit success {TICKET} {phase}
+
+# CI-fix loop (max 3 cycles)
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix start {TICKET} {pr_number}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix attempt {TICKET} {fix_type}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
 ```
 
-Full reference: `flow/orchestration.md`
+**DB location:** `~/.claude/weside/orchestration.db` — Never access directly, always use CLI.
+
+**Phases:** refined → git_prepared → implementation_complete → ac_verified → simplified → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
 
 ---
 
