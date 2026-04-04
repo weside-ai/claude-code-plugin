@@ -74,7 +74,7 @@ from typing import Any
 # Valid worker ID pattern: alphanumeric, underscores, hyphens, dots
 WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 
-# Story phases for checkpoint tracking (WA-170, updated for unified workflow)
+# Story phases for checkpoint tracking
 # Planning phases (before /story):
 #   - refined: /refine completed (Business Context, AC, Testing Req)
 #   - architected: /arch completed (Implementation Notes, ADRs, Security)
@@ -97,7 +97,7 @@ STORY_PHASES = [
 # Stale checkpoint threshold in hours
 STALE_CHECKPOINT_HOURS = 24
 
-# Circuit Breaker configuration (WA-172)
+# Circuit Breaker configuration
 CIRCUIT_BREAKER_CONFIG = {
     "max_failures_per_phase": 3,  # After 3 failures, circuit opens
     "cooldown_seconds": 60,  # Cooldown before HALF-OPEN test
@@ -109,7 +109,7 @@ CIRCUIT_STATE_CLOSED = "closed"  # Normal operation
 CIRCUIT_STATE_OPEN = "open"  # Failed too many times, blocked
 CIRCUIT_STATE_HALF_OPEN = "half_open"  # Testing if recovered
 
-# CI-Fix Loop configuration (WA-174)
+# CI-Fix Loop configuration
 # Success rates based on historical analysis of CI failure categories
 CIFIX_LINT_SUCCESS_RATE = 0.90  # High: ruff --fix resolves most lint issues
 CIFIX_FORMAT_SUCCESS_RATE = 0.95  # Very high: ruff format is deterministic
@@ -156,7 +156,7 @@ CIFIX_STATE_SUCCESS = "success"  # CI passed
 CIFIX_STATE_FAILED = "failed"  # Exceeded max attempts
 CIFIX_STATE_BLOCKED = "blocked"  # Non-fixable error encountered
 
-# Definition of Ready (DoR) markers for section detection (WA-173)
+# Definition of Ready (DoR) markers for section detection
 # Supports Jira Textile (h2.) and Markdown (##) formats
 DOR_USER_STORY_MARKERS = ["h2. user story", "## user story", "as a ", "as an "]
 DOR_ACCEPTANCE_MARKERS = [
@@ -248,7 +248,7 @@ def init_db() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
-            -- Worker registration (extended for headless support - WA-176)
+            -- Worker registration
             CREATE TABLE IF NOT EXISTS workers (
                 id TEXT PRIMARY KEY,
                 terminal TEXT,
@@ -270,7 +270,7 @@ def init_db() -> None:
                 FOREIGN KEY (task_id) REFERENCES tasks(id)
             );
 
-            -- Story checkpoints for /story resume (WA-170)
+            -- Story checkpoints for /story resume
             CREATE TABLE IF NOT EXISTS story_checkpoints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 story_key TEXT NOT NULL,
@@ -285,7 +285,7 @@ def init_db() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
-            -- Circuit breaker state tracking (WA-172)
+            -- Circuit breaker state tracking
             CREATE TABLE IF NOT EXISTS circuit_breakers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 story_key TEXT NOT NULL,
@@ -301,7 +301,7 @@ def init_db() -> None:
                 UNIQUE(story_key, phase)
             );
 
-            -- CI-Fix session tracking (WA-174)
+            -- CI-Fix session tracking
             CREATE TABLE IF NOT EXISTS cifix_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 story_key TEXT NOT NULL,
@@ -314,7 +314,7 @@ def init_db() -> None:
                 UNIQUE(story_key, pr_number)
             );
 
-            -- CI-Fix attempt history (WA-174)
+            -- CI-Fix attempt history
             CREATE TABLE IF NOT EXISTS cifix_attempts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL,
@@ -337,7 +337,7 @@ def init_db() -> None:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
-            -- Story workflow tracking for crash recovery (WA-234)
+            -- Story workflow tracking for crash recovery
             CREATE TABLE IF NOT EXISTS story_workflow (
                 story_key TEXT PRIMARY KEY,
                 phase TEXT NOT NULL,  -- Current phase in STORY_PHASES
@@ -349,7 +349,7 @@ def init_db() -> None:
                 retry_count INTEGER DEFAULT 0
             );
 
-            -- Story metrics for retrospective analysis (WA-234)
+            -- Story metrics for retrospective analysis
             CREATE TABLE IF NOT EXISTS story_metrics (
                 story_key TEXT PRIMARY KEY,
                 pr_number INTEGER,
@@ -404,7 +404,7 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "is_headless" not in columns:
         conn.execute("ALTER TABLE workers ADD COLUMN is_headless BOOLEAN DEFAULT FALSE")
 
-    # Check if story_metrics table needs updated_at column (WA-234)
+    # Check if story_metrics table needs updated_at column
     cursor = conn.execute("PRAGMA table_info(story_metrics)")
     metrics_columns = {row[1] for row in cursor.fetchall()}
 
@@ -1047,7 +1047,7 @@ def cleanup(
 
 
 # =============================================================================
-# Story Checkpoint Functions (WA-170)
+# Story Checkpoint Functions
 # =============================================================================
 
 
@@ -1321,7 +1321,7 @@ def story_status(story_key: str) -> dict[str, Any]:
 
 
 # =============================================================================
-# Circuit Breaker Functions (WA-172)
+# Circuit Breaker Functions
 # =============================================================================
 
 
@@ -1688,7 +1688,7 @@ def circuit_list(story_key: str | None = None, state: str | None = None) -> list
 
 
 # =============================================================================
-# Auto-Refine DoR Functions (WA-173)
+# Auto-Refine DoR Functions
 # =============================================================================
 
 
@@ -2029,7 +2029,7 @@ def _perform_rollback(conn: sqlite3.Connection, story_key: str, phase: str) -> d
 
 
 # ============================================================================
-# CI-Fix Functions (WA-174)
+# CI-Fix Functions
 # ============================================================================
 
 
@@ -2038,7 +2038,7 @@ def cifix_start(story_key: str, pr_number: int) -> dict[str, Any]:
     Start a new CI-fix session for a story's PR.
 
     Args:
-        story_key: Story/ticket key (e.g., 'WA-174')
+        story_key: Story/ticket key (e.g., 'PROJ-1')
         pr_number: GitHub PR number
 
     Returns:
@@ -2591,7 +2591,7 @@ def main() -> None:
     task_update_p.add_argument("--result")
     task_update_p.add_argument("--phase")
 
-    # worker commands (extended for WA-176)
+    # worker commands (extended for)
     worker_parser = subparsers.add_parser("worker", help="Worker operations")
     worker_sub = worker_parser.add_subparsers(dest="action", required=True)
 
@@ -2633,7 +2633,7 @@ def main() -> None:
     cp_load_p.add_argument("task_id")
     cp_load_p.add_argument("--phase")
 
-    # story commands (WA-170)
+    # story commands
     story_parser = subparsers.add_parser("story", help="Story checkpoint operations")
     story_sub = story_parser.add_subparsers(dest="action", required=True)
 
@@ -2664,7 +2664,7 @@ def main() -> None:
 
     story_sub.add_parser("phases", help="List valid story phases")
 
-    # circuit breaker commands (WA-172)
+    # circuit breaker commands
     circuit_parser = subparsers.add_parser("circuit", help="Circuit breaker operations")
     circuit_sub = circuit_parser.add_subparsers(dest="action", required=True)
 
@@ -2695,7 +2695,7 @@ def main() -> None:
 
     circuit_sub.add_parser("config", help="Show circuit breaker configuration")
 
-    # dor commands (WA-173)
+    # dor commands
     dor_parser = subparsers.add_parser("dor", help="Definition of Ready operations")
     dor_sub = dor_parser.add_subparsers(dest="action", required=True)
 
@@ -2712,7 +2712,7 @@ def main() -> None:
     dor_refine_p.add_argument("summary", help="Story summary")
     dor_refine_p.add_argument("--description", help="Existing description (optional)")
 
-    # cifix commands (WA-174)
+    # cifix commands
     cifix_parser = subparsers.add_parser("cifix", help="CI-Fix Loop operations")
     cifix_sub = cifix_parser.add_subparsers(dest="action", required=True)
 
