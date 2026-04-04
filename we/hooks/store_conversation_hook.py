@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop hook: Per-turn conversation storage as companion memory.
 
-WA-701: After each meaningful turn, store the last exchange directly
+After each meaningful turn, store the last exchange directly
 via the weside MCP endpoint. Completely silent — no Claude involvement.
 
 Flow:
@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import urllib.request
 
@@ -24,64 +23,39 @@ MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
 MAX_CONTENT_LENGTH = 500
 
-# Supabase auth
-SUPABASE_URL = "https://pqykrwpmhjqjhpsnjxbd.supabase.co"
-MCP_URL = "https://api.weside.ai/mcp/"
+# Auth config — all values from environment, no defaults
+SUPABASE_URL = os.environ.get("WESIDE_SUPABASE_URL", "")
+MCP_URL = os.environ.get("WESIDE_MCP_URL", "https://api.weside.ai/mcp/")
+SUPABASE_ANON_KEY = os.environ.get("WESIDE_SUPABASE_ANON_KEY", "")
 
-# Credentials resolved at runtime from K8s secret
-_cached_anon_key: str | None = None
-
-
-def _get_anon_key() -> str | None:
-    """Get Supabase anon key from K8s secret (cached)."""
-    global _cached_anon_key  # noqa: PLW0603
-    if _cached_anon_key:
-        return _cached_anon_key
-    try:
-        result = subprocess.run(
-            [
-                "kubectl",
-                "get",
-                "secret",
-                "backend-secret",
-                "-n",
-                "weside-production",
-                "-o",
-                "jsonpath={.data.SUPABASE_ANON_KEY}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout:
-            import base64
-
-            _cached_anon_key = base64.b64decode(result.stdout).decode()
-            return _cached_anon_key
-    except Exception:
-        pass
-    return None
+_cached_token: str | None = None
 
 
-def _get_access_token(anon_key: str) -> str | None:
-    """Get Supabase access token via password auth."""
-    # Read credentials from plugin config or env
-    email = os.environ.get("WESIDE_EMAIL", "chandri@gmx.net")
-    password = os.environ.get("WESIDE_PASSWORD", "Colenet123!")
+def _get_access_token() -> str | None:
+    """Get Supabase access token via password auth. Requires env vars."""
+    global _cached_token  # noqa: PLW0603
+    if _cached_token:
+        return _cached_token
+
+    email = os.environ.get("WESIDE_EMAIL", "")
+    password = os.environ.get("WESIDE_PASSWORD", "")
+
+    if not all([SUPABASE_URL, SUPABASE_ANON_KEY, email, password]):
+        return None
 
     data = json.dumps({"email": email, "password": password}).encode()
     req = urllib.request.Request(
         f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
         data=data,
         headers={
-            "apikey": anon_key,
+            "apikey": SUPABASE_ANON_KEY,
             "Content-Type": "application/json",
         },
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read()).get("access_token")
+            _cached_token = json.loads(resp.read()).get("access_token")
+            return _cached_token
     except Exception:
         return None
 
@@ -269,12 +243,8 @@ def main() -> None:
     if not is_worth_storing(user_msg, assistant_msg):
         return
 
-    # 5. Auth
-    anon_key = _get_anon_key()
-    if not anon_key:
-        return
-
-    token = _get_access_token(anon_key)
+    # 5. Auth (requires WESIDE_* env vars)
+    token = _get_access_token()
     if not token:
         return
 

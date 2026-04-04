@@ -18,8 +18,8 @@ You orchestrate the entire development pipeline in a single skill invocation —
 ## Prerequisites
 
 ```
-Read("flow/dor.md")
-Read("flow/dod.md")
+Read("quality/dor.md")
+Read("quality/dod.md")
 ```
 
 ---
@@ -27,12 +27,25 @@ Read("flow/dod.md")
 ## Orchestration CLI
 
 ```bash
+# Checkpoints
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status {TICKET}
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {step}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story resume {TICKET}
+
+# Circuit breaker (3 failures → stop)
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {phase}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit fail {TICKET} {phase} --error "msg"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit success {TICKET} {phase}
+
+# CI-fix loop (max 3 cycles)
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix start {TICKET} {pr_number}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix attempt {TICKET} {fix_type}
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
 ```
 
-Full reference: `flow/orchestration.md`
+**DB location:** `~/.claude/weside/orchestration.db` — Never access directly, always use CLI.
+
+**Phases:** refined → git_prepared → implementation_complete → ac_verified → simplified → docs_updated → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
 
 ---
 
@@ -65,6 +78,8 @@ If interrupted → ask user whether to resume from last checkpoint.
 ## Step 1: DoR + Load Story + Reality Check
 
 Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-plan.md`).
+
+**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 **Reality Check:** If plan exists, check creation date against recent git changes. Warn if code changed significantly since plan was written.
 
@@ -102,7 +117,7 @@ Only write checkpoint `ac_verified` when ALL items pass. If items fail → call 
 
 ## Step 4: Simplify
 
-Check `ac_verified` exists. Run code simplification. If changes made → commit. Write checkpoint `simplified`.
+Check `ac_verified` exists. Run `/simplify` skill (from code-simplifier plugin). If code-simplifier plugin is not installed, skip with warning: "code-simplifier plugin not available — skipping simplification. Install with: `/install code-simplifier@claude-plugins-official`". If changes made → commit. Write checkpoint `simplified`.
 
 ## Step 5: Quality Gates (PARALLEL)
 
@@ -132,10 +147,10 @@ Wait for completion. If docs were updated → commit. Write checkpoint `docs_upd
 
 ## Step 7: PR
 
-Verify `test_passed` checkpoint. Call PR creator:
+Verify `test_passed` checkpoint. Call PR creator agent:
 
 ```
-Skill(skill="pr-creator")
+Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
 ```
 
 Extract PR number. Write checkpoint `pr_created`.

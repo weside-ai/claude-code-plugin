@@ -74,7 +74,7 @@ from typing import Any
 # Valid worker ID pattern: alphanumeric, underscores, hyphens, dots
 WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 
-# Story phases for checkpoint tracking (WA-170, updated for unified workflow)
+# Story phases for checkpoint tracking
 # Planning phases (before /story):
 #   - refined: /refine completed (Business Context, AC, Testing Req)
 #   - architected: /arch completed (Implementation Notes, ADRs, Security)
@@ -86,6 +86,7 @@ STORY_PHASES = [
     "implementation_complete",  # /we:develop — Code + tests committed
     "ac_verified",  # /we:story — All ACs verified with evidence
     "simplified",  # /we:story — Code simplified
+    "docs_updated",  # /we:docs — Documentation updated
     "review_passed",  # /we:review — Code review passed
     "static_analysis_passed",  # /we:static — Lint/format/types passed
     "test_passed",  # /we:test — Tests + coverage passed
@@ -96,7 +97,7 @@ STORY_PHASES = [
 # Stale checkpoint threshold in hours
 STALE_CHECKPOINT_HOURS = 24
 
-# Circuit Breaker configuration (WA-172)
+# Circuit Breaker configuration
 CIRCUIT_BREAKER_CONFIG = {
     "max_failures_per_phase": 3,  # After 3 failures, circuit opens
     "cooldown_seconds": 60,  # Cooldown before HALF-OPEN test
@@ -108,7 +109,7 @@ CIRCUIT_STATE_CLOSED = "closed"  # Normal operation
 CIRCUIT_STATE_OPEN = "open"  # Failed too many times, blocked
 CIRCUIT_STATE_HALF_OPEN = "half_open"  # Testing if recovered
 
-# CI-Fix Loop configuration (WA-174)
+# CI-Fix Loop configuration
 # Success rates based on historical analysis of CI failure categories
 CIFIX_LINT_SUCCESS_RATE = 0.90  # High: ruff --fix resolves most lint issues
 CIFIX_FORMAT_SUCCESS_RATE = 0.95  # Very high: ruff format is deterministic
@@ -155,7 +156,7 @@ CIFIX_STATE_SUCCESS = "success"  # CI passed
 CIFIX_STATE_FAILED = "failed"  # Exceeded max attempts
 CIFIX_STATE_BLOCKED = "blocked"  # Non-fixable error encountered
 
-# Definition of Ready (DoR) markers for section detection (WA-173)
+# Definition of Ready (DoR) markers for section detection
 # Supports Jira Textile (h2.) and Markdown (##) formats
 DOR_USER_STORY_MARKERS = ["h2. user story", "## user story", "as a ", "as an "]
 DOR_ACCEPTANCE_MARKERS = [
@@ -177,6 +178,137 @@ DOR_IMPLEMENTATION_MARKERS = [
 # Database location - in ~/.claude/weside/ (shared across worktrees)
 # Using home directory ensures all worktrees share the same database
 DB_PATH = Path.home() / ".claude" / "weside" / "orchestration.db"
+
+# Schema SQL — used by both init_db() and auto-init on first use
+_SCHEMA_SQL = """
+    CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        story_key TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'claimed', 'running', 'completed', 'failed', 'blocked')),
+        worker_id TEXT,
+        phase TEXT,
+        dependencies TEXT,
+        started_at DATETIME,
+        completed_at DATETIME,
+        result_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS workers (
+        id TEXT PRIMARY KEY,
+        terminal TEXT,
+        status TEXT DEFAULT 'idle' CHECK(status IN ('idle', 'working', 'offline')),
+        current_task_id TEXT,
+        worktree_path TEXT,
+        is_headless BOOLEAN DEFAULT FALSE,
+        last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        state_json TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (task_id) REFERENCES tasks(id)
+    );
+    CREATE TABLE IF NOT EXISTS story_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_key TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        phase_index INTEGER NOT NULL,
+        branch TEXT,
+        files_modified TEXT,
+        commits TEXT,
+        pr_number INTEGER,
+        test_coverage REAL,
+        extra_data TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS circuit_breakers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_key TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        failure_count INTEGER DEFAULT 0,
+        state TEXT DEFAULT 'closed' CHECK(state IN ('closed', 'open', 'half_open')),
+        last_failure_at DATETIME,
+        opened_at DATETIME,
+        last_error TEXT,
+        rollback_commit TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(story_key, phase)
+    );
+    CREATE TABLE IF NOT EXISTS cifix_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_key TEXT NOT NULL,
+        pr_number INTEGER NOT NULL,
+        state TEXT DEFAULT 'active' CHECK(state IN ('active', 'success', 'failed', 'blocked')),
+        attempt_count INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME,
+        UNIQUE(story_key, pr_number)
+    );
+    CREATE TABLE IF NOT EXISTS cifix_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        attempt_number INTEGER NOT NULL,
+        fix_type TEXT NOT NULL,
+        error_message TEXT,
+        fix_applied TEXT,
+        success BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (session_id) REFERENCES cifix_sessions(id)
+    );
+    CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT,
+        worker_id TEXT,
+        event_type TEXT NOT NULL,
+        message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS story_workflow (
+        story_key TEXT PRIMARY KEY,
+        phase TEXT NOT NULL,
+        branch_name TEXT,
+        pr_number INTEGER,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        error_message TEXT,
+        retry_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS story_metrics (
+        story_key TEXT PRIMARY KEY,
+        pr_number INTEGER,
+        ci_attempts INTEGER DEFAULT 1,
+        failure_types TEXT,
+        first_ci_green BOOLEAN,
+        time_to_merge_minutes INTEGER,
+        lessons_learned TEXT,
+        retro_completed BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME,
+        merged_at DATETIME
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_story ON tasks(story_key);
+    CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
+    CREATE INDEX IF NOT EXISTS idx_workers_headless ON workers(is_headless);
+    CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
+    CREATE INDEX IF NOT EXISTS idx_checkpoints_task ON checkpoints(task_id);
+    CREATE INDEX IF NOT EXISTS idx_story_checkpoints_story ON story_checkpoints(story_key);
+    CREATE INDEX IF NOT EXISTS idx_story_checkpoints_phase ON story_checkpoints(phase);
+    CREATE INDEX IF NOT EXISTS idx_circuit_breakers_story ON circuit_breakers(story_key);
+    CREATE INDEX IF NOT EXISTS idx_circuit_breakers_state ON circuit_breakers(state);
+    CREATE INDEX IF NOT EXISTS idx_circuit_breakers_story_phase ON circuit_breakers(story_key, phase);
+    CREATE INDEX IF NOT EXISTS idx_cifix_sessions_story ON cifix_sessions(story_key);
+    CREATE INDEX IF NOT EXISTS idx_cifix_sessions_state ON cifix_sessions(state);
+    CREATE INDEX IF NOT EXISTS idx_cifix_attempts_session ON cifix_attempts(session_id);
+    CREATE INDEX IF NOT EXISTS idx_story_workflow_phase ON story_workflow(phase);
+    CREATE INDEX IF NOT EXISTS idx_story_metrics_retro ON story_metrics(retro_completed);
+"""
 
 # Legacy paths for migration (oldest first)
 _LEGACY_DB_PATHS = [
@@ -212,175 +344,46 @@ def _migrate_legacy_db() -> None:
 
 
 def get_db() -> sqlite3.Connection:
-    """Get database connection with proper settings."""
+    """Get database connection with proper settings. Auto-initializes on first use."""
     # Auto-migrate from legacy location on first access
     _migrate_legacy_db()
 
     # Ensure parent directory exists
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+    is_new = not DB_PATH.exists()
+
     conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
     # Enable WAL mode for better concurrent access
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")  # 30 second timeout
+
+    # Auto-create tables if this is a fresh database
+    if is_new:
+        _ensure_schema(conn)
+
     return conn
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create tables if they don't exist. Called automatically on first use."""
+    # Check if story_checkpoints table exists as a proxy for schema presence
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='story_checkpoints'"
+    )
+    if cursor.fetchone() is None:
+        # Schema not present — run full init (init_db closes conn, so we do it inline)
+        conn.executescript(_SCHEMA_SQL)
+        _migrate_db(conn)
+        conn.commit()
 
 
 def init_db() -> None:
     """Initialize database schema with migrations."""
     conn = get_db()
     try:
-        conn.executescript("""
-            -- Task management
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY,
-                story_key TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'claimed', 'running', 'completed', 'failed', 'blocked')),
-                worker_id TEXT,
-                phase TEXT,
-                dependencies TEXT,  -- JSON array of task IDs
-                started_at DATETIME,
-                completed_at DATETIME,
-                result_json TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Worker registration (extended for headless support - WA-176)
-            CREATE TABLE IF NOT EXISTS workers (
-                id TEXT PRIMARY KEY,
-                terminal TEXT,
-                status TEXT DEFAULT 'idle' CHECK(status IN ('idle', 'working', 'offline')),
-                current_task_id TEXT,
-                worktree_path TEXT,  -- Path to git worktree (for headless instances)
-                is_headless BOOLEAN DEFAULT FALSE,  -- True for headless Claude instances
-                last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Checkpoints for task resume
-            CREATE TABLE IF NOT EXISTS checkpoints (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id TEXT NOT NULL,
-                phase TEXT NOT NULL,
-                state_json TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (task_id) REFERENCES tasks(id)
-            );
-
-            -- Story checkpoints for /story resume (WA-170)
-            CREATE TABLE IF NOT EXISTS story_checkpoints (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                story_key TEXT NOT NULL,
-                phase TEXT NOT NULL,  -- One of STORY_PHASES
-                phase_index INTEGER NOT NULL,  -- Index in STORY_PHASES for ordering
-                branch TEXT,  -- Git branch name
-                files_modified TEXT,  -- JSON array of modified files
-                commits TEXT,  -- JSON array of commit hashes
-                pr_number INTEGER,  -- PR number if created
-                test_coverage REAL,  -- Test coverage percentage
-                extra_data TEXT,  -- JSON for additional phase-specific data
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Circuit breaker state tracking (WA-172)
-            CREATE TABLE IF NOT EXISTS circuit_breakers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                story_key TEXT NOT NULL,
-                phase TEXT NOT NULL,
-                failure_count INTEGER DEFAULT 0,
-                state TEXT DEFAULT 'closed' CHECK(state IN ('closed', 'open', 'half_open')),
-                last_failure_at DATETIME,
-                opened_at DATETIME,  -- When circuit transitioned to OPEN
-                last_error TEXT,  -- Error message from last failure
-                rollback_commit TEXT,  -- Commit hash rolled back to (if any)
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(story_key, phase)
-            );
-
-            -- CI-Fix session tracking (WA-174)
-            CREATE TABLE IF NOT EXISTS cifix_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                story_key TEXT NOT NULL,
-                pr_number INTEGER NOT NULL,
-                state TEXT DEFAULT 'active' CHECK(state IN ('active', 'success', 'failed', 'blocked')),
-                attempt_count INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                completed_at DATETIME,
-                UNIQUE(story_key, pr_number)
-            );
-
-            -- CI-Fix attempt history (WA-174)
-            CREATE TABLE IF NOT EXISTS cifix_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id INTEGER NOT NULL,
-                attempt_number INTEGER NOT NULL,
-                fix_type TEXT NOT NULL,  -- lint, format, type_error, test_failure, build_error
-                error_message TEXT,
-                fix_applied TEXT,  -- Description of fix or command run
-                success BOOLEAN DEFAULT FALSE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (session_id) REFERENCES cifix_sessions(id)
-            );
-
-            -- Event log for debugging
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id TEXT,
-                worker_id TEXT,
-                event_type TEXT NOT NULL,
-                message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Story workflow tracking for crash recovery (WA-234)
-            CREATE TABLE IF NOT EXISTS story_workflow (
-                story_key TEXT PRIMARY KEY,
-                phase TEXT NOT NULL,  -- Current phase in STORY_PHASES
-                branch_name TEXT,
-                pr_number INTEGER,
-                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                error_message TEXT,
-                retry_count INTEGER DEFAULT 0
-            );
-
-            -- Story metrics for retrospective analysis (WA-234)
-            CREATE TABLE IF NOT EXISTS story_metrics (
-                story_key TEXT PRIMARY KEY,
-                pr_number INTEGER,
-                ci_attempts INTEGER DEFAULT 1,
-                failure_types TEXT,  -- JSON array of failure types
-                first_ci_green BOOLEAN,
-                time_to_merge_minutes INTEGER,
-                lessons_learned TEXT,
-                retro_completed BOOLEAN DEFAULT FALSE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME,
-                merged_at DATETIME
-            );
-
-            -- Indexes for common queries
-            CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-            CREATE INDEX IF NOT EXISTS idx_tasks_story ON tasks(story_key);
-            CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
-            CREATE INDEX IF NOT EXISTS idx_workers_headless ON workers(is_headless);
-            CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
-            CREATE INDEX IF NOT EXISTS idx_checkpoints_task ON checkpoints(task_id);
-            CREATE INDEX IF NOT EXISTS idx_story_checkpoints_story ON story_checkpoints(story_key);
-            CREATE INDEX IF NOT EXISTS idx_story_checkpoints_phase ON story_checkpoints(phase);
-            CREATE INDEX IF NOT EXISTS idx_circuit_breakers_story ON circuit_breakers(story_key);
-            CREATE INDEX IF NOT EXISTS idx_circuit_breakers_state ON circuit_breakers(state);
-            CREATE INDEX IF NOT EXISTS idx_circuit_breakers_story_phase ON circuit_breakers(story_key, phase);
-            CREATE INDEX IF NOT EXISTS idx_cifix_sessions_story ON cifix_sessions(story_key);
-            CREATE INDEX IF NOT EXISTS idx_cifix_sessions_state ON cifix_sessions(state);
-            CREATE INDEX IF NOT EXISTS idx_cifix_attempts_session ON cifix_attempts(session_id);
-            CREATE INDEX IF NOT EXISTS idx_story_workflow_phase ON story_workflow(phase);
-            CREATE INDEX IF NOT EXISTS idx_story_metrics_retro ON story_metrics(retro_completed);
-        """)
+        conn.executescript(_SCHEMA_SQL)
 
         # Run migrations for existing databases
         _migrate_db(conn)
@@ -403,7 +406,7 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "is_headless" not in columns:
         conn.execute("ALTER TABLE workers ADD COLUMN is_headless BOOLEAN DEFAULT FALSE")
 
-    # Check if story_metrics table needs updated_at column (WA-234)
+    # Check if story_metrics table needs updated_at column
     cursor = conn.execute("PRAGMA table_info(story_metrics)")
     metrics_columns = {row[1] for row in cursor.fetchall()}
 
@@ -1046,7 +1049,7 @@ def cleanup(
 
 
 # =============================================================================
-# Story Checkpoint Functions (WA-170)
+# Story Checkpoint Functions
 # =============================================================================
 
 
@@ -1320,7 +1323,7 @@ def story_status(story_key: str) -> dict[str, Any]:
 
 
 # =============================================================================
-# Circuit Breaker Functions (WA-172)
+# Circuit Breaker Functions
 # =============================================================================
 
 
@@ -1687,7 +1690,7 @@ def circuit_list(story_key: str | None = None, state: str | None = None) -> list
 
 
 # =============================================================================
-# Auto-Refine DoR Functions (WA-173)
+# Auto-Refine DoR Functions
 # =============================================================================
 
 
@@ -2028,7 +2031,7 @@ def _perform_rollback(conn: sqlite3.Connection, story_key: str, phase: str) -> d
 
 
 # ============================================================================
-# CI-Fix Functions (WA-174)
+# CI-Fix Functions
 # ============================================================================
 
 
@@ -2037,7 +2040,7 @@ def cifix_start(story_key: str, pr_number: int) -> dict[str, Any]:
     Start a new CI-fix session for a story's PR.
 
     Args:
-        story_key: Story/ticket key (e.g., 'WA-174')
+        story_key: Story/ticket key (e.g., 'PROJ-1')
         pr_number: GitHub PR number
 
     Returns:
@@ -2590,7 +2593,7 @@ def main() -> None:
     task_update_p.add_argument("--result")
     task_update_p.add_argument("--phase")
 
-    # worker commands (extended for WA-176)
+    # worker commands (extended for)
     worker_parser = subparsers.add_parser("worker", help="Worker operations")
     worker_sub = worker_parser.add_subparsers(dest="action", required=True)
 
@@ -2632,7 +2635,7 @@ def main() -> None:
     cp_load_p.add_argument("task_id")
     cp_load_p.add_argument("--phase")
 
-    # story commands (WA-170)
+    # story commands
     story_parser = subparsers.add_parser("story", help="Story checkpoint operations")
     story_sub = story_parser.add_subparsers(dest="action", required=True)
 
@@ -2663,7 +2666,7 @@ def main() -> None:
 
     story_sub.add_parser("phases", help="List valid story phases")
 
-    # circuit breaker commands (WA-172)
+    # circuit breaker commands
     circuit_parser = subparsers.add_parser("circuit", help="Circuit breaker operations")
     circuit_sub = circuit_parser.add_subparsers(dest="action", required=True)
 
@@ -2694,7 +2697,7 @@ def main() -> None:
 
     circuit_sub.add_parser("config", help="Show circuit breaker configuration")
 
-    # dor commands (WA-173)
+    # dor commands
     dor_parser = subparsers.add_parser("dor", help="Definition of Ready operations")
     dor_sub = dor_parser.add_subparsers(dest="action", required=True)
 
@@ -2711,7 +2714,7 @@ def main() -> None:
     dor_refine_p.add_argument("summary", help="Story summary")
     dor_refine_p.add_argument("--description", help="Existing description (optional)")
 
-    # cifix commands (WA-174)
+    # cifix commands
     cifix_parser = subparsers.add_parser("cifix", help="CI-Fix Loop operations")
     cifix_sub = cifix_parser.add_subparsers(dest="action", required=True)
 

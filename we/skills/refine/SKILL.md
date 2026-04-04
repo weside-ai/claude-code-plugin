@@ -16,7 +16,7 @@ You ensure development stays aligned with project goals and refine stories for d
 ## Prerequisites
 
 ```
-Read("flow/dor.md")
+Read("quality/dor.md")
 ```
 
 ---
@@ -83,7 +83,9 @@ Implementation Plan: docs/plans/{TICKET}-plan.md
 
 ### Step 4: Create Plan (EnterPlanMode)
 
-Research codebase, then create detailed plan:
+Research codebase thoroughly, then create detailed plan.
+
+**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 ```markdown
 ---
@@ -120,6 +122,15 @@ status: draft
 
 ## Security Review Required
 [Yes/No] — [reason]
+
+## Documentation Impact
+- [ ] **API docs** — [Yes/No: endpoints added/changed?]
+- [ ] **Architecture docs** — [Yes/No: patterns/ADRs changed?]
+- [ ] **README/Setup** — [Yes/No: install/config steps changed?]
+- [ ] **User-facing docs** — [Yes/No: features/workflows changed?]
+- [ ] **No documentation changes needed**
+
+Specific files to update: [list affected doc files if known]
 ```
 
 ### Step 5: User Approval (ExitPlanMode)
@@ -175,7 +186,7 @@ Trigger: `/we:refine "Feature description"`
 1. Design session — ask clarifying questions
 2. Create ticket via ticketing tool (minimal)
 3. Link to Epic (if applicable)
-4. Continue as MODE 1 (Steps 4-7)
+4. Continue as MODE 1 (Steps 4-6)
 
 ---
 
@@ -194,7 +205,29 @@ Trigger: `/we:refine` (no argument)
 
 Trigger: `/we:refine {EPIC-KEY}` (when key is an Epic)
 
-Load `flow/epic-management.md`. Help create/refine Epics with Vision, Scope, Stories, Success Metrics.
+Help create/refine Epics.
+
+**Epic = finite initiative** (not a permanent category). 1-3 months, stories emerge progressively.
+
+| Create Epic when | Do NOT create when |
+|-----|------|
+| Initiative > 2 sprints | Permanent category ("Mobile", "Backend") |
+| Multiple related stories | Only 2-3 small stories |
+| Clear end foreseeable | No clear end |
+
+**Epic Template:**
+```markdown
+## Vision
+[Why? What problem?]
+## Scope
+[IN / OUT]
+## Stories
+[First 2-3 stories]
+## Success Metrics
+[When is Epic DONE?]
+```
+
+**Epic Status = Project Focus:** In Progress (actively working) → Selected (up next) → Backlog (paused) → Done (all stories done AND no further scope). Stories emerge during work — this is normal.
 
 ---
 

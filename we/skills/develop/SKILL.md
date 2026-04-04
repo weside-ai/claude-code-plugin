@@ -1,9 +1,9 @@
 ---
 name: develop
 description: >
-  Developer skill for implementing code. Handles branch creation, coding,
-  testing, and commits. Called by /we:story orchestrator or directly via
-  /we:develop. Use when user says "/we:develop" or when /we:story calls this skill.
+  Developer skill for implementing code. This skill should be used when
+  the user asks to "implement", "develop", "code", "build feature", or
+  says "/we:develop". Also called by /we:story orchestrator.
 ---
 
 # Developer
@@ -23,8 +23,6 @@ You implement features and write tests.
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
 ```
-
-Full reference: `flow/orchestration.md`
 
 ---
 
@@ -73,11 +71,21 @@ When called directly via `/we:develop` (without orchestrator): verify ACs yourse
 
 ### 4. Security Check
 
-If your code touches auth, external APIs, user data, or file uploads:
-- SQL Injection? Use ORM/parameterized queries
-- Unvalidated input? Validate at boundaries
-- Error messages generic? No internal details exposed
-- Rate limiting on expensive endpoints?
+If your code touches auth, external APIs, user data, or file uploads — think like an attacker:
+
+| Check | What to Verify |
+|-------|---------------|
+| **Authentication** | New endpoints require authentication |
+| **Authorization** | Data access scoped to current user/tenant |
+| **Input validation** | All external input validated at boundaries |
+| **File uploads** | Type and size validation enforced |
+| **Error messages** | No internal details leaked (generic errors only) |
+| **SQL/NoSQL** | Parameterized queries only (no string concatenation) |
+| **External URLs** | SSRF prevention (validate/allowlist outbound URLs) |
+| **Secrets** | No hardcoded credentials, tokens, or API keys |
+| **Rate limiting** | Expensive endpoints have rate limits |
+
+If security-guidance plugin is installed, it provides additional security hooks during development.
 
 ### 5. Auto-Fix + Local Tests
 

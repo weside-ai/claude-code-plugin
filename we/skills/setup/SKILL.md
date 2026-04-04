@@ -46,6 +46,22 @@ Scan the project to detect:
 - `.weside/` directory exists → already configured
 - `CLAUDE.md` exists → read for conventions
 
+### Step 1b: Check Plugin Dependencies
+
+Check if recommended companion plugins are installed. Read `~/.claude/plugins/installed_plugins.json` or check if the skill appears in available skills.
+
+| Plugin | Provides | Used By |
+|--------|----------|---------|
+| `code-simplifier@claude-plugins-official` | `/simplify` skill | Step 4: Simplify in `/we:story` |
+| `security-guidance@claude-plugins-official` | Security hooks during development | `/we:develop` security checks |
+
+If either is missing, inform the user:
+
+> "Recommended plugin not installed: **{plugin-name}**. It provides {what}. Install with: `/install {plugin-name}`"
+> "The /we:* pipeline works without it, but {feature} will be skipped."
+
+**Do NOT block.** This is informational only — the pipeline works without these plugins.
+
 ### Step 2: Ask 3 Questions
 
 ```
@@ -72,7 +88,7 @@ If user provided a vision or wants custom DoR/DoD:
 └── dod.md       # Custom DoD overrides (optional)
 ```
 
-Otherwise: plugin uses built-in defaults from `flow/dor.md` and `flow/dod.md`.
+Otherwise: plugin uses built-in defaults from `quality/dor.md` and `quality/dod.md`.
 
 ### Step 4: Confirm
 

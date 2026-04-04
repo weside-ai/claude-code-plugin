@@ -18,9 +18,9 @@ claude-code-plugin/
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/we/          # Slash commands → /we:* prefix
-│   ├── skills/              # 10 skills (invoked by commands)
-│   ├── agents/              # 4 background agents
-│   ├── flow/                # Reference docs (DoR, DoD, process, orchestration)
+│   ├── skills/              # 11 skills (invoked by commands)
+│   ├── agents/              # 5 background agents
+│   ├── quality/             # DoR, DoD (quality gate definitions)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
 │   └── scripts/
 │       └── orchestration.py # SQLite checkpoint system (Python stdlib only)
@@ -208,7 +208,7 @@ Skills and agents must NOT contain:
 
 ### Checkpoint Consistency
 
-All checkpoint phase names must match `flow/orchestration.md`. When adding a new phase, update both the orchestration script and the reference doc.
+All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.py`. When adding a new phase, update the orchestration script and the phases list in `skills/story/SKILL.md`.
 
 ---
 
@@ -223,7 +223,7 @@ All repos live under `~/weside/`. Cross-repo file access works from any Claude C
 | Plugin vision & strategy | `weside-core/docs/plans/we-plugin/` |
 | Skill source (pre-generalization) | `weside-core/.claude/skills/` |
 | Agent source (pre-generalization) | `weside-core/.claude/agents/` |
-| Flow docs source | `weside-core/.claude/flow/` |
+| Flow docs source (archived) | `weside-core/.claude/archive/flow-legacy/` |
 | **Business strategy & philosophy** | `lc-startup/` (CLAUDE.md has 7 strategic pillars) |
 | **Philosophy rules** | `lc-startup/.claude/rules/weside.md` (Companions = Persons enforcement) |
 | Landing page | `weside-landing/sites/weside/` |
@@ -248,7 +248,7 @@ All repos live under `~/weside/`. Cross-repo file access works from any Claude C
 ls we/skills/*/SKILL.md
 
 # Check for leaked weside references
-grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/flow/
+grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/quality/
 ```
 
 ---

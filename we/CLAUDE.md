@@ -33,7 +33,7 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 User         → reviews PR, merges, closes ticket
 ```
 
-**Full pipeline reference:** `flow/development-process.md`
+**Pipeline:** /we:refine (interactive) → /we:story (autonomous) → User merges (manual)
 
 ---
 
@@ -175,9 +175,7 @@ Skills use generic actions ("Create ticket", "Move to In Progress") — never to
 
 ## References
 
-- **Pipeline:** `flow/development-process.md`
-- **DoR/DoD:** `flow/dor.md`, `flow/dod.md`
-- **Orchestration:** `flow/orchestration.md` + `scripts/orchestration.py`
-- **Epics:** `flow/epic-management.md`
+- **DoR/DoD:** `quality/dor.md`, `quality/dod.md`
+- **Orchestration:** `scripts/orchestration.py` (SQLite CLI for checkpoints, circuit breaker, CI-fix loop)
 - **Homepage:** [agenticproductownership.com](https://agenticproductownership.com)
 - **Platform:** [weside.ai](https://weside.ai)
