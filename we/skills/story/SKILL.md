@@ -7,7 +7,6 @@ description: >
   "implement story", or provides a ticket key.
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="story") again. You ARE inside the skill. Execute Step 0 below. -->
 
 # Story Orchestrator
 

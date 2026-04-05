@@ -6,7 +6,6 @@ description: >
   says "/we:setup", "configure project", "set up workflow".
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="setup") again. You ARE inside the skill. Start below. -->
 
 # Project Setup
 

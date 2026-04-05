@@ -7,7 +7,6 @@ description: >
   Use when user says "/we:ci-review", "fix ci", "fix reviews", "ci failed".
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="ci-review") again. You ARE inside the skill. Start below. -->
 
 # CI Reviewer
 

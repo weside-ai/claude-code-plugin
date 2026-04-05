@@ -6,7 +6,6 @@ description: >
   Use when asked to find dead code, clean up unused functions, or reduce codebase size.
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="find-dead-code") again. You ARE inside the skill. Start below. -->
 
 # Find Dead Code
 

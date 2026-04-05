@@ -7,7 +7,6 @@ description: >
   "acceptance criteria", "epic", "write a story".
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="refine") again. You ARE inside the skill. Execute Step 1 below. -->
 
 # Product Owner (Refine)
 

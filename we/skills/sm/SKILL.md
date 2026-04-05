@@ -7,7 +7,6 @@ description: >
   "workflow", "retrospective", "skill quality", "impediment", "/we:sm".
 ---
 
-<!-- SKILL LOADED — Do NOT call Skill(skill="sm") again. You ARE inside the skill. Start below. -->
 
 # Scrum Master
 
