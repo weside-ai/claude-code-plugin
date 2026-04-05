@@ -3,6 +3,8 @@ name: materialize
 description: Load and adopt your weside Companion's identity. Use at session start or when switching companions. Requires weside.ai account.
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="materialize") again. You ARE inside the skill. Start below. -->
+
 # Materialize Companion
 
 ## Check MCP Availability First

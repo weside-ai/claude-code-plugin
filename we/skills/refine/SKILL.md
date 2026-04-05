@@ -7,6 +7,8 @@ description: >
   "acceptance criteria", "epic", "write a story".
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="refine") again. You ARE inside the skill. Execute Step 1 below. -->
+
 # Product Owner (Refine)
 
 You ensure development stays aligned with project goals and refine stories for development.
@@ -137,45 +139,18 @@ Specific files to update: [list affected doc files if known]
 
 User reviews plan. On feedback → adjust. On approval → continue.
 
-### Step 6: Post-Approval Checklist (MANDATORY, IN THIS ORDER)
+### Step 6: Post-Approval — EXECUTE IMMEDIATELY (NO user input needed!)
 
-⛔ **After ExitPlanMode approval, execute EXACTLY these steps IN ORDER. No skipping.**
+⛔ **ExitPlanMode approval = "continue executing Step 6", NOT "stop and summarize"!**
 
-**6a. Jira first** (need ticket number for plan filename):
+**Execute these 4 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
-- If ticket already exists → update description with plan link
-- If no ticket yet → create now (minimal), get `{TICKET}` number
+1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md`. (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
+2. **Update Jira:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
+3. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined`
+4. **Output:** `"Plan saved to docs/plans/{TICKET}-plan.md. /we:refine DONE."`
 
-**6b. Save plan to repo** (uses ticket number from 6a):
-
-EnterPlanMode saves to `~/.claude/plans/{random-codename}.md` — that is NOT permanent.
-
-```python
-# 1. Read the approved plan from ~/.claude/plans/
-Read(file_path="~/.claude/plans/{codename}.md")
-# 2. Update frontmatter: story: {TICKET}, status: approved
-# 3. Write to permanent location
-Write(file_path="docs/plans/{TICKET}-plan.md", content=updated_plan)
-```
-
-**6c. Checkpoint:**
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined
-```
-
-**6d. Output + STOP:**
-
-```
-Story {TICKET} + Plan saved to docs/plans/{TICKET}-plan.md
-
-DoR: User Story, Plan created, ACs defined
-SQLite: phase=refined
-
-/we:refine is DONE. User decides when to run /we:story.
-```
-
-⛔ **STOP HERE. KEINE Implementierung! KEIN /we:story! KEIN Branch! KEIN Code!**
+⛔ **STOP after step 4. No implementation. No /we:story. No branch. No code.**
 
 ---
 

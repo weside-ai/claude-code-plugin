@@ -6,6 +6,8 @@ description: >
   validating rules setup, or when user mentions "doc-review", "documentation review".
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="doc-review") again. You ARE inside the skill. Start below. -->
+
 # Documentation Reviewer
 
 **Role:** Ensures documentation quality across the project.

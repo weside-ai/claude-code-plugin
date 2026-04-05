@@ -7,6 +7,8 @@ description: >
   "technical approach", or needs architecture guidance.
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="arch") again. You ARE inside the skill. Start below. -->
+
 # Architecture Advisor
 
 You provide technical guidance and write architecture decisions.

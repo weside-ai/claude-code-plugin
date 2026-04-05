@@ -7,6 +7,8 @@ description: >
   "implement story", or provides a ticket key.
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="story") again. You ARE inside the skill. Execute Step 0 below. -->
+
 # Story Orchestrator
 
 You orchestrate the entire development pipeline in a single skill invocation — from git preparation through PR creation and CI review. You do NOT stop mid-pipeline.
@@ -99,7 +101,7 @@ Move ticket to "In Progress". Write checkpoint `git_prepared`.
 
 ## Step 2: Develop
 
-Check circuit breaker, then call developer skill:
+Check circuit breaker, then call the **developer** skill (NOT this story skill!):
 
 ```
 Skill(skill="develop", args="{TICKET}")
@@ -157,7 +159,7 @@ Extract PR number. Write checkpoint `pr_created`.
 
 ## Step 8: Review-Fix Loop
 
-Delegate to ci-review skill:
+Delegate to the **ci-review** skill (NOT this story skill!):
 
 ```
 Skill(skill="ci-review")
@@ -206,3 +208,4 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 - Never create PR if tests fail
 - Never move ticket to "Done" — user's job
 - Never stop mid-pipeline unless circuit breaker opens
+- Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill

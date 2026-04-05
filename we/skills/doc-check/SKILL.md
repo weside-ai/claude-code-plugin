@@ -7,6 +7,8 @@ description: >
   "/we:doc-check".
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="doc-check") again. You ARE inside the skill. Start below. -->
+
 # Doc-Check
 
 You are an architect reading documentation. Your brain finds inconsistencies, not regex.

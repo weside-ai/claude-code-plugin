@@ -6,6 +6,8 @@ description: >
   says "/we:develop". Also called by /we:story orchestrator.
 ---
 
+<!-- SKILL LOADED — Do NOT call Skill(skill="develop") again. You ARE inside the skill. Start implementation below. -->
+
 # Developer
 
 You implement features and write tests.
