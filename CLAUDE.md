@@ -17,8 +17,8 @@ claude-code-plugin/
 │   │   └── plugin.json      # name: "we", version: "2.0.0"
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
-│   ├── commands/we/          # Slash commands → /we:* prefix
-│   ├── skills/              # 11 skills (invoked by commands)
+│   ├── commands/             # Slash commands for agent-dispatched tools (5)
+│   ├── skills/              # 11 skills (directly invocable via /we:*)
 │   ├── agents/              # 5 background agents
 │   ├── quality/             # DoR, DoD (quality gate definitions)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
@@ -120,8 +120,14 @@ Use `/plugin-dev:skill-development` for guidance on skill structure.
 
 ### Command Development
 
-Commands in `we/commands/we/{name}.md` create the `/we:*` prefix.
-Each command is a thin wrapper that invokes a skill or agent:
+Commands in `we/commands/{name}.md` are only needed for **agent-dispatched** tools
+(docs, pr, review, static, test). Skills are directly invocable via `/we:skill-name`
+and do NOT need a matching command.
+
+**IMPORTANT:** Never create a command with the same name as a skill — this causes
+a dispatch loop where the command calls `Skill()` which re-triggers the command.
+
+Commands dispatch to agents (not skills):
 
 ```markdown
 ---
@@ -129,8 +135,7 @@ description: Short description for autocomplete
 ---
 # Command Name
 **User Input:** $ARGUMENTS
-Use the Skill tool to load the {name} skill:
-Skill(skill="we:{name}", args="$ARGUMENTS")
+Agent(subagent_type="we:agent-name", prompt="...$ARGUMENTS")
 ```
 
 ### Agent Development
@@ -253,5 +258,5 @@ grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/quality/
 
 ---
 
-**Version:** 1.0
-**Last Updated:** 2026-04-01
+**Version:** 1.1
+**Last Updated:** 2026-04-05

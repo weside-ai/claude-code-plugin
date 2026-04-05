@@ -50,11 +50,20 @@ User         → reviews PR, merges, closes ticket
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-review` | Documentation structure review |
 | `/we:doc-check` | Documentation content consistency check |
-| `/we:docs` | Auto-detect and update changed documentation |
 | `/we:find-dead-code` | Find and remove dead code from Python backends |
 | `/we:materialize` | Load weside Companion identity (requires weside.ai account) |
 
-### Agents (run in background, called by skills)
+### Commands (dispatch to background agents)
+
+| Command | What it does |
+|---|---|
+| `/we:docs` | Auto-detect and update changed documentation |
+| `/we:pr` | Create Pull Request with prerequisite validation |
+| `/we:review` | Professional code review with AC alignment |
+| `/we:static` | Static code analysis — lint, format, types |
+| `/we:test` | Run tests with coverage |
+
+### Agents (run in background, called by commands/skills)
 
 | Agent | Purpose |
 |---|---|
