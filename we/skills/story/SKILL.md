@@ -82,7 +82,7 @@ Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans
 
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
-**Reality Check:** If plan exists, check creation date against recent git changes. Warn if code changed significantly since plan was written.
+**Reality Check:** If plan exists, check creation date against recent git changes. If code changed significantly since the plan was written (files moved, APIs renamed, dependencies changed), **STOP the pipeline** and ask the user: "The plan may be outdated — key files have changed since it was written. Run `/we:refine {TICKET}` to update the plan before continuing?" Do NOT proceed with a stale plan.
 
 **Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.
 
@@ -111,8 +111,21 @@ Check circuit breaker. Then implement directly:
    - Write tests alongside code
    - Run auto-fix (ruff/eslint) after each phase
    - Commit after each phase
-4. **Run local tests** before marking complete
-5. **Write checkpoint** `implementation_complete`
+4. **Wiring Check** after each phase that introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
+5. **Security Check** — if code touches auth, external APIs, user data, or file uploads:
+
+   | Check | What to Verify |
+   |-------|---------------|
+   | Authentication | New endpoints require authentication |
+   | Authorization | Data access scoped to current user/tenant |
+   | Input validation | All external input validated at boundaries |
+   | Error messages | No internal details leaked (generic errors only) |
+   | SQL/NoSQL | Parameterized queries only (no string concatenation) |
+   | Secrets | No hardcoded credentials, tokens, or API keys |
+   | Rate limiting | Expensive endpoints have rate limits |
+
+6. **Run local tests** before marking complete
+7. **Write checkpoint** `implementation_complete`
 
 **3 Guiding Questions (check after each phase):**
 - "Can the user use the feature NOW?"
