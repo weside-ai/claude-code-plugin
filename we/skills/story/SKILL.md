@@ -56,13 +56,13 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
 /we:story {TICKET}
   ├── Step 0: Check for Resume
   ├── Step 1: Check DoR + Load Story + Plan (Reality Check)
-  ├── Step 2: /we:develop (developer skill)
+  ├── Step 2: Develop (INLINE, not Skill dispatch)
   ├── Step 3: AC Verification Gate (BLOCKING)
   ├── Step 4: Simplify
   ├── Step 5: PARALLEL: /we:review + /we:static + /we:test [+ coderabbit]
   ├── Step 6: Documentation check
   ├── Step 7: /we:pr (checks test_passed)
-  ├── Step 8: Review-Fix Loop (max 3 cycles)
+  ├── Step 8: Review-Fix Loop (INLINE, max 3 cycles)
   └── Step 9: Ticket → In Review
 ```
 
@@ -98,15 +98,28 @@ This gives the story an isolated copy of the repo. The worktree is kept on compl
 
 Move ticket to "In Progress". Write checkpoint `git_prepared`.
 
-## Step 2: Develop
+## Step 2: Develop (INLINE — do NOT dispatch Skill)
 
-Check circuit breaker, then call the **developer** skill (NOT this story skill!):
+⛔ **Do NOT call `Skill(skill="develop")`!** Skill() expands context and causes the orchestrator to lose control after the developer finishes. Instead, execute development steps inline.
 
-```
-Skill(skill="develop", args="{TICKET}")
-```
+Check circuit breaker. Then implement directly:
 
-After developer returns, verify checkpoints `git_prepared` and `implementation_complete` exist. Record circuit success. **Continue immediately to Step 3.**
+1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY.
+2. **Formulate goal**: "The user should be able to X so that Y."
+3. **Implement phase by phase** from plan. For each phase:
+   - Follow project conventions
+   - Write tests alongside code
+   - Run auto-fix (ruff/eslint) after each phase
+   - Commit after each phase
+4. **Run local tests** before marking complete
+5. **Write checkpoint** `implementation_complete`
+
+**3 Guiding Questions (check after each phase):**
+- "Can the user use the feature NOW?"
+- "Is the feature REACHABLE?"
+- "Does this bring me closer to the Story GOAL?"
+
+**Continue immediately to Step 3.**
 
 ## Step 3: AC Verification Gate (BLOCKING)
 
@@ -156,15 +169,19 @@ Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
 
 Extract PR number. Write checkpoint `pr_created`.
 
-## Step 8: Review-Fix Loop
+## Step 8: Review-Fix Loop (INLINE — do NOT dispatch Skill)
 
-Delegate to the **ci-review** skill (NOT this story skill!):
+⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute CI-review steps inline:
 
-```
-Skill(skill="ci-review")
-```
+1. **Collect** findings from CI, Claude Review, and CodeRabbit (use `gh` CLI)
+2. **Triage**: BLOCKING = must fix, WARNING = fix unless wrong, INFO = evaluate
+3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
+4. **Batch fix** all issues locally, ONE commit with all fixes
+5. **Resolve** CodeRabbit threads via GraphQL, verify 0 unresolved
+6. **Push** only when all threads resolved
+7. **Repeat** (max 3 cycles). After 3 → stop, ask user.
 
-It collects from all sources, triages, batch-fixes, resolves threads, pushes. Max 3 cycles. After reviews green → write checkpoint `ci_passed`.
+After reviews green → write checkpoint `ci_passed`.
 
 ## Step 9: Ticket Transition
 
@@ -176,8 +193,8 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 
 | After | Phase | Written By |
 |---|---|---|
-| Branch + Story loaded | `git_prepared` | develop |
-| Code complete | `implementation_complete` | develop |
+| Branch + Story loaded | `git_prepared` | story (Step 1) |
+| Code complete | `implementation_complete` | story (Step 2) |
 | ACs verified | `ac_verified` | story |
 | Simplified | `simplified` | story |
 | Docs updated | `docs_updated` | docs |
@@ -208,3 +225,4 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 - Never move ticket to "Done" — user's job
 - Never stop mid-pipeline unless circuit breaker opens
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
+- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — these expand context and break the pipeline. Execute their logic INLINE in Steps 2 and 8.
