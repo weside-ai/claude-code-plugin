@@ -108,7 +108,7 @@ Check circuit breaker. Then implement directly:
 2. **Formulate goal**: "The user should be able to X so that Y."
 3. **Implement phase by phase** from plan. For each phase:
    - Follow project conventions
-   - Write tests alongside code
+   - Write tests alongside code (TDD: test first, then implementation)
    - Run auto-fix (ruff/eslint) after each phase
    - Commit after each phase
 4. **Wiring Check** after each phase that introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
@@ -174,7 +174,14 @@ Wait for completion. If docs were updated → commit. Write checkpoint `docs_upd
 
 ## Step 7: PR
 
-Verify `test_passed` checkpoint. Call PR creator agent:
+**BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
+- `review_passed` (code review clean)
+- `static_analysis_passed` (lint/format/types clean)
+- `test_passed` (tests green + coverage met)
+
+If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
+
+Call PR creator agent:
 
 ```
 Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
@@ -239,3 +246,5 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 - Never stop mid-pipeline unless circuit breaker opens
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
 - Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — these expand context and break the pipeline. Execute their logic INLINE in Steps 2 and 8.
+- Never commit code changes without corresponding test changes in the same commit
+- Never create a PR before ALL THREE quality gates pass (review + static + test)
