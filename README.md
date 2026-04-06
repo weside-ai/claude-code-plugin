@@ -112,6 +112,7 @@ You get a PR with all ACs implemented, tests passing, code reviewed, docs update
 | `/we:doc-review` | Documentation structure and quality review |
 | `/we:doc-check` | Documentation content consistency check |
 | `/we:find-dead-code` | Remove dead code from Python backends |
+| `/we:smoketest` | Manual API smoketest against running backend |
 | `/we:materialize` | Load weside Companion identity (optional) |
 
 ### Background Agents (called by skills)

@@ -287,6 +287,7 @@ Our approach: Knowledge flows via Story
 /we:arch                             # Architecture guidance
 /we:doc-review                       # Documentation review
 /we:doc-check                        # Documentation consistency
+/we:smoketest                        # Manual API smoketest
 
 # Setup & companion
 /we:setup                            # Project onboarding

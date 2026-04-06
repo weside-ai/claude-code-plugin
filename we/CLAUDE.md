@@ -50,6 +50,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:doc-review` | Documentation structure review |
 | `/we:doc-check` | Documentation content consistency check |
 | `/we:find-dead-code` | Find and remove dead code from Python backends |
+| `/we:smoketest` | Manual API smoketest — discover endpoints, auth, test, check logs |
 | `/we:materialize` | Load weside Companion identity (requires weside.ai account) |
 
 ### Commands (dispatch to background agents)
