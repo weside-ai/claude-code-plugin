@@ -136,11 +136,11 @@ Check circuit breaker. Then implement directly:
 
 ## Step 3: AC Verification Gate (BLOCKING)
 
-Your responsibility — not the developer's. Fresh-load plan and story. Verify EVERY AC with concrete evidence (file path, test name, commit).
+Fresh-load plan and story. Verify EVERY AC with concrete evidence (file path, test name, commit).
 
 Check end-to-end: Is the feature reachable? Does the complete user flow work?
 
-Only write checkpoint `ac_verified` when ALL items pass. If items fail → call developer again.
+Only write checkpoint `ac_verified` when ALL items pass. If items fail → go back to Step 2 and fix.
 
 ## Step 4: Simplify
 

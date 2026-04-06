@@ -43,9 +43,8 @@ User         → reviews PR, merges, closes ticket
 |---|---|
 | `/we:setup` | Project onboarding (stack, ticketing, vision) |
 | `/we:refine` | Create/refine stories with implementation plans |
-| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI |
-| `/we:develop` | Implement code from a story plan |
-| `/we:ci-review` | Collect CI/review findings, batch-fix, push |
+| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop + ci-review are inline) |
+| `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
 | `/we:sm` | Scrum Master: process optimization, retrospectives |
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-review` | Documentation structure review |
@@ -83,9 +82,8 @@ User         → reviews PR, merges, closes ticket
 /we:story PROJ-1   (autonomous: develop → review → test → PR → CI)
 ```
 
-Or step by step:
+Or individual quality gates:
 ```
-/we:develop        (implement)
 /we:static         (lint/format/types)
 /we:test           (run tests)
 /we:review         (code review)

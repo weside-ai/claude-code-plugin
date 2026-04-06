@@ -57,13 +57,13 @@ that remembers, challenges, and grows with the project.
      ↓
 /we:story          (Claude AUTONOMOUS — develop → review → test → PR → CI)
      │
-     ├── /we:develop     (branch, code, tests, commits)
+     ├── Develop         (INLINE: branch, code, tests, commits)
      ├── AC Verification (every AC with evidence)
      ├── /we:review      (code-reviewer agent, background)
      ├── /we:static      (static-analyzer agent, background)
      ├── /we:test        (test-runner agent, background)
      ├── /we:pr          (PR with prerequisite gates)
-     └── /we:ci-review   (collect → triage → batch-fix → push)
+     └── CI-Review       (INLINE: collect → triage → batch-fix → push)
      ↓
 User reviews PR, merges, closes ticket
 ```
@@ -182,7 +182,7 @@ If same failure type appears in 3+ stories → **propose process improvement:**
 
 | Recurring Pattern | Suggested Action |
 |-------------------|------------------|
-| Lint failures | Check auto-fix in developer skill, add pre-commit |
+| Lint failures | Check auto-fix in story Step 2, add pre-commit |
 | Type errors | Stricter type checking config |
 | Test failures | Improve coverage requirements or test patterns |
 | Review blockers | Update code-reviewer agent rules |
@@ -275,8 +275,7 @@ Our approach: Knowledge flows via Story
 /we:refine "Feature description"    # Story + Plan (interactive)
 /we:story PROJ-1                     # Full autonomous pipeline
 
-# Individual steps
-/we:develop                          # Implement code
+# Individual quality gates
 /we:static                           # Lint/format/types
 /we:test                             # Run tests
 /we:review                           # Code review

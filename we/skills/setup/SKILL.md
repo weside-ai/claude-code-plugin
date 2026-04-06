@@ -54,7 +54,7 @@ Check if recommended companion plugins are installed. Read `~/.claude/plugins/in
 | Plugin | Provides | Used By |
 |--------|----------|---------|
 | `code-simplifier@claude-plugins-official` | `/simplify` skill | Step 4: Simplify in `/we:story` |
-| `security-guidance@claude-plugins-official` | Security hooks during development | `/we:develop` security checks |
+| `security-guidance@claude-plugins-official` | Security hooks during development | `/we:story` Step 2 security checks |
 
 If either is missing, inform the user:
 
