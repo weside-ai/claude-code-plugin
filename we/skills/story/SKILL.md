@@ -189,9 +189,9 @@ When the agent returns with proposals:
 If the agent returns "nothing needs updating" — write `docs_updated` immediately
 and continue. Do not invent work.
 
-**Note on the legacy `doc-manager` agent:** it is deprecated (WA-772) and now
-a thin delegate to `doc-architect`. Existing call sites still work but new
-code should invoke `doc-architect` directly.
+**Note on the legacy `doc-manager` agent:** it is deprecated and now a thin
+delegate to `doc-architect`. Existing call sites still work but new code
+should invoke `we:doc-architect` directly.
 
 ## Step 7: PR
 

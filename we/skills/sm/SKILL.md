@@ -32,7 +32,7 @@ Examples:
 - `/we:sm The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing`
 - `/we:sm We keep shipping migrations without testing them locally — how do we stop this?`
 - `/we:sm /we:story burned 40 min on CI fixes because it missed a failing test locally`
-- `/we:sm Why did WA-756 take 3 refine rounds? What's the process gap?`
+- `/we:sm Why did that last story take 3 refine rounds? What's the process gap?`
 
 Your job is to take that prompt, understand the gap in our current process,
 and propose concrete fixes — not produce a generic report.

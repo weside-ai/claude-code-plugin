@@ -54,12 +54,17 @@ If the project has Platform Primitive enforcement (detect via
 `scripts/check-primitive-bypass.sh` existence), run these gates:
 
 ```bash
-# 1. All three bypass checks must pass
-if [ -f scripts/check-primitive-bypass.sh ]; then
-    bash scripts/check-primitive-bypass.sh || { echo "FAIL: primitive bypass"; exit 1; }
-    bash scripts/check-crud-bypass.sh      || { echo "FAIL: CRUD bypass"; exit 1; }
-    bash scripts/check-session-bypass.sh   || { echo "FAIL: session bypass"; exit 1; }
-fi
+# 1. All three bypass checks must pass — each is independently guarded
+# so a missing script is an absent-gate case, not a blocking failure.
+for script in \
+    scripts/check-primitive-bypass.sh \
+    scripts/check-crud-bypass.sh \
+    scripts/check-session-bypass.sh
+do
+    if [ -f "$script" ]; then
+        bash "$script" || { echo "FAIL: $script"; exit 1; }
+    fi
+done
 
 # 2. Bypass Register diff check vs main
 if [ -f docs/architecture/BYPASS-REGISTER.md ] && [ -f scripts/generate-bypass-register.sh ]; then

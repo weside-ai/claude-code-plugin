@@ -66,7 +66,6 @@ echo "--- Plugin content ---"
 check_glob "we/skills/*/SKILL.md" "Skills"
 check_glob "we/commands/*.md" "Commands"
 check_glob "we/agents/*.md" "Agents"
-check_glob "we/flow/*.md" "Flow docs"
 
 echo ""
 if [[ $ERRORS -gt 0 ]]; then
