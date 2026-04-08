@@ -19,6 +19,8 @@
 - [ ] Architecture patterns from plan followed
 - [ ] ADRs referenced in story were followed
 - [ ] Security patterns applied (if Security Review = Yes in plan)
+- [ ] **Platform Primitive compliance** — No new primitive bypasses without an annotated reason; if the project has `docs/architecture/BYPASS-REGISTER.md` and it grew, the PR description cites an ADR or justifies inline
+- [ ] **Bypass register regenerated** — if any new `# *-BYPASS-OK:` annotation was added, the register was regenerated (`bash scripts/generate-bypass-register.sh --write`) and committed
 - [ ] Not applicable → skip if no architecture constraints in plan
 
 ### Testing

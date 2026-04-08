@@ -125,6 +125,15 @@ A finding may be skipped ONLY when:
    yarn lint --fix && yarn typecheck
    # Tests:
    pytest tests/unit/ tests/integration/ --no-cov -x
+   # Platform Primitive bypass checks — must pass if present.
+   # Missing script = absent-gate (no-op). Present script failing = STOP.
+   for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
+     if [ -f "$s" ]; then
+       bash "$s" || { echo "FAIL: $s — fix before push"; exit 1; }
+     fi
+   done
+   # If the register exists and the codebase has new/changed bypass annotations:
+   [ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
    ```
 1. ONE commit with all fixes:
 
@@ -172,6 +181,8 @@ Check that every WARNING and BLOCKING from the Claude review comment has been fi
 [ ] All CodeRabbit threads resolved (0 unresolved)
 [ ] All Claude Review WARNINGs addressed
 [ ] Local lint + tests pass
+[ ] Platform Primitive bypass scripts pass (check-primitive, check-crud, check-session)
+[ ] BYPASS-REGISTER.md regenerated if any new annotations were added
 [ ] CI failure either fixed or truly unfixable from this branch
 ```
 

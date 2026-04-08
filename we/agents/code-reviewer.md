@@ -66,6 +66,7 @@ For each issue: **file:line + severity + issue + fix suggestion**.
 - **End-to-end?** Complete user flow works
 - **Plan alignment?** Implementation matches the plan (if available)
 - **DoD Quick Check:** Architecture compliance, security, wiring, test depth (see `quality/dod.md`)
+- **Platform Primitive compliance:** Any new `# *-BYPASS-OK:` annotations in the diff? Each one needs a specific reason (not "legacy" or "TODO"). If the project has a `docs/architecture/BYPASS-REGISTER.md` and it grew, verify the PR description cites an ADR or justifies inline. Flag any new primitive bypass as a WARNING if unjustified.
 
 ### Step 6: Save Review
 
@@ -105,6 +106,7 @@ Write to `.reviews/$FILENAME`.
 | Security patterns applied | Pass/Fail/N/A | |
 | State wiring complete | Pass/Fail/N/A | |
 | Tests verify behavior | Pass/Fail/N/A | |
+| Platform Primitive compliance | Pass/Fail/N/A | New bypasses annotated? Register regenerated? |
 | No open TODO/FIXME | Pass/Fail | |
 
 ## Issues
