@@ -157,20 +157,41 @@ Launch all agents with `run_in_background=True` in a single message:
 
 Wait for all. Verify checkpoints: `review_passed`, `static_analysis_passed`, `test_passed`. If any fail → fix and re-run. Circuit breaker opens after 3 failures.
 
-## Step 6: Documentation (/we:docs)
+## Step 6: Documentation (/we:docs — doc-architect)
 
-**Always run.** Launch the doc-manager agent to auto-detect and update affected documentation:
+**Always run.** Launch the `doc-architect` agent (via `/we:docs`) to read the
+doc landscape fresh, identify what needs updating for this story's diff, and
+propose concrete doc changes.
+
+The agent reads rules, indices (`PRIMITIVES.md`, `foundations/README.md`,
+`adr/README.md`), and the tree at boot — it does NOT rely on a cached doc
+map. It never writes autonomously — every change is a diff proposal.
 
 ```
 Agent(
-    subagent_type="we:doc-manager",
+    subagent_type="we:doc-architect",
     description="Update documentation for {TICKET}",
-    prompt="Update documentation for the changes in {TICKET}. Context: [summarize what changed]",
+    prompt="Story {TICKET} is implemented. Git diff between this branch and main: <summary of what changed>. Running in proactive mode: what documentation needs updating? Return a concise list of proposed doc updates (file, change, why). If nothing needs updating, say so explicitly.",
     run_in_background=True
 )
 ```
 
-Wait for completion. If docs were updated → commit. Write checkpoint `docs_updated`.
+When the agent returns with proposals:
+
+1. Present them to the user (concise list — the agent already formatted it)
+2. User approves / adjusts / rejects each proposal
+3. On approval → apply the diffs via Edit
+4. If any bypass annotation changed → also run
+   `bash scripts/generate-bypass-register.sh --write` and commit the
+   regenerated register in the same docs commit
+5. Commit the doc changes and write checkpoint `docs_updated`
+
+If the agent returns "nothing needs updating" — write `docs_updated` immediately
+and continue. Do not invent work.
+
+**Note on the legacy `doc-manager` agent:** it is deprecated (WA-772) and now
+a thin delegate to `doc-architect`. Existing call sites still work but new
+code should invoke `doc-architect` directly.
 
 ## Step 7: PR
 

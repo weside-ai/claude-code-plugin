@@ -48,6 +48,45 @@ git rebase origin/main
 
 If conflicts → `git rebase --abort` and inform user.
 
+### Step 3b: Platform Primitive Pre-PR Checks (if the project has them)
+
+If the project has Platform Primitive enforcement (detect via
+`scripts/check-primitive-bypass.sh` existence), run these gates:
+
+```bash
+# 1. All three bypass checks must pass
+if [ -f scripts/check-primitive-bypass.sh ]; then
+    bash scripts/check-primitive-bypass.sh || { echo "FAIL: primitive bypass"; exit 1; }
+    bash scripts/check-crud-bypass.sh      || { echo "FAIL: CRUD bypass"; exit 1; }
+    bash scripts/check-session-bypass.sh   || { echo "FAIL: session bypass"; exit 1; }
+fi
+
+# 2. Bypass Register diff check vs main
+if [ -f docs/architecture/BYPASS-REGISTER.md ] && [ -f scripts/generate-bypass-register.sh ]; then
+    # Regenerate and verify it matches what's committed (idempotence)
+    bash scripts/generate-bypass-register.sh > /tmp/pr-register.md
+    if ! diff -q /tmp/pr-register.md docs/architecture/BYPASS-REGISTER.md > /dev/null; then
+        echo "FAIL: BYPASS-REGISTER.md is stale — run 'bash scripts/generate-bypass-register.sh --write' and commit"
+        exit 1
+    fi
+    # Growth check: compare line counts vs main
+    BASE_COUNT=$(git show origin/main:docs/architecture/BYPASS-REGISTER.md 2>/dev/null | grep -c "^| \`" || echo 0)
+    HEAD_COUNT=$(grep -c "^| \`" docs/architecture/BYPASS-REGISTER.md || echo 0)
+    if [ "$HEAD_COUNT" -gt "$BASE_COUNT" ]; then
+        DELTA=$((HEAD_COUNT - BASE_COUNT))
+        echo ""
+        echo "⚠️  BYPASS-REGISTER.md grew by $DELTA entry(s) vs origin/main."
+        echo "   The PR description MUST either:"
+        echo "   (a) cite an ADR that justifies the new bypass(es), or"
+        echo "   (b) explain inline why the bypass is the lesser evil."
+        echo ""
+        echo "   Verify the PR description before marking this gate as pass."
+        # This is a warning, not a hard block — the gh pr create step below
+        # prompts the user to include the justification in the body.
+    fi
+fi
+```
+
 ### Step 4: Push
 
 ```bash
