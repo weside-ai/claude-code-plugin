@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 MIN_USER_MSG_LENGTH = 50
