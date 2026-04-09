@@ -67,6 +67,7 @@ For each issue: **file:line + severity + issue + fix suggestion**.
 - **Plan alignment?** Implementation matches the plan (if available)
 - **DoD Quick Check:** Architecture compliance, security, wiring, test depth (see `quality/dod.md`)
 - **Platform Primitive compliance:** Any new `# *-BYPASS-OK:` annotations in the diff? Each one needs a specific reason (not "legacy" or "TODO"). If the project has a `docs/architecture/BYPASS-REGISTER.md` and it grew, verify the PR description cites an ADR or justifies inline. Flag any new primitive bypass as a WARNING if unjustified.
+- **Horizontal scalability (backend):** Grep the diff for process-local mutable state added in `apps/backend/` or equivalent: `TTLCache`, `cachetools`, module-level `dict`/`list`/`set` mutation, `@lru_cache` on non-pure funcs (DB/IO), class-level mutable on singletons, `global` mutation, `asyncio.Lock()` / `threading.Lock()` used for cross-request coordination. Each hit is BLOCKING unless annotated with `# SCALABILITY-EXEMPT: <reason>` explaining why it's safe (e.g. immutable-after-startup, identical in every worker). State that outlives a request must live in Postgres, Redis, or a queue.
 
 ### Step 6: Save Review
 
@@ -107,6 +108,7 @@ Write to `.reviews/$FILENAME`.
 | State wiring complete | Pass/Fail/N/A | |
 | Tests verify behavior | Pass/Fail/N/A | |
 | Platform Primitive compliance | Pass/Fail/N/A | New bypasses annotated? Register regenerated? |
+| Horizontal scalability (backend) | Pass/Fail/N/A | No new process-local mutable state without `SCALABILITY-EXEMPT` |
 | No open TODO/FIXME | Pass/Fail | |
 
 ## Issues

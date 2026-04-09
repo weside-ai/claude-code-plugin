@@ -42,7 +42,8 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] **String length validation** — Text/VARCHAR columns have length validation before insert
 - [ ] **Test depth** — Tests verify actual behavior and parameters, not just return values
 - [ ] **i18n complete** — All user-facing strings use translation functions (if project uses i18n)
-- [ ] **Not applicable** → skip if item does not apply (no migration/date/range/state/index/text column/i18n)
+- [ ] **Horizontal scalability** — No new process-local mutable state introduced (no new `TTLCache`, module-level mutable `dict`/`list`/`set`, `@lru_cache` on non-pure funcs, class-level mutable on singletons, `global` mutation, or in-process locks used for cross-request coordination). State that outlives a request lives in Postgres, Redis, or a queue. Exceptions carry an inline `# SCALABILITY-EXEMPT: <reason>` comment.
+- [ ] **Not applicable** → skip if item does not apply (no migration/date/range/state/index/text column/i18n/scalability)
 
 ### Quality Gates
 
