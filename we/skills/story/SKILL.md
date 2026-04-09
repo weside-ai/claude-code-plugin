@@ -254,9 +254,11 @@ Extract PR number. Write checkpoint `pr_created`.
 
 After reviews green → write checkpoint `ci_passed`.
 
-## Step 9: Ticket Transition
+## Step 9: Verify Ticket Transition
 
-Move ticket to "In Review". Never move to "Done" — that's the user's job.
+The transition to "In Review" is performed by the `pr-creator` agent in its Step 7 (see `agents/pr-creator.md`).
+
+**Verify** the ticket actually moved. If the ticketing tool reports the ticket is still in "In Progress" (or equivalent), retry the transition once. Never move to "Done" — that's the user's job.
 
 ---
 
@@ -291,6 +293,7 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 - Always use `EnterWorktree` for isolation (unless user opts out)
 - Always save checkpoints after each phase
 - Always run quality gates before creating PR
+- Always verify ticket is in "In Review" after PR creation — retry once if not
 - Never skip test quality gate
 - Never create PR if tests fail
 - Never move ticket to "Done" — user's job

@@ -125,9 +125,16 @@ EOF
 )"
 ```
 
-### Step 7: Link PR to Ticket
+### Step 7: Link PR to Ticket & Transition
 
-If ticketing tool available → add comment with PR link.
+If ticketing tool available:
+
+1. Add comment with PR link
+2. **Transition ticket → "In Review"**
+   - If transition fails (workflow doesn't allow move, permissions, etc.) → log warning, continue. Do NOT block PR creation.
+   - Never transition to "Done" — that's the user's job.
+
+See "Ticketing Integration" section below for tool detection.
 
 ### Step 8: Save Checkpoint
 
@@ -137,10 +144,23 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint $TICKET 
 
 ---
 
+## Ticketing Integration
+
+Detect available ticketing tool (in priority order):
+
+1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
+2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
+3. `gh` CLI → GitHub Issues (PR auto-links via `$TICKET` in body; no status transition possible)
+4. Nothing → skip transition silently
+
+---
+
 ## Rules
 
 - **VERIFY** all 3 checkpoints before creating PR
 - **STOP** if any checkpoint missing
 - **ALWAYS** rebase on main before push
 - **ALWAYS** save `pr_created` checkpoint after success
+- **ALWAYS** transition ticket → "In Review" in Step 7 (soft-fail only)
 - **NEVER** merge PR — that's the user's job
+- **NEVER** transition ticket to "Done" — that's the user's job
