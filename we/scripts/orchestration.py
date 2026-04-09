@@ -90,6 +90,7 @@ STORY_PHASES = [
     "review_passed",  # /we:review — Code review passed
     "static_analysis_passed",  # /we:static — Lint/format/types passed
     "test_passed",  # /we:test — Tests + coverage passed
+    "coderabbit_passed",  # /we:story Step 5b — Local CodeRabbit review passed (0 BLOCKING)
     "pr_created",  # /we:pr — PR created
     "ci_passed",  # /we:story — CI/Reviews green
 ]

@@ -12,13 +12,14 @@ color: green
 
 ## Prerequisites (BLOCKING)
 
-All 3 checkpoints must exist before PR creation:
+All 4 checkpoints must exist before PR creation:
 
 | Checkpoint | From | Required |
 |---|---|---|
 | `review_passed` | `/we:review` | Yes |
 | `static_analysis_passed` | `/we:static` | Yes |
 | `test_passed` | `/we:test` | Yes |
+| `coderabbit_passed` | Local `coderabbit review` (Step 5b in `/we:story`) | Yes |
 
 ---
 

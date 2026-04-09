@@ -298,4 +298,4 @@ Move ticket to "In Review". Never move to "Done" — that's the user's job.
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
 - Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — these expand context and break the pipeline. Execute their logic INLINE in Steps 2 and 8.
 - Never commit code changes without corresponding test changes in the same commit
-- Never create a PR before ALL THREE quality gates pass (review + static + test)
+- Never create a PR before ALL FOUR quality gates pass (review + static + test + coderabbit)
