@@ -148,14 +148,43 @@ Check `ac_verified` exists. Run `/simplify` skill (from code-simplifier plugin).
 
 ## Step 5: Quality Gates (PARALLEL)
 
-Launch all agents with `run_in_background=True` in a single message:
+**Four gates run in parallel.** Launch them in a **single message** so they execute concurrently:
+
+**5a. Three subagents via `Agent(run_in_background=True)`:**
 
 - **code-reviewer** — Code review + AC-alignment
 - **static-analyzer** — Lint, format, types
 - **test-runner** — Tests + coverage
-- **CodeRabbit CLI** (optional) — If `coderabbit` command available: `coderabbit review --plain --base origin/main`
 
-Wait for all. Verify checkpoints: `review_passed`, `static_analysis_passed`, `test_passed`. If any fail → fix and re-run. Circuit breaker opens after 3 failures.
+**5b. CodeRabbit CLI via `Bash(run_in_background=True)`:**
+
+In the **same message** as the three `Agent()` calls, also start:
+
+```
+Bash(
+    command="command -v coderabbit >/dev/null 2>&1 && coderabbit review --plain --base origin/main || echo 'CODERABBIT_MISSING'",
+    run_in_background=True,
+    description="CodeRabbit local review"
+)
+```
+
+**CodeRabbit is mandatory, not optional.** If the command returns `CODERABBIT_MISSING`:
+- **STOP the pipeline.** Do not continue to Step 6.
+- Tell the user: *"CodeRabbit CLI not found. Install with `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` and re-run `/we:story`. Missing CodeRabbit is a setup bug, not an acceptable skip."*
+- Do NOT write the `coderabbit_passed` checkpoint.
+
+**Triage CodeRabbit findings** using the same severity mapping as `/we:ci-review`:
+- **BLOCKING** = CRITICAL / MAJOR → must fix before continuing
+- **WARNING** = MINOR → fix unless factually wrong
+- **INFO** = NITPICK / Suggestions → evaluate, document if skipped
+
+**Wait for ALL FOUR.** Then verify checkpoints:
+- `review_passed` (code-reviewer clean)
+- `static_analysis_passed` (static-analyzer clean)
+- `test_passed` (tests green + coverage met)
+- `coderabbit_passed` (0 BLOCKING findings; WARNINGs fixed or factually justified)
+
+If any fail → fix and re-run. Circuit breaker opens after 3 failures.
 
 ## Step 6: Documentation (/we:docs — doc-architect)
 
@@ -195,10 +224,11 @@ should invoke `we:doc-architect` directly.
 
 ## Step 7: PR
 
-**BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
+**BLOCKING:** Verify ALL FOUR quality gate checkpoints exist before creating PR:
 - `review_passed` (code review clean)
 - `static_analysis_passed` (lint/format/types clean)
 - `test_passed` (tests green + coverage met)
+- `coderabbit_passed` (local CodeRabbit clean — 0 BLOCKING findings)
 
 If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
 
