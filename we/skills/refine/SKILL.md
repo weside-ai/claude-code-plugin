@@ -86,6 +86,15 @@ Implementation Plan: docs/plans/{TICKET}-plan.md
 
 Research codebase thoroughly, then create detailed plan.
 
+**Architecture Context (TurboVault):** Before writing the plan, search for relevant
+architecture docs using TurboVault MCP (if available):
+```
+mcp__turbovault__semantic_search("topic of this story")
+mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", value:"<relevant-domain>"}])
+```
+Read the top 3-5 results to understand existing patterns, primitives, and ADRs
+that apply. Reference them in the plan's Technical Approach section.
+
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 ```markdown

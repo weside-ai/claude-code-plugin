@@ -82,6 +82,14 @@ Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans
 
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
+**Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP
+(if available) to surface related architecture docs:
+```
+mcp__turbovault__find_similar_notes("docs/plans/{TICKET}-plan.md")
+```
+Read the top 3 results — they contain patterns, primitives, and ADRs relevant
+to this story. Keep them in mind during implementation.
+
 **Reality Check:** If plan exists, check creation date against recent git changes. If code changed significantly since the plan was written (files moved, APIs renamed, dependencies changed), **STOP the pipeline** and ask the user: "The plan may be outdated — key files have changed since it was written. Run `/we:refine {TICKET}` to update the plan before continuing?" Do NOT proceed with a stale plan.
 
 **Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.

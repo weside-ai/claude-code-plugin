@@ -45,7 +45,12 @@ having those artefacts; skip gracefully if missing.
    - `docs/architecture/README.md` — architecture doc inventory
    - `docs/adr/README.md` — ADR index + promotion criteria
 
-4. **Scan the tree** (directories and top-level files only, not contents):
+4. **Scan the tree via TurboVault** (if TurboVault MCP is available):
+   ```
+   mcp__turbovault__explain_vault()          — holistic overview
+   mcp__turbovault__quick_health_check()     — health score + broken links count
+   ```
+   **Fallback** (if TurboVault unavailable):
    ```bash
    find docs -maxdepth 2 -type f -name '*.md' | sort
    find docs/architecture/primitives -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
@@ -58,6 +63,12 @@ having those artefacts; skip gracefully if missing.
 
 6. **Never load full file contents at boot** — only frontmatter and headings.
    Open specific files on demand when the user's request needs them.
+
+7. **Use TurboVault for search** (if available) instead of grepping `docs/`:
+   - `mcp__turbovault__semantic_search(query)` — find conceptually related docs
+   - `mcp__turbovault__advanced_search(query, frontmatter_filters)` — filter by domain/type
+   - `mcp__turbovault__find_similar_notes(path)` — find docs related to a specific doc
+   - `mcp__turbovault__find_duplicates()` — detect near-duplicate content
 
 ---
 
@@ -89,8 +100,14 @@ mode argument. Pattern-match these shapes:
    - **adr?** — point-in-time decision with rationale
    - **guide?** — human-facing how-to
    - **vision?** — north-star / philosophy
-4. Offer to draft the doc in the suggested location (proposes a diff — never
+4. **Check for duplicates** before proposing a new doc:
+   `mcp__turbovault__find_similar_notes(path)` or
+   `mcp__turbovault__semantic_search(topic)` — if similar content exists,
+   propose extending it instead of creating a new file.
+5. Offer to draft the doc in the suggested location (proposes a diff — never
    writes autonomously).
+6. **Ensure frontmatter** on any new doc: `type`, `domain`, `status` fields
+   per the Frontmatter Standard in `doc-standards.md`.
 
 ### Integrate mode — "I changed X, what needs to update?"
 
