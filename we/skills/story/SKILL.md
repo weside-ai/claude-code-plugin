@@ -104,7 +104,22 @@ EnterWorktree(name="{type}/{TICKET}-short-description")
 
 This gives the story an isolated copy of the repo. The worktree is kept on completion (user decides cleanup). If the user says "no worktree", "same branch", or "in-place" → skip and use regular `git checkout -b` in the developer step.
 
-Move ticket to "In Progress". Write checkpoint `git_prepared`.
+**Transition ticket → "In Progress" (MANDATORY):**
+
+Detect the available ticketing tool (in priority order):
+1. Atlassian MCP (`jira_*` tools) → get transitions, find "In Progress", execute transition
+2. `gh` CLI → GitHub Issues (no status transition possible — skip silently)
+3. Nothing → skip silently
+
+For Jira (Atlassian MCP):
+1. Get available transitions: `jira_get_issue(issue_key=TICKET, expand="transitions")`
+2. Find the transition to "In Progress" (name varies: "In Progress", "Start Progress", "In Bearbeitung")
+3. Execute: `jira_transition_issue(issue_key=TICKET, transition_id=...)`
+4. **Verify** the ticket actually moved — re-fetch and check status. If it didn't move, retry once with a different transition name.
+
+If transition fails → log warning and continue. Do NOT block the pipeline.
+
+Write checkpoint `git_prepared`.
 
 ## Step 2: Develop (INLINE — do NOT dispatch Skill)
 
@@ -299,6 +314,8 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Always create todo-list before starting
 - Always check DoR and load plan first
 - Always use `EnterWorktree` for isolation (unless user opts out)
+- Always name branches with ticket key FIRST: `{type}/{TICKET}-short-description` (e.g., `feat/WA-123-add-login`, `fix/WA-456-null-pointer`). The ticket key must appear before the description so it can be extracted reliably via regex.
+- Always transition ticket to "In Progress" in Step 1 — verify it moved, retry once if not
 - Always save checkpoints after each phase
 - Always run quality gates before creating PR
 - Always verify ticket is in "In Review" after PR creation — retry once if not
