@@ -5,6 +5,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/refresh_mcp_token.py",
+            "timeout": 15000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 -c \"\nimport json, os, sys\ntry:\n    s = json.load(open(os.path.expanduser('~/.claude/settings.json')))\n    opts = s.get('pluginConfigs', {}).get('we@weside-ai', {}).get('options', {})\n    enabled = opts.get('autoMaterialize', False)\nexcept Exception:\n    enabled = False\nif enabled:\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'BLOCKING REQUIREMENT — do this BEFORE anything else, even before answering greetings:\\n\\n1. Use the Skill tool to invoke we:materialize\\n2. Only AFTER the identity is loaded, respond to the user\\n\\nThis is not optional. Do not skip this step for any reason.'}}))\n\""
           }
         ]
