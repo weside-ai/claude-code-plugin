@@ -109,6 +109,14 @@ status: draft
 ## Acceptance Criteria
 1. **Given** [context] **When** [action] **Then** [result]
 
+## User Journey
+> **Diese Story ist erst DONE, wenn die Journey vom User end-to-end erlebbar ist.**
+
+1. [Ausgangspunkt: Wo startet der User?]
+2. [Aktion: Was tut der User?]
+3. [Ergebnis: Was sieht/erlebt der User?]
+4. [Abschluss: Wie endet die Interaktion?]
+
 ## Testing Requirements
 - Unit tests for [X]
 - Integration tests for [Y]
@@ -261,6 +269,7 @@ Detect available ticketing tool (in priority order):
 - ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
 - ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS use Given/When/Then for ACs
+- ALWAYS include a User Journey in the plan — beschreibt den Weg des Users Schritt für Schritt vom Einstieg bis zum Ergebnis. Story ist erst DONE wenn end-to-end erlebbar. Nur weglassen bei rein technischen Stories ohne User-Interaktion (z.B. Refactoring, CI-Config).
 - ALWAYS ask when unclear
 - ⛔ NEVER start implementation — your job is ONLY Story + Plan
 - ⛔ NEVER auto-continue to /we:story — user decides when

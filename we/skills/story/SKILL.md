@@ -223,7 +223,7 @@ map. It never writes autonomously — every change is a diff proposal.
 Agent(
     subagent_type="we:doc-architect",
     description="Update documentation for {TICKET}",
-    prompt="Story {TICKET} is implemented. Git diff between this branch and main: <summary of what changed>. Running in proactive mode: what documentation needs updating? Return a concise list of proposed doc updates (file, change, why). If nothing needs updating, say so explicitly.",
+    prompt="Story {TICKET} is implemented. Git diff between this branch and main: <summary of what changed>. Running in proactive mode: what documentation needs updating? Also: does this story introduce or significantly change a user-facing flow? If yes, propose creating or updating a journey doc (docs/architecture/journey-*.md). Return a concise list of proposed doc updates (file, change, why). If nothing needs updating, say so explicitly.",
     run_in_background=True
 )
 ```

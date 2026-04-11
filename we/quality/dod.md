@@ -58,6 +58,7 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] Architecture changed → Architecture documentation updated
 - [ ] CLI changed → CLI documentation updated
 - [ ] Configuration changed → Configuration docs updated
+- [ ] User-flow changed → Journey doc updated or created (`docs/architecture/journey-*.md`)
 - [ ] Documentation Impact from plan addressed (if specified)
 - [ ] No doc changes needed (skip if nothing relevant changed)
 

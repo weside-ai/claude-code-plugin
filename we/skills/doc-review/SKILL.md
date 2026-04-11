@@ -81,6 +81,15 @@ paths: src/**/*.py
 | Description includes trigger words | WARNING |
 | Instructions are step-by-step | WARNING |
 
+### Journey Specific (`architecture/journey-*.md`)
+
+| Check | Severity |
+|---|---|
+| Frontmatter has `type: journey` | ISSUE |
+| Filename matches `journey-*.md` | WARNING |
+| Contains numbered steps | WARNING |
+| Contains "Components Involved" table | INFO |
+
 ---
 
 ## Deduplication Rules
@@ -132,6 +141,7 @@ paths: src/**/*.py
 ```
 Is this for Claude Code?
 ├── NO → docs/ (human reference)
+│   ├── A user-facing flow end-to-end? → architecture/journey-*.md (type: journey)
 └── YES → What type?
     ├── Vision/Fundamentals → CLAUDE.md
     ├── Git/CI/Story workflows → rules/workflows/

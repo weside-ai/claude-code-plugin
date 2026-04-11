@@ -98,6 +98,8 @@ mode argument. Pattern-match these shapes:
    - **primitive?** — used in ≥3 places, has invariants, has bypass cost
    - **architecture/?** — current implementation reality for a broader topic
    - **adr?** — point-in-time decision with rationale
+   - **journey?** — user-facing end-to-end flow through the system,
+     lives in `architecture/journey-*.md`
    - **guide?** — human-facing how-to
    - **vision?** — north-star / philosophy
 4. **Check for duplicates** before proposing a new doc:
@@ -119,6 +121,8 @@ mode argument. Pattern-match these shapes:
      touched primitive detail docs
    - New `# PRIMITIVE-BYPASS-OK` annotations → regenerate
      `docs/architecture/BYPASS-REGISTER.md`
+   - New/changed user-facing flows → check if a `journey-*.md` exists
+     for this flow; propose creating or updating it
    - New primitive candidates (3+ usages, invariants) → propose promotion
 3. Propose a concrete list of doc updates, each with a diff sketch.
 4. Wait for approval. On approval, produce the diffs and apply them via
@@ -147,7 +151,10 @@ mode argument. Pattern-match these shapes:
 checkpoints with the following prompt shape:
 
 > "Story {TICKET} is implemented. Here is the git diff between the branch
-> and main. What documentation needs updating?"
+> and main. What documentation needs updating?
+> Also check: does this story introduce or change a user-facing flow?
+> If yes, propose creating or updating a journey doc in
+> `docs/architecture/journey-*.md`."
 
 Your response:
 
