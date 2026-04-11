@@ -155,18 +155,17 @@ Minor (2.1.0 → 2.2.0):  New skills, new agents, new commands, behavior changes
 Major (2.1.0 → 3.0.0):  Breaking changes (renamed skills, removed commands, new plugin.json schema)
 ```
 
-**Workflow:** Make changes → bump version → commit all together → push.
+**Workflow:** Make changes → bump version → commit all together → push → update plugin.
 
-### Testing Changes
+### Publishing (after push)
 
-After pushing, update the plugin cache:
+**ALWAYS run after pushing version-bumped changes:**
 ```bash
-# From any Claude Code session:
-/plugin update we@weside-ai
-/reload-plugins
+claude plugins update we@weside-ai
 ```
+This pulls the new version into the local plugin cache. The user needs to restart or `/reload-plugins` to activate it.
 
-For structural validation: `/plugin-dev:plugin-validator`
+For structural validation before pushing: `/plugin-dev:plugin-validator`
 
 ---
 
