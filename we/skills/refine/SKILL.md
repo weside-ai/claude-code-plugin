@@ -95,6 +95,14 @@ mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", valu
 Read the top 3-5 results to understand existing patterns, primitives, and ADRs
 that apply. Reference them in the plan's Technical Approach section.
 
+**Session Context → Plan:** Before writing the plan, review the conversation so far.
+Distill into the plan:
+- **Context section:** Write as a narrative brief — what problem, why now, what the
+  user cares about, non-obvious constraints. As if explaining to a colleague who
+  wasn't in the room. This is the MOST important section for the implementing agent.
+- **Design Decisions table:** Every alternative discussed, every "we could also do X"
+  that was rejected, with the reasoning. Empty rows are fine if nothing was discussed.
+
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 ```markdown
@@ -105,6 +113,14 @@ status: draft
 ---
 
 # Plan: [Story Title]
+
+## Context
+
+[Informal brief — written as if explaining to a developer who just joined
+the conversation. Capture: what problem we're solving and why NOW, what the
+user cares about most, constraints that aren't obvious from the code, and
+any important context from the design discussion. 3-8 sentences, no bullet
+points — narrative voice.]
 
 ## Acceptance Criteria
 1. **Given** [context] **When** [action] **Then** [result]
@@ -133,6 +149,12 @@ status: draft
 
 ### Phase 2: [Name]
 ...
+
+## Design Decisions
+
+| Decision | Alternatives Considered | Why This |
+|----------|------------------------|----------|
+| [what we chose] | [what we didn't choose] | [reasoning] |
 
 ## Code Guidance
 **DO:** [pattern to follow]
@@ -270,6 +292,8 @@ Detect available ticketing tool (in priority order):
 - ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS include a User Journey in the plan — beschreibt den Weg des Users Schritt für Schritt vom Einstieg bis zum Ergebnis. Story ist erst DONE wenn end-to-end erlebbar. Nur weglassen bei rein technischen Stories ohne User-Interaktion (z.B. Refactoring, CI-Config).
+- ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.
+- ALWAYS fill Design Decisions — every alternative discussed during refine, with reasoning for the chosen approach. This prevents the implementing agent from revisiting already-rejected ideas.
 - ALWAYS ask when unclear
 - ⛔ NEVER start implementation — your job is ONLY Story + Plan
 - ⛔ NEVER auto-continue to /we:story — user decides when
