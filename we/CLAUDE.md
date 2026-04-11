@@ -35,6 +35,8 @@ User         → reviews PR, merges, closes ticket
 
 **Pipeline:** /we:refine (interactive) → /we:story (autonomous) → User merges (manual)
 
+**Context flow:** /we:refine captures session context (why, trade-offs, rejected alternatives) into the plan's Context and Design Decisions sections, so /we:story understands intent — not just spec. After story completion, /we:story proposes journey docs (`docs/architecture/journey-*.md`) for shipped user-facing flows.
+
 ---
 
 ## Skills
@@ -42,7 +44,7 @@ User         → reviews PR, merges, closes ticket
 | Command | What it does |
 |---|---|
 | `/we:setup` | Project onboarding (stack, ticketing, vision) |
-| `/we:refine` | Create/refine stories with implementation plans |
+| `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
 | `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop + ci-review are inline) |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
 | `/we:sm` | Scrum Master: process optimization, retrospectives |
