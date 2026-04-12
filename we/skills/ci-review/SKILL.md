@@ -18,11 +18,9 @@ Iteratively collects findings from CI + reviews, fixes ALL of them, and pushes o
 ```
 1. Collect iteratively (start with what's available, wait for the rest)
 2. Triage (BLOCKING/WARNING/INFO)
-3. Batch Fix ALL (ONE commit, no skipping warnings)
-4. Local validation
-5. Resolve Threads
-6. Verify ALL green → Push
-7. Report
+3. Fix → Validate → Commit → Resolve Threads → Verify 0 Unresolved → Push
+4. Post-Push Check (max 3 cycles)
+5. Report
 ```
 
 ---
@@ -113,29 +111,37 @@ A finding may be skipped ONLY when:
 
 ---
 
-## Phase 3: Batch Fix
+## Phase 3: Fix → Validate → Resolve → Push (single flow, no skipping steps)
+
+⛔ **This is ONE continuous flow. Execute every step in order. Do NOT jump to `git push`.**
+
+### 3a. Batch Fix
 
 1. Read each finding, open file, make fix
-1. Do NOT commit between fixes — accumulate ALL changes
-1. After ALL fixes — run local validation:
-   ```bash
-   # Python:
-   ruff check . --fix && ruff format . && mypy app/
-   # TypeScript:
-   yarn lint --fix && yarn typecheck
-   # Tests:
-   pytest tests/unit/ tests/integration/ --no-cov -x
-   # Platform Primitive bypass checks — must pass if present.
-   # Missing script = absent-gate (no-op). Present script failing = STOP.
-   for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
-     if [ -f "$s" ]; then
-       bash "$s" || { echo "FAIL: $s — fix before push"; exit 1; }
-     fi
-   done
-   # If the register exists and the codebase has new/changed bypass annotations:
-   [ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
-   ```
-1. ONE commit with all fixes:
+2. Do NOT commit between fixes — accumulate ALL changes
+
+### 3b. Local Validation
+
+After ALL fixes — run local validation:
+
+```bash
+# Python:
+ruff check . --fix && ruff format . && mypy app/
+# TypeScript:
+yarn lint --fix && yarn typecheck
+# Tests:
+pytest tests/unit/ tests/integration/ --no-cov -x
+# Platform Primitive bypass checks:
+for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
+  [ -f "$s" ] && bash "$s" || { echo "FAIL: $s"; exit 1; }
+done
+# Bypass register:
+[ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
+```
+
+### 3c. Commit
+
+ONE commit with all fixes:
 
 ```bash
 git add <specific changed files>
@@ -144,21 +150,27 @@ git commit -m "fix: address CI and review findings
 {TICKET}"
 ```
 
----
+### 3d. Resolve ALL CodeRabbit Threads (MANDATORY before push)
 
-## Phase 4: Pre-Push Verification (NEW — do NOT skip!)
+⛔ **Do NOT skip this step. The `check-coderabbit` gate WILL fail if threads are unresolved.**
 
-Before pushing, verify ALL sources will be satisfied:
-
-### 4a. Resolve ALL CodeRabbit threads (fixed AND skipped-with-reason)
+For EVERY CodeRabbit thread from the findings table — whether fixed or skipped-with-reason — resolve it:
 
 ```bash
-for id in PRRT_xxx PRRT_yyy; do
+# Get all unresolved thread IDs
+THREADS=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
+  repository(owner:$owner,name:$repo){pullRequest(number:$pr){
+    reviewThreads(first:100){nodes{isResolved id}}
+  }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id')
+
+# Resolve each one
+for id in $THREADS; do
   gh api graphql -f query="mutation(\$id:ID!){resolveReviewThread(input:{threadId:\$id}){thread{isResolved}}}" -f id="$id"
 done
 ```
 
-### 4b. Verify zero unresolved threads
+### 3e. Verify Zero Unresolved (HARD GATE)
 
 ```bash
 UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
@@ -166,27 +178,19 @@ UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String
     reviewThreads(first:100){nodes{isResolved}}
   }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
   --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)] | length')
-echo "Unresolved: $UNRESOLVED"
+
+if [ "$UNRESOLVED" -gt 0 ]; then
+  echo "⛔ BLOCKED: $UNRESOLVED unresolved CodeRabbit threads. Resolve them before pushing."
+  exit 1
+fi
+echo "✅ All threads resolved ($UNRESOLVED unresolved)"
 ```
 
-### 4c. Verify Claude Review findings addressed
+⛔ **If UNRESOLVED > 0: STOP. Go back to 3d. Do NOT proceed to push.**
 
-Check that every WARNING and BLOCKING from the Claude review comment has been fixed. If the Claude review said "assert in production code" and you didn't fix it — go fix it now.
+### 3f. Push
 
-### 4d. Push Checklist (ALL must be true)
-
-```
-[ ] All BLOCKING findings fixed
-[ ] All WARNING findings fixed (or skipped with factual justification)
-[ ] All CodeRabbit threads resolved (0 unresolved)
-[ ] All Claude Review WARNINGs addressed
-[ ] Local lint + tests pass
-[ ] Platform Primitive bypass scripts pass (check-primitive, check-crud, check-session)
-[ ] BYPASS-REGISTER.md regenerated if any new annotations were added
-[ ] CI failure either fixed or truly unfixable from this branch
-```
-
-**Only push when ALL boxes are checked.**
+Only after 3e confirms 0 unresolved:
 
 ```bash
 git push
@@ -194,7 +198,7 @@ git push
 
 ---
 
-## Phase 5: Post-Push Check
+## Phase 4: Post-Push Check
 
 After pushing, CI + reviews will re-run (~3-5 min). If new findings appear:
 
@@ -209,7 +213,7 @@ After pushing, CI + reviews will re-run (~3-5 min). If new findings appear:
 
 ---
 
-## Phase 6: Report
+## Phase 5: Report
 
 - Complete findings table with Action column (Fixed/Skipped+reason)
 - Fix summary (1-line per fix)
