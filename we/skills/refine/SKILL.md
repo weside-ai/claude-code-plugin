@@ -181,14 +181,22 @@ User reviews plan. On feedback → adjust. On approval → continue.
 
 ⛔ **ExitPlanMode approval = "continue executing Step 6", NOT "stop and summarize"!**
 
-**Execute these 4 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
+**Execute these 5 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
-1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md`. (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
+1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md` **in the main weside-core worktree** (`~/weside/weside-core/docs/plans/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
 2. **Update Jira:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
-3. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined`
-4. **Output:** `"Plan saved to docs/plans/{TICKET}-plan.md. /we:refine DONE."`
+3. **Commit plan to main:** Only if the main worktree (`~/weside/weside-core`) has `main` checked out (do NOT switch branches). Run:
+   ```bash
+   cd ~/weside/weside-core && \
+   [ "$(git branch --show-current)" = "main" ] && \
+   git add docs/plans/{TICKET}-plan.md && \
+   git commit -m "docs: add {TICKET} plan — {Story Title}" && \
+   git push || echo "WARN: main worktree not on main branch — plan saved but not committed. Commit manually."
+   ```
+4. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined`
+5. **Output:** `"Plan saved to docs/plans/{TICKET}-plan.md. /we:refine DONE."`
 
-⛔ **STOP after step 4. No implementation. No /we:story. No branch. No code.**
+⛔ **STOP after step 5. No implementation. No /we:story. No branch. No code.**
 
 ---
 
