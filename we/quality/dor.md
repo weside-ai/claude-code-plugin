@@ -10,7 +10,7 @@
 
 - [ ] **Clear Summary** — One-line description (max 80 chars)
 - [ ] **User Story** — "As [role] I want [feature] so that [benefit]" format
-- [ ] **Plan exists** — `docs/plans/{TICKET}-plan.md` with implementation details
+- [ ] **Plan exists** — `docs/plans/{TICKET}-plan.md` with implementation details. Once the plan is final, `/we:story` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:refine`, not in the pipeline.
 - [ ] **Ticket linked** — Connected to parent Epic (if using ticketing tool)
 
 ### In Plan (Details)
