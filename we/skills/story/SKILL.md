@@ -16,6 +16,26 @@ You orchestrate the entire development pipeline in a single skill invocation —
 
 ---
 
+## Execution Is Not Negotiable
+
+By the time `/we:story` runs, the plan already exists (`/we:refine` produced it) and the user has chosen to execute it. The pipeline IS the execution path, not a discovery path. The phases in the plan ARE the phase-by-phase execution — running them sequentially with checkpoints is what "phased" means here.
+
+**Do NOT ask the user how to run the story.** Specifically forbidden:
+
+- **At the start:** "Should I run this end-to-end or phase by phase?" / "This story is large — how would you like to proceed?" — No. Just start. Story size and phase count are not negotiation levers; a 6-phase encryption story and a 1-phase typo fix run the same pipeline.
+- **Mid-pipeline, on token-budget grounds:** "The context is getting large, should I split the PR?" / "We're approaching the token limit, want me to stop?" — No. The session runs on a 1M-token model and the runtime auto-compacts older turns. Token pressure is not your problem to solve by interrupting the user. Keep going. If compaction actually happens, the checkpoint system lets you resume — that's exactly what it's for.
+
+**Legitimate reasons to interrupt the user (these stay — judgment is not abolished):**
+
+1. **Circuit Breaker** — 3 failures in the same phase. Present options.
+2. **AC Verification Gate** (Step 3) — blocking checkpoint by design.
+3. **Plan ambiguity that blocks implementation** — a concrete, named gap in the plan that cannot be resolved by reading the code. State the gap, ask the specific question, continue.
+4. **Destructive or out-of-scope action** — anything the system prompt's "executing actions with care" rules require confirmation for (force-push, dropping data, deleting branches, etc.).
+
+If your reason to interrupt does not fit one of those four buckets, the answer is: just execute.
+
+---
+
 ## Prerequisites
 
 ```
