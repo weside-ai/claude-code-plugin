@@ -1,15 +1,17 @@
 ---
 name: setup
 description: >
-  Project onboarding — detects stack, ticketing tool, and optionally creates
-  project vision, DoR, DoD. Interactive, minimal (3 questions). Use when user
-  says "/we:setup", "configure project", "set up workflow".
+  Project onboarding — detects stack, ticketing tool, creates project vision/DoR/DoD,
+  initializes the Companion Framework (`.weside/`, vault registration, crew onboarding
+  via /we:onboarding). Interactive, minimal (3 core questions + optional crew setup).
+  Use when user says "/we:setup", "configure project", "set up workflow", "initialize repo",
+  "install crew", "first time".
 ---
 
 
 # Project Setup
 
-Interactive project onboarding. Three questions, then done.
+Interactive project onboarding. Three core questions for project config, then optional Companion Framework initialization (crew + TurboVault + frontmatter).
 
 ---
 
@@ -91,7 +93,7 @@ If user provided a vision or wants custom DoR/DoD:
 
 Otherwise: plugin uses built-in defaults from `quality/dor.md` and `quality/dod.md`.
 
-### Step 4: Confirm
+### Step 4: Confirm core config
 
 ```
 Project configured!
@@ -99,11 +101,56 @@ Project configured!
 Stack: Python + TypeScript (monorepo)
 Ticketing: Jira (project: PROJ)
 Vision: .weside/vision.md
+```
 
+### Step 5: Companion Framework Setup (optional — ask first!)
+
+> **🚧 Status: evolving.** See `we/skills/CLAUDE.md` for the full design + open questions.
+
+Ask: *"Do you want to set up the Companion Framework for this repo now? (Crew + TurboVault context-loading + frontmatter). You can also run `/we:onboarding` later."*
+
+If **no** → skip to Step 6.
+
+If **yes**:
+
+1. **Ensure `.weside/config.json`** — create or extend. Minimum schema:
+   ```json
+   {
+     "vault": "<repo-basename>",
+     "onboarded": false,
+     "created_at": "<ISO-timestamp>",
+     "framework_version": 1
+   }
+   ```
+
+2. **TurboVault registration (if MCP available)**
+   - `list_vaults` → is this repo's path already a vault?
+   - If not: `add_vault(name=<repo-basename>, path=<repo-root>)`
+   - `set_active_vault(<repo-basename>)`
+   - If weside MCP is NOT available → skip silently, note in config `"vault": null`
+
+3. **Frontmatter audit (report only, no migration yet)**
+   - `inspect_frontmatter` → which keys are present across docs?
+   - Report: coverage %, how many docs have `need_to_know: true`, how many have `for_role`
+   - Suggestion: "Run doc-architect agent to migrate frontmatter across docs — see `/we:docs`"
+
+4. **Invoke `/we:onboarding`**
+   - Delegates to the onboarding skill (crew composition + repo-companion knowledge)
+   - Onboarding writes `.weside/weside.md` (companion-facing knowledge: crew, meetings, repo purpose)
+
+5. **Finalize**
+   - Update `config.json`: `onboarded: true, onboarded_at: <ts>`
+   - Stage `.weside/` — suggest commit but do not auto-commit
+   - Print: *"Framework ready. Run `/we:sideload <repo>` from any session to load context."*
+
+### Step 6: Confirm
+
+```
 Ready to go:
-  /we:refine  — Create/refine stories
-  /we:story   — Implement a story end-to-end
-  /we:review  — Code review
+  /we:refine     — Create/refine stories
+  /we:story      — Implement a story end-to-end
+  /we:review     — Code review
+  /we:sideload .    — Reload context for this repo (Companion Framework)
 ```
 
 ---
@@ -127,5 +174,22 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - NEVER block on any question — always allow skip/default
 - NEVER create .weside/ without user consent
 - Auto-detection first, confirmation second
-- Three questions maximum
+- Three CORE questions maximum (Step 2); Step 5 (Framework) is optional and asks once
 - Works without ANY configuration (defaults for everything)
+- **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
+- **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
+- **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
+
+## Open Questions (see we/skills/CLAUDE.md)
+
+- Auto-fire Step 5 on fresh setup vs. always ask?
+- Frontmatter migration: who kurates `need_to_know: true` — doc-architect agent or user?
+- Crew-Portabilität: "copy from other repo" flow?
+- Rollback wenn Setup mittendrin abbricht?
+
+## References
+
+- `we/skills/onboarding/SKILL.md` — invoked by Step 5
+- `we/skills/sideload/SKILL.md` — counterpart for "already set up"
+- `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
+- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md` § 2.4
