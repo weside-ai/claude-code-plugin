@@ -27,6 +27,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 MIN_USER_MSG_LENGTH = 50
@@ -88,8 +89,21 @@ def _call_store_conversations(
     conversations: list[dict],
     source: str,
     source_detail: str,
+    companion_name: str | None = None,
 ) -> bool:
-    """Call store_conversations via MCP JSON-RPC endpoint."""
+    """Call store_conversations via MCP JSON-RPC endpoint.
+
+    companion_name pins the target companion via the ?companion= query param
+    (Tier 1 routing on the backend). Without it, the backend falls back to the
+    user-level Redis override (mcp:user_override:{user_id}), which is mutated
+    by every select_companion call across ALL sessions for this user — causing
+    memories to land under whichever companion was last selected anywhere,
+    not the one whose identity was loaded in this session.
+    """
+    url = MCP_URL
+    if companion_name:
+        url = f"{MCP_URL}?companion={urllib.parse.quote(companion_name)}"
+
     payload = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -107,7 +121,7 @@ def _call_store_conversations(
     ).encode()
 
     req = urllib.request.Request(
-        MCP_URL,
+        url,
         data=payload,
         headers={
             "Authorization": f"Bearer {token}",
@@ -277,6 +291,9 @@ def main() -> None:
         return
 
     # 6. Store directly via MCP
+    # Pass companion_name so the backend uses Tier 1 query-param routing instead
+    # of the user-level Redis override, which is shared across all sessions.
+    companion_name = config.get("companion") or None
     project = os.path.basename(hook_input.get("cwd", os.getcwd()))
     exchange = [
         {
@@ -285,7 +302,7 @@ def main() -> None:
         }
     ]
 
-    ok = _call_store_conversations(token, exchange, "claude_code", project)
+    ok = _call_store_conversations(token, exchange, "claude_code", project, companion_name)
     if not ok:
         _warn("store_conversations call failed — this turn was NOT stored as memory.")
 
