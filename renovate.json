@@ -1,6 +1,69 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate configuration for claude-code-plugin (Claude Code plugin with Python tooling)",
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":separateMajorReleases"
+  ],
+  "labels": ["dependencies", "renovate"],
+  "enabledManagers": [
+    "github-actions",
+    "pep621"
+  ],
+  "packageRules": [
+    {
+      "description": "Python tooling (ruff, mypy) defined in pyproject.toml",
+      "matchManagers": ["pep621"],
+      "labels": ["python", "tooling"]
+    },
+    {
+      "description": "GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "labels": ["ci"]
+    },
+    {
+      "description": "Group GitHub Actions updates + automerge (safe with SHA pinning)",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor", "major", "digest", "pin"],
+      "groupName": "github actions",
+      "automerge": true,
+      "automergeType": "pr",
+      "labels": ["automerge", "ci"]
+    },
+    {
+      "description": "Group Python tooling patch/minor + automerge",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "groupName": "python tooling",
+      "automerge": true,
+      "automergeType": "pr",
+      "labels": ["python", "automerge"]
+    },
+    {
+      "description": "Separate major Python tooling updates (breaking changes)",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["major"],
+      "labels": ["breaking-change", "python"]
+    }
+  ],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 3,
+  "platformAutomerge": true,
+  "rebaseWhen": "conflicted",
+  "ignorePaths": [
+    "**/node_modules/**"
+  ],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "automerge": true
+  },
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageExtra": "{{#if isMajor}}(major){{else}}{{#if isMinor}}(minor){{else}}(patch){{/if}}{{/if}}",
+  "semanticCommits": "enabled",
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "📦 Dependency Updates Dashboard"
 }

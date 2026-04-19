@@ -53,8 +53,15 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - name: Skip for bot PRs (Renovate/Dependabot)
+        if: startsWith(github.head_ref, 'renovate/') || startsWith(github.head_ref, 'dependabot/')
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: echo "Skipping version bump check for dependency update branch $HEAD_REF"
       - uses: actions/checkout@v4
+        if: ${{ !(startsWith(github.head_ref, 'renovate/') || startsWith(github.head_ref, 'dependabot/')) }}
         with:
           fetch-depth: 0
       - name: Check version bump
+        if: ${{ !(startsWith(github.head_ref, 'renovate/') || startsWith(github.head_ref, 'dependabot/')) }}
         run: bash scripts/check-version-bump.sh
