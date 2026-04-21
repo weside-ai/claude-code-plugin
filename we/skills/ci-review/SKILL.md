@@ -85,7 +85,7 @@ Only skip a CI failure if it's truly unfixable from this branch (e.g., infrastru
 
 Severity mapping:
 - **BLOCKING** = CI failure, Claude BLOCKING, CodeRabbit CRITICAL/MAJOR
-- **WARNING** = Claude WARNING, CodeRabbit MAJOR/MINOR
+- **WARNING** = Claude WARNING, CodeRabbit MINOR
 - **INFO** = CodeRabbit NITPICK, Suggestions
 
 ---

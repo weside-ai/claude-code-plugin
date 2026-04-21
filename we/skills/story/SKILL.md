@@ -79,7 +79,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
   ├── Step 2: Develop (INLINE, not Skill dispatch)
   ├── Step 3: AC Verification Gate (BLOCKING)
   ├── Step 4: Simplify
-  ├── Step 5: PARALLEL: /we:review + /we:static + /we:test [+ coderabbit]
+  ├── Step 5: PARALLEL: /we:review + /we:static + /we:test
   ├── Step 6: Documentation check
   ├── Step 7: /we:pr (checks test_passed)
   ├── Step 8: Review-Fix Loop (INLINE, max 3 cycles)
@@ -191,41 +191,23 @@ Check `ac_verified` exists. Run `/simplify` skill (from code-simplifier plugin).
 
 ## Step 5: Quality Gates (PARALLEL)
 
-**Four gates run in parallel.** Launch them in a **single message** so they execute concurrently:
+**Three gates run in parallel.** Launch them in a **single message** so they execute concurrently:
 
-**5a. Three subagents via `Agent(run_in_background=True)`:**
+Three subagents via `Agent(run_in_background=True)`:
 
 - **code-reviewer** — Code review + AC-alignment
 - **static-analyzer** — Lint, format, types
 - **test-runner** — Tests + coverage
 
-**5b. CodeRabbit CLI via `Bash(run_in_background=True)`:**
+**CodeRabbit runs on GitHub, not locally.** The `check-coderabbit` CI gate
+enforces CRITICAL/MAJOR thread resolution after PR creation. Local CodeRabbit
+CLI is not part of this pipeline — the GitHub review has better context
+(PR diff, commit history, prior reviews) and is the authoritative gate.
 
-In the **same message** as the three `Agent()` calls, also start:
-
-```
-Bash(
-    command="command -v coderabbit >/dev/null 2>&1 && coderabbit review --plain --base origin/main || echo 'CODERABBIT_MISSING'",
-    run_in_background=True,
-    description="CodeRabbit local review"
-)
-```
-
-**CodeRabbit is mandatory, not optional.** If the command returns `CODERABBIT_MISSING`:
-- **STOP the pipeline.** Do not continue to Step 6.
-- Tell the user: *"CodeRabbit CLI not found. Install with `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` and re-run `/we:story`. Missing CodeRabbit is a setup bug, not an acceptable skip."*
-- Do NOT write the `coderabbit_passed` checkpoint.
-
-**Triage CodeRabbit findings** using the same severity mapping as `/we:ci-review`:
-- **BLOCKING** = CRITICAL / MAJOR → must fix before continuing
-- **WARNING** = MINOR → fix unless factually wrong
-- **INFO** = NITPICK / Suggestions → evaluate, document if skipped
-
-**Wait for ALL FOUR.** Then verify checkpoints:
+**Wait for ALL THREE.** Then verify checkpoints:
 - `review_passed` (code-reviewer clean)
 - `static_analysis_passed` (static-analyzer clean)
 - `test_passed` (tests green + coverage met)
-- `coderabbit_passed` (0 BLOCKING findings; WARNINGs fixed or factually justified)
 
 If any fail → fix and re-run. Circuit breaker opens after 3 failures.
 
@@ -267,13 +249,14 @@ should invoke `we:doc-architect` directly.
 
 ## Step 7: PR
 
-**BLOCKING:** Verify ALL FOUR quality gate checkpoints exist before creating PR:
+**BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
 - `review_passed` (code review clean)
 - `static_analysis_passed` (lint/format/types clean)
 - `test_passed` (tests green + coverage met)
-- `coderabbit_passed` (local CodeRabbit clean — 0 BLOCKING findings)
 
 If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
+
+CodeRabbit runs on GitHub after PR creation. `/we:ci-review` handles thread resolution.
 
 Call PR creator agent:
 
@@ -346,4 +329,4 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
 - Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — these expand context and break the pipeline. Execute their logic INLINE in Steps 2 and 8.
 - Never commit code changes without corresponding test changes in the same commit
-- Never create a PR before ALL FOUR quality gates pass (review + static + test + coderabbit)
+- Never create a PR before ALL THREE quality gates pass (review + static + test)

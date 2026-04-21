@@ -12,14 +12,13 @@ color: green
 
 ## Prerequisites (BLOCKING)
 
-All 4 checkpoints must exist before PR creation:
+All 3 checkpoints must exist before PR creation:
 
 | Checkpoint | From | Required |
 |---|---|---|
 | `review_passed` | `/we:review` | Yes |
 | `static_analysis_passed` | `/we:static` | Yes |
 | `test_passed` | `/we:test` | Yes |
-| `coderabbit_passed` | Local `coderabbit review` (Step 5b in `/we:story`) | Yes |
 
 ---
 
@@ -162,5 +161,6 @@ Detect available ticketing tool (in priority order):
 - **ALWAYS** rebase on main before push
 - **ALWAYS** save `pr_created` checkpoint after success
 - **ALWAYS** transition ticket → "In Review" in Step 7 (soft-fail only)
+- **ALWAYS** remind user: *"CodeRabbit will review on GitHub. After CI runs, use `/we:ci-review` to resolve threads — unresolved CRITICAL/MAJOR threads block merge via `check-coderabbit` gate."*
 - **NEVER** merge PR — that's the user's job
 - **NEVER** transition ticket to "Done" — that's the user's job

@@ -50,7 +50,7 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] `/we:review` passed (review_passed checkpoint)
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
-- [ ] Local CodeRabbit passed (coderabbit_passed checkpoint — 0 BLOCKING findings)
+- [ ] CodeRabbit threads resolved on GitHub — `check-coderabbit` CI gate blocks on unresolved CRITICAL/MAJOR threads. Use `/we:ci-review` to fix and resolve after PR creation.
 
 ### Documentation
 
@@ -103,7 +103,7 @@ Feature reachable for user?
 End-to-end flow works?
 Architecture compliance? (patterns, ADRs, security)
 Post-implementation semantic checks? (migrations, timezone, wiring, ...)
-Quality gates passed? (review + static + test + coderabbit)
+Quality gates passed? (review + static + test locally, CodeRabbit on GitHub)
 Docs updated? (per Documentation Impact in plan)
 PR created and CI green?
 All BLOCKING/WARNING fixed?

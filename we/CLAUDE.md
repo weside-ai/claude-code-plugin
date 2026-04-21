@@ -28,7 +28,7 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:refine   → PO + Claude create story + plan (INTERACTIVE)
 /we:story    → Claude runs full pipeline AUTONOMOUSLY:
-               develop → AC verify → review + static + test + coderabbit (parallel)
+               develop → AC verify → review + static + test (parallel) → PR → CodeRabbit on GitHub
                → docs → PR → CI fix → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
