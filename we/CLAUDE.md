@@ -49,8 +49,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
 | `/we:sm` | Scrum Master: process optimization, retrospectives |
 | `/we:arch` | Architecture guidance, ADRs |
-| `/we:doc-review` | Documentation structure review |
-| `/we:doc-check` | Documentation content consistency check |
+| `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap |
 | `/we:find-dead-code` | Find and remove dead code from Python backends |
 | `/we:smoketest` | Manual API smoketest — discover endpoints, auth, test, check logs |
 | `/we:materialize` | Load weside Companion identity (requires weside.ai account) |

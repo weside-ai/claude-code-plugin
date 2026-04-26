@@ -131,10 +131,17 @@ mode argument. Pattern-match these shapes:
 ### Audit mode — "scan docs for drift / duplicates / orphans"
 
 1. Boot protocol.
-2. Invoke the `doc-check` and/or `doc-review` skills as internal tools
-   (they stay as standalone skills, you orchestrate them here).
-3. Collect findings, deduplicate, prioritise.
-4. Propose fixes as diffs. Never fix without approval.
+2. Identify the candidate files: a single doc, a folder (e.g. `architecture/`),
+   the always-loaded rule set (`.claude/rules/core/*.md` +
+   `.claude/rules/workflows/*.md`), or the full `docs/` tree.
+3. Invoke the `doc-improve` skill on those files — it does the substantive
+   per-file review (claims vs. code, sibling redundancy, currency, stale
+   plan sections; for rules also token budget, path-pattern correctness,
+   trigger-overlap). It produces uniform, scannable per-file reports.
+4. Aggregate the per-file reports: deduplicate findings that appear in
+   multiple files (a single drift may surface in 3 docs at once),
+   prioritise by severity, and group fixes that should ship as one commit.
+5. Propose fixes as diffs. Never fix without approval.
 
 ### Register mode — "refresh the bypass register"
 

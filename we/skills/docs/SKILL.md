@@ -90,14 +90,16 @@ the project's `.doc-architect.yml` says.
 
 ## Internal Tools (agent can invoke)
 
-The doc-architect agent does NOT replace `doc-check` and `doc-review`. It
-**orchestrates** them as internal audit tools:
+In Audit mode, the doc-architect agent **orchestrates `doc-improve`** for the
+substantive per-file reviewing. `doc-improve` produces uniform per-file
+reports with verdicts, severity-tagged findings, code-grounded evidence,
+and (for rules) token budget plus trigger-overlap analysis. The agent
+aggregates and prioritises across files; the per-file work is `doc-improve`'s.
 
-- `we:doc-check` → content consistency (outdated code references, contradictions)
-- `we:doc-review` → structural review (frontmatter, size, duplicates)
-
-Both skills continue to exist as standalone entry points. `/we:docs` is
-the unified front door that knows when to delegate.
+- `/we:doc-improve <file>` (or multiple, or glob) → substantive review and
+  diff proposals for the named files. Standalone entry point too — when the
+  user asks "is this file good?", route to `/we:doc-improve` directly,
+  not through this skill.
 
 ---
 
@@ -136,4 +138,4 @@ the unified front door that knows when to delegate.
 - **Doc standards rule:** `.claude/rules/quality/doc-standards.md`
 - **Primitives index:** `docs/architecture/PRIMITIVES.md`
 - **Bypass register:** `docs/architecture/BYPASS-REGISTER.md`
-- **Internal tools:** `we/skills/doc-check/SKILL.md`, `we/skills/doc-review/SKILL.md`
+- **Per-file reviewer:** `we/skills/doc-improve/SKILL.md` (used by Audit mode and as a standalone entry point)

@@ -109,8 +109,7 @@ You get a PR with all ACs implemented, tests passing, code reviewed, docs update
 | `/we:refine` | Create stories with acceptance criteria and plans |
 | `/we:arch` | Architecture guidance, ADR creation |
 | `/we:sm` | Process optimization, retrospectives |
-| `/we:doc-review` | Documentation structure and quality review |
-| `/we:doc-check` | Documentation content consistency check |
+| `/we:doc-improve` | Substantive doc review on a file or files (drift vs. code, redundancy, staleness; rule-mode adds token + trigger-overlap checks) |
 | `/we:find-dead-code` | Remove dead code from Python backends |
 | `/we:smoketest` | Manual API smoketest against running backend |
 | `/we:materialize` | Load weside Companion identity (optional) |
