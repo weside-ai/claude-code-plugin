@@ -166,28 +166,59 @@ content.
 
 ## Pillar 5d — Always-Loaded vs Path-Filtered Fit
 
-A rule sits in `core/` because it's load-bearing in *every* agent context.
-The question to ask of every always-loaded rule: *does the agent really need
-this when it's editing a frontend test?*
+**Trigger this check unconditionally** for any rule in `core/` or `workflows/`,
+or any other rule without a `paths:` field. It is too easy to skip with a
+"feels right" judgement; this check is mandatory and must produce either a
+finding or an explicit "checked, clean" line in the report.
 
-### Method
+### Method (concrete, not vibes-based)
 
-Walk through the rule mentally with three different agent contexts:
+Don't skim the rule and ask "does this feel core". Do this instead:
 
-1. Agent editing `apps/backend/app/companion/being.py`.
-2. Agent editing `apps/mobile/components/ChatScreen.tsx`.
-3. Agent editing `docs/architecture/MEMORY.md`.
+1. **Section-by-section relevance audit.** Read the rule heading by heading,
+   and tag each section with the agent contexts it actually serves:
+   `[backend]`, `[frontend]`, `[infra]`, `[docs]`, `[universal]`.
+   "Universal" means: would help in any of the three other contexts.
 
-Does the rule's content help in **all three** contexts? If yes — `core/` is
-correct. If no — the rule should move to a path-filtered location.
+2. **Compute the universal share.** What percentage of the rule's lines is
+   `[universal]`? If under ~60%, the rule is a candidate for splitting:
+   keep the universal part in `core/`, push the rest into a path-filtered
+   companion in `stacks/` or `quality/`.
+
+3. **Walk through three concrete contexts:**
+   - Agent editing `apps/backend/app/companion/being.py` — what does the rule
+     contribute? Tag the sections it activates.
+   - Agent editing `apps/mobile/components/ChatScreen.tsx` — same tagging.
+   - Agent editing `docs/architecture/MEMORY.md` — same.
+
+4. **Decide:** if context 1 activates 90% and contexts 2+3 activate 10%, the
+   rule is mis-classified as always-loaded. Propose a split or a path filter.
 
 ### Findings to look for
 
-- **Always-loaded rule with backend-only content** — move to `stacks/` with
-  `paths: apps/backend/**`. **MAJOR — token waste.**
-- **Always-loaded rule with infrastructure-only content** — same fix.
-- **`core/` rule that's a placement decision tree** — usually fine, that
-  *is* always-loaded territory. Don't over-correct.
+- **Always-loaded rule with backend-only content** — content is only useful
+  when editing `apps/backend/**`. Move to `stacks/` with the appropriate
+  `paths:`. **MAJOR — token waste in every non-backend session.**
+- **Always-loaded rule with subsystem-only content** — companion-specific,
+  or auth-specific, or voice-specific. Same fix: split — keep universal
+  orientation in `core/`, push the subsystem detail behind a path filter.
+- **Always-loaded rule that's mostly a pointer table** — usually fine, that
+  *is* always-loaded territory (orientation + navigation). Don't over-correct.
+- **Rule whose claims are subsystem-narrow but headings sound universal** —
+  watch for this pattern: a "general orientation" framing wrapping
+  subsystem-specific content. Real example: a `core/` rule titled
+  "Architecture — Essential Mental Model" whose 70% of bytes describe one
+  backend subsystem. Universal title; subsystem content; mismatch.
+
+### Output discipline
+
+In every rule review the verdict line MUST include the result of this check
+explicitly. One of:
+
+- `**Always-loaded fit:** clean (≥60% universal content)`, or
+- `**Always-loaded fit:** mismatch — <X>% of content is <subsystem>-specific; propose path filter or split (see F<n>)`.
+
+If you don't write this line, you skipped the check. Don't skip it.
 
 ---
 

@@ -109,6 +109,46 @@ field deleted from a dataclass, a middleware count drift, an API method that
 got added but isn't documented, a "Phase 2" plan section describing work
 that was abandoned or already shipped.
 
+**Pillar 1 has three named sub-checks. Run all three when applicable:**
+
+**1a — API-surface completeness.** When the doc shows a `class X:` block with
+method signatures, do NOT just verify each listed method exists. Verify the
+**listing is complete** — every public method on the actual class must be
+in the listing or the listing lies by omission.
+
+```bash
+# For every class shown with method signatures in the doc:
+grep -nE "^    (async )?def [a-z]" path/to/impl.py | grep -v "^    def _"
+# Compare counts against the doc. Missing methods = MAJOR finding.
+```
+
+The same applies to dataclass fields, enum members, table-column names,
+config-file keys. *Listing exists in doc → listing must be complete vs code.*
+Real example: `companion-being.md` listed 5 of 11 Gateway methods; a reader
+using the rule to discover the API would have thought 6 methods don't exist.
+
+**1b — Invariant-still-true.** When the doc states an invariant in
+imperative form ("X ONLY in Y", "Z must Y", "never Y"), grep the **negation**
+and confirm zero hits (or only documented exceptions).
+
+```bash
+# Doc says: "LangGraph ONLY in companion/core/"
+grep -rn "from langgraph\|import langgraph" apps/backend/app/companion/gateway/
+# Any non-TYPE_CHECKING hit = invariant has been violated; the doc is lying
+# OR the code is broken. Either way, finding.
+```
+
+Invariants stated in always-loaded rules are the most damaging when wrong —
+the agent acts on them every session. Invariant verification should appear
+as evidence in the finding even when the result is "still true".
+
+**1c — Cross-claim consistency.** When the doc makes the same claim twice
+(once in a section heading, once in a code block, once in prose), verify all
+copies agree. Internal contradictions (real baseline: COMPANION-CORE.md
+Section A said "12 middlewares", Section B's snippet showed 12, the live
+code had 13) are a signal that one of the claims got updated and the others
+didn't.
+
 **Severity:** any factual disagreement with code is at minimum **MAJOR**. If
 following the doc would produce broken code or a wrong mental model, it's
 **BLOCKER**.
@@ -263,6 +303,8 @@ For each file:
 2. **Detect type** from path; note frontmatter; load matching reference doc.
 3. **Pillar 1 — extract claims, verify against code.** Use Bash/Grep liberally;
    they are cheap, hallucinations are not. Never write a finding from memory.
+   Run all three Pillar 1 sub-checks (1a API-completeness, 1b invariant-still-true,
+   1c cross-claim consistency) when applicable.
 4. **Pillar 2 — read as a reader.** Imagine the dominant audience. What's
    buried? What's missing? What's editorial-instead-of-mechanical?
 5. **Pillar 3 — surface redundancy.** Use TurboVault if available; grep
@@ -277,6 +319,23 @@ For each file:
 10. **On approval — apply** via Edit tool, finding-by-finding, in the order the
     user approves. If the user approves "all": apply in severity order,
     BLOCKER first.
+
+### Pillars are checklists, not vibes
+
+Every pillar must produce one of:
+
+- A finding (something is wrong — emit F<n> in the report).
+- An explicit "checked, clean" note (something was checked and is fine — emit
+  in the verdict header or "What stays" so the user can see the check ran).
+
+Silent skipping is the failure mode that kills review quality. If you can't
+explain *what evidence* led you to "no Pillar 3 finding", you didn't run
+Pillar 3. Re-run it. The skill is not done until every applicable pillar
+either fires a finding or emits a clean line.
+
+For rules, this is mandatory in the verdict block: "Pillar 5d
+(always-loaded fit)" must explicitly say `clean` or `mismatch`. See
+`references/rules.md` § Output discipline for the exact format.
 
 ---
 
