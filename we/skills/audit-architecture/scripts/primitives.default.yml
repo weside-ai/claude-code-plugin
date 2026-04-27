@@ -1,0 +1,201 @@
+# primitives.default.yml — Default Primitive-Detector-Catalog for /we:audit-architecture v3
+#
+# This catalog ships with the plugin and provides the "Companion-architecture-flavored"
+# defaults observed in weside-core. Other projects can:
+#   (a) Provide their own catalog via `--primitives-catalog <path>`, OR
+#   (b) Add/override entries via `primitive_detectors:` in their `.audit-architecture.yml`
+#
+# Structure: each entry has a `name` (the primitive identifier) and `patterns` (a list
+# of regex patterns; ANY match counts the primitive as composed by that file).
+#
+# Pattern conventions:
+# - Use `\b` word-boundaries when matching class names to avoid substring false-positives
+# - Use `\.` to escape dots in module paths
+# - Patterns are applied with re.search (not re.match), so ^ anchoring is optional
+
+primitives:
+  - name: llm-factory
+    patterns:
+      - 'from app\.config\.llm import'
+      - '\bLLMFactory\b'
+
+  - name: instrumented-chat-model
+    patterns:
+      - 'from app\.config\._instrumented_model'
+      - 'InstrumentedChatModel'
+
+  - name: instrumented-embedding
+    patterns:
+      - 'InstrumentedEmbeddings'
+      - 'from app\.config\._instrumented_embeddings'
+
+  - name: llm-rate-limiter
+    patterns:
+      - '\bLLMRateLimiter\b'
+      - 'from app\.services\.llm_rate_limiter'
+
+  - name: vendor-langchain-direct
+    # Composing this "primitive" is itself a code-smell outside config/llm.py
+    # — provider-agnosticism violation. Encapsulation-Boundaries lens enforces.
+    patterns:
+      - 'from langchain_anthropic\b'
+      - 'from langchain_openai\b'
+      - 'from langchain_google'
+      - 'from langchain_mistralai'
+      - 'from langchain_deepseek'
+
+  - name: companion-gateway-being
+    patterns:
+      - '\bCompanionGateway\b'
+      - '\bCompanionBeing\b'
+      - 'from app\.companion\.gateway'
+      - 'from app\.companion\.core\.being'
+
+  - name: langgraph-checkpointer
+    patterns:
+      - '\bLangGraphCheckpointer\b'
+      - 'checkpointer_factory'
+      - 'BaseCheckpointSaver'
+
+  - name: thread-lock
+    patterns:
+      - '\bThreadLock\b'
+      - 'from app\.companion\.gateway\.locks'
+
+  - name: safe-background-task
+    patterns:
+      - '\bSafeBackgroundTask\b'
+      - 'from app\.services\.safe_background_task'
+
+  - name: dispatch-service
+    patterns:
+      - '\bDispatchService\b'
+      - 'from app\.services\.dispatch_'
+
+  - name: event-bus
+    patterns:
+      - 'from app\.senses\.event_bus'
+      - '\bSenseEvent\b'
+      - 'get_event_bus'
+
+  - name: subconscious-pipeline
+    patterns:
+      - 'AttentionConsumer'
+      - 'AttentionRouter'
+      - 'from app\.senses\.attention'
+
+  - name: meter-primitive
+    patterns:
+      - 'from app\.services\.billing\.primitive import'
+      - 'async def meter\('
+
+  - name: credit-reservation
+    patterns:
+      - '\bCreditReservation\b'
+      - 'reserve_credits'
+      - 'settle_reservation'
+
+  - name: idempotency
+    patterns:
+      - '\bdedup_key\b'
+      - 'idempotency_key'
+      - 'from app\.services\.billing\.idempotency'
+
+  - name: api-errors-rfc9457
+    patterns:
+      - '\bAPIError\b'
+      - '\bErrorType\b'
+      - 'from app\.core\.exceptions'
+
+  - name: crud-layer
+    patterns:
+      - 'from app\.crud\.'
+      - 'from app\.crud import'
+
+  - name: db-sessions
+    patterns:
+      - '\bget_tool_session\b'
+      - '\bget_task_session\b'
+      - '\bget_background_session\b'
+      - '\bAsyncSessionLocal\b'
+
+  - name: memory-versioning
+    patterns:
+      - 'from app\.crud\.memory'
+      - 'upsert_memory'
+      - 'memory_group_id'
+
+  - name: memory-reminders
+    patterns:
+      - 'from app\.crud\.reminder_buffer'
+      - '\bReminderBuffer\b'
+
+  - name: context-compaction
+    patterns:
+      - 'SlidingWindowMiddleware'
+      - 'ToolResultCollapseMiddleware'
+
+  - name: multi-tenant-isolation
+    patterns:
+      - 'set_rls_user_id'
+      - 'from app\.utils\.encryption'
+      - 'from app\.utils\.memory_encryption'
+      - '\bbypass_rls\b'
+
+  - name: observability-logs
+    patterns:
+      - 'from app\.core\.logging import'
+
+  - name: observability-metrics
+    patterns:
+      - 'from prometheus_client import'
+
+  - name: user-storage
+    patterns:
+      - 'from app\.storage'
+      - 'juicefs'
+
+  - name: blob-storage
+    patterns:
+      - '\bCdnStorageClient\b'
+      - 'get_cdn_client'
+
+  - name: async-completion
+    patterns:
+      - '\bCompletionTask\b'
+      - '\bCompletionManager\b'
+
+  - name: skills-disclosure
+    patterns:
+      - 'from app\.skills'
+
+  - name: mcp-multi-tenancy
+    patterns:
+      - 'from app\.mcp'
+
+  - name: config-service
+    patterns:
+      - '\bConfigService\b'
+      - 'from app\.services\.config_service'
+
+  - name: voice-pipeline
+    patterns:
+      - '\bvoice_metrics\b'
+      - 'VOICE_LLM_LATENCY'
+      - 'VOICE_TURNS_TOTAL'
+
+# Encapsulation homes (used by audit-hotspots.py for leak-detection).
+# A "leak" is a `from <vendor>` runtime import outside the configured home_paths.
+# Project YAML can override this via `hotspots.encapsulation_homes:`.
+encapsulation_homes:
+  langchain:
+    - apps/backend/app/companion/core/
+    - apps/backend/app/config/llm.py
+    - apps/backend/app/config/_instrumented_model.py
+  langgraph:
+    - apps/backend/app/companion/core/
+
+# Private-module root: files OUTSIDE this path that import _-prefixed symbols
+# from this path are flagged as private-reach-ins (encapsulation violation).
+# Project YAML can override via `hotspots.private_module_root:`.
+private_module_root: apps/backend/app/companion/core
