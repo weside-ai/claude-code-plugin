@@ -1,117 +1,292 @@
 ---
 name: audit-architecture-findings-reference
-description: Output skeleton for the audit findings file — frontmatter, healthcheck section, severity-grouped findings, per-subsystem Mermaid diagrams, optionals doc-refresh, severity scale, filename convention. Loaded on demand by the audit-architecture skill.
+description: Output skeleton for the v3 audit findings — directory layout (master + per-subsystem + cross-cutting + hotspots), per-finding template, severity scale, visualization conventions, filename rules
+type: reference
 ---
 
-# Findings-MD Template
+# v3 Findings Output Template
 
-Copy this skeleton when writing the output to
-`<findings_dir>/YYYY-MM-DD-<scope>.md`. Replace `<...>` placeholders.
+The v3 skill writes a **directory** per run, not a single file:
 
-````markdown
+```
+<findings_dir>/<date>-<scope>/
+├── master.md                  # entry point: Executive Summary + 3 intensity views + reading-order
+├── hotspots.md                # Phase 1 output (always present)
+├── cross-cutting.md           # Phase 3 output (always present if any cross_cutting lens ran)
+└── subsystems/
+    ├── <id1>.md               # Phase 2 per-subsystem
+    └── <id2>.md
+```
+
+Plus diagrams in `<diagrams_dir>/`:
+
+```
+<diagrams_dir>/
+├── severity-pie.mmd           # Phase 4 master overview
+├── heatmap.mmd                # Phase 1 quadrant
+├── drift-matrix.mmd           # Phase 3 doc-vs-reality
+└── <subsystem-id>.mmd         # Phase 2 (severity-overlaid)
+```
+
+For **filename rules**, see § Filename Convention at the end of this file.
+
+## master.md Skeleton
+
+```markdown
 ---
 type: audit
-domain: [platform]
+domain: [<derived from subsystem domains>]
 status: current
-created: <YYYY-MM-DD>
-scope: <full | "id1,id2,..." | healthcheck>
+date: <YYYY-MM-DD>
+scope: <full | <id> | <id1>,<id2> | healthcheck | hotspots>
+phases: [0, 1, 2, 3, 4]
+lenses_used: [<...>]
 ---
 
 # Architecture Audit — <YYYY-MM-DD>
 
-**Scope:** <full | "ids list" | healthcheck-only>
+**Scope:** <full | "ids list" | healthcheck-only | hotspots-only>
 **Run-Zeit:** <duration>
 **Subsysteme audited:** <count> / <total>
-**Primitives berührt:** <count> / <total>
+**Lenses run:** <list>
 
-## Healthcheck
+## Executive Summary
 
-### Doc-Drift
+| Severity | Count |
+|---|---|
+| CRITICAL | <n> |
+| MAJOR    | <n> |
+| MINOR    | <n> |
+| NIT      | <n> |
 
-<table from healthcheck Check 1, or "alle Primitive-Docs grün">
-
-### Bypass-Register-Drift
-
-<table from healthcheck Check 2, or "Register stimmt mit Code überein">
-
-### Missing-Primitive-Scan
-
-<output from scan-recent-primitives.sh>
-
-## Subsystem Findings (priorisiert)
-
-### CRITICAL (<count>)
-
-<bullet list of CRITICAL findings using the per-finding template>
-
-### MAJOR (<count>)
-
-<...>
-
-### MINOR (<count>)
-
-<...>
-
-### NIT (<count>)
-
-<...>
-
-## Per-Subsystem Diagramme
-
-Each deep-audit subsystem gets one block. Inline Mermaid for GitHub
-readability, plus link to source `.mmd`.
-
-### <Subsystem Name>
+[Inline severity-pie.mmd]
 
 ```mermaid
-<actual mermaid content>
+pie title Findings by Severity
+    "CRITICAL" : <n>
+    "MAJOR" : <n>
+    "MINOR" : <n>
+    "NIT" : <n>
 ```
 
-[Source](../architecture/diagrams/<subsystem-id>.mmd)
+## Hotspot Map
 
-## Optionals — Doku-Refresh
+[Inline heatmap.mmd, only if Phase 1 ran]
 
-<for each architecture_doc in optionals subsystem, /we:doc-improve summary>
+[1-paragraph commentary on expected vs unexpected hotspots]
 
-- ARENA.md: <2 Verbesserungsvorschläge | aktuell, keine Drift>
-- ADMIN-SUPPORT.md: <...>
-- DATA-MODEL.md: <...>
-- ERROR-HANDLING.md: <...>
-- FEEDBACK.md: <...>
+## Doc-vs-Reality Drift Matrix
+
+[Inline drift-matrix.mmd, only if Phase 3 doc-vs-reality-drift ran]
+
+[1-paragraph commentary on most consequential drifts]
+
+## Reading Order
+
+For human readers, suggested order to read sub-files:
+
+1. This master.md (the navigation surface)
+2. `cross-cutting.md` — typically highest-impact findings (drift + significance)
+3. `subsystems/<most-affected-id>.md` first, then others
+4. `hotspots.md` last (informational, candidates for next audit)
+
+## Findings Index (sorted: severity → lens → file)
+
+### CRITICAL (<n>)
+
+- [<id-CRIT-1>] <one-line title> — `<file>:<line>` ([<sub-file>](<sub-file>))
+- ...
+
+### MAJOR (<n>)
+
+- [<id-MAJ-1>] <one-line title> — ...
+- ...
+
+### MINOR (<n>)
+
+- ...
+
+### NIT (<n>)
+
+- ...
+
+## Sub-files
+
+- [hotspots.md](hotspots.md) — Phase 1 architectural-density scan
+- [cross-cutting.md](cross-cutting.md) — Phase 3 cross-codebase lenses
+- [subsystems/<id1>.md](subsystems/<id1>.md) — <name>
+- [subsystems/<id2>.md](subsystems/<id2>.md) — <name>
+- ...
 
 ## Open Items from Previous Audits
 
-<scan docs/audits/*.md for findings still relevant>
+[Scan <findings_dir>/ for older audits with findings still relevant]
 
-- <date>:<finding-title> — still open, see [<file>](<file>)
-````
+- <date>: <finding-title> — still open, see <relative-link>
+```
+
+## subsystems/<id>.md Skeleton
+
+```markdown
+---
+type: audit
+domain: [<subsystem-domain>]
+status: current
+scope: <subsystem-id>
+date: <YYYY-MM-DD>
+lenses_used: [<7 default + extra_lens>]
+---
+
+# <Subsystem Name> — Phase 2 Audit
+
+[Inline <subsystem-id>.mmd diagram]
+
+```mermaid
+<flowchart with severity-overlay>
+```
+
+[Source](../../architecture/diagrams/<subsystem-id>.mmd)
+
+## Diff Against Previous Diagram
+
+[Empty if first audit, or list of structural changes; see audit-checklist.md § Diff]
+
+## Findings (<n>)
+
+### <id>-CRIT-N — <title>
+
+[Per-Finding Template]
+
+### <id>-MAJ-N — <title>
+
+[Per-Finding Template]
+
+...
+
+## Phase-1 Hotspot Cross-References
+
+[Files in this subsystem that were unexpected hotspots in Phase 1]
+
+- `<file>` (Phase-1 score X, rank #N) — see Phase-3 finding AS-MAJ-N in cross-cutting.md
+```
+
+## cross-cutting.md Skeleton
+
+```markdown
+---
+type: audit
+domain: [platform]
+status: current
+scope: cross-cutting
+date: <YYYY-MM-DD>
+lenses_used: [encapsulation-boundaries, architectural-significance, doc-vs-reality-drift, ...]
+---
+
+# Cross-Cutting Findings — <YYYY-MM-DD>
+
+## Encapsulation-Boundaries
+
+[Findings from EB-1, EB-2, EB-3 sub-checks; see encapsulation-boundaries.md for finding format]
+
+## Architectural-Significance
+
+[Findings from AS-1..AS-5 per unexpected hotspot; see architectural-significance.md]
+
+## Doc-vs-Reality Drift Matrix
+
+[Inline drift-matrix.mmd]
+
+[For each ✗ verdict, a finding with severity + citation; see doc-vs-reality-drift.md]
+
+## Personality-Cohesion (only if --lens=personality-cohesion or extra_lens)
+
+[Findings from PC-1..PC-5; see personality-cohesion.md]
+```
+
+## hotspots.md Skeleton
+
+This file is generated by `scripts/audit-hotspots.py --write`. The script template is the canonical source; reference for human readers only.
+
+See `references/hotspot-density.md` § Output Format for the literal layout.
 
 ## Per-Finding Template
 
-For each finding under CRITICAL / MAJOR / MINOR / NIT:
+Used in subsystems/<id>.md, cross-cutting.md (within each lens's section).
 
 ```markdown
-#### [<subsystem-name>] <Title>: `<file>:<line>`
+### <id-or-lens-prefix>-<SEV>-<N> — <one-line title>
 
-**Lens:** <Kapselung | Schichten | Primitive-Compliance | Security | Observability | Error-Handling | Tests | Privacy-*>
-**Befund:** <one sentence>
-**Risiko:** <one sentence>
-**Fix:** <one sentence — what to do, not how>
-**Aufwand:** <X min | X h>
+**Severity:** <CRITICAL | MAJOR | MINOR | NIT>
+**Lens:** <kapselung | schichten | primitive-compliance | security | observability | error-handling | tests | encapsulation-boundaries | architectural-significance | doc-vs-reality-drift | personality-cohesion | privacy-*>
+**Cite:** `<file>:<line>` (or `<file>` for whole-file findings)
+
+[Optional code block showing the offending pattern]
+
+```python
+<offending pattern>
 ```
+
+<1-3 paragraphs explaining: what the code does, why it violates the rule, what the implication is>
+
+**Fix proposal:** <1-2 paragraphs: concrete remediation path, including alternatives>
+
+**Effort:** <XS | S | M | L | XL>  <!-- XS=1min, S=15min-1h, M=1-4h, L=4-8h, XL=>8h -->
+```
+
+**Finding-ID conventions:**
+
+| Type | Prefix | Example |
+|---|---|---|
+| Subsystem-scoped (Phase 2) | `<subsystem-id>` | `memory-MAJ-1`, `auth-multitenancy-CRIT-2` |
+| Encapsulation-Boundaries | `EB` | `EB-MAJ-1`, `EB-MIN-2` |
+| Architectural-Significance | `AS` | `AS-MAJ-1` |
+| Doc-vs-Reality-Drift | `DR` | `DR-MAJ-3` |
+| Personality-Cohesion | `PC` | `PC-MAJ-1` |
+| Privacy | `PRIV` | `PRIV-CRIT-1` |
+
+The number `N` resets per-(prefix, severity) within a single audit run. So `EB-MAJ-1`, `EB-MAJ-2` are sequential MAJOR findings from the encapsulation-boundaries lens.
 
 ## Severity Scale
 
-| Severity | Definition |
-|---|---|
-| **CRITICAL** | Security or data-loss risk; broken Primitive invariant; production blocker |
-| **MAJOR** | Architectural violation that compounds (skip-layer import, undocumented bypass, no Privacy-Lens coverage of a stated promise) |
-| **MINOR** | Code-smell that doesn't break anything (low coverage, missing structlog adoption, unused export) |
-| **NIT** | Style, naming, comment quality — fix-when-touching |
+| Severity | Definition | Examples |
+|---|---|---|
+| **CRITICAL** | Security or data-loss risk; broken Primitive invariant; production blocker | PII leaked to logs; cross-tenant data leak; missing RLS on multi-tenant table |
+| **MAJOR** | Architectural violation that compounds (skip-layer import, undocumented bypass, primitive-doc-vs-reality drift) | LangChain types in THIN channel; god-object candidate; missing trace_id middleware |
+| **MINOR** | Code-smell that doesn't break anything (low coverage, missing structlog adoption, unused export) | File over 1500 LOC; un-annotated `*-BYPASS-OK` |
+| **NIT** | Style, naming, comment quality — fix-when-touching | Stale TODO comment; doc-link to renamed file |
+
+## Visualization Conventions
+
+All diagrams MUST include the severity classDef registry from `references/visualization.md`:
+
+```
+classDef critical fill:#ffcccc,stroke:#cc0000,stroke-width:3px
+classDef major    fill:#ffe0b3,stroke:#ff9900,stroke-width:2px
+classDef minor    fill:#fff5cc,stroke:#cc9900
+classDef nit      fill:#eee,stroke:#999
+classDef clean    fill:#ccffcc,stroke:#00aa00
+```
+
+Apply the **maximum severity** of all findings on a node to that node. Nodes without findings: no severity class (default styling) OR `clean` if you want to explicitly mark verified-OK.
 
 ## Filename Convention
 
-- `<scope>=full` → `YYYY-MM-DD-full.md`
-- `<scope>=<id>` → `YYYY-MM-DD-<id>.md` (e.g. `2026-04-26-tools-skills.md`)
-- `<scope>=<id1>,<id2>` → `YYYY-MM-DD-<id1>-<id2>.md` (commas → hyphens)
-- `--healthcheck-only` → `YYYY-MM-DD-healthcheck.md`
+For directory `<findings_dir>/<date>-<scope>/`:
+
+| `<scope>` | Source |
+|---|---|
+| `full` | full run (no `<id>` arg) |
+| `<id>` | single subsystem scoped run (e.g. `2026-04-27-tools-skills/`) |
+| `<id1>-<id2>` | multiple subsystems, comma in CLI converted to `-` |
+| `healthcheck` | `--healthcheck-only` |
+| `hotspots` | `--hotspots-only` |
+
+## Backward Compatibility
+
+v2 produces a single `<findings_dir>/<date>-<scope>.md` file. v3 produces a directory. To keep historical links working, the skill writes a top-level redirect file `<findings_dir>/<date>-<scope>.md` containing a single line pointing to the new master:
+
+```markdown
+This audit moved to a multi-file layout. See [`<date>-<scope>/master.md`](<date>-<scope>/master.md).
+```
+
+This way, links to `2026-04-26-channels.md` (v2 path) still resolve to a useful location.
