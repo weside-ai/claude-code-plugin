@@ -101,9 +101,18 @@ Findings: any ⚠ row OR keyword hit becomes a MAJOR Promotion-Finding
 ("evaluate against promotion criteria from `.doc-architect.yml`:
 min_usages=3, requires_invariants, requires_bypass_cost").
 
-## Aggregating into Findings-MD
+## Aggregating into Findings-MD (v3)
 
-The three sections above all live under a top-level `## Healthcheck`
-heading in the Findings-MD. If `--healthcheck-only`, that's the entire
-output (no Phase 1, no Phase 2). The file lands at
-`<findings_dir>/YYYY-MM-DD-healthcheck.md`.
+In v3, Phase 0 output lives in **`<findings_dir>/<date>-<scope>/master.md`** under a top-level `## Healthcheck` heading. If `--healthcheck-only`, the master.md contains ONLY the Healthcheck section (no Phase 1/2/3 output) and lives at `<findings_dir>/<date>-healthcheck/master.md`.
+
+For backward compatibility with v2's flat-file layout, the skill also writes a top-level redirect file `<findings_dir>/<date>-healthcheck.md` that points to the new master (see `findings-template.md` § Backward Compatibility).
+
+## Cross-Phase Synergy (v3)
+
+Phase 0 findings feed forward into Phases 1–3:
+
+- **Doc-Drift findings** → if `/we:doc-improve` flags a primitive-doc as drift, that primitive becomes a higher-priority candidate for Phase 3 `doc-vs-reality-drift` (the doc itself is suspect — verify invariants extra carefully).
+- **Bypass-Register-Drift** → new bypass annotations contribute to Phase 1 hotspot scores (each `*-BYPASS-OK` adds 3 to the file's score). Phase 2 lenses cite these bypasses where relevant.
+- **Missing-Primitive-Scan** → candidate paths surface in Phase 1 hotspots (likely high primitive-density). The `architectural-significance` lens then evaluates whether the candidate should become a primitive.
+
+Phase 0 is therefore informational input, not just a yes/no gate. Even when it produces no findings, it sets context for the rest of the run.
