@@ -26,8 +26,8 @@
 ### Testing
 
 - [ ] Test types from plan implemented (Unit/Integration/E2E)
-- [ ] Coverage meets project thresholds
-- [ ] Tests passing locally
+- [ ] Coverage meets project thresholds (verified by CI on push — not a local gate)
+- [ ] **Affected tests pass locally** — tests covering the diff (mapped paths for pytest, `--findRelatedTests` for Jest); the full suite runs in CI. Fall back to the full local suite when the diff touches `conftest.py`, jest config, fixtures, or >50 files.
 
 ### Post-Implementation Semantic Checks
 

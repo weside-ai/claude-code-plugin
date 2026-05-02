@@ -122,15 +122,26 @@ A finding may be skipped ONLY when:
 
 ### 3b. Local Validation
 
-After ALL fixes — run local validation:
+After ALL fixes — run local validation. **Affected tests only**, not the full suite (CI runs that on push):
 
 ```bash
-# Python:
+# Determine scope: files changed vs main
+CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null)
+[ -z "$CHANGED" ] && CHANGED=$(git diff --name-only HEAD~1)
+
+# Python: lint/format/types on the package
 ruff check . --fix && ruff format . && mypy app/
-# TypeScript:
+
+# TypeScript: lint + typecheck (project-wide regardless of scope)
 yarn lint --fix && yarn typecheck
-# Tests:
-pytest tests/unit/ tests/integration/ --no-cov -x
+
+# Tests — only those covering the diff. If CHANGED touches conftest/jest config or >50 files,
+# fall back to the full suite (same policy as the test-runner agent).
+# Backend (pytest): map app/<path>.py → tests/unit/<path> + tests/integration/test_<basename>*.py
+#   pytest <mapped paths> --no-cov -x
+# Frontend (Jest):
+#   yarn test --findRelatedTests <changed .ts/.tsx files>
+
 # Platform Primitive bypass checks:
 for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
   [ -f "$s" ] && bash "$s" || { echo "FAIL: $s"; exit 1; }
@@ -138,6 +149,8 @@ done
 # Bypass register:
 [ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
 ```
+
+The full suite + coverage gate runs in GitHub Actions on push — duplicating it here only burns time. Phase 4 (post-push CI re-collect) catches anything the affected-only run missed.
 
 ### 3c. Commit
 

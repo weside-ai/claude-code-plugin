@@ -66,25 +66,24 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
 
 **DB location:** `~/.claude/weside/orchestration.db` — Never access directly, always use CLI.
 
-**Phases:** refined → git_prepared → implementation_complete → ac_verified → simplified → docs_updated → review_passed → static_analysis_passed → test_passed → pr_created → ci_passed
-
 ---
 
 ## Pipeline
 
-```
-/we:story {TICKET}
-  ├── Step 0: Check for Resume
-  ├── Step 1: Check DoR + Load Story + Plan (Reality Check)
-  ├── Step 2: Develop (INLINE, not Skill dispatch)
-  ├── Step 3: AC Verification Gate (BLOCKING)
-  ├── Step 4: Simplify
-  ├── Step 5: PARALLEL: /we:review + /we:static + /we:test
-  ├── Step 6: Documentation check
-  ├── Step 7: /we:pr (checks test_passed)
-  ├── Step 8: Review-Fix Loop (INLINE, max 3 cycles)
-  └── Step 9: Ticket → In Review
-```
+Single source of truth — step, what it does, checkpoint written, who writes it. Earlier `refined` checkpoint comes from `/we:refine` before this skill is invoked.
+
+| Step | What | Checkpoint written | Written by |
+|---|---|---|---|
+| 0 | Check for resume | — | — |
+| 1 | DoR + load story + plan + worktree + ticket → "In Progress" | `git_prepared` | story (Step 1) |
+| 2 | Develop INLINE (not Skill dispatch) | `implementation_complete` | story (Step 2) |
+| 3 | AC verification gate (BLOCKING) | `ac_verified` | story (Step 3) |
+| 4 | Simplify | `simplified` | story (Step 4) |
+| 5 | PARALLEL: `/we:review` + `/we:static` + `/we:test` | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
+| 6 | Documentation check (`doc-architect`) | `docs_updated` | docs (Step 6) |
+| 7 | `/we:pr` (verifies all 3 quality-gate checkpoints first) | `pr_created` | pr-creator |
+| 8 | Review-fix loop INLINE (max 3 cycles) | `ci_passed` | story (Step 8) |
+| 9 | Verify ticket → "In Review" | — | — |
 
 ---
 
@@ -285,23 +284,6 @@ After reviews green → write checkpoint `ci_passed`.
 The transition to "In Review" is performed by the `pr-creator` agent in its Step 7 (see `agents/pr-creator.md`).
 
 **Verify** the ticket actually moved. If the ticketing tool reports the ticket is still in "In Progress" (or equivalent), retry the transition once. Never move to "Done" — that's the user's job.
-
----
-
-## Checkpoints
-
-| After | Phase | Written By |
-|---|---|---|
-| Branch + Story loaded | `git_prepared` | story (Step 1) |
-| Code complete | `implementation_complete` | story (Step 2) |
-| ACs verified | `ac_verified` | story |
-| Simplified | `simplified` | story |
-| Docs updated | `docs_updated` | docs |
-| Review passed | `review_passed` | review |
-| Static passed | `static_analysis_passed` | static |
-| Tests passed | `test_passed` | test |
-| PR created | `pr_created` | pr-creator |
-| CI green | `ci_passed` | story |
 
 ---
 
