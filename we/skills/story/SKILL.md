@@ -187,7 +187,7 @@ Only write checkpoint `ac_verified` when ALL items pass. If items fail → go ba
 
 ## Step 4: Simplify
 
-Check `ac_verified` exists. Run `/simplify` skill (from code-simplifier plugin). If code-simplifier plugin is not installed, skip with warning: "code-simplifier plugin not available — skipping simplification. Install with: `/install code-simplifier@claude-plugins-official`". If changes made → commit. Write checkpoint `simplified`.
+Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simplify")`. Availability is verified once during `/we:setup` (Step 1b — prerequisite check); do NOT re-derive availability from plugin paths or memory here. The only legitimate skip is when the Skill tool actually returns a "skill not found" error — in that case warn `"simplify skill not available — run /we:setup to verify prerequisites"` and continue. If changes made → commit. Write checkpoint `simplified`.
 
 ## Step 5: Quality Gates (PARALLEL)
 

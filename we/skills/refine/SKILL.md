@@ -20,6 +20,8 @@ You ensure development stays aligned with project goals and refine stories for d
 Read("quality/dor.md")
 ```
 
+**Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first to verify prerequisites (`gh` CLI, Jira access, recommended plugins). Do NOT block — refine can proceed in degraded modes (no ticketing → Plan-only).
+
 ---
 
 ## Your Output

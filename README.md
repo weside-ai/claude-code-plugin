@@ -61,7 +61,7 @@ Idea → /we:refine → /we:story → User merges → Done
   ├── Load story + plan, create worktree
   ├── /we:develop (implement phase by phase)
   ├── AC Verification (every criterion checked with evidence)
-  ├── Simplify (requires code-simplifier plugin)
+  ├── Simplify (uses simplify skill from code-simplifier plugin)
   ├── Quality Gates in PARALLEL:
   │     /we:review + /we:static + /we:test + CodeRabbit
   ├── /we:docs (auto-update documentation)
@@ -199,7 +199,7 @@ These plugins enhance the pipeline but are not required:
 
 | Plugin | What it provides | Install |
 |--------|-----------------|---------|
-| `code-simplifier@claude-plugins-official` | `/simplify` — code quality pass in Step 4 | `/install code-simplifier@claude-plugins-official` |
+| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in Step 4 | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
 
 `/we:setup` auto-detects and recommends missing plugins.

@@ -47,21 +47,27 @@ Scan the project to detect:
 - `.weside/` directory exists → already configured
 - `CLAUDE.md` exists → read for conventions
 
-### Step 1b: Check Plugin Dependencies
+### Step 1b: Check Plugin Prerequisites
 
-Check if recommended companion plugins are installed. Read `~/.claude/plugins/installed_plugins.json` or check if the skill appears in available skills.
+This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify each prerequisite empirically — never derive availability from plugin filesystem paths alone, since plugins can ship agents, skills, or commands under different names than expected.
 
-| Plugin | Provides | Used By |
-|--------|----------|---------|
-| `code-simplifier@claude-plugins-official` | `/simplify` skill | Step 4: Simplify in `/we:story` |
-| `security-guidance@claude-plugins-official` | Security hooks during development | `/we:story` Step 2 security checks |
+**Detection rule:** for each row, run the listed *Detection check*. The check is the source of truth. If it succeeds → prerequisite is met. If it errors with "not found" → mark as missing and inform the user (do NOT block).
 
-If either is missing, inform the user:
+| Prerequisite | Detection check | Provided by | Used by |
+|---|---|---|---|
+| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:story` PR creation, CI status, CodeRabbit thread resolution |
+| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:refine`, `/we:story` ticket fetch and transitions |
+| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:story` Step 4: Simplify |
+| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:story` Step 2 security checks |
+| TurboVault MCP | `mcp__turbovault__*` tools available | TurboVault MCP server | `/we:refine` (semantic search), `/we:story` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
+| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:refine` and `/we:story` |
+
+If a prerequisite is missing, inform the user:
 
 > "Recommended plugin not installed: **{plugin-name}**. It provides {what}. Install with: `/install {plugin-name}`"
 > "The /we:* pipeline works without it, but {feature} will be skipped."
 
-**Do NOT block.** This is informational only — the pipeline works without these plugins.
+**Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:story` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
 
 ### Step 2: Ask 3 Questions
 
