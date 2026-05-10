@@ -1,15 +1,17 @@
 ---
 name: audit
 description: >
-  Run security audit across weside repositories. Checks tool availability,
-  executes scripts/security-audit.sh, parses JSON reports, and summarizes findings
-  by severity. Use when asked to "run audit", "security scan", "check vulnerabilities",
-  or "/we:audit".
+  Run a security audit across one or more repositories. Checks tool availability,
+  executes the project's `scripts/security-audit.sh` if present (otherwise falls
+  back to running individual tools), parses JSON reports, and summarizes findings
+  by severity. Use when asked to "run audit", "security scan", "check
+  vulnerabilities", or "/we:audit".
 ---
 
 # Security Audit
 
-Run a comprehensive security audit across weside repositories using automated scanning tools.
+Run a comprehensive security audit across one or more repositories using
+automated scanning tools.
 
 ---
 
@@ -17,7 +19,7 @@ Run a comprehensive security audit across weside repositories using automated sc
 
 ```
 1. Check tool availability
-2. Run security-audit.sh
+2. Run security-audit.sh (or individual tools)
 3. Parse JSON reports
 4. Present findings summary
 5. Recommend manual review steps
@@ -51,34 +53,33 @@ pip3 install semgrep
 
 ## Phase 2 — Run Audit Script
 
-Execute the audit script from the weside-core repository:
+If the project ships its own audit script, prefer it (it will know which tools
+to invoke and where to write reports):
 
 ```bash
-# Find script (works from any weside repo)
 SCRIPT="scripts/security-audit.sh"
-if [ ! -f "$SCRIPT" ]; then
-  SCRIPT="$HOME/weside/weside-core/scripts/security-audit.sh"
+if [ -f "$SCRIPT" ]; then
+  bash "$SCRIPT" --skip-history
 fi
-
-# Run (--skip-history for faster results)
-bash "$SCRIPT" --skip-history
 ```
 
-**If script not found:** Run individual tools manually:
+**If no project script is present:** run individual tools manually:
 - `semgrep scan --config auto --json --output /tmp/semgrep.json .`
 - `trivy fs --scanners vuln --format json --output /tmp/trivy.json .`
 - `gitleaks detect --source . --report-format json --report-path /tmp/gitleaks.json --no-git`
 
 ## Phase 3 — Parse Reports
 
-Read JSON reports from `docs/security/reports/` and summarize:
+Read JSON reports (from the project's report directory if a script wrote them,
+otherwise from `/tmp/`) and summarize:
 
 ```python
-import json, glob, os
+import json, glob
 
-report_dir = "docs/security/reports"
+# Adjust the directory to wherever the script (or your manual run) wrote reports.
+report_dir = "docs/security/reports"  # or "/tmp"
 for tool in ["semgrep", "trivy", "kubescape", "gitleaks", "bandit"]:
-    reports = glob.glob(f"{report_dir}/{tool}/*.json")
+    reports = glob.glob(f"{report_dir}/{tool}/*.json") + glob.glob(f"{report_dir}/{tool}.json")
     # Parse and count findings by severity
 ```
 
@@ -108,11 +109,12 @@ After automated scans, remind about checks that can't be automated:
 
 - **Auth & Access Control:** RLS policies, JWT validation, role-based access
 - **Billing & Abuse:** Credit race conditions, webhook idempotency, rate limiting
-- **Data Privacy (DSGVO):** PII exposure, data residency, retention policies
-- **Secrets:** Review SOPS encryption, K8s secret management
-- **Infrastructure:** Network policies, container security, TURN server config
+- **Data Privacy (GDPR):** PII exposure, data residency, retention policies
+- **Secrets:** Encryption-at-rest, K8s/CI secret management
+- **Infrastructure:** Network policies, container security, transport security
 
-Reference: `docs/security/AUDIT-PROCEDURE.md` for the full 49-vector threat model.
+If the project keeps a threat-model document (e.g. `docs/security/AUDIT-PROCEDURE.md`),
+reference it here.
 
 ---
 
@@ -122,4 +124,4 @@ Reference: `docs/security/AUDIT-PROCEDURE.md` for the full 49-vector threat mode
 |------|--------|
 | `--quick` | Skip git history scan (faster) |
 | `--full` | Include git history scan (slower, more thorough) |
-| `--repo <name>` | Scan only one repo (core, cli, infra, landing, plugin) |
+| `--repo <name>` | Scan only one repo when running across a multi-repo workspace |

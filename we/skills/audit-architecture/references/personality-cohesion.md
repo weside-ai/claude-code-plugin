@@ -150,14 +150,22 @@ the prompt locally.
 
 ## Examples (hypothetical, would emerge in real run)
 
-The lens has not yet been run against weside-core. Predicted findings:
+Findings shapes the lens is designed to surface:
 
-1. **PC-MAJ-1** — `services/skill_agent_dispatcher.py:?` likely constructs skill-specific system prompts (suspected from Phase 1 hotspot density: 14 primitives in 457 LOC + 2 LangChain leaks)
-2. **PC-MAJ-2** — `voice/llm_service.py:?` may have voice-specific persona-injection (Pipecat compatibility might require a shim)
-3. **PC-MAJ-3** — channel transports (telegram_transport, whatsapp_transport) may contain "channel-flavored" prompt prefixes ("Telegram says: <user_msg>")
-4. **PC-MIN-1** — EXPERIENCE-Layer-Lokation (`services/evolution/`?) needs verification — primitive-doc claim vs code reality
+1. **PC-MAJ-1** — A skill-dispatcher service constructs its own
+   skill-specific system-prompt prefix instead of delegating to the
+   identity-construction module (often surfaced via Phase-1 hotspot density
+   plus a couple of framework leaks).
+2. **PC-MAJ-2** — A voice / channel service injects voice-specific persona
+   prefixes (e.g. for streaming-LLM compatibility shims).
+3. **PC-MAJ-3** — Channel transports (telegram, whatsapp, slack) prepend
+   "channel-flavored" prefixes to the user message ("Telegram says: …").
+4. **PC-MIN-1** — An EXPERIENCE-layer module location drift: the primitive
+   doc says X lives in `services/<a>/`, but code has moved it to
+   `services/<b>/`.
 
-These are predictions, NOT verified findings. The first real run of this lens will produce the actual list.
+These are illustrative shapes, not verified findings. A real run produces
+the actual list against the project's own code.
 
 ## Why This Lens Matters
 

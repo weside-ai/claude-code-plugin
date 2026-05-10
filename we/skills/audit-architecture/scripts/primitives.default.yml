@@ -1,7 +1,7 @@
 # primitives.default.yml — Default Primitive-Detector-Catalog for /we:audit-architecture v3
 #
-# This catalog ships with the plugin and provides the "Companion-architecture-flavored"
-# defaults observed in weside-core. Other projects can:
+# This catalog ships with the plugin and provides Companion-architecture-flavored
+# defaults (LangGraph agent + primitive-based subsystems). Other projects can:
 #   (a) Provide their own catalog via `--primitives-catalog <path>`, OR
 #   (b) Add/override entries via `primitive_detectors:` in their `.audit-architecture.yml`
 #

@@ -34,15 +34,17 @@ The skill is a multi-phase architecture-audit tool that produces severity-tagged
 
 ## 2. Why v3 (Problem Statement)
 
-v2 (Healthcheck → Subsystem-Deep-Read → Findings) was applied to weside-core overnight on 2026-04-26 across 4 subsystems (memory, channels, observability, background-time). Result: 24 findings (0 CRITICAL, 11 MAJOR, 9 MINOR, 4 NIT) on PR #1769.
+v2 (Healthcheck → Subsystem-Deep-Read → Findings) was applied across four
+subsystems of a real backend project as a shakedown. Result on the order of
+two dozen findings, mostly MAJOR/MINOR.
 
 The run revealed five structural gaps in v2:
 
-| # | Gap | Concrete miss |
+| # | Gap | Concrete shape |
 |---|---|---|
-| 1 | Subsystem audits don't catch modules *between* subsystems | `api/v1/endpoints/chat.py` (2269 LOC, 9 primitives) — invisible because not in any subsystem's `paths:` |
-| 2 | High-level conceptual lenses absent | "Stays the Companion logically whole?" / "Are the 5 components separable?" — most valuable architectural questions, no mechanism |
-| 3 | Doc-vs-Reality drift only found accidentally | Observability audit found 3 invariant violations (I2/I3/I8) by happenstance grep, no systematic mechanism |
+| 1 | Subsystem audits don't catch modules *between* subsystems | A multi-thousand-LOC endpoint module touching nine primitives — invisible because not in any subsystem's `paths:` |
+| 2 | High-level conceptual lenses absent | "Does the system stay logically whole?" / "Are the major components separable?" — most valuable architectural questions, no mechanism |
+| 3 | Doc-vs-Reality drift only found accidentally | One subsystem audit found three invariant violations by happenstance grep, no systematic mechanism |
 | 4 | Severity invisible in diagrams | Mermaid diagrams had no risk-storming colors despite findings being severity-tagged in the MD |
 | 5 | Architectural significance unmeasured | No way to identify load-bearing components a priori; subsystem map alone misses density hotspots |
 
@@ -424,8 +426,11 @@ Combinations are valid: `--lens=personality-cohesion --skip-phase=2` runs only P
 
 ## 12. References
 
-- v2 design (implicit): `claude-code-plugin/we/skills/audit-architecture/SKILL.md` v2.19.0
-- Real-world v2 output (motivating v3): `weside-core/docs/audits/2026-04-26-{healthcheck,memory,channels,observability,background-time,overnight-summary}.md` (PR #1769)
-- Hotspot script prototype: `weside-core/scripts/audit-hotspots.py` (now ported to plugin in v3)
-- Plugin convention: `claude-code-plugin/we/skills/doc-improve/SKILL.md` (similar phase-based dispatcher pattern)
-- Companion-Anatomy reference for personality-cohesion: `weside-core/docs/foundations/companion-anatomy.md`, `weside-core/.claude/rules/core/companion-being.md`
+- v2 design (implicit): `we/skills/audit-architecture/SKILL.md` v2.19.0
+- Plugin convention: `we/skills/doc-improve/SKILL.md` (similar phase-based
+  dispatcher pattern)
+- Companion-Anatomy: the personality-cohesion lens assumes a "5 components
+  of a companion" shape (CONSCIOUSNESS / SENSES / BODY / MEMORY /
+  EXPERIENCE). Projects that ship Companion runtimes typically have an
+  internal architecture doc describing this; the lens is opt-in via
+  `default_lenses` / `optional_lenses`.

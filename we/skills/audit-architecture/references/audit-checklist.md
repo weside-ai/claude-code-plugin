@@ -126,7 +126,7 @@ it from outside.
 **How to check:**
 
 - Search for `print(` in subsystem paths → MAJOR finding (cross-ref `observability-triad.md` I1).
-- Search for raw `logging.getLogger` instead of `structlog` → MAJOR (per real-world finding pattern from weside-core observability audit).
+- Search for raw `logging.getLogger` instead of the project's structured-logger primitive → MAJOR (a recurring real-world finding pattern in observability audits).
 - Check that LLM calls go through `InstrumentedChatModel`.
 - Search for `logger.{info,error,warning}(f"…")` → MAJOR (cross-ref `observability-triad.md` I2).
 - Spot-check log lines for PII (email, phone, raw user_id without hash) → CRITICAL if found.
@@ -229,6 +229,6 @@ The following files in this subsystem appeared in Phase-1 top-15 as
 **unexpected hotspots** (see `architectural-significance` lens findings
 in `cross-cutting.md`):
 
-- `apps/backend/app/api/v1/endpoints/chat.py` (Phase-1 score 240, rank #2)
+- `<backend>/api/<endpoint>.py` (Phase-1 score 240, rank #2)
   → Phase-3 finding: AS-MAJ-1 (god-object candidate)
 ```

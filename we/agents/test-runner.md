@@ -36,7 +36,7 @@ Decide scope from `$CHANGED`. If it touches >50 files **or** crosses test config
 
 **Coverage:** intentionally `--no-cov` locally. Coverage gates run in GitHub Actions CI — duplicating them here only burns time. If you need a coverage spot-check (e.g. before claiming a new test exercises a path), call out which file you measured.
 
-For monorepos: detect stack per top-level app dir (`apps/backend`, `apps/mobile`, …) and run only the ones with changes.
+For monorepos: detect stack per top-level app dir (e.g. `apps/<service>`, `packages/<lib>`) and run only the ones with changes.
 
 **Test-only changes:** if the diff only touches test files, run those test files directly — no path mapping needed.
 

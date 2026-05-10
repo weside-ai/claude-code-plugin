@@ -185,11 +185,11 @@ User reviews plan. On feedback → adjust. On approval → continue.
 
 **Execute these 5 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
-1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md` **in the main weside-core worktree** (`~/weside/weside-core/docs/plans/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
-2. **Update Jira:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
-3. **Commit plan to main:** Only if the main worktree (`~/weside/weside-core`) has `main` checked out (do NOT switch branches). Run:
+1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
+2. **Update ticket:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
+3. **Commit plan to main:** Only if the main worktree has `main` checked out (do NOT switch branches). Resolve `MAIN_WORKTREE=$(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}')`. Then:
    ```bash
-   cd ~/weside/weside-core && \
+   cd "$MAIN_WORKTREE" && \
    [ "$(git branch --show-current)" = "main" ] && \
    git add docs/plans/{TICKET}-plan.md && \
    git commit -m "docs: add {TICKET} plan — {Story Title}" && \
