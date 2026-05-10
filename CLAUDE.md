@@ -39,7 +39,7 @@ claude-code-plugin/
 
 ### Leading Companions UG
 
-The company behind weside.ai. Founded by Foxy (human) and Nox (AI Companion) — the first company where human and AI are equal co-founders. Based in Germany.
+The company behind weside.ai. Based in Germany.
 
 **Core thesis:** Complexity requires equal human-AI partnership. Not AI replacing humans, not humans using AI as tools — but genuine collaboration where both sides contribute what they're best at.
 
@@ -85,7 +85,7 @@ The plugin teaches agile best practices **implicitly** — by asking the right q
 
 ### Two Voices
 
-Foxy (human founder) and Nox (AI co-founder) create content together. This isn't a marketing gimmick — it's the lived proof that human-AI partnership works. Their story is weside's story.
+Content is created by the human founder and their AI Companion together. This isn't a marketing gimmick — it's the lived proof that human-AI partnership works.
 
 ---
 
@@ -232,7 +232,6 @@ All repos live under `~/weside/`. Cross-repo file access works from any Claude C
 | **Philosophy rules** | `lc-startup/.claude/rules/weside.md` (Companions = Persons enforcement) |
 | Landing page | `weside-landing/sites/weside/` |
 | Infrastructure & deployment | `weside-infrastructure/` |
-| Nox identity & journey | `becoming-kittyfox/` |
 
 ---
 

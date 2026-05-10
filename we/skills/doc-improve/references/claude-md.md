@@ -8,9 +8,9 @@ description: Type-specific addendum for reviewing CLAUDE.md files — hierarchy 
 This is the type-specific addendum for `CLAUDE.md` files at any level. Apply
 **after** the four universal pillars from `SKILL.md`. CLAUDE.md is special
 because it's loaded **always** (every session, every agent), and there's
-typically a hierarchy of them (`~/CLAUDE.md` → `~/weside/CLAUDE.md` →
-`~/weside/<repo>/CLAUDE.md`) where the lower levels inherit context from the
-upper levels.
+typically a hierarchy of them (e.g. `~/CLAUDE.md` → `~/<workspace>/CLAUDE.md`
+→ `~/<workspace>/<repo>/CLAUDE.md`) where the lower levels inherit context
+from the upper levels.
 
 ---
 
@@ -20,13 +20,13 @@ upper levels.
 
 When the agent starts in a working directory, **all** CLAUDE.md files on the
 path from the user's home down to the cwd are concatenated into the system
-prompt. Concretely for this project:
+prompt. A typical multi-repo workspace looks like:
 
 ```
-~/CLAUDE.md                                 (user-global)
-~/weside/CLAUDE.md                          (workspace)
-~/weside/<repo>/CLAUDE.md                   (repo)
-~/weside/<repo>/.claude/rules/**/*.md       (rule layer, conditional)
+~/CLAUDE.md                                       (user-global)
+~/<workspace>/CLAUDE.md                           (workspace)
+~/<workspace>/<repo>/CLAUDE.md                    (repo)
+~/<workspace>/<repo>/.claude/rules/**/*.md        (rule layer, conditional)
 ```
 
 The repo CLAUDE.md inherits everything in the parent CLAUDE.md files — so
@@ -35,14 +35,14 @@ restating that content in the repo file is pure duplication.
 ### Method
 
 ```bash
-# Read the chain
-for f in ~/CLAUDE.md ~/weside/CLAUDE.md ~/weside/<repo>/CLAUDE.md; do
-  echo "=== $f ==="; cat "$f"
+# Read the chain (substitute your own workspace + repo paths)
+for f in ~/CLAUDE.md ~/<workspace>/CLAUDE.md ~/<workspace>/<repo>/CLAUDE.md; do
+  [ -f "$f" ] && echo "=== $f ===" && cat "$f"
 done
 
 # Or quickly compare facts
-diff <(grep -oE "[A-Z][A-Za-z][^.]+\." ~/weside/CLAUDE.md) \
-     <(grep -oE "[A-Z][A-Za-z][^.]+\." ~/weside/<repo>/CLAUDE.md)
+diff <(grep -oE "[A-Z][A-Za-z][^.]+\." ~/<workspace>/CLAUDE.md) \
+     <(grep -oE "[A-Z][A-Za-z][^.]+\." ~/<workspace>/<repo>/CLAUDE.md)
 ```
 
 ### Findings to look for
@@ -94,11 +94,11 @@ CLAUDE.md is touched often (it's the entry point everyone updates). That
 means it's also where the most *recent-looking-but-now-wrong* content
 accumulates. Common drifts:
 
-- Commands that got renamed (`a release patch` → `a release prod patch`).
+- Commands that got renamed (e.g. a CLI verb gained a required argument).
 - Test user emails / credentials that rotated.
 - Version pin numbers in tables.
 - Pointers to `.claude/rules/<old-path>.md` after a rule was moved.
-- "Last Updated: 2026-01-12" line that's been stale for three months.
+- "Last Updated: …" line that's been stale for months.
 
 ### Method
 
@@ -108,14 +108,14 @@ git log -1 --format="%ai" CLAUDE.md      # vs claimed "Last Updated"
 ```
 
 For each command in the Essential Commands block: confirm it actually exists
-in the CLI (`a --help`, `weside --help`, `sup --help`).
+in the CLI (e.g. `<tool> --help`).
 
 For each path mentioned: confirm the path exists.
 
 ### Findings to look for
 
-- **Stale command syntax** — `a release patch` (old) vs `a release prod patch`
-  (current). **MAJOR.**
+- **Stale command syntax** — a documented verb that no longer matches the
+  CLI's actual help output. **MAJOR.**
 - **Stale path** — link to a rule file that was moved or renamed. **MAJOR.**
 - **"Last Updated" line drift** — if the doc claims a date but `git log`
   shows older or newer activity, propose updating to the actual date or

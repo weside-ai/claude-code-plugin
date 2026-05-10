@@ -133,9 +133,10 @@ Use Composition: original class becomes a thin coordinator that delegates to the
 **Effort:** L (4-8h plus call-site updates across 11 files).
 ```
 
-## Examples (predicted, from Phase 1 of weside-core 2026-04-27)
+## Examples (illustrative)
 
-The 5 unexpected hotspots from the smoke-run:
+A real Phase-1 smoke-run typically surfaces a handful of unexpected
+hotspots. Common shapes:
 
 | File | Predicted AS verdict |
 |---|---|

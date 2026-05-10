@@ -29,7 +29,7 @@ Five steps:
 ls docs/architecture/primitives/*.md
 ```
 
-For weside-core: ~32 primitive docs. Each is a candidate.
+A mature backend often has 20–40 primitive docs. Each is a candidate.
 
 ### Step 2 — Extract Invariants
 
@@ -144,9 +144,10 @@ Each `✓` is reported but not a finding.
 [Findings list, severity-tagged]
 ```
 
-## Examples (real, from weside-core observability audit 2026-04-26)
+## Examples (illustrative)
 
-The observability-triad primitive has 8 invariants. Audit verdicts:
+A typical observability-triad primitive doc has on the order of 8
+invariants. A real audit run produces verdicts like this:
 
 | Invariant | Claim | Verdict | Evidence |
 |---|---|---|---|

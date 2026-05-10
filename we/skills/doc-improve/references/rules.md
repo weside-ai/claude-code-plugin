@@ -79,7 +79,7 @@ paths:
 ---
 ```
 
-Three frontmatter rules from `weside-core/CLAUDE.md`:
+Three frontmatter rules:
 
 1. The field is `paths:`, **NOT** `globs:`. (`globs:` is a silent typo — the
    rule loads as if always-loaded, blowing the budget.)

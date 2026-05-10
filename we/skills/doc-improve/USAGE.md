@@ -5,8 +5,9 @@ description: Real-world use cases + 28-file sweep case-study for /we:doc-improve
 
 # /we:doc-improve — Real-World Use Cases
 
-How this skill gets used in practice, with three illustrative runs from the
-weside-core repo. Read after [SKILL.md](SKILL.md) — this is the case-book.
+How this skill gets used in practice, with three illustrative runs from a
+large internal Python+TypeScript monorepo. Read after [SKILL.md](SKILL.md) —
+this is the case-book.
 
 ## When to reach for it
 
@@ -42,18 +43,18 @@ file is still tight before merging.
 The skill:
 
 - Reads `quality/doc-standards.md` + `references/rules.md` to ground itself.
-- Verifies every claim (code structure, primitive index, "5 components" table)
-  against `apps/backend/app/companion/`, `docs/architecture/PRIMITIVES.md`,
-  etc.
+- Verifies every claim (code structure, primitive index, fixed-cardinality
+  tables) against the live code (e.g. backend modules, architecture docs).
 - Fires Pillar 5d ("always-loaded fit") because the rule has no `paths:`
   field. Verdict line is mandatory: `Always-loaded fit: clean | mismatch — X%
   subsystem-specific`.
 - Returns a structured report with severity-tagged findings + concrete diffs.
 
-**Real outcome (2026-04-26):** the always-loaded rule had a Companion code
-structure block that was ~70% backend-only — present on every `apps/mobile/**`
-edit too, which it shouldn't be. Pillar 5d fired with a "mismatch" verdict.
-The trim shipped as commit `1c89f11` and saved ~12 lines per session.
+**Real outcome:** the always-loaded rule had a backend-only code-structure
+block that was ~70% irrelevant for frontend edits — present on every
+frontend session too, which it shouldn't be. Pillar 5d fired with a
+"mismatch" verdict. The trim shipped as a small commit and saved roughly
+a dozen lines per session.
 
 ---
 
@@ -78,17 +79,18 @@ The skill batches the work and produces:
   apply order ranked by leverage (always-loaded reach × drift severity ×
   cross-file payoff).
 
-**Real outcome (PR weside-core#1770):** 28 files reviewed, 110 findings
-(7 BLOCKER · 49 MAJOR · 41 MINOR · 13 NIT). Cross-cluster patterns surfaced
-five distinct dedup themes:
+**Real outcome (one merged sweep PR):** 28 files reviewed, 110 findings
+(7 BLOCKER · 49 MAJOR · 41 MINOR · 13 NIT). Cross-cluster patterns
+surfaced five distinct dedup themes — typical shapes the master aggregate
+will produce:
 
-| Theme | Files | Outcome |
+| Theme shape | Files | Outcome |
 |---|---|---|
-| WA-903 `a content push` narration | 5 | Canonical home → `stacks/content-seeding.md`; CLAUDE.md collapses to 3-line pointer |
-| `a migrate --direct` triple-coverage | 3 | Canonical home → `core/deployment.md`; siblings keep one-line pointer |
-| WA-894 credit-mutation audit log | 2 | Canonical home → `stacks/billing-metering.md` |
-| BaseModal `variant=` prop fabrication | 2 | Real props are `size` + `headerAccent`; both rules now agree |
-| Voice React-Query bridge naming | 2 | `useVoiceMessages` (public) vs `useVoiceCacheBridge` (internal) — disambiguated |
+| Multi-file narration of one CLI command (workflow described in 5 places) | 5 | Pick canonical home in the matching stack rule; CLAUDE.md collapses to a 3-line pointer |
+| Triple-coverage of one operational subcommand | 3 | Canonical home → deployment rule; siblings keep one-line pointer |
+| Audit-log conventions duplicated across two billing rules | 2 | Canonical home → the writer-side rule that owns the helper |
+| UI prop fabricated in two rules, real prop is different | 2 | Both rules updated to match the live API; one source of truth |
+| Naming inconsistency for two adjacent React-Query bridges | 2 | Public vs internal name disambiguated in both rules |
 
 Total: 10 commits over 28 files. Always-loaded surface ~170 lines slimmer
 per session.
@@ -106,11 +108,12 @@ now wrong in subtle ways. You want a substantive read.
 
 The skill flags exactly the drifted claims, with line-level diffs:
 
-- `primitive.py:172-176` line cite went stale (block moved). → Replace with
-  block-name reference (line numbers drift, names don't).
-- WA-894 audit-log block fully overlaps `billing-presets.md` § same heading.
-  → Pick canonical home (writer-side, where `meter()` calls
-  `set_meter_context`); collapse the duplicate to a one-line pointer.
+- A `primitive.py:172-176` line citation went stale (the block moved).
+  → Replace with a block-name reference (line numbers drift, names don't).
+- An audit-log block fully overlaps a sibling rule's same-named heading.
+  → Pick canonical home (writer-side, where the helper that emits the
+  audit-log entry actually lives); collapse the duplicate to a one-line
+  pointer.
 
 Report severity tags tell you which findings block a merge (BLOCKER, MAJOR)
 vs. which are polish (MINOR, NIT).

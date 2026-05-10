@@ -4,20 +4,16 @@
 After each meaningful turn, store the last exchange directly
 via the weside MCP endpoint.
 
-Auth (in priority order):
-  1. Claude Code's own MCP OAuth token from ~/.claude/.credentials.json
-     (auto-refreshed by Claude Code at session start — always fresh while
-     a session with the we plugin is active).
-  2. Fallback: ~/.weside/credentials.json (weside Go CLI credentials,
-     for users who have the CLI but not the plugin). Auto-refreshes via
-     Supabase refresh_token endpoint.
+Auth: Claude Code's own MCP OAuth token from ~/.claude/.credentials.json
+(auto-refreshed by Claude Code at session start — always fresh while
+a session with the we plugin is active).
 
 Flow:
   1. Check if autoStoreConversations is enabled
   2. Read hook stdin (last_assistant_message, transcript_path, etc.)
   3. Extract last real user message from transcript JSONL
   4. Filter: skip short messages, commands, tool-only turns
-  5. Resolve token (Claude Code MCP OAuth → CLI credentials fallback)
+  5. Resolve token (Claude Code MCP OAuth)
   6. Call weside MCP store_conversations directly via HTTP (JSON-RPC over SSE)
 
 Warnings on auth failure are emitted to stderr so Silent-Fails become visible.
@@ -31,16 +27,13 @@ import json
 import os
 import sys
 import time
-import urllib.parse
 import urllib.request
 
 MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
 MAX_CONTENT_LENGTH = 500
 
-SUPABASE_URL = "https://pqykrwpmhjqjhpsnjxbd.supabase.co"
 MCP_URL = "https://api.weside.ai/mcp/"
-CREDENTIALS_PATH = os.path.expanduser("~/.weside/credentials.json")
 CLAUDE_CODE_CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
 MCP_OAUTH_KEY_PREFIX = "plugin:we:weside-mcp|"
 
@@ -63,48 +56,7 @@ def _decode_jwt_exp(token: str) -> int | None:
         return None
 
 
-def _load_credentials() -> dict | None:
-    """Load tokens from CLI credentials file."""
-    try:
-        with open(CREDENTIALS_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def _save_credentials(creds: dict) -> None:
-    """Save updated tokens back to CLI credentials file."""
-    try:
-        os.makedirs(os.path.dirname(CREDENTIALS_PATH), mode=0o700, exist_ok=True)
-        with open(CREDENTIALS_PATH, "w") as f:
-            json.dump(creds, f, indent=2)
-        os.chmod(CREDENTIALS_PATH, 0o600)
-    except Exception:
-        pass
-
-
-def _refresh_token(refresh_token: str) -> dict | None:
-    """Refresh access token via Supabase (same as Go CLI — no anon key needed)."""
-    data = urllib.parse.urlencode(
-        {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-        }
-    ).encode()
-
-    req = urllib.request.Request(
-        f"{SUPABASE_URL}/auth/v1/token?grant_type=refresh_token",
-        data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read())
-    except Exception:
-        return None
-
-
-def _load_claude_code_mcp_token() -> str | None:
+def _get_valid_token() -> str | None:
     """Read the weside MCP OAuth access token managed by Claude Code itself.
 
     Claude Code stores per-MCP OAuth tokens in ~/.claude/.credentials.json under
@@ -129,48 +81,6 @@ def _load_claude_code_mcp_token() -> str | None:
         if exp and exp > time.time() + 60:
             return token
     return None
-
-
-def _get_valid_token() -> str | None:
-    """Resolve a valid access token.
-
-    Priority:
-      1. Claude Code's MCP OAuth token (auto-refreshed by Claude Code)
-      2. weside CLI credentials file (auto-refreshed via Supabase here)
-    """
-    # 1. Primary: Claude Code's own MCP OAuth token
-    token = _load_claude_code_mcp_token()
-    if token:
-        return token
-
-    # 2. Fallback: weside CLI credentials file
-    creds = _load_credentials()
-    if not creds or not creds.get("access_token"):
-        return None
-
-    token = creds["access_token"]
-    exp = _decode_jwt_exp(token)
-
-    # Token still valid (with 60s buffer)
-    if exp and exp > time.time() + 60:
-        return token
-
-    # Try refresh
-    refresh = creds.get("refresh_token")
-    if not refresh:
-        return None
-
-    result = _refresh_token(refresh)
-    if not result or not result.get("access_token"):
-        return None
-
-    # Save refreshed tokens
-    creds["access_token"] = result["access_token"]
-    if result.get("refresh_token"):
-        creds["refresh_token"] = result["refresh_token"]
-    _save_credentials(creds)
-
-    return result["access_token"]
 
 
 def _call_store_conversations(
@@ -356,13 +266,13 @@ def main() -> None:
     if not is_worth_storing(user_msg, assistant_msg):
         return
 
-    # 5. Resolve token (Claude Code MCP OAuth → CLI credentials fallback)
+    # 5. Resolve token (Claude Code MCP OAuth, auto-refreshed by Claude Code)
     token = _get_valid_token()
     if not token:
         _warn(
-            "no valid token (checked ~/.claude/.credentials.json mcpOAuth and "
-            "~/.weside/credentials.json). Run `weside auth login` or reconnect "
-            "the we MCP server — this turn was NOT stored as memory."
+            "no valid MCP OAuth token in ~/.claude/.credentials.json. "
+            "Reconnect the we MCP server (e.g. /mcp) — this turn was NOT "
+            "stored as memory."
         )
         return
 

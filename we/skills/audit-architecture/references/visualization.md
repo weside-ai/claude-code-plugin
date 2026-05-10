@@ -173,7 +173,7 @@ When applying severity classes to nodes:
 
 ## Worked Example — Subsystem Diagram with Findings
 
-The memory subsystem from weside-core 2026-04-26 audit had 0 CRITICAL + 1 MAJOR + 2 MINOR + 1 NIT. Applying v3 conventions, the diagram becomes:
+An illustrative memory-subsystem audit produced 0 CRITICAL + 1 MAJOR + 2 MINOR + 1 NIT. Applying v3 conventions, the diagram becomes:
 
 ```mermaid
 flowchart TB

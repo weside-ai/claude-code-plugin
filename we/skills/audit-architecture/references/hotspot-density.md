@@ -38,7 +38,7 @@ Top-N (default 15) sorted descending. Each entry is auto-classified:
 
 ## Score Tuning
 
-The default coefficients reflect the Companion-style architecture observed in weside-core. Tuning rationale:
+The default coefficients reflect a Companion-style backend architecture (LangGraph agent + primitive-based subsystems). Tuning rationale:
 
 | Component | Coefficient | Why |
 |---|---|---|
@@ -53,33 +53,32 @@ Projects can override via project-config — but the score is a *ranking*, not a
 
 ## Expected vs Unexpected Classification
 
-A documented hub is a file the team knows is dense — by design. Examples from weside-core:
+A documented hub is a file the team knows is dense — by design. Typical
+shape of an `expected_hubs:` block for a Companion-style backend:
 
 ```yaml
 hotspots:
   expected_hubs:
-    - apps/backend/app/main.py                              # FastAPI app factory
+    - apps/backend/app/main.py                              # app factory (FastAPI / similar)
     - apps/backend/app/companion/core/being.py              # CONSCIOUSNESS hub
     - apps/backend/app/companion/core/_langgraph.py         # agent definition
     - apps/backend/app/companion/gateway/service.py         # FAT entry point
-    - apps/backend/app/api/deps.py                          # Auth Context Chain
-    - apps/backend/app/config/llm.py                        # LLMFactory chokepoint
-    - apps/backend/app/config/_instrumented_model.py        # Observability chokepoint
-    - apps/backend/app/senses/attention/consumer.py         # 3-tier pipeline
-    - apps/backend/app/companion/core/subconscious.py       # Tier-3 subconscious
-    - apps/backend/app/companion/core/_context_composer.py  # CONSCIOUSNESS composer
-    - apps/backend/app/companion/core/_context_manager.py   # middleware orchestration
+    - apps/backend/app/api/deps.py                          # auth context chain
+    - apps/backend/app/config/llm.py                        # LLM factory chokepoint
+    - apps/backend/app/config/_instrumented_model.py        # observability chokepoint
+    # …add other files the team knows are dense by design.
 ```
 
-A file in the top-N that is NOT in `expected_hubs:` is the audit signal. Five surprises (real, from weside-core 2026-04-27 run):
+A file in the top-N that is NOT in `expected_hubs:` is the audit signal.
+Common surprise shapes from real runs:
 
-| Rank | File | Score | Why surprising |
-|---|---|---|---|
-| 2 | `api/v1/endpoints/chat.py` | 240 | "Endpoint" with 2269 LOC → business-logic metastasis |
-| 4 | `config/settings.py` | 175 | 1108 LOC + 138 commits/6mo for "config" only |
-| 8 | `api/v1/endpoints/companions.py` | 143 | 1410 LOC same fat-endpoint problem |
-| 13 | `services/skill_agent_dispatcher.py` | 111 | 14 primitives in 457 LOC = densest per-LOC + 2 LangChain leaks |
-| 15 | `tools/discovery.py` | 107 | 1162 LOC + 2 LangChain leaks (tools should be LangChain-agnostic) |
+| Rank | File shape | Why surprising |
+|---|---|---|
+| 2 | `api/<endpoint>.py` (~2k LOC) | "Endpoint" carrying business logic → metastasis |
+| 4 | `config/settings.py` (~1k LOC + heavy churn) | "Config" file growing into a god-object |
+| 8 | A second fat endpoint module | Same fat-endpoint problem, second instance |
+| 13 | `services/<dispatcher>.py` (densest per-LOC + framework leaks) | Dispatcher accreted unrelated logic |
+| 15 | `tools/discovery.py` (~1k LOC + framework leaks) | Tools should be framework-agnostic |
 
 ## Output Format
 

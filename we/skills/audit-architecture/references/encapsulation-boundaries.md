@@ -112,30 +112,32 @@ it actually needs.
 **Effort:** M (1-2h per occurrence)
 ```
 
-## Examples (real, from weside-core)
+## What findings look like
 
-These were found in the channels-audit on 2026-04-26 and re-validated by Phase 1's leak-counter:
+Typical shapes a real run produces:
 
-1. **EB-MAJ-1** — `apps/backend/app/companion/gateway/service.py:862` runtime imports `langchain_core.messages.AIMessage`. Gateway is supposed to be FAT-but-LangGraph-naive. The TODO at line 47 acknowledges the planned extraction.
+1. **EB-MAJ-1** — A "fat-but-framework-naive" service tier (e.g. a gateway
+   that's supposed to know nothing about LangGraph) does a runtime import
+   from the framework's message types. Often acknowledged by a nearby TODO.
 
-2. **EB-MAJ-2** — `apps/backend/app/companion/channels/telegram_transport.py:207` runtime imports `langchain_core.messages.HumanMessage`. THIN-channel violation; channels were renamed from `adapters/` (WA-585) explicitly to mark them as transport-only.
+2. **EB-MAJ-2** — A transport-only channel module (telegram, slack, web,
+   etc.) imports a framework-specific message type at runtime. THIN-channel
+   violation; channels were typically renamed from generic `adapters/`
+   precisely to mark them as transport-only.
 
-3. **EB-MIN-1** — `apps/backend/app/companion/gateway/service.py:46` TYPE_CHECKING import of `langgraph.checkpoint.base.BaseCheckpointSaver`. Documented TODO ("remove when get_thread_timestamp is extracted to core/"). MINOR because TYPE_CHECKING-only.
+3. **EB-MIN-1** — A `TYPE_CHECKING`-only import of a framework-internal
+   class. MINOR because it never executes, but it still leaks the name
+   into the gateway's surface and is worth tracking.
 
-10 sites for EB-2 (private reach-ins) found:
+EB-2 (private reach-ins) typically surface as a table of 5–15 sites where
+non-owner modules import a `_private` symbol from another package. Common
+shapes:
 
-| Importing file | Symbol imported | Severity |
+| Where the reach-in lives | What it reaches in for | Why it's MAJOR |
 |---|---|---|
-| `api/admin/debug.py` | `_langgraph` | MAJOR (admin/debug exception is documented in `companion-being.md`, downgraded to MINOR if exempted) |
-| `services/data_export_service.py` | `_stream_helpers` | MAJOR |
-| `services/skill_agent_dispatcher.py` | `_credit_check` | MAJOR |
-| `services/help_chat_service.py` | `_stream_helpers` | MAJOR |
-| `services/credit_service.py` | `_credit_check` | MAJOR |
-| `services/companion_service.py` | `_context_composer` | MAJOR |
-| `tools/core/workspace_tools.py` | `_attachment_loader` | MAJOR |
-| `tools/core/reaction_tools.py` | `_request_context` | MAJOR |
-| `config/_instrumented_model.py` | `_middleware_telemetry` | MAJOR |
-| `skills/agents.py` | `_stream_helpers` | MAJOR |
+| `services/<various>.py` | helper modules under another package's `_*` namespace | services should call the public API, not the helper |
+| `tools/<various>.py` | request-context / loader / cache helpers | the same — public surface only |
+| `api/admin/debug.py` | framework internals | usually exemptable as documented admin/debug exception |
 
 ## Cross-Reference with Phase 1
 
@@ -151,6 +153,8 @@ Projects with different conventions adjust:
 
 ## Why this lens?
 
-Heute Nacht (2026-04-26 weside-core run): the channels-audit found EB-MAJ-1 and EB-MAJ-2 by accident — a grep for `from langchain` happened to be done within the channels-subsystem scope. EB-2 (the 10 private reach-ins) was found by a *different* grep done while writing the memory-audit. Without an explicit cross-cutting lens, these findings depend on auditor luck.
-
-This lens makes the checks systematic.
+Without an explicit cross-cutting lens, encapsulation findings depend on
+auditor luck — a `from langchain` grep done in one subsystem catches the
+gateway leak, while reach-ins into another package's `_private` modules
+only surface if a *different* grep happens to be run. This lens makes the
+same checks systematic and reproducible.

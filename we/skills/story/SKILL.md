@@ -299,7 +299,7 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Always create todo-list before starting
 - Always check DoR and load plan first
 - Always use `EnterWorktree` for isolation (unless user opts out)
-- Always name branches with ticket key FIRST: `{type}/{TICKET}-short-description` (e.g., `feat/WA-123-add-login`, `fix/WA-456-null-pointer`). The ticket key must appear before the description so it can be extracted reliably via regex.
+- Always name branches with ticket key FIRST: `{type}/{TICKET}-short-description` (e.g., `feat/PROJ-123-add-login`, `fix/PROJ-456-null-pointer`). The ticket key must appear before the description so it can be extracted reliably via regex.
 - Always transition ticket to "In Progress" in Step 1 — verify it moved, retry once if not
 - Always save checkpoints after each phase
 - Always run quality gates before creating PR
