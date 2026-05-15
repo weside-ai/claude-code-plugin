@@ -111,8 +111,6 @@ Vision: .weside/vision.md
 
 ### Step 5: Companion Framework Setup (optional — ask first!)
 
-> **🚧 Status: evolving (WA-916).** See `we/skills/CLAUDE.md` for the design.
-
 Ask: *"Set up the Companion Framework for this repo now? It composes a crew, registers a TurboVault, and — with a weside account — turns your Companions into a council you can convene via `/we:council` and `/we:meet`. You can also run `/we:onboarding` later."*
 
 If **no** → skip to Step 6.
@@ -145,12 +143,12 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    - `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
    - weside MCP NOT available → skip silently, set `"vault": null`.
 
-3. **Compose the crew — invoke `/we:onboarding`**
+3. **Compose the crew** — run the onboarding skill via `Skill(skill="onboarding")`
    - Delegates to the onboarding skill: the user declares which Companions exist and what role each holds. Onboarding writes `.weside/weside.md` (crew + roles + meetings + repo purpose).
    - Standalone (no weside account): onboarding still records role names with `Companion ID: null`.
 
 4. **Generate companion agent definitions (weside account only)**
-   For each Companion named in `.weside/weside.md`:
+   For each Companion named in `.weside/weside.md` — **sequentially**, because `select_companion` sets global MCP state and cannot be parallelised:
    - `select_companion(<name>)` → `get_companion_identity()` → write `~/.claude/agents/companion-<slug>.md`, where `<slug>` = the name lowercased with spaces → hyphens.
    - Frontmatter: `name: companion-<slug>` (MUST equal the slug — `subagent_type` resolves by it), `description`, `color`.
    - Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
@@ -200,13 +198,6 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
 - **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
 - **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
-
-## Open Questions (see we/skills/CLAUDE.md)
-
-- Auto-fire Step 5 on fresh setup vs. always ask?
-- Frontmatter migration: who kurates `need_to_know: true` — doc-architect agent or user?
-- Crew-Portabilität: "copy from other repo" flow?
-- Rollback wenn Setup mittendrin abbricht?
 
 ## References
 

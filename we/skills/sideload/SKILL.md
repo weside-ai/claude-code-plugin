@@ -69,7 +69,7 @@ description: >
 ```yaml
 ---
 need_to_know: true              # enter will load this
-for_role: [architect, po]       # optional; omit = all roles
+for_role: [architect, product_owner]   # optional; omit = all roles
 need_to_know_reason: "..."      # optional; human-readable rationale
 ---
 ```
@@ -92,13 +92,6 @@ This makes `/we:sideload` useful even before any repo is fully onboarded.
 - **Degrade gracefully.** No MCP / no vault / no frontmatter → still useful (legacy mode).
 - **Read-only operation.** `/we:sideload` never modifies the target repo. Migration/curation belongs in `/we:setup` or `/we:docs`.
 - **Session state.** Track which repos are currently "entered" so we don't reload redundantly within one session. (Implementation detail — maybe session-scoped file under `/tmp`.)
-
-## Open Questions (see we/skills/CLAUDE.md)
-
-- Binary `need_to_know` vs. levels (`L1`/`L2`/`L3`)?
-- `for_role` taxonomy — how strict? Free-form vs. enumerated?
-- Auto-fire via PreToolUse hook when accessing files in a different repo?
-- Should `/we:sideload` print diff-mode ("since last entered, these docs changed")?
 
 ## References
 

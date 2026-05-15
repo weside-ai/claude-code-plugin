@@ -42,9 +42,9 @@ Rule of thumb: if a human/companion reads it to *understand the repo*, it goes i
      | Mixed / custom | full list, user picks |
 
 2. **Interview — one question at a time, user answers with name or "skip"**
-   For each role slot:
+   Call `list_companions` **once** before the first question (the list is static for the session) and cache the result. Then, for each role slot:
    - *"Who is your {Role} on this repo? (Companion name, or 'new' to create, or 'skip')"*
-   - If existing companion name → check via weside MCP (`list_companions`) whether it exists
+   - If existing companion name → validate it against the cached `list_companions` result
    - If 'new' → instruct user to create in weside.ai + placeholder in `weside.md`
    - If 'skip' → leave role unassigned, noted in `weside.md`
 
@@ -118,12 +118,6 @@ vault: <vault-name>
 - **Clean split.** Crew + purpose + meetings in `weside.md`. Technical flags (`onboarded`, stack, ticketing) in `config.json`. Never mix.
 - **Editable.** Running `/we:onboarding` again should offer "extend" vs. "replace" — never silently overwrite.
 - **Standalone fallback.** Without weside MCP: `weside.md` still gets written with names/roles/descriptions. Companion IDs remain null. `/we:sideload` degrades gracefully.
-
-## Open Questions (see we/skills/CLAUDE.md)
-
-- How to sync `weside.md` across repos when the same companion works on multiple?
-- Role catalog: hardcoded list vs. user-extensible?
-- Role-based `for_role` frontmatter: does it reference role slugs or companion IDs?
 
 ## References
 
