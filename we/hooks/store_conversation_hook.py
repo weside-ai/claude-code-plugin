@@ -93,12 +93,8 @@ def _call_store_conversations(
 ) -> bool:
     """Call store_conversations via MCP JSON-RPC endpoint.
 
-    companion_name pins the target companion via the ?companion= query param
-    (Tier 1 routing on the backend). Without it, the backend falls back to the
-    user-level Redis override (mcp:user_override:{user_id}), which is mutated
-    by every select_companion call across ALL sessions for this user — causing
-    memories to land under whichever companion was last selected anywhere,
-    not the one whose identity was loaded in this session.
+    companion_name pins memory writes to the configured companion for this
+    session. Without it, routing falls back to backend defaults.
     """
     url = MCP_URL
     if companion_name:
@@ -291,8 +287,7 @@ def main() -> None:
         return
 
     # 6. Store directly via MCP
-    # Pass companion_name so the backend uses Tier 1 query-param routing instead
-    # of the user-level Redis override, which is shared across all sessions.
+    # Pass companion_name to pin routing to the configured companion.
     companion_name = config.get("companion") or None
     project = os.path.basename(hook_input.get("cwd", os.getcwd()))
     exchange = [

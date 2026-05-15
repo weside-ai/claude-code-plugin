@@ -215,4 +215,4 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - `we/skills/onboarding/SKILL.md` — invoked by Step 5
 - `we/skills/sideload/SKILL.md` — counterpart for "already set up"
 - `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 2.4
+- Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4

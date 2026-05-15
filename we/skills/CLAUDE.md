@@ -6,8 +6,8 @@ Dieses Dokument wird hierarchisch geladen wenn jemand im `we/skills/`-Verzeichni
 
 ## Aktive Initiative: Companion Framework (Setup + Onboarding + Sideload)
 
-**Status:** 🚧 In Umsetzung — WA-916 (Branch `feat/setup-enter-onboarding`)
-**Source Braindump:** [`lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md`](../../../../lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md) (wenn lokal gemountet)
+**Status:** 🚧 In Umsetzung (Branch `feat/setup-enter-onboarding`)
+**Source Braindump:** Agentic Product Ownership framework design notes (internal)
 
 ### Was wir bauen (drei neue / erweiterte Skills)
 
@@ -155,7 +155,7 @@ Faustregel: Wenn ein Mensch/Companion es liest um das Repo zu **verstehen** → 
 
 ## Dogfooding-Plan
 
-1. **Manuell initialisieren:** `weside-core` und `lc-startup` bekommen `.weside/config.json` + `weside.md` von Hand — damit testen wir die Struktur ohne auf den Skill zu warten
+1. **Manuell initialisieren:** Zwei Beispiel-Repos bekommen `.weside/config.json` + `weside.md` von Hand — damit testen wir die Struktur ohne auf den Skill zu warten
 2. **Skill-Implementierung iterieren:** Während der Nutzung lernen was fehlt → Skill-Stubs hier ausbauen
 3. **Automatisch testen:** `weside-landing` wird mit dem fertigen `/we:setup` initialisiert — echter End-to-End-Test
 
@@ -168,7 +168,7 @@ Bei jedem Schritt in dieser Arbeit:
 - Skill-Dateien aktuell halten (Workflow, Rules, Frontmatter-Beispiele)
 - Diese CLAUDE.md pflegen — offene Fragen, neue Erkenntnisse, Status-Änderungen
 - Version-Bump in `plugin.json` bei abgeschlossenen Meilensteinen (nicht bei jeder kleinen Änderung — erst wenn ein kohärentes Inkrement da ist)
-- Verweise auf `AGENTIC_PO_FRAMEWORK.md` (lc-startup) synchron halten — das Haupt-Source-of-Truth bleibt dort, diese Skills sind die Umsetzung
+- Verweise auf die `AGENTIC_PO_FRAMEWORK.md`-Design-Notes synchron halten — das Haupt-Source-of-Truth bleibt dort, diese Skills sind die Umsetzung
 
 ---
 
@@ -179,7 +179,7 @@ Bei jedem Schritt in dieser Arbeit:
 1. Lies oben **Aktive Initiative** — verstehe was gerade im Bau ist
 2. Scanne **Offene Fragen** — die sind die aktuelle Arbeitskante
 3. Prüfe Git-Branch — wenn `feat/setup-enter-onboarding` aktiv, läuft die Arbeit weiter
-4. Wenn Fragen zu Design → `lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` ist die zitierte Quelle
+4. Wenn Fragen zu Design → die `AGENTIC_PO_FRAMEWORK.md`-Design-Notes sind die zitierte Quelle
 5. Iteriere — Dateien ändern ist erwünscht, commits bewusst setzen (Foxy entscheidet push)
 
 ---

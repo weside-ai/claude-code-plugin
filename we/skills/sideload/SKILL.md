@@ -19,7 +19,7 @@ description: >
 /we:sideload <repo-name-or-path>
 /we:sideload .                     # current repo
 /we:sideload weside-core           # sibling repo by basename
-/we:sideload ~/weside/lc-startup   # explicit path
+/we:sideload ../another-repo        # explicit path
 /we:sideload <repo> --role=architect   # filter need-to-know docs by role
 /we:sideload <repo> --full              # ignore role filter, load everything
 ```
@@ -27,8 +27,8 @@ description: >
 ## Workflow
 
 1. **Resolve target repo**
-   - Input is repo basename (sibling search under `~/weside/`) or absolute path
-   - If basename: search `~/weside/<name>` and `~/<workspace>/<name>`
+   - Input is a repo basename (sibling-directory search) or an absolute path
+   - If basename: search the sibling directories of the current repo's parent
    - Verify `.weside/config.json` exists → else print: "Run `/we:setup` in that repo first"
 
 2. **Activate vault**
@@ -98,4 +98,4 @@ This makes `/we:sideload` useful even before any repo is fully onboarded.
 - `we/skills/setup/SKILL.md` — sets up a repo for `/we:sideload` to work
 - `we/skills/onboarding/SKILL.md` — produces the `weside.md` this skill reads
 - `we/skills/CLAUDE.md` — design rationale + frontmatter vocabulary
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 2.4
+- Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4

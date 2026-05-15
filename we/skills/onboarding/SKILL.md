@@ -124,4 +124,4 @@ vault: <vault-name>
 - `we/skills/setup/SKILL.md` — the parent skill, invokes this
 - `we/skills/sideload/SKILL.md` — consumes `weside.md` at entry time
 - `we/skills/CLAUDE.md` — design rationale
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 1.3.1 (Rollen) + § 2.3 (Onboarding)
+- Source brainstorm: the Agentic Product Ownership framework design notes, § 1.3.1 (Rollen) + § 2.3 (Onboarding)
