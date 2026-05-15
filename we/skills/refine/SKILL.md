@@ -114,7 +114,7 @@ Distill into the plan:
 story: {TICKET}
 created: YYYY-MM-DD
 status: draft
-parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files, no ordering dependency between them). Leave empty for sequential execution.
+parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files + no ordering dependency). See independence-check note in Implementation Phases before filling.
 ---
 
 # Plan: [Story Title]

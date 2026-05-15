@@ -191,6 +191,8 @@ Agent(
 # implement phase 4 directly in the orchestrator thread, commit
 ```
 
+**Conflict recovery:** After a parallel group returns, run `git status` in the feature branch. If merge conflicts exist, `parallel_groups` was misconfigured — the phases were not truly disjoint. Resolve conflicts manually, commit the resolution, and note it in the PR description. Update the plan's `parallel_groups` via `/we:refine` to prevent the same conflict in future runs.
+
 **Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
 
 1. The full path to the plan (`docs/plans/{TICKET}-plan.md`) and which phase number it owns
@@ -198,7 +200,8 @@ Agent(
 3. The ticket key, feature branch name, and absolute repo path
 4. The project conventions file (`CLAUDE.md` path)
 5. **Instruction:** implement the phase, commit with message `{TICKET}: phase {N} — {description}`, push to the feature branch
-6. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
+6. **Instruction:** follow TDD convention — write failing tests first, then implementation. Run `ruff`/`eslint` auto-fix before committing.
+7. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
 
 **The orchestrator retains all pipeline ownership.** Sub-agents implement + commit only. They do NOT open PRs, transition Jira, write checkpoints, make decisions outside their phase scope, or run quality gates.
 
