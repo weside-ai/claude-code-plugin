@@ -155,7 +155,7 @@ points — narrative voice.]
 ### Phase 2: [Name]
 ...
 
-> **Independence check (fill `parallel_groups`):** When two or more phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. If that applies, list them in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). Explicit declaration here is what enables `/we:story` to fan out sub-agents; prose descriptions like "these can run in parallel" are not read by the orchestrator.
+> **Independence check (fill `parallel_groups`):** For stories with 3+ phases, when phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. If that applies, list them in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). Explicit declaration here is what enables `/we:story` to fan out sub-agents; prose descriptions like "these can run in parallel" are not read by the orchestrator.
 
 ## Design Decisions
 

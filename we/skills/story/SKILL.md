@@ -232,8 +232,8 @@ Agent(
    | Secrets | No hardcoded credentials, tokens, or API keys |
    | Rate limiting | Expensive endpoints have rate limits |
 
-4. **Run local tests** — in Mode A: after each phase. In Mode B: once after the full parallel group integrates (not per sub-agent), then once more after any inline phases that follow.
-5. **Write checkpoint** `implementation_complete`
+4. **Run local tests** — in Mode A: after each phase. In Mode B: after each inline phase completes, and once after each parallel group integrates (not per sub-agent).
+5. **Write checkpoint** `implementation_complete` — once, after ALL phases complete (both inline and parallel groups)
 
 **3 Guiding Questions (check after each phase):**
 
