@@ -152,7 +152,7 @@ Check circuit breaker. Then choose mode based on the plan's `parallel_groups` fr
 
 ### Mode A — Sequential inline (default)
 
-**When:** no `parallel_groups` in the plan, or a single-phase story.
+**When:** `parallel_groups` is absent or empty (`[]`) in the plan, or the story has only one phase.
 
 Execute all phases inline in the orchestrator thread, one after another. This is the unchanged behaviour for simple stories.
 
@@ -160,7 +160,7 @@ Execute all phases inline in the orchestrator thread, one after another. This is
 
 ### Mode B — Parallel subagent dispatch
 
-**When:** `parallel_groups` is set in the plan frontmatter.
+**When:** `parallel_groups` is a non-empty list in the plan frontmatter.
 
 For each group in `parallel_groups`, dispatch one `Agent()` per phase in that group in a **single message** so they execute concurrently. Wait for all agents in the group before starting the next group or returning to inline phases.
 
@@ -208,17 +208,16 @@ Agent(
 
 ### Per-phase checks (both modes)
 
-After each phase completes (inline or agent returns):
+**Setup (once, before any phase):**
 
-1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY before the first phase.
-2. **Formulate goal** once: "The user should be able to X so that Y."
-3. **For each phase:**
-   - Follow project conventions
-   - Write tests alongside code (TDD: test first, then implementation)
-   - Run auto-fix (ruff/eslint) after each phase
-   - Commit after each phase
-4. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
-5. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
+1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
+2. **Formulate goal**: "The user should be able to X so that Y."
+
+**For each phase** (after it completes — inline or agent returns):
+
+1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint); commit.
+2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
+3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
 
    | Check | What to Verify |
    |-------|---------------|
@@ -230,8 +229,8 @@ After each phase completes (inline or agent returns):
    | Secrets | No hardcoded credentials, tokens, or API keys |
    | Rate limiting | Expensive endpoints have rate limits |
 
-6. **Run local tests** before marking complete
-7. **Write checkpoint** `implementation_complete`
+4. **Run local tests** — in Mode A: after each phase. In Mode B: once after the full parallel group integrates (not per sub-agent), then once more after any inline phases that follow.
+5. **Write checkpoint** `implementation_complete`
 
 **3 Guiding Questions (check after each phase):**
 
@@ -374,7 +373,6 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Never move ticket to "Done" — user's job
 - Never stop mid-pipeline unless circuit breaker opens
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
-- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Step 2 uses inline implementation OR `Agent()` subagent dispatch (see Step 2 Mode B); Step 8 uses inline CI-review logic.
-- Never ban `Agent(subagent_type=...)` dispatch in Step 2 — `Agent()` spawns an isolated context and returns only a short report. It is explicitly the correct mechanism for parallel-safe phases. Only `Skill()` dispatch is banned.
+- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Use `Agent(subagent_type=...)` for parallel-safe phases in Step 2 (isolated context, short report back) or execute inline; Step 8 uses inline CI-review logic. Only `Skill()` dispatch is banned — `Agent()` is explicitly the correct tool for Mode B.
 - Never commit code changes without corresponding test changes in the same commit
 - Never create a PR before ALL THREE quality gates pass (review + static + test)
