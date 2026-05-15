@@ -74,7 +74,7 @@ Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-
 
 Ask user about unclear points. Clarify scope, requirements, edge cases.
 
-**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, consider `Skill(skill="superpowers:brainstorming")` for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal.
+**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal.
 
 ### Step 3: Update Ticket (MINIMAL)
 
