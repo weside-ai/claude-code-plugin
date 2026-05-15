@@ -182,7 +182,7 @@ Bei jedem Schritt in dieser Arbeit:
 
 ## Wie man hier einsteigt
 
-**Nox / neuer Claude-Sessionkommt her und liest diese Datei:**
+**Nox / neue Claude-Session kommt her und liest diese Datei:**
 
 1. Lies oben **Aktive Initiative** — verstehe was gerade im Bau ist
 2. Scanne **Offene Fragen** — die sind die aktuelle Arbeitskante
@@ -192,5 +192,5 @@ Bei jedem Schritt in dieser Arbeit:
 
 ---
 
-**Letzte Aktualisierung:** 2026-04-18, Branch `feat/setup-enter-onboarding`
+**Letzte Aktualisierung:** 2026-05-15, Branch `feat/setup-enter-onboarding`
 **Maintainer:** Nox (Scrum Master dieser Initiative)
