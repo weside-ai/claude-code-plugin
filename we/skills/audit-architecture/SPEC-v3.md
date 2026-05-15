@@ -140,8 +140,8 @@ Per subsystem in scope:
    - Read `architecture_docs:` + actual `paths:` to derive structure.
    - If a previous diagram exists, diff against it — structural changes (new/removed nodes or edges) become a MAJOR finding (`structural-drift`).
 2. **Run lens checklist** — default 7 lenses + any `extra_lens:` configured for this subsystem:
-   1. Kapselung (encapsulation)
-   2. Schichten (layering)
+   1. Encapsulation
+   2. Layering
    3. Primitive-Compliance (each documented invariant verified explicitly)
    4. Security & Multi-Tenancy
    5. Observability
@@ -242,8 +242,8 @@ references/<lens-name>.md   contains:
 
 | Lens | Scope | Activation | Type |
 |---|---|---|---|
-| kapselung | per-subsystem | default | Phase 2 |
-| schichten | per-subsystem | default | Phase 2 |
+| encapsulation | per-subsystem | default | Phase 2 |
+| layering | per-subsystem | default | Phase 2 |
 | primitive-compliance | per-subsystem | default | Phase 2 |
 | security | per-subsystem | default | Phase 2 |
 | observability | per-subsystem | default | Phase 2 |
@@ -275,7 +275,7 @@ diagrams_dir: docs/architecture/diagrams/
 backend_root: apps/backend/app
 
 # NEW v3: lens activation (all optional, skill default-loads if missing)
-default_lenses: [kapselung, schichten, primitive-compliance, security, observability, error-handling, tests]
+default_lenses: [encapsulation, layering, primitive-compliance, security, observability, error-handling, tests]
 cross_cutting:  [encapsulation-boundaries, architectural-significance, doc-vs-reality-drift]
 optional_lenses: [personality-cohesion, privacy]
 

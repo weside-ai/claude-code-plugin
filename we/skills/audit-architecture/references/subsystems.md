@@ -41,8 +41,8 @@ backend_root: apps/backend/app
 
 # NEW v3: lens activation (all optional, skill default-loads)
 default_lenses:
-  - kapselung
-  - schichten
+  - encapsulation
+  - layering
   - primitive-compliance
   - security
   - observability
@@ -136,7 +136,7 @@ optional_lenses:       # Phase 3 opt-in only (via --lens= or extra_lens:)
 **Defaults if missing:** the skill loads:
 
 ```yaml
-default_lenses: [kapselung, schichten, primitive-compliance, security, observability, error-handling, tests]
+default_lenses: [encapsulation, layering, primitive-compliance, security, observability, error-handling, tests]
 cross_cutting:  [encapsulation-boundaries, architectural-significance, doc-vs-reality-drift]
 optional_lenses: []
 ```
@@ -219,7 +219,7 @@ import yaml
 data = yaml.safe_load(open("docs/.audit-architecture.yml"))
 
 # v3 default-loading
-data.setdefault("default_lenses", ["kapselung", "schichten", "primitive-compliance",
+data.setdefault("default_lenses", ["encapsulation", "layering", "primitive-compliance",
                                     "security", "observability", "error-handling", "tests"])
 data.setdefault("cross_cutting", ["encapsulation-boundaries",
                                    "architectural-significance",

@@ -217,7 +217,7 @@ Used in subsystems/<id>.md, cross-cutting.md (within each lens's section).
 ### <id-or-lens-prefix>-<SEV>-<N> — <one-line title>
 
 **Severity:** <CRITICAL | MAJOR | MINOR | NIT>
-**Lens:** <kapselung | schichten | primitive-compliance | security | observability | error-handling | tests | encapsulation-boundaries | architectural-significance | doc-vs-reality-drift | personality-cohesion | privacy-*>
+**Lens:** <encapsulation | layering | primitive-compliance | security | observability | error-handling | tests | encapsulation-boundaries | architectural-significance | doc-vs-reality-drift | personality-cohesion | privacy-*>
 **Cite:** `<file>:<line>` (or `<file>` for whole-file findings)
 
 [Optional code block showing the offending pattern]

@@ -12,8 +12,8 @@ Lenses are composable units of audit logic. Each lens answers one question. The 
 
 | Lens | Scope | Activation | Phase | Reference |
 |---|---|---|---|---|
-| kapselung | per-subsystem | default | 2 | `audit-checklist.md` |
-| schichten | per-subsystem | default | 2 | `audit-checklist.md` |
+| encapsulation | per-subsystem | default | 2 | `audit-checklist.md` |
+| layering | per-subsystem | default | 2 | `audit-checklist.md` |
 | primitive-compliance | per-subsystem | default | 2 | `audit-checklist.md` |
 | security | per-subsystem | default | 2 | `audit-checklist.md` |
 | observability | per-subsystem | default | 2 | `audit-checklist.md` |
@@ -33,7 +33,7 @@ Lenses are composable units of audit logic. Each lens answers one question. The 
 **default lenses** run automatically in their phase. Configured in YAML:
 
 ```yaml
-default_lenses: [kapselung, schichten, primitive-compliance, security, observability, error-handling, tests]
+default_lenses: [encapsulation, layering, primitive-compliance, security, observability, error-handling, tests]
 cross_cutting:  [encapsulation-boundaries, architectural-significance, doc-vs-reality-drift]
 ```
 

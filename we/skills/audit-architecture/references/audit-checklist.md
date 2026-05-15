@@ -35,7 +35,7 @@ Each lens produces 0..N findings. All findings collected in `<findings_dir>/<dat
 ### <id>-MAJ-N — Structural drift since last audit
 
 **Severity:** MAJOR
-**Lens:** schichten (or: kapselung if a private boundary moved)
+**Lens:** layering (or: encapsulation if a private boundary moved)
 **Cite:** `<diagrams_dir>/<id>.mmd` (current vs HEAD~)
 
 The diagram changed:
@@ -53,7 +53,7 @@ If no previous diagram exists, this check produces no finding (first-time audit 
 
 ## Standard Lenses (apply to all deep-audit subsystems)
 
-### Lens 1: Encapsulation (`kapselung`)
+### Lens 1: Encapsulation
 
 **Question:** Does the subsystem have a clear public API? Are internals imported from outside?
 
@@ -71,7 +71,7 @@ If no previous diagram exists, this check produces no finding (first-time audit 
 ### <id>-MAJ-N — Encapsulation breach: <importing-file>
 
 **Severity:** MAJOR
-**Lens:** kapselung
+**Lens:** encapsulation
 **Cite:** `<importing-file>:<line>`
 
 `<importing-file>` imports `<private-symbol>` from this subsystem's
@@ -83,7 +83,7 @@ it from outside.
 **Effort:** S-M (15min - 2h depending on call-site count).
 ```
 
-### Lens 2: Layering (`schichten`)
+### Lens 2: Layering
 
 **Question:** Are Gateway → Service → CRUD → DB access cleanly separated? No skip-layer imports?
 

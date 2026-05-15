@@ -152,7 +152,7 @@ These are predictions; the actual lens-run will produce concrete findings with c
 
 Architectural-significance findings are often **explained** by other lens findings:
 
-- `chat.py` MAJOR (god-object) is **caused by** API → Service → CRUD layering not being enforced (could become a `schichten` Phase-2 finding for the subsystem owning chat.py)
+- `chat.py` MAJOR (god-object) is **caused by** API → Service → CRUD layering not being enforced (could become a `layering` Phase-2 finding for the subsystem owning chat.py)
 - `skill_agent_dispatcher.py` MAJOR (god-object) is **partly explained by** EB-1 (LangChain leaks) — if it's leaking encapsulation, it's likely over-reaching its responsibility too
 - `tools/discovery.py` MAJOR (god-object) is **partly explained by** EB-1 (LangChain leaks)
 
