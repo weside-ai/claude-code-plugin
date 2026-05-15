@@ -13,10 +13,6 @@ description: >
 
 **Purpose:** When you're about to work on a repo — either switching from another or collaborating across repos — load the minimum essential context without flooding your window with every rule.
 
-## Status
-
-🚧 **Stub — evolving.** See `we/skills/CLAUDE.md` for full design.
-
 ## Invocation
 
 ```
@@ -109,4 +105,4 @@ This makes `/we:sideload` useful even before any repo is fully onboarded.
 - `we/skills/setup/SKILL.md` — sets up a repo for `/we:sideload` to work
 - `we/skills/onboarding/SKILL.md` — produces the `weside.md` this skill reads
 - `we/skills/CLAUDE.md` — design rationale + frontmatter vocabulary
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md` § 2.4
+- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 2.4

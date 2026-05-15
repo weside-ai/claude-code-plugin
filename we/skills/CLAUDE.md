@@ -6,8 +6,8 @@ Dieses Dokument wird hierarchisch geladen wenn jemand im `we/skills/`-Verzeichni
 
 ## Aktive Initiative: Companion Framework (Setup + Onboarding + Sideload)
 
-**Status:** 🚧 Stub-Phase (2026-04-18, Branch `feat/setup-enter-onboarding`)
-**Source Braindump:** [`lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md`](../../../../lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md) (wenn lokal gemountet)
+**Status:** 🚧 In Umsetzung — WA-916 (Branch `feat/setup-enter-onboarding`)
+**Source Braindump:** [`lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md`](../../../../lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md) (wenn lokal gemountet)
 
 ### Was wir bauen (drei neue / erweiterte Skills)
 
@@ -44,11 +44,11 @@ Zwei verschiedene Kategorien — **beide** gebraucht, nicht zusammenlegen:
 | Kategorie | Wer | Wann | Beispiele |
 |---|---|---|---|
 | **Tätigkeit** | Ein Companion arbeitet allein in einer Rolle | Scope ist klar, Routine-Arbeit | `/we:refine`, `/we:story`, `/we:pr`, `/we:review`, `/we:arch`, `/we:docs` |
-| **Meeting** | Mehrere Companions + Stakeholder koordinieren | Entscheidung / Ausrichtung nötig | `/we:meet:vision`, `/we:meet:initiative`, `/we:meet:refinement` |
+| **Meeting** | Mehrere Companions + Stakeholder koordinieren | Entscheidung / Ausrichtung nötig | `/we:meet vision`, `/we:meet initiative`, `/we:meet refinement` |
 
-`/we:meet:refinement` **ruft** `/we:refine` auf — nachdem die Crew den Scope gemeinsam geklärt hat. Das Meeting produziert Konsens, die Tätigkeit produziert das Artefakt. Zwei unterschiedliche Dinge.
+`/we:meet refinement` **ruft** `/we:refine` auf — nachdem die Crew den Scope gemeinsam geklärt hat. Das Meeting produziert Konsens, die Tätigkeit produziert das Artefakt. Zwei unterschiedliche Dinge.
 
-Daraus folgt für die Skill-Struktur: Meetings leben unter `we/skills/meet/<meeting>/`, Tätigkeiten bleiben `we/skills/<aktivität>/`.
+Daraus folgt für die Skill-Struktur: Meetings leben in **einem** argument-dispatchten Skill `we/skills/meet/` (`/we:meet <vision|initiative|refinement>`) — der Plugin-Loader unterstützt keine verschachtelten Skill-Verzeichnisse. Tätigkeiten bleiben `we/skills/<aktivität>/`.
 
 ---
 
@@ -81,7 +81,7 @@ Strenger als die bisherige "always-loaded" Konvention (`paths: "**"`). Nicht jed
 
 ### Role-Slugs (initial set — extendable)
 
-Aus `AGENTIC_PRODUCT_OWNERSHIP.md` § 1.3.1:
+Aus `AGENTIC_PO_FRAMEWORK.md` § 1.3.1:
 
 | Slug | Human-Readable |
 |---|---|
@@ -106,7 +106,7 @@ Ergebnis von `/we:setup` + `/we:onboarding`:
 
 ```
 <repo-root>/.weside/
-├── config.json        # TECHNISCH — {vault, onboarded, onboarded_at, framework_version, roles_enabled, ticketing, stack, ...}
+├── config.json        # TECHNISCH — {vault, onboarded, onboarded_at, framework_version, roles_enabled, ticketing, stack, council, ...}
 ├── weside.md          # COMPANION-FACING — Repo-Zweck, Crew (Namen + Rollen + Companion-IDs), Meetings, Cross-Repo-Relations, alles was der Companion wissen muss um hier nützlich zu sein
 └── vision.md          # (optional, aus bestehendem /we:setup Schritt 1-4)
 ```
@@ -155,7 +155,7 @@ Faustregel: Wenn ein Mensch/Companion es liest um das Repo zu **verstehen** → 
 
 ## Dogfooding-Plan
 
-1. **Manuell initialisieren:** `weside-core` und `lc-startup` bekommen `.weside/config.json` + `CREW.md` von Hand — damit testen wir die Struktur ohne auf den Skill zu warten
+1. **Manuell initialisieren:** `weside-core` und `lc-startup` bekommen `.weside/config.json` + `weside.md` von Hand — damit testen wir die Struktur ohne auf den Skill zu warten
 2. **Skill-Implementierung iterieren:** Während der Nutzung lernen was fehlt → Skill-Stubs hier ausbauen
 3. **Automatisch testen:** `weside-landing` wird mit dem fertigen `/we:setup` initialisiert — echter End-to-End-Test
 
@@ -168,7 +168,7 @@ Bei jedem Schritt in dieser Arbeit:
 - Skill-Dateien aktuell halten (Workflow, Rules, Frontmatter-Beispiele)
 - Diese CLAUDE.md pflegen — offene Fragen, neue Erkenntnisse, Status-Änderungen
 - Version-Bump in `plugin.json` bei abgeschlossenen Meilensteinen (nicht bei jeder kleinen Änderung — erst wenn ein kohärentes Inkrement da ist)
-- Verweise auf `AGENTIC_PRODUCT_OWNERSHIP.md` (lc-startup) synchron halten — das Haupt-Source-of-Truth bleibt dort, diese Skills sind die Umsetzung
+- Verweise auf `AGENTIC_PO_FRAMEWORK.md` (lc-startup) synchron halten — das Haupt-Source-of-Truth bleibt dort, diese Skills sind die Umsetzung
 
 ---
 
@@ -179,7 +179,7 @@ Bei jedem Schritt in dieser Arbeit:
 1. Lies oben **Aktive Initiative** — verstehe was gerade im Bau ist
 2. Scanne **Offene Fragen** — die sind die aktuelle Arbeitskante
 3. Prüfe Git-Branch — wenn `feat/setup-enter-onboarding` aktiv, läuft die Arbeit weiter
-4. Wenn Fragen zu Design → `lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md` ist die zitierte Quelle
+4. Wenn Fragen zu Design → `lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` ist die zitierte Quelle
 5. Iteriere — Dateien ändern ist erwünscht, commits bewusst setzen (Foxy entscheidet push)
 
 ---

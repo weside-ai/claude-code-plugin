@@ -13,10 +13,6 @@ description: >
 
 **Purpose:** Define what a companion needs to know to work on this repo — who is in the crew, which meetings happen here, what the repo is for — and persist it as `.weside/weside.md` (human- and companion-readable), plus bookkeeping in `.weside/config.json` (machine-readable).
 
-## Status
-
-🚧 **Stub — evolving.** See `we/skills/CLAUDE.md` for the current design.
-
 ## Prerequisite
 
 `.weside/config.json` must exist. If not, suggest `/we:setup` first.
@@ -30,7 +26,7 @@ description: >
 
 Rule of thumb: if a human/companion reads it to *understand the repo*, it goes in `weside.md`. If a skill/agent reads it to *decide what to do*, it goes in `config.json`.
 
-## Workflow (sketch)
+## Workflow
 
 1. **Greet + detect repo flavor**
    - Read `CLAUDE.md` + existing `.weside/config.json` + `.weside/weside.md` (if any)
@@ -118,7 +114,7 @@ vault: <vault-name>
 - **One-question-at-a-time.** Never overwhelm — each role is a separate prompt.
 - **Empty is OK.** A role can be unassigned. `weside.md` still lists it with `Companion ID: null`.
 - **Never invent companions.** If the user says 'new', record a TBD entry and instruct the user to create the companion in weside.ai. Never fabricate a companion ID.
-- **System prompts live in weside, not here.** `weside.md` references companions by name/ID + role. The personality, memory, body, style live in weside MCP at `get_companion_identity()`. This separation is the whole point (see AGENTIC_PRODUCT_OWNERSHIP.md).
+- **System prompts live in weside, not here.** `weside.md` references companions by name/ID + role. The personality, memory, body, style live in weside MCP at `get_companion_identity()`. This separation is the whole point (see AGENTIC_PO_FRAMEWORK.md).
 - **Clean split.** Crew + purpose + meetings in `weside.md`. Technical flags (`onboarded`, stack, ticketing) in `config.json`. Never mix.
 - **Editable.** Running `/we:onboarding` again should offer "extend" vs. "replace" — never silently overwrite.
 - **Standalone fallback.** Without weside MCP: `weside.md` still gets written with names/roles/descriptions. Companion IDs remain null. `/we:sideload` degrades gracefully.
@@ -134,4 +130,4 @@ vault: <vault-name>
 - `we/skills/setup/SKILL.md` — the parent skill, invokes this
 - `we/skills/sideload/SKILL.md` — consumes `weside.md` at entry time
 - `we/skills/CLAUDE.md` — design rationale
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md` § 1.3.1 (Rollen) + § 2.3 (Onboarding)
+- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 1.3.1 (Rollen) + § 2.3 (Onboarding)

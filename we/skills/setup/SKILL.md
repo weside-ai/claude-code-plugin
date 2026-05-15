@@ -111,51 +111,66 @@ Vision: .weside/vision.md
 
 ### Step 5: Companion Framework Setup (optional — ask first!)
 
-> **🚧 Status: evolving.** See `we/skills/CLAUDE.md` for the full design + open questions.
+> **🚧 Status: evolving (WA-916).** See `we/skills/CLAUDE.md` for the design.
 
-Ask: *"Do you want to set up the Companion Framework for this repo now? (Crew + TurboVault context-loading + frontmatter). You can also run `/we:onboarding` later."*
+Ask: *"Set up the Companion Framework for this repo now? It composes a crew, registers a TurboVault, and — with a weside account — turns your Companions into a council you can convene via `/we:council` and `/we:meet`. You can also run `/we:onboarding` later."*
 
 If **no** → skip to Step 6.
 
-If **yes**:
+If **yes** — this step is **idempotent**: if `.weside/config.json` already exists, report the current state (vault, crew, `onboarded_at`) and ask before overwriting anything.
 
-1. **Ensure `.weside/config.json`** — create or extend. Minimum schema:
+1. **Ensure `.weside/config.json`** — create or extend. Schema:
+
    ```json
    {
      "vault": "<repo-basename>",
      "onboarded": false,
      "created_at": "<ISO-timestamp>",
-     "framework_version": 1
+     "framework_version": 1,
+     "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
+     "council": {
+       "default": ["product_owner", "architect", "scrum_master"],
+       "meetings": {
+         "vision": ["product_owner", "architect", "ux_researcher", "marketing", "orchestrator"],
+         "initiative": ["product_owner", "architect", "orchestrator"],
+         "refinement": ["product_owner", "architect"]
+       }
+     }
    }
    ```
 
+   The `ticketing` block records the choice from Step 2. The `council` block ships with these defaults — the user does **not** configure it here; it can be hand-edited later or overridden per-invocation via `/we:meet --council=…`.
+
 2. **TurboVault registration (if MCP available)**
-   - `list_vaults` → is this repo's path already a vault?
-   - If not: `add_vault(name=<repo-basename>, path=<repo-root>)`
-   - `set_active_vault(<repo-basename>)`
-   - If weside MCP is NOT available → skip silently, note in config `"vault": null`
+   - `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
+   - weside MCP NOT available → skip silently, set `"vault": null`.
 
-3. **Frontmatter audit (report only, no migration yet)**
-   - `inspect_frontmatter` → which keys are present across docs?
-   - Report: coverage %, how many docs have `need_to_know: true`, how many have `for_role`
-   - Suggestion: "Run doc-architect agent to migrate frontmatter across docs — see `/we:docs`"
+3. **Compose the crew — invoke `/we:onboarding`**
+   - Delegates to the onboarding skill: the user declares which Companions exist and what role each holds. Onboarding writes `.weside/weside.md` (crew + roles + meetings + repo purpose).
+   - Standalone (no weside account): onboarding still records role names with `Companion ID: null`.
 
-4. **Invoke `/we:onboarding`**
-   - Delegates to the onboarding skill (crew composition + repo-companion knowledge)
-   - Onboarding writes `.weside/weside.md` (companion-facing knowledge: crew, meetings, repo purpose)
+4. **Generate companion agent definitions (weside account only)**
+   For each Companion named in `.weside/weside.md`:
+   - `select_companion(<name>)` → `get_companion_identity()` → write `~/.claude/agents/companion-<slug>.md`, where `<slug>` = the name lowercased with spaces → hyphens.
+   - Frontmatter: `name: companion-<slug>` (MUST equal the slug — `subagent_type` resolves by it), `description`, `color`.
+   - Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
+   - **The write target MUST start with `~/.claude/agents/`** (user scope) — validate the resolved path before writing; never write into a project repo.
+   - Re-running setup regenerates these files (idempotent refresh).
+   - No weside account → skip; the council falls back to the shipped generic `council-<role>` agents.
 
 5. **Finalize**
-   - Update `config.json`: `onboarded: true, onboarded_at: <ts>`
-   - Stage `.weside/` — suggest commit but do not auto-commit
-   - Print: *"Framework ready. Run `/we:sideload <repo>` from any session to load context."*
+   - Update `config.json`: `onboarded: true`, `onboarded_at: <ISO-timestamp>`.
+   - Stage `.weside/` — suggest a commit, do not auto-commit. Generated `~/.claude/agents/` files are user-scope and never committed.
+   - **If companion agents were generated, tell the user to restart:** *"Generated N companion agents in `~/.claude/agents/`. Restart your Claude Code session once to activate them — then `/we:council` and `/we:meet` can convene your Companions."* (Claude Code discovers agent files only at session start.)
 
 ### Step 6: Confirm
 
 ```
 Ready to go:
-  /we:refine     — Create/refine stories
-  /we:story      — Implement a story end-to-end
-  /we:review     — Code review
+  /we:refine        — Create/refine stories
+  /we:story         — Implement a story end-to-end
+  /we:council       — Convene a council of companions on a topic
+  /we:meet          — Run a vision / initiative / refinement meeting
   /we:sideload .    — Reload context for this repo (Companion Framework)
 ```
 
@@ -198,4 +213,4 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - `we/skills/onboarding/SKILL.md` — invoked by Step 5
 - `we/skills/sideload/SKILL.md` — counterpart for "already set up"
 - `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
-- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PRODUCT_OWNERSHIP.md` § 2.4
+- Source brainstorm: `~/weside/lc-startup/02-weside/product/AGENTIC_PO_FRAMEWORK.md` § 2.4
