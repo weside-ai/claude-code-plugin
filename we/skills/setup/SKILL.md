@@ -88,7 +88,18 @@ If a prerequisite is missing, inform the user:
 
 ### Step 3: Save Configuration
 
-If user provided a vision or wants custom DoR/DoD:
+Always write `.weside/config.json` with the choices from Step 2 — the ticketing and stack configuration must persist **even if the Companion Framework (Step 5) is declined**:
+
+```json
+{
+  "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
+  "stack": ["<detected stacks>"]
+}
+```
+
+If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
+
+If the user provided a vision or wants custom DoR/DoD:
 
 ```
 .weside/

@@ -107,7 +107,7 @@ No weside account / no `.weside/` → every one of the six standard roles resolv
 
 ## Rules
 
-- **Dispatch with `Agent`, never `Skill`.** `Skill()` loads into the main context; `Agent()` gives each member its own.
+- **Dispatch council members with `Agent`, never `Skill`.** `Skill()` loads into the main context; `Agent()` gives each member its own. (This governs member dispatch — a caller invoking the `council` skill itself, e.g. `/we:meet`, is a separate, fine thing.)
 - **All member dispatches in one message** — that is what makes them run in parallel.
 - **Never invent a perspective.** A member that did not respond is reported as absent, not summarised.
 - **The orchestrator owns the synthesis** — do not let the main agent flatten the perspectives itself.

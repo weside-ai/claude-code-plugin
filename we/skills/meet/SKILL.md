@@ -37,7 +37,7 @@ If no meeting type is given, list the three and ask which one.
 2. **Council decision** — unless a flag forces it:
    - `--council` → convene it. `--no-council` → run solo.
    - Neither flag → **offer it**: *"Convene the council for this {type} meeting? [y/n]"*. No "complexity" guessing — always a plain offer.
-   - If convened → invoke the council via `Skill(skill="council")` with the meeting's framing question and `--meeting=<type>`. (Unlike `/we:refine`, the council skill is light — its own sub-agents do the heavy work — so invoking it inline is fine.) The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default). Feed the synthesis into the meeting workflow below.
+   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")` — the topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. (Unlike `/we:refine`, the council skill is light — its own sub-agents do the heavy work — so invoking it inline is fine.) The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default). Feed the synthesis into the meeting workflow below.
 3. **Run the meeting workflow** for the type.
 4. **Close out** — vision and initiative produce a written summary artifact (the final step of each workflow below) and offer to persist it; refinement instead hands off to `/we:refine` per its workflow. The Agentic-PO convention for persisted artifacts is `docs/plans/<saga>/`.
 
