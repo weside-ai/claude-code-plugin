@@ -74,6 +74,8 @@ Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-
 
 Ask user about unclear points. Clarify scope, requirements, edge cases.
 
+**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal.
+
 ### Step 3: Update Ticket (MINIMAL)
 
 ```markdown
@@ -112,6 +114,7 @@ Distill into the plan:
 story: {TICKET}
 created: YYYY-MM-DD
 status: draft
+parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files + no ordering dependency). See independence-check note in Implementation Phases before filling.
 ---
 
 # Plan: [Story Title]
@@ -151,6 +154,8 @@ points — narrative voice.]
 
 ### Phase 2: [Name]
 ...
+
+> **Independence check (fill `parallel_groups`):** For stories with 3+ phases, when phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. If that applies, list them in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). Explicit declaration here is what enables `/we:story` to fan out sub-agents; prose descriptions like "these can run in parallel" are not read by the orchestrator.
 
 ## Design Decisions
 

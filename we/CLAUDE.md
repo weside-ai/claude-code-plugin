@@ -28,7 +28,7 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:refine   → PO + Claude create story + plan (INTERACTIVE)
 /we:story    → Claude runs full pipeline AUTONOMOUSLY:
-               develop → AC verify → review + static + test (parallel) → PR → CodeRabbit on GitHub
+               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → CodeRabbit on GitHub
                → docs → PR → CI fix → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
@@ -45,7 +45,7 @@ User         → reviews PR, merges, closes ticket
 |---|---|
 | `/we:setup` | Project onboarding (stack, ticketing, vision) |
 | `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
-| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop + ci-review are inline) |
+| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
 | `/we:sm` | Scrum Master: process optimization, retrospectives |
 | `/we:arch` | Architecture guidance, ADRs |

@@ -13,6 +13,7 @@
 - [ ] Feature REACHABLE: User can navigate to the feature (button/route/screen)
 - [ ] End-to-end: Complete user flow works, not just individual parts
 - [ ] No unresolved TODO/FIXME left
+- [ ] **Parallelisation considered** — for stories with 3+ independent implementation phases: `parallel_groups` is set in the plan frontmatter, or there is an explicit note in the plan explaining why phases must be sequential. Skip for stories with 1–2 phases.
 
 ### Architecture Compliance
 
@@ -46,6 +47,10 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] **Cross-request ORM cache safety** — Any cache that holds ORM objects across request/session boundaries MUST eager-load every relationship it serves and detach the row from its loading session. Lazy attributes on a cached row crash the next request with a "detached instance" error. Reads feeding such a cache use eager-load helpers (e.g. `selectinload`) for every relationship downstream code touches; the cache detaches the row before storing.
 - [ ] **New reference table classification** — A new table that is static/global (same for every tenant, seeded via migration) AND read on a hot path (per LLM call / request / turn) belongs to a typed reference-data layer with a process-level cache. Direct CRUD reads on the hot path bypass the cache and re-introduce per-call DB load. Tenant-scoped tables (RLS, runtime writes) stay under the regular CRUD layer.
 - [ ] **Not applicable** → skip if item does not apply (no migration/date/range/state/index/text column/i18n/scalability)
+
+### Verification
+
+- [ ] **Success claims require evidence** — "tests pass", "it works", "fixed" are assertions, not verification. Each claim must be backed by a pasted command + its actual output (in the PR description, a commit message, or an inline comment). An assertion without output fails this gate.
 
 ### Quality Gates
 
