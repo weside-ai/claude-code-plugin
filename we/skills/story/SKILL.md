@@ -76,7 +76,7 @@ Single source of truth — step, what it does, checkpoint written, who writes it
 |---|---|---|---|
 | 0 | Check for resume | — | — |
 | 1 | DoR + load story + plan + worktree + ticket → "In Progress" | `git_prepared` | story (Step 1) |
-| 2 | Develop INLINE (not Skill dispatch) | `implementation_complete` | story (Step 2) |
+| 2 | Develop (inline or parallel-subagent dispatch) | `implementation_complete` | story (Step 2) |
 | 3 | AC verification gate (BLOCKING) | `ac_verified` | story (Step 3) |
 | 4 | Simplify | `simplified` | story (Step 4) |
 | 5 | PARALLEL: `/we:review` + `/we:static` + `/we:test` | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
@@ -113,6 +113,8 @@ to this story. Keep them in mind during implementation.
 
 **Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.
 
+**Plan Frontmatter — parse `parallel_groups`:** After loading the plan, extract the `parallel_groups` field from YAML frontmatter. Default (no field present) = all phases run sequentially inline. If present, the value is a list of lists of phase numbers — e.g. `parallel_groups: [[2,3]]` means phases 2 and 3 can run concurrently. Pass this to Step 2 to guide dispatch decisions. A phase not mentioned in any group always runs inline in plan order.
+
 ### Worktree (Default)
 
 **Unless the user explicitly says otherwise**, create a git worktree for isolated development:
@@ -140,21 +142,83 @@ If transition fails → log warning and continue. Do NOT block the pipeline.
 
 Write checkpoint `git_prepared`.
 
-## Step 2: Develop (INLINE — do NOT dispatch Skill)
+## Step 2: Develop (inline or parallel-subagent dispatch)
 
-⛔ **Do NOT call `Skill(skill="develop")`!** Skill() expands context and causes the orchestrator to lose control after the developer finishes. Instead, execute development steps inline.
+⛔ **Do NOT call `Skill(skill="develop")`!** `Skill()` loads a skill into the main context, inflating it and causing the orchestrator to lose control. Use one of the two modes below instead.
 
-Check circuit breaker. Then implement directly:
+Check circuit breaker. Then choose mode based on the plan's `parallel_groups` frontmatter (parsed in Step 1):
 
-1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY.
-2. **Formulate goal**: "The user should be able to X so that Y."
-3. **Implement phase by phase** from plan. For each phase:
+---
+
+### Mode A — Sequential inline (default)
+
+**When:** no `parallel_groups` in the plan, or a single-phase story.
+
+Execute all phases inline in the orchestrator thread, one after another. This is the unchanged behaviour for simple stories.
+
+---
+
+### Mode B — Parallel subagent dispatch
+
+**When:** `parallel_groups` is set in the plan frontmatter.
+
+For each group in `parallel_groups`, dispatch one `Agent()` per phase in that group in a **single message** so they execute concurrently. Wait for all agents in the group before starting the next group or returning to inline phases.
+
+```
+# Example for parallel_groups: [[2,3]] — phases 1 and 4 are inline, 2+3 are parallel
+
+# Phase 1 — inline (not in any group)
+# implement phase 1 directly in the orchestrator thread, commit
+
+# Group [2,3] — dispatch concurrently in ONE message:
+Agent(
+    subagent_type="general-purpose",
+    model="sonnet",
+    run_in_background=True,
+    description="Implement Phase 2 of {TICKET}",
+    prompt=<phase-developer brief for phase 2>
+)
+Agent(
+    subagent_type="general-purpose",
+    model="sonnet",
+    run_in_background=True,
+    description="Implement Phase 3 of {TICKET}",
+    prompt=<phase-developer brief for phase 3>
+)
+
+# Wait for both agents to return, then check for conflicts / integrate
+# Phase 4 — inline (after group completes)
+# implement phase 4 directly in the orchestrator thread, commit
+```
+
+**Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
+
+1. The full path to the plan (`docs/plans/{TICKET}-plan.md`) and which phase number it owns
+2. The phase's Goal, Files, and Approach block **verbatim** from the plan
+3. The ticket key, feature branch name, and absolute repo path
+4. The project conventions file (`CLAUDE.md` path)
+5. **Instruction:** implement the phase, commit with message `{TICKET}: phase {N} — {description}`, push to the feature branch
+6. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
+
+**The orchestrator retains all pipeline ownership.** Sub-agents implement + commit only. They do NOT open PRs, transition Jira, write checkpoints, make decisions outside their phase scope, or run quality gates.
+
+**If a sub-agent reports a real blocker** (missing dependency, auth endpoint absent, etc.), record it as a ≤200-token note and decide per-phase whether to defer and continue or stop and ask the user. A sub-agent blocker is NOT a reason to bail on all remaining phases.
+
+---
+
+### Per-phase checks (both modes)
+
+After each phase completes (inline or agent returns):
+
+1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY before the first phase.
+2. **Formulate goal** once: "The user should be able to X so that Y."
+3. **For each phase:**
    - Follow project conventions
    - Write tests alongside code (TDD: test first, then implementation)
    - Run auto-fix (ruff/eslint) after each phase
    - Commit after each phase
-4. **Wiring Check** after each phase that introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
-5. **Security Check** — if code touches auth, external APIs, user data, or file uploads:
+4. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
+5. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
 
    | Check | What to Verify |
    |-------|---------------|
@@ -170,6 +234,7 @@ Check circuit breaker. Then implement directly:
 7. **Write checkpoint** `implementation_complete`
 
 **3 Guiding Questions (check after each phase):**
+
 - "Can the user use the feature NOW?"
 - "Is the feature REACHABLE?"
 - "Does this bring me closer to the Story GOAL?"
@@ -309,6 +374,7 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Never move ticket to "Done" — user's job
 - Never stop mid-pipeline unless circuit breaker opens
 - Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
-- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — these expand context and break the pipeline. Execute their logic INLINE in Steps 2 and 8.
+- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Step 2 uses inline implementation OR `Agent()` subagent dispatch (see Step 2 Mode B); Step 8 uses inline CI-review logic.
+- Never ban `Agent(subagent_type=...)` dispatch in Step 2 — `Agent()` spawns an isolated context and returns only a short report. It is explicitly the correct mechanism for parallel-safe phases. Only `Skill()` dispatch is banned.
 - Never commit code changes without corresponding test changes in the same commit
 - Never create a PR before ALL THREE quality gates pass (review + static + test)
