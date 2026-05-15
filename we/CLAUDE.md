@@ -44,6 +44,8 @@ User         → reviews PR, merges, closes ticket
 | Command | What it does |
 |---|---|
 | `/we:setup` | Project onboarding (stack, ticketing, vision, Companion Framework) |
+| `/we:onboarding` | Compose the repo crew + author `.weside/weside.md`; invoked by `/we:setup` Step 5 or standalone |
+| `/we:sideload` | Load a repo's essential context (`need_to_know` frontmatter + `.weside/weside.md`) into the session, cross-repo capable |
 | `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis (companions with a weside account, generic role-agents otherwise) |
 | `/we:meet` | Run a structured meeting — `vision` / `initiative` / `refinement`; optionally convenes a council; refinement hands off to `/we:refine` |
 | `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
@@ -75,7 +77,8 @@ User         → reviews PR, merges, closes ticket
 | `static-analyzer` | Lint, format, types — auto-detects stack |
 | `test-runner` | Tests + coverage — auto-detects framework |
 | `pr-creator` | PR with prerequisite checkpoint validation |
-| `doc-manager` | Auto-detect and update project documentation |
+| `doc-architect` | Documentation coherence steward — classify, integrate, audit doc drift |
+| `council-*` (6) | Role-lens council agents (orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing) — spawned by `/we:council` and `/we:meet` |
 
 ---
 
