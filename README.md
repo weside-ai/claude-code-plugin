@@ -105,8 +105,10 @@ You get a PR with all ACs implemented, tests passing, code reviewed, docs update
 
 | Skill | What it does |
 |---|---|
-| `/we:setup` | Project onboarding (3 questions, auto-detection) |
+| `/we:setup` | Project onboarding (3 questions, auto-detection, Companion Framework) |
 | `/we:refine` | Create stories with acceptance criteria and plans |
+| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis |
+| `/we:meet` | Run a structured meeting — vision / initiative / refinement |
 | `/we:arch` | Architecture guidance, ADR creation |
 | `/we:sm` | Process optimization, retrospectives |
 | `/we:doc-improve` | Substantive doc review on a file or files (drift vs. code, redundancy, staleness; rule-mode adds token + trigger-overlap checks). Real-world use cases + sweep case-study: [`we/skills/doc-improve/USAGE.md`](we/skills/doc-improve/USAGE.md) |

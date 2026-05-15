@@ -45,6 +45,7 @@ User         → reviews PR, merges, closes ticket
 |---|---|
 | `/we:setup` | Project onboarding (stack, ticketing, vision, Companion Framework) |
 | `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis (companions with a weside account, generic role-agents otherwise) |
+| `/we:meet` | Run a structured meeting — `vision` / `initiative` / `refinement`; optionally convenes a council; refinement hands off to `/we:refine` |
 | `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
 | `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
