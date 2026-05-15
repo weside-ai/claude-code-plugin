@@ -105,8 +105,12 @@ You get a PR with all ACs implemented, tests passing, code reviewed, docs update
 
 | Skill | What it does |
 |---|---|
-| `/we:setup` | Project onboarding (3 questions, auto-detection) |
+| `/we:setup` | Project onboarding (3 questions, auto-detection, Companion Framework) |
+| `/we:onboarding` | Compose the repo crew + author `.weside/weside.md` (companion-facing repo knowledge) |
+| `/we:sideload` | Load a neighbor repo's essential context into the current session |
 | `/we:refine` | Create stories with acceptance criteria and plans |
+| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis |
+| `/we:meet` | Run a structured meeting — vision / initiative / refinement |
 | `/we:arch` | Architecture guidance, ADR creation |
 | `/we:sm` | Process optimization, retrospectives |
 | `/we:doc-improve` | Substantive doc review on a file or files (drift vs. code, redundancy, staleness; rule-mode adds token + trigger-overlap checks). Real-world use cases + sweep case-study: [`we/skills/doc-improve/USAGE.md`](we/skills/doc-improve/USAGE.md) |
@@ -122,7 +126,8 @@ You get a PR with all ACs implemented, tests passing, code reviewed, docs update
 | **static-analyzer** | Lint, format, types — auto-detects your stack |
 | **test-runner** | Tests with coverage gates — auto-detects framework |
 | **pr-creator** | PR with prerequisite checkpoint validation |
-| **doc-manager** | Auto-detect and update project documentation |
+| **doc-architect** | Documentation coherence steward — classify, integrate, audit doc drift |
+| **council-\*** (6) | Role-lens council agents (orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing) — spawned by `/we:council` and `/we:meet` |
 
 ---
 

@@ -1,15 +1,17 @@
 ---
 name: setup
 description: >
-  Project onboarding — detects stack, ticketing tool, and optionally creates
-  project vision, DoR, DoD. Interactive, minimal (3 questions). Use when user
-  says "/we:setup", "configure project", "set up workflow".
+  Project onboarding — detects stack, ticketing tool, creates project vision/DoR/DoD,
+  initializes the Companion Framework (`.weside/`, vault registration, crew onboarding
+  via /we:onboarding). Interactive, minimal (3 core questions + optional crew setup).
+  Use when user says "/we:setup", "configure project", "set up workflow", "initialize repo",
+  "install crew", "first time".
 ---
 
 
 # Project Setup
 
-Interactive project onboarding. Three questions, then done.
+Interactive project onboarding. Three core questions for project config, then optional Companion Framework initialization (crew + TurboVault + frontmatter).
 
 ---
 
@@ -86,7 +88,18 @@ If a prerequisite is missing, inform the user:
 
 ### Step 3: Save Configuration
 
-If user provided a vision or wants custom DoR/DoD:
+Always write `.weside/config.json` with the choices from Step 2 — the ticketing and stack configuration must persist **even if the Companion Framework (Step 5) is declined**:
+
+```json
+{
+  "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
+  "stack": ["<detected stacks>"]
+}
+```
+
+If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
+
+If the user provided a vision or wants custom DoR/DoD:
 
 ```
 .weside/
@@ -97,7 +110,7 @@ If user provided a vision or wants custom DoR/DoD:
 
 Otherwise: plugin uses built-in defaults from `quality/dor.md` and `quality/dod.md`.
 
-### Step 4: Confirm
+### Step 4: Confirm core config
 
 ```
 Project configured!
@@ -105,11 +118,69 @@ Project configured!
 Stack: Python + TypeScript (monorepo)
 Ticketing: Jira (project: PROJ)
 Vision: .weside/vision.md
+```
 
+### Step 5: Companion Framework Setup (optional — ask first!)
+
+Ask: *"Set up the Companion Framework for this repo now? It composes a crew, registers a TurboVault, and — with a weside account — turns your Companions into a council you can convene via `/we:council` and `/we:meet`. You can also run `/we:onboarding` later."*
+
+If **no** → skip to Step 6.
+
+If **yes** — this step is **idempotent**: if `.weside/config.json` already exists, report the current state (vault, crew, `onboarded_at`) and ask before overwriting anything.
+
+1. **Ensure `.weside/config.json`** — create or extend. Schema:
+
+   ```json
+   {
+     "vault": "<repo-basename>",
+     "onboarded": false,
+     "created_at": "<ISO-timestamp>",
+     "framework_version": 1,
+     "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
+     "council": {
+       "default": ["product_owner", "architect", "scrum_master"],
+       "meetings": {
+         "vision": ["product_owner", "architect", "ux_researcher", "marketing", "orchestrator"],
+         "initiative": ["product_owner", "architect", "orchestrator"],
+         "refinement": ["product_owner", "architect"]
+       }
+     }
+   }
+   ```
+
+   The `ticketing` block records the choice from Step 2. The `council` block ships with these defaults — the user does **not** configure it here; it can be hand-edited later or overridden per-invocation via `/we:meet --council=…`.
+
+2. **TurboVault registration (if MCP available)**
+   - `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
+   - weside MCP NOT available → skip silently, set `"vault": null`.
+
+3. **Compose the crew** — run the onboarding skill via `Skill(skill="onboarding")`
+   - Delegates to the onboarding skill: the user declares which Companions exist and what role each holds. Onboarding writes `.weside/weside.md` (crew + roles + meetings + repo purpose).
+   - Standalone (no weside account): onboarding still records role names with `Companion ID: null`.
+
+4. **Generate companion agent definitions (weside account only)**
+   For each Companion named in `.weside/weside.md` — **sequentially**, because `select_companion` sets global MCP state and cannot be parallelised:
+   - `select_companion(<name>)` → `get_companion_identity()` → write `~/.claude/agents/companion-<slug>.md`, where `<slug>` = the name lowercased with spaces → hyphens.
+   - Frontmatter: `name: companion-<slug>` (MUST equal the slug — `subagent_type` resolves by it), `description`, `color`.
+   - Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
+   - **The write target MUST start with `~/.claude/agents/`** (user scope) — validate the resolved path before writing; never write into a project repo.
+   - Re-running setup regenerates these files (idempotent refresh).
+   - No weside account → skip; the council falls back to the shipped generic `council-<role>` agents.
+
+5. **Finalize**
+   - Update `config.json`: `onboarded: true`, `onboarded_at: <ISO-timestamp>`.
+   - Stage `.weside/` — suggest a commit, do not auto-commit. Generated `~/.claude/agents/` files are user-scope and never committed.
+   - **If companion agents were generated, tell the user to restart:** *"Generated N companion agents in `~/.claude/agents/`. Restart your Claude Code session once to activate them — then `/we:council` and `/we:meet` can convene your Companions."* (Claude Code discovers agent files only at session start.)
+
+### Step 6: Confirm
+
+```
 Ready to go:
-  /we:refine  — Create/refine stories
-  /we:story   — Implement a story end-to-end
-  /we:review  — Code review
+  /we:refine        — Create/refine stories
+  /we:story         — Implement a story end-to-end
+  /we:council       — Convene a council of companions on a topic
+  /we:meet          — Run a vision / initiative / refinement meeting
+  /we:sideload .    — Reload context for this repo (Companion Framework)
 ```
 
 ---
@@ -133,5 +204,15 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - NEVER block on any question — always allow skip/default
 - NEVER create .weside/ without user consent
 - Auto-detection first, confirmation second
-- Three questions maximum
+- Three CORE questions maximum (Step 2); Step 5 (Framework) is optional and asks once
 - Works without ANY configuration (defaults for everything)
+- **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
+- **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
+- **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
+
+## References
+
+- `we/skills/onboarding/SKILL.md` — invoked by Step 5
+- `we/skills/sideload/SKILL.md` — counterpart for "already set up"
+- `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
+- Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4

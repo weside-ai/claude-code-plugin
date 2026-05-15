@@ -14,12 +14,12 @@ claude-code-plugin/
 │   └── marketplace.json     # Publisher: weside-ai
 ├── we/                      # Plugin root
 │   ├── .claude-plugin/
-│   │   └── plugin.json      # name: "we", version: "2.0.0"
+│   │   └── plugin.json      # name: "we", version: "2.24.0"
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/             # Slash commands for agent-dispatched tools (5)
-│   ├── skills/              # 12 skills (directly invocable via /we:*)
-│   ├── agents/              # 5 background agents
+│   ├── skills/              # 17 skills (directly invocable via /we:*)
+│   ├── agents/              # 11 agents (5 pipeline + doc-architect + 6 council)
 │   ├── quality/             # DoR, DoD (quality gate definitions)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
 │   └── scripts/

@@ -42,6 +42,9 @@ def get_category(filepath: str) -> str | None:
     return None
 
 
+DOC_FILENAMES = {"CLAUDE.md", "README.md"}
+
+
 def validate_file(filepath: str) -> list[str]:
     """Validate a single file's frontmatter. Returns list of error messages."""
     errors: list[str] = []
@@ -49,6 +52,9 @@ def validate_file(filepath: str) -> list[str]:
 
     if not path.exists():
         return [f"{filepath}: file not found"]
+
+    if path.name in DOC_FILENAMES:
+        return []  # Documentation files, not skills/commands/agents
 
     content = path.read_text(encoding="utf-8")
     category = get_category(filepath)
