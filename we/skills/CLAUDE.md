@@ -1,3 +1,11 @@
+---
+need_to_know: true
+for_role: [scrum_master, product_owner, architect]
+need_to_know_reason: "Describes the active Companion Framework initiative, design vocabulary, and .weside/ structure — essential when working on skills"
+type: foundation
+status: current
+---
+
 # Skills-Arbeitsbereich — Stand & Design-Notizen
 
 Dieses Dokument wird hierarchisch geladen wenn jemand im `we/skills/`-Verzeichnis arbeitet. Es beschreibt **laufende Design-Arbeit**, nicht stabiles Plugin-Verhalten.
