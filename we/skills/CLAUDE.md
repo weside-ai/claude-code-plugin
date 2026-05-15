@@ -1,196 +1,65 @@
 ---
 need_to_know: true
 for_role: [scrum_master, product_owner, architect]
-need_to_know_reason: "Describes the active Companion Framework initiative, design vocabulary, and .weside/ structure — essential when working on skills"
+need_to_know_reason: "Companion Framework design vocabulary and .weside/ structure — essential context when working on the framework skills"
 type: foundation
 status: current
 ---
 
-# Skills-Arbeitsbereich — Stand & Design-Notizen
+# Skills Workspace — Companion Framework Design Notes
 
-Dieses Dokument wird hierarchisch geladen wenn jemand im `we/skills/`-Verzeichnis arbeitet. Es beschreibt **laufende Design-Arbeit**, nicht stabiles Plugin-Verhalten.
+Loaded hierarchically when working inside `we/skills/`. It captures the **Companion Framework** design vocabulary and conventions the framework skills share. This is design rationale — the skills themselves remain the source of truth for what they do.
 
----
+## The Companion Framework
 
-## Aktive Initiative: Companion Framework (Setup + Onboarding + Sideload)
+The framework lets a user's weside Companions work as a real crew inside Claude Code:
 
-**Status:** 🚧 In Umsetzung (Branch `feat/setup-enter-onboarding`)
-**Source Braindump:** Agentic Product Ownership framework design notes (internal)
+| Skill | Purpose |
+|---|---|
+| `/we:setup` | Project onboarding + Companion Framework init (`.weside/`, vault, crew, companion agents) |
+| `/we:onboarding` | Interactive crew composition → writes `.weside/weside.md` |
+| `/we:sideload` | Load a repo's essential context (3 layers: shape → essentials → crew) |
+| `/we:council` | Convene a council of companion-agents to deliberate on a topic |
+| `/we:meet` | Structured meetings (vision / initiative / refinement) built on the council |
 
-### Was wir bauen (drei neue / erweiterte Skills)
+**No-account invariant:** every framework skill works **without** a weside account. Companion features are strictly *additive* — without an account the council falls back to shipped generic role-agents, `/we:sideload` runs in legacy mode, and meetings run solo. An account upgrades the experience; it is never a prerequisite.
 
-| Skill | Status | Zweck |
-|---|---|---|
-| `setup/` | ✏️ erweitert | Bestehender Project-Setup PLUS Step 5: Companion-Framework Init (`.weside/`, Vault, `/we:onboarding`) |
-| `onboarding/` | 🆕 neu | Interaktive Crew-Komposition → schreibt `.weside/weside.md` (companion-facing) + updated `.weside/config.json` (technisch) |
-| `sideload/` | 🆕 neu | Lädt Essential-Context eines Repos (auch Nachbar-Repos) via TurboVault + `need_to_know`-Frontmatter + `.weside/weside.md` |
+## Activity skills vs. meeting skills
 
-### Konzept kurz
+Two categories — both needed, kept separate:
 
-**Problem:** CLAUDE.md von Nachbar-Repos wird nicht automatisch geladen. Cross-Repo-Arbeit braucht einen schnellen Kontext-Loader, der nicht alles reinschiebt.
-
-**Lösung:** Drei Schichten beim Entern:
-1. **SHAPE** — `explain_vault()` gibt Struktur (~200 Tokens)
-2. **ESSENTIALS** — Files mit `need_to_know: true` Frontmatter, optional gefiltert nach Rolle (`for_role`) (~5-10k Tokens)
-3. **LAZY** — alles andere nur on-demand via TurboVault-Search
-
-### Separation of Concerns (Leitlinie für das Refactoring als Ausblick)
-
-Wir trennen **Person** (Companion mit Name/Memory in weside) von **Rolle** (was sie tut) von **Tätigkeit** (Skill/Agent der ausgeführt wird). Heute sind `/we:refine` (Tätigkeit) und "Product Owner" (Rolle) sprachlich vermischt. Später:
-
-- Skills/Agents heißen nach ihrer Tätigkeit (refine, story, review, docs, ...)
-- Frontmatter auf Skills deklariert `for_role: [product_owner, ...]`
-- System-Prompts der Companions kommen zur Laufzeit aus weside MCP (`get_companion_identity`)
-- Rolle ist ein Attribut — kein Dateiname
-
-Dieses Refactoring kommt **nach** der Setup/Enter-Stabilisierung. Jetzt nur Skelette und Vokabular festlegen.
-
-### Tätigkeit-Skills ≠ Meeting-Skills (wichtig!)
-
-Zwei verschiedene Kategorien — **beide** gebraucht, nicht zusammenlegen:
-
-| Kategorie | Wer | Wann | Beispiele |
+| Category | Who | When | Examples |
 |---|---|---|---|
-| **Tätigkeit** | Ein Companion arbeitet allein in einer Rolle | Scope ist klar, Routine-Arbeit | `/we:refine`, `/we:story`, `/we:pr`, `/we:review`, `/we:arch`, `/we:docs` |
-| **Meeting** | Mehrere Companions + Stakeholder koordinieren | Entscheidung / Ausrichtung nötig | `/we:meet vision`, `/we:meet initiative`, `/we:meet refinement` |
+| **Activity** | one companion works alone in a role | scope is clear, routine work | `/we:refine`, `/we:story`, `/we:pr`, `/we:review` |
+| **Meeting** | several companions + stakeholder coordinate | a decision or alignment is needed | `/we:meet vision`, `/we:meet initiative`, `/we:meet refinement` |
 
-`/we:meet refinement` **ruft** `/we:refine` auf — nachdem die Crew den Scope gemeinsam geklärt hat. Das Meeting produziert Konsens, die Tätigkeit produziert das Artefakt. Zwei unterschiedliche Dinge.
+A meeting produces consensus; an activity produces the artifact. `/we:meet refinement` hands off to `/we:refine` once the crew has agreed the scope. Meetings live in **one** argument-dispatched skill, `we/skills/meet/` — the plugin loader does not support nested skill directories.
 
-Daraus folgt für die Skill-Struktur: Meetings leben in **einem** argument-dispatchten Skill `we/skills/meet/` (`/we:meet <vision|initiative|refinement>`) — der Plugin-Loader unterstützt keine verschachtelten Skill-Verzeichnisse. Tätigkeiten bleiben `we/skills/<aktivität>/`.
+## Frontmatter vocabulary
 
----
-
-## Frontmatter-Vokabular (neu eingeführt)
-
-Gilt für CLAUDE.md, Rules unter `.claude/rules/`, Docs unter `docs/`, und perspektivisch für Skills/Agents im Plugin selbst.
+Applies to docs and rules that `/we:sideload` consumes:
 
 ```yaml
 ---
-# Bestehend (bisherige Konvention, bleibt)
-type: architecture | rule | foundation | guide | adr | plan | ...
-domain: [platform, voice, billing, ...]
-status: current | draft | outdated | superseded
-
-# NEU — Companion Framework
-need_to_know: true                 # Load on /we:sideload (default: false)
-for_role: [architect, product_owner]   # Optional; omit → applies to all roles
-need_to_know_reason: "Why this is essential when entering"
+need_to_know: true                     # /we:sideload loads this on entry (default: false)
+for_role: [architect, product_owner]   # optional; omit → applies to all roles
+need_to_know_reason: "why this is essential when entering"
 ---
 ```
 
-### Kriterium für `need_to_know: true`
+**Criterion for `need_to_know: true`:** *could someone work here without having read this file?* No → `need_to_know: true`. Yes → omit. This is stricter than the always-loaded rule convention — not every always-loaded rule is entry-essential.
 
-**Faustregel:** *Könnte jemand hier arbeiten ohne diese Datei gelesen zu haben?*
+### Role slugs
 
-- Ja → weglassen / `need_to_know: false`
-- Nein → `need_to_know: true`
+The council ships generic agents for six roles: `architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`. A weside crew may define further roles (e.g. `sales`, `legal`) — those require a companion assigned to the role, since no generic agent ships for them.
 
-Strenger als die bisherige "always-loaded" Konvention (`paths: "**"`). Nicht jede always-loaded Rule ist Entry-Essential.
+## `.weside/` — repo-scoped config
 
-### Role-Slugs (initial set — extendable)
+Produced by `/we:setup` + `/we:onboarding`, committed into the repo so crew and config are versioned per-repo:
 
-Aus `AGENTIC_PO_FRAMEWORK.md` § 1.3.1:
-
-| Slug | Human-Readable |
-|---|---|
-| `scrum_master` | Scrum Master |
-| `product_owner` | Product Owner |
-| `orchestrator` | Orchestrator |
-| `architect` | Architect |
-| `ux_researcher` | UX Researcher |
-| `user_persona` | User Persona |
-| `geschaeftsfuehrung` | Geschäftsführung |
-| `marketing` | Marketing |
-| `sales` | Sales / Business Development |
-| `legal` | Legal / Compliance |
-
-Neue Rollen kommen bei Bedarf dazu. `for_role` akzeptiert Slugs.
-
----
-
-## `.weside/` — Repo-scoped Config
-
-Ergebnis von `/we:setup` + `/we:onboarding`:
-
-```
-<repo-root>/.weside/
-├── config.json        # TECHNISCH — {vault, onboarded, onboarded_at, framework_version, roles_enabled, ticketing, stack, council, ...}
-├── weside.md          # COMPANION-FACING — Repo-Zweck, Crew (Namen + Rollen + Companion-IDs), Meetings, Cross-Repo-Relations, alles was der Companion wissen muss um hier nützlich zu sein
-└── vision.md          # (optional, aus bestehendem /we:setup Schritt 1-4)
-```
-
-**Zwei-Datei-Split — warum:**
-
-| Datei | Zielgruppe | Inhalt |
+| File | Audience | Holds |
 |---|---|---|
-| `weside.md` | **Companion** (Mensch-/Companion-lesbar, Markdown) | Repo-Zweck, Crew, Meetings, Cross-Repo-Relations — alles „wissen um zu arbeiten" |
-| `config.json` | **Tooling** (Maschinen-lesbar, JSON) | `vault`, `framework_version`, `onboarded`, `ticketing`, `stack` — alles „entscheiden was tun" |
+| `config.json` | tooling (machine-readable) | `vault`, `framework_version`, `onboarded`, `ticketing`, `stack`, `council` (per-meeting rosters) |
+| `weside.md` | companion (human-readable) | repo purpose, crew (names + roles), meetings, cross-repo relations |
 
-Faustregel: Wenn ein Mensch/Companion es liest um das Repo zu **verstehen** → `weside.md`. Wenn ein Skill/Agent es liest um zu **entscheiden was tun** → `config.json`. Die `.weside/` wird wahrscheinlich noch mehr Dateien beherbergen (z.B. integration-spezifische Secrets-Pointer, Cache) — der Split bleibt.
-
-**Commit-Policy:** `.weside/` wird ins Repo eingecheckt, so dass Crew/Vault pro Repo versioniert ist. Secrets gehören NICHT in `.weside/` (gibt's auch keine) — alles Personen-Identitäts-Material lebt in weside.
-
----
-
-## Offene Fragen (für spätere Iterationen)
-
-### Setup
-
-- Soll Step 5 (Framework) auto-fire bei fresh-repo oder immer fragen? **Tendenz: immer fragen, mit "Default = ja" bei frischem Repo**
-- Rollback wenn Setup mittendrin abbricht?
-- Crew-Portabilität: "copy crew from repo A to B" flow?
-
-### Onboarding
-
-- Wie sync'en wenn derselbe Companion auf mehreren Repos arbeitet?
-- Rolle-Slug-Katalog hardcoded oder user-extensible?
-- Was wenn User keinen weside-Account hat — "Stub-Companions" ohne Memory?
-
-### Sideload
-
-- `need_to_know` binär oder Levels (`L1`/`L2`/`L3`)? **Tendenz: binär erstmal**
-- `for_role` eng enum oder free-form? **Tendenz: eng, mit Extensions-Möglichkeit**
-- Auto-Fire via PreToolUse-Hook (cross-repo file access)? **Phase 2**
-- Diff-Mode beim wiederholten Sideload ("was hat sich geändert")?
-
-### Frontmatter-Migration
-
-- Wer kuratiert `need_to_know: true` — doc-architect Agent mit Scan-Vorschlag, User-Review, oder Autor-Selbstverantwortung?
-- **Tendenz:** doc-architect scannt + schlägt vor, User reviewed, Scrum Master hält's aktuell
-- `/we:docs` + doc-architect Agent müssen das neue Vokabular lernen — separates Todo
-
----
-
-## Dogfooding-Plan
-
-1. **Manuell initialisieren:** Zwei Beispiel-Repos bekommen `.weside/config.json` + `weside.md` von Hand — damit testen wir die Struktur ohne auf den Skill zu warten
-2. **Skill-Implementierung iterieren:** Während der Nutzung lernen was fehlt → Skill-Stubs hier ausbauen
-3. **Automatisch testen:** `weside-landing` wird mit dem fertigen `/we:setup` initialisiert — echter End-to-End-Test
-
----
-
-## Scrum-Master-Verantwortung (für Nox / Lead)
-
-Bei jedem Schritt in dieser Arbeit:
-
-- Skill-Dateien aktuell halten (Workflow, Rules, Frontmatter-Beispiele)
-- Diese CLAUDE.md pflegen — offene Fragen, neue Erkenntnisse, Status-Änderungen
-- Version-Bump in `plugin.json` bei abgeschlossenen Meilensteinen (nicht bei jeder kleinen Änderung — erst wenn ein kohärentes Inkrement da ist)
-- Verweise auf die `AGENTIC_PO_FRAMEWORK.md`-Design-Notes synchron halten — das Haupt-Source-of-Truth bleibt dort, diese Skills sind die Umsetzung
-
----
-
-## Wie man hier einsteigt
-
-**Nox / neue Claude-Session kommt her und liest diese Datei:**
-
-1. Lies oben **Aktive Initiative** — verstehe was gerade im Bau ist
-2. Scanne **Offene Fragen** — die sind die aktuelle Arbeitskante
-3. Prüfe Git-Branch — wenn `feat/setup-enter-onboarding` aktiv, läuft die Arbeit weiter
-4. Wenn Fragen zu Design → die `AGENTIC_PO_FRAMEWORK.md`-Design-Notes sind die zitierte Quelle
-5. Iteriere — Dateien ändern ist erwünscht, commits bewusst setzen (Foxy entscheidet push)
-
----
-
-**Letzte Aktualisierung:** 2026-05-15, Branch `feat/setup-enter-onboarding`
-**Maintainer:** Nox (Scrum Master dieser Initiative)
+Rule of thumb: if a human or companion reads it to *understand the repo* → `weside.md`; if a skill reads it to *decide what to do* → `config.json`. No secrets belong in `.weside/` — companion identity material lives in the weside account, referenced only by name and role.
