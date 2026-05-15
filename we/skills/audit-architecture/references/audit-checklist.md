@@ -53,9 +53,9 @@ If no previous diagram exists, this check produces no finding (first-time audit 
 
 ## Standard Lenses (apply to all deep-audit subsystems)
 
-### Lens 1: Kapselung (Encapsulation)
+### Lens 1: Encapsulation (`kapselung`)
 
-**Question:** Hat das Subsystem klare Public-API? Werden Internals von außen importiert?
+**Question:** Does the subsystem have a clear public API? Are internals imported from outside?
 
 **How to check:**
 
@@ -68,7 +68,7 @@ If no previous diagram exists, this check produces no finding (first-time audit 
 **Finding template:**
 
 ```markdown
-### <id>-MAJ-N — Kapselung-Bruch: <importing-file>
+### <id>-MAJ-N — Encapsulation breach: <importing-file>
 
 **Severity:** MAJOR
 **Lens:** kapselung
@@ -83,9 +83,9 @@ it from outside.
 **Effort:** S-M (15min - 2h depending on call-site count).
 ```
 
-### Lens 2: Schichten (Layering)
+### Lens 2: Layering (`schichten`)
 
-**Question:** Gateway → Service → CRUD → DB-Zugriff sauber getrennt? Keine Skip-Layer-Imports?
+**Question:** Are Gateway → Service → CRUD → DB access cleanly separated? No skip-layer imports?
 
 **How to check:**
 
@@ -98,7 +98,7 @@ it from outside.
 
 ### Lens 3: Primitive-Compliance
 
-**Question:** Sind alle berührten Primitives (subsystem.primitives in YAML) korrekt verwendet? Bypässe annotiert?
+**Question:** Are all touched primitives (subsystem.primitives in YAML) used correctly? Bypasses annotated?
 
 **How to check:**
 
@@ -110,7 +110,7 @@ it from outside.
 
 ### Lens 4: Security
 
-**Question:** Trust-Boundaries klar? Auth-Chain korrekt? Multi-Tenancy isoliert?
+**Question:** Trust boundaries clear? Auth chain correct? Multi-tenancy isolated?
 
 **How to check:**
 
@@ -121,7 +121,7 @@ it from outside.
 
 ### Lens 5: Observability
 
-**Question:** Strukturierte Logs? Metriken? Traces? Keine PII?
+**Question:** Structured logs? Metrics? Traces? No PII?
 
 **How to check:**
 
@@ -133,7 +133,7 @@ it from outside.
 
 ### Lens 6: Error-Handling
 
-**Question:** `APIError` + `ErrorType`-Enum, kein nacktes `HTTPException`?
+**Question:** `APIError` + `ErrorType` enum, no bare `HTTPException`?
 
 **How to check:**
 
@@ -167,9 +167,9 @@ The skill checks `references/<lens-name>.md` for the lens's method + output form
 
 Typically applied to subsystems with `domain: [billing, data-residency]`.
 
-### Privacy-Lens 1: Datenresidenz
+### Privacy-Lens 1: Data residency
 
-**Question:** EU-Region für alle State-bearing Services? BYOK-Pfad korrekt?
+**Question:** EU region for all state-bearing services? BYOK path correct?
 
 **How to check:**
 
@@ -177,7 +177,7 @@ Typically applied to subsystems with `domain: [billing, data-residency]`.
 - Verify any third-party provider configs (Anthropic, OpenAI, Deepgram, ElevenLabs) explicitly use EU endpoints where available.
 - Verify BYOK promotion logic (`byok-promotion` primitive) covers all promotable sources (CHAT, UTILITY, PROXY).
 
-### Privacy-Lens 2: Verschlüsselung
+### Privacy-Lens 2: Encryption
 
 **Question:** Per-User-Encryption at-rest? TLS in-transit? Key-Rotation?
 
@@ -186,9 +186,9 @@ Typically applied to subsystems with `domain: [billing, data-residency]`.
 - Encrypted columns in DB models — search for `Encrypted` SQLAlchemy types or `encrypt(` calls in CRUD.
 - Confirm migration adds encryption to new sensitive columns.
 
-### Privacy-Lens 3: GDPR-Löschung
+### Privacy-Lens 3: GDPR deletion
 
-**Question:** Löschpfad implementiert? Soft-Delete vs. Hard-Delete klar? Backups?
+**Question:** Deletion path implemented? Soft-delete vs. hard-delete clear? Backups?
 
 **How to check:**
 
@@ -198,16 +198,16 @@ Typically applied to subsystems with `domain: [billing, data-residency]`.
 
 ### Privacy-Lens 4: Tenant-Isolation
 
-**Question:** RLS aktiv? Cross-Tenant-Queries auditierbar?
+**Question:** RLS active? Cross-tenant queries auditable?
 
 **How to check:**
 
 - Verify RLS is enabled on every multi-tenant table (admin queries excepted, but those must be `# CRUD-BYPASS-OK`).
 - Verify `set_user_context()` (or equivalent) is called before each request (Auth Context Chain).
 
-### Privacy-Lens 5: Datenversprechen
+### Privacy-Lens 5: Data promise
 
-**Question:** Stimmt der Code mit dem Datenschutzversprechen (z.B. aus `docs/vision/PHILOSOPHY.md`)?
+**Question:** Does the code match the data-protection promise (e.g. from `docs/vision/PHILOSOPHY.md`)?
 
 **How to check:**
 

@@ -165,6 +165,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    - Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
    - **The write target MUST start with `~/.claude/agents/`** (user scope) — validate the resolved path before writing; never write into a project repo.
    - Re-running setup regenerates these files (idempotent refresh).
+   - **When the loop finishes, restore the active companion.** `select_companion` is global MCP session state — after the last companion is generated, the session is left on *that* companion, not the user's configured default. Call `select_companion(...)` once at the end — with the companion name from the plugin's `companion` setting — so the rest of the session keeps the right identity.
    - No weside account → skip; the council falls back to the shipped generic `council-<role>` agents.
 
 5. **Finalize**

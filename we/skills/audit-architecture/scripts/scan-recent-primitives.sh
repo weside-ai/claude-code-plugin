@@ -87,7 +87,7 @@ if [[ ${#KEYWORD_PATTERNS[@]} -gt 0 ]]; then
 fi
 
 # --- Emit markdown ---
-echo "**Verdachts-Pfade (≥3 PRs in last $PR_COUNT):**"
+echo "**Candidate paths (≥3 PRs in last $PR_COUNT):**"
 echo
 if [[ -z "$PATH_COUNTS_TSV" ]]; then
   echo "_(no paths matched)_"
@@ -98,7 +98,7 @@ else
 fi
 
 echo
-echo "**PR-Schlagwort-Treffer (manuell prüfen):**"
+echo "**PR keyword matches (review manually):**"
 echo
 if [[ -z "$KEYWORD_HITS" ]]; then
   echo "_(no keyword hits)_"

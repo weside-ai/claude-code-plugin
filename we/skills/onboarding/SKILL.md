@@ -37,7 +37,7 @@ Rule of thumb: if a human/companion reads it to *understand the repo*, it goes i
      |---|---|
      | Backend/Engineering | Scrum Master, Product Owner, Architect |
      | Landing/Marketing | Scrum Master, Product Owner, Marketing, UX Researcher |
-     | Business docs | Scrum Master, Product Owner, Geschäftsführung, Marketing |
+     | Business docs | Scrum Master, Product Owner, Leadership, Marketing |
      | Plugin / toolkit | Scrum Master, Product Owner, Architect, UX Researcher |
      | Mixed / custom | full list, user picks |
 
@@ -53,7 +53,7 @@ Rule of thumb: if a human/companion reads it to *understand the repo*, it goes i
    - Free-form: user provides name + role + one-line description
 
 4. **Ask about meetings held on this repo**
-   - Default: `refinement` always. `initiative` if repo is source-of-truth for any Saga. `vision` if Geschäftsführung lives here.
+   - Default: `refinement` always. `initiative` if repo is source-of-truth for any Saga. `vision` if leadership lives here.
    - User can override.
 
 5. **Write `.weside/weside.md`** (see schema below)

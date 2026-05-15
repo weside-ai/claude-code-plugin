@@ -55,6 +55,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap. Real-world use cases + 28-file sweep case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |
+| `/we:audit` | Tool-driven security scan — runs semgrep / trivy / kubescape / gitleaks (or the project's own audit script), parses the JSON reports, and summarizes findings by severity. |
 | `/we:find-dead-code` | Find and remove dead code from Python backends |
 | `/we:smoketest` | Manual API smoketest — discover endpoints, auth, test, check logs |
 | `/we:materialize` | Load weside Companion identity (requires weside.ai account) |

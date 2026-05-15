@@ -14,7 +14,7 @@ claude-code-plugin/
 │   └── marketplace.json     # Publisher: weside-ai
 ├── we/                      # Plugin root
 │   ├── .claude-plugin/
-│   │   └── plugin.json      # name: "we", version: "2.24.0"
+│   │   └── plugin.json      # name: "we", version: "2.24.1"
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/             # Slash commands for agent-dispatched tools (5)
@@ -99,11 +99,11 @@ Plugin (Claude Code) → MCP OAuth → weside Backend API → Companion Memory/G
 
 - **Without MCP:** All skills work. No companion features.
 - **With MCP:** Skills can load companion identity, search memories, check goals.
-- **MCP tools:** Defined in `we/.mcp.json`, implemented in weside-core (`apps/backend/app/mcp/`)
+- **MCP tools:** Defined in `we/.mcp.json`, implemented by the weside backend service.
 
-When changing MCP tool signatures, both repos need updating:
-- weside-core: Backend implementation (`app/mcp/tools/`)
-- This repo: Skill references to MCP tools
+When changing MCP tool signatures, both sides need updating:
+- The weside backend — MCP tool implementation.
+- This repo — skill references to MCP tools.
 
 ---
 
@@ -216,25 +216,6 @@ All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.p
 
 ---
 
-## Cross-Repo References
-
-All repos live under `~/weside/`. Cross-repo file access works from any Claude Code session.
-
-| What | Where |
-|------|-------|
-| **Workspace overview** | `~/weside/CLAUDE.md` |
-| MCP server implementation | `weside-core/apps/backend/app/mcp/` |
-| Plugin vision & strategy | `weside-core/docs/plans/we-plugin/` |
-| Skill source (pre-generalization) | `weside-core/.claude/skills/` |
-| Agent source (pre-generalization) | `weside-core/.claude/agents/` |
-| Flow docs source (archived) | `weside-core/.claude/archive/flow-legacy/` |
-| **Business strategy & philosophy** | `lc-startup/` (CLAUDE.md has 7 strategic pillars) |
-| **Philosophy rules** | `lc-startup/.claude/rules/weside.md` (Companions = Persons enforcement) |
-| Landing page | `weside-landing/sites/weside/` |
-| Infrastructure & deployment | `weside-infrastructure/` |
-
----
-
 ## Useful Commands
 
 ```bash
@@ -256,5 +237,5 @@ grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/quality/
 
 ---
 
-**Version:** 1.1
-**Last Updated:** 2026-04-05
+**Version:** 1.2
+**Last Updated:** 2026-05-15

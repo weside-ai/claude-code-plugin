@@ -50,10 +50,10 @@ teardown() {
   [ -x "$SCRIPT_DIR/scan-recent-primitives.sh" ]
 }
 
-@test "outputs a Verdachts-Pfade section" {
+@test "outputs a candidate-paths section" {
   run bash "$SCRIPT_DIR/scan-recent-primitives.sh" --config "$CONFIG" --repo /tmp --pr-count 10 --output-md
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Verdachts-Pfade"* ]]
+  [[ "$output" == *"Candidate paths"* ]]
 }
 
 @test "flags apps/backend/app/dispatch/ as ≥3 PRs" {

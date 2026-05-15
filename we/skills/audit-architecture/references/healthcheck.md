@@ -28,7 +28,7 @@ just collect them as findings.
 | ... | (no drift found) | — |
 ```
 
-If `/we:doc-improve` finds nothing: write "alle Primitive-Docs grün" in
+If `/we:doc-improve` finds nothing: write "all primitive docs clean" in
 the table.
 
 ## Check 2: Bypass-Register-Drift
@@ -84,14 +84,14 @@ for the implementation.
 ```markdown
 ### Missing-Primitive-Scan
 
-**Verdachts-Pfade (≥3 PRs in last 100):**
+**Candidate paths (≥3 PRs in last 100):**
 
 | Path | PR Count | Already a Primitive? |
 |---|---|---|
 | apps/backend/app/dispatch/ | 8 | ✓ DispatchService |
 | apps/backend/app/proactivity/triggers/ | 4 | ⚠ no primitive |
 
-**PR-Schlagwort-Treffer (manuell prüfen):**
+**PR keyword matches (review manually):**
 
 - #1718 "introduce SafeDeleteContext" → maybe new primitive?
 - #1742 "centralize companion warmup" → likely Companion Lifecycle scope
