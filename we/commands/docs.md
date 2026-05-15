@@ -34,4 +34,3 @@ Agent(
 
 - Skill: `we/skills/docs/SKILL.md`
 - Agent: `we/agents/doc-architect.md`
-- Legacy (deprecated): `we/agents/doc-manager.md` — now a thin delegate to `doc-architect`

@@ -82,5 +82,5 @@ If no meeting type is given, list the three and ask which one.
 
 - `we/skills/council/SKILL.md` — the deliberation engine a meeting convenes
 - `we/skills/refine/SKILL.md` — what a refinement meeting hands off to
-- `we/skills/CLAUDE.md` — Tätigkeit-vs-Meeting design rationale
+- `we/skills/CLAUDE.md` — Activity-vs-Meeting design rationale
 - Source: the Agentic Product Ownership framework design notes, § 1.3.2 (Meetings)

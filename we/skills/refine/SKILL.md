@@ -131,12 +131,12 @@ points — narrative voice.]
 1. **Given** [context] **When** [action] **Then** [result]
 
 ## User Journey
-> **Diese Story ist erst DONE, wenn die Journey vom User end-to-end erlebbar ist.**
+> **This story is only DONE when the user can experience the journey end-to-end.**
 
-1. [Ausgangspunkt: Wo startet der User?]
-2. [Aktion: Was tut der User?]
-3. [Ergebnis: Was sieht/erlebt der User?]
-4. [Abschluss: Wie endet die Interaktion?]
+1. [Starting point: where does the user begin?]
+2. [Action: what does the user do?]
+3. [Result: what does the user see / experience?]
+4. [Close: how does the interaction end?]
 
 ## Testing Requirements
 - Unit tests for [X]
@@ -306,7 +306,7 @@ Detect available ticketing tool (in priority order):
 - ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
 - ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS use Given/When/Then for ACs
-- ALWAYS include a User Journey in the plan — beschreibt den Weg des Users Schritt für Schritt vom Einstieg bis zum Ergebnis. Story ist erst DONE wenn end-to-end erlebbar. Nur weglassen bei rein technischen Stories ohne User-Interaktion (z.B. Refactoring, CI-Config).
+- ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).
 - ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.
 - ALWAYS fill Design Decisions — every alternative discussed during refine, with reasoning for the chosen approach. This prevents the implementing agent from revisiting already-rejected ideas.
 - ALWAYS ask when unclear

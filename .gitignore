@@ -6,5 +6,4 @@ __pycache__/
 node_modules/
 .ruff_cache/
 .mypy_cache/
-.reviews/20260515-1953_feat-setup-enter-onboarding_V1.md
-.reviews/20260515-2010_feat-setup-enter-onboarding_V2.md
+.reviews/

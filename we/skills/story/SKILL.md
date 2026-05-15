@@ -309,10 +309,6 @@ When the agent returns with proposals:
 If the agent returns "nothing needs updating" — write `docs_updated` immediately
 and continue. Do not invent work.
 
-**Note on the legacy `doc-manager` agent:** it is deprecated and now a thin
-delegate to `doc-architect`. Existing call sites still work but new code
-should invoke `we:doc-architect` directly.
-
 ## Step 7: PR
 
 **BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
