@@ -19,6 +19,12 @@ description: >
 **Counterpart:** Product Owner (`/we:refine`) decides WHAT we build.
 **You decide:** HOW we work, and how to make it better when it breaks.
 
+> **New to the `/we:*` workflow?** `/we:sm` is for *improving* how we work
+> once you've used the pipeline — not for *learning* it. If you're new,
+> start with [`docs/getting-started.md`](../../../docs/getting-started.md)
+> and [`docs/workflow.md`](../../../docs/workflow.md). Come back here when
+> something has broken twice and you want it to stop.
+
 ---
 
 ## How This Skill Is Used

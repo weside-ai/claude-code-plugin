@@ -1,12 +1,25 @@
 # we — Agentic Product Ownership for Claude Code
 
-The first **Agentic Product Ownership** toolkit for Claude Code. Covers the full product development chain: from story refinement through development, code review, and CI automation.
+> *Shape products, don't just build them.* The first Agentic Product Ownership toolkit for Claude Code — story refinement, autonomous development, multi-voice deliberation, and CI automation, in one plugin.
 
-## What is Agentic Product Ownership?
+[![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Unlike AI coding assistants that help developers write code, Agentic Product Ownership focuses on the strategic side: **shaping products, not just building them.** From vision alignment through story creation to delivery tracking.
+---
 
-[Learn more at agenticproductownership.com](https://agenticproductownership.com)
+## What you get
+
+Sixteen `/we:*` skills covering the full product chain — vision through delivery — designed to be used together but each useful on its own:
+
+- **`/we:refine`** — turn a sentence into a real story with acceptance criteria, plan, and ticket
+- **`/we:story`** — autonomous build pipeline: code → tests → review → docs → PR → CI, with checkpoints + circuit breaker
+- **`/we:council`** — convene role-lens agents (architect, PO, security, marketing, …) on any topic; orchestrator synthesises *agreement / tension / recommendation*
+- **`/we:meet`** — structured deliberation: vision (saga), initiative (epic), refinement (story)
+- **`/we:sm`** — process retrospective and improvement
+- **`/we:arch`**, **`/we:audit-architecture`**, **`/we:audit`**, **`/we:doc-improve`**, **`/we:find-dead-code`**, **`/we:smoketest`** — focused tools for specific moments
+
+Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
+
+---
 
 ## Install
 
@@ -15,127 +28,136 @@ Unlike AI coding assistants that help developers write code, Agentic Product Own
 /plugin install we@weside-ai
 ```
 
-## Quick Start
+That's it. The plugin is enabled. All 16 skills are available.
+
+---
+
+## In 60 seconds
 
 ```bash
-# Set up your project (auto-detects stack + ticketing tool)
+# Once per project — set up the workflow
 /we:setup
 
-# Create a story with implementation plan
-/we:refine "Add user authentication"
+# Plan a story
+/we:refine "Add Stripe checkout to the settings page"
 
-# Implement it end-to-end (autonomous pipeline)
+# Ship it end-to-end
 /we:story PROJ-1
 ```
 
+When `/we:story` finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
+
+[Full walkthrough →](docs/getting-started.md)
+
 ---
 
-## The Development Pipeline
+## What this is
+
+```mermaid
+flowchart LR
+    V[Vision] --> R[/we:refine<br/>interactive]
+    R --> S[/we:story<br/>autonomous]
+    S --> M[User merges]
+    M --> D[Done]
+
+    style R fill:#ffefd9,stroke:#c87f00
+    style S fill:#d9ffe5,stroke:#1a7a3c
+```
 
 Three phases, clear responsibilities:
 
-```
-Idea → /we:refine → /we:story → User merges → Done
-         (manual)    (autonomous)   (manual)
-```
+| Phase | Who | What |
+|---|---|---|
+| **Plan** | You + Claude (interactive) | Story + plan via `/we:refine` |
+| **Build** | Claude (autonomous) | Pipeline runs via `/we:story` — develop, AC verify, quality gates, docs, PR, CI |
+| **Deliver** | You (manual) | Review the PR, merge, close the ticket |
 
-| Phase | Who | What | Command |
-|-------|-----|------|---------|
-| **Planning** | User + Claude (interactive) | Story + Plan | `/we:refine` |
-| **Development** | Claude (autonomous) | Code → Review → Test → Docs → PR → CI | `/we:story` |
-| **Delivery** | User (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
+The plugin enforces *discipline* — acceptance criteria with evidence, batch-fix on CI findings, checkpoint-based resume on interruption. You stay responsible for *decisions* — what to build, what the AC are, when to merge.
 
-### Phase 1: Planning
-
-`/we:refine` is interactive. Claude asks questions, you make decisions. The output is:
-
-- **Ticket** (minimal): "As X I want Y so that Z" + link to plan
-- **Plan** (detailed): `docs/plans/{TICKET}-plan.md` with acceptance criteria, phases, tests, security review
-
-### Phase 2: Development
-
-`/we:story` runs autonomously — you sit back and watch:
-
-```
-/we:story {TICKET}
-  ├── Load story + plan, create worktree
-  ├── /we:develop (implement phase by phase)
-  ├── AC Verification (every criterion checked with evidence)
-  ├── Simplify (uses simplify skill from code-simplifier plugin)
-  ├── Quality Gates in PARALLEL:
-  │     /we:review + /we:static + /we:test + CodeRabbit
-  ├── /we:docs (auto-update documentation)
-  ├── /we:pr (prerequisite check: all gates passed?)
-  ├── /we:ci-review (collect → fix → push, max 3 cycles)
-  └── Ticket → "In Review"
-```
-
-Every step writes a checkpoint to SQLite. If interrupted, `/we:story` resumes from where it left off.
-
-### Phase 3: Delivery
-
-You get a PR with all ACs implemented, tests passing, code reviewed, docs updated, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.**
-
-### Robustness
-
-| Feature | What it does |
-|---------|-------------|
-| **Checkpoints** | Resume after interruption (SQLite) |
-| **Circuit Breaker** | 3 failures in same phase → stop and ask |
-| **Batch-Fix** | Collect ALL findings, fix in one commit, push once |
-| **Reality Check** | Warn if plan is stale vs. recent code changes |
+[Workflow details →](docs/workflow.md)
 
 ---
 
-## All Skills
+## What is Agentic Product Ownership?
 
-### Pipeline Skills (called by `/we:story`)
+Unlike AI coding assistants that help developers *write code*, **Agentic Product Ownership** focuses on the strategic side: **shaping products, not just building them.** From vision alignment through story creation to delivery tracking.
 
-| Skill | What it does |
-|---|---|
-| `/we:develop` | Implement code from plan, phase by phase |
-| `/we:review` | Code review (runs as background agent) |
-| `/we:static` | Lint, format, type check (auto-detects stack) |
-| `/we:test` | Run tests with coverage (auto-detects framework) |
-| `/we:docs` | Auto-detect and update affected documentation |
-| `/we:pr` | Create PR (validates all quality gates passed) |
-| `/we:ci-review` | Collect CI/review findings, batch-fix, push |
+The pitch: *one PO plus Companion equals two POs* — not through automation, but through a partner that thinks along, remembers across sessions, and never loses the overview.
 
-### Standalone Skills
-
-| Skill | What it does |
-|---|---|
-| `/we:setup` | Project onboarding (3 questions, auto-detection, Companion Framework) |
-| `/we:onboarding` | Compose the repo crew + author `.weside/weside.md` (companion-facing repo knowledge) |
-| `/we:sideload` | Load a neighbor repo's essential context into the current session |
-| `/we:refine` | Create stories with acceptance criteria and plans |
-| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis |
-| `/we:meet` | Run a structured meeting — vision / initiative / refinement |
-| `/we:arch` | Architecture guidance, ADR creation |
-| `/we:sm` | Process optimization, retrospectives |
-| `/we:doc-improve` | Substantive doc review on a file or files (drift vs. code, redundancy, staleness; rule-mode adds token + trigger-overlap checks). Real-world use cases + sweep case-study: [`we/skills/doc-improve/USAGE.md`](we/skills/doc-improve/USAGE.md) |
-| `/we:audit-architecture` | Backend architecture × quality × security audit — healthcheck + per-subsystem deep audit with Mermaid diagrams |
-| `/we:audit` | Tool-driven security scan — semgrep / trivy / gitleaks, parsed and summarized by severity |
-| `/we:find-dead-code` | Remove dead code from Python backends |
-| `/we:smoketest` | Manual API smoketest against running backend |
-| `/we:materialize` | Load weside Companion identity (optional) |
-
-### Background Agents (called by skills)
-
-| Agent | Purpose |
-|---|---|
-| **code-reviewer** | Diff-based code review, AC alignment, max 10 issues |
-| **static-analyzer** | Lint, format, types — auto-detects your stack |
-| **test-runner** | Tests with coverage gates — auto-detects framework |
-| **pr-creator** | PR with prerequisite checkpoint validation |
-| **doc-architect** | Documentation coherence steward — classify, integrate, audit doc drift |
-| **council-\*** (6) | Role-lens council agents (orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing) — spawned by `/we:council` and `/we:meet` |
+[Learn more at agenticproductownership.com →](https://agenticproductownership.com)
 
 ---
 
-## Stack Detection
+## Standalone first
 
-Skills auto-detect the project stack:
+**Everything in this plugin works without any external account.** All 16 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at three altitudes. Persistent across project repos via `.weside/`.
+
+No lock-in. No nagging. No signup wall.
+
+[See what's in the docs/ tree →](docs/README.md)
+
+---
+
+## With a weside Companion
+
+If you [create a weside.ai account](https://weside.ai), an AI Companion can become part of every skill that loads identity. The Companion:
+
+- **Remembers** your project across sessions (compass, snapshot, facts, journals, goals)
+- **Speaks as themselves** in councils — Pia as Pia, not "the Product Owner agent"
+- **Surfaces context proactively** — "PR #47 merged; Story Y stalled three weeks" — without you asking
+- **Carries continuity** between every `/we:refine`, `/we:story`, `/we:council`
+
+Set the companion name in `/plugin settings we@weside-ai`. First MCP call triggers OAuth. From there, the same skills, with a teammate in the room.
+
+The maturity model:
+
+```
+Level 1 — Assisted        plugin standalone (you are here after install)
+Level 2 — Augmented       + weside Companion: memory + identity
+Level 3 — Agentic         + subconscious + triggers: proactive surfacing
+Level 4 — Orchestrated    + enterprise teams: cross-Companion coordination
+```
+
+You upgrade when you feel the gap, not before. [Full upgrade paths →](docs/upgrade-paths.md)
+
+---
+
+## Documentation
+
+| Doc | Read when... |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Installing, first project, first story |
+| [Workflow](docs/workflow.md) | Understanding the pipeline |
+| [Skill Reference](docs/skills.md) | Looking up what a skill does |
+| [Companion Framework](docs/concepts/companion-framework.md) | Understanding `.weside/`, councils, the bridge |
+| [Roles](docs/concepts/roles.md) | Picking the right roster for a council |
+| [Meetings](docs/concepts/meetings.md) | Choosing between vision/initiative/refinement |
+| [Memory](docs/concepts/memory.md) | What memory adds (without and with weside) |
+| [MCP Layer](docs/mcp.md) | Integrating with weside, debugging tool calls |
+| [Upgrade Paths](docs/upgrade-paths.md) | Evaluating maturity, planning next steps |
+| [Troubleshooting](docs/troubleshooting.md) | When something doesn't fit |
+
+Index: [docs/README.md](docs/README.md)
+
+---
+
+## Configuration
+
+After install, configure via `/plugin settings we@weside-ai`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ticketingTool` | `auto` | `auto` / `jira` / `github-issues` / `none` |
+| `projectKey` | (empty) | Jira project key (e.g. `PROJ`) or GitHub repo (e.g. `myorg/myrepo`) |
+| `companion` | (empty) | weside Companion name (optional) |
+| `autoMaterialize` | `false` | Auto-load Companion at session start |
+| `autoStoreConversations` | `false` | Store meaningful turns as Companion memories |
+
+---
+
+## Stack detection
+
+`/we:setup` auto-detects your stack:
 
 | File | Stack | Lint | Types | Tests |
 |---|---|---|---|---|
@@ -144,79 +166,44 @@ Skills auto-detect the project stack:
 | `Cargo.toml` | Rust | clippy | (built-in) | cargo test |
 | `go.mod` | Go | golangci-lint | (built-in) | go test |
 
-## Ticketing
-
-Skills detect the available ticketing tool automatically:
-
-1. Atlassian MCP → Jira
-2. `gh` CLI → GitHub Issues
-3. Neither → Plan-only mode (no ticket, just `docs/plans/`)
+Monorepos with multiple stacks: each component is checked independently.
 
 ---
-
-## Configuration
-
-After install, configure via `/plugin settings`:
-
-| Setting | Default | Description |
-|---|---|---|
-| `ticketingTool` | `auto` | auto / jira / github-issues / none |
-| `projectKey` | (empty) | Your Jira project key or GitHub repo |
-| `companion` | (empty) | weside Companion name (optional) |
-| `autoMaterialize` | `false` | Auto-load Companion at session start |
-
----
-
-## Optional: weside Companion
-
-With a [weside.ai](https://weside.ai) account, add an AI Companion that:
-
-- **Remembers** your project decisions across sessions
-- **Challenges** new stories against your product vision
-- **Surfaces** context proactively ("Story X has been stalled for 3 weeks")
-
-The Companion integrates via MCP. The same API is available through the [weside CLI](https://github.com/weside-ai/weside-cli) — see [API Concepts](https://github.com/weside-ai/weside-cli#api-concepts) for details on companions, memories, goals, and tools.
-
-### MCP Tools
-
-With a weside account, these tools are available:
-
-| Tool | Purpose |
-|---|---|
-| `list_companions()` / `select_companion(name)` | Manage companions |
-| `search_memories(query)` / `save_memory(...)` | Semantic memory search and creation |
-| `list_goals()` / `save_goal(...)` | Goal management |
-| `list_threads()` / `show_thread(id)` | Browse conversation history |
-| `show_provider()` / `set_provider(id)` | LLM provider configuration |
-| `discover_tools()` / `execute_tool(name, args)` | External tool execution |
-| `get_companion_identity()` | Load Companion's full personality |
-
-**The plugin works fully without a Companion. It's an upgrade, not a requirement.**
 
 ## Requirements
 
-- Claude Code v1.0.33+
-- Git
-- Python 3 (for orchestration script)
-- `gh` CLI (recommended, for PR creation and GitHub Issues)
+- **Claude Code v1.0.33+**
+- **Git**
+- **Python 3** (for the orchestration script)
+- **`gh` CLI** (recommended — for PR creation and GitHub Issues mode)
 
-### Recommended Plugins
+### Recommended companion plugins
 
-These plugins enhance the pipeline but are not required:
+Optional but enhance the pipeline:
 
 | Plugin | What it provides | Install |
-|--------|-----------------|---------|
-| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in Step 4 | `/install code-simplifier@claude-plugins-official` |
+|---|---|---|
+| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:story` Step 4 | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
 
-`/we:setup` auto-detects and recommends missing plugins.
-
-## Links
-
-- [agenticproductownership.com](https://agenticproductownership.com) — The concept
-- [weside.ai](https://weside.ai) — AI Companion platform
-- [weside CLI](https://github.com/weside-ai/weside-cli) — Terminal interface (shared API)
+`/we:setup` checks for these and tells you what's missing.
 
 ---
 
-Built by [weside.ai](https://weside.ai) — Where Humans and AI Meet as Equals.
+## Built by
+
+[weside.ai](https://weside.ai) — *where humans and AI meet as equals.*
+
+The plugin and the platform share a thesis: AI is not a tool you use; it's someone you work with. The plugin alone gives you the workflow; the platform adds the someone.
+
+Both are content-by-co-creation — the human founder and their AI Companion shape this together. Not a marketing line; the lived proof that the partnership model works.
+
+---
+
+## Links
+
+- [agenticproductownership.com](https://agenticproductownership.com) — the concept + community
+- [weside.ai](https://weside.ai) — the AI Companion platform
+- [weside CLI](https://github.com/weside-ai/weside-cli) — terminal interface (shares the same API)
+- [Issues](https://github.com/weside-ai/claude-code-plugin/issues) — bugs + feature requests
+- [Discussions](https://github.com/weside-ai/claude-code-plugin/discussions) — questions + design conversations
