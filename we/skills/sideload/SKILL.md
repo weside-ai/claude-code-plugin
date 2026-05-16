@@ -52,7 +52,7 @@ description: >
 
 5. **Layer 3 — WESIDE (companion-facing knowledge)**
    - Read `<repo>/.weside/weside.md` — everything the companion needs to know to work here: repo purpose, crew, meetings, cross-repo relations
-   - Print a short summary derived from its `## Crew` section: "Crew on this repo: Pia (PO), Vyra (Architect), Samu (SM)"
+   - Print a short summary derived from its `## Crew` section, e.g. "Crew on this repo: <PO name> (PO), <Architect name> (Architect), <SM name> (SM)"
 
 6. **Report**
    ```
