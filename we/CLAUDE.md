@@ -46,7 +46,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:setup` | Project onboarding (stack, ticketing, vision, Companion Framework) |
 | `/we:onboarding` | Compose the repo crew + author `.weside/weside.md`; invoked by `/we:setup` Step 5 or standalone |
 | `/we:sideload` | Load a repo's essential context (`need_to_know` frontmatter + `.weside/weside.md`) into the session, cross-repo capable |
-| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis. Real crew via `.weside/council.json` bridge file (interim stand-in for the future `get_council` MCP method); generic role-agents as fallback. |
+| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis. Real crew via `get_council` MCP method (preferred) paired with the `.weside/council.json` bridge for role/color/membership; fat-bridge fallback when MCP is offline; nine generic role-agents (`architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `sales`, `legal`) as the no-account path. |
 | `/we:meet` | Run a structured meeting — `vision` / `initiative` / `refinement`; optionally convenes a council; refinement hands off to `/we:refine` |
 | `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
 | `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
@@ -79,7 +79,7 @@ User         → reviews PR, merges, closes ticket
 | `test-runner` | Tests + coverage — auto-detects framework |
 | `pr-creator` | PR with prerequisite checkpoint validation |
 | `doc-architect` | Documentation coherence steward — classify, integrate, audit doc drift |
-| `council-*` (6) | Role-lens council agents (orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing) — spawned by `/we:council` and `/we:meet` |
+| `council-*` (9) | Role-lens council agents — orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing, security, sales, legal — spawned by `/we:council` and `/we:meet` |
 
 ---
 
@@ -140,7 +140,8 @@ Level 4: Orchestrated  Companions coordinate across teams (enterprise)
 | Tool | Purpose |
 |---|---|
 | `get_companion_identity()` | Load Companion personality |
-| `list_companions()` | Available companions |
+| `list_companions()` | Available companions (includes `identity_updated_at`) |
+| `get_council(names?)` | Batch-load council projections for the user's companions (v1 stub: identity + updated_at, ignores workspace_id) |
 | `select_companion(name)` | Switch companion |
 | `search_memories(query)` | Search project memory |
 | `save_memory(title, content, type)` | Save to persistent memory |

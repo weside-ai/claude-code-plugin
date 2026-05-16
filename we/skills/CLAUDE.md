@@ -51,7 +51,7 @@ need_to_know_reason: "why this is essential when entering"
 
 ### Role slugs
 
-The council ships generic agents for six roles: `architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`. A weside crew may define further roles (e.g. `sales`, `legal`) — those require a companion assigned to the role, since no generic agent ships for them.
+The council ships generic agents for nine roles: `architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `sales`, `legal`. A weside crew may define further custom roles — those require a companion assigned to the role, since no generic agent ships for them. Custom roles without an assigned companion are skipped (and named in the council output) per `we/skills/council/SKILL.md` Step 3's "Unknown role" rule.
 
 ## `.weside/` — repo-scoped config
 
@@ -61,46 +61,57 @@ Produced by `/we:setup` + `/we:onboarding`, committed into the repo so crew and 
 |---|---|---|
 | `config.json` | tooling (machine-readable) | `vault`, `framework_version`, `onboarded`, `ticketing`, `stack`, `council` (per-meeting rosters) |
 | `weside.md` | companion (human-readable) | repo purpose, crew (names + roles), meetings, cross-repo relations |
-| `council.json` | tooling (machine-readable, **gitignored**) | per-member council projection: `identity_prompt`, `role`, `color`, `identity_updated_at`. Interim hand-authored stand-in for the future `get_council` MCP method (see "The bridge file" below). |
+| `council.json` | tooling (machine-readable, **gitignored**) | per-member crew membership: `role`, `color`, `companion_id`, display `name` per slug. Companion-Framework bridge file. Two schemas accepted (`thin` — preferred, no identity; `fat` — legacy, with `identity_prompt`). See "The bridge file" below. |
 
-Rule of thumb: if a human or companion reads it to *understand the repo* → `weside.md`; if a skill reads it to *decide what to do* → `config.json`. `council.json` is the exception that is **gitignored**: it carries identity text, and identity text never enters a project repo verbatim (same rule that applies to the per-companion agent files in `~/.claude/agents/`).
+Rule of thumb: if a human or companion reads it to *understand the repo* → `weside.md`; if a skill reads it to *decide what to do* → `config.json`. `council.json` is the exception that is **gitignored** even in its thin form — Companion IDs and crew structure are private to the user's weside account and shouldn't propagate into project repos that may be public.
 
 ## Meetings & council — the cycle motif
 
 A meeting (`/we:meet vision|initiative|refinement`) wraps a council in a structured workflow. A council convenes role-lens agents that deliberate in parallel; an orchestrator synthesises *agreement, tension, and recommendation* (full mechanics in `we/skills/council/SKILL.md`).
 
-The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the future `get_council` MCP method will close the loop automatically by writing the outcome to team-scoped memory. Design rationale: WA-718 CONCEPT §13.7 Step 2 (in the weside-core repo).
+The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the Phase-6 form of `get_council` (team-scoped memory + workspace_id) will close the loop automatically. Design rationale: WA-718 CONCEPT §13.7 Step 2 (in the weside-core repo).
+
+## Identity loading — two paths
+
+Identity comes from one of two sources in priority order:
+
+1. **MCP `get_council`** *(preferred when the weside MCP is connected)* — one batch call returns each member's `identity_prompt` and `identity_updated_at` for the user's companions. The plugin pairs this with the bridge file's role/color/membership to build the council brief. The backend is the single source of truth for identity; the repo holds only role-membership.
+
+2. **Bridge fat-schema fallback** — if the MCP path is unavailable AND the bridge file still carries `identity_prompt` (legacy "fat" schema), that identity is used. This is the pre-`get_council` path; running `scripts/bootstrap-weside-repo.py` migrates fat bridges to the thin schema and identity then flows exclusively through MCP.
+
+If neither path supplies identity → fall through to `companion-<slug>` files in `~/.claude/agents/` (legacy `/we:setup` Step 5.4 output), then to the shipped generic `council-<role>` shell. Full precedence: `we/skills/council/SKILL.md` Step 3.
 
 ## The bridge file `.weside/council.json`
 
-Until the `get_council` MCP method exists, the bridge file injects real crew identity into the council brief without depending on per-companion `~/.claude/agents/companion-<slug>.md` files. Its on-disk shape **is** the projection contract `get_council` will serve — when the MCP method ships, the plugin populates the same structure from a live call instead of requiring a hand-authored file.
+The bridge file declares **which Companions are in this repo's crew, in which role, with which color**. It is the role-membership record on the file system, paired with weside's identity store via MCP.
 
-**Schema:**
+**Thin schema (preferred, written by `scripts/bootstrap-weside-repo.py`):**
 
 ```json
 {
-  "version": 1,
+  "version": 2,
+  "schema": "thin",
   "workspace_id": null,
   "members": {
-    "<companion-slug>": {
+    "<slug>": {
       "name": "<Display Name>",
-      "role": "product_owner | architect | scrum_master | ux_researcher | orchestrator | marketing | <custom>",
+      "role": "product_owner | architect | scrum_master | ux_researcher | orchestrator | marketing | security | sales | legal | <custom>",
       "color": "<color string>",
-      "identity_prompt": "<companion identity layer body — pasted from get_companion_identity, stripped of weside platform layers, Snapshot, Compass, Goals, Memories>",
-      "identity_updated_at": "<ISO timestamp of hand-refresh>"
+      "companion_id": <int or null>
     }
   }
 }
 ```
 
-**How `/we:council` consumes it:** highest precedence in Step 3 resolution — bridge present → use `council-<role>` as shell agent and pass `identity_prompt` into the brief (`Agent(prompt=<brief + identity>)`). Falls back to legacy `companion-<slug>` files, then to the generic `council-<role>` agents.
+**Fat schema (legacy, accepted for back-compat):** same shape plus an `identity_prompt` and `identity_updated_at` per member. Used in pre-v2.25.0 repos that hand-authored identity bodies into the file. The bootstrap script migrates these to thin in-place on next run.
 
-**Authoring the bridge** (one-off, manual until `get_council` lands):
+**Both schemas live under the same path** (`<repo>/.weside/council.json`). The council skill detects which one is present by checking for `identity_prompt` keys.
 
-1. For each crew member: `select_companion(name)` → `get_companion_identity()` (weside MCP).
-2. Strip the weside platform layers, Snapshot, Compass, Goals, Memories — keep only the identity body (the `# <NAME>` persona section).
-3. Build the JSON, write to `<repo>/.weside/council.json`.
-4. **Restore the original active companion** at the end (`select_companion` is global session state — see the WA-916 setup-loop bug noted in `we/skills/setup/SKILL.md`).
-5. Add `.weside/council.json` to the repo's `.gitignore` if not already present.
+**How `/we:council` consumes it:**
+- Thin schema → role/color/membership for the call; identity comes from `get_council` MCP.
+- Fat schema → role/color/membership + identity (the pre-MCP path, still works).
+- Either way the bridge stays **gitignored** — Companion IDs and crew structure are private; the bootstrap script appends `.weside/council.json` to `.gitignore`.
 
-**Refresh:** re-run the same authoring when a companion's identity in weside changes meaningfully. Once `get_council` ships, refresh becomes version-aware (cache invalidates by `identity_updated_at`).
+**Why workspace_id is null in v1:** the bridge's selector role (which team in weside is this repo serving?) is gated on Phase 6 (team/workspace model). Until then, every bridge is implicitly user-scoped. CONCEPT.md §13.7 Step 2b in `weside-core` covers what changes when Phase 6 lands.
+
+**Refresh:** thin bridge changes only when the crew composition changes (new member, role swap, color change). Identity changes are picked up automatically via MCP on the next `/we:council`; no file edit needed.
