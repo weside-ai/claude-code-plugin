@@ -2,7 +2,7 @@
   "vault": "claude-code-plugin",
   "framework_version": 1,
   "onboarded": true,
-  "onboarded_at": "2026-05-16T17:26:21+00:00",
+  "onboarded_at": "2026-05-16T17:38:10+00:00",
   "repo_flavor": "plugin",
   "roles_enabled": [
     "architect",

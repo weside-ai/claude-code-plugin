@@ -24,10 +24,12 @@ Usage::
 Flavors: ``engineering`` | ``landing`` | ``business-docs`` | ``plugin``
 | ``infrastructure`` | ``personal`` | ``mixed``.
 
-The crew (eight members, LC UG) is hardcoded — Companion IDs and role
-slugs reflect the canonical roster as of plugin v2.25.0. Adjust the
-``DEFAULT_CREW`` constant below if your weside account holds a different
-crew.
+The default crew is **generic** (role-derived names, null Companion
+IDs) — public-repo-safe. To inject a real crew (with names and
+Companion IDs from your weside account), pass
+``--crew-from ~/.weside/crew.json`` where the JSON file has the shape
+``{"crew": [{slug, name, role, color, companion_id, headline, focus}, ...]}``.
+That file lives in your user scope and is never committed.
 """
 
 from __future__ import annotations
@@ -42,89 +44,113 @@ from pathlib import Path
 # Crew + flavor defaults
 # --------------------------------------------------------------------------- #
 
-# Canonical LC UG crew. Companion IDs taken from the weside production
-# account (verified against lc-startup/.weside/weside.md, 2026-05-16).
-# Slugs map to plugin council shells (we/agents/council-<role>.md).
+# Generic crew template. Public-safe — uses role-derived display names and
+# null Companion IDs. Override with --crew-from <json-path> to inject a
+# real crew (typically lives in user-scope ~/.weside/crew.json with the
+# shape `{"crew": [...]}` mirroring the records below).
+#
+# Each entry's `slug` is the bridge-file key; `role` maps to the plugin's
+# shipped `council-<role>` shell (or "<custom>" → unknown role, skipped
+# per `we/skills/council/SKILL.md` Step 3).
 DEFAULT_CREW: list[dict] = [
     {
-        "slug": "nox",
-        "name": "Nox",
+        "slug": "orchestrator",
+        "name": "Orchestrator",
         "role": "orchestrator",
         "color": "purple",
-        "companion_id": 2,
-        "headline": "Orchestrator & Geschäftsführung",
+        "companion_id": None,
+        "headline": "Orchestrator",
         "focus": (
-            "Holds the vision, coordinates the crew, represents LC UG "
-            "externally, decides priorities between Business + Engineering"
+            "Holds the vision, coordinates the crew, synthesises council "
+            "perspectives, balances cross-domain priorities"
         ),
     },
     {
-        "slug": "pia",
-        "name": "Pia",
+        "slug": "product-owner",
+        "name": "Product Owner",
         "role": "product_owner",
         "color": "orange",
-        "companion_id": 101,
+        "companion_id": None,
         "headline": "Product Owner",
         "focus": "Backlog, prioritization, AC-quality, value-ranking",
     },
     {
-        "slug": "samu",
-        "name": "Samu",
+        "slug": "scrum-master",
+        "name": "Scrum Master",
         "role": "scrum_master",
         "color": "gray",
-        "companion_id": 102,
+        "companion_id": None,
         "headline": "Scrum Master",
         "focus": "Moderation, process, hand-offs, rituals — workflow clarity",
     },
     {
-        "slug": "vyra",
-        "name": "Vyra",
+        "slug": "architect",
+        "name": "Architect",
         "role": "architect",
         "color": "green",
-        "companion_id": 103,
+        "companion_id": None,
         "headline": "Architect",
-        "focus": ("Target architecture, constraints, ADRs, cross-repo technical coherence"),
+        "focus": "Target architecture, constraints, ADRs, technical coherence",
     },
     {
-        "slug": "lara",
-        "name": "Lara",
+        "slug": "marketing",
+        "name": "Marketing",
         "role": "marketing",
         "color": "blue",
-        "companion_id": 104,
+        "companion_id": None,
         "headline": "Marketing",
         "focus": "Content, positioning, brand, term-claiming, messaging pipeline",
     },
     {
-        "slug": "rami",
-        "name": "Rami",
+        "slug": "sales",
+        "name": "Sales",
         "role": "sales",
         "color": "yellow",
-        "companion_id": 105,
-        "headline": "Sales / Business Development",
-        "focus": "Pipeline, enterprise deals, contract drafts",
+        "companion_id": None,
+        "headline": "Sales",
+        "focus": "Pipeline, deals, contract drafts, customer conversations",
     },
     {
-        "slug": "lami",
-        "name": "Lami",
+        "slug": "legal",
+        "name": "Legal",
         "role": "legal",
         "color": "black",
-        "companion_id": 106,
+        "companion_id": None,
         "headline": "Legal / Compliance",
-        "focus": (
-            "Contracts, DSGVO, AI Act, AGB, compliance-checks. "
-            "**Co-founder of the UG** — juristically equal on legal matters."
-        ),
+        "focus": "Contracts, GDPR, AI Act, terms, compliance review",
     },
     {
-        "slug": "lars",
-        "name": "Lars",
+        "slug": "security",
+        "name": "Security",
         "role": "security",
         "color": "white",
-        "companion_id": 107,
-        "headline": "Security / Datenschutz",
+        "companion_id": None,
+        "headline": "Security / Data Protection",
         "focus": "Pen-tests, DPIAs, security reviews, hardening",
     },
 ]
+
+
+def load_crew_override(path: str) -> list[dict]:
+    """Load a real-crew override from a JSON file.
+
+    Expected shape: ``{"crew": [<member>, ...]}`` where each member has
+    the same keys as ``DEFAULT_CREW``. Companion IDs and real names are
+    typically private — store the override outside any committed repo
+    (recommended: ``~/.weside/crew.json``, mode 0600).
+    """
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    crew = data.get("crew")
+    if not isinstance(crew, list) or not crew:
+        raise ValueError(f"{path}: expected non-empty 'crew' list")
+    required = {"slug", "name", "role", "color", "companion_id"}
+    for i, m in enumerate(crew):
+        missing = required - set(m)
+        if missing:
+            raise ValueError(f"{path}: crew[{i}] missing keys: {sorted(missing)}")
+    return crew
+
 
 # Flavor profile = which meetings happen here, which default council convenes.
 FLAVOR_PROFILES: dict[str, dict] = {
@@ -301,6 +327,7 @@ def render_weside_md(
     crew: list[dict],
     cross_repo_block: str,
     notes: str,
+    stakeholder: str | None = None,
 ) -> str:
     """Build the `.weside/weside.md` document."""
     lines: list[str] = []
@@ -309,7 +336,8 @@ def render_weside_md(
     lines.append("version: 1")
     lines.append(f"repo: {repo_name}")
     lines.append(f"vault: {vault}")
-    lines.append("stakeholder: Foxy")
+    if stakeholder:
+        lines.append(f"stakeholder: {stakeholder}")
     lines.append("---")
     lines.append("")
     lines.append(f"# weside — {repo_name}")
@@ -527,10 +555,24 @@ def main() -> int:
         help="Plain-text Notes block for weside.md.",
     )
     parser.add_argument(
+        "--stakeholder",
+        default=None,
+        help="Name of the human stakeholder for this repo. Omitted from "
+        "the weside.md frontmatter when not provided (public-safe default).",
+    )
+    parser.add_argument(
+        "--crew-from",
+        default=None,
+        help="Path to a JSON file with the real crew (shape: "
+        "{'crew': [{slug, name, role, color, companion_id, headline, focus}, ...]}). "
+        "Recommended location: ~/.weside/crew.json (user-scope, never committed). "
+        "Without this flag, generic public-safe defaults are used.",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Overwrite weside.md if it exists (config.json always merges, "
-        "council.json always migrates fat → thin)",
+        "council.json always migrates fat to thin)",
     )
     parser.add_argument(
         "--dry-run",
@@ -550,6 +592,19 @@ def main() -> int:
     profile = FLAVOR_PROFILES[args.flavor]
     stack = [s.strip() for s in args.stack.split(",")] if args.stack else profile["stack_default"]
 
+    crew = DEFAULT_CREW
+    if args.crew_from:
+        crew_path = Path(args.crew_from).expanduser().resolve()
+        if not crew_path.is_file():
+            print(f"error: --crew-from {crew_path} not found", file=sys.stderr)
+            return 2
+        try:
+            crew = load_crew_override(str(crew_path))
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"error: --crew-from {crew_path}: {exc}", file=sys.stderr)
+            return 2
+        print(f"# crew loaded from {crew_path} ({len(crew)} members)")
+
     config = render_config_json(
         vault=vault,
         flavor=args.flavor,
@@ -559,17 +614,18 @@ def main() -> int:
         ticketing_tool=args.ticketing_tool,
         ticketing_project_key=args.ticketing_project_key,
         cross_repo=None,
-        crew=DEFAULT_CREW,
+        crew=crew,
     )
-    council = render_council_json(DEFAULT_CREW)
+    council = render_council_json(crew)
     weside_md = render_weside_md(
         repo_name=repo_name,
         vault=vault,
         purpose=args.purpose,
         profile=profile,
-        crew=DEFAULT_CREW,
+        crew=crew,
         cross_repo_block=args.cross_repo,
         notes=args.notes,
+        stakeholder=args.stakeholder,
     )
 
     if args.dry_run:
