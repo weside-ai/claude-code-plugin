@@ -10,8 +10,8 @@ This page maps the full pipeline and explains where each skill fits. For learnin
 
 ```mermaid
 flowchart LR
-    V[Vision] --> R[/we:refine<br/>interactive]
-    R --> S[/we:story<br/>autonomous]
+    V[Vision] --> R["/we:refine<br/>interactive"]
+    R --> S["/we:story<br/>autonomous"]
     S --> M[User merges PR<br/>+ closes ticket]
     M --> D[Done]
 
@@ -55,14 +55,14 @@ You hand the ticket key to `/we:story`. It runs the entire build pipeline autono
 
 ```mermaid
 flowchart TB
-    Start[/we:story TICKET/] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
+    Start["/we:story TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
     DoR --> Dev[Step 2: Develop<br/>phase by phase from plan]
     Dev --> AC[Step 3: AC verification<br/>BLOCKING checkpoint]
     AC --> Simp[Step 4: Simplify<br/>code quality pass]
     Simp --> Gates[Step 5: Quality gates<br/>PARALLEL]
-    Gates --> Review[/we:review/]
-    Gates --> Static[/we:static/]
-    Gates --> Test[/we:test/]
+    Gates --> Review["/we:review"]
+    Gates --> Static["/we:static"]
+    Gates --> Test["/we:test"]
     Review & Static & Test --> Docs[Step 6: /we:docs<br/>doc-architect proposes diffs]
     Docs --> PR[Step 7: /we:pr<br/>verifies all gates pass]
     PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>max 3 cycles]
@@ -132,32 +132,32 @@ The pipeline above is the spine. The standalone skills serve specific needs arou
 ```mermaid
 flowchart TB
     subgraph spine[Pipeline spine]
-        refine[/we:refine/]
-        story[/we:story/]
-        cireview[/we:ci-review<br/>inline in /we:story]
+        refine["/we:refine"]
+        story["/we:story"]
+        cireview["/we:ci-review<br/>inline in /we:story"]
     end
     subgraph deliberation[Deliberation]
-        council[/we:council/]
-        meet[/we:meet/]
+        council["/we:council"]
+        meet["/we:meet"]
     end
     subgraph process[Process improvement]
-        sm[/we:sm<br/>retro after something broke/]
-        arch[/we:arch<br/>architecture decisions/]
+        sm["/we:sm<br/>retro after something broke"]
+        arch["/we:arch<br/>architecture decisions"]
     end
     subgraph review[Review + audit]
-        docimprove[/we:doc-improve/]
-        audit[/we:audit/]
-        auditarch[/we:audit-architecture/]
-        find[/we:find-dead-code/]
-        smoke[/we:smoketest/]
+        docimprove["/we:doc-improve"]
+        audit["/we:audit"]
+        auditarch["/we:audit-architecture"]
+        find["/we:find-dead-code"]
+        smoke["/we:smoketest"]
     end
     subgraph framework[Framework]
-        setup[/we:setup<br/>once per project/]
-        onboard[/we:onboarding/]
-        sideload[/we:sideload/]
+        setup["/we:setup<br/>once per project"]
+        onboard["/we:onboarding"]
+        sideload["/we:sideload"]
     end
     subgraph weside[Optional: weside]
-        materialize[/we:materialize/]
+        materialize["/we:materialize"]
     end
 
     setup --> framework

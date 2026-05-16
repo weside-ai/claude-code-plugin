@@ -12,10 +12,10 @@ For the underlying council mechanic, see [companion-framework.md](companion-fram
 
 ```mermaid
 flowchart TB
-    V[/we:meet vision<br/>Saga-level<br/>weeks-months horizon] --> I[/we:meet initiative<br/>Epic-level<br/>days-weeks horizon]
-    I --> R[/we:meet refinement<br/>Story-level<br/>hours-days horizon]
+    V["/we:meet vision<br/>Saga-level<br/>weeks-months horizon"] --> I["/we:meet initiative<br/>Epic-level<br/>days-weeks horizon"]
+    I --> R["/we:meet refinement<br/>Story-level<br/>hours-days horizon"]
     R --> Refine[hands off to /we:refine<br/>→ ticket + plan]
-    Refine --> Story[/we:story<br/>→ implementation]
+    Refine --> Story["/we:story<br/>→ implementation"]
 ```
 
 Each meeting answers a different question:

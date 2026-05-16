@@ -14,7 +14,7 @@ For the upgrade journey itself, see [upgrade-paths.md](upgrade-paths.md). For th
 
 ```mermaid
 flowchart LR
-    CC[Claude Code<br/>your session] --> Skill[/we:* skill/]
+    CC[Claude Code<br/>your session] --> Skill["/we:* skill"]
     Skill -->|standalone| LocalFS[Local files<br/>.weside/, docs/, .claude/]
     Skill -->|with account| MCPClient[MCP client<br/>built into Claude Code]
     MCPClient -->|OAuth| MCPServer[weside-mcp<br/>server]

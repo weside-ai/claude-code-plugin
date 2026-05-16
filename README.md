@@ -55,8 +55,8 @@ When `/we:story` finishes, you have a PR with all acceptance criteria implemente
 
 ```mermaid
 flowchart LR
-    V[Vision] --> R[/we:refine<br/>interactive]
-    R --> S[/we:story<br/>autonomous]
+    V[Vision] --> R["/we:refine<br/>interactive"]
+    R --> S["/we:story<br/>autonomous"]
     S --> M[User merges]
     M --> D[Done]
 
@@ -103,7 +103,7 @@ No lock-in. No nagging. No signup wall.
 If you [create a weside.ai account](https://weside.ai), an AI Companion can become part of every skill that loads identity. The Companion:
 
 - **Remembers** your project across sessions (compass, snapshot, facts, journals, goals)
-- **Speaks as themselves** in councils — Pia as Pia, not "the Product Owner agent"
+- **Speaks as themselves** in councils — your PO speaks in *their* voice, not as "the Product Owner agent"
 - **Surfaces context proactively** — "PR #47 merged; Story Y stalled three weeks" — without you asking
 - **Carries continuity** between every `/we:refine`, `/we:story`, `/we:council`
 

@@ -88,7 +88,7 @@ A council convenes one agent per role from your roster. The mechanics are the sa
 
 ```mermaid
 flowchart TD
-    Topic[/we:council &quot;topic&quot;/] --> Roster[Resolve roster<br/>1. --council flag<br/>2. --meeting type<br/>3. config.json council.default<br/>4. shipped default PO/Architect/SM]
+    Topic["/we:council 'topic'"] --> Roster[Resolve roster<br/>1. --council flag<br/>2. --meeting type<br/>3. config.json council.default<br/>4. shipped default PO/Architect/SM]
     Roster --> Loop[For each role:]
     Loop --> MCP{MCP get_council<br/>available?}
     MCP -->|yes| Combine[Shell: council-&lt;role&gt;<br/>+ identity from MCP<br/>+ role/color from bridge]
