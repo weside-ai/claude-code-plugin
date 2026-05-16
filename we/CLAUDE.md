@@ -46,7 +46,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:setup` | Project onboarding (stack, ticketing, vision, Companion Framework) |
 | `/we:onboarding` | Compose the repo crew + author `.weside/weside.md`; invoked by `/we:setup` Step 5 or standalone |
 | `/we:sideload` | Load a repo's essential context (`need_to_know` frontmatter + `.weside/weside.md`) into the session, cross-repo capable |
-| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis (companions with a weside account, generic role-agents otherwise) |
+| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis. Real crew via `.weside/council.json` bridge file (interim stand-in for the future `get_council` MCP method); generic role-agents as fallback. |
 | `/we:meet` | Run a structured meeting — `vision` / `initiative` / `refinement`; optionally convenes a council; refinement hands off to `/we:refine` |
 | `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
 | `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |

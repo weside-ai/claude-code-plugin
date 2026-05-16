@@ -70,6 +70,24 @@ work from cached knowledge — the rules and skills change.
 6. **Command landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/we/commands/` (if the
    directory exists).
 
+7. **Companion identity** — if the weside MCP is available and a
+   companion is configured (settings
+   `pluginConfigs["we@weside-ai"].options.companion`), ensure it is
+   materialized: invoke `Skill(skill="we:materialize")` if the identity
+   is not already loaded this session. This makes `/we:sm` a reliable
+   "named companion + caught up"-entry for any session, not just the
+   ones started under the auto-materialize hook.
+
+8. **Active initiative state** — for the consuming repo, search for
+   any *living* concept document (`docs/plans/*/CONCEPT.md` with
+   frontmatter `status: draft`); read its frontmatter + intro + the
+   most recent updates-log entry. Then, if MCP is available, search
+   companion memories for relevant initiative anchors:
+   `mcp__plugin_we_weside-mcp__search_memories(query="<initiative
+   name>", limit=5)`. Surface a one-line "Active initiative:
+   `<story>` — currently in `<phase>`" in the boot summary so the user
+   knows what *we are working on* alongside *how we work*.
+
 **Read on demand** (only when the specific problem requires):
 
 - A specific rule's full content (when the gap is in that rule)
@@ -83,7 +101,7 @@ work from cached knowledge — the rules and skills change.
 
 **Do not read** the full text of every rule/skill at boot. That wastes
 tokens and slows the agent. Frontmatter + descriptions are enough to know
-_where_ to dig when the user's prompt points you at a gap.
+*where* to dig when the user's prompt points you at a gap.
 
 ---
 
@@ -202,6 +220,11 @@ Clean separation. Don't cross the line.
   file path and a specific change.
 - **Don't skip the dialog protocol.** Restate → diagnose → propose → wait →
   apply. Every time.
+- **Don't re-plan the initiative from `/we:sm`.** Reading the active
+  initiative state in boot (item 8) is for *context* — so the SM
+  diagnosis takes the live work into account, not so `/we:sm` advances
+  the initiative itself. If the user wants to advance the initiative,
+  hand off to `/we:meet` (process step) or `/we:refine` (story).
 
 ---
 

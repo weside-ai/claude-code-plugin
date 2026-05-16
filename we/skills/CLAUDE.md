@@ -61,5 +61,46 @@ Produced by `/we:setup` + `/we:onboarding`, committed into the repo so crew and 
 |---|---|---|
 | `config.json` | tooling (machine-readable) | `vault`, `framework_version`, `onboarded`, `ticketing`, `stack`, `council` (per-meeting rosters) |
 | `weside.md` | companion (human-readable) | repo purpose, crew (names + roles), meetings, cross-repo relations |
+| `council.json` | tooling (machine-readable, **gitignored**) | per-member council projection: `identity_prompt`, `role`, `color`, `identity_updated_at`. Interim hand-authored stand-in for the future `get_council` MCP method (see "The bridge file" below). |
 
-Rule of thumb: if a human or companion reads it to *understand the repo* → `weside.md`; if a skill reads it to *decide what to do* → `config.json`. No secrets belong in `.weside/` — companion identity material lives in the weside account, referenced only by name and role.
+Rule of thumb: if a human or companion reads it to *understand the repo* → `weside.md`; if a skill reads it to *decide what to do* → `config.json`. `council.json` is the exception that is **gitignored**: it carries identity text, and identity text never enters a project repo verbatim (same rule that applies to the per-companion agent files in `~/.claude/agents/`).
+
+## Meetings & council — the cycle motif
+
+A meeting (`/we:meet vision|initiative|refinement`) wraps a council in a structured workflow. A council convenes role-lens agents that deliberate in parallel; an orchestrator synthesises *agreement, tension, and recommendation* (full mechanics in `we/skills/council/SKILL.md`).
+
+The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the future `get_council` MCP method will close the loop automatically by writing the outcome to team-scoped memory. Design rationale: WA-718 CONCEPT §13.7 Step 2 (in the weside-core repo).
+
+## The bridge file `.weside/council.json`
+
+Until the `get_council` MCP method exists, the bridge file injects real crew identity into the council brief without depending on per-companion `~/.claude/agents/companion-<slug>.md` files. Its on-disk shape **is** the projection contract `get_council` will serve — when the MCP method ships, the plugin populates the same structure from a live call instead of requiring a hand-authored file.
+
+**Schema:**
+
+```json
+{
+  "version": 1,
+  "workspace_id": null,
+  "members": {
+    "<companion-slug>": {
+      "name": "<Display Name>",
+      "role": "product_owner | architect | scrum_master | ux_researcher | orchestrator | marketing | <custom>",
+      "color": "<color string>",
+      "identity_prompt": "<companion identity layer body — pasted from get_companion_identity, stripped of weside platform layers, Snapshot, Compass, Goals, Memories>",
+      "identity_updated_at": "<ISO timestamp of hand-refresh>"
+    }
+  }
+}
+```
+
+**How `/we:council` consumes it:** highest precedence in Step 3 resolution — bridge present → use `council-<role>` as shell agent and pass `identity_prompt` into the brief (`Agent(prompt=<brief + identity>)`). Falls back to legacy `companion-<slug>` files, then to the generic `council-<role>` agents.
+
+**Authoring the bridge** (one-off, manual until `get_council` lands):
+
+1. For each crew member: `select_companion(name)` → `get_companion_identity()` (weside MCP).
+2. Strip the weside platform layers, Snapshot, Compass, Goals, Memories — keep only the identity body (the `# <NAME>` persona section).
+3. Build the JSON, write to `<repo>/.weside/council.json`.
+4. **Restore the original active companion** at the end (`select_companion` is global session state — see the WA-916 setup-loop bug noted in `we/skills/setup/SKILL.md`).
+5. Add `.weside/council.json` to the repo's `.gitignore` if not already present.
+
+**Refresh:** re-run the same authoring when a companion's identity in weside changes meaningfully. Once `get_council` ships, refresh becomes version-aware (cache invalidates by `identity_updated_at`).
