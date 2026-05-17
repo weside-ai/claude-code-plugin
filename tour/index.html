@@ -214,11 +214,13 @@
   /* ─── 2. BIG PICTURE — full hierarchy ─── */
   .hierarchy {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 0.6rem;
     max-width: 1300px;
     width: 100%;
     margin-bottom: 1.6rem;
+    position: relative;
+    padding-top: 64px; /* room for hovering token */
   }
   .alt-card {
     background: var(--bg-card);
@@ -229,9 +231,59 @@
     flex-direction: column;
     gap: 0.35rem;
     position: relative;
-    transition: transform 0.2s ease, border-color 0.2s ease;
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.55s ease, transform 0.55s ease, border-color 0.25s ease, box-shadow 0.3s ease;
   }
+  section#overview.in .alt-card { opacity: 1; transform: translateY(0); }
+  section#overview.in .alt-card:nth-child(1) { transition-delay: 0.05s; }
+  section#overview.in .alt-card:nth-child(2) { transition-delay: 0.18s; }
+  section#overview.in .alt-card:nth-child(3) { transition-delay: 0.31s; }
+  section#overview.in .alt-card:nth-child(4) { transition-delay: 0.44s; }
+  section#overview.in .alt-card:nth-child(5) { transition-delay: 0.57s; }
+  section#overview.in .alt-card:nth-child(6) { transition-delay: 0.70s; }
   .alt-card:hover { transform: translateY(-2px); border-color: var(--line-bright); }
+  .alt-card.token-active {
+    border-color: var(--gold-glow);
+    box-shadow: 0 0 0 1px var(--gold), 0 6px 24px rgba(255, 217, 102, 0.18);
+    transform: translateY(-3px);
+  }
+
+  /* Lifecycle token — walks through the six altitudes */
+  .flow-token {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--gold-glow), var(--gold) 70%);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 22px rgba(255, 217, 102, 0.55), 0 4px 14px rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    z-index: 3;
+    transform: translateX(0);
+    transition: transform 0.85s cubic-bezier(0.65, 0.05, 0.35, 1);
+    pointer-events: none;
+    opacity: 0;
+  }
+  .flow-token.armed { opacity: 1; }
+  .flow-token .token-label {
+    position: absolute;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+    color: var(--gold-glow);
+    text-transform: uppercase;
+    white-space: nowrap;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.85);
+  }
   .alt-card .alt-altitude {
     font-family: ui-monospace, Menlo, monospace;
     font-size: 0.66rem;
@@ -290,7 +342,29 @@
     font-size: 0.78rem;
     letter-spacing: 0.06em;
   }
-  .hierarchy-flow .arrow { color: var(--fg-muted); margin: 0 0.8rem; }
+  .hierarchy-flow .arrow {
+    color: var(--fg-muted);
+    margin: 0 0.8rem;
+    display: inline-block;
+    transition: color 0.4s ease, transform 0.4s ease, text-shadow 0.4s ease;
+  }
+  .hierarchy-flow .arrow.lit {
+    color: var(--gold-glow);
+    transform: scale(1.25);
+    text-shadow: 0 0 12px rgba(255, 217, 102, 0.6);
+  }
+
+  /* Honor reduced-motion + small viewports for the token walker */
+  @media (prefers-reduced-motion: reduce) {
+    .alt-card { opacity: 1 !important; transform: none !important; transition: border-color 0.25s ease, box-shadow 0.3s ease; }
+    .flow-token { display: none !important; }
+    .hierarchy-flow .arrow.lit { color: var(--fg-muted); transform: none; text-shadow: none; }
+  }
+  @media (max-width: 900px) {
+    .hierarchy { padding-top: 0; }
+    .flow-token { display: none !important; }
+    .hierarchy-flow .arrow.lit { color: var(--fg-muted); transform: none; text-shadow: none; }
+  }
 
   .boundary-note {
     background: rgba(255, 112, 112, 0.07);
@@ -917,6 +991,10 @@
     <p class="lede">Agentic Product Ownership treats software as a chain of decisions at increasing resolution. Each Plan altitude has both a <strong style="color:var(--fg)">Solo</strong> skill (formulate the artifact) and a <strong style="color:var(--fg)">Meet</strong> skill (Council decomposes it into the next altitude down). Build is autonomous; Deliver is human-only. You drop in at whichever altitude your project actually needs.</p>
 
     <div class="hierarchy">
+      <div class="flow-token" id="flow-token" aria-hidden="true">
+        <span class="token-glyph">📄</span>
+        <span class="token-label">PRD</span>
+      </div>
       <div class="alt-card saga">
         <div class="alt-altitude">VISION</div>
         <div class="alt-horizon">~ multi-year</div>
@@ -1563,6 +1641,111 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("convene").click();
   }
 });
+
+//
+// Overview lifecycle animation — token walks through six altitudes
+//
+(function setupOverviewAnimation() {
+  const overviewSection = document.getElementById("overview");
+  if (!overviewSection) return;
+  const hierarchy = overviewSection.querySelector(".hierarchy");
+  const cards = overviewSection.querySelectorAll(".alt-card");
+  const arrows = overviewSection.querySelectorAll(".hierarchy-flow .arrow");
+  const token = overviewSection.querySelector("#flow-token");
+  if (!hierarchy || !cards.length || !token) return;
+
+  const glyph = token.querySelector(".token-glyph");
+  const label = token.querySelector(".token-label");
+
+  // One stage per altitude — symbol + label that match the card it sits over.
+  const stages = [
+    { glyph: "📄", label: "PRD" },
+    { glyph: "📦", label: "SAGA" },
+    { glyph: "🎯", label: "EPIC" },
+    { glyph: "✂️", label: "STORY" },
+    { glyph: "🚀", label: "CODE" },
+    { glyph: "✅", label: "PR" }
+  ];
+
+  let currentIdx = 0;
+  let walkerTimer = null;
+
+  function positionToken(idx) {
+    const card = cards[idx];
+    if (!card) return;
+    const hierarchyRect = hierarchy.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const x = (cardRect.left - hierarchyRect.left) + (cardRect.width / 2) - (token.offsetWidth / 2);
+    token.style.transform = "translateX(" + x + "px)";
+    glyph.textContent = stages[idx].glyph;
+    label.textContent = stages[idx].label;
+    cards.forEach(c => c.classList.remove("token-active"));
+    card.classList.add("token-active");
+    arrows.forEach((a, i) => a.classList.toggle("lit", i === idx));
+  }
+
+  function startWalker() {
+    if (walkerTimer) return;
+    token.classList.add("armed");
+    positionToken(currentIdx);
+    walkerTimer = setInterval(() => {
+      currentIdx = (currentIdx + 1) % stages.length;
+      positionToken(currentIdx);
+    }, 1500);
+  }
+
+  function stopWalker() {
+    if (walkerTimer) {
+      clearInterval(walkerTimer);
+      walkerTimer = null;
+    }
+    token.classList.remove("armed");
+    cards.forEach(c => c.classList.remove("token-active"));
+    arrows.forEach(a => a.classList.remove("lit"));
+  }
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const smallViewport = window.matchMedia("(max-width: 900px)");
+  function walkerAllowed() {
+    return !reducedMotion.matches && !smallViewport.matches;
+  }
+
+  // Reveal cards as soon as overview enters the viewport; start walker once cards
+  // have settled. We use thresholds rather than a single value to ride the
+  // scroll-snap edges cleanly.
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+        overviewSection.classList.add("in");
+        if (walkerAllowed()) {
+          // Wait for the cascade to finish before the walker glows over them.
+          setTimeout(() => {
+            if (overviewSection.classList.contains("in")) startWalker();
+          }, 950);
+        }
+      } else if (entry.intersectionRatio < 0.15) {
+        stopWalker();
+      }
+    });
+  }, { threshold: [0.15, 0.35, 0.6] });
+
+  observer.observe(overviewSection);
+
+  // Re-anchor token if the layout shifts (resize, fullscreen toggle).
+  let resizeRaf = null;
+  window.addEventListener("resize", () => {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      if (walkerTimer) positionToken(currentIdx);
+    });
+  });
+
+  // React to user toggling reduced-motion mid-session.
+  reducedMotion.addEventListener("change", () => {
+    if (!walkerAllowed()) stopWalker();
+    else if (overviewSection.classList.contains("in")) startWalker();
+  });
+})();
 </script>
 </body>
 </html>
