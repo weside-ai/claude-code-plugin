@@ -4,7 +4,7 @@
 
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> 🎬 **[Take the interactive tour →](https://weside-ai.github.io/claude-code-plugin/tour/)** — five-minute walkthrough: vision → epic → story, council live demo, architecture. Runs in your browser, no install. *(Source: [`tour/`](tour/))*
+> 🎬 **[Take the interactive tour →](https://plugin.weside.ai/tour/)** — five-minute walkthrough: vision → epic → story, council live demo, architecture. Runs in your browser, no install. *(Source: [`tour/`](tour/))*
 
 ---
 
