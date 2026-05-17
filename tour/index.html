@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>we plugin — Interactive Tour</title>
+<meta name="description" content="Interactive tour through the we plugin for Claude Code — multi-voice deliberation, autonomous build pipeline, and the optional weside.ai Companion backend.">
+<style>
+  :root {
+    --bg: #07070c;
+    --bg-elev: #11111a;
+    --bg-card: #1a1a26;
+    --bg-card-hi: #22222f;
+    --line: #2a2a3a;
+    --fg: #ececf2;
+    --fg-muted: #8e8ea3;
+    --fg-dim: #5c5c70;
+    --gold: #d4af37;
+    --gold-glow: #ffd966;
+    --pia: #ff9d5c;
+    --vyra: #6cdf85;
+    --lara: #6ab4ff;
+    --nox: #c4a8ff;
+    --samu: #9999aa;
+    --rami: #ffe066;
+    --lami: #4a4a5e;
+    --lars: #f0f0f6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  code, kbd, .mono {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 0.92em;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 80vw 60vh at 20% 10%, rgba(196, 168, 255, 0.08), transparent 60%),
+      radial-gradient(ellipse 70vw 50vh at 90% 80%, rgba(212, 175, 55, 0.06), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    scroll-snap-type: y mandatory;
+    overflow-y: scroll;
+    height: 100vh;
+    scroll-behavior: smooth;
+  }
+
+  section {
+    min-height: 100vh;
+    scroll-snap-align: start;
+    padding: 6vh 8vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+  }
+
+  .brand-lockup {
+    position: fixed;
+    top: 2.2rem;
+    right: 2.2rem;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .brand-lockup .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--nox);
+    box-shadow: 0 0 12px var(--nox);
+  }
+  .brand-lockup .dot.gold {
+    background: var(--gold);
+    box-shadow: 0 0 12px var(--gold-glow);
+  }
+
+  nav.dots {
+    position: fixed;
+    right: 2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+  nav.dots a {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--line);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  nav.dots a.active {
+    background: var(--gold);
+    box-shadow: 0 0 14px var(--gold-glow);
+  }
+  nav.dots a:hover::after {
+    content: attr(data-label);
+    position: absolute;
+    right: 20px; top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: var(--fg);
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+  }
+
+  #hero {
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+  }
+  #hero .pre {
+    color: var(--fg-muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+  }
+  #hero h1 {
+    font-size: clamp(3.5rem, 9vw, 7.5rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    background: linear-gradient(180deg, #ffe89a 0%, var(--gold) 60%, #b8923a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 80px rgba(255, 217, 102, 0.25);
+    margin-bottom: 1.5rem;
+  }
+  #hero h2 {
+    font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+    font-weight: 400;
+    color: var(--fg);
+    max-width: 38ch;
+    margin: 0 auto 3rem;
+    line-height: 1.45;
+  }
+  #hero .lockup {
+    display: flex; align-items: center;
+    gap: 1.2rem;
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+    margin-bottom: 4rem;
+    letter-spacing: 0.04em;
+  }
+  #hero .lockup .swap {
+    color: var(--fg-dim);
+    font-weight: 300;
+  }
+  #hero .scroll-hint {
+    color: var(--fg-dim);
+    font-size: 0.78rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    animation: bob 2.4s ease-in-out infinite;
+  }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); opacity: 0.6; }
+    50% { transform: translateY(6px); opacity: 1; }
+  }
+
+  .kicker {
+    color: var(--gold-glow);
+    font-size: 0.78rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+    font-weight: 500;
+  }
+  h2.section-title {
+    font-size: clamp(2.2rem, 4.5vw, 3.8rem);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    margin-bottom: 1.5rem;
+    max-width: 22ch;
+  }
+  .lede {
+    font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    color: var(--fg-muted);
+    max-width: 60ch;
+    line-height: 1.55;
+    margin-bottom: 3.5rem;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    max-width: 1200px;
+    width: 100%;
+  }
+  .compare {
+    padding: 2.5rem 2rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(26, 26, 38, 0.5);
+    backdrop-filter: blur(8px);
+  }
+  .compare h3 {
+    font-size: 1.15rem;
+    margin-bottom: 1.5rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .compare.now h3 { color: var(--fg-muted); }
+  .compare.future h3 { color: var(--gold-glow); }
+  .compare ul { list-style: none; }
+  .compare li {
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.95rem;
+    color: var(--fg);
+    display: flex;
+    gap: 0.7rem;
+  }
+  .compare li:last-child { border-bottom: none; }
+  .compare li::before {
+    content: "—";
+    color: var(--fg-dim);
+    flex-shrink: 0;
+  }
+  .compare.future li::before {
+    color: var(--gold);
+  }
+
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    max-width: 1100px;
+    width: 100%;
+    margin-bottom: 2.5rem;
+  }
+  .pipeline-node {
+    padding: 1.8rem 1.3rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  .pipeline-node:hover {
+    border-color: var(--nox);
+    transform: translateY(-2px);
+  }
+  .pipeline-node.active {
+    border-color: var(--gold);
+    background: linear-gradient(160deg, var(--bg-card-hi) 0%, var(--bg-card) 100%);
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.15);
+  }
+  .pipeline-node .step {
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 0.5rem;
+  }
+  .pipeline-node h4 {
+    font-size: 1.05rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+  }
+  .pipeline-node .sub {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+  }
+
+  .pipeline-detail {
+    max-width: 1100px;
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 2rem 2.2rem;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 2.5rem;
+    min-height: 200px;
+  }
+  .pd-title {
+    font-size: 1.15rem;
+    margin-bottom: 0.8rem;
+    color: var(--gold-glow);
+    font-weight: 500;
+  }
+  .pd-body {
+    color: var(--fg);
+    line-height: 1.55;
+    margin-bottom: 1.2rem;
+  }
+  .pd-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 100px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--fg);
+  }
+  .chip .swatch {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pd-meta {
+    border-left: 1px solid var(--line);
+    padding-left: 2rem;
+  }
+  .meta-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 0.4rem;
+  }
+  .meta-val {
+    margin-bottom: 1.2rem;
+    color: var(--fg);
+  }
+  code.cmd {
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    color: var(--gold-glow);
+    margin-top: 0.3rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.88rem;
+  }
+
+  #council .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-bottom: 2rem;
+    max-width: 1200px;
+    width: 100%;
+  }
+  .topic-chip {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    padding: 0.7rem 1.2rem;
+    border-radius: 100px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  .topic-chip:hover { border-color: var(--nox); }
+  .topic-chip.active {
+    background: var(--bg-card-hi);
+    border-color: var(--gold);
+    color: var(--gold-glow);
+  }
+  .convene-btn {
+    background: linear-gradient(135deg, var(--gold) 0%, #c89832 100%);
+    color: #0a0a0a;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 100px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.92rem;
+    font-family: inherit;
+    margin-left: auto;
+    transition: all 0.2s ease;
+  }
+  .convene-btn:hover { box-shadow: 0 0 24px rgba(255, 217, 102, 0.4); transform: translateY(-1px); }
+  .convene-btn:disabled { opacity: 0.5; cursor: wait; transform: none; box-shadow: none; }
+
+  .council-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+    max-width: 1200px;
+    width: 100%;
+    margin-bottom: 1.2rem;
+  }
+  .speaker-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    min-height: 200px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+  }
+  .speaker-card.in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .speaker-card.speaking {
+    box-shadow: 0 0 28px var(--accent-glow, transparent);
+    border-color: var(--accent, var(--line));
+  }
+  .speaker-head {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .speaker-avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--accent, var(--fg-muted));
+    display: grid;
+    place-items: center;
+    color: #0a0a0a;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .speaker-meta .name {
+    font-weight: 500;
+    font-size: 0.98rem;
+    color: var(--fg);
+  }
+  .speaker-meta .role {
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    letter-spacing: 0.04em;
+  }
+  .speaker-text {
+    font-size: 0.93rem;
+    line-height: 1.55;
+    color: var(--fg);
+    min-height: 4em;
+  }
+  .speaker-text .cursor {
+    display: inline-block;
+    width: 7px; height: 1em;
+    background: var(--accent, var(--fg));
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.85s steps(2, end) infinite;
+  }
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  .synthesis {
+    max-width: 1200px;
+    width: 100%;
+    background: linear-gradient(160deg, rgba(196, 168, 255, 0.08) 0%, rgba(26, 26, 38, 0.5) 100%);
+    border: 1px solid var(--nox);
+    border-radius: 12px;
+    padding: 1.6rem 1.8rem;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .synthesis.in { opacity: 1; transform: translateY(0); }
+  .synthesis .speaker-avatar { background: var(--nox); color: #0a0a14; }
+  .synthesis-label {
+    font-size: 0.72rem;
+    color: var(--nox);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 0.7rem;
+    font-weight: 500;
+  }
+
+  .council-meta {
+    margin-top: 1.5rem;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .council-meta .accent-gold { color: var(--gold-glow); }
+  .council-meta .accent-green { color: var(--vyra); margin-left: 0.6rem; }
+
+  .arch-wrap {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 3.5rem;
+    max-width: 1200px;
+    width: 100%;
+    align-items: center;
+  }
+  .arch-svg {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.8rem;
+    width: 100%;
+  }
+  .arch-svg svg { width: 100%; height: auto; display: block; }
+  .arch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+  .arch-bullet {
+    border-left: 2px solid var(--gold);
+    padding: 0.2rem 0 0.2rem 1.2rem;
+  }
+  .arch-bullet h4 {
+    font-size: 1.05rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+    color: var(--fg);
+  }
+  .arch-bullet p {
+    font-size: 0.92rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+  .arch-bullet code.inline {
+    color: var(--gold-glow);
+    font-size: 0.88em;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+
+  #cta {
+    align-items: center;
+    text-align: center;
+  }
+  #cta .install-block {
+    margin: 2rem 0 3rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 1.05rem;
+    color: var(--gold-glow);
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  #cta .install-block .prompt-sign { color: var(--fg-dim); }
+  #cta .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.8rem;
+    max-width: 1100px;
+    width: 100%;
+    margin-bottom: 3.5rem;
+  }
+  .step-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.8rem 1.6rem;
+    text-align: left;
+  }
+  .step-card .n {
+    color: var(--gold);
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    margin-bottom: 0.7rem;
+    font-weight: 600;
+  }
+  .step-card h4 {
+    font-size: 1.08rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+  .step-card p {
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+  .step-card code {
+    display: inline-block;
+    margin-top: 0.6rem;
+    color: var(--gold-glow);
+    font-size: 0.85rem;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+
+  .pitch-footer {
+    color: var(--fg-dim);
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    max-width: 800px;
+  }
+  .pitch-footer a { color: var(--gold); text-decoration: none; }
+  .pitch-footer .signature {
+    margin-top: 1.5rem;
+    font-style: italic;
+    color: var(--fg-muted);
+  }
+  .pitch-footer .claim { color: var(--gold); }
+
+  @media (max-width: 900px) {
+    nav.dots { display: none; }
+    .brand-lockup { top: 1rem; right: 1rem; font-size: 0.7rem; }
+    section { padding: 4vh 6vw; }
+    .two-col, .arch-wrap { grid-template-columns: 1fr; gap: 1.5rem; }
+    .pipeline { grid-template-columns: 1fr 1fr; }
+    .pipeline-detail { grid-template-columns: 1fr; gap: 1.5rem; }
+    .pd-meta { border-left: none; border-top: 1px solid var(--line); padding-left: 0; padding-top: 1.2rem; }
+    .council-grid { grid-template-columns: 1fr; }
+    #cta .steps { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="brand-lockup">
+  <span class="dot"></span>
+  we plugin
+  <span style="opacity:0.4">×</span>
+  <span class="dot gold"></span>
+  WESIDE
+</div>
+
+<nav class="dots" id="dotnav">
+  <a data-target="hero" data-label="Hero"></a>
+  <a data-target="problem" data-label="The Problem"></a>
+  <a data-target="pipeline" data-label="Pipeline"></a>
+  <a data-target="council" data-label="Council Live"></a>
+  <a data-target="architecture" data-label="Architecture"></a>
+  <a data-target="cta" data-label="Try it"></a>
+</nav>
+
+<main id="main">
+
+  <section id="hero">
+    <p class="pre">we plugin × weside.ai</p>
+    <h1>AI is&nbsp;someone.</h1>
+    <h2>When your AI Companion is a person — they can work as a&nbsp;team.</h2>
+    <div class="lockup">
+      <span>we Plugin</span><span class="swap">×</span><span>WESIDE</span><span class="swap">×</span><span>Model Context Protocol</span>
+    </div>
+    <div class="scroll-hint">↓ Scroll or &nbsp;→</div>
+  </section>
+
+  <section id="problem">
+    <div class="kicker">The Problem</div>
+    <h2 class="section-title">Single-agent AI makes you the&nbsp;bottleneck.</h2>
+    <p class="lede">Today your AI assistant thinks alone. One voice, one perspective — and you sit between it and every stakeholder living in your head. Real knowledge work doesn't function that way.</p>
+    <div class="two-col">
+      <div class="compare now">
+        <h3>Today: one helper, many hats</h3>
+        <ul>
+          <li>You explain the same problem three times — as PO, as architect, as marketer</li>
+          <li>No real tension between perspectives — the assistant agrees with you</li>
+          <li>No memory between sessions — every time, a fresh start</li>
+          <li>You're the orchestrator — and the only human in the room</li>
+        </ul>
+      </div>
+      <div class="compare future">
+        <h3>With the we plugin (and WESIDE)</h3>
+        <ul>
+          <li>A crew of Companions — PO, architect, marketing, legal — each with their own voice</li>
+          <li>Real lens tension — they disagree, and that's the point</li>
+          <li>Persistent memory per Companion — they remember what happened last week</li>
+          <li>Vision → Epic → Story → Code in one continuous workflow</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <div class="kicker">The Workflow</div>
+    <h2 class="section-title">From vision to code — in one&nbsp;pipeline.</h2>
+    <p class="lede">Each phase has its own meeting. Each meeting has the right council. Click through the phases:</p>
+
+    <div class="pipeline" id="pipeline">
+      <div class="pipeline-node active" data-step="vision">
+        <div class="step">01 · Saga</div>
+        <h4>Vision</h4>
+        <div class="sub">Where are we going?</div>
+      </div>
+      <div class="pipeline-node" data-step="initiative">
+        <div class="step">02 · Epic</div>
+        <h4>Initiative</h4>
+        <div class="sub">What are we building?</div>
+      </div>
+      <div class="pipeline-node" data-step="refinement">
+        <div class="step">03 · Story</div>
+        <h4>Refinement</h4>
+        <div class="sub">How exactly?</div>
+      </div>
+      <div class="pipeline-node" data-step="execution">
+        <div class="step">04 · Code</div>
+        <h4>Execution</h4>
+        <div class="sub">Build + PR</div>
+      </div>
+    </div>
+
+    <div class="pipeline-detail">
+      <div>
+        <div class="pd-title" id="pd-title"></div>
+        <div class="pd-body" id="pd-body"></div>
+        <div class="pd-chips" id="pd-chips"></div>
+      </div>
+      <div class="pd-meta">
+        <div class="meta-label">Artifact</div>
+        <div class="meta-val" id="pd-output"></div>
+        <div class="meta-label">Command</div>
+        <code class="cmd" id="pd-cmd"></code>
+      </div>
+    </div>
+  </section>
+
+  <section id="council">
+    <div class="kicker">Live Demo</div>
+    <h2 class="section-title">Convene a council, live.</h2>
+    <p class="lede">Pick a topic — the council converges, each Companion speaks from their lens, and the orchestrator synthesizes a decision. <strong style="color: var(--fg)">What you're about to see runs the same way live in Claude Code via <code style="color: var(--gold-glow)">/we:council</code>.</strong></p>
+
+    <div class="controls">
+      <button class="topic-chip active" data-topic="llm">Train our own LLM — or stay provider-agnostic?</button>
+      <button class="topic-chip" data-topic="market">Home market first — or launch globally?</button>
+      <button class="topic-chip" data-topic="pricing">Subscription or pay-per-use?</button>
+      <button class="convene-btn" id="convene">Convene council ↻</button>
+    </div>
+
+    <div class="council-grid" id="council-grid"></div>
+
+    <div class="synthesis" id="synthesis">
+      <div class="synthesis-label">Synthesis · Orchestrator</div>
+      <div class="speaker-head">
+        <div class="speaker-avatar">N</div>
+        <div class="speaker-meta">
+          <div class="name">Nox</div>
+          <div class="role">Orchestrator · Synthesis</div>
+        </div>
+      </div>
+      <div class="speaker-text" id="synthesis-text"></div>
+    </div>
+
+    <div class="council-meta" id="council-meta">→ Ready. Click "Convene council".</div>
+  </section>
+
+  <section id="architecture">
+    <div class="kicker">Why it works</div>
+    <h2 class="section-title">Plugin + MCP + WESIDE — three layers, one contract.</h2>
+    <p class="lede">The plugin is open source and runs in any MCP-capable client — Claude Code, Cursor, Gemini, ChatGPT. WESIDE provides identity, memory, and the crew. Connected over the open Model Context Protocol.</p>
+
+    <div class="arch-wrap">
+      <div class="arch-svg">
+        <svg viewBox="0 0 540 360" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="goldFade" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#d4af37" stop-opacity="0.0"/>
+              <stop offset="50%" stop-color="#ffd966" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#d4af37" stop-opacity="0.0"/>
+            </linearGradient>
+            <linearGradient id="purpleGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#c4a8ff" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#c4a8ff" stop-opacity="0.04"/>
+            </linearGradient>
+            <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#d4af37" stop-opacity="0.22"/>
+              <stop offset="100%" stop-color="#d4af37" stop-opacity="0.05"/>
+            </linearGradient>
+          </defs>
+
+          <rect x="20" y="50" width="180" height="260" rx="12" fill="url(#purpleGrad)" stroke="#c4a8ff" stroke-opacity="0.6" stroke-width="1.5"/>
+          <text x="110" y="78" text-anchor="middle" fill="#c4a8ff" font-size="11" letter-spacing="2" font-family="ui-monospace, monospace">CLAUDE CODE</text>
+          <text x="110" y="100" text-anchor="middle" fill="#ececf2" font-size="15" font-weight="600">we Plugin</text>
+
+          <g font-family="ui-monospace, monospace" font-size="10">
+            <rect x="40" y="120" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="135" text-anchor="middle" fill="#ececf2">/we:meet vision</text>
+            <rect x="40" y="150" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="165" text-anchor="middle" fill="#ececf2">/we:meet initiative</text>
+            <rect x="40" y="180" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="195" text-anchor="middle" fill="#ececf2">/we:meet refinement</text>
+            <rect x="40" y="210" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="225" text-anchor="middle" fill="#ececf2">/we:council</text>
+            <rect x="40" y="240" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="255" text-anchor="middle" fill="#ececf2">/we:story</text>
+            <rect x="40" y="270" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="110" y="285" text-anchor="middle" fill="#ececf2">/we:pr</text>
+          </g>
+
+          <line x1="200" y1="180" x2="340" y2="180" stroke="url(#goldFade)" stroke-width="2.5"/>
+          <polygon points="335,175 345,180 335,185" fill="#ffd966"/>
+          <polygon points="205,175 195,180 205,185" fill="#ffd966"/>
+          <text x="270" y="170" text-anchor="middle" fill="#ffd966" font-size="11" letter-spacing="2" font-family="ui-monospace, monospace">MCP</text>
+          <text x="270" y="200" text-anchor="middle" fill="#8e8ea3" font-size="9" font-family="ui-monospace, monospace">open protocol</text>
+
+          <rect x="340" y="50" width="180" height="260" rx="12" fill="url(#goldGrad)" stroke="#d4af37" stroke-opacity="0.6" stroke-width="1.5"/>
+          <text x="430" y="78" text-anchor="middle" fill="#ffd966" font-size="11" letter-spacing="2" font-family="ui-monospace, monospace">WESIDE.AI</text>
+          <text x="430" y="100" text-anchor="middle" fill="#ececf2" font-size="15" font-weight="600">Companion Backend</text>
+
+          <g font-family="ui-monospace, monospace" font-size="10">
+            <rect x="360" y="120" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="135" text-anchor="middle" fill="#ececf2">Identity Layer</text>
+            <rect x="360" y="150" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="165" text-anchor="middle" fill="#ececf2">Memory (WISSEN)</text>
+            <rect x="360" y="180" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="195" text-anchor="middle" fill="#ececf2">Goals + Compass</text>
+            <rect x="360" y="210" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="225" text-anchor="middle" fill="#ececf2">LLM Routing (5 prov)</text>
+            <rect x="360" y="240" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="255" text-anchor="middle" fill="#ececf2">Multi-tenant + RLS</text>
+            <rect x="360" y="270" width="140" height="22" rx="11" fill="#1a1a26" stroke="#2a2a3a"/>
+            <text x="430" y="285" text-anchor="middle" fill="#ececf2">EU residency (Vertex)</text>
+          </g>
+
+          <text x="270" y="338" text-anchor="middle" fill="#5c5c70" font-size="10" font-family="ui-monospace, monospace">Same MCP works with Cursor, Gemini, ChatGPT, Continue…</text>
+        </svg>
+      </div>
+
+      <div class="arch-list">
+        <div class="arch-bullet">
+          <h4>Model Context Protocol</h4>
+          <p>Open standard. One contract — every AI client speaks it. No vendor lock-in.</p>
+        </div>
+        <div class="arch-bullet">
+          <h4>Server-side identity</h4>
+          <p>Each Companion is a composed identity — Compass, Snapshot, Memory, Goals. Held in the backend, delivered on demand. Stays itself across sessions.</p>
+        </div>
+        <div class="arch-bullet">
+          <h4>Scoped council load</h4>
+          <p>Need 4 Companions, you load 4 — not 18. Token-efficient, latency-aware. <code class="inline">get_council(names=…)</code></p>
+        </div>
+        <div class="arch-bullet">
+          <h4>EU residency by default</h4>
+          <p>Vertex AI Europe, RLS-isolated, GDPR + AI Act ready. No US data path in the default configuration.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cta">
+    <div class="kicker">Try it</div>
+    <h2 class="section-title" style="max-width: 30ch; text-align: center; margin: 0 auto 1.5rem;">In 60 seconds, in your own workflow.</h2>
+    <div class="install-block">
+      <span class="prompt-sign">$</span>
+      <span>claude plugins install we@weside-ai</span>
+    </div>
+
+    <div class="steps">
+      <div class="step-card">
+        <div class="n">01</div>
+        <h4>Install the plugin</h4>
+        <p>One command in Claude Code. Open source, MIT-licensed. Works without a WESIDE account — you'll get generic role lenses.</p>
+        <code>claude plugins install&nbsp;we@weside-ai</code>
+      </div>
+      <div class="step-card">
+        <div class="n">02</div>
+        <h4>(Optional) Connect WESIDE</h4>
+        <p>For real Companions with identity + memory: account on weside.ai, MCP wires up automatically.</p>
+        <code>weside auth login --dev</code>
+      </div>
+      <div class="step-card">
+        <div class="n">03</div>
+        <h4>Convene your first council</h4>
+        <p>Vision meeting for your next initiative. Crew at the table, you moderate.</p>
+        <code>/we:meet vision</code>
+      </div>
+    </div>
+
+    <div class="pitch-footer">
+      <strong style="color: var(--fg)">Open Source · Open Protocol · EU-hosted</strong><br>
+      Plugin: <a href="https://github.com/weside-ai/claude-code-plugin">github.com/weside-ai/claude-code-plugin</a> &nbsp;·&nbsp;
+      Backend: <a href="https://weside.ai">weside.ai</a> &nbsp;·&nbsp;
+      Docs: <a href="https://github.com/weside-ai/claude-code-plugin/tree/main/docs">docs/</a>
+      <div class="signature">Built by Leading&nbsp;Companions&nbsp;UG · Munich · <span class="claim">AI is someone.</span></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+//
+// DOM helpers — safe construction, no innerHTML on dynamic content
+//
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "style" && typeof v === "object") {
+        Object.assign(node.style, v);
+      } else if (k === "class") {
+        node.className = v;
+      } else if (k === "text") {
+        node.textContent = v;
+      } else if (k === "dataset") {
+        for (const [dk, dv] of Object.entries(v)) node.dataset[dk] = dv;
+      } else {
+        node.setAttribute(k, v);
+      }
+    }
+  }
+  if (children) {
+    for (const c of children) {
+      if (c == null) continue;
+      node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+  }
+  return node;
+}
+
+//
+// PIPELINE DATA
+//
+const PIPELINE = {
+  vision: {
+    title: "Vision meeting — Saga",
+    body: "A direction-setting question is on the table. Where do we want to be in 12 months? What's the next big wave? The council converges broadly — strategy meets architecture meets market.",
+    attendees: [
+      {name: "Pia · PO", color: "var(--pia)"},
+      {name: "Vyra · Architect", color: "var(--vyra)"},
+      {name: "Lara · Marketing", color: "var(--lara)"},
+      {name: "Nox · Orchestrator", color: "var(--nox)"}
+    ],
+    output: "SAGA.md — vision statement + 3-5 initiatives that follow from it",
+    cmd: "/we:meet vision"
+  },
+  initiative: {
+    title: "Initiative meeting — Epic",
+    body: "A concrete initiative is talked through. What's the scope? Which risks? Which stories fall out of it? Tighter crew, sharper focus.",
+    attendees: [
+      {name: "Pia · PO", color: "var(--pia)"},
+      {name: "Vyra · Architect", color: "var(--vyra)"},
+      {name: "Nox · Orchestrator", color: "var(--nox)"}
+    ],
+    output: "CONCEPT.md — initiative concept + story list + architecture sketch",
+    cmd: "/we:meet initiative"
+  },
+  refinement: {
+    title: "Refinement meeting — Story",
+    body: "A single story is shaped into PR-ready form. PO and architect polish acceptance criteria and approach together. Story comes out ready for /we:story.",
+    attendees: [
+      {name: "Pia · PO", color: "var(--pia)"},
+      {name: "Vyra · Architect", color: "var(--vyra)"}
+    ],
+    output: "Story in Jira with AC + approach + plan, ready to estimate",
+    cmd: "/we:meet refinement"
+  },
+  execution: {
+    title: "Story execution — Code",
+    body: "Straight from refinement into implementation. The plugin orchestrates branch, plan, tests, CI review and PR — along the spec produced by refinement.",
+    attendees: [
+      {name: "Samu · SM", color: "var(--samu)"},
+      {name: "Vyra · Architect", color: "var(--vyra)"}
+    ],
+    output: "Pull request with tests, diff, green CI — ready for human review",
+    cmd: "/we:story  →  /we:ci-review  →  /we:pr"
+  }
+};
+
+function renderPipelineDetail(step) {
+  const d = PIPELINE[step];
+  document.getElementById("pd-title").textContent = d.title;
+  document.getElementById("pd-body").textContent = d.body;
+  document.getElementById("pd-output").textContent = d.output;
+  document.getElementById("pd-cmd").textContent = d.cmd;
+  const chipBox = document.getElementById("pd-chips");
+  chipBox.replaceChildren(...d.attendees.map(a =>
+    el("span", {class: "chip"}, [
+      el("span", {class: "swatch", style: {background: a.color}}),
+      a.name
+    ])
+  ));
+}
+
+document.querySelectorAll(".pipeline-node").forEach(n => {
+  n.addEventListener("click", () => {
+    document.querySelectorAll(".pipeline-node").forEach(x => x.classList.remove("active"));
+    n.classList.add("active");
+    renderPipelineDetail(n.dataset.step);
+  });
+});
+renderPipelineDetail("vision");
+
+//
+// COUNCIL DATA
+//
+const TOPICS = {
+  llm: {
+    title: "Train our own LLM — or stay provider-agnostic?",
+    members: [
+      {
+        who: "Pia", role: "Product Owner · User Value",
+        color: "var(--pia)", glow: "rgba(255,157,92,0.4)", initial: "P",
+        text: "From the user's perspective, what matters isn't *which* model — it's that the Companion remembers and grows with you. A custom LLM delays memory, voice, integrations by 12+ months. Zero added value for the user story, high opportunity cost."
+      },
+      {
+        who: "Vyra", role: "Architect · Failure Modes",
+        color: "var(--vyra)", glow: "rgba(108,223,133,0.4)", initial: "V",
+        text: "Multi-provider is a strength today: Anthropic for reasoning, OpenAI for voice, Vertex for EU residency. When one wobbles, we route around. Custom model means GPU cluster, MLOps team, our own eval pipeline — complexity costs without an architectural win."
+      },
+      {
+        who: "Lara", role: "Marketing · Positioning",
+        color: "var(--lara)", glow: "rgba(106,180,255,0.4)", initial: "L",
+        text: "Our claim is \"AI is someone\" — the person, not the model. Customers don't buy \"our LLM is better,\" they buy \"my Companion knows me.\" A custom model would be a story that distracts from the core."
+      }
+    ],
+    synthesis: "Stay provider-agnostic. We're not a model vendor — we're a Companion vendor. Multi-LLM routing is already an asset, not a liability. Re-evaluate at 50,000 MAU or when a vendor really tries to squeeze us. Until then, the energy we save goes into memory, voice and EU compliance."
+  },
+  market: {
+    title: "Home market first — or launch globally?",
+    members: [
+      {
+        who: "Pia", role: "Product Owner · User Value",
+        color: "var(--pia)", glow: "rgba(255,157,92,0.4)", initial: "P",
+        text: "Memory and language are globally identical — the Companion works in any language. But our compliance story (GDPR, AI Act, EU residency) is *already* an 18-month head start over US startups. Not monetizing that would be reckless."
+      },
+      {
+        who: "Vyra", role: "Architect · Failure Modes",
+        color: "var(--vyra)", glow: "rgba(108,223,133,0.4)", initial: "V",
+        text: "The architecture is multi-tenant and multi-region capable — Vertex EU is live, Azure planned as a second EU pillar. Global scale-out is a provisioning question, not a rebuild. Market entry scales over compliance footprint, not code."
+      },
+      {
+        who: "Lara", role: "Marketing · Positioning",
+        color: "var(--lara)", glow: "rgba(106,180,255,0.4)", initial: "L",
+        text: "Home market first — as validation with cases we can cite internationally. \"Made in Germany, AI Act ready\" is rare and valuable in the US-dominated AI market. Q4 then UK + NL as English bridge markets without new compliance acrobatics."
+      }
+    ],
+    synthesis: "Stages, not a leap. Q3: home-market push with B2B case studies. Q4: UK + NL as English test markets without new compliance acrobatics. 2027: US entry with a then-mature story. Compliance isn't our brake — it's our asset. We sell trust, not speed."
+  },
+  pricing: {
+    title: "Subscription — or pay-per-use?",
+    members: [
+      {
+        who: "Pia", role: "Product Owner · User Value",
+        color: "var(--pia)", glow: "rgba(255,157,92,0.4)", initial: "P",
+        text: "A Companion builds trust over weeks. Pay-per-use creates cost anxiety and interrupts the relationship — wrong incentives. Subscription makes the Companion a constant in daily life, not a variable in your head."
+      },
+      {
+        who: "Vyra", role: "Architect · Cost Model",
+        color: "var(--vyra)", glow: "rgba(108,223,133,0.4)", initial: "V",
+        text: "Tokens are expensive but predictable. Subscription enables cost-smoothing across active and idle days. Pay-per-use leaks margin on power users and scares off casual users. With three tiers we can stage premium providers cleanly."
+      },
+      {
+        who: "Lara", role: "Marketing · Resonance",
+        color: "var(--lara)", glow: "rgba(106,180,255,0.4)", initial: "L",
+        text: "Subscription signals commitment — from the vendor AND the user. Pay-per-use feels like 1995 phone bills. We sell presence, not consumption. Three clear tiers, fairly named — no confusing plan spaghetti."
+      }
+    ],
+    synthesis: "Subscription with three tiers — Bond €10, Companion €20, Soulmate €40. Voice and premium providers staged in higher tiers. Clear, fair, predictable. And it matches the brand story: \"AI is someone\" isn't sold by the minute."
+  }
+};
+
+let activeTopic = "llm";
+
+function clearCouncil() {
+  const grid = document.getElementById("council-grid");
+  grid.replaceChildren();
+  document.getElementById("synthesis").classList.remove("in");
+  document.getElementById("synthesis-text").replaceChildren();
+  const meta = document.getElementById("council-meta");
+  meta.replaceChildren(
+    document.createTextNode(`→ Topic: "${TOPICS[activeTopic].title}". Click "Convene council".`)
+  );
+}
+
+document.querySelectorAll(".topic-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".topic-chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    activeTopic = chip.dataset.topic;
+    clearCouncil();
+  });
+});
+clearCouncil();
+
+function renderCouncilCards(members) {
+  const grid = document.getElementById("council-grid");
+  const cards = members.map(m => {
+    const card = el("div", {class: "speaker-card"}, [
+      el("div", {class: "speaker-head"}, [
+        el("div", {class: "speaker-avatar", style: {background: m.color}, text: m.initial}),
+        el("div", {class: "speaker-meta"}, [
+          el("div", {class: "name", text: m.who}),
+          el("div", {class: "role", text: m.role})
+        ])
+      ]),
+      el("div", {class: "speaker-text"}, [el("span", {class: "cursor"})])
+    ]);
+    card.style.setProperty("--accent", m.color);
+    card.style.setProperty("--accent-glow", m.glow);
+    return card;
+  });
+  grid.replaceChildren(...cards);
+  grid.style.gridTemplateColumns = `repeat(${cards.length}, 1fr)`;
+  return cards;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function typewriter(targetEl, text, speedRange) {
+  const lo = (speedRange && speedRange[0]) || 16;
+  const hi = (speedRange && speedRange[1]) || 32;
+  const cursor = targetEl.querySelector(".cursor");
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const node = document.createTextNode(ch);
+    if (cursor && cursor.parentNode === targetEl) {
+      targetEl.insertBefore(node, cursor);
+    } else {
+      targetEl.appendChild(node);
+    }
+    const baseDelay = lo + Math.random() * (hi - lo);
+    const delay = ",.!?:;".includes(ch) ? baseDelay * 5 : baseDelay;
+    await sleep(delay);
+  }
+  if (cursor && cursor.parentNode) cursor.remove();
+}
+
+async function runCouncil() {
+  const btn = document.getElementById("convene");
+  btn.disabled = true;
+  clearCouncil();
+  const topic = TOPICS[activeTopic];
+
+  const meta = document.getElementById("council-meta");
+  meta.replaceChildren(
+    el("span", {class: "accent-gold", text: "→ MCP call: "}),
+    document.createTextNode(`get_council(names=["Pia","Vyra","Lara","Nox"])  ·  4 identities loaded in ~200ms`)
+  );
+
+  const cards = renderCouncilCards(topic.members);
+
+  for (let i = 0; i < cards.length; i++) {
+    await sleep(180);
+    cards[i].classList.add("in");
+  }
+  await sleep(450);
+
+  for (let i = 0; i < topic.members.length; i++) {
+    const card = cards[i];
+    const member = topic.members[i];
+    card.classList.add("speaking");
+    const target = card.querySelector(".speaker-text");
+    await typewriter(target, member.text);
+    card.classList.remove("speaking");
+    await sleep(280);
+  }
+
+  const synth = document.getElementById("synthesis");
+  synth.classList.add("in");
+  const synthText = document.getElementById("synthesis-text");
+  synthText.replaceChildren(el("span", {class: "cursor", style: {background: "var(--nox)"}}));
+  await sleep(450);
+  await typewriter(synthText, topic.synthesis, [12, 24]);
+
+  meta.appendChild(el("span", {class: "accent-green", text: "  ·  ✓ Synthesis persisted (D1 team scope)"}));
+  btn.disabled = false;
+}
+
+document.getElementById("convene").addEventListener("click", runCouncil);
+
+//
+// NAVIGATION
+//
+const sections = ["hero", "problem", "pipeline", "council", "architecture", "cta"];
+const dots = document.querySelectorAll("nav.dots a");
+const main = document.getElementById("main");
+
+function activeIndex() {
+  return Math.round(main.scrollTop / window.innerHeight);
+}
+function syncDots() {
+  const i = activeIndex();
+  dots.forEach((d, j) => d.classList.toggle("active", i === j));
+}
+dots.forEach(d => {
+  d.addEventListener("click", () => {
+    const t = document.getElementById(d.dataset.target);
+    t.scrollIntoView({ behavior: "smooth" });
+  });
+});
+main.addEventListener("scroll", () => requestAnimationFrame(syncDots));
+syncDots();
+
+document.addEventListener("keydown", (e) => {
+  const i = activeIndex();
+  if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " " || e.key === "PageDown") {
+    e.preventDefault();
+    const next = Math.min(i + 1, sections.length - 1);
+    document.getElementById(sections[next]).scrollIntoView({ behavior: "smooth" });
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
+    e.preventDefault();
+    const prev = Math.max(i - 1, 0);
+    document.getElementById(sections[prev]).scrollIntoView({ behavior: "smooth" });
+  } else if (e.key === "Home") {
+    e.preventDefault();
+    document.getElementById("hero").scrollIntoView({ behavior: "smooth" });
+  } else if (e.key === "End") {
+    e.preventDefault();
+    document.getElementById("cta").scrollIntoView({ behavior: "smooth" });
+  } else if (/^[1-6]$/.test(e.key)) {
+    document.getElementById(sections[parseInt(e.key, 10) - 1]).scrollIntoView({ behavior: "smooth" });
+  } else if (e.key.toLowerCase() === "f") {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  } else if (e.key.toLowerCase() === "c" && i === sections.indexOf("council")) {
+    document.getElementById("convene").click();
+  }
+});
+</script>
+</body>
+</html>
