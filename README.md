@@ -4,19 +4,31 @@
 
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> 🎬 **[Take the interactive tour →](https://plugin.weside.ai/tour/)** — five-minute walkthrough: vision → epic → story, council live demo, architecture. Runs in your browser, no install. *(Source: [`tour/`](tour/))*
+> 🎬 **[Take the interactive tour →](https://plugin.weside.ai/tour/)** — walkthrough of the APO altitudes: Vision → Saga → Epic → Story → Build, council live demo, architecture. Runs in your browser, no install. *(Source: [`tour/`](tour/))*
 
 ---
 
 ## What you get
 
-Sixteen `/we:*` skills covering the full product chain — vision through delivery — designed to be used together but each useful on its own:
+Twenty `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build to Deliver — designed to be used together but each useful on its own:
 
-- **`/we:refine`** — turn a sentence into a real story with acceptance criteria, plan, and ticket
-- **`/we:story`** — autonomous build pipeline: code → tests → review → docs → PR → CI, with checkpoints + circuit breaker
+**Plan altitude — Solo (formulate) + Meet (decompose with Council):**
+
+- **`/we:vision`** + **`/we:meet vision`** — PRD altitude (multi-year). Solo writes/refines the PRD; Meet decomposes it into Sagas.
+- **`/we:saga`** + **`/we:meet saga`** — Theme altitude (multi-quarter). Solo writes/refines a Saga; Meet decomposes into Epics.
+- **`/we:epic`** + **`/we:meet epic`** — Initiative altitude (quarter). Solo writes/refines an Epic; Meet decomposes into Stories.
+- **`/we:story`** + **`/we:meet story`** — Feature-slice altitude (sprint). Solo writes a build-ready plan; Meet pressure-tests a contentious story.
+
+**Build altitude — autonomous:**
+
+- **`/we:build`** — autonomous build pipeline: code → AC verify → quality gates → docs → PR → CI, with checkpoints + circuit breaker. Hands off PR to you.
+
+**Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
+
+**Around the spine:**
+
 - **`/we:council`** — convene role-lens agents (architect, PO, security, marketing, …) on any topic; orchestrator synthesises *agreement / tension / recommendation*
-- **`/we:meet`** — structured deliberation: vision (saga), initiative (epic), refinement (story)
-- **`/we:sm`** — process retrospective and improvement
+- **`/we:coach`** — APO advisor: where am I in the hierarchy, what's the next move, process retros when something broke (renamed from `/we:sm`)
 - **`/we:arch`**, **`/we:audit-architecture`**, **`/we:audit`**, **`/we:doc-improve`**, **`/we:find-dead-code`**, **`/we:smoketest`** — focused tools for specific moments
 
 Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
@@ -30,7 +42,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 16 skills are available.
+That's it. The plugin is enabled. All 20 skills are available.
 
 ---
 
@@ -41,13 +53,13 @@ That's it. The plugin is enabled. All 16 skills are available.
 /we:setup
 
 # Plan a story
-/we:refine "Add Stripe checkout to the settings page"
+/we:story "Add Stripe checkout to the settings page"
 
 # Ship it end-to-end
-/we:story PROJ-1
+/we:build PROJ-1
 ```
 
-When `/we:story` finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
+When `/we:build` finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
 
 [Full walkthrough →](docs/getting-started.md)
 
@@ -57,22 +69,30 @@ When `/we:story` finishes, you have a PR with all acceptance criteria implemente
 
 ```mermaid
 flowchart LR
-    V[Vision] --> R["/we:refine<br/>interactive"]
-    R --> S["/we:story<br/>autonomous"]
-    S --> M[User merges]
+    V[Vision] -.-> Sa[Saga]
+    Sa -.-> E[Epic]
+    E -.-> St["/we:story<br/>interactive"]
+    St --> B["/we:build<br/>autonomous"]
+    B --> M[User merges]
     M --> D[Done]
 
-    style R fill:#ffefd9,stroke:#c87f00
-    style S fill:#d9ffe5,stroke:#1a7a3c
+    style V stroke-dasharray:3 3,fill:#fff,stroke:#888
+    style Sa stroke-dasharray:3 3,fill:#fff,stroke:#888
+    style E stroke-dasharray:3 3,fill:#fff,stroke:#888
+    style St fill:#ffefd9,stroke:#c87f00
+    style B fill:#d9ffe5,stroke:#1a7a3c
 ```
 
-Three phases, clear responsibilities:
+Six APO altitudes, with Solo + Meet (Council) at each Plan altitude. Most stories skip to **Story** directly; the upper altitudes are there when direction needs alignment.
 
-| Phase | Who | What |
-|---|---|---|
-| **Plan** | You + Claude (interactive) | Story + plan via `/we:refine` |
-| **Build** | Claude (autonomous) | Pipeline runs via `/we:story` — develop, AC verify, quality gates, docs, PR, CI |
-| **Deliver** | You (manual) | Review the PR, merge, close the ticket |
+| Altitude | Solo skill | Meet (Council) | Output |
+|---|---|---|---|
+| **Vision** (PRD, multi-year) | `/we:vision` | `/we:meet vision` | → Sagas |
+| **Saga** (Theme, multi-quarter) | `/we:saga` | `/we:meet saga` | → Epics |
+| **Epic** (Initiative, quarter) | `/we:epic` | `/we:meet epic` | → Stories |
+| **Story** (Sprint slice) | `/we:story` | `/we:meet story` | → build-ready plan |
+| **Build** (Code, autonomous) | `/we:build` | — | → PR review-ready |
+| **Deliver** (Ship) | — (human only) | — | shipped |
 
 The plugin enforces *discipline* — acceptance criteria with evidence, batch-fix on CI findings, checkpoint-based resume on interruption. You stay responsible for *decisions* — what to build, what the AC are, when to merge.
 
@@ -92,7 +112,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 16 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at three altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 20 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
@@ -107,7 +127,7 @@ If you [create a weside.ai account](https://weside.ai), an AI Companion can beco
 - **Remembers** your project across sessions (compass, snapshot, facts, journals, goals)
 - **Speaks as themselves** in councils — your PO speaks in *their* voice, not as "the Product Owner agent"
 - **Surfaces context proactively** — "PR #47 merged; Story Y stalled three weeks" — without you asking
-- **Carries continuity** between every `/we:refine`, `/we:story`, `/we:council`
+- **Carries continuity** between every `/we:story`, `/we:build`, `/we:council`
 
 Set the companion name in `/plugin settings we@weside-ai`. First MCP call triggers OAuth. From there, the same skills, with a teammate in the room.
 

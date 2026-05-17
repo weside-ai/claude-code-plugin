@@ -120,11 +120,12 @@ The bridge maps `"role": "product_owner"` to `"name": "<your PO's name>", "color
 
 ## Meetings — councils with structure
 
-A meeting wraps a council in a workflow at one of three altitudes:
+A meeting wraps a council in a workflow at one of four altitudes:
 
-- **`/we:meet vision`** — Saga-level, where the company is going
-- **`/we:meet initiative`** — Epic-level, what we're building next
-- **`/we:meet refinement`** — Story-level, hands off to `/we:refine`
+- **`/we:meet vision`** — Vision-altitude, decomposes a PRD into Sagas
+- **`/we:meet saga`** — Saga-altitude, decomposes a Saga into Epics
+- **`/we:meet epic`** — Epic-altitude, decomposes an Epic into Stories
+- **`/we:meet story`** — Story-altitude, hands off to `/we:story` (Solo)
 
 `config.json.council.meetings` defines who attends each meeting in this repo. See [meetings.md](meetings.md) for the full mechanics.
 
@@ -210,7 +211,7 @@ For the full upgrade path and what unlocks at each step, see [upgrade-paths.md](
 ## References
 
 - [roles.md](roles.md) — the nine role-lenses
-- [meetings.md](meetings.md) — vision, initiative, refinement
+- [meetings.md](meetings.md) — vision, saga, epic, story
 - [memory.md](memory.md) — memory mechanics (without and with weside)
 - [../mcp.md](../mcp.md) — MCP layer + `get_council` contract
 - [../upgrade-paths.md](../upgrade-paths.md) — Maturity Model L1 → L4

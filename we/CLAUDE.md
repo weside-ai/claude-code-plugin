@@ -8,13 +8,15 @@ Development workflow plugin covering the full product chain: story refinement, d
 
 Unlike AI coding assistants that help developers write code, **Agentic Product Ownership** focuses on the strategic side of product development: shaping products, not just building them.
 
-The plugin covers the full upstream chain:
+The plugin covers the full APO chain — four Plan altitudes, then Build, then Deliver:
 
 ```
-Vision → Epic → Story → Development → Review → Done
-  PO domain              Dev domain          Delivery
-  /we:refine             /we:story           User merges
+Vision → Saga → Epic → Story → Build → Deliver
+  /we:vision   /we:saga  /we:epic   /we:story    /we:build    User merges
+  + /we:meet vision|saga|epic|story (Council at each altitude)
 ```
+
+Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is autonomous (`/we:build`). Deliver is human-only — Claude never merges PRs or closes tickets.
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
@@ -26,16 +28,20 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 
 ```
 /we:setup    → once per project (detect stack, ticketing, optional vision)
-/we:refine   → PO + Claude create story + plan (INTERACTIVE)
-/we:story    → Claude runs full pipeline AUTONOMOUSLY:
+/we:story    → PO + Claude create Story + plan (INTERACTIVE; Solo)
+/we:build    → Claude runs full pipeline AUTONOMOUSLY:
                develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → CodeRabbit on GitHub
                → docs → PR → CI fix → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
 
-**Pipeline:** /we:refine (interactive) → /we:story (autonomous) → User merges (manual)
+**Pipeline:** /we:story (interactive Solo) → /we:build (autonomous) → User merges (manual)
 
-**Context flow:** /we:refine captures session context (why, trade-offs, rejected alternatives) into the plan's Context and Design Decisions sections, so /we:story understands intent — not just spec. After story completion, /we:story proposes journey docs (`docs/architecture/journey-*.md`) for shipped user-facing flows.
+**Upper altitudes** (`/we:vision`, `/we:saga`, `/we:epic` + their Council variants under `/we:meet`) are optional for routine Stories. Reach for them when direction needs alignment, when a Saga needs decomposing into Epics, etc.
+
+**Context flow:** /we:story captures session context (why, trade-offs, rejected alternatives) into the plan's Context and Design Decisions sections, so /we:build understands intent — not just spec. After build completion, /we:build proposes journey docs (`docs/architecture/journey-*.md`) for shipped user-facing flows.
+
+**Internal CLI back-compat:** `scripts/orchestration.py story status|checkpoint|resume` and the SQLite schema still use `story` as the table/command name. The `/we:build` skill is the public surface; the internal state machine keeps its existing name so pre-v2.28.0 checkpoints still resume.
 
 ---
 
@@ -47,11 +53,14 @@ User         → reviews PR, merges, closes ticket
 | `/we:onboarding` | Compose the repo crew + author `.weside/weside.md`; invoked by `/we:setup` Step 5 or standalone |
 | `/we:sideload` | Load a repo's essential context (`need_to_know` frontmatter + `.weside/weside.md`) into the session, cross-repo capable |
 | `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis. Real crew via `get_council` MCP method (preferred) paired with the `.weside/council.json` bridge for role/color/membership; fat-bridge fallback when MCP is offline; nine generic role-agents (`architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `sales`, `legal`) as the no-account path. |
-| `/we:meet` | Run a structured meeting — `vision` / `initiative` / `refinement`; optionally convenes a council; refinement hands off to `/we:refine` |
-| `/we:refine` | Create/refine stories with implementation plans (Context, ACs, User Journey, Design Decisions) |
-| `/we:story` | Full autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
-| `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:story Step 8) |
-| `/we:sm` | Scrum Master: process optimization, retrospectives |
+| `/we:meet` | Run a structured meeting at one of four Plan altitudes — `vision` / `saga` / `epic` / `story`; optionally convenes a council; story hands off to `/we:story` (Solo) |
+| `/we:vision` | Solo PRD-altitude formulation — write/refine `docs/plans/<vision>/PRD.md` |
+| `/we:saga` | Solo Theme-altitude formulation — write/refine `docs/plans/<saga>/SAGA.md` |
+| `/we:epic` | Solo Initiative-altitude formulation — write/refine an Epic plan (`CONCEPT.md` or Jira Epic) |
+| `/we:story` | Solo Story-altitude formulation — write the build-ready plan for one feature slice (Context, ACs, User Journey, Design Decisions). Renamed from `/we:refine` |
+| `/we:build` | Build-altitude autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline). Renamed from the old `/we:story` Build pipeline; internal SQLite tables keep `story` name for back-compat. |
+| `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
+| `/we:coach` | APO Coach: cross-altitude advisor + process retros. Renamed from `/we:sm` (scope-expansion in v2.29.0 / Phase 3 of APO Refactor) |
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap. Real-world use cases + 28-file sweep case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |
@@ -87,8 +96,18 @@ User         → reviews PR, merges, closes ticket
 
 ```
 /we:setup          (once per project)
-/we:refine PROJ-1  (PO creates story + plan)
-/we:story PROJ-1   (autonomous: develop → review → test → PR → CI)
+/we:story PROJ-1   (PO writes the Story + build-ready plan, Solo)
+/we:build PROJ-1   (autonomous: develop → review → test → PR → CI)
+```
+
+For new direction (new product, new theme, new Epic):
+
+```
+/we:vision                       (or /we:meet vision → Sagas)
+/we:saga "Self-host onboarding"  (or /we:meet saga → Epics)
+/we:epic "Ledger Foundation"     (or /we:meet epic → Stories)
+/we:story PROJ-1                 (or /we:meet story for contentious ones)
+/we:build PROJ-1
 ```
 
 Or individual quality gates:

@@ -13,7 +13,7 @@ Welcome. Pick your entry point.
 
 - **[Companion Framework](concepts/companion-framework.md)** — the `.weside/` directory, the bridge file, how skills consume the framework
 - **[Roles](concepts/roles.md)** — the nine role-lenses councils convene
-- **[Meetings](concepts/meetings.md)** — vision / initiative / refinement, when to use which
+- **[Meetings](concepts/meetings.md)** — vision / saga / epic / story, when to use which
 - **[Memory](concepts/memory.md)** — what session-scope vs. persistent memory unlocks
 
 ## I want to go deeper
@@ -41,7 +41,7 @@ Welcome. Pick your entry point.
 
 1. [agenticproductownership.com](https://agenticproductownership.com) (the philosophy)
 2. [Workflow](workflow.md) (what the pipeline does)
-3. [concepts/meetings.md](concepts/meetings.md) (vision/initiative/refinement)
+3. [concepts/meetings.md](concepts/meetings.md) (vision/saga/epic/story)
 4. [Getting Started](getting-started.md) (try it)
 
 ### For a team lead evaluating adoption
@@ -61,7 +61,7 @@ Welcome. Pick your entry point.
 
 ## Without a weside account
 
-Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 16 skills standalone. Councils convene with nine generic role-lenses. Meetings have structure. The pipeline ships stories end-to-end.
+Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 20 skills standalone. Councils convene with nine generic role-lenses. Meetings at four Plan altitudes (Vision/Saga/Epic/Story). The pipeline ships stories end-to-end.
 
 Where weside adds something, the relevant doc explicitly calls out *what's available standalone* and *what unlocks with an account*. No surprises; no lock-in.
 

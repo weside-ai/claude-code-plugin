@@ -21,11 +21,11 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 ## Level 1 — Assisted
 
-**What you have:** the plugin alone. All 16 skills. The full `/we:refine → /we:story → merge` pipeline. Councils with nine generic role-lenses. Meetings at three altitudes.
+**What you have:** the plugin alone. All 20 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with nine generic role-lenses. Meetings at four altitudes.
 
 **What you ship:** stories with plans, code with tests, PRs with reviews, deliberations with synthesis. End-to-end. No external dependency beyond Claude Code itself.
 
-**What you give up:** continuity across sessions. Each `/we:refine` starts cold. Each council convenes voices without memory of past councils. You compensate with discipline — good `docs/plans/` files, well-tended `.weside/weside.md`, careful retros.
+**What you give up:** continuity across sessions. Each `/we:story` starts cold. Each council convenes voices without memory of past councils. You compensate with discipline — good `docs/plans/` files, well-tended `.weside/weside.md`, careful retros.
 
 **Who this fits:**
 - Solo developers
@@ -107,11 +107,14 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 | Skill | L1 | L2 | L3 | L4 |
 |---|---|---|---|---|
-| `/we:refine` | ✓ generic | + memory grounding | + proactive context | + team memory |
-| `/we:story` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past stories | + team patterns |
+| `/we:vision` | ✓ generic PRD frame | + Companion identity | + proactive drift surfacing | + team-shared vision |
+| `/we:saga` | ✓ generic Saga frame | + Companion identity | + memory of past Sagas | + team-scoped themes |
+| `/we:epic` | ✓ generic Epic frame | + Companion identity | + memory of past Epics | + cross-team coordination |
+| `/we:story` | ✓ generic | + memory grounding | + proactive context | + team memory |
+| `/we:build` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past builds | + team patterns |
 | `/we:council` | ✓ generic role-agents | + real Companion voices | + memory of past councils | + write-back, team lenses |
 | `/we:meet` | ✓ structured workflows | + named Companions | + continuity across meetings | + cross-team coordination |
-| `/we:sm` | ✓ rules + landscape | + Companion-as-SM identity | + proactive process drift surfacing | + team-wide process awareness |
+| `/we:coach` | ✓ rules + landscape | + Companion-as-coach identity | + proactive process drift surfacing | + team-wide process awareness |
 | `/we:arch` | ✓ technical guidance | + Companion-as-architect identity | + memory of past ADRs | + team architectural history |
 | `/we:sideload` | ✓ legacy mode | + crew loaded | + Companion-knows-the-target-repo | + cross-team crew shared |
 

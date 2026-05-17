@@ -1,6 +1,6 @@
 # The Workflow
 
-Agentic Product Ownership has three phases — *plan*, *build*, *deliver*. The plugin gives you one skill per phase, plus a deeper pipeline inside the build phase that runs autonomously when you trigger it.
+Agentic Product Ownership has three phases — *plan*, *build*, *deliver*. The plugin gives you four altitudes of Plan skills, one autonomous Build skill, and a Deliver phase that stays with you.
 
 This page maps the full pipeline and explains where each skill fits. For learning by doing, start with [getting-started.md](getting-started.md). For the why behind the structure, see [agenticproductownership.com](https://agenticproductownership.com).
 
@@ -10,14 +10,18 @@ This page maps the full pipeline and explains where each skill fits. For learnin
 
 ```mermaid
 flowchart LR
-    V[Vision] --> R["/we:refine<br/>interactive"]
-    R --> S["/we:story<br/>autonomous"]
-    S --> M[User merges PR<br/>+ closes ticket]
+    V["Vision<br/><i>PRD</i>"] --> S["Saga<br/><i>Theme</i>"]
+    S --> E["Epic<br/><i>Initiative</i>"]
+    E --> ST["/we:story<br/>interactive"]
+    ST --> B["/we:build<br/>autonomous"]
+    B --> M[User merges PR<br/>+ closes ticket]
     M --> D[Done]
 
-    style V fill:#fff,stroke:#888
-    style R fill:#ffefd9,stroke:#c87f00
-    style S fill:#d9ffe5,stroke:#1a7a3c
+    style V fill:#fff,stroke:#bbb,stroke-dasharray:4 3
+    style S fill:#fff,stroke:#bbb,stroke-dasharray:4 3
+    style E fill:#fff,stroke:#bbb,stroke-dasharray:4 3
+    style ST fill:#ffefd9,stroke:#c87f00
+    style B fill:#d9ffe5,stroke:#1a7a3c
     style M fill:#fff,stroke:#888
     style D fill:#fff,stroke:#888
 ```
@@ -26,36 +30,51 @@ Three phases, three responsibilities:
 
 | Phase | Who | What | Command |
 |---|---|---|---|
-| **Plan** | You + Claude (interactive) | Story + plan | `/we:refine` |
-| **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:story` |
+| **Plan** | You + Claude (interactive) | Vision / Saga / Epic / Story + build-ready plan | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` (+ `/we:meet`) |
+| **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:build` |
 | **Deliver** | You (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
 
 **Claude never merges PRs or closes tickets.** Those stay with you.
 
+The upper Plan altitudes (Vision, Saga, Epic) are drawn lighter because most stories enter the pipeline at Story-altitude — by the time you trigger `/we:story`, the upstream work has usually already happened (in a previous session, in a Council meeting, or in your head). When it hasn't, walk top-down: `/we:vision` → `/we:meet vision` → `/we:saga` → `/we:meet saga` → `/we:epic` → `/we:meet epic` → `/we:story` → `/we:build`. Skipping levels is allowed — when the level above is stable, you don't need to re-do it.
+
 ---
 
-## Phase 1: Plan with `/we:refine`
+## Phase 1: Plan
 
-You bring an idea — a short sentence, a Jira ticket key, a description. `/we:refine` asks the questions that turn it into a story you can actually build.
+Plan has four altitudes. Each one has a **Solo** skill (formulate / refine the item) and a **Meet** variant (convene a Council to decompose into the next altitude down).
 
-The conversation produces two things:
+| Altitude | Item | Solo | Council | Produces |
+|---|---|---|---|---|
+| **Vision** | PRD (multi-year) | `/we:vision` | `/we:meet vision` | Sagas |
+| **Saga** | Theme (multi-quarter) | `/we:saga` | `/we:meet saga` | Epics |
+| **Epic** | Initiative (quarter) | `/we:epic` | `/we:meet epic` | Stories |
+| **Story** | Feature slice (sprint) | `/we:story` | `/we:meet story` | Build-ready plan |
+
+**Solo formulates an N-item; Meet decomposes an N-item into N+1-items.** A useful cadence is: Solo to sharpen the current item → Meet to decompose into the next level → Solo on each child → and so on. The two modes interleave naturally as you walk the altitudes down. See [concepts/meetings.md](concepts/meetings.md) for when to convene a Council.
+
+The most common entry point is `/we:story`. It asks the questions that turn an idea (a sentence, a Jira ticket key, a description) into a sprint-sized Story you can build.
+
+`/we:story` produces two things:
 
 - **Ticket** (minimal): "As X I want Y so that Z" + link to the plan
 - **Plan** (`docs/plans/{TICKET}-plan.md`, detailed): context, acceptance criteria, phased implementation, tests, security review, design decisions
 
-Context flows: the plan's *Context* and *Design Decisions* sections capture why you decided what you decided — including rejected alternatives. The next skill, `/we:story`, reads this and understands intent, not just spec.
+Context flows: the plan's *Context* and *Design Decisions* sections capture why you decided what you decided — including rejected alternatives. `/we:build` reads this and understands intent, not just spec.
 
-For contentious stories, use `/we:meet refinement` instead — convenes a small council (PO + architect) for two perspectives before the plan crystallizes. Hands off to `/we:refine` once aligned. See [concepts/meetings.md](concepts/meetings.md).
+For contentious stories, run `/we:meet story` first — convenes a small council (PO + Architect) for two perspectives before the plan crystallizes. Hands off to `/we:story` once aligned. The other Meet variants (`/we:meet vision|saga|epic`) work the same way, with rosters tuned to the altitude.
 
 ---
 
-## Phase 2: Build with `/we:story`
+## Phase 2: Build with `/we:build`
 
-You hand the ticket key to `/we:story`. It runs the entire build pipeline autonomously — you can watch, you don't have to drive.
+You hand the ticket key to `/we:build`. It runs the entire build pipeline autonomously — you can watch, you don't have to drive.
+
+> **Back-compat:** the orchestration CLI keeps the internal `story` table name; checkpoints from pre-v2.28.0 sessions still resume cleanly under `/we:build`.
 
 ```mermaid
 flowchart TB
-    Start["/we:story TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
+    Start["/we:build TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
     DoR --> Dev[Step 2: Develop<br/>phase by phase from plan]
     Dev --> AC[Step 3: AC verification<br/>BLOCKING checkpoint]
     AC --> Simp[Step 4: Simplify<br/>code quality pass]
@@ -91,14 +110,14 @@ flowchart TB
 
 | Feature | What it does |
 |---|---|
-| **Checkpoints** | SQLite at `~/.claude/weside/orchestration.db`. Resume after interruption with `/we:story {TICKET}` — picks up where it stopped. |
+| **Checkpoints** | SQLite at `~/.claude/weside/orchestration.db`. Resume after interruption with `/we:build {TICKET}` — picks up where it stopped. (Table name is still `story` for back-compat.) |
 | **Circuit breaker** | 3 failures in the same phase → stop and ask. Prevents thrashing. |
 | **Batch-fix pattern** | Collect ALL findings, fix in ONE commit, push ONCE. One CI cycle, not three. |
 | **Reality check** | Warns if the plan is stale vs. recent code changes. Refuses to proceed with an out-of-date plan. |
 
 ### The forbidden interruption
 
-`/we:story` does **not** ask you "should I run this end-to-end or phase by phase" at the start. By the time you've handed it a ticket, you've already decided. The phases-from-the-plan run sequentially with checkpoints. That *is* what "phased" means here.
+`/we:build` does **not** ask you "should I run this end-to-end or phase by phase" at the start. By the time you've handed it a ticket, you've already decided. The phases-from-the-plan run sequentially with checkpoints. That *is* what "phased" means here.
 
 Legitimate interruptions stay:
 - Circuit breaker (3 failures in same phase)
@@ -121,7 +140,7 @@ You receive a PR with:
 - CI green
 - Ticket in *In Review*
 
-You review the PR (your eyes, your call), merge it, close the ticket. Done.
+You review the PR (your eyes, your call), merge it, close the ticket. Done. There is no plugin skill for Deliver on purpose — autonomy ends where consequence begins.
 
 ---
 
@@ -132,16 +151,19 @@ The pipeline above is the spine. The standalone skills serve specific needs arou
 ```mermaid
 flowchart TB
     subgraph spine[Pipeline spine]
-        refine["/we:refine"]
+        vision["/we:vision"]
+        saga["/we:saga"]
+        epic["/we:epic"]
         story["/we:story"]
-        cireview["/we:ci-review<br/>inline in /we:story"]
+        build["/we:build"]
+        cireview["/we:ci-review<br/>inline in /we:build"]
     end
     subgraph deliberation[Deliberation]
         council["/we:council"]
-        meet["/we:meet"]
+        meet["/we:meet<br/>vision / saga / epic / story"]
     end
-    subgraph process[Process improvement]
-        sm["/we:sm<br/>retro after something broke"]
+    subgraph process[Process + architecture]
+        coach["/we:coach<br/>APO advisor + retro"]
         arch["/we:arch<br/>architecture decisions"]
     end
     subgraph review[Review + audit]
@@ -163,8 +185,8 @@ flowchart TB
     setup --> framework
     council --> deliberation
     meet --> deliberation
-    refine --> spine
     story --> spine
+    build --> spine
 ```
 
 Read each skill's reference in [skills.md](skills.md), or browse the relevant concept doc:
@@ -177,10 +199,10 @@ Read each skill's reference in [skills.md](skills.md), or browse the relevant co
 
 ## When the pipeline doesn't fit
 
-Three common cases where you sidestep `/we:story`:
+Three common cases where you sidestep the spine:
 
-- **Hotfix** — typo, dependency bump, copy change. Open a PR by hand; `/we:story` overhead isn't worth it for trivial changes.
-- **Exploration** — you don't know what you're building yet. Use `/we:meet vision` or `/we:meet initiative` to deliberate first, then `/we:refine` once direction emerges.
+- **Hotfix** — typo, dependency bump, copy change. Open a PR by hand; `/we:build` overhead isn't worth it for trivial changes.
+- **Exploration** — you don't know what you're building yet. Use `/we:meet vision`, `/we:meet saga`, or `/we:meet epic` for upstream deliberation, then walk the altitudes down once direction emerges.
 - **Cross-repo coordination** — `/we:sideload <other-repo>` to pull context, then plan + execute. The pipeline still works per repo; the sideload bridges them.
 
 ---
@@ -191,9 +213,9 @@ The pipeline runs end-to-end. Checkpoints work. Quality gates work. Docs get pro
 
 Three things look different:
 
-- `/we:refine` doesn't ground a new story in cross-session memory — it works from the current conversation + plan files.
+- The Plan skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) don't ground new artifacts in cross-session memory — they work from the current conversation + plan files.
 - `/we:council` and `/we:meet` use generic role-agents instead of named Companions.
-- `/we:sm` and `/we:arch` boot without companion identity.
+- `/we:coach` and `/we:arch` boot without companion identity.
 
 You still get a pipeline that ships code. You don't get a teammate who remembers across days.
 
@@ -210,5 +232,5 @@ For the upgrade path, see [upgrade-paths.md](upgrade-paths.md).
 - [getting-started.md](getting-started.md) — learn by doing
 - [skills.md](skills.md) — per-skill reference
 - [concepts/companion-framework.md](concepts/companion-framework.md) — what the framework adds around the pipeline
-- [concepts/meetings.md](concepts/meetings.md) — when to deliberate before refining
+- [concepts/meetings.md](concepts/meetings.md) — when to deliberate at which altitude
 - [troubleshooting.md](troubleshooting.md) — common pipeline issues

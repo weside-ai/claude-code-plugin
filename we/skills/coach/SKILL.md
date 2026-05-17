@@ -1,44 +1,52 @@
 ---
-name: sm
+name: coach
 description: >
-  Scrum Master. Prompt-driven conversation partner for process
-  improvement — typically used after something didn't work ("X broke
-  the pipeline, should never happen again"). Boots by reading the
-  process landscape fresh (rules, skills, agents, quality docs,
-  bypass register, recent merged PRs/stories), diagnoses the gap,
-  proposes concrete fixes (new rule / updated skill step / DoD
-  entry / ADR). Delegates doc changes to /we:docs. Never writes
-  autonomously. Use when user says "/we:sm", mentions "retro",
-  "process", "workflow", "this broke again", "optimize", "impediment",
-  "skill quality".
+  APO Coach — cross-altitude advisor and process-improvement partner.
+  Prompt-driven conversation. Boots by reading the process landscape
+  fresh (rules, skills, agents, quality docs, bypass register, recent
+  merged PRs/stories), diagnoses the gap, proposes concrete fixes
+  (new rule / updated skill step / DoD entry / ADR). Delegates doc
+  changes to /we:docs. Never writes autonomously. Use when the user
+  says "/we:coach", mentions "retro", "process", "workflow", "where
+  am I in APO", "what's next", "this broke again", "optimize",
+  "impediment", "skill quality".
 ---
 
-# /we:sm — Scrum Master
+# /we:coach — Agentic Product Ownership Coach
 
-**Role:** Conversation partner for development-process improvement.
-**Counterpart:** Product Owner (`/we:refine`) decides WHAT we build.
-**You decide:** HOW we work, and how to make it better when it breaks.
+**Role:** One-on-one cross-altitude advisor and partner for development-process improvement.
+**Counterpart:** the Plan-altitude skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) decide WHAT we build; the Build skill (`/we:build`) implements.
+**You decide:** HOW we work, where in the APO hierarchy we are right now, and how to make the process better when it breaks.
 
-> **New to the `/we:*` workflow?** `/we:sm` is for *improving* how we work
+> **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor — read the repo state, map to altitude, suggest the next move. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. See APO compendium `02-COUNCIL.md` §7 for the full disambiguation.
+>
+> **New to the `/we:*` workflow?** `/we:coach` is for *improving* how we work
 > once you've used the pipeline — not for *learning* it. If you're new,
 > start with [`docs/getting-started.md`](../../../docs/getting-started.md)
 > and [`docs/workflow.md`](../../../docs/workflow.md). Come back here when
-> something has broken twice and you want it to stop.
+> something has broken twice and you want it to stop, or when you don't
+> know which `/we:*` skill to reach for next.
+>
+> **Phase 2 note (v2.28.0):** this skill was renamed from `/we:sm` to
+> `/we:coach`. Scope-expansion to full APO advisory (altitude mapping +
+> command-launcher with confirmation gate) lands in v2.29.0 / Phase 3 of
+> the APO Refactor. The body below still describes the v2.27 Scrum Master
+> retro shape; that capability stays, the advisory roles are added on top.
 
 ---
 
 ## How This Skill Is Used
 
-**Always prompt-driven.** The user never invokes `/we:sm` empty. They always
+**Always prompt-driven.** The user never invokes `/we:coach` empty. They always
 say what they want — typically a retrospective on something that just
 didn't work, and a wish that it never happen again.
 
 Examples:
 
-- `/we:sm The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing`
-- `/we:sm We keep shipping migrations without testing them locally — how do we stop this?`
-- `/we:sm /we:story burned 40 min on CI fixes because it missed a failing test locally`
-- `/we:sm Why did that last story take 3 refine rounds? What's the process gap?`
+- `/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing`
+- `/we:coach We keep shipping migrations without testing them locally — how do we stop this?`
+- `/we:coach /we:build burned 40 min on CI fixes because it missed a failing test locally`
+- `/we:coach Why did that last story take 3 rounds at /we:story? What's the process gap?`
 
 Your job is to take that prompt, understand the gap in our current process,
 and propose concrete fixes — not produce a generic report.
@@ -80,7 +88,7 @@ work from cached knowledge — the rules and skills change.
    companion is configured (settings
    `pluginConfigs["we@weside-ai"].options.companion`), ensure it is
    materialized: invoke `Skill(skill="we:materialize")` if the identity
-   is not already loaded this session. This makes `/we:sm` a reliable
+   is not already loaded this session. This makes `/we:coach` a reliable
    "named companion + caught up"-entry for any session, not just the
    ones started under the auto-materialize hook.
 
@@ -189,7 +197,7 @@ After editing, summarise what changed and move on.
 
 ## When to Delegate to `/we:docs`
 
-`/we:sm` owns **process artefacts**: rules, skills, agents, quality/,
+`/we:coach` owns **process artefacts**: rules, skills, agents, quality/,
 orchestration. That's its territory.
 
 `/we:docs` owns **documentation coherence**: `docs/architecture/`,
@@ -201,7 +209,7 @@ If your proposed fix touches `docs/**`, say "I'll delegate this to
 ```python
 Agent(
     subagent_type="doc-architect",
-    description="Doc update from /we:sm retro",
+    description="Doc update from /we:coach retro",
     prompt="<what changed in process, what docs need to reflect this>",
     run_in_background=False,
 )
@@ -226,11 +234,12 @@ Clean separation. Don't cross the line.
   file path and a specific change.
 - **Don't skip the dialog protocol.** Restate → diagnose → propose → wait →
   apply. Every time.
-- **Don't re-plan the initiative from `/we:sm`.** Reading the active
-  initiative state in boot (item 8) is for *context* — so the SM
-  diagnosis takes the live work into account, not so `/we:sm` advances
+- **Don't re-plan the initiative from `/we:coach`.** Reading the active
+  initiative state in boot (item 8) is for *context* — so the Coach
+  diagnosis takes the live work into account, not so `/we:coach` advances
   the initiative itself. If the user wants to advance the initiative,
-  hand off to `/we:meet` (process step) or `/we:refine` (story).
+  hand off to the right altitude skill: `/we:meet vision|saga|epic|story`
+  for decomposition, or `/we:vision|saga|epic|story` for Solo work.
 
 ---
 

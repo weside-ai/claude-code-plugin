@@ -10,7 +10,7 @@
 
 - [ ] **Clear Summary** — One-line description (max 80 chars)
 - [ ] **User Story** — "As [role] I want [feature] so that [benefit]" format
-- [ ] **Plan exists** — `docs/plans/{TICKET}-plan.md` with implementation details. Once the plan is final, `/we:story` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:refine`, not in the pipeline. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers) to enable parallel sub-agent dispatch in Step 2.
+- [ ] **Plan exists** — `docs/plans/{TICKET}-plan.md` with implementation details. Once the plan is final, `/we:build` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the pipeline. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers) to enable parallel sub-agent dispatch in Step 2.
 - [ ] **Ticket linked** — Connected to parent Epic (if using ticketing tool)
 
 ### In Plan (Details)
@@ -63,18 +63,18 @@ Stories with these patterns are **NOT READY** — send back for refinement:
 
 | Section | Where | Command |
 |---------|-------|---------|
-| User Story | Ticket (minimal) | `/we:refine` |
-| **Implementation Plan** | `docs/plans/{TICKET}-plan.md` | `/we:refine` |
-| → Context | Plan | (in /we:refine) |
-| → Acceptance Criteria | Plan | (in /we:refine) |
-| → User Journey | Plan | (in /we:refine) |
-| → Design Decisions | Plan | (in /we:refine) |
-| → Testing Requirements | Plan | (in /we:refine) |
-| → Technical Approach | Plan | (in /we:refine) |
-| → Security Review | Plan | (in /we:refine) |
-| → Documentation Impact | Plan | (in /we:refine) |
+| User Story | Ticket (minimal) | `/we:story` |
+| **Implementation Plan** | `docs/plans/{TICKET}-plan.md` | `/we:story` |
+| → Context | Plan | (in /we:story) |
+| → Acceptance Criteria | Plan | (in /we:story) |
+| → User Journey | Plan | (in /we:story) |
+| → Design Decisions | Plan | (in /we:story) |
+| → Testing Requirements | Plan | (in /we:story) |
+| → Technical Approach | Plan | (in /we:story) |
+| → Security Review | Plan | (in /we:story) |
+| → Documentation Impact | Plan | (in /we:story) |
 
-**`/we:refine` creates Ticket + Plan in one step.**
+**`/we:story` creates Ticket + Plan in one step.**
 
 ---
 
@@ -105,7 +105,7 @@ Design Decisions documented? (in plan — alternatives + reasoning)
 Documentation impact identified? (in plan)
 
 All yes → Story is READY
-Any missing → Run /we:refine first
+Any missing → Run /we:story first
 ```
 
 ---
@@ -116,13 +116,13 @@ Any missing → Run /we:refine first
 |-----------|--------|
 | With Plan file | Ready |
 | With inline Implementation Notes | Acceptable (legacy) |
-| Without anything | Not Ready → `/we:refine` |
+| Without anything | Not Ready → `/we:story` |
 
 ---
 
 ## Checkpoint
 
-After `/we:refine`: `phase=refined`
+After `/we:story`: `phase=refined`
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined

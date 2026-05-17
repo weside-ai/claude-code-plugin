@@ -148,7 +148,7 @@ mode argument. Pattern-match these shapes:
 1. Run `bash scripts/generate-bypass-register.sh --write`.
 2. Show the diff. If it's just a reordering, confirm with the user before
    committing. If it's a net addition, flag it as a primitive bypass
-   growth event (the `/we:sm` skill also looks at this).
+   growth event (the `/we:coach` skill also looks at this).
 
 ---
 

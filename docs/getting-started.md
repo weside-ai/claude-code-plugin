@@ -26,7 +26,7 @@ The plugin is now active. All `/we:*` skills are available.
 
 ### Recommended companion plugins
 
-Two plugins enhance the pipeline. They're optional — the framework works without them, but `/we:story` runs better with them:
+Two plugins enhance the pipeline. They're optional — the framework works without them, but `/we:build` runs better with them:
 
 ```
 /install code-simplifier@claude-plugins-official
@@ -47,7 +47,7 @@ Two plugins enhance the pipeline. They're optional — the framework works witho
 
 Three questions:
 
-1. **Vision** — link, file, or short description. *Optional* — say "skip" if you don't have one. Vision is the anchor `/we:refine` uses to evaluate priority; without it, every feature seems equally important.
+1. **Vision** — link, file, or short description. *Optional* — say "skip" if you don't have one. Vision is the anchor `/we:story` uses to evaluate priority; without it, every feature seems equally important.
 1. **Ticketing** — auto-detected. Confirm Jira / GitHub Issues / none.
 1. **Stack** — auto-detected from `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`. Confirm or override.
 1. **Companion Framework** *(optional)* — write `.weside/config.json` + invoke `/we:onboarding` to compose your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
@@ -63,13 +63,15 @@ See [concepts/companion-framework.md](concepts/companion-framework.md) for the f
 
 ## 3. Your first story (15 minutes)
 
+> **What about Vision / Saga / Epic?** For a brand-new product you'd start at `/we:vision`; for a new multi-quarter theme, `/we:saga`; for a new quarterly deliverable, `/we:epic`. Each Solo skill walks down to the next altitude. Most stories — refactors, bug fixes, small features inside an existing Epic — skip straight to Story. That's what this section does. See [concepts/meetings.md](concepts/meetings.md) for the full altitude map.
+
 Pick something small — a refactor, a small feature, a typo cluster. Then:
 
 ```
-/we:refine "Brief description of what you want"
+/we:story "Brief description of what you want"
 ```
 
-`/we:refine` is **interactive**. Claude will:
+`/we:story` is **interactive**. Claude will:
 
 1. Ask clarifying questions about scope, users, edge cases
 2. Probe trade-offs and rejected alternatives
@@ -84,19 +86,19 @@ You'll know it worked when:
 - The ticket has been created in Jira / GitHub Issues
 - The plan has a *Context* section (the why), *Acceptance Criteria*, and *Phases*
 
-Take five minutes to read the plan. If something's off, tell `/we:refine` — it'll adjust. The plan is the contract for the next step.
+Take five minutes to read the plan. If something's off, tell `/we:story` — it'll adjust. The plan is the contract for the next step.
 
 ---
 
-## 4. Hand it to `/we:story` (10 minutes of watching)
+## 4. Hand it to `/we:build` (10 minutes of watching)
 
 When you're happy with the plan:
 
 ```
-/we:story {TICKET}
+/we:build {TICKET}
 ```
 
-`/we:story` runs the full pipeline autonomously. You watch:
+`/we:build` runs the full pipeline autonomously. You watch:
 
 ```
 Step 1: git_prepared          ← worktree, branch, ticket → In Progress
@@ -112,6 +114,8 @@ Step 8: ci_passed              ← CI + CodeRabbit findings, fixed in batch
 Step 9: ticket → In Review     ← awaiting your merge
 ```
 
+Checkpoint names (`git_prepared`, `ac_verified`, etc.) and the internal orchestration CLI still use the `story` table for back-compat with pre-v2.28.0 sessions — that's why a long-interrupted Build resumes cleanly. The user-facing skill is `/we:build`.
+
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
 - **Step 3 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
@@ -123,7 +127,7 @@ Otherwise it runs.
 
 ## 5. Review + merge
 
-When `/we:story` finishes, you have a PR. Open it. Review it like any PR — your eyes, your call. When you're happy:
+When `/we:build` finishes, you have a PR. Open it. Review it like any PR — your eyes, your call. When you're happy:
 
 - Merge via GitHub UI
 - Close the ticket (or watch it auto-transition, depending on your Jira config)
@@ -163,9 +167,9 @@ Pick one based on where you want to go next:
 
 ## Common first-time issues
 
-- **`/we:refine` produces a plan but the ticket wasn't created** → check `/plugin settings` for `ticketingTool` and `projectKey`. Or no ticketing tool detected — that's "Plan-only mode", which is fine.
-- **`/we:story` errors at Step 1 with "DoR failed"** → the plan is missing required sections. Open it, see what's flagged, re-run `/we:refine` to fill the gap.
-- **`/we:story` interrupted mid-pipeline** → run `/we:story {TICKET}` again. It picks up from the last checkpoint.
+- **`/we:story` produces a plan but the ticket wasn't created** → check `/plugin settings` for `ticketingTool` and `projectKey`. Or no ticketing tool detected — that's "Plan-only mode", which is fine.
+- **`/we:build` errors at Step 1 with "DoR failed"** → the plan is missing required sections. Open it, see what's flagged, re-run `/we:story` to fill the gap.
+- **`/we:build` interrupted mid-pipeline** → run `/we:build {TICKET}` again. It picks up from the last checkpoint.
 - **CI keeps failing** → see the [ci-review skill reference](skills.md#weci-review) and [troubleshooting.md](troubleshooting.md).
 
 ---
@@ -174,5 +178,9 @@ Pick one based on where you want to go next:
 
 - [workflow.md](workflow.md) — the full pipeline with diagrams
 - [skills.md](skills.md) — every skill explained
+- [concepts/meetings.md](concepts/meetings.md) — the four meeting altitudes
 - [concepts/companion-framework.md](concepts/companion-framework.md) — what `.weside/` is and why
+- [upgrade-paths.md](upgrade-paths.md) — Maturity Model L1 → L4
+- [agenticproductownership.com](https://agenticproductownership.com) — the philosophy
+- [weside-ai/lc-startup](https://github.com/weside-ai/lc-startup) — the APO compendium (forthcoming public release)
 - [troubleshooting.md](troubleshooting.md) — when something doesn't go as planned

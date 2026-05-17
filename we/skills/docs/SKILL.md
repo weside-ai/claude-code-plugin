@@ -15,7 +15,7 @@ description: >
 **Role:** Entry point for documentation coherence. Delegates to the
 `doc-architect` agent.
 
-**Counterpart:** `/we:arch` (architecture guidance) · `/we:sm` (process).
+**Counterpart:** `/we:arch` (architecture guidance) · `/we:coach` (process).
 
 ---
 

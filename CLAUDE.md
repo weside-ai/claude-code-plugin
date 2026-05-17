@@ -81,7 +81,7 @@ No lock-in. No nagging. The value speaks for itself.
 
 ### Training on the Job
 
-The plugin teaches agile best practices **implicitly** — by asking the right questions, not through documentation. When a user runs `/we:refine` without a vision, the plugin gently suggests creating one. When acceptance criteria are missing, it explains why they matter. One-time hints, never blocking, respecting "no".
+The plugin teaches agile best practices **implicitly** — by asking the right questions, not through documentation. When a user runs `/we:story` without a vision, the plugin gently suggests creating one. When acceptance criteria are missing, it explains why they matter. One-time hints, never blocking, respecting "no".
 
 ### Two Voices
 

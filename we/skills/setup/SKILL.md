@@ -57,19 +57,19 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 
 | Prerequisite | Detection check | Provided by | Used by |
 |---|---|---|---|
-| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:story` PR creation, CI status, CodeRabbit thread resolution |
-| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:refine`, `/we:story` ticket fetch and transitions |
-| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:story` Step 4: Simplify |
-| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:story` Step 2 security checks |
-| TurboVault MCP | `mcp__turbovault__*` tools available | TurboVault MCP server | `/we:refine` (semantic search), `/we:story` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
-| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:refine` and `/we:story` |
+| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:build` PR creation, CI status, CodeRabbit thread resolution |
+| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:build` ticket fetch and transitions |
+| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:build` Step 4: Simplify |
+| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:build` Step 2 security checks |
+| TurboVault MCP | `mcp__turbovault__*` tools available | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
+| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:build` |
 
 If a prerequisite is missing, inform the user:
 
 > "Recommended plugin not installed: **{plugin-name}**. It provides {what}. Install with: `/install {plugin-name}`"
 > "The /we:* pipeline works without it, but {feature} will be skipped."
 
-**Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:story` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
+**Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:build` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
 
 ### Step 2: Ask 3 Questions
 
@@ -177,11 +177,11 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
 ```
 Ready to go:
-  /we:refine        — Create/refine stories
-  /we:story         — Implement a story end-to-end
-  /we:council       — Convene a council of companions on a topic
-  /we:meet          — Run a vision / initiative / refinement meeting
-  /we:sideload .    — Reload context for this repo (Companion Framework)
+  /we:story        — Create/refine the Story (Solo) — build-ready plan
+  /we:build        — Implement the Story end-to-end (autonomous pipeline)
+  /we:council      — Convene a council of companions on a topic
+  /we:meet         — Run a vision / saga / epic / story meeting
+  /we:sideload .   — Reload context for this repo (Companion Framework)
 ```
 
 ---

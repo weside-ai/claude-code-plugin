@@ -2,7 +2,7 @@
 
 Common stumbles, organized by symptom. Each entry has: what you see, what's happening, what to do.
 
-If your issue isn't here, `/we:sm` is the meta-skill for that — a process-improvement conversation partner that boots with the current rules + skill landscape + your active initiative state. Tell it what broke; it diagnoses and proposes a concrete fix.
+If your issue isn't here, `/we:coach` is the meta-skill for that — a process-improvement conversation partner that boots with the current rules + skill landscape + your active initiative state. Tell it what broke; it diagnoses and proposes a concrete fix.
 
 ---
 
@@ -43,9 +43,9 @@ Or skip them — the pipeline works without them, just with smaller quality step
 
 ---
 
-## `/we:refine` issues
+## `/we:story` issues
 
-### `/we:refine` produces a plan but no ticket appears
+### `/we:story` produces a plan but no ticket appears
 
 **Cause:** ticketing tool not configured or not detected.
 
@@ -59,23 +59,23 @@ Set `ticketingTool` to `jira` or `github-issues`, and `projectKey` to your proje
 
 ---
 
-### Plan is too vague to hand to `/we:story`
+### Plan is too vague to hand to `/we:build`
 
-**Cause:** `/we:refine` produced a plan but you (or it) cut the conversation short before scope was tight.
+**Cause:** `/we:story` produced a plan but you (or it) cut the conversation short before scope was tight.
 
-**Fix:** re-invoke `/we:refine {TICKET}`. It reads the existing plan, identifies gaps, and asks the next clarifying questions. You don't lose what's there; you sharpen it.
+**Fix:** re-invoke `/we:story {TICKET}`. It reads the existing plan, identifies gaps, and asks the next clarifying questions. You don't lose what's there; you sharpen it.
 
 ---
 
-## `/we:story` issues
+## `/we:build` issues
 
 ### "DoR failed" at Step 1
 
-**Symptom:** `/we:story` errors out before any code is written, complaining about Definition of Ready.
+**Symptom:** `/we:build` errors out before any code is written, complaining about Definition of Ready.
 
 **Cause:** the plan is missing required sections (User Story, Acceptance Criteria, or the plan file itself).
 
-**Fix:** open `docs/plans/{TICKET}-plan.md`, see what's missing, and either fix by hand or re-run `/we:refine {TICKET}` to fill the gap.
+**Fix:** open `docs/plans/{TICKET}-plan.md`, see what's missing, and either fix by hand or re-run `/we:story {TICKET}` to fill the gap.
 
 ---
 
@@ -86,10 +86,10 @@ Set `ticketingTool` to `jira` or `github-issues`, and `projectKey` to your proje
 **Fix:** re-invoke:
 
 ```
-/we:story {TICKET}
+/we:build {TICKET}
 ```
 
-The SQLite checkpoint store at `~/.claude/weside/orchestration.db` knows where you stopped. `/we:story` reads the last checkpoint and picks up from the next step. You won't lose progress.
+The SQLite checkpoint store at `~/.claude/weside/orchestration.db` knows where you stopped. `/we:build` reads the last checkpoint and picks up from the next step. You won't lose progress. (Internal CLI keeps the `story` table name for back-compat — `python3 scripts/orchestration.py story status {TICKET}`.)
 
 If you want to start over instead:
 
@@ -108,7 +108,7 @@ python3 ~/.claude/plugins/cache/weside-ai/we/<version>/scripts/orchestration.py 
 **Fix:**
 1. Read the verification report — it names which AC failed and why
 2. If the AC is sound but the code is wrong: go back to Step 2, fix the code, re-run the verify
-3. If the AC is poorly written: re-run `/we:refine {TICKET}` to sharpen it, then re-run `/we:story`
+3. If the AC is poorly written: re-run `/we:story {TICKET}` to sharpen it, then re-run `/we:build`
 
 The verification is blocking on purpose. Don't bypass it.
 
@@ -116,7 +116,7 @@ The verification is blocking on purpose. Don't bypass it.
 
 ### CI keeps failing after 3 cycles
 
-**Symptom:** `/we:story` Step 8 ran 3 ci-review cycles and CI is still red.
+**Symptom:** `/we:build` Step 8 ran 3 ci-review cycles and CI is still red.
 
 **Cause:** something fundamentally hard or unfixable from this branch — infrastructure issue, flaky test that won't stabilize, dependency conflict.
 
@@ -254,7 +254,7 @@ The legacy mode still works (loads `CLAUDE.md` + always-loaded `.claude/rules/`)
 
 ### Worktree got into a weird state
 
-**Symptom:** `/we:story` failed to create or enter a worktree.
+**Symptom:** `/we:build` failed to create or enter a worktree.
 
 **Diagnose:**
 
@@ -269,7 +269,7 @@ git worktree remove .worktrees/<name> --force
 git worktree prune
 ```
 
-Then re-invoke `/we:story` — it'll create a fresh worktree.
+Then re-invoke `/we:build` — it'll create a fresh worktree.
 
 ---
 
@@ -279,13 +279,13 @@ Then re-invoke `/we:story` — it'll create a fresh worktree.
 
 **Cause:** a recurring friction; either a missing check, an unclear rule, or a tool gap.
 
-**Fix:** invoke `/we:sm` with a description of what broke:
+**Fix:** invoke `/we:coach` with a description of what broke:
 
 ```
-/we:sm The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing.
+/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing.
 ```
 
-`/we:sm` will diagnose the gap (missing rule? unclear skill step? missing DoD item?) and propose 2–3 concrete fixes with file paths and costs. You approve one; it applies it. Next time the friction doesn't happen.
+`/we:coach` will diagnose the gap (missing rule? unclear skill step? missing DoD item?) and propose 2–3 concrete fixes with file paths and costs. You approve one; it applies it. Next time the friction doesn't happen.
 
 ---
 
@@ -301,7 +301,7 @@ Or just ask: "I want to do X — which skill?" Claude will tell you (and probabl
 
 ## When to escalate
 
-If the issue is structural — a rule that doesn't fit your repo's reality, a skill step that's wrong for your workflow — that's `/we:sm` territory. He'll diagnose, propose, and (with your approval) apply.
+If the issue is structural — a rule that doesn't fit your repo's reality, a skill step that's wrong for your workflow — that's `/we:coach` territory. He'll diagnose, propose, and (with your approval) apply.
 
 If it's a bug in the plugin itself, file an issue at <https://github.com/weside-ai/claude-code-plugin/issues> with:
 - Plugin version (`/plugin list | grep we@weside-ai`)
@@ -318,4 +318,4 @@ If it's a bug in the plugin itself, file an issue at <https://github.com/weside-
 - [skills.md](skills.md) — per-skill reference
 - [concepts/companion-framework.md](concepts/companion-framework.md) — `.weside/` mechanics
 - [mcp.md](mcp.md) — MCP architecture + tools
-- [`/we:sm`](skills.md#wesm) — the process-improvement conversation partner
+- [`/we:coach`](skills.md#wecoach) — the process-improvement conversation partner

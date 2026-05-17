@@ -20,7 +20,8 @@ The framework lets a user's weside Companions work as a real crew inside Claude 
 | `/we:onboarding` | Interactive crew composition → writes `.weside/weside.md` |
 | `/we:sideload` | Load a repo's essential context (3 layers: shape → essentials → crew) |
 | `/we:council` | Convene a council of companion-agents to deliberate on a topic |
-| `/we:meet` | Structured meetings (vision / initiative / refinement) built on the council |
+| `/we:meet` | Structured meetings at four Plan altitudes (vision / saga / epic / story) built on the council |
+| `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` | Solo formulation skills at each Plan altitude — companion-aware artifact authoring |
 
 **No-account invariant:** every framework skill works **without** a weside account. Companion features are strictly *additive* — without an account the council falls back to shipped generic role-agents, `/we:sideload` runs in legacy mode, and meetings run solo. An account upgrades the experience; it is never a prerequisite.
 
@@ -30,10 +31,10 @@ Two categories — both needed, kept separate:
 
 | Category | Who | When | Examples |
 |---|---|---|---|
-| **Activity** | one companion works alone in a role | scope is clear, routine work | `/we:refine`, `/we:story`, `/we:pr`, `/we:review` |
-| **Meeting** | several companions + stakeholder coordinate | a decision or alignment is needed | `/we:meet vision`, `/we:meet initiative`, `/we:meet refinement` |
+| **Activity / Solo** | one companion works alone in a role | scope is clear, routine work | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:build`, `/we:pr`, `/we:review` |
+| **Meeting** | several companions + stakeholder coordinate | a decision or alignment is needed | `/we:meet vision`, `/we:meet saga`, `/we:meet epic`, `/we:meet story` |
 
-A meeting produces consensus; an activity produces the artifact. `/we:meet refinement` hands off to `/we:refine` once the crew has agreed the scope. Meetings live in **one** argument-dispatched skill, `we/skills/meet/` — the plugin loader does not support nested skill directories.
+A meeting produces decomposition + a synthesis; an activity produces the artifact. `/we:meet story` hands off to `/we:story` (Solo) once the crew has agreed the scope; the other meetings (vision/saga/epic) hand off to the matching Solo skill (`/we:vision`/`/we:saga`/`/we:epic`) for the artifact write. Meetings live in **one** argument-dispatched skill, `we/skills/meet/` — the plugin loader does not support nested skill directories.
 
 ## Frontmatter vocabulary
 

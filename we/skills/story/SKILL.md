@@ -1,38 +1,23 @@
 ---
 name: story
 description: >
-  Story Orchestrator — coordinates the complete development pipeline from git
-  preparation through PR creation and CI review. Loads plan, manages checkpoints,
-  circuit breaker, and resume capability. Use when user says "/we:story",
-  "implement story", or provides a ticket key.
+  Story (Solo) — Product Owner skill at the Story altitude. Creates or refines
+  one Story (a sprint-sized feature slice) with a build-ready plan. Ticket
+  MINIMAL, plan DETAILED. Uses EnterPlanMode. Use when the user says
+  "/we:story", "new story", "refine story", "acceptance criteria", "plan",
+  "write a story". For contentious stories that need multi-voice input,
+  use `/we:meet story` first — it convenes a small council, then hands off
+  here.
 ---
 
 
-# Story Orchestrator
+# Story (Solo) — Product Owner at the Story altitude
 
-You orchestrate the entire development pipeline in a single skill invocation — from git preparation through PR creation and CI review. You do NOT stop mid-pipeline.
+You produce or sharpen one Story — a sprint-sized feature slice with a build-ready plan. This is the Solo half of the Story altitude in the APO hierarchy; the Council half is `/we:meet story` (convene PO + Architect when a story is contentious; the meeting hands off here).
 
-**After every sub-skill returns, IMMEDIATELY continue with the next step.**
-
----
-
-## Execution Is Not Negotiable
-
-By the time `/we:story` runs, the plan already exists (`/we:refine` produced it) and the user has chosen to execute it. The pipeline IS the execution path, not a discovery path. The phases in the plan ARE the phase-by-phase execution — running them sequentially with checkpoints is what "phased" means here.
-
-**Do NOT ask the user how to run the story.** Specifically forbidden:
-
-- **At the start:** "Should I run this end-to-end or phase by phase?" / "This story is large — how would you like to proceed?" — No. Just start. Story size and phase count are not negotiation levers; a 6-phase encryption story and a 1-phase typo fix run the same pipeline.
-- **Mid-pipeline, on token-budget grounds:** "The context is getting large, should I split the PR?" / "We're approaching the token limit, want me to stop?" — No. The session runs on a 1M-token model and the runtime auto-compacts older turns. Token pressure is not your problem to solve by interrupting the user. Keep going. If compaction actually happens, the checkpoint system lets you resume — that's exactly what it's for.
-
-**Legitimate reasons to interrupt the user (these stay — judgment is not abolished):**
-
-1. **Circuit Breaker** — 3 failures in the same phase. Present options.
-2. **AC Verification Gate** (Step 3) — blocking checkpoint by design.
-3. **Plan ambiguity that blocks implementation** — a concrete, named gap in the plan that cannot be resolved by reading the code. State the gap, ask the specific question, continue.
-4. **Destructive or out-of-scope action** — anything the system prompt's "executing actions with care" rules require confirmation for (force-push, dropping data, deleting branches, etc.).
-
-If your reason to interrupt does not fit one of those four buckets, the answer is: just execute.
+> **APO altitude:** Story (Solo). Upstream: `/we:meet epic` decomposes Epics into Stories that land here. Downstream: `/we:build {TICKET}` hands the plan to the autonomous Build pipeline. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude map.
+>
+> **For Epic-altitude work** (formulating or refining an Epic), use `/we:epic` (Solo) or `/we:meet epic` (Council). Epic Operations no longer live here.
 
 ---
 
@@ -40,338 +25,274 @@ If your reason to interrupt does not fit one of those four buckets, the answer i
 
 ```
 Read("quality/dor.md")
-Read("quality/dod.md")
 ```
+
+**Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first to verify prerequisites (`gh` CLI, Jira access, recommended plugins). Do NOT block — `/we:story` can proceed in degraded modes (no ticketing → Plan-only).
 
 ---
 
-## Orchestration CLI
+## Your Output
 
-```bash
-# Checkpoints
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status {TICKET}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story resume {TICKET}
+| What | Where | Detail Level |
+|---|---|---|
+| User Story | Ticket (minimal) | "As X I want Y so that Z" |
+| **Plan** | `docs/plans/{TICKET}-plan.md` | Acceptance Criteria, Technical Approach, Phases, Tests |
 
-# Circuit breaker (3 failures → stop)
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {phase}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit fail {TICKET} {phase} --error "msg"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit success {TICKET} {phase}
-
-# CI-fix loop (max 3 cycles)
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix start {TICKET} {pr_number}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix attempt {TICKET} {fix_type}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
-```
-
-**DB location:** `~/.claude/weside/orchestration.db` — Never access directly, always use CLI.
+**Ticket is MINIMAL. Plan contains ALL details.**
 
 ---
 
-## Pipeline
+## Writing Effective Acceptance Criteria
 
-Single source of truth — step, what it does, checkpoint written, who writes it. Earlier `refined` checkpoint comes from `/we:refine` before this skill is invoked.
+### The Formula: User Action + Entry Point + Outcome
 
-| Step | What | Checkpoint written | Written by |
-|---|---|---|---|
-| 0 | Check for resume | — | — |
-| 1 | DoR + load story + plan + worktree + ticket → "In Progress" | `git_prepared` | story (Step 1) |
-| 2 | Develop (inline or parallel-subagent dispatch) | `implementation_complete` | story (Step 2) |
-| 3 | AC verification gate (BLOCKING) | `ac_verified` | story (Step 3) |
-| 4 | Simplify | `simplified` | story (Step 4) |
-| 5 | PARALLEL: `/we:review` + `/we:static` + `/we:test` | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
-| 6 | Documentation check (`doc-architect`) | `docs_updated` | docs (Step 6) |
-| 7 | `/we:pr` (verifies all 3 quality-gate checkpoints first) | `pr_created` | pr-creator |
-| 8 | Review-fix loop INLINE (max 3 cycles) | `ci_passed` | story (Step 8) |
-| 9 | Verify ticket → "In Review" | — | — |
+Every AC must answer:
+1. **What can the user DO?** (verb: open, see, click, access)
+2. **HOW do they access it?** (entry point: button, menu, route)
+3. **What happens?** (expected outcome)
+
+### Given/When/Then Format
+
+```
+Given I am on the settings page
+When I click the "Dark Mode" toggle
+Then the UI updates to dark theme immediately
+```
+
+**Entry point is in the "When" clause.**
+
+### Red Flags
+
+| Phrase | Problem | Fix |
+|---|---|---|
+| "Feature exists" | No access path | Add "via [button/menu/route]" |
+| "Shows X" | How to open? | Add entry point |
+| "Implemented" | Too vague | Specify user action |
 
 ---
 
-## Step 0: Check for Resume
+## MODE 1: Refine Existing Story
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story resume {TICKET}
+### Step 1: Load Story
+
+Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-plan.md`.
+
+### Step 2: Understand Context (INTERACTIVE)
+
+Ask user about unclear points. Clarify scope, requirements, edge cases.
+
+**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal. If the Story turns out to be Epic-sized, hand off to `/we:epic` — don't try to write a plan that doesn't fit a sprint.
+
+### Step 3: Update Ticket (MINIMAL)
+
+```markdown
+## User Story
+As [role] I want [feature] so that [benefit].
+
+## Plan
+Implementation Plan: docs/plans/{TICKET}-plan.md
 ```
 
-If interrupted → ask user whether to resume from last checkpoint.
+### Step 4: Create Plan (EnterPlanMode)
 
-## Step 1: DoR + Load Story + Reality Check
+Research codebase thoroughly, then create detailed plan.
 
-Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-plan.md`).
+**Architecture Context (TurboVault):** Before writing the plan, search for relevant
+architecture docs using TurboVault MCP (if available):
+```
+mcp__turbovault__semantic_search("topic of this story")
+mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", value:"<relevant-domain>"}])
+```
+Read the top 3-5 results to understand existing patterns, primitives, and ADRs
+that apply. Reference them in the plan's Technical Approach section.
+
+**Session Context → Plan:** Before writing the plan, review the conversation so far.
+Distill into the plan:
+- **Context section:** Write as a narrative brief — what problem, why now, what the
+  user cares about, non-obvious constraints. As if explaining to a colleague who
+  wasn't in the room. This is the MOST important section for the implementing agent.
+- **Design Decisions table:** Every alternative discussed, every "we could also do X"
+  that was rejected, with the reasoning. Empty rows are fine if nothing was discussed.
 
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
-**Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP
-(if available) to surface related architecture docs:
+```markdown
+---
+story: {TICKET}
+created: YYYY-MM-DD
+status: draft
+parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files + no ordering dependency). See independence-check note in Implementation Phases before filling.
+---
+
+# Plan: [Story Title]
+
+## Context
+
+[Informal brief — written as if explaining to a developer who just joined
+the conversation. Capture: what problem we're solving and why NOW, what the
+user cares about most, constraints that aren't obvious from the code, and
+any important context from the design discussion. 3-8 sentences, no bullet
+points — narrative voice.]
+
+## Acceptance Criteria
+1. **Given** [context] **When** [action] **Then** [result]
+
+## User Journey
+> **This story is only DONE when the user can experience the journey end-to-end.**
+
+1. [Starting point: where does the user begin?]
+2. [Action: what does the user do?]
+3. [Result: what does the user see / experience?]
+4. [Close: how does the interaction end?]
+
+## Testing Requirements
+- Unit tests for [X]
+- Integration tests for [Y]
+
+## Technical Approach
+**Patterns:** [relevant patterns]
+
+## Implementation Phases
+
+### Phase 1: [Name]
+- **Goal:** [achieved outcome]
+- **Files:** [affected files]
+- **Approach:** [how]
+
+### Phase 2: [Name]
+...
+
+> **Independence check (fill `parallel_groups`):** For stories with 3+ phases, when phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. If that applies, list them in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). Explicit declaration here is what enables `/we:build` to fan out sub-agents; prose descriptions like "these can run in parallel" are not read by the orchestrator.
+
+## Design Decisions
+
+| Decision | Alternatives Considered | Why This |
+|----------|------------------------|----------|
+| [what we chose] | [what we didn't choose] | [reasoning] |
+
+## Code Guidance
+**DO:** [pattern to follow]
+**DON'T:** [anti-pattern to avoid]
+
+## Security Review Required
+[Yes/No] — [reason]
+
+## Documentation Impact
+- [ ] **API docs** — [Yes/No: endpoints added/changed?]
+- [ ] **Architecture docs** — [Yes/No: patterns/ADRs changed?]
+- [ ] **README/Setup** — [Yes/No: install/config steps changed?]
+- [ ] **User-facing docs** — [Yes/No: features/workflows changed?]
+- [ ] **No documentation changes needed**
+
+Specific files to update: [list affected doc files if known]
 ```
-mcp__turbovault__find_similar_notes("docs/plans/{TICKET}-plan.md")
-```
-Read the top 3 results — they contain patterns, primitives, and ADRs relevant
-to this story. Keep them in mind during implementation.
 
-**Reality Check:** If plan exists, check creation date against recent git changes. If code changed significantly since the plan was written (files moved, APIs renamed, dependencies changed), **STOP the pipeline** and ask the user: "The plan may be outdated — key files have changed since it was written. Run `/we:refine {TICKET}` to update the plan before continuing?" Do NOT proceed with a stale plan.
+### Step 5: User Approval (ExitPlanMode)
 
-**Dynamic Todo-Liste:** Extract phases from plan (`### Phase \d+:` headers). Build todos for plan phases + AC Verification + Quality Gates + PR + Reviews.
+User reviews plan. On feedback → adjust. On approval → continue.
 
-**Plan Frontmatter — parse `parallel_groups`:** After loading the plan, extract the `parallel_groups` field from YAML frontmatter. Default (no field present) = all phases run sequentially inline. If present, the value is a list of lists of phase numbers — e.g. `parallel_groups: [[2,3]]` means phases 2 and 3 can run concurrently. Pass this to Step 2 to guide dispatch decisions. A phase not mentioned in any group always runs inline in plan order.
+### Step 6: Post-Approval — EXECUTE IMMEDIATELY (NO user input needed!)
 
-### Worktree (Default)
+⛔ **ExitPlanMode approval = "continue executing Step 6", NOT "stop and summarize"!**
 
-**Unless the user explicitly says otherwise**, create a git worktree for isolated development:
+**Execute these 5 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
-```
-EnterWorktree(name="{type}/{TICKET}-short-description")
-```
+1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
+2. **Update ticket:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
+3. **Commit plan to main:** Only if the main worktree has `main` checked out (do NOT switch branches). Resolve `MAIN_WORKTREE=$(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}')`. Then:
+   ```bash
+   cd "$MAIN_WORKTREE" && \
+   [ "$(git branch --show-current)" = "main" ] && \
+   git add docs/plans/{TICKET}-plan.md && \
+   git commit -m "docs: add {TICKET} plan — {Story Title}" && \
+   git push || echo "WARN: main worktree not on main branch — plan saved but not committed. Commit manually."
+   ```
+4. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined` (CLI keeps the `story` table name for back-compat — see Build skill note.)
+5. **Output:** `"Plan saved to docs/plans/{TICKET}-plan.md. /we:story DONE."`
 
-This gives the story an isolated copy of the repo. The worktree is kept on completion (user decides cleanup). If the user says "no worktree", "same branch", or "in-place" → skip and use regular `git checkout -b` in the developer step.
-
-**Transition ticket → "In Progress" (MANDATORY):**
-
-Detect the available ticketing tool (in priority order):
-1. Atlassian MCP (`jira_*` tools) → get transitions, find "In Progress", execute transition
-2. `gh` CLI → GitHub Issues (no status transition possible — skip silently)
-3. Nothing → skip silently
-
-For Jira (Atlassian MCP):
-1. Get available transitions: `jira_get_issue(issue_key=TICKET, expand="transitions")`
-2. Find the transition to "In Progress" (name varies: "In Progress", "Start Progress", "In Bearbeitung")
-3. Execute: `jira_transition_issue(issue_key=TICKET, transition_id=...)`
-4. **Verify** the ticket actually moved — re-fetch and check status. If it didn't move, retry once with a different transition name.
-
-If transition fails → log warning and continue. Do NOT block the pipeline.
-
-Write checkpoint `git_prepared`.
-
-## Step 2: Develop (inline or parallel-subagent dispatch)
-
-⛔ **Do NOT call `Skill(skill="develop")`!** `Skill()` loads a skill into the main context, inflating it and causing the orchestrator to lose control. Use one of the two modes below instead.
-
-Check circuit breaker. Then choose mode based on the plan's `parallel_groups` frontmatter (parsed in Step 1):
+⛔ **STOP after step 5. No implementation. No /we:build. No branch. No code.**
 
 ---
 
-### Mode A — Sequential inline (default)
+## MODE 2: Create New Story
 
-**When:** `parallel_groups` is absent or empty (`[]`) in the plan, or the story has only one phase.
+Trigger: `/we:story "Feature description"`
 
-Execute all phases inline in the orchestrator thread, one after another. This is the unchanged behaviour for simple stories.
-
----
-
-### Mode B — Parallel subagent dispatch
-
-**When:** `parallel_groups` is a non-empty list in the plan frontmatter.
-
-For each group in `parallel_groups`, dispatch one `Agent()` per phase in that group in a **single message** so they execute concurrently. Wait for all agents in the group before starting the next group or returning to inline phases.
-
-```
-# Example for parallel_groups: [[2,3]] — phases 1 and 4 are inline, 2+3 are parallel
-
-# Phase 1 — inline (not in any group)
-# implement phase 1 directly in the orchestrator thread, commit
-
-# Group [2,3] — dispatch concurrently in ONE message:
-Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
-    run_in_background=True,
-    description="Implement Phase 2 of {TICKET}",
-    prompt=<phase-developer brief for phase 2>
-)
-Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
-    run_in_background=True,
-    description="Implement Phase 3 of {TICKET}",
-    prompt=<phase-developer brief for phase 3>
-)
-
-# Wait for both agents to return, then check for conflicts / integrate
-# Phase 4 — inline (after group completes)
-# implement phase 4 directly in the orchestrator thread, commit
-```
-
-**Conflict recovery:** After a parallel group returns, run `git status` in the feature branch. If merge conflicts exist, `parallel_groups` was misconfigured — the phases were not truly disjoint. Resolve conflicts manually, commit the resolution, and note it in the PR description. Update the plan's `parallel_groups` via `/we:refine` to prevent the same conflict in future runs.
-
-**Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
-
-1. The full path to the plan (`docs/plans/{TICKET}-plan.md`) and which phase number it owns
-2. The phase's Goal, Files, and Approach block **verbatim** from the plan
-3. The ticket key, feature branch name, and absolute repo path
-4. The project conventions file (`CLAUDE.md` path)
-5. **Instruction:** implement the phase, commit with message `{TICKET}: phase {N} — {description}`, push to the feature branch
-6. **Instruction:** follow TDD convention — write failing tests first, then implementation. Run `ruff`/`eslint` auto-fix before committing.
-7. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
-
-**The orchestrator retains all pipeline ownership.** Sub-agents implement + commit only. They do NOT open PRs, transition Jira, write checkpoints, make decisions outside their phase scope, or run quality gates.
-
-**If a sub-agent reports a real blocker** (missing dependency, auth endpoint absent, etc.), record it as a ≤200-token note and decide per-phase whether to defer and continue or stop and ask the user. A sub-agent blocker is NOT a reason to bail on all remaining phases.
+1. Design session — ask clarifying questions
+2. If the scope is Epic-sized (multi-sprint, multiple slices), hand off to `/we:epic` instead of trying to fit it into a Story
+3. Create ticket via ticketing tool (minimal)
+4. Link to Epic (if applicable)
+5. Continue as MODE 1 (Steps 4-6)
 
 ---
 
-### Per-phase checks (both modes)
+## MODE 3: Interactive Design Session
 
-**Setup (once, before any phase):**
+Trigger: `/we:story` (no argument)
 
-1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
-2. **Formulate goal**: "The user should be able to X so that Y."
-
-**For each phase** (after it completes — inline or agent returns):
-
-1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint); commit.
-2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
-3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
-
-   | Check | What to Verify |
-   |-------|---------------|
-   | Authentication | New endpoints require authentication |
-   | Authorization | Data access scoped to current user/tenant |
-   | Input validation | All external input validated at boundaries |
-   | Error messages | No internal details leaked (generic errors only) |
-   | SQL/NoSQL | Parameterized queries only (no string concatenation) |
-   | Secrets | No hardcoded credentials, tokens, or API keys |
-   | Rate limiting | Expensive endpoints have rate limits |
-
-4. **Run local tests** — in Mode A: after each phase. In Mode B: after each inline phase completes, and once after each parallel group integrates (not per sub-agent).
-5. **Write checkpoint** `implementation_complete` — once, after ALL phases complete (both inline and parallel groups)
-
-**3 Guiding Questions (check after each phase):**
-
-- "Can the user use the feature NOW?"
-- "Is the feature REACHABLE?"
-- "Does this bring me closer to the Story GOAL?"
-
-**Continue immediately to Step 3.**
-
-## Step 3: AC Verification Gate (BLOCKING)
-
-Fresh-load plan and story. Verify EVERY AC with concrete evidence (file path, test name, commit).
-
-Check end-to-end: Is the feature reachable? Does the complete user flow work?
-
-Only write checkpoint `ac_verified` when ALL items pass. If items fail → go back to Step 2 and fix.
-
-## Step 4: Simplify
-
-Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simplify")`. Availability is verified once during `/we:setup` (Step 1b — prerequisite check); do NOT re-derive availability from plugin paths or memory here. The only legitimate skip is when the Skill tool actually returns a "skill not found" error — in that case warn `"simplify skill not available — run /we:setup to verify prerequisites"` and continue. If changes made → commit. Write checkpoint `simplified`.
-
-## Step 5: Quality Gates (PARALLEL)
-
-**Three gates run in parallel.** Launch them in a **single message** so they execute concurrently:
-
-Three subagents via `Agent(run_in_background=True)`:
-
-- **code-reviewer** — Code review + AC-alignment
-- **static-analyzer** — Lint, format, types
-- **test-runner** — Tests + coverage
-
-**CodeRabbit runs on GitHub, not locally.** The `check-coderabbit` CI gate
-enforces CRITICAL/MAJOR thread resolution after PR creation. Local CodeRabbit
-CLI is not part of this pipeline — the GitHub review has better context
-(PR diff, commit history, prior reviews) and is the authoritative gate.
-
-**Wait for ALL THREE.** Then verify checkpoints:
-- `review_passed` (code-reviewer clean)
-- `static_analysis_passed` (static-analyzer clean)
-- `test_passed` (tests green + coverage met)
-
-If any fail → fix and re-run. Circuit breaker opens after 3 failures.
-
-## Step 6: Documentation (/we:docs — doc-architect)
-
-**Always run.** Launch the `doc-architect` agent (via `/we:docs`) to read the
-doc landscape fresh, identify what needs updating for this story's diff, and
-propose concrete doc changes.
-
-The agent reads rules, indices (`PRIMITIVES.md`, `foundations/README.md`,
-`adr/README.md`), and the tree at boot — it does NOT rely on a cached doc
-map. It never writes autonomously — every change is a diff proposal.
-
-```
-Agent(
-    subagent_type="we:doc-architect",
-    description="Update documentation for {TICKET}",
-    prompt="Story {TICKET} is implemented. Git diff between this branch and main: <summary of what changed>. Running in proactive mode: what documentation needs updating? Also: does this story introduce or significantly change a user-facing flow? If yes, propose creating or updating a journey doc (docs/architecture/journey-*.md). Return a concise list of proposed doc updates (file, change, why). If nothing needs updating, say so explicitly.",
-    run_in_background=True
-)
-```
-
-When the agent returns with proposals:
-
-1. Present them to the user (concise list — the agent already formatted it)
-2. User approves / adjusts / rejects each proposal
-3. On approval → apply the diffs via Edit
-4. If any bypass annotation changed → also run
-   `bash scripts/generate-bypass-register.sh --write` and commit the
-   regenerated register in the same docs commit
-5. Commit the doc changes and write checkpoint `docs_updated`
-
-If the agent returns "nothing needs updating" — write `docs_updated` immediately
-and continue. Do not invent work.
-
-## Step 7: PR
-
-**BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
-- `review_passed` (code review clean)
-- `static_analysis_passed` (lint/format/types clean)
-- `test_passed` (tests green + coverage met)
-
-If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
-
-CodeRabbit runs on GitHub after PR creation. `/we:ci-review` handles thread resolution.
-
-Call PR creator agent:
-
-```
-Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
-```
-
-Extract PR number. Write checkpoint `pr_created`.
-
-## Step 8: Review-Fix Loop (INLINE — do NOT dispatch Skill)
-
-⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute CI-review steps inline:
-
-1. **Collect** findings from CI, Claude Review, and CodeRabbit (use `gh` CLI)
-2. **Triage**: BLOCKING = must fix, WARNING = fix unless wrong, INFO = evaluate
-3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
-4. **Batch fix** all issues locally, ONE commit with all fixes
-5. **Resolve** CodeRabbit threads via GraphQL, verify 0 unresolved
-6. **Push** only when all threads resolved
-7. **Repeat** (max 3 cycles). After 3 → stop, ask user.
-
-After reviews green → write checkpoint `ci_passed`.
-
-## Step 9: Verify Ticket Transition
-
-The transition to "In Review" is performed by the `pr-creator` agent in its Step 7 (see `agents/pr-creator.md`).
-
-**Verify** the ticket actually moved. If the ticketing tool reports the ticket is still in "In Progress" (or equivalent), retry the transition once. Never move to "Done" — that's the user's job.
+1. Ask user what they want to build
+2. Discuss scope and requirements
+3. If multiple Stories emerge, work them one at a time (or first establish the parent Epic via `/we:epic`)
+4. Create + refine each story
 
 ---
 
-## Error Handling
+> **Epic Operations** (formulate or refine an Epic) live in `/we:epic` (Solo) or `/we:meet epic` (Council). Story-altitude work stops where the slice no longer fits a sprint.
 
-**Circuit Breaker:** After 3 failures in same phase → stop, present options to user.
-**Resume:** On next `/we:story {TICKET}` → detect interrupted state, offer resume.
+---
+
+## Vision Alignment (3 Levels)
+
+### Level 1: No vision configured
+
+Skip vision checks. Just verify ACs and plan quality.
+
+### Level 2: Local vision (`.weside/vision.md`)
+
+If file exists → check story against project vision.
+
+### Level 3: Companion (weside MCP)
+
+If Companion connected → check story against Companion Goals (= product vision).
+Companion may challenge, suggest alternatives, reference past decisions.
+
+---
+
+## Training on the Job
+
+On first `/we:story` without vision:
+> "Would you like to define a project vision? It helps me check stories against your product goals. Run `/we:setup vision` to get started — or we continue without."
+
+One-time hint. If user says no → never ask again.
+
+---
+
+## Ticketing Integration
+
+Detect available ticketing tool (in priority order):
+1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
+2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
+3. `gh` CLI → GitHub Issues
+4. Nothing → Plan-only mode (no ticket, just docs/plans/)
+
+**If weside MCP is connected but Jira tools are missing:** Tell the user:
+> "Jira is not connected via your weside Companion. To enable it: go to weside.ai → Integrations → connect Jira, then activate it for your Companion."
 
 ---
 
 ## Rules
 
-- Always create todo-list before starting
-- Always check DoR and load plan first
-- Always use `EnterWorktree` for isolation (unless user opts out)
-- Always name branches with ticket key FIRST: `{type}/{TICKET}-short-description` (e.g., `feat/PROJ-123-add-login`, `fix/PROJ-456-null-pointer`). The ticket key must appear before the description so it can be extracted reliably via regex.
-- Always transition ticket to "In Progress" in Step 1 — verify it moved, retry once if not
-- Always save checkpoints after each phase
-- Always run quality gates before creating PR
-- Always verify ticket is in "In Review" after PR creation — retry once if not
-- Never skip test quality gate
-- Never create PR if tests fail
-- Never move ticket to "Done" — user's job
-- Never stop mid-pipeline unless circuit breaker opens
-- Never re-invoke `Skill(skill="story")` — if you're reading this, you ARE the story skill
-- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Use `Agent(subagent_type=...)` for parallel-safe phases in Step 2 (isolated context, short report back) or execute inline; Step 8 uses inline CI-review logic. Only `Skill()` dispatch is banned — `Agent()` is explicitly the correct tool for Mode B.
-- Never commit code changes without corresponding test changes in the same commit
-- Never create a PR before ALL THREE quality gates pass (review + static + test)
+- ALWAYS load DoR first
+- ALWAYS create MINIMAL ticket + DETAILED plan
+- ALWAYS use EnterPlanMode for plan creation
+- ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
+- ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
+- ALWAYS use Given/When/Then for ACs
+- ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).
+- ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.
+- ALWAYS fill Design Decisions — every alternative discussed during refine, with reasoning for the chosen approach. This prevents the implementing agent from revisiting already-rejected ideas.
+- ALWAYS ask when unclear
+- ⛔ NEVER start implementation — your job is ONLY Story + Plan
+- ⛔ NEVER auto-continue to /we:build — user decides when
+- ⛔ NEVER create branches, write code, or run tests after plan approval
+- ⛔ After Step 6d: STOP IMMEDIATELY — do not continue under any circumstances

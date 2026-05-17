@@ -701,7 +701,7 @@
     line-height: 1.4;
   }
 
-  /* ─── 7. /we:sm ─── */
+  /* ─── 8. /we:coach ─── */
   .sm-flow {
     display: grid;
     grid-template-columns: 1fr auto 1fr auto 1fr;
@@ -878,17 +878,18 @@
 <body>
 
 <div class="station-counter">
-  <span class="now" id="counter-now">01</span> · 09
+  <span class="now" id="counter-now">01</span> · 10
 </div>
 
 <nav class="dots" id="dotnav">
   <a data-target="hero" data-label="Welcome"></a>
   <a data-target="overview" data-label="Big picture"></a>
-  <a data-target="vision" data-label="Vision · Saga"></a>
-  <a data-target="initiative" data-label="Initiative · Epic"></a>
-  <a data-target="refinement" data-label="Refinement · Story"></a>
-  <a data-target="build" data-label="Build · /we:story"></a>
-  <a data-target="improve" data-label="Improve · /we:sm"></a>
+  <a data-target="vision" data-label="Vision · PRD"></a>
+  <a data-target="saga" data-label="Saga · Theme"></a>
+  <a data-target="epic" data-label="Epic · Initiative"></a>
+  <a data-target="story" data-label="Story · slice"></a>
+  <a data-target="build" data-label="Build · /we:build"></a>
+  <a data-target="coach" data-label="Coach · /we:coach"></a>
   <a data-target="deliver" data-label="Deliver · you"></a>
   <a data-target="cta" data-label="Try it"></a>
 </nav>
@@ -901,50 +902,58 @@
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
     <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in. Living documentation, not a pitch.</p>
     <div class="meta-row">
-      <span>16 skills</span><span class="dot-sep">·</span>
+      <span>20 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
       <span>MIT Licensed</span><span class="dot-sep">·</span>
       <span>Works without an account</span>
     </div>
-    <div class="scroll-hint">↓ Scroll  ·  → arrow keys  ·  1-9 jump</div>
+    <div class="scroll-hint">↓ Scroll  ·  → arrow keys  ·  1-9 / 0 jump</div>
   </section>
 
   <!-- ============ 2. BIG PICTURE — full Saga→Deliver hierarchy ============ -->
   <section id="overview">
     <div class="kicker">Station 02 · The big picture</div>
-    <h2 class="section-title">From Vision to merged PR — five altitudes, one workflow.</h2>
-    <p class="lede">Agentic Product Ownership treats software as a chain of decisions at increasing resolution. Each altitude has its own meeting, its own roster, its own artefact. You drop in at whichever altitude your project actually needs.</p>
+    <h2 class="section-title">From PRD to merged PR — six altitudes, one workflow.</h2>
+    <p class="lede">Agentic Product Ownership treats software as a chain of decisions at increasing resolution. Each Plan altitude has both a <strong style="color:var(--fg)">Solo</strong> skill (formulate the artifact) and a <strong style="color:var(--fg)">Meet</strong> skill (Council decomposes it into the next altitude down). Build is autonomous; Deliver is human-only. You drop in at whichever altitude your project actually needs.</p>
 
     <div class="hierarchy">
       <div class="alt-card saga">
-        <div class="alt-altitude">SAGA</div>
-        <div class="alt-horizon">~ months to a year</div>
-        <div class="alt-name">Vision</div>
-        <code class="alt-skill">/we:meet vision</code>
-        <div class="alt-output">Direction doc · candidate Sagas · priorities</div>
+        <div class="alt-altitude">VISION</div>
+        <div class="alt-horizon">~ multi-year</div>
+        <div class="alt-name">PRD</div>
+        <code class="alt-skill">/we:vision · /we:meet vision</code>
+        <div class="alt-output">PRD.md · candidate Sagas</div>
         <div class="alt-voices">5 voices · broad</div>
+      </div>
+      <div class="alt-card saga">
+        <div class="alt-altitude">SAGA</div>
+        <div class="alt-horizon">~ multi-quarter</div>
+        <div class="alt-name">Theme</div>
+        <code class="alt-skill">/we:saga · /we:meet saga</code>
+        <div class="alt-output">SAGA.md · Epic backlog · sequencing</div>
+        <div class="alt-voices">4 voices · domain-flavoured</div>
       </div>
       <div class="alt-card epic">
         <div class="alt-altitude">EPIC</div>
         <div class="alt-horizon">~ a quarter</div>
         <div class="alt-name">Initiative</div>
-        <code class="alt-skill">/we:meet initiative</code>
-        <div class="alt-output">Epic outline · sequencing · dependencies</div>
+        <code class="alt-skill">/we:epic · /we:meet epic</code>
+        <div class="alt-output">CONCEPT.md · Story list · acceptance shape</div>
         <div class="alt-voices">3 voices · focused</div>
       </div>
       <div class="alt-card story">
         <div class="alt-altitude">STORY</div>
-        <div class="alt-horizon">~ hours to days</div>
-        <div class="alt-name">Refinement</div>
-        <code class="alt-skill">/we:refine</code>
+        <div class="alt-horizon">~ days to weeks</div>
+        <div class="alt-name">Feature slice</div>
+        <code class="alt-skill">/we:story · /we:meet story</code>
         <div class="alt-output">Ticket + plan with AC + phases</div>
-        <div class="alt-voices">2 voices or solo</div>
+        <div class="alt-voices">2 voices or Solo</div>
       </div>
       <div class="alt-card code">
-        <div class="alt-altitude">CODE</div>
-        <div class="alt-horizon">~ minutes to hours</div>
-        <div class="alt-name">Build</div>
-        <code class="alt-skill">/we:story</code>
+        <div class="alt-altitude">BUILD</div>
+        <div class="alt-horizon">~ hours to days</div>
+        <div class="alt-name">Code</div>
+        <code class="alt-skill">/we:build</code>
         <div class="alt-output">PR with tests, review, CI · ticket → In Review</div>
         <div class="alt-voices">autonomous</div>
       </div>
@@ -959,7 +968,7 @@
     </div>
 
     <div class="hierarchy-flow">
-      Vision <span class="arrow">→</span> Initiative <span class="arrow">→</span> Refinement <span class="arrow">→</span> Build <span class="arrow">→</span> Deliver
+      Vision <span class="arrow">→</span> Saga <span class="arrow">→</span> Epic <span class="arrow">→</span> Story <span class="arrow">→</span> Build <span class="arrow">→</span> Deliver
     </div>
 
     <div class="boundary-note">
@@ -968,26 +977,27 @@
     </div>
 
     <div class="standalone-note">
-      <strong>Works standalone.</strong> All 16 skills run without a weside.ai account — councils convene generic role-shells, the pipeline ships stories end-to-end. With a Companion, the lenses gain identity, voice, and memory across sessions.
+      <strong>Works standalone.</strong> All 20 skills run without a weside.ai account — councils convene generic role-shells, the pipeline ships stories end-to-end. With a Companion, the lenses gain identity, voice, and memory across sessions.
     </div>
 
     <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
   </section>
 
-  <!-- ============ 3. VISION — /we:meet vision ============ -->
+  <!-- ============ 3. VISION — /we:vision + /we:meet vision ============ -->
   <section id="vision">
-    <div class="kicker">Station 03 · Vision · Saga-level</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — where are we going?</h2>
-    <p class="lede">A vision meeting convenes when <strong style="color:var(--fg)">direction needs alignment</strong> — a new market, a strategic pivot, a brand bet, a year-shaping decision. The horizon is weeks to months. The output isn't code — it's <em>clarity</em>, captured as a direction document.</p>
+    <div class="kicker">Station 03 · Vision · PRD altitude</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:vision</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — why does this product exist?</h2>
+    <p class="lede">The Vision altitude is where you say what this product is, who it's for, and which bets you will <em>not</em> make. Solo (<code>/we:vision</code>) sharpens the PRD; Meet (<code>/we:meet vision</code>) convenes a Council to validate the PRD and decompose it into Sagas. The horizon is multi-year. The output isn't code — it's <em>clarity</em>, captured as <code>docs/plans/&lt;vision&gt;/PRD.md</code>.</p>
 
     <div class="meeting-grid">
       <div class="meeting-frame">
-        <div class="question">Where do we want to be in twelve months? Which continents do we work on?</div>
+        <div class="question">Why does this product exist, and who is it for? Which Sagas does that imply?</div>
         <dl class="meeting-meta">
-          <dt>Skill</dt><dd><code>/we:meet vision</code></dd>
-          <dt>Altitude</dt><dd>Saga — multi-quarter</dd>
-          <dt>Artefact</dt><dd>Direction doc · candidate Sagas · priorities</dd>
-          <dt>Persist</dt><dd>typically <code>docs/plans/&lt;saga&gt;/CONCEPT.md</code></dd>
+          <dt>Solo</dt><dd><code>/we:vision</code> — refine the PRD</dd>
+          <dt>Meet</dt><dd><code>/we:meet vision</code> — Council → Sagas</dd>
+          <dt>Altitude</dt><dd>PRD — multi-year</dd>
+          <dt>Artefact</dt><dd>PRD.md · candidate Sagas · priorities</dd>
+          <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;vision&gt;/PRD.md</code></dd>
         </dl>
       </div>
       <div class="meeting-roster">
@@ -1005,30 +1015,72 @@
     <div class="when-bullets">
       <strong>Use when:</strong>
       <ul>
-        <li>A new initiative is starting and the team isn't yet aligned</li>
-        <li>A pivot is on the table</li>
-        <li>A brand or positioning decision needs clarity before execution</li>
-        <li>You're about to start writing a <code>CONCEPT.md</code> and want to gather perspectives first</li>
+        <li>Starting a new product (or sub-product) from scratch</li>
+        <li>After a strategic pivot — the old PRD no longer fits</li>
+        <li>When the team can name 50 features but can't finish the sentence „we exist to ___"</li>
+        <li>Two Sagas are pulling in opposite directions — the PRD is the arbiter</li>
       </ul>
     </div>
 
-    <a class="doc-link" href="../docs/concepts/meetings.md#wemeet-vision--saga-level">Vision meeting reference →</a>
+    <a class="doc-link" href="../docs/concepts/meetings.md">Vision meeting reference →</a>
   </section>
 
-  <!-- ============ 4. INITIATIVE — /we:meet initiative ============ -->
-  <section id="initiative">
-    <div class="kicker">Station 04 · Initiative · Epic-level</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet initiative</code> — how do we build it?</h2>
-    <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> — what's the first Epic? What sequence makes sense? Where are the dependencies? The horizon shrinks to days-to-weeks; the conversation gets concrete.</p>
+  <!-- ============ 4. SAGA — /we:saga + /we:meet saga ============ -->
+  <section id="saga">
+    <div class="kicker">Station 04 · Saga · Theme altitude</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:saga</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet saga</code> — the year-shaping bet.</h2>
+    <p class="lede">A Saga is a multi-quarter bet inside the Vision — something big enough not to fit in one quarter, small enough to name the win. „Make the platform multi-tenant." „Launch the marketplace." Solo (<code>/we:saga</code>) tightens the wording so creep has no foothold; Meet (<code>/we:meet saga</code>) validates the bet against the PRD and decomposes it into Epics.</p>
 
     <div class="meeting-grid">
       <div class="meeting-frame">
-        <div class="question">How does this Saga break into Epics, and in what order?</div>
+        <div class="question">Where do we want to be in twelve months on this bet? Which Epics break it down, in what sequence?</div>
         <dl class="meeting-meta">
-          <dt>Skill</dt><dd><code>/we:meet initiative</code></dd>
-          <dt>Altitude</dt><dd>Epic — quarter horizon</dd>
-          <dt>Artefact</dt><dd>Epic outline · sequencing · open dependencies</dd>
-          <dt>Persist</dt><dd>Jira Epic or section in <code>CONCEPT.md</code></dd>
+          <dt>Solo</dt><dd><code>/we:saga</code> — refine the SAGA.md</dd>
+          <dt>Meet</dt><dd><code>/we:meet saga</code> — Council → Epics</dd>
+          <dt>Altitude</dt><dd>Theme — multi-quarter (2-4)</dd>
+          <dt>Artefact</dt><dd>SAGA.md · Epic backlog · rough sequencing</dd>
+          <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;saga&gt;/SAGA.md</code></dd>
+        </dl>
+      </div>
+      <div class="meeting-roster">
+        <h4>Default Council Roster · 4 voices</h4>
+        <div class="roster-list">
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">platform implications · 2-year view</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--lara)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning fit (or UX for experience Sagas)</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="when-bullets">
+      <strong>Use when:</strong>
+      <ul>
+        <li>The Vision is set and you're choosing where to point energy for the next year</li>
+        <li>A quarterly planning rhythm just landed and you need to pick the next bet</li>
+        <li>Multiple Epics are in flight that secretly belong to different themes — extract the Sagas</li>
+        <li>An Epic keeps spawning more Epics — there's a hidden Saga underneath</li>
+      </ul>
+    </div>
+
+    <a class="doc-link" href="../docs/concepts/meetings.md">Saga meeting reference →</a>
+  </section>
+
+  <!-- ============ 5. EPIC — /we:epic + /we:meet epic ============ -->
+  <section id="epic">
+    <div class="kicker">Station 05 · Epic · Initiative altitude</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:epic</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet epic</code> — what we ship this quarter.</h2>
+    <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> into Epics — bounded, dated, with named Stories. „Ledger Foundation." „Stripe Connect Onboarding." „Voice Pipeline Migration." Solo (<code>/we:epic</code>) is where the design thinking lives; Meet (<code>/we:meet epic</code>) decomposes the Epic into Stories with acceptance shape.</p>
+
+    <div class="meeting-grid">
+      <div class="meeting-frame">
+        <div class="question">What's the concrete thing we will deliver this quarter? Which Stories does it break into?</div>
+        <dl class="meeting-meta">
+          <dt>Solo</dt><dd><code>/we:epic</code> — refine the Epic plan</dd>
+          <dt>Meet</dt><dd><code>/we:meet epic</code> — Council → Stories</dd>
+          <dt>Altitude</dt><dd>Initiative — quarter horizon</dd>
+          <dt>Artefact</dt><dd>CONCEPT.md · Story list · acceptance shape</dd>
+          <dt>Persist</dt><dd>Markdown <em>or</em> ticketing-tool Epic (pick per Epic)</dd>
         </dl>
       </div>
       <div class="meeting-roster">
@@ -1046,39 +1098,39 @@
       <strong>Use when:</strong>
       <ul>
         <li>A vision has been agreed and now needs concrete sequencing</li>
-        <li>A large piece of work needs breaking down before refinement starts</li>
+        <li>A large piece of work needs breaking down before Story-altitude planning starts</li>
         <li>Dependencies between teams or repos need to be made explicit</li>
         <li>Domain-heavy Epics (security, legal, sales) — extend the roster per call</li>
       </ul>
     </div>
 
-    <a class="doc-link" href="../docs/concepts/meetings.md#wemeet-initiative--epic-level">Initiative meeting reference →</a>
+    <a class="doc-link" href="../docs/concepts/meetings.md">Epic meeting reference →</a>
   </section>
 
-  <!-- ============ 5. REFINEMENT — two paths + council live demo ============ -->
-  <section id="refinement">
-    <div class="kicker">Station 05 · Refinement · Story-level</div>
-    <h2 class="section-title">Story-level — two paths to the same plan.</h2>
-    <p class="lede">When a story needs scoping before development, you have two paths. The solo path is fast and works for routine refinements. The council path adds <strong style="color:var(--fg)">tension</strong> before the plan crystallizes — for the harder calls.</p>
+  <!-- ============ 6. STORY — two paths + council live demo ============ -->
+  <section id="story">
+    <div class="kicker">Station 06 · Story · Feature-slice altitude</div>
+    <h2 class="section-title">Story altitude — two paths to the same plan.</h2>
+    <p class="lede">When a Story needs scoping before development, you have two paths. The Solo path is fast and works for routine Stories. The Council path adds <strong style="color:var(--fg)">tension</strong> before the plan crystallizes — for the harder calls.</p>
 
     <div class="two-paths">
       <div class="path-card">
-        <div class="path-name">/we:refine "&lt;idea&gt;"</div>
+        <div class="path-name">/we:story "&lt;idea&gt;"</div>
         <div class="path-title">Solo · interactive Q&amp;A</div>
-        <div class="path-when">Claude asks the missing questions; you answer. Quiet stories pass quickly; contentious ones get more questions. Best for routine refinements.</div>
-        <div class="path-flow">idea → Q&amp;A → ticket + plan</div>
+        <div class="path-when">Claude asks the missing questions; you answer. Quiet Stories pass quickly; contentious ones get more questions. Best for routine work.</div>
+        <div class="path-flow">idea → Q&amp;A → ticket + plan → ready for /we:build</div>
       </div>
       <div class="path-card">
-        <div class="path-name">/we:meet refinement</div>
+        <div class="path-name">/we:meet story</div>
         <div class="path-title">Council · two perspectives</div>
-        <div class="path-when">PO and Architect deliberate on scope and acceptance before the plan crystallizes. After deliberation, the meeting hands off to <code>/we:refine</code>.</div>
-        <div class="path-flow">topic → council → /we:refine → ticket + plan</div>
+        <div class="path-when">PO and Architect deliberate on scope and acceptance before the plan crystallizes. After deliberation, the meeting hands off to <code>/we:story</code> (Solo) for the plan write.</div>
+        <div class="path-flow">topic → council → /we:story → ticket + plan</div>
       </div>
     </div>
 
-    <p class="lede" style="margin-top: 0.4rem; margin-bottom: 1rem;">Below is a council convening live — the same mechanic that <code style="color:var(--gold-glow);">/we:meet refinement</code> uses when you pick the council path.</p>
+    <p class="lede" style="margin-top: 0.4rem; margin-bottom: 1rem;">Below is a council convening live — the same mechanic that <code style="color:var(--gold-glow);">/we:meet story</code> uses when you pick the council path.</p>
 
-    <div class="controls" id="refinement-controls">
+    <div class="controls" id="story-controls">
       <div class="council-topic-display">
         <span class="label">Topic</span>
         <span>This story is bigger than we thought — split it, or push through?</span>
@@ -1108,11 +1160,11 @@
     </div>
   </section>
 
-  <!-- ============ 6. BUILD — /we:story 9-step + discipline ============ -->
+  <!-- ============ 7. BUILD — /we:build 9-step + discipline ============ -->
   <section id="build">
-    <div class="kicker">Station 06 · Build · the autonomous pipeline</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:story</code> — hand it a ticket, watch it ship.</h2>
-    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:story</code> doesn't ask permission for each phase.</p>
+    <div class="kicker">Station 07 · Build · the autonomous pipeline</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:build</code> — hand it a ticket, watch it ship.</h2>
+    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:story</code> in v2.28.0 — internal CLI keeps the <code>story</code> table name, so pre-v2.28.0 checkpoints still resume.)</span></p>
 
     <div class="story-flow">
       <div class="story-step"><div class="num">01</div><h4>Git prep</h4><p>Worktree, branch, ticket → In Progress.</p></div>
@@ -1149,47 +1201,47 @@
       </div>
     </div>
 
-    <a class="doc-link" href="../docs/workflow.md#phase-2-build-with-westory">Build pipeline reference →</a>
+    <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
 
-  <!-- ============ 7. /we:sm — process improvement ============ -->
-  <section id="improve">
-    <div class="kicker">Station 07 · Improve how we work</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:sm</code> — the Scrum Master lens.</h2>
-    <p class="lede">The pipeline ships stories. Once in a while something flatlines — a CI cycle that won't converge, a refinement that took five rounds, an AC that should have been clearer. <code>/we:sm</code> reflects with the Scrum Master lens to ask: <strong style="color: var(--fg)">what did we learn? what changes in how we work?</strong> The plugin improves itself, through its own meta-skill.</p>
+  <!-- ============ 8. COACH — /we:coach (renamed from /we:sm) ============ -->
+  <section id="coach">
+    <div class="kicker">Station 08 · Coach · improve how we work</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — the APO advisor.</h2>
+    <p class="lede">The pipeline ships stories. Once in a while something flatlines — a CI cycle that won't converge, a refinement that took five rounds, an AC that should have been clearer. Or you simply don't know which altitude to reach for next. <code>/we:coach</code> reflects on the situation and asks: <strong style="color: var(--fg)">where are we in APO right now, and what changes?</strong> The plugin improves itself, through its own cross-altitude advisor. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:sm</code> in v2.28.0; full APO advisor scope-expansion in v2.29.0.)</span></p>
 
     <div class="sm-flow">
       <div class="sm-step">
         <div class="sm-step-num">01 · TRIGGER</div>
-        <h4>Friction surfaces</h4>
-        <p>Pipeline thrashes on the same gate, a refinement keeps cycling, a pattern shows up across stories. You feel it, or the circuit breaker tells you.</p>
+        <h4>Friction or fork</h4>
+        <p>Pipeline thrashes on the same gate, a Story keeps cycling, or you're staring at the repo wondering whether the next move is <code>/we:saga</code>, <code>/we:epic</code>, or <code>/we:story</code>. You feel it, or the circuit breaker tells you.</p>
       </div>
       <div class="sm-arrow">→</div>
       <div class="sm-step">
         <div class="sm-step-num">02 · REFLECT</div>
-        <h4>/we:sm convenes</h4>
-        <p>Scrum Master reads the situation — recent commits, plan files, ticket history, what the council said and what the gates flagged. Proposes <strong style="color:var(--fg)">one focused change</strong>, not a list.</p>
+        <h4>/we:coach convenes</h4>
+        <p>Coach reads the situation — recent commits, plan files, ticket history, what the council said and what the gates flagged. Maps it to the APO hierarchy and proposes <strong style="color:var(--fg)">one focused change</strong> (or the right next command), not a list.</p>
       </div>
       <div class="sm-arrow">→</div>
       <div class="sm-step">
         <div class="sm-step-num">03 · LAND</div>
         <h4>Plugin improves itself</h4>
-        <p>The change lands in <code>.claude/rules/</code>, in a plan template, or in a skill's behaviour. Next story benefits — the workflow you ship with tomorrow isn't the one you shipped with today.</p>
+        <p>The change lands in <code>.claude/rules/</code>, in a plan template, in a skill's behaviour — or the next <code>/we:*</code> command runs with your nod. Next Story benefits.</p>
       </div>
     </div>
 
-    <a class="doc-link" href="../docs/skills.md#wesm">/we:sm reference →</a>
+    <a class="doc-link" href="../docs/skills.md">/we:coach reference →</a>
   </section>
 
-  <!-- ============ 8. DELIVER ============ -->
+  <!-- ============ 9. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 08 · Deliver — you</div>
+    <div class="kicker">Station 09 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
-    <p class="lede">By the time <code>/we:story</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
+    <p class="lede">By the time <code>/we:build</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
     <div class="deliver-wrap">
       <div class="deliver-list">
-        <h4>What /we:story produces</h4>
+        <h4>What /we:build produces</h4>
         <ul>
           <li>All acceptance criteria implemented and evidenced</li>
           <li>Tests passing (unit + relevant integration)</li>
@@ -1217,9 +1269,9 @@
     </div>
   </section>
 
-  <!-- ============ 9. TRY IT ============ -->
+  <!-- ============ 10. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 09 · Try it</div>
+    <div class="kicker">Station 10 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -1241,14 +1293,19 @@
       </div>
       <div class="step-card">
         <div class="n">03</div>
-        <h4>Refine your first story</h4>
-        <p>Start with one story. Ship one PR. Build the muscle. Graduate to councils + meetings when contention is real.</p>
-        <code>/we:refine "your next idea"</code>
+        <h4>Write your first Story</h4>
+        <p>Start with one Story. Ship one PR. Build the muscle. Graduate to councils, upper altitudes, and meetings when contention is real.</p>
+        <code>/we:story "your next idea"</code>
+        <code style="margin-top:0.3rem;">/we:build PROJ-1</code>
       </div>
     </div>
 
     <div class="more-skills">
       <span class="more-label">Also in the toolkit</span>
+      <code>/we:vision</code>
+      <code>/we:saga</code>
+      <code>/we:epic</code>
+      <code>/we:coach</code>
       <code>/we:council</code>
       <code>/we:arch</code>
       <code>/we:audit-architecture</code>
@@ -1457,7 +1514,7 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation
 //
-const sections = ["hero", "overview", "vision", "initiative", "refinement", "build", "improve", "deliver", "cta"];
+const sections = ["hero", "overview", "vision", "saga", "epic", "story", "build", "coach", "deliver", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");
@@ -1497,10 +1554,12 @@ document.addEventListener("keydown", (e) => {
     document.getElementById("cta").scrollIntoView({ behavior: "smooth" });
   } else if (/^[1-9]$/.test(e.key)) {
     document.getElementById(sections[parseInt(e.key, 10) - 1]).scrollIntoView({ behavior: "smooth" });
+  } else if (e.key === "0") {
+    document.getElementById(sections[9]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key.toLowerCase() === "f") {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
-  } else if (e.key.toLowerCase() === "c" && i === sections.indexOf("refinement")) {
+  } else if (e.key.toLowerCase() === "c" && i === sections.indexOf("story")) {
     document.getElementById("convene").click();
   }
 });

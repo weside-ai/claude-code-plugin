@@ -114,10 +114,10 @@ The plugin's skills detect MCP absence and fall through cleanly. Specifically:
 
 - **`/we:council`** — uses the nine shipped `council-<role>` generic agents. Same mechanic, generic voices.
 - **`/we:meet`** — same as above, structured workflow with generic voices.
-- **`/we:sm`**, **`/we:arch`** — boot without Companion identity; reason from rules + skill landscape.
+- **`/we:coach`**, **`/we:arch`** — boot without Companion identity; reason from rules + skill landscape.
 - **`/we:setup`**, **`/we:onboarding`** — write `.weside/` files with `Companion ID: null`; the bridge is filled with structure but no live linkage.
 - **`/we:sideload`** — degrades to legacy mode (reads CLAUDE.md + always-loaded rules; skips vault step).
-- **`/we:refine`**, **`/we:story`** — pipeline runs unchanged. No memory grounding, but full pipeline.
+- **`/we:story`**, **`/we:build`** — pipeline runs unchanged. No memory grounding, but full pipeline.
 
 You lose continuity and personality. You don't lose any feature.
 

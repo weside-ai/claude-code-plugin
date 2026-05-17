@@ -81,17 +81,17 @@ WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 # Development phases (during /story):
 #   - git_prepared through jira_transitioned
 STORY_PHASES = [
-    "refined",  # /we:refine — Story + Plan created
+    "refined",  # /we:story (Solo Story) — Story + Plan created
     "git_prepared",  # /we:develop — Branch created, story loaded
     "implementation_complete",  # /we:develop — Code + tests committed
-    "ac_verified",  # /we:story — All ACs verified with evidence
-    "simplified",  # /we:story — Code simplified
+    "ac_verified",  # /we:build — All ACs verified with evidence
+    "simplified",  # /we:build — Code simplified
     "docs_updated",  # /we:docs — Documentation updated
     "review_passed",  # /we:review — Code review passed
     "static_analysis_passed",  # /we:static — Lint/format/types passed
     "test_passed",  # /we:test — Tests + coverage passed
     "pr_created",  # /we:pr — PR created
-    "ci_passed",  # /we:story — CI/Reviews green
+    "ci_passed",  # /we:build — CI/Reviews green
 ]
 
 # Stale checkpoint threshold in hours

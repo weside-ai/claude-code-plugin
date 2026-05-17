@@ -6,18 +6,72 @@ For the pipeline overview, see [workflow.md](workflow.md). For learning by doing
 
 ---
 
-## Pipeline skills
+## Plan altitude skills
 
-The skills that ship a story end-to-end.
+Four altitudes — Vision, Saga, Epic, Story. Each has a **Solo** half (formulate / refine the item) and a **Meet** half (Council that decomposes the item into the next altitude down). The Solo skills are listed first; the Meet variants are all dispatched via the single `/we:meet` skill (see *Deliberation skills* below).
 
-### `/we:refine`
+### `/we:vision`
 
-> *Create or refine stories with implementation plans.*
+> *Solo — Product Owner at the PRD altitude.*
 
-The Product Owner skill. Interactive — Claude asks, you decide.
+Produces or sharpens a Product Requirements Document — the multi-year reason a product exists, the audience it serves, the change it intends, the bets it will not make.
 
 **When to use:**
-- Starting a new story
+- Starting a new product or sub-product
+- After a strategic pivot — the old PRD no longer fits
+- When the team can name 50 features but cannot finish the sentence "we exist to ___"
+
+**What it produces:**
+- `docs/plans/<vision>/PRD.md` — one PRD per product
+
+**Hand-off:** to `/we:meet vision` (decompose the PRD into Sagas) or `/we:saga "<name>"` (formulate one Saga the PRD implies).
+
+---
+
+### `/we:saga`
+
+> *Solo — Product Owner at the Theme altitude.*
+
+Produces or sharpens a Saga — a multi-quarter bet inside the Vision. "Make the platform multi-tenant." "Become voice-first." Sagas have a beginning and an end; if they don't, they're a Vision in disguise.
+
+**When to use:**
+- The Vision is set and you're choosing where to point energy for the next year
+- A quarterly planning rhythm just landed and you need to pick the next bet
+- Multiple Epics are in flight that secretly belong to different themes — extract the Sagas to make the conflict legible
+
+**What it produces:**
+- `docs/plans/<saga>/SAGA.md` — Markdown only; ticketing starts at Epic
+
+**Hand-off:** to `/we:meet saga` (decompose into Epics) or `/we:epic "<name>"` (formulate one Epic).
+
+---
+
+### `/we:epic`
+
+> *Solo — Product Owner at the Initiative altitude.*
+
+Produces or sharpens an Epic — a concrete, quarter-sized deliverable that serves a Saga. "Ledger Foundation." "Stripe Connect Onboarding." "Voice Pipeline Migration."
+
+**When to use:**
+- A Saga has been agreed and the next Epic needs scoping
+- A long-running Epic is showing scope drift — re-cut the slice
+- A Story has been refined three times and never converged — the real problem is at the Epic level
+
+**What it produces:**
+- `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`, optionally a Jira Epic with the same name
+
+**Hand-off:** to `/we:meet epic` (decompose into Stories) or `/we:story "<name>"` (write one Story).
+
+---
+
+### `/we:story`
+
+> *Solo — Product Owner at the Story altitude.*
+
+Produces or sharpens a Story — one sprint-sized feature slice with a build-ready plan. Ticket MINIMAL, plan DETAILED. Interactive — Claude asks, you decide.
+
+**When to use:**
+- Starting a new story (most common pipeline entry point)
 - Refining an existing ticket that's too vague to implement
 - Re-planning after the code drifted from a stale plan
 
@@ -25,18 +79,22 @@ The Product Owner skill. Interactive — Claude asks, you decide.
 - Ticket in your ticketing tool (minimal: user-story format)
 - `docs/plans/{TICKET}-plan.md` (detailed: context, ACs, phases, design decisions, security review)
 
-**Hand-off:** to `/we:story` (when you're ready to build) or `/we:meet refinement` (when the story is contentious enough to want two perspectives first).
+**Hand-off:** to `/we:build` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
 
 ---
 
-### `/we:story`
+## Build altitude skill
+
+### `/we:build`
 
 > *Run the full development pipeline autonomously.*
 
-Story orchestrator. Once you trigger it, it runs all eight steps + delivery hand-off without pausing unless something is genuinely blocking.
+Build orchestrator — the autonomous half of the pipeline. Once you trigger it, it runs all nine steps + delivery hand-off without pausing unless something is genuinely blocking. No Solo/Meet split at this altitude — there is one mode, and it's autonomous.
+
+> **Internal CLI back-compat:** the orchestration CLI keeps `story` as the table and command name. Checkpoints from pre-v2.28.0 sessions resume cleanly under `/we:build`.
 
 **When to use:**
-- After `/we:refine` has produced a plan you're happy with
+- After `/we:story` has produced a plan you're happy with
 - To resume an interrupted pipeline (just re-invoke with the same ticket; SQLite checkpoints take you to where you stopped)
 
 **What it produces:**
@@ -60,10 +118,10 @@ Story orchestrator. Once you trigger it, it runs all eight steps + delivery hand
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
 
-Runs inline as Step 8 of `/we:story`, but also standalone. Collects findings from CI failures, Claude Review, and CodeRabbit; triages them; fixes them in one batch; resolves all CodeRabbit threads; pushes once.
+Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures, Claude Review, and CodeRabbit; triages them; fixes them in one batch; resolves all CodeRabbit threads; pushes once.
 
 **When to use standalone:**
-- After CI failed on a PR not driven by `/we:story`
+- After CI failed on a PR not driven by `/we:build`
 - After a CodeRabbit review on a manually-opened PR
 - To iterate review fixes without re-running the full pipeline
 
@@ -76,13 +134,13 @@ Runs inline as Step 8 of `/we:story`, but also standalone. Collects findings fro
 
 ---
 
-## Quality gates (called by `/we:story`)
+## CI / Quality gates (called by `/we:build`)
 
 These also run standalone for one-off checks.
 
 ### `/we:review`
 
-Diff-based code review. Checks AC alignment, max 10 issues. Dispatched as a background agent (`code-reviewer`) by `/we:story` Step 5; runs alongside `/we:static` and `/we:test`.
+Diff-based code review. Checks AC alignment, max 10 issues. Dispatched as a background agent (`code-reviewer`) by `/we:build` Step 5; runs alongside `/we:static` and `/we:test`.
 
 ### `/we:static`
 
@@ -131,15 +189,16 @@ The core deliberation mechanic. Spawns one agent per role (parallel), each reaso
 
 ### `/we:meet`
 
-> *Structured meeting — vision / initiative / refinement.*
+> *Structured meeting at one of four APO altitudes — vision / saga / epic / story.*
 
-Wraps a council in a workflow at one of three altitudes:
+Wraps a council in a workflow tuned to the altitude. Each meeting validates the current artifact and decomposes it into the next altitude's items:
 
-- `/we:meet vision` — Saga-level, where the company is going
-- `/we:meet initiative` — Epic-level, what we're building next
-- `/we:meet refinement` — Story-level, hands off to `/we:refine`
+- `/we:meet vision` — PRD altitude, decomposes Vision → Sagas. Hand-off: `/we:vision` to lock the PRD, then `/we:saga` per Saga.
+- `/we:meet saga` — Theme altitude, decomposes Saga → Epics. Hand-off: `/we:saga` to lock the SAGA, then `/we:epic` per Epic.
+- `/we:meet epic` — Initiative altitude, decomposes Epic → Stories. Hand-off: `/we:epic` to lock the CONCEPT, then `/we:story` per Story.
+- `/we:meet story` — Story altitude, sharpens scope and hands off to `/we:story` (Solo) to write the build-ready plan.
 
-**When to use:** when the topic deserves more than a flat council — when you want structure, sequencing, and a named hand-off. See [concepts/meetings.md](concepts/meetings.md).
+**When to use:** when the topic deserves more than a flat council — when you want structure, sequencing, and a named hand-off. The roster defaults are tuned per altitude (widest at Vision, tightest at Story); override per repo in `.weside/config.json` or per call with `--council=role,role,…`. See [concepts/meetings.md](concepts/meetings.md).
 
 ---
 
@@ -158,21 +217,24 @@ Writes implementation notes, ADRs, security review decisions. Standalone — for
 
 ---
 
-### `/we:sm`
+### `/we:coach`
 
-> *Scrum Master. Process optimization, retrospectives.*
+> *APO Coach — cross-altitude advisor and process-improvement partner.*
 
-A conversation partner for process improvement. Prompt-driven — you describe a friction or breakage; it diagnoses (from rules + skills + recent stories) and proposes concrete fixes (new rule / updated skill step / new DoD entry).
+A conversation partner for process improvement and altitude orientation. Prompt-driven — you describe a friction, a breakage, or a "where am I?" question; it diagnoses (from rules + skills + recent stories + current repo state) and proposes concrete fixes (new rule / updated skill step / new DoD entry / next `/we:*` move).
+
+> **Renamed from `/we:sm` in v2.28.0.** The scope-expansion to full APO advisory (altitude mapping + command-launcher with confirmation gate) lands in v2.29.0.
 
 **When to use:**
 - After something didn't work ("X broke the pipeline, should never happen again")
 - After a retro reveals a recurring friction
+- When you don't know which `/we:*` skill to reach for next
 - To audit a specific skill's quality
 
 **Won't do:**
 - Generic reports without a prompt
 - Audit all skills in one invocation
-- Re-plan an active initiative (that's `/we:meet` or `/we:refine`)
+- Re-plan an active initiative (that's `/we:meet` or the Solo Plan skill at the relevant altitude)
 
 **Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + surfaces active-initiative state. Then engages in dialog.
 
@@ -307,11 +369,11 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 
 | Agent | Used by | What it does |
 |---|---|---|
-| `code-reviewer` | `/we:review`, `/we:story` | Diff-based code review, AC alignment |
-| `static-analyzer` | `/we:static`, `/we:story` | Lint, format, types |
-| `test-runner` | `/we:test`, `/we:story` | Tests with coverage |
-| `pr-creator` | `/we:pr`, `/we:story` | PR creation with checkpoint validation |
-| `doc-architect` | `/we:docs`, `/we:story` | Doc proposals; reads landscape fresh on every call |
+| `code-reviewer` | `/we:review`, `/we:build` | Diff-based code review, AC alignment |
+| `static-analyzer` | `/we:static`, `/we:build` | Lint, format, types |
+| `test-runner` | `/we:test`, `/we:build` | Tests with coverage |
+| `pr-creator` | `/we:pr`, `/we:build` | PR creation with checkpoint validation |
+| `doc-architect` | `/we:docs`, `/we:build` | Doc proposals; reads landscape fresh on every call |
 | `council-architect` | `/we:council`, `/we:meet` | Architect role-lens |
 | `council-product-owner` | `/we:council`, `/we:meet` | PO role-lens |
 | `council-scrum-master` | `/we:council`, `/we:meet` | SM role-lens |
@@ -331,6 +393,6 @@ For the council lenses, see [concepts/roles.md](concepts/roles.md).
 - [workflow.md](workflow.md) — pipeline overview
 - [getting-started.md](getting-started.md) — first-project walkthrough
 - [concepts/companion-framework.md](concepts/companion-framework.md) — what `.weside/` adds
-- [concepts/meetings.md](concepts/meetings.md) — vision / initiative / refinement
+- [concepts/meetings.md](concepts/meetings.md) — vision / saga / epic / story meetings
 - [mcp.md](mcp.md) — MCP layer + tools
 - [troubleshooting.md](troubleshooting.md) — when something doesn't fit
