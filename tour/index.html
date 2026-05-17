@@ -240,17 +240,23 @@
     flex-direction: column;
     gap: 0.35rem;
     position: relative;
+    transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.3s ease;
+  }
+  /* Optional reveal cascade — only kicks in when JS marks the section
+     active. If JS is blocked or the observer never fires, cards stay
+     visible by default (no opacity:0 trap). */
+  section#overview.armed .alt-card {
     opacity: 0;
     transform: translateY(18px);
     transition: opacity 0.55s ease, transform 0.55s ease, border-color 0.25s ease, box-shadow 0.3s ease;
   }
-  section#overview.in .alt-card { opacity: 1; transform: translateY(0); }
-  section#overview.in .alt-card:nth-child(1) { transition-delay: 0.05s; }
-  section#overview.in .alt-card:nth-child(2) { transition-delay: 0.18s; }
-  section#overview.in .alt-card:nth-child(3) { transition-delay: 0.31s; }
-  section#overview.in .alt-card:nth-child(4) { transition-delay: 0.44s; }
-  section#overview.in .alt-card:nth-child(5) { transition-delay: 0.57s; }
-  section#overview.in .alt-card:nth-child(6) { transition-delay: 0.70s; }
+  section#overview.armed.in .alt-card { opacity: 1; transform: translateY(0); }
+  section#overview.armed.in .alt-card:nth-child(1) { transition-delay: 0.05s; }
+  section#overview.armed.in .alt-card:nth-child(2) { transition-delay: 0.18s; }
+  section#overview.armed.in .alt-card:nth-child(3) { transition-delay: 0.31s; }
+  section#overview.armed.in .alt-card:nth-child(4) { transition-delay: 0.44s; }
+  section#overview.armed.in .alt-card:nth-child(5) { transition-delay: 0.57s; }
+  section#overview.armed.in .alt-card:nth-child(6) { transition-delay: 0.70s; }
   .alt-card:hover { transform: translateY(-2px); border-color: var(--line-bright); }
   .alt-card.token-active {
     border-color: var(--gold-glow);
@@ -1652,7 +1658,10 @@ document.addEventListener("keydown", (e) => {
 });
 
 //
-// Overview lifecycle animation — token walks through six altitudes
+// Overview lifecycle animation — token walks through six altitudes.
+// Uses the existing main.scroll active-section detection (same pattern as
+// syncUi) — IntersectionObserver was unreliable inside the scroll-snap
+// container.
 //
 (function setupOverviewAnimation() {
   const overviewSection = document.getElementById("overview");
@@ -1676,8 +1685,10 @@ document.addEventListener("keydown", (e) => {
     { glyph: "✅", label: "PR" }
   ];
 
+  const overviewIdx = sections.indexOf("overview");
   let currentIdx = 0;
   let walkerTimer = null;
+  let firstReveal = true;
 
   function positionToken(idx) {
     const card = cards[idx];
@@ -1719,26 +1730,32 @@ document.addEventListener("keydown", (e) => {
     return !reducedMotion.matches && !smallViewport.matches;
   }
 
-  // Reveal cards as soon as overview enters the viewport; start walker once cards
-  // have settled. We use thresholds rather than a single value to ride the
-  // scroll-snap edges cleanly.
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
-        overviewSection.classList.add("in");
-        if (walkerAllowed()) {
-          // Wait for the cascade to finish before the walker glows over them.
-          setTimeout(() => {
-            if (overviewSection.classList.contains("in")) startWalker();
-          }, 950);
-        }
-      } else if (entry.intersectionRatio < 0.15) {
-        stopWalker();
-      }
-    });
-  }, { threshold: [0.15, 0.35, 0.6] });
+  // Arm the cascade animation only when JS is alive — without "armed",
+  // cards stay visible by default (failsafe if anything below breaks).
+  if (walkerAllowed()) overviewSection.classList.add("armed");
 
-  observer.observe(overviewSection);
+  function handleSectionChange() {
+    const i = activeIndex();
+    if (i === overviewIdx) {
+      const wasFirstReveal = firstReveal;
+      overviewSection.classList.add("in");
+      firstReveal = false;
+      if (walkerAllowed() && !walkerTimer) {
+        // First time: wait for the cascade to finish before the walker
+        // glows over the cards. Subsequent re-entries: short delay.
+        setTimeout(() => {
+          if (activeIndex() === overviewIdx) startWalker();
+        }, wasFirstReveal ? 950 : 200);
+      }
+    } else {
+      stopWalker();
+    }
+  }
+
+  // Hook into the existing scroll listener path.
+  main.addEventListener("scroll", () => requestAnimationFrame(handleSectionChange));
+  // Initial check — in case the page loads with overview already active.
+  handleSectionChange();
 
   // Re-anchor token if the layout shifts (resize, fullscreen toggle).
   let resizeRaf = null;
@@ -1751,8 +1768,13 @@ document.addEventListener("keydown", (e) => {
 
   // React to user toggling reduced-motion mid-session.
   reducedMotion.addEventListener("change", () => {
-    if (!walkerAllowed()) stopWalker();
-    else if (overviewSection.classList.contains("in")) startWalker();
+    if (!walkerAllowed()) {
+      stopWalker();
+      overviewSection.classList.remove("armed");
+    } else {
+      overviewSection.classList.add("armed");
+      handleSectionChange();
+    }
   });
 })();
 </script>
