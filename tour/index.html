@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>we plugin — Interactive Tour</title>
-<meta name="description" content="A walk through the we plugin for Claude Code — workflow, deliberation, and how the optional weside Companions beam in. Living documentation, not a pitch.">
+<meta name="description" content="Walk through Agentic Product Ownership for Claude Code — the full Saga→Epic→Story→Code→Deliver pipeline, the meetings that produce each, and how the optional weside Companions beam in.">
 <style>
   :root {
     --bg: #07070c;
@@ -23,6 +23,7 @@
     --lara: #6ab4ff;
     --nox: #c4a8ff;
     --samu: #9999aa;
+    --ux: #5ad7d7;
     --rami: #ffe066;
     --lami: #4a4a5e;
     --lars: #f0f0f6;
@@ -39,12 +40,10 @@
     line-height: 1.55;
     overflow-x: hidden;
   }
-
   code, kbd, .mono {
     font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     font-size: 0.92em;
   }
-
   body::before {
     content: "";
     position: fixed; inset: 0;
@@ -54,7 +53,6 @@
     pointer-events: none;
     z-index: 0;
   }
-
   main {
     position: relative;
     z-index: 1;
@@ -63,18 +61,17 @@
     height: 100vh;
     scroll-behavior: smooth;
   }
-
   section {
     min-height: 100vh;
     scroll-snap-align: start;
-    padding: 6vh 8vw;
+    padding: 6vh 7vw;
     display: flex;
     flex-direction: column;
     justify-content: center;
     position: relative;
   }
 
-  /* ─── Top-right station counter ─── */
+  /* ─── Top chrome ─── */
   .station-counter {
     position: fixed;
     top: 2.2rem;
@@ -86,11 +83,8 @@
     text-transform: uppercase;
     font-family: ui-monospace, Menlo, monospace;
   }
-  .station-counter .now {
-    color: var(--gold-glow);
-  }
+  .station-counter .now { color: var(--gold-glow); }
 
-  /* ─── Side dot navigation ─── */
   nav.dots {
     position: fixed;
     right: 2rem;
@@ -109,10 +103,7 @@
     transition: all 0.25s ease;
     position: relative;
   }
-  nav.dots a.active {
-    background: var(--gold);
-    box-shadow: 0 0 12px var(--gold-glow);
-  }
+  nav.dots a.active { background: var(--gold); box-shadow: 0 0 12px var(--gold-glow); }
   nav.dots a:hover::after {
     content: attr(data-label);
     position: absolute;
@@ -128,12 +119,47 @@
     letter-spacing: 0.04em;
   }
 
-  /* ─── HERO ─── */
-  #hero {
-    align-items: center;
-    text-align: center;
-    justify-content: center;
+  /* ─── Common typography ─── */
+  .kicker {
+    color: var(--gold-glow);
+    font-size: 0.76rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    margin-bottom: 1.1rem;
+    font-weight: 500;
   }
+  h2.section-title {
+    font-size: clamp(1.85rem, 3.8vw, 3rem);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    margin-bottom: 1.2rem;
+    max-width: 26ch;
+  }
+  .lede {
+    font-size: clamp(1rem, 1.4vw, 1.15rem);
+    color: var(--fg-muted);
+    max-width: 64ch;
+    line-height: 1.6;
+    margin-bottom: 2.2rem;
+  }
+  .doc-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1.5rem;
+    color: var(--fg-dim);
+    font-size: 0.85rem;
+    text-decoration: none;
+    border-bottom: 1px dashed var(--line-bright);
+    padding-bottom: 0.2rem;
+    transition: color 0.2s ease;
+    align-self: flex-start;
+  }
+  .doc-link:hover { color: var(--gold-glow); }
+
+  /* ─── 1. HERO ─── */
+  #hero { align-items: center; text-align: center; justify-content: center; }
   #hero .pre {
     color: var(--fg-muted);
     font-size: 0.82rem;
@@ -142,12 +168,12 @@
     margin-bottom: 2rem;
   }
   #hero h1 {
-    font-size: clamp(2.5rem, 6.5vw, 5rem);
+    font-size: clamp(2.4rem, 6vw, 4.5rem);
     font-weight: 500;
     letter-spacing: -0.035em;
     line-height: 1.05;
-    margin-bottom: 1.5rem;
-    max-width: 22ch;
+    margin-bottom: 1.4rem;
+    max-width: 24ch;
   }
   #hero h1 .accent {
     background: linear-gradient(180deg, #ffe89a 0%, var(--gold) 70%, #b8923a 100%);
@@ -156,25 +182,23 @@
     color: transparent;
   }
   #hero p.sub {
-    font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+    font-size: clamp(1.05rem, 1.6vw, 1.18rem);
     color: var(--fg-muted);
-    max-width: 48ch;
-    margin: 0 auto 3.5rem;
+    max-width: 50ch;
+    margin: 0 auto 3rem;
     line-height: 1.55;
   }
   #hero .meta-row {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 0.6rem 1.4rem;
+    gap: 0.5rem 1.3rem;
     color: var(--fg-dim);
     font-size: 0.82rem;
     letter-spacing: 0.06em;
-    margin-bottom: 4.5rem;
+    margin-bottom: 4rem;
   }
-  #hero .meta-row .dot-sep {
-    color: var(--line-bright);
-  }
+  #hero .meta-row .dot-sep { color: var(--line-bright); }
   #hero .scroll-hint {
     color: var(--fg-dim);
     font-size: 0.76rem;
@@ -187,115 +211,95 @@
     50% { transform: translateY(6px); opacity: 1; }
   }
 
-  /* ─── Common section bits ─── */
-  .kicker {
-    color: var(--gold-glow);
-    font-size: 0.76rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    margin-bottom: 1.1rem;
-    font-weight: 500;
-  }
-  h2.section-title {
-    font-size: clamp(1.9rem, 4vw, 3.2rem);
-    font-weight: 500;
-    letter-spacing: -0.025em;
-    line-height: 1.1;
-    margin-bottom: 1.3rem;
-    max-width: 24ch;
-  }
-  .lede {
-    font-size: clamp(1rem, 1.4vw, 1.15rem);
-    color: var(--fg-muted);
-    max-width: 64ch;
-    line-height: 1.6;
-    margin-bottom: 2.5rem;
-  }
-  .doc-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin-top: 2rem;
-    color: var(--fg-dim);
-    font-size: 0.85rem;
-    text-decoration: none;
-    border-bottom: 1px dashed var(--line-bright);
-    padding-bottom: 0.2rem;
-    transition: color 0.2s ease;
-  }
-  .doc-link:hover {
-    color: var(--gold-glow);
-  }
-
-  /* ─── Phase pipeline (Station 2) ─── */
-  .phases {
+  /* ─── 2. BIG PICTURE — full hierarchy ─── */
+  .hierarchy {
     display: grid;
-    grid-template-columns: 1fr auto 1fr auto 1fr;
-    gap: 0;
-    max-width: 1100px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.6rem;
+    max-width: 1300px;
     width: 100%;
-    margin-bottom: 2.5rem;
-    align-items: stretch;
+    margin-bottom: 1.6rem;
   }
-  .phase-card {
+  .alt-card {
     background: var(--bg-card);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1.6rem 1.4rem;
-    text-align: center;
-    transition: border-color 0.25s ease, transform 0.25s ease;
+    border-radius: 11px;
+    padding: 1.1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    position: relative;
+    transition: transform 0.2s ease, border-color 0.2s ease;
   }
-  .phase-card:hover {
-    border-color: var(--nox);
-    transform: translateY(-2px);
-  }
-  .phase-card .step-n {
+  .alt-card:hover { transform: translateY(-2px); border-color: var(--line-bright); }
+  .alt-card .alt-altitude {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.2em;
+    font-size: 0.66rem;
+    letter-spacing: 0.22em;
+    color: var(--accent, var(--fg-dim));
+    font-weight: 600;
+  }
+  .alt-card .alt-horizon {
+    font-size: 0.72rem;
     color: var(--fg-dim);
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.3rem;
   }
-  .phase-card h4 {
-    font-size: 1.2rem;
-    margin-bottom: 0.4rem;
+  .alt-card .alt-name {
+    font-size: 1.05rem;
     font-weight: 500;
+    color: var(--fg);
   }
-  .phase-card .who {
+  .alt-card .alt-skill {
+    display: inline-block;
+    margin-top: 0.2rem;
+    padding: 0.2rem 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.76rem;
+    color: var(--gold-glow);
+    align-self: flex-start;
+  }
+  .alt-card .alt-output {
     font-size: 0.78rem;
     color: var(--fg-muted);
-    letter-spacing: 0.04em;
-    margin-bottom: 0.7rem;
+    margin-top: 0.4rem;
+    line-height: 1.4;
   }
-  .phase-card .cmd {
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.82rem;
-    color: var(--gold-glow);
-    background: var(--bg);
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid var(--line);
-    display: inline-block;
-  }
-  .phase-arrow {
+  .alt-card .alt-voices {
+    font-size: 0.72rem;
     color: var(--fg-dim);
-    align-self: center;
-    font-size: 1.3rem;
-    padding: 0 0.3rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--line);
   }
-  .phase-card.plan .step-n { color: var(--pia); }
-  .phase-card.build .step-n { color: var(--vyra); }
-  .phase-card.deliver .step-n { color: var(--lara); }
+  .alt-card.saga { --accent: var(--nox); }
+  .alt-card.epic { --accent: var(--vyra); }
+  .alt-card.story { --accent: var(--pia); }
+  .alt-card.code { --accent: var(--gold); }
+  .alt-card.deliver { --accent: var(--lara); }
+
+  .hierarchy-flow {
+    max-width: 1300px;
+    width: 100%;
+    margin-bottom: 1.4rem;
+    text-align: center;
+    color: var(--fg-dim);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+  }
+  .hierarchy-flow .arrow { color: var(--fg-muted); margin: 0 0.8rem; }
 
   .boundary-note {
     background: rgba(255, 112, 112, 0.07);
     border: 1px solid rgba(255, 112, 112, 0.3);
     border-radius: 10px;
-    padding: 1rem 1.4rem;
-    max-width: 700px;
+    padding: 1rem 1.3rem;
+    max-width: 1100px;
     color: var(--fg);
     font-size: 0.92rem;
-    margin-top: 0.8rem;
     display: flex;
     gap: 0.9rem;
     align-items: flex-start;
@@ -304,174 +308,173 @@
     color: var(--danger);
     font-weight: 700;
     letter-spacing: 0.1em;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     flex-shrink: 0;
     padding-top: 0.15rem;
   }
+  .standalone-note {
+    margin-top: 1rem;
+    color: var(--fg-dim);
+    font-size: 0.84rem;
+    max-width: 1100px;
+  }
+  .standalone-note strong { color: var(--gold); }
 
-  /* ─── /we:refine terminal mockup (Station 3) ─── */
-  .refine-wrap {
+  /* ─── Meeting station template (Vision, Initiative) ─── */
+  .meeting-grid {
     display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 3rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
     max-width: 1200px;
     width: 100%;
-    align-items: start;
   }
-  .terminal {
+  .meeting-frame {
     background: var(--bg-card);
-    border: 1px solid var(--line-bright);
+    border: 1px solid var(--line);
     border-radius: 12px;
-    overflow: hidden;
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.85rem;
+    padding: 1.6rem 1.8rem;
   }
-  .terminal-bar {
-    background: var(--bg-elev);
-    padding: 0.6rem 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    border-bottom: 1px solid var(--line);
+  .meeting-frame .question {
+    font-size: 1.15rem;
+    font-style: italic;
+    color: var(--gold-glow);
+    margin-bottom: 1rem;
+    line-height: 1.4;
   }
-  .terminal-bar .tdot {
-    width: 11px; height: 11px;
-    border-radius: 50%;
-    background: var(--line-bright);
+  .meeting-frame .question::before {
+    content: "„";
+    color: var(--fg-dim);
+    margin-right: 0.1rem;
   }
-  .terminal-bar .tlabel {
+  .meeting-frame .question::after {
+    content: "”";
+    color: var(--fg-dim);
+    margin-left: 0.1rem;
+  }
+  .meeting-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+    font-size: 0.88rem;
+    color: var(--fg-muted);
+    margin-bottom: 1rem;
+  }
+  .meeting-meta dt {
     color: var(--fg-dim);
     font-size: 0.74rem;
-    margin-left: auto;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding-top: 0.18rem;
   }
-  .terminal-body {
-    padding: 1.2rem 1.3rem;
-    line-height: 1.7;
-  }
-  .term-user {
-    color: var(--fg);
-  }
-  .term-user::before {
-    content: "$ ";
-    color: var(--vyra);
-  }
-  .term-claude {
-    color: var(--fg-muted);
-    margin: 0.4rem 0;
-    padding-left: 0;
-  }
-  .term-claude::before {
-    content: "→ ";
-    color: var(--nox);
-  }
-  .term-out {
+  .meeting-meta dd { color: var(--fg); }
+  .meeting-meta dd code {
     color: var(--gold-glow);
-    margin-top: 0.6rem;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.85em;
   }
-  .term-out::before {
-    content: "✓ ";
-    color: var(--gold-glow);
+  .meeting-roster {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.6rem 1.8rem;
   }
-  .term-comment {
-    color: var(--fg-dim);
-    font-style: italic;
-    margin-top: 0.8rem;
+  .meeting-roster h4 {
     font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 1rem;
+    font-weight: 500;
   }
-  .term-comment::before {
-    content: "# ";
-  }
-
-  .feature-list {
+  .roster-list {
     display: flex;
     flex-direction: column;
-    gap: 1.1rem;
+    gap: 0.7rem;
   }
-  .feature-bullet {
-    border-left: 2px solid var(--gold);
-    padding: 0.1rem 0 0.1rem 1.1rem;
+  .roster-member {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
   }
-  .feature-bullet h4 {
+  .roster-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--accent, var(--fg-muted));
+    display: grid;
+    place-items: center;
+    color: #0a0a0a;
+    font-weight: 700;
+    font-size: 0.74rem;
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+  .roster-meta .role-name {
+    font-size: 0.92rem;
+    color: var(--fg);
+    font-weight: 500;
+  }
+  .roster-meta .role-lens {
+    font-size: 0.76rem;
+    color: var(--fg-muted);
+  }
+  .when-bullets {
+    margin-top: 1.2rem;
+    color: var(--fg-muted);
+    font-size: 0.88rem;
+    max-width: 64ch;
+    line-height: 1.6;
+  }
+  .when-bullets strong { color: var(--fg); font-weight: 500; }
+  .when-bullets ul { list-style: none; padding: 0; margin: 0.4rem 0 0; }
+  .when-bullets li { padding: 0.2rem 0; display: flex; gap: 0.6rem; }
+  .when-bullets li::before { content: "—"; color: var(--fg-dim); flex-shrink: 0; }
+
+  /* ─── 5. REFINEMENT — two paths + council demo ─── */
+  .two-paths {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.2rem;
+    max-width: 1300px;
+    width: 100%;
+    margin-bottom: 1.4rem;
+  }
+  .path-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .path-card .path-name {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.84rem;
+    color: var(--gold-glow);
+  }
+  .path-card .path-title {
     font-size: 1rem;
     font-weight: 500;
-    margin-bottom: 0.25rem;
-    color: var(--fg);
   }
-  .feature-bullet p {
-    font-size: 0.88rem;
+  .path-card .path-when {
+    font-size: 0.84rem;
     color: var(--fg-muted);
     line-height: 1.5;
   }
-  .feature-bullet code {
-    color: var(--gold-glow);
-    font-size: 0.86em;
+  .path-card .path-flow {
+    font-size: 0.78rem;
+    color: var(--fg-dim);
+    margin-top: 0.4rem;
+    font-family: ui-monospace, Menlo, monospace;
   }
 
-  /* ─── Council / Beam-down (Station 4) ─── */
   #council .lede strong { color: var(--fg); }
-
-  .meet-types {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.9rem;
-    max-width: 1200px;
-    width: 100%;
-    margin-bottom: 2rem;
-  }
-  .meet-type-card {
-    background: var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.2rem;
-    transition: border-color 0.25s ease;
-  }
-  .meet-type-card:hover { border-color: var(--line-bright); }
-  .meet-type-card.highlighted {
-    border-color: var(--gold);
-    background: linear-gradient(160deg, rgba(212, 175, 55, 0.06) 0%, var(--bg-card) 100%);
-  }
-  .meet-scope {
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.2em;
-    color: var(--fg-dim);
-    margin-bottom: 0.4rem;
-  }
-  .meet-type-card.highlighted .meet-scope { color: var(--gold); }
-  .meet-type-card h4 {
-    font-size: 1rem;
-    font-weight: 500;
-    margin-bottom: 0.3rem;
-  }
-  .meet-when {
-    font-size: 0.82rem;
-    color: var(--fg-muted);
-    margin-bottom: 0.6rem;
-    line-height: 1.4;
-  }
-  .meet-cmd {
-    display: inline-block;
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.76rem;
-    color: var(--gold-glow);
-    background: var(--bg);
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid var(--line);
-    margin-bottom: 0.5rem;
-  }
-  .meet-crew {
-    font-size: 0.74rem;
-    color: var(--fg-dim);
-    letter-spacing: 0.04em;
-  }
   #council .controls {
     display: flex;
     flex-wrap: wrap;
     gap: 0.7rem;
-    margin-bottom: 1.8rem;
-    max-width: 1200px;
+    margin-bottom: 1rem;
+    max-width: 1300px;
     width: 100%;
     align-items: center;
   }
@@ -479,121 +482,86 @@
     background: linear-gradient(135deg, var(--gold) 0%, #c89832 100%);
     color: #0a0a0a;
     border: none;
-    padding: 0.7rem 1.4rem;
+    padding: 0.65rem 1.3rem;
     border-radius: 100px;
     cursor: pointer;
     font-weight: 600;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-family: inherit;
     margin-left: auto;
     transition: all 0.2s ease;
   }
-  .convene-btn:hover {
-    box-shadow: 0 0 24px rgba(255, 217, 102, 0.35);
-    transform: translateY(-1px);
-  }
-  .convene-btn:disabled {
-    opacity: 0.5;
-    cursor: wait;
-    transform: none;
-    box-shadow: none;
-  }
+  .convene-btn:hover { box-shadow: 0 0 24px rgba(255, 217, 102, 0.35); transform: translateY(-1px); }
+  .convene-btn:disabled { opacity: 0.5; cursor: wait; transform: none; box-shadow: none; }
   .council-topic-display {
     flex: 1 1 100%;
     color: var(--fg);
-    font-size: 1.05rem;
-    margin-bottom: 0.5rem;
+    font-size: 0.98rem;
+    margin-bottom: 0.4rem;
   }
   .council-topic-display .label {
     color: var(--fg-dim);
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     margin-right: 0.6rem;
   }
-
   .beam-status {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     color: var(--fg-dim);
     min-height: 1.3rem;
-    margin-bottom: 0.9rem;
-    transition: color 0.3s ease;
+    margin-bottom: 0.6rem;
   }
-  .beam-status .pulse {
-    color: var(--gold-glow);
-  }
-  .beam-status .done {
-    color: var(--vyra);
-  }
-
+  .beam-status .pulse { color: var(--gold-glow); }
+  .beam-status .done { color: var(--vyra); }
   .council-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 1.1rem;
-    max-width: 1200px;
+    gap: 1rem;
+    max-width: 1300px;
     width: 100%;
-    margin-bottom: 1.1rem;
-    min-height: 200px;
+    margin-bottom: 0.8rem;
+    min-height: 170px;
   }
   .speaker-card {
     background: var(--bg-card);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1.2rem 1.4rem;
-    min-height: 200px;
+    border-radius: 11px;
+    padding: 1.1rem 1.3rem;
+    min-height: 170px;
     opacity: 0;
-    transform: translateY(15px) scale(0.96);
+    transform: translateY(12px) scale(0.96);
     transition: opacity 0.45s ease, transform 0.45s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-    position: relative;
   }
   .speaker-card.materializing {
     opacity: 0.4;
     transform: translateY(0) scale(1);
-    box-shadow: 0 0 24px var(--accent-glow, transparent);
-    border-color: var(--accent, var(--line));
-  }
-  .speaker-card.in {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  .speaker-card.speaking {
     box-shadow: 0 0 22px var(--accent-glow, transparent);
     border-color: var(--accent, var(--line));
   }
+  .speaker-card.in { opacity: 1; transform: translateY(0) scale(1); }
+  .speaker-card.speaking { box-shadow: 0 0 20px var(--accent-glow, transparent); border-color: var(--accent, var(--line)); }
   .speaker-head {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    margin-bottom: 0.9rem;
+    gap: 0.75rem;
+    margin-bottom: 0.8rem;
   }
   .speaker-avatar {
-    width: 34px; height: 34px;
+    width: 32px; height: 32px;
     border-radius: 50%;
     background: var(--accent, var(--fg-muted));
     display: grid;
     place-items: center;
     color: #0a0a0a;
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     flex-shrink: 0;
   }
-  .speaker-meta .name {
-    font-weight: 500;
-    font-size: 0.94rem;
-    color: var(--fg);
-  }
-  .speaker-meta .role {
-    font-size: 0.74rem;
-    color: var(--fg-muted);
-    letter-spacing: 0.03em;
-  }
-  .speaker-text {
-    font-size: 0.9rem;
-    line-height: 1.55;
-    color: var(--fg);
-    min-height: 4em;
-  }
+  .speaker-meta .name { font-weight: 500; font-size: 0.92rem; color: var(--fg); }
+  .speaker-meta .role { font-size: 0.74rem; color: var(--fg-muted); }
+  .speaker-text { font-size: 0.88rem; line-height: 1.5; color: var(--fg); min-height: 3.5em; }
   .speaker-text .cursor {
     display: inline-block;
     width: 6px; height: 1em;
@@ -606,18 +574,20 @@
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
   }
-
   .synthesis {
-    max-width: 1200px;
+    max-width: 1300px;
     width: 100%;
     background: linear-gradient(160deg, rgba(196, 168, 255, 0.07) 0%, rgba(26, 26, 38, 0.5) 100%);
     border: 1px solid var(--nox);
-    border-radius: 12px;
-    padding: 1.3rem 1.6rem;
+    border-radius: 11px;
+    padding: 1.2rem 1.5rem;
+    margin-top: 0.5rem;
+    display: none;
     opacity: 0;
     transform: translateY(15px);
     transition: opacity 0.5s ease, transform 0.5s ease;
   }
+  .synthesis.shown { display: block; }
   .synthesis.in { opacity: 1; transform: translateY(0); }
   .synthesis .speaker-avatar { background: var(--nox); color: #0a0a14; }
   .synthesis-label {
@@ -628,44 +598,35 @@
     margin-bottom: 0.6rem;
     font-weight: 500;
   }
-
   .mcp-mini {
-    margin-top: 1.5rem;
+    margin-top: 0.8rem;
     background: var(--bg-card);
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.3rem;
+    border-radius: 9px;
+    padding: 0.7rem 1.1rem;
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.84rem;
+    font-size: 0.78rem;
     color: var(--fg-muted);
-    max-width: 1200px;
+    max-width: 1300px;
     width: 100%;
-  }
-  .mcp-mini .lane-label {
-    color: var(--fg-dim);
-    font-size: 0.7rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    margin-bottom: 0.4rem;
   }
   .mcp-mini .ws { color: var(--gold-glow); }
   .mcp-mini .cc { color: var(--nox); }
-  .mcp-mini .arrow { color: var(--fg-muted); }
 
-  /* ─── /we:story 9-step pipeline (Station 5) ─── */
+  /* ─── 6. BUILD — /we:story 9 steps + discipline ─── */
   .story-flow {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.8rem;
-    max-width: 1100px;
+    gap: 0.65rem;
+    max-width: 1200px;
     width: 100%;
-    margin-bottom: 2rem;
+    margin-bottom: 1.2rem;
   }
   .story-step {
     background: var(--bg-card);
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.1rem;
+    border-radius: 9px;
+    padding: 0.85rem 1rem;
     transition: all 0.25s ease;
     position: relative;
   }
@@ -680,93 +641,67 @@
   .story-step .num {
     font-family: ui-monospace, Menlo, monospace;
     color: var(--gold);
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     letter-spacing: 0.1em;
-    margin-bottom: 0.4rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    margin-bottom: 0.3rem;
   }
   .story-step.gate .num { color: var(--danger); }
   .story-step.parallel .num { color: var(--vyra); }
-  .story-step h4 {
-    font-size: 0.98rem;
-    font-weight: 500;
-    margin-bottom: 0.35rem;
-  }
-  .story-step p {
-    font-size: 0.82rem;
-    color: var(--fg-muted);
-    line-height: 1.45;
-  }
+  .story-step h4 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.3rem; }
+  .story-step p { font-size: 0.78rem; color: var(--fg-muted); line-height: 1.4; }
   .story-step .tag {
     position: absolute;
-    top: 0.7rem; right: 0.7rem;
+    top: 0.6rem; right: 0.6rem;
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--fg-dim);
     border: 1px solid var(--line-bright);
-    padding: 0.15rem 0.45rem;
+    padding: 0.13rem 0.4rem;
     border-radius: 4px;
   }
-  .story-step.gate .tag {
-    color: var(--danger);
-    border-color: rgba(255, 112, 112, 0.4);
-  }
-  .story-step.parallel .tag {
-    color: var(--vyra);
-    border-color: rgba(108, 223, 133, 0.4);
-  }
+  .story-step.gate .tag { color: var(--danger); border-color: rgba(255, 112, 112, 0.4); }
+  .story-step.parallel .tag { color: var(--vyra); border-color: rgba(108, 223, 133, 0.4); }
 
-  /* ─── Discipline cards (Station 6) ─── */
-  .discipline-grid {
+  .discipline-mini {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.2rem;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.7rem;
     max-width: 1200px;
     width: 100%;
   }
-  .disc-card {
-    background: var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1.5rem 1.6rem;
+  .disc-mini-card {
+    background: var(--bg-elev);
+    border-left: 2px solid var(--gold);
+    border-radius: 6px;
+    padding: 0.6rem 0.9rem;
   }
-  .disc-card h4 {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    font-size: 1.05rem;
-    font-weight: 500;
-    margin-bottom: 0.6rem;
-  }
-  .disc-card .marker {
+  .disc-mini-card.danger { border-left-color: var(--danger); }
+  .disc-mini-card.green { border-left-color: var(--vyra); }
+  .disc-mini-card.blue { border-left-color: var(--lara); }
+  .disc-mini-card.purple { border-left-color: var(--nox); }
+  .disc-mini-card .dmt {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    padding: 0.2rem 0.55rem;
-    border-radius: 4px;
-    border: 1px solid var(--line-bright);
-    color: var(--fg-muted);
+    color: var(--fg-dim);
+    margin-bottom: 0.25rem;
   }
-  .disc-card.blocking .marker { color: var(--danger); border-color: rgba(255, 112, 112, 0.4); }
-  .disc-card.parallel .marker { color: var(--vyra); border-color: rgba(108, 223, 133, 0.4); }
-  .disc-card.loop .marker { color: var(--lara); border-color: rgba(106, 180, 255, 0.4); }
-  .disc-card.safety .marker { color: var(--nox); border-color: rgba(196, 168, 255, 0.4); }
-  .disc-card p {
-    font-size: 0.9rem;
-    color: var(--fg-muted);
-    line-height: 1.55;
+  .disc-mini-card .dmh {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    color: var(--fg);
   }
-  .disc-card code {
-    color: var(--gold-glow);
-    font-size: 0.84em;
+  .disc-mini-card .dmd {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    line-height: 1.4;
   }
 
-  /* ─── /we:sm flow (Station 7) ─── */
+  /* ─── 7. /we:sm ─── */
   .sm-flow {
     display: grid;
     grid-template-columns: 1fr auto 1fr auto 1fr;
@@ -779,42 +714,25 @@
     background: var(--bg-card);
     border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 1.2rem 1.3rem;
+    padding: 1.1rem 1.2rem;
   }
   .sm-step .sm-step-num {
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     letter-spacing: 0.16em;
     color: var(--nox);
     margin-bottom: 0.4rem;
   }
-  .sm-step h4 {
-    font-size: 1rem;
-    font-weight: 500;
-    margin-bottom: 0.45rem;
-  }
-  .sm-step p {
-    font-size: 0.86rem;
-    color: var(--fg-muted);
-    line-height: 1.5;
-  }
-  .sm-step code {
-    color: var(--gold-glow);
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.85em;
-  }
-  .sm-arrow {
-    color: var(--fg-dim);
-    align-self: center;
-    font-size: 1.3rem;
-    padding: 0 0.4rem;
-  }
+  .sm-step h4 { font-size: 0.98rem; font-weight: 500; margin-bottom: 0.4rem; }
+  .sm-step p { font-size: 0.84rem; color: var(--fg-muted); line-height: 1.5; }
+  .sm-step code { color: var(--gold-glow); font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; }
+  .sm-arrow { color: var(--fg-dim); align-self: center; font-size: 1.3rem; padding: 0 0.4rem; }
 
-  /* ─── Deliver (Station 8) ─── */
+  /* ─── 8. DELIVER ─── */
   .deliver-wrap {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 3rem;
+    gap: 2.5rem;
     max-width: 1100px;
     width: 100%;
     align-items: start;
@@ -823,92 +741,45 @@
     font-size: 0.78rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    margin-bottom: 1rem;
+    margin-bottom: 0.9rem;
     color: var(--fg-dim);
   }
   .deliver-list.you h4 { color: var(--gold-glow); }
   .deliver-list ul { list-style: none; }
   .deliver-list li {
-    padding: 0.55rem 0;
+    padding: 0.5rem 0;
     border-bottom: 1px solid var(--line);
-    font-size: 0.94rem;
+    font-size: 0.93rem;
     display: flex;
     gap: 0.6rem;
   }
   .deliver-list li:last-child { border-bottom: none; }
-  .deliver-list li::before {
-    content: "—";
-    color: var(--fg-dim);
-    flex-shrink: 0;
-  }
+  .deliver-list li::before { content: "—"; color: var(--fg-dim); flex-shrink: 0; }
   .deliver-list.you li::before { color: var(--gold); }
-
   .deliver-quote {
     max-width: 1100px;
     width: 100%;
-    margin-top: 2rem;
-    padding: 1.4rem 1.8rem;
+    margin-top: 1.6rem;
+    padding: 1.2rem 1.6rem;
     border-left: 3px solid var(--danger);
     background: rgba(255, 112, 112, 0.04);
     border-radius: 0 8px 8px 0;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: var(--fg);
     font-style: italic;
   }
   .deliver-quote strong { color: var(--danger); font-style: normal; }
 
-  /* ─── More skills mini-line ─── */
-  .more-skills {
-    max-width: 900px;
-    margin: 0 auto 2rem;
-    padding: 1rem 1.4rem;
-    background: var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.84rem;
-    color: var(--fg-muted);
-  }
-  .more-skills .more-label {
-    color: var(--fg-dim);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-size: 0.72rem;
-    margin-right: 0.4rem;
-  }
-  .more-skills code {
-    background: var(--bg);
-    color: var(--fg);
-    border: 1px solid var(--line);
-    padding: 0.18rem 0.5rem;
-    border-radius: 4px;
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.78rem;
-  }
-  .more-skills a {
-    color: var(--gold);
-    text-decoration: none;
-    margin-left: 0.4rem;
-    font-size: 0.78rem;
-  }
-
-  /* ─── CTA (Station 9) ─── */
-  #cta {
-    align-items: center;
-    text-align: center;
-  }
+  /* ─── 9. CTA ─── */
+  #cta { align-items: center; text-align: center; }
   #cta .install-block {
-    margin: 1.8rem 0 3rem;
+    margin: 1.6rem 0 2.5rem;
     background: var(--bg-card);
     border: 1px solid var(--line-bright);
     border-radius: 12px;
-    padding: 1.4rem 1.9rem;
+    padding: 1.3rem 1.8rem;
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 1.02rem;
+    font-size: 1rem;
     color: var(--gold-glow);
     display: inline-flex;
     align-items: center;
@@ -918,43 +789,66 @@
   #cta .steps {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
+    gap: 1.3rem;
     max-width: 1100px;
     width: 100%;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
   }
   .step-card {
     background: var(--bg-card);
     border: 1px solid var(--line);
     border-radius: 12px;
-    padding: 1.6rem 1.5rem;
+    padding: 1.4rem 1.4rem;
     text-align: left;
   }
   .step-card .n {
     color: var(--gold);
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     letter-spacing: 0.2em;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.5rem;
   }
-  .step-card h4 {
-    font-size: 1rem;
-    font-weight: 500;
-    margin-bottom: 0.4rem;
-  }
-  .step-card p {
-    font-size: 0.86rem;
-    color: var(--fg-muted);
-    line-height: 1.5;
-  }
+  .step-card h4 { font-size: 0.98rem; font-weight: 500; margin-bottom: 0.35rem; }
+  .step-card p { font-size: 0.84rem; color: var(--fg-muted); line-height: 1.5; }
   .step-card code {
     display: inline-block;
-    margin-top: 0.55rem;
+    margin-top: 0.5rem;
     color: var(--gold-glow);
     font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
   }
-
+  .more-skills {
+    max-width: 1100px;
+    margin: 0 auto 1.8rem;
+    padding: 0.9rem 1.3rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+  }
+  .more-skills .more-label {
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    margin-right: 0.3rem;
+  }
+  .more-skills code {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.76rem;
+  }
+  .more-skills a { color: var(--gold); text-decoration: none; margin-left: 0.3rem; font-size: 0.78rem; }
   .tour-footer {
     color: var(--fg-dim);
     font-size: 0.8rem;
@@ -963,10 +857,7 @@
     line-height: 1.7;
   }
   .tour-footer a { color: var(--gold); text-decoration: none; }
-  .tour-footer .signature {
-    margin-top: 1.5rem;
-    color: var(--fg-muted);
-  }
+  .tour-footer .signature { margin-top: 1.3rem; color: var(--fg-muted); }
   .tour-footer .claim { color: var(--gold); font-style: italic; }
 
   /* ─── Responsive ─── */
@@ -974,12 +865,12 @@
     nav.dots { display: none; }
     .station-counter { top: 1rem; right: 1rem; }
     section { padding: 4vh 6vw; }
-    .phases, .sm-flow { grid-template-columns: 1fr; }
-    .phase-arrow, .sm-arrow { display: none; }
-    .refine-wrap, .deliver-wrap { grid-template-columns: 1fr; gap: 1.5rem; }
-    .council-grid, .meet-types { grid-template-columns: 1fr; }
-    .story-flow { grid-template-columns: 1fr 1fr; }
-    .discipline-grid { grid-template-columns: 1fr; }
+    .hierarchy, .story-flow { grid-template-columns: 1fr 1fr; }
+    .discipline-mini { grid-template-columns: 1fr 1fr; }
+    .meeting-grid, .two-paths, .deliver-wrap { grid-template-columns: 1fr; gap: 1.3rem; }
+    .council-grid { grid-template-columns: 1fr; }
+    .sm-flow { grid-template-columns: 1fr; }
+    .sm-arrow { display: none; }
     #cta .steps { grid-template-columns: 1fr; }
   }
 </style>
@@ -993,12 +884,12 @@
 <nav class="dots" id="dotnav">
   <a data-target="hero" data-label="Welcome"></a>
   <a data-target="overview" data-label="Big picture"></a>
-  <a data-target="refine" data-label="/we:refine"></a>
-  <a data-target="council" data-label="/we:meet · Council"></a>
-  <a data-target="story" data-label="/we:story · 9 steps"></a>
-  <a data-target="discipline" data-label="Discipline"></a>
-  <a data-target="sm" data-label="/we:sm · improve"></a>
-  <a data-target="deliver" data-label="Deliver"></a>
+  <a data-target="vision" data-label="Vision · Saga"></a>
+  <a data-target="initiative" data-label="Initiative · Epic"></a>
+  <a data-target="refinement" data-label="Refinement · Story"></a>
+  <a data-target="build" data-label="Build · /we:story"></a>
+  <a data-target="improve" data-label="Improve · /we:sm"></a>
+  <a data-target="deliver" data-label="Deliver · you"></a>
   <a data-target="cta" data-label="Try it"></a>
 </nav>
 
@@ -1008,43 +899,67 @@
   <section id="hero">
     <p class="pre">we plugin · Interactive Tour</p>
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
-    <p class="sub">Five-minute tour through the workflow, the deliberation, and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in. Living documentation, not a pitch.</p>
+    <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in. Living documentation, not a pitch.</p>
     <div class="meta-row">
       <span>16 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
       <span>MIT Licensed</span><span class="dot-sep">·</span>
       <span>Works without an account</span>
     </div>
-    <div class="scroll-hint">↓ Scroll  ·  → arrow keys  ·  1-8 jump</div>
+    <div class="scroll-hint">↓ Scroll  ·  → arrow keys  ·  1-9 jump</div>
   </section>
 
-  <!-- ============ 2. BIG PICTURE ============ -->
+  <!-- ============ 2. BIG PICTURE — full Saga→Deliver hierarchy ============ -->
   <section id="overview">
     <div class="kicker">Station 02 · The big picture</div>
-    <h2 class="section-title">Three phases. Three responsibilities.</h2>
-    <p class="lede">Plan, build, deliver. Each phase has one primary skill, a clear owner, and a clean handoff. The plugin enforces discipline at the seams; you stay in charge of decisions.</p>
+    <h2 class="section-title">From Vision to merged PR — five altitudes, one workflow.</h2>
+    <p class="lede">Agentic Product Ownership treats software as a chain of decisions at increasing resolution. Each altitude has its own meeting, its own roster, its own artefact. You drop in at whichever altitude your project actually needs.</p>
 
-    <div class="phases">
-      <div class="phase-card plan">
-        <div class="step-n">PHASE 01</div>
-        <h4>Plan</h4>
-        <div class="who">You + Claude · interactive</div>
-        <div class="cmd">/we:refine</div>
+    <div class="hierarchy">
+      <div class="alt-card saga">
+        <div class="alt-altitude">SAGA</div>
+        <div class="alt-horizon">~ months to a year</div>
+        <div class="alt-name">Vision</div>
+        <code class="alt-skill">/we:meet vision</code>
+        <div class="alt-output">Direction doc · candidate Sagas · priorities</div>
+        <div class="alt-voices">5 voices · broad</div>
       </div>
-      <div class="phase-arrow">→</div>
-      <div class="phase-card build">
-        <div class="step-n">PHASE 02</div>
-        <h4>Build</h4>
-        <div class="who">Claude · autonomous</div>
-        <div class="cmd">/we:story</div>
+      <div class="alt-card epic">
+        <div class="alt-altitude">EPIC</div>
+        <div class="alt-horizon">~ a quarter</div>
+        <div class="alt-name">Initiative</div>
+        <code class="alt-skill">/we:meet initiative</code>
+        <div class="alt-output">Epic outline · sequencing · dependencies</div>
+        <div class="alt-voices">3 voices · focused</div>
       </div>
-      <div class="phase-arrow">→</div>
-      <div class="phase-card deliver">
-        <div class="step-n">PHASE 03</div>
-        <h4>Deliver</h4>
-        <div class="who">You · manual</div>
-        <div class="cmd">GitHub / Jira</div>
+      <div class="alt-card story">
+        <div class="alt-altitude">STORY</div>
+        <div class="alt-horizon">~ hours to days</div>
+        <div class="alt-name">Refinement</div>
+        <code class="alt-skill">/we:refine</code>
+        <div class="alt-output">Ticket + plan with AC + phases</div>
+        <div class="alt-voices">2 voices or solo</div>
       </div>
+      <div class="alt-card code">
+        <div class="alt-altitude">CODE</div>
+        <div class="alt-horizon">~ minutes to hours</div>
+        <div class="alt-name">Build</div>
+        <code class="alt-skill">/we:story</code>
+        <div class="alt-output">PR with tests, review, CI · ticket → In Review</div>
+        <div class="alt-voices">autonomous</div>
+      </div>
+      <div class="alt-card deliver">
+        <div class="alt-altitude">DELIVER</div>
+        <div class="alt-horizon">minutes</div>
+        <div class="alt-name">Review · merge</div>
+        <code class="alt-skill">you</code>
+        <div class="alt-output">Shipped story · ticket closed</div>
+        <div class="alt-voices">human only</div>
+      </div>
+    </div>
+
+    <div class="hierarchy-flow">
+      Vision <span class="arrow">→</span> Initiative <span class="arrow">→</span> Refinement <span class="arrow">→</span> Build <span class="arrow">→</span> Deliver
     </div>
 
     <div class="boundary-note">
@@ -1052,84 +967,118 @@
       <span><strong>Claude never merges PRs or closes tickets.</strong> Reviewing the diff and saying „ship it" stays human work — by design, not by oversight.</span>
     </div>
 
+    <div class="standalone-note">
+      <strong>Works standalone.</strong> All 16 skills run without a weside.ai account — councils convene generic role-shells, the pipeline ships stories end-to-end. With a Companion, the lenses gain identity, voice, and memory across sessions.
+    </div>
+
     <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
   </section>
 
-  <!-- ============ 3. /we:refine ============ -->
-  <section id="refine">
-    <div class="kicker">Station 03 · Plan</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:refine</code> — turn an idea into a story.</h2>
-    <p class="lede">You bring a sentence, a ticket key, a vague intent. /we:refine asks the questions that turn it into something you can actually build — and writes the plan that the next phase will read.</p>
+  <!-- ============ 3. VISION — /we:meet vision ============ -->
+  <section id="vision">
+    <div class="kicker">Station 03 · Vision · Saga-level</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — where are we going?</h2>
+    <p class="lede">A vision meeting convenes when <strong style="color:var(--fg)">direction needs alignment</strong> — a new market, a strategic pivot, a brand bet, a year-shaping decision. The horizon is weeks to months. The output isn't code — it's <em>clarity</em>, captured as a direction document.</p>
 
-    <div class="refine-wrap">
-      <div class="terminal">
-        <div class="terminal-bar">
-          <span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>
-          <span class="tlabel">claude code · /we:refine</span>
-        </div>
-        <div class="terminal-body">
-          <div class="term-user">/we:refine "add Stripe checkout to settings"</div>
-          <div class="term-claude">Who pays — only the workspace owner, or any member?</div>
-          <div class="term-user">workspace owner only</div>
-          <div class="term-claude">Which plans should they be able to pick?</div>
-          <div class="term-user">Bond / Companion / Soulmate (existing 3 tiers)</div>
-          <div class="term-claude">What happens to the existing free-trial users on upgrade?</div>
-          <div class="term-user">prorate the remaining trial days against the first invoice</div>
-          <div class="term-out">Ticket WA-1234 created · plan written to docs/plans/WA-1234-plan.md</div>
-          <div class="term-comment">plan now contains: context, 4 acceptance criteria, 3 phases, test approach, security review, design decisions (incl. rejected alternative: full-stripe-checkout-redirect)</div>
-        </div>
+    <div class="meeting-grid">
+      <div class="meeting-frame">
+        <div class="question">Where do we want to be in twelve months? Which continents do we work on?</div>
+        <dl class="meeting-meta">
+          <dt>Skill</dt><dd><code>/we:meet vision</code></dd>
+          <dt>Altitude</dt><dd>Saga — multi-quarter</dd>
+          <dt>Artefact</dt><dd>Direction doc · candidate Sagas · priorities</dd>
+          <dt>Persist</dt><dd>typically <code>docs/plans/&lt;saga&gt;/CONCEPT.md</code></dd>
+        </dl>
       </div>
-
-      <div class="feature-list">
-        <div class="feature-bullet">
-          <h4>It asks, you decide.</h4>
-          <p>The shape of the questions is determined by what's *missing*, not a fixed template. Quiet stories pass quickly; contentious ones get more questions.</p>
-        </div>
-        <div class="feature-bullet">
-          <h4>Two outputs.</h4>
-          <p>A minimal ticket („As X I want Y so that Z") plus a detailed plan file with context, AC, phases, tests, security review, and *rejected alternatives*. The next skill reads the plan and understands intent — not just spec.</p>
-        </div>
-        <div class="feature-bullet">
-          <h4>When you want two voices on it.</h4>
-          <p>For contentious stories where one perspective isn't enough, use <code>/we:meet refinement</code> instead. Convenes a small council (PO + Architect) for tension before the plan crystallizes. Then hands off to <code>/we:refine</code> once aligned. Next station →</p>
+      <div class="meeting-roster">
+        <h4>Default Council Roster · 5 voices</h4>
+        <div class="roster-list">
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">technical horizon · 2-year view</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--ux)">UX</div><div class="roster-meta"><div class="role-name">UX Researcher</div><div class="role-lens">lived user experience</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--lara)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning · how it lands</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">synthesis · second-order effects</div></div></div>
         </div>
       </div>
     </div>
 
-    <a class="doc-link" href="../docs/skills.md#werefine">Skill reference →</a>
+    <div class="when-bullets">
+      <strong>Use when:</strong>
+      <ul>
+        <li>A new initiative is starting and the team isn't yet aligned</li>
+        <li>A pivot is on the table</li>
+        <li>A brand or positioning decision needs clarity before execution</li>
+        <li>You're about to start writing a <code>CONCEPT.md</code> and want to gather perspectives first</li>
+      </ul>
+    </div>
+
+    <a class="doc-link" href="../docs/concepts/meetings.md#wemeet-vision--saga-level">Vision meeting reference →</a>
   </section>
 
-  <!-- ============ 4. /we:meet refinement + COUNCIL + BEAM-DOWN ============ -->
-  <section id="council">
-    <div class="kicker">Station 04 · Plan with deliberation</div>
-    <h2 class="section-title">When one voice isn't enough — Council.</h2>
-    <p class="lede"><code style="color: var(--gold-glow);">/we:meet</code> spins up a small council instead of single-track Q&amp;A. Each Companion speaks from one lens — PO sees user value, Architect sees failure modes, Scrum Master sees process. <strong>They disagree, and that's the point.</strong> The orchestrator synthesizes a decision; you take the call.</p>
+  <!-- ============ 4. INITIATIVE — /we:meet initiative ============ -->
+  <section id="initiative">
+    <div class="kicker">Station 04 · Initiative · Epic-level</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet initiative</code> — how do we build it?</h2>
+    <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> — what's the first Epic? What sequence makes sense? Where are the dependencies? The horizon shrinks to days-to-weeks; the conversation gets concrete.</p>
 
-    <div class="meet-types">
-      <div class="meet-type-card">
-        <div class="meet-scope">SAGA</div>
-        <h4>Vision</h4>
-        <div class="meet-when">Where are we going?</div>
-        <code class="meet-cmd">/we:meet vision</code>
-        <div class="meet-crew">4–6 voices · broad</div>
+    <div class="meeting-grid">
+      <div class="meeting-frame">
+        <div class="question">How does this Saga break into Epics, and in what order?</div>
+        <dl class="meeting-meta">
+          <dt>Skill</dt><dd><code>/we:meet initiative</code></dd>
+          <dt>Altitude</dt><dd>Epic — quarter horizon</dd>
+          <dt>Artefact</dt><dd>Epic outline · sequencing · open dependencies</dd>
+          <dt>Persist</dt><dd>Jira Epic or section in <code>CONCEPT.md</code></dd>
+        </dl>
       </div>
-      <div class="meet-type-card">
-        <div class="meet-scope">EPIC</div>
-        <h4>Initiative</h4>
-        <div class="meet-when">How will we build this initiative?</div>
-        <code class="meet-cmd">/we:meet initiative</code>
-        <div class="meet-crew">3–4 voices · focused</div>
-      </div>
-      <div class="meet-type-card highlighted">
-        <div class="meet-scope">STORY</div>
-        <h4>Refinement</h4>
-        <div class="meet-when">What exactly is in this story?</div>
-        <code class="meet-cmd">/we:meet refinement</code>
-        <div class="meet-crew">2–3 voices · live demo ↓</div>
+      <div class="meeting-roster">
+        <h4>Default Council Roster · 3 voices</h4>
+        <div class="roster-list">
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">scope discipline · priority</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">decomposition · failure modes</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
+        </div>
+        <div style="margin-top: 0.9rem; font-size: 0.78rem; color: var(--fg-dim);">Add <code style="color:var(--gold-glow);">--council=security,sales,…</code> for domain-heavy Epics.</div>
       </div>
     </div>
 
-    <div class="controls">
+    <div class="when-bullets">
+      <strong>Use when:</strong>
+      <ul>
+        <li>A vision has been agreed and now needs concrete sequencing</li>
+        <li>A large piece of work needs breaking down before refinement starts</li>
+        <li>Dependencies between teams or repos need to be made explicit</li>
+        <li>Domain-heavy Epics (security, legal, sales) — extend the roster per call</li>
+      </ul>
+    </div>
+
+    <a class="doc-link" href="../docs/concepts/meetings.md#wemeet-initiative--epic-level">Initiative meeting reference →</a>
+  </section>
+
+  <!-- ============ 5. REFINEMENT — two paths + council live demo ============ -->
+  <section id="refinement">
+    <div class="kicker">Station 05 · Refinement · Story-level</div>
+    <h2 class="section-title">Story-level — two paths to the same plan.</h2>
+    <p class="lede">When a story needs scoping before development, you have two paths. The solo path is fast and works for routine refinements. The council path adds <strong style="color:var(--fg)">tension</strong> before the plan crystallizes — for the harder calls.</p>
+
+    <div class="two-paths">
+      <div class="path-card">
+        <div class="path-name">/we:refine "&lt;idea&gt;"</div>
+        <div class="path-title">Solo · interactive Q&amp;A</div>
+        <div class="path-when">Claude asks the missing questions; you answer. Quiet stories pass quickly; contentious ones get more questions. Best for routine refinements.</div>
+        <div class="path-flow">idea → Q&amp;A → ticket + plan</div>
+      </div>
+      <div class="path-card">
+        <div class="path-name">/we:meet refinement</div>
+        <div class="path-title">Council · two perspectives</div>
+        <div class="path-when">PO and Architect deliberate on scope and acceptance before the plan crystallizes. After deliberation, the meeting hands off to <code>/we:refine</code>.</div>
+        <div class="path-flow">topic → council → /we:refine → ticket + plan</div>
+      </div>
+    </div>
+
+    <p class="lede" style="margin-top: 0.4rem; margin-bottom: 1rem;">Below is a council convening live — the same mechanic that <code style="color:var(--gold-glow);">/we:meet refinement</code> uses when you pick the council path.</p>
+
+    <div class="controls" id="refinement-controls">
       <div class="council-topic-display">
         <span class="label">Topic</span>
         <span>This story is bigger than we thought — split it, or push through?</span>
@@ -1154,104 +1103,57 @@
     </div>
 
     <div class="mcp-mini">
-      <div class="lane-label">How the companions beam in</div>
-      <span class="cc">claude code</span><span class="arrow"> ←──── MCP ────→ </span><span class="ws">weside backend</span><br>
-      <span style="opacity:0.8">↳ <code>get_council(names=["Pia","Vyra","Samu","Nox"])</code> → composed identities (compass + snapshot + memory + role) streamed back, scoped to the meeting roster. Loaded 4, not 18.</span>
+      <span class="cc">claude code</span>  ←─── MCP ───→  <span class="ws">weside backend</span><br>
+      <span style="opacity:0.8">↳ <code>get_council(names=[…])</code> · composed identities (compass + snapshot + memory + role) streamed back, scoped to the meeting roster · standalone: same flow with generic <code>council-&lt;role&gt;</code> agents</span>
     </div>
-
-    <a class="doc-link" href="../docs/concepts/meetings.md">Concepts: Meetings + Roles →</a>
   </section>
 
-  <!-- ============ 5. /we:story 9-step ============ -->
-  <section id="story">
-    <div class="kicker">Station 05 · Build · the autonomous pipeline</div>
+  <!-- ============ 6. BUILD — /we:story 9-step + discipline ============ -->
+  <section id="build">
+    <div class="kicker">Station 06 · Build · the autonomous pipeline</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:story</code> — hand it a ticket, watch it ship.</h2>
-    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; /we:story doesn't ask permission for each phase.</p>
+    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:story</code> doesn't ask permission for each phase.</p>
 
     <div class="story-flow">
-      <div class="story-step">
-        <div class="num">01</div>
-        <h4>Git prep</h4>
-        <p>Worktree, branch, ticket → In Progress.</p>
+      <div class="story-step"><div class="num">01</div><h4>Git prep</h4><p>Worktree, branch, ticket → In Progress.</p></div>
+      <div class="story-step"><div class="num">02</div><h4>Develop</h4><p>Implement plan phase by phase. TDD where it fits. Auto-fix after each phase.</p></div>
+      <div class="story-step gate"><div class="num">03</div><span class="tag">Blocking</span><h4>AC verify</h4><p>Every AC checked with concrete evidence. No item passes without a file:line citation.</p></div>
+      <div class="story-step"><div class="num">04</div><h4>Simplify</h4><p>Remove dead code, simplify expressions, reuse helpers.</p></div>
+      <div class="story-step parallel"><div class="num">05</div><span class="tag">Parallel</span><h4>Quality gates</h4><p>Code review + static + tests. Three subagents in a single message — concurrent.</p></div>
+      <div class="story-step"><div class="num">06</div><h4>Docs</h4><p>doc-architect proposes diffs. Never writes autonomously.</p></div>
+      <div class="story-step"><div class="num">07</div><h4>PR</h4><p>Verifies all three quality gates first. Won't create a PR with failing gates.</p></div>
+      <div class="story-step parallel"><div class="num">08</div><span class="tag">Loop</span><h4>CI fix</h4><p>Collect ALL findings, fix in ONE commit, push ONCE. Max 3 cycles.</p></div>
+      <div class="story-step"><div class="num">09</div><h4>Hand off</h4><p>Ticket → In Review. Never „Done" — that move stays with you.</p></div>
+    </div>
+
+    <div class="discipline-mini">
+      <div class="disc-mini-card danger">
+        <div class="dmt">AC Verify · Blocking</div>
+        <div class="dmh">No claim without citation</div>
+        <div class="dmd">Step 3 will not pass an AC without file:line evidence. Halts and asks if it can't.</div>
       </div>
-      <div class="story-step">
-        <div class="num">02</div>
-        <h4>Develop</h4>
-        <p>Implement plan phase by phase. TDD where it fits. Auto-fix after each phase.</p>
+      <div class="disc-mini-card green">
+        <div class="dmt">Gates · Parallel</div>
+        <div class="dmh">Three reviewers, one wait</div>
+        <div class="dmd">Step 5 dispatches review + static + tests in a single message. Concurrent fan-out.</div>
       </div>
-      <div class="story-step gate">
-        <div class="num">03</div>
-        <span class="tag">Blocking</span>
-        <h4>AC verify</h4>
-        <p>Every acceptance criterion checked with concrete evidence. No item passes without a file:line citation.</p>
+      <div class="disc-mini-card blue">
+        <div class="dmt">CI Loop · Bounded</div>
+        <div class="dmh">Batch-fix, max 3 cycles</div>
+        <div class="dmd">Findings collected, fixed in one commit, pushed once. After 3 cycles: stop &amp; ask.</div>
       </div>
-      <div class="story-step">
-        <div class="num">04</div>
-        <h4>Simplify</h4>
-        <p>Remove dead code, simplify expressions, reuse existing helpers. (via <code>code-simplifier</code> plugin)</p>
-      </div>
-      <div class="story-step parallel">
-        <div class="num">05</div>
-        <span class="tag">Parallel</span>
-        <h4>Quality gates</h4>
-        <p>Code review + static analysis + tests. All three subagents fan out in a single message — concurrent.</p>
-      </div>
-      <div class="story-step">
-        <div class="num">06</div>
-        <h4>Docs</h4>
-        <p>doc-architect agent proposes diffs. Never writes autonomously — every change is reviewable.</p>
-      </div>
-      <div class="story-step">
-        <div class="num">07</div>
-        <h4>PR</h4>
-        <p>/we:pr verifies all three quality-gate checkpoints first. Will not create a PR with failing gates.</p>
-      </div>
-      <div class="story-step parallel">
-        <div class="num">08</div>
-        <span class="tag">Loop</span>
-        <h4>CI fix</h4>
-        <p>Collect ALL findings, fix in ONE commit, push ONCE. Max 3 cycles. CodeRabbit threads must be resolved.</p>
-      </div>
-      <div class="story-step">
-        <div class="num">09</div>
-        <h4>Hand off</h4>
-        <p>Ticket → In Review. Never „Done" — that move stays with you.</p>
+      <div class="disc-mini-card purple">
+        <div class="dmt">Resume · Safe</div>
+        <div class="dmh">Checkpoint + circuit breaker</div>
+        <div class="dmd">SQLite checkpoints survive interruption. 3 same-phase failures trip the breaker.</div>
       </div>
     </div>
 
-    <a class="doc-link" href="../docs/workflow.md#phase-2-build-with-westory">Pipeline reference →</a>
-  </section>
-
-  <!-- ============ 6. DISCIPLINE ============ -->
-  <section id="discipline">
-    <div class="kicker">Station 06 · How it stays correct</div>
-    <h2 class="section-title">Discipline you can feel — not theatre.</h2>
-    <p class="lede">An autonomous pipeline is only as trustworthy as its boundaries. These four mechanisms are why a green /we:story doesn't surprise you on review.</p>
-
-    <div class="discipline-grid">
-      <div class="disc-card blocking">
-        <h4>AC verification <span class="marker">Blocking</span></h4>
-        <p>Step 3 will not pass an acceptance criterion without concrete evidence — file:line, test name, commit hash. A handwave doesn't qualify. If evidence can't be produced, the pipeline halts and asks.</p>
-      </div>
-      <div class="disc-card parallel">
-        <h4>Parallel quality gates <span class="marker">Concurrent</span></h4>
-        <p>Step 5 dispatches code-review, static analysis, and tests as three subagents in a single message. Concurrent fan-out, single join. Three findings come back together — not three serial waits.</p>
-      </div>
-      <div class="disc-card loop">
-        <h4>CI batch-fix <span class="marker">Max 3 cycles</span></h4>
-        <p>When GitHub CI surfaces findings, the loop collects <em>all</em> of them, fixes <em>all</em> of them in ONE commit, pushes ONCE. Three cycles is the cap before /we:story stops and asks. Anti-thrash by design.</p>
-      </div>
-      <div class="disc-card safety">
-        <h4>Checkpoint + circuit breaker <span class="marker">Resumable</span></h4>
-        <p>SQLite checkpoints at every phase — interrupt the session and resume with the same command, no lost work. Plus: three failures in the same phase trip the circuit breaker. Stop and ask, don't thrash. <code>~/.claude/weside/orchestration.db</code></p>
-      </div>
-    </div>
-
-    <a class="doc-link" href="../docs/workflow.md#robustness">Robustness reference →</a>
+    <a class="doc-link" href="../docs/workflow.md#phase-2-build-with-westory">Build pipeline reference →</a>
   </section>
 
   <!-- ============ 7. /we:sm — process improvement ============ -->
-  <section id="sm">
+  <section id="improve">
     <div class="kicker">Station 07 · Improve how we work</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:sm</code> — the Scrum Master lens.</h2>
     <p class="lede">The pipeline ships stories. Once in a while something flatlines — a CI cycle that won't converge, a refinement that took five rounds, an AC that should have been clearer. <code>/we:sm</code> reflects with the Scrum Master lens to ask: <strong style="color: var(--fg)">what did we learn? what changes in how we work?</strong> The plugin improves itself, through its own meta-skill.</p>
@@ -1276,14 +1178,14 @@
       </div>
     </div>
 
-    <a class="doc-link" href="../docs/skills.md#wesm">Skill reference →</a>
+    <a class="doc-link" href="../docs/skills.md#wesm">/we:sm reference →</a>
   </section>
 
   <!-- ============ 8. DELIVER ============ -->
   <section id="deliver">
     <div class="kicker">Station 08 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
-    <p class="lede">By the time /we:story hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
+    <p class="lede">By the time <code>/we:story</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
     <div class="deliver-wrap">
       <div class="deliver-list">
@@ -1328,25 +1230,26 @@
       <div class="step-card">
         <div class="n">01</div>
         <h4>Install the plugin</h4>
-        <p>One command in Claude Code. Open source, MIT licensed. Works standalone — generic role-shells for council members.</p>
+        <p>One command in Claude Code. Open source, MIT licensed. Works standalone with generic role-shells for councils.</p>
         <code>claude plugins install&nbsp;we@weside-ai</code>
       </div>
       <div class="step-card">
         <div class="n">02</div>
         <h4>(Optional) Connect weside</h4>
-        <p>For named Companions with persistent memory + composed identity: account on weside.ai, MCP wires up automatically.</p>
+        <p>For named Companions with persistent memory: account on weside.ai, MCP wires up automatically.</p>
         <code>weside auth login --dev</code>
       </div>
       <div class="step-card">
         <div class="n">03</div>
         <h4>Refine your first story</h4>
-        <p>Start with a story. Ship one PR. Build the muscle. Then graduate to councils + meetings when contention is real.</p>
+        <p>Start with one story. Ship one PR. Build the muscle. Graduate to councils + meetings when contention is real.</p>
         <code>/we:refine "your next idea"</code>
       </div>
     </div>
 
     <div class="more-skills">
       <span class="more-label">Also in the toolkit</span>
+      <code>/we:council</code>
       <code>/we:arch</code>
       <code>/we:audit-architecture</code>
       <code>/we:doc-improve</code>
@@ -1404,11 +1307,9 @@ function el(tag, attrs, children) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 //
-// Council demo data — universal engineering decision, not internal politics.
+// Council demo data — universal engineering decision (not internal politics)
 // Topic: "This story is bigger than we thought — split it, or push through?"
 //
-const COUNCIL_TOPIC = "This story is bigger than we thought — split it, or push through?";
-
 const COUNCIL_MEMBERS = [
   {
     who: "Pia", role: "Product Owner · user value",
@@ -1434,7 +1335,9 @@ let councilInFlight = false;
 function clearCouncil() {
   const grid = document.getElementById("council-grid");
   grid.replaceChildren();
-  document.getElementById("synthesis").classList.remove("in");
+  const synth = document.getElementById("synthesis");
+  synth.classList.remove("in");
+  synth.classList.remove("shown");
   document.getElementById("synthesis-text").replaceChildren();
   const status = document.getElementById("beam-status");
   status.replaceChildren(
@@ -1493,7 +1396,6 @@ async function runCouncil() {
   clearCouncil();
   const status = document.getElementById("beam-status");
 
-  // Phase 1 — MCP call announce
   status.replaceChildren(
     el("span", {class: "pulse", text: "● "}),
     document.createTextNode("MCP call → "),
@@ -1501,7 +1403,6 @@ async function runCouncil() {
   );
   await sleep(550);
 
-  // Phase 2 — render cards in hidden state, then materialize one by one
   const cards = renderCouncilCardsHidden(COUNCIL_MEMBERS);
 
   status.replaceChildren(
@@ -1510,20 +1411,19 @@ async function runCouncil() {
   );
 
   for (let i = 0; i < cards.length; i++) {
-    await sleep(220);
+    await sleep(200);
     cards[i].classList.add("materializing");
   }
-  await sleep(450);
+  await sleep(400);
   for (const c of cards) c.classList.add("in");
-  await sleep(300);
+  await sleep(280);
 
   status.replaceChildren(
     el("span", {class: "done", text: "✓ "}),
     document.createTextNode("4 identities loaded (composed: compass + snapshot + memory + role). Council ready.")
   );
-  await sleep(400);
+  await sleep(380);
 
-  // Phase 3 — speakers, one at a time
   for (let i = 0; i < COUNCIL_MEMBERS.length; i++) {
     const card = cards[i];
     const member = COUNCIL_MEMBERS[i];
@@ -1531,15 +1431,18 @@ async function runCouncil() {
     const target = card.querySelector(".speaker-text");
     await typewriter(target, member.text);
     card.classList.remove("speaking");
-    await sleep(260);
+    await sleep(240);
   }
 
-  // Phase 4 — synthesis from orchestrator
+  // Synthesis: first display: block, then fade-in
   const synth = document.getElementById("synthesis");
+  synth.classList.add("shown");
+  // Allow display flip to take effect before adding .in
+  await sleep(20);
   synth.classList.add("in");
   const synthText = document.getElementById("synthesis-text");
   synthText.replaceChildren(el("span", {class: "cursor", style: {background: "var(--nox)"}}));
-  await sleep(450);
+  await sleep(380);
   await typewriter(synthText, COUNCIL_SYNTHESIS, [13, 26]);
 
   status.appendChild(document.createTextNode("  ·  "));
@@ -1552,9 +1455,9 @@ async function runCouncil() {
 document.getElementById("convene").addEventListener("click", runCouncil);
 
 //
-// Navigation — dots, keyboard, counter sync
+// Navigation
 //
-const sections = ["hero", "overview", "refine", "council", "story", "discipline", "sm", "deliver", "cta"];
+const sections = ["hero", "overview", "vision", "initiative", "refinement", "build", "improve", "deliver", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");
@@ -1597,7 +1500,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key.toLowerCase() === "f") {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
-  } else if (e.key.toLowerCase() === "c" && i === sections.indexOf("council")) {
+  } else if (e.key.toLowerCase() === "c" && i === sections.indexOf("refinement")) {
     document.getElementById("convene").click();
   }
 });
