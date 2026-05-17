@@ -817,7 +817,162 @@
   .sm-step code { color: var(--gold-glow); font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; }
   .sm-arrow { color: var(--fg-dim); align-self: center; font-size: 1.3rem; padding: 0 0.4rem; }
 
-  /* ─── 8. DELIVER ─── */
+  /* ─── 9. RETRO ─── */
+  .retro-demo {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 1.4rem;
+    max-width: 1200px;
+    width: 100%;
+    margin-bottom: 1.4rem;
+    align-items: start;
+  }
+  .retro-col-label {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 0.55rem;
+  }
+  .retro-pain .retro-col-label { color: var(--danger); }
+  .retro-proposal .retro-col-label { color: var(--gold-glow); }
+  .retro-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+  }
+  .retro-pain .retro-card { border-left: 3px solid rgba(255, 112, 112, 0.6); }
+  .retro-proposal .retro-card { border-left: 3px solid var(--gold); }
+  .retro-card-head {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--fg);
+    margin-bottom: 0.55rem;
+  }
+  .retro-tag-p1 {
+    display: inline-block;
+    background: var(--gold);
+    color: #0a0a0a;
+    padding: 0.08rem 0.4rem;
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-right: 0.4rem;
+  }
+  .retro-card-target {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    margin-bottom: 0.7rem;
+    word-break: break-all;
+  }
+  .retro-card-target code {
+    color: var(--gold-glow);
+    background: var(--bg);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+  }
+  .retro-card-body {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
+  }
+  .retro-card-body code {
+    color: var(--gold-glow);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.86em;
+  }
+  .retro-evidence,
+  .retro-root {
+    padding: 0.25rem 0;
+  }
+  .retro-root {
+    border-top: 1px dashed var(--line);
+    margin-top: 0.3rem;
+    padding-top: 0.45rem;
+  }
+  .retro-diff {
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 0.7rem 0.85rem;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--vyra);
+    margin: 0.4rem 0 0.8rem;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .retro-diff code {
+    color: var(--gold-glow);
+    background: transparent;
+  }
+  .retro-gate {
+    border-top: 1px solid var(--line);
+    padding-top: 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.82rem;
+  }
+  .retro-gate-prompt { color: var(--fg-muted); margin-right: 0.3rem; }
+  .retro-gate-key {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    background: var(--bg);
+    border: 1px solid var(--line-bright);
+    color: var(--gold-glow);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+  .retro-loop-note {
+    max-width: 1200px;
+    width: 100%;
+    background: rgba(212, 175, 55, 0.06);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: 10px;
+    padding: 0.9rem 1.2rem;
+    display: flex;
+    gap: 0.9rem;
+    align-items: flex-start;
+    font-size: 0.9rem;
+    color: var(--fg);
+    margin-bottom: 0.9rem;
+  }
+  .retro-loop-note .retro-loop-marker {
+    color: var(--gold-glow);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    font-size: 0.72rem;
+    flex-shrink: 0;
+    padding-top: 0.15rem;
+  }
+  .retro-loop-note code {
+    color: var(--gold-glow);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.88em;
+  }
+  .retro-trigger-note {
+    max-width: 1200px;
+    width: 100%;
+    font-size: 0.88rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
+  }
+  .retro-trigger-note strong { color: var(--fg); }
+  .retro-trigger-note code {
+    color: var(--gold-glow);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.92em;
+  }
+  .retro-trigger-note em { color: var(--gold-glow); font-style: italic; }
+
+  /* ─── 10. DELIVER ─── */
   .deliver-wrap {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -960,6 +1115,7 @@
     .council-grid { grid-template-columns: 1fr; }
     .sm-flow { grid-template-columns: 1fr; }
     .sm-arrow { display: none; }
+    .retro-demo { grid-template-columns: 1fr; }
     #cta .steps { grid-template-columns: 1fr; }
   }
 </style>
@@ -967,7 +1123,7 @@
 <body>
 
 <div class="station-counter">
-  <span class="now" id="counter-now">01</span> · 10
+  <span class="now" id="counter-now">01</span> · 11
 </div>
 
 <nav class="dots" id="dotnav">
@@ -979,6 +1135,7 @@
   <a data-target="story" data-label="Story · slice"></a>
   <a data-target="build" data-label="Build · /we:build"></a>
   <a data-target="coach" data-label="Coach · /we:coach"></a>
+  <a data-target="retro" data-label="Retro · KVP loop"></a>
   <a data-target="deliver" data-label="Deliver · you"></a>
   <a data-target="cta" data-label="Try it"></a>
 </nav>
@@ -1326,9 +1483,68 @@
     <a class="doc-link" href="../docs/skills.md">/we:coach reference →</a>
   </section>
 
-  <!-- ============ 9. DELIVER ============ -->
+  <!-- ============ 9. RETRO — /we:retro (KVP loop) ============ -->
+  <section id="retro">
+    <div class="kicker">Station 09 · Retro · the harness improves itself</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:retro</code> — every error happens exactly once.</h2>
+    <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the just-shipped PR — session transcript + <code>gh api</code> (CI checks, CodeRabbit threads, push-fix-push cycles) — finds the frictions that cost time, and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter with every cycle.</p>
+
+    <div class="retro-demo">
+      <div class="retro-col retro-pain">
+        <div class="retro-col-label">PAIN — what cost time this cycle</div>
+        <div class="retro-card">
+          <div class="retro-card-head">PR #1998 · 4 CI cycles · ~12 min</div>
+          <div class="retro-card-body">
+            <div class="retro-evidence">evidence: <code>gh pr checks 1998</code>, commits <code>f7d985a..0575bcc</code></div>
+            <div class="retro-root">root: <code>Press „Convene"</code> — mismatched ASCII / German quote, present since v2.27.1</div>
+            <div class="retro-root">root²: <code>node --check</code> ran only on the new IIFE, not the whole script</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="retro-col retro-proposal">
+        <div class="retro-col-label">PROPOSAL · default placement: user repo</div>
+        <div class="retro-card">
+          <div class="retro-card-head"><span class="retro-tag-p1">P1</span> · 5min · NEW</div>
+          <div class="retro-card-target"><code>weside-core/.claude/rules/quality/html-script-validation.md</code></div>
+          <div class="retro-card-body">
+            <div class="retro-diff">
+              <div>+ ---</div>
+              <div>+ paths:</div>
+              <div>+&nbsp;&nbsp;- "**/*.html"</div>
+              <div>+ ---</div>
+              <div>+ # HTML &lt;script&gt; validation</div>
+              <div>+ When editing inline JS, extract the full &lt;script&gt;</div>
+              <div>+ and run <code>node --check</code> before pushing. A latent</div>
+              <div>+ SyntaxError elsewhere will mask your edit's intent.</div>
+            </div>
+          </div>
+          <div class="retro-gate">
+            <span class="retro-gate-prompt">Apply this? Override placement? </span>
+            <span class="retro-gate-key">[y]</span>
+            <span class="retro-gate-key">[n]</span>
+            <span class="retro-gate-key">[edit-path]</span>
+            <span class="retro-gate-key">[skip-for-later]</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="retro-loop-note">
+      <span class="retro-loop-marker">LOOP</span>
+      <span>Approved proposals applied via Edit/Write (default: PR workflow into the user repo). A retro log lands in <code>docs/retros/YYYY-MM-DD-*.md</code> regardless of how many proposals applied — that's the corpus the next <code>/we:retro --scan 10</code> reads for recurring patterns.</span>
+    </div>
+
+    <div class="retro-trigger-note">
+      <strong>Coach can suggest it.</strong> <code>/we:coach</code> watches for retro-worthy signals during its Boot Protocol — recent PR merge, CI cycles ≥ 3, end-of-session prompts — and offers <code>/we:retro</code> with the same <code>[y/n]</code> gate the Coach uses for advisor launches. Never auto-fires. <em>Motto: jeder Fehler passiert nur einmal.</em>
+    </div>
+
+    <a class="doc-link" href="../docs/concepts/retro.md">/we:retro concept doc →</a>
+  </section>
+
+  <!-- ============ 10. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 09 · Deliver — you</div>
+    <div class="kicker">Station 10 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
     <p class="lede">By the time <code>/we:build</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
@@ -1364,7 +1580,7 @@
 
   <!-- ============ 10. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 10 · Try it</div>
+    <div class="kicker">Station 11 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -1607,7 +1823,7 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation
 //
-const sections = ["hero", "overview", "vision", "saga", "epic", "story", "build", "coach", "deliver", "cta"];
+const sections = ["hero", "overview", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");

@@ -28,6 +28,8 @@ description: >
 >
 > Both modes share the same Boot Protocol. The intent-detection rule decides which one to enter — see [Mode Selection](#mode-selection) below.
 >
+> **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting `/we:retro`](#suggesting-weretro) below.
+>
 > **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See APO compendium `02-COUNCIL.md` §7 (lc-startup) or [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the public summary.
 >
 > **Companion-aware.** When the weside MCP is connected and a Companion is configured, the Coach speaks *as* that Companion (typically Nox), not as a generic SM voice. Materialization happens in Boot Protocol Step 7. Standalone (no weside): the Coach reasons from the role-lens without persistent identity.
@@ -53,6 +55,7 @@ Decide ADVISOR vs RETRO from the user's prompt:
 | names a process artefact to improve (rule / skill / DoD / ADR)          | RETRO   |
 | empty invocation (`/we:coach` with no argument)                         | ADVISOR (open) |
 | ambiguous between the two                                               | ADVISOR — ask once, then proceed |
+| asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
 
 The shapes overlap at the edges. When in doubt, default to ADVISOR — it's the more interactive mode and naturally surfaces whether the user actually wants a retro instead.
 
@@ -128,6 +131,10 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    - `git branch --show-current` — are we on `main` or a feature branch?
    - Active ticketing-tool tickets (Jira via MCP, or `gh issue list -L 10`) — what's open
    - `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story list` — pipeline state for recent stories
+   - **Retro-worthy signals** (for the [Suggesting `/we:retro`](#suggesting-weretro) decision):
+     - `gh pr list --state merged -L 1 --json mergedAt,number` — was a PR merged very recently (last few hours)?
+     - On the current branch's open PR (if any): count of `synchronize` events on the PR timeline as a proxy for CI cycles. ≥ 3 is the threshold.
+     - User uttered an end-of-session signal in the prompt or prior turn ("bis morgen", "schlafen", "going home", "wrap up")
 
 10. **Active initiative state** — for the consuming repo, search for
     any *living* concept document (`docs/plans/*/CONCEPT.md` with
@@ -291,6 +298,43 @@ After editing, summarise what changed and move on.
 
 ---
 
+## Suggesting `/we:retro`
+
+Coach's RETRO mode (above) handles one specific friction the user already named. For a *systematic full pass* over the whole PR + CI cycle, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, CodeRabbit threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
+
+| Situation | Use |
+|---|---|
+| User reports one specific pain ("CodeRabbit threads broke push again") | Coach RETRO (Step R1-R5 above) |
+| User wants a full review of what just happened ("retro this PR", "post-mortem", "wat hat uns Zeit gekostet") | `/we:retro` (hand off) |
+| Coach detects retro-worthy signals at boot (PR just merged, CI cycles ≥ 3, end-of-session) | **Offer** `/we:retro` with a `[y/n]` gate |
+
+### Auto-suggest mechanics
+
+When any retro-worthy signal fires in Boot Protocol Step 9, surface it once per session per signal — never nag. The shape:
+
+> *"This PR (#1998) merged with 4 CI cycles — `/we:retro` would catch why in ~3min and propose rule changes so the next cycle is cleaner. Run it? [y/n]"*
+
+- `y` → print hand-off (do **not** `Skill()`-invoke `/we:retro` inline — it's a heavy skill):
+
+  ```text
+  SCOPE IS CLEAR. Run this next:
+
+    /we:retro --pr 1998
+
+  I'll be back when retro finishes.
+  ```
+
+- `n` → drop it silently. Don't re-ask for the same signal in the same session.
+- Anything else → treat as discussion; the suggestion stands.
+
+Coach never auto-fires `/we:retro`. The `[y/n]` is always present.
+
+### Why hand off instead of doing it here
+
+`/we:retro` does substantial data-fetching work (parallel `gh api` calls, transcript scan, optional `--scan N` over `docs/retros/`) and produces a per-item approval loop with file edits. That would inflate Coach's advisory context to tens of KB. Coach stays lightweight: it *notices* that a retro is due, *offers* it, then hands the work off to a dedicated session.
+
+---
+
 ## When to Delegate to `/we:docs`
 
 `/we:coach` owns **process artefacts**: rules, skills, agents, quality/, orchestration. That's its territory.
@@ -354,3 +398,4 @@ Clean separation. Don't cross the line.
 - **APO altitude map (public):** [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md)
 - **APO compendium (private, when reachable):** `lc-startup/02-weside/product/AGENTIC_PO/`
 - **Orchestration CLI:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py`
+- **Sibling skill for full systematic retros:** [`/we:retro`](../retro/SKILL.md) — proactive, comprehensive, applies N proposals after per-item gate

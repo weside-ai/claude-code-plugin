@@ -1,6 +1,6 @@
 # The Workflow
 
-Agentic Product Ownership has three phases — *plan*, *build*, *deliver*. The plugin gives you four altitudes of Plan skills, one autonomous Build skill, and a Deliver phase that stays with you.
+Agentic Product Ownership has four phases — *plan*, *build*, *deliver*, *retro*. The plugin gives you four altitudes of Plan skills, one autonomous Build skill, a Deliver phase that stays with you, and a Retro phase that feeds lessons from the just-shipped cycle back into the rules and CLAUDE.md files that govern the next one.
 
 This page maps the full pipeline and explains where each skill fits. For learning by doing, start with [getting-started.md](getting-started.md). For the why behind the structure, see [agenticproductownership.com](https://agenticproductownership.com).
 
@@ -15,7 +15,8 @@ flowchart LR
     E --> ST["/we:story<br/>interactive"]
     ST --> B["/we:build<br/>autonomous"]
     B --> M[User merges PR<br/>+ closes ticket]
-    M --> D[Done]
+    M --> R["/we:retro<br/>tighten the harness"]
+    R -.lessons.-> V
 
     style V fill:#fff,stroke:#bbb,stroke-dasharray:4 3
     style S fill:#fff,stroke:#bbb,stroke-dasharray:4 3
@@ -23,18 +24,19 @@ flowchart LR
     style ST fill:#ffefd9,stroke:#c87f00
     style B fill:#d9ffe5,stroke:#1a7a3c
     style M fill:#fff,stroke:#888
-    style D fill:#fff,stroke:#888
+    style R fill:#e8e0ff,stroke:#6a4ec0
 ```
 
-Three phases, three responsibilities:
+Four phases, four responsibilities:
 
 | Phase | Who | What | Command |
 |---|---|---|---|
 | **Plan** | You + Claude (interactive) | Vision / Saga / Epic / Story + build-ready plan | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` (+ `/we:meet`) |
 | **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:build` |
 | **Deliver** | You (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
+| **Retro** | You + Claude (interactive) | Find frictions in the just-shipped cycle; encode lessons in `.claude/rules/` + `CLAUDE.md` so they don't recur | `/we:retro` (Coach can suggest it after a merge) |
 
-**Claude never merges PRs or closes tickets.** Those stay with you.
+**Claude never merges PRs or closes tickets.** Those stay with you. **Claude never silently applies retro fixes** either — every proposal passes through a `[y/n]` gate.
 
 The upper Plan altitudes (Vision, Saga, Epic) are drawn lighter because most stories enter the pipeline at Story-altitude — by the time you trigger `/we:story`, the upstream work has usually already happened (in a previous session, in a Council meeting, or in your head). When it hasn't, walk top-down: `/we:vision` → `/we:meet vision` → `/we:saga` → `/we:meet saga` → `/we:epic` → `/we:meet epic` → `/we:story` → `/we:build`. Skipping levels is allowed — when the level above is stable, you don't need to re-do it.
 
@@ -144,6 +146,49 @@ You review the PR (your eyes, your call), merge it, close the ticket. Done. Ther
 
 ---
 
+## Phase 4: Retro with `/we:retro`
+
+The cycle doesn't end at Deliver — it closes. Every PR teaches something: a CI check that flipped red, a CodeRabbit thread that blocked merge, a workflow gap that cost two extra cycles, a manual correction the agent should have known to skip. `/we:retro` is where those lessons stop being one-off Slack threads and start being durable rules.
+
+```mermaid
+flowchart LR
+    M[Deliver: PR merged] --> R["/we:retro --pr N"]
+    R --> Report["Wins / Pain / Proposals report"]
+    Report --> Gate["[y/n] per proposal"]
+    Gate -->|y| Apply["Edit MD files<br/>in user repo's<br/>.claude/rules/ or CLAUDE.md"]
+    Gate -->|n| Log["Log only"]
+    Apply --> Log
+    Log --> Done["docs/retros/YYYY-MM-DD-*.md"]
+
+    style R fill:#e8e0ff,stroke:#6a4ec0
+    style Apply fill:#d9ffe5,stroke:#1a7a3c
+    style Gate fill:#fff,stroke:#888
+```
+
+### What it does
+
+| Step | What |
+|---|---|
+| **Source scope** | Default: current branch + last merged PR. `--pr N` for a specific PR. `--scan N` to also read the last N retros in `docs/retros/` for recurring patterns. |
+| **Data fetch** | Session transcript (what the agent did) + `gh api` (what failed externally — CI checks, CodeRabbit threads, push-fix-push cycles). Two-source model — both required. |
+| **Triage** | Each friction classified by surface: CI/static, CI/tests, CI/build, Review/CodeRabbit, Review/human, Workflow/cycle-count, Agent/manual-correction, Agent/iteration-loop, Tooling/friction. |
+| **Propose** | Each friction → 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/` over `CLAUDE.md` over `docs/`; plugin MDs rare and explicitly flagged), effort tag, diff preview. |
+| **Per-item gate** | `[y / n / edit-path / skip-for-later]` for each proposal. Never silent. |
+| **Apply** | Approved items → Edit/Write. Default PR-workflow in user repo; direct-commit if repo configured that way. |
+| **Log** | Always writes `docs/retros/YYYY-MM-DD-<topic>.md` with structured frontmatter — the corpus future `--scan` runs read for patterns. |
+
+### Privacy guard
+
+The skill reads session transcripts and must skip personal content (Companion-mode conversations, memory writes about the user, `save_compass` payloads). Engineering surfaces only — tool calls, file diffs, CI logs, PR comments. See [`we/skills/retro/SKILL.md`](../we/skills/retro/SKILL.md) for the full rule.
+
+### Coach can suggest it
+
+`/we:coach` watches for retro-worthy signals during its Boot Protocol — recent PR merge, CI cycles ≥ 3, end-of-session prompts — and offers `/we:retro` via a `[y/n]` gate. Never auto-fires.
+
+**Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once; the next time it shows up, it's a rule the agent already follows.
+
+---
+
 ## Where the other skills sit
 
 The pipeline above is the spine. The standalone skills serve specific needs around it:
@@ -164,6 +209,7 @@ flowchart TB
     end
     subgraph process[Process + architecture]
         coach["/we:coach<br/>APO advisor + retro"]
+        retro["/we:retro<br/>full systematic retro"]
         arch["/we:arch<br/>architecture decisions"]
     end
     subgraph review[Review + audit]

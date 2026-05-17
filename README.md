@@ -10,7 +10,7 @@
 
 ## What you get
 
-Twenty `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build to Deliver — designed to be used together but each useful on its own:
+Twenty-one `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
 **Plan altitude — Solo (formulate) + Meet (decompose with Council):**
 
@@ -29,6 +29,7 @@ Twenty `/we:*` skills covering the full **Agentic Product Ownership** chain — 
 
 - **`/we:council`** — convene role-lens agents (architect, PO, security, marketing, …) on any topic; orchestrator synthesises *agreement / tension / recommendation*
 - **`/we:coach`** — APO advisor: where am I in the hierarchy, what's the next move, process retros when something broke (renamed from `/we:sm`)
+- **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:arch`**, **`/we:audit-architecture`**, **`/we:audit`**, **`/we:doc-improve`**, **`/we:find-dead-code`**, **`/we:smoketest`** — focused tools for specific moments
 
 Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
@@ -42,7 +43,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 20 skills are available.
+That's it. The plugin is enabled. All 21 skills are available.
 
 ---
 
@@ -112,7 +113,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 20 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 21 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 

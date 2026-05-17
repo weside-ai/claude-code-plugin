@@ -248,6 +248,36 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 ---
 
+### `/we:retro`
+
+> *Systematic continuous-improvement pass on the just-shipped cycle. Every error happens exactly once.*
+
+`/we:retro` is the dedicated retrospective skill. It reads two complementary sources — the **session transcript** (what the agent *did*) and the **GitHub PR + CI history** via `gh api` (what failed *externally* — checks, CodeRabbit threads, push-fix-push cycles) — and surfaces engineering frictions that cost time during the cycle. For each friction it drafts 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/<topic>.md`, then `CLAUDE.md`, then `docs/`; plugin MDs rare and explicitly flagged), an effort tag, and a diff preview. You approve per item via `[y / n / edit-path / skip-for-later]`. Approved items get applied via Edit/Write — default PR-workflow in the user repo, direct-commit when the repo is configured for it. A retro log (`docs/retros/YYYY-MM-DD-<topic>.md`) is always written, regardless of how many proposals applied — that's the corpus the optional `--scan N` flag reads later to surface recurring patterns across past retros.
+
+**Privacy guard (mandatory):** if session content reads as personal, skip it — analyse only engineering surfaces (tool calls, file diffs, CI logs, PR comments). Companion-mode conversations, `save_memory` payloads, and `save_compass` writes are categorically out-of-scope.
+
+**When to use:**
+- After a PR merges that took multiple CI cycles (`/we:retro --pr 1998`)
+- After a story shipped and you want a structured cleanup pass
+- At end-of-session when you want the cycle's lessons to outlive the conversation
+- With `--scan N` to look for patterns across the last N retros (e.g. "same issue showed up 3 times — promote to structural fix")
+
+**Triggered by `/we:coach`:** Coach detects retro-worthy signals during its Boot Protocol (PR just merged, CI cycles ≥ 3, end-of-session prompts) and offers `/we:retro` via a `[y / n]` gate. Coach never auto-fires it.
+
+**Won't do:**
+- Apply any edit without an explicit `y` for that item
+- Quote personal content from the transcript (privacy guard)
+- Modify source code (MDs only — code-level lessons flow back through `/we:build` if needed)
+- Auto-create Jira / GitHub tickets (skill can scaffold one on explicit `--ticket` request, off by default)
+- Push directly to `weside-core` `main` (rule + CLAUDE.md edits always go through PR)
+- Replace Coach RETRO mode (additive — Coach handles single-pain, `/we:retro` handles full-cycle)
+
+**Differs from Coach RETRO:** Coach RETRO is reactive (user names one pain → 2–3 fix options → apply 1). `/we:retro` is proactive + comprehensive (scan everything → N proposals → apply N after per-item gate).
+
+> **New in v2.30.0.**
+
+---
+
 ## Framework setup skills
 
 ### `/we:setup`
