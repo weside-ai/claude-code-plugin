@@ -410,6 +410,62 @@
 
   /* ─── Council / Beam-down (Station 4) ─── */
   #council .lede strong { color: var(--fg); }
+
+  .meet-types {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.9rem;
+    max-width: 1200px;
+    width: 100%;
+    margin-bottom: 2rem;
+  }
+  .meet-type-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    transition: border-color 0.25s ease;
+  }
+  .meet-type-card:hover { border-color: var(--line-bright); }
+  .meet-type-card.highlighted {
+    border-color: var(--gold);
+    background: linear-gradient(160deg, rgba(212, 175, 55, 0.06) 0%, var(--bg-card) 100%);
+  }
+  .meet-scope {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.2em;
+    color: var(--fg-dim);
+    margin-bottom: 0.4rem;
+  }
+  .meet-type-card.highlighted .meet-scope { color: var(--gold); }
+  .meet-type-card h4 {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+  }
+  .meet-when {
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    margin-bottom: 0.6rem;
+    line-height: 1.4;
+  }
+  .meet-cmd {
+    display: inline-block;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.76rem;
+    color: var(--gold-glow);
+    background: var(--bg);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    margin-bottom: 0.5rem;
+  }
+  .meet-crew {
+    font-size: 0.74rem;
+    color: var(--fg-dim);
+    letter-spacing: 0.04em;
+  }
   #council .controls {
     display: flex;
     flex-wrap: wrap;
@@ -710,7 +766,51 @@
     font-size: 0.84em;
   }
 
-  /* ─── Deliver (Station 7) ─── */
+  /* ─── /we:sm flow (Station 7) ─── */
+  .sm-flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 0;
+    max-width: 1100px;
+    width: 100%;
+    align-items: stretch;
+  }
+  .sm-step {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.2rem 1.3rem;
+  }
+  .sm-step .sm-step-num {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    color: var(--nox);
+    margin-bottom: 0.4rem;
+  }
+  .sm-step h4 {
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 0.45rem;
+  }
+  .sm-step p {
+    font-size: 0.86rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+  }
+  .sm-step code {
+    color: var(--gold-glow);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.85em;
+  }
+  .sm-arrow {
+    color: var(--fg-dim);
+    align-self: center;
+    font-size: 1.3rem;
+    padding: 0 0.4rem;
+  }
+
+  /* ─── Deliver (Station 8) ─── */
   .deliver-wrap {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -757,7 +857,46 @@
   }
   .deliver-quote strong { color: var(--danger); font-style: normal; }
 
-  /* ─── CTA (Station 8) ─── */
+  /* ─── More skills mini-line ─── */
+  .more-skills {
+    max-width: 900px;
+    margin: 0 auto 2rem;
+    padding: 1rem 1.4rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.84rem;
+    color: var(--fg-muted);
+  }
+  .more-skills .more-label {
+    color: var(--fg-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    margin-right: 0.4rem;
+  }
+  .more-skills code {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    padding: 0.18rem 0.5rem;
+    border-radius: 4px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+  }
+  .more-skills a {
+    color: var(--gold);
+    text-decoration: none;
+    margin-left: 0.4rem;
+    font-size: 0.78rem;
+  }
+
+  /* ─── CTA (Station 9) ─── */
   #cta {
     align-items: center;
     text-align: center;
@@ -835,10 +974,10 @@
     nav.dots { display: none; }
     .station-counter { top: 1rem; right: 1rem; }
     section { padding: 4vh 6vw; }
-    .phases { grid-template-columns: 1fr; }
-    .phase-arrow { display: none; }
+    .phases, .sm-flow { grid-template-columns: 1fr; }
+    .phase-arrow, .sm-arrow { display: none; }
     .refine-wrap, .deliver-wrap { grid-template-columns: 1fr; gap: 1.5rem; }
-    .council-grid { grid-template-columns: 1fr; }
+    .council-grid, .meet-types { grid-template-columns: 1fr; }
     .story-flow { grid-template-columns: 1fr 1fr; }
     .discipline-grid { grid-template-columns: 1fr; }
     #cta .steps { grid-template-columns: 1fr; }
@@ -848,7 +987,7 @@
 <body>
 
 <div class="station-counter">
-  <span class="now" id="counter-now">01</span> · 08
+  <span class="now" id="counter-now">01</span> · 09
 </div>
 
 <nav class="dots" id="dotnav">
@@ -858,6 +997,7 @@
   <a data-target="council" data-label="/we:meet · Council"></a>
   <a data-target="story" data-label="/we:story · 9 steps"></a>
   <a data-target="discipline" data-label="Discipline"></a>
+  <a data-target="sm" data-label="/we:sm · improve"></a>
   <a data-target="deliver" data-label="Deliver"></a>
   <a data-target="cta" data-label="Try it"></a>
 </nav>
@@ -963,7 +1103,31 @@
   <section id="council">
     <div class="kicker">Station 04 · Plan with deliberation</div>
     <h2 class="section-title">When one voice isn't enough — Council.</h2>
-    <p class="lede"><code style="color: var(--gold-glow);">/we:meet refinement</code> spins up a small council instead of single-track Q&amp;A. Each Companion speaks from one lens — PO sees user value, Architect sees failure modes, Scrum Master sees process. <strong>They disagree, and that's the point.</strong> The orchestrator synthesizes a decision; you take the call.</p>
+    <p class="lede"><code style="color: var(--gold-glow);">/we:meet</code> spins up a small council instead of single-track Q&amp;A. Each Companion speaks from one lens — PO sees user value, Architect sees failure modes, Scrum Master sees process. <strong>They disagree, and that's the point.</strong> The orchestrator synthesizes a decision; you take the call.</p>
+
+    <div class="meet-types">
+      <div class="meet-type-card">
+        <div class="meet-scope">SAGA</div>
+        <h4>Vision</h4>
+        <div class="meet-when">Where are we going?</div>
+        <code class="meet-cmd">/we:meet vision</code>
+        <div class="meet-crew">4–6 voices · broad</div>
+      </div>
+      <div class="meet-type-card">
+        <div class="meet-scope">EPIC</div>
+        <h4>Initiative</h4>
+        <div class="meet-when">How will we build this initiative?</div>
+        <code class="meet-cmd">/we:meet initiative</code>
+        <div class="meet-crew">3–4 voices · focused</div>
+      </div>
+      <div class="meet-type-card highlighted">
+        <div class="meet-scope">STORY</div>
+        <h4>Refinement</h4>
+        <div class="meet-when">What exactly is in this story?</div>
+        <code class="meet-cmd">/we:meet refinement</code>
+        <div class="meet-crew">2–3 voices · live demo ↓</div>
+      </div>
+    </div>
 
     <div class="controls">
       <div class="council-topic-display">
@@ -1086,9 +1250,38 @@
     <a class="doc-link" href="../docs/workflow.md#robustness">Robustness reference →</a>
   </section>
 
-  <!-- ============ 7. DELIVER ============ -->
+  <!-- ============ 7. /we:sm — process improvement ============ -->
+  <section id="sm">
+    <div class="kicker">Station 07 · Improve how we work</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:sm</code> — the Scrum Master lens.</h2>
+    <p class="lede">The pipeline ships stories. Once in a while something flatlines — a CI cycle that won't converge, a refinement that took five rounds, an AC that should have been clearer. <code>/we:sm</code> reflects with the Scrum Master lens to ask: <strong style="color: var(--fg)">what did we learn? what changes in how we work?</strong> The plugin improves itself, through its own meta-skill.</p>
+
+    <div class="sm-flow">
+      <div class="sm-step">
+        <div class="sm-step-num">01 · TRIGGER</div>
+        <h4>Friction surfaces</h4>
+        <p>Pipeline thrashes on the same gate, a refinement keeps cycling, a pattern shows up across stories. You feel it, or the circuit breaker tells you.</p>
+      </div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-step">
+        <div class="sm-step-num">02 · REFLECT</div>
+        <h4>/we:sm convenes</h4>
+        <p>Scrum Master reads the situation — recent commits, plan files, ticket history, what the council said and what the gates flagged. Proposes <strong style="color:var(--fg)">one focused change</strong>, not a list.</p>
+      </div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-step">
+        <div class="sm-step-num">03 · LAND</div>
+        <h4>Plugin improves itself</h4>
+        <p>The change lands in <code>.claude/rules/</code>, in a plan template, or in a skill's behaviour. Next story benefits — the workflow you ship with tomorrow isn't the one you shipped with today.</p>
+      </div>
+    </div>
+
+    <a class="doc-link" href="../docs/skills.md#wesm">Skill reference →</a>
+  </section>
+
+  <!-- ============ 8. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 07 · Deliver — you</div>
+    <div class="kicker">Station 08 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
     <p class="lede">By the time /we:story hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
@@ -1122,9 +1315,9 @@
     </div>
   </section>
 
-  <!-- ============ 8. TRY IT ============ -->
+  <!-- ============ 9. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 08 · Try it</div>
+    <div class="kicker">Station 09 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -1150,6 +1343,20 @@
         <p>Start with a story. Ship one PR. Build the muscle. Then graduate to councils + meetings when contention is real.</p>
         <code>/we:refine "your next idea"</code>
       </div>
+    </div>
+
+    <div class="more-skills">
+      <span class="more-label">Also in the toolkit</span>
+      <code>/we:arch</code>
+      <code>/we:audit-architecture</code>
+      <code>/we:doc-improve</code>
+      <code>/we:find-dead-code</code>
+      <code>/we:smoketest</code>
+      <code>/we:setup</code>
+      <code>/we:onboarding</code>
+      <code>/we:sideload</code>
+      <code>/we:materialize</code>
+      <a href="../docs/skills.md">→ skills.md</a>
     </div>
 
     <div class="tour-footer">
@@ -1347,7 +1554,7 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation — dots, keyboard, counter sync
 //
-const sections = ["hero", "overview", "refine", "council", "story", "discipline", "deliver", "cta"];
+const sections = ["hero", "overview", "refine", "council", "story", "discipline", "sm", "deliver", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");
@@ -1385,7 +1592,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "End") {
     e.preventDefault();
     document.getElementById("cta").scrollIntoView({ behavior: "smooth" });
-  } else if (/^[1-8]$/.test(e.key)) {
+  } else if (/^[1-9]$/.test(e.key)) {
     document.getElementById(sections[parseInt(e.key, 10) - 1]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key.toLowerCase() === "f") {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
