@@ -223,9 +223,9 @@
   /* ─── 2. BIG PICTURE — full hierarchy ─── */
   .hierarchy {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 0.6rem;
-    max-width: 1300px;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.55rem;
+    max-width: 1340px;
     width: 100%;
     margin-bottom: 1.6rem;
     position: relative;
@@ -257,6 +257,7 @@
   section#overview.armed.in .alt-card:nth-child(4) { transition-delay: 0.44s; }
   section#overview.armed.in .alt-card:nth-child(5) { transition-delay: 0.57s; }
   section#overview.armed.in .alt-card:nth-child(6) { transition-delay: 0.70s; }
+  section#overview.armed.in .alt-card:nth-child(7) { transition-delay: 0.83s; }
   .alt-card:hover { transform: translateY(-2px); border-color: var(--line-bright); }
   .alt-card.token-active {
     border-color: var(--gold-glow);
@@ -346,6 +347,7 @@
   .alt-card.story { --accent: var(--pia); }
   .alt-card.code { --accent: var(--gold); }
   .alt-card.deliver { --accent: var(--lara); }
+  .alt-card.retro { --accent: var(--rami); }
 
   .hierarchy-flow {
     max-width: 1300px;
@@ -367,6 +369,13 @@
     color: var(--gold-glow);
     transform: scale(1.25);
     text-shadow: 0 0 12px rgba(255, 217, 102, 0.6);
+  }
+  .hierarchy-flow .loop {
+    color: var(--rami);
+    font-style: italic;
+    margin-left: 0.6rem;
+    font-size: 0.92em;
+    letter-spacing: 0.04em;
   }
 
   /* Honor reduced-motion + small viewports for the token walker */
@@ -1215,10 +1224,18 @@
         <div class="alt-output">Shipped story · ticket closed</div>
         <div class="alt-voices">human only</div>
       </div>
+      <div class="alt-card retro">
+        <div class="alt-altitude">RETRO</div>
+        <div class="alt-horizon">minutes</div>
+        <div class="alt-name">KVP loop</div>
+        <code class="alt-skill">/we:retro</code>
+        <div class="alt-output">MD-file edits in .claude/rules/ · log in docs/retros/</div>
+        <div class="alt-voices">harness improves itself</div>
+      </div>
     </div>
 
     <div class="hierarchy-flow">
-      Vision <span class="arrow">→</span> Saga <span class="arrow">→</span> Epic <span class="arrow">→</span> Story <span class="arrow">→</span> Build <span class="arrow">→</span> Deliver
+      Vision <span class="arrow">→</span> Saga <span class="arrow">→</span> Epic <span class="arrow">→</span> Story <span class="arrow">→</span> Build <span class="arrow">→</span> Deliver <span class="arrow">↻</span> Retro <span class="loop">↺ feeds back into next Vision</span>
     </div>
 
     <div class="boundary-note">
@@ -1898,7 +1915,8 @@ document.addEventListener("keydown", (e) => {
     { glyph: "🎯", label: "EPIC" },
     { glyph: "✂️", label: "STORY" },
     { glyph: "🚀", label: "CODE" },
-    { glyph: "✅", label: "PR" }
+    { glyph: "✅", label: "PR" },
+    { glyph: "🔁", label: "LESSON" }
   ];
 
   const overviewIdx = sections.indexOf("overview");
