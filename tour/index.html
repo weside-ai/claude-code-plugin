@@ -70,6 +70,15 @@
     justify-content: center;
     position: relative;
   }
+  /* Content-heavy stations anchor from the top so they don't overflow
+     center-aligned (would clip the token above + push the convene button
+     onto the next section's text). */
+  section#overview,
+  section#story,
+  section#build {
+    justify-content: flex-start;
+    padding-top: 7vh;
+  }
 
   /* ─── Top chrome ─── */
   .station-counter {
@@ -367,8 +376,8 @@
   }
 
   .boundary-note {
-    background: rgba(255, 112, 112, 0.07);
-    border: 1px solid rgba(255, 112, 112, 0.3);
+    background: rgba(212, 175, 55, 0.06);
+    border: 1px solid rgba(212, 175, 55, 0.3);
     border-radius: 10px;
     padding: 1rem 1.3rem;
     max-width: 1100px;
@@ -379,7 +388,7 @@
     align-items: flex-start;
   }
   .boundary-note .marker {
-    color: var(--danger);
+    color: var(--gold-glow);
     font-weight: 700;
     letter-spacing: 0.1em;
     font-size: 0.74rem;
@@ -974,7 +983,7 @@
   <section id="hero">
     <p class="pre">we plugin · Interactive Tour</p>
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
-    <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in. Living documentation, not a pitch.</p>
+    <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in.</p>
     <div class="meta-row">
       <span>20 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
