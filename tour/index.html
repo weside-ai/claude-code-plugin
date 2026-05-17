@@ -251,13 +251,15 @@
     transition: opacity 0.55s ease, transform 0.55s ease, border-color 0.25s ease, box-shadow 0.3s ease;
   }
   section#overview.armed.in .alt-card { opacity: 1; transform: translateY(0); }
-  section#overview.armed.in .alt-card:nth-child(1) { transition-delay: 0.05s; }
-  section#overview.armed.in .alt-card:nth-child(2) { transition-delay: 0.18s; }
-  section#overview.armed.in .alt-card:nth-child(3) { transition-delay: 0.31s; }
-  section#overview.armed.in .alt-card:nth-child(4) { transition-delay: 0.44s; }
-  section#overview.armed.in .alt-card:nth-child(5) { transition-delay: 0.57s; }
-  section#overview.armed.in .alt-card:nth-child(6) { transition-delay: 0.70s; }
-  section#overview.armed.in .alt-card:nth-child(7) { transition-delay: 0.83s; }
+  /* Cascade indices are shifted +1 because .flow-token is child #1 of .hierarchy.
+     Vision is child #2, …, Retro is child #8. */
+  section#overview.armed.in .alt-card:nth-child(2) { transition-delay: 0.05s; }
+  section#overview.armed.in .alt-card:nth-child(3) { transition-delay: 0.18s; }
+  section#overview.armed.in .alt-card:nth-child(4) { transition-delay: 0.31s; }
+  section#overview.armed.in .alt-card:nth-child(5) { transition-delay: 0.44s; }
+  section#overview.armed.in .alt-card:nth-child(6) { transition-delay: 0.57s; }
+  section#overview.armed.in .alt-card:nth-child(7) { transition-delay: 0.70s; }
+  section#overview.armed.in .alt-card:nth-child(8) { transition-delay: 0.83s; }
   .alt-card:hover { transform: translateY(-2px); border-color: var(--line-bright); }
   .alt-card.token-active {
     border-color: var(--gold-glow);
