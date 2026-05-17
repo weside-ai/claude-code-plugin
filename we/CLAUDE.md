@@ -60,7 +60,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:story` | Solo Story-altitude formulation — write the build-ready plan for one feature slice (Context, ACs, User Journey, Design Decisions). Renamed from `/we:refine` |
 | `/we:build` | Build-altitude autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline). Renamed from the old `/we:story` Build pipeline; internal SQLite tables keep `story` name for back-compat. |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
-| `/we:coach` | APO Coach: cross-altitude advisor + process retros. Renamed from `/we:sm` (scope-expansion in v2.29.0 / Phase 3 of APO Refactor) |
+| `/we:coach` | APO Coach — two modes, one skill: ADVISOR (read repo state, map to altitude, propose next `/we:*` command with `[y/n]` gate) + RETRO (diagnose process gap, propose 2-3 fixes). Companion-aware. Renamed from `/we:sm` in v2.28.0; scope expanded in v2.29.0. |
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap. Real-world use cases + 28-file sweep case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |

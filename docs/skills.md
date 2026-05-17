@@ -221,22 +221,30 @@ Writes implementation notes, ADRs, security review decisions. Standalone — for
 
 > *APO Coach — cross-altitude advisor and process-improvement partner.*
 
-A conversation partner for process improvement and altitude orientation. Prompt-driven — you describe a friction, a breakage, or a "where am I?" question; it diagnoses (from rules + skills + recent stories + current repo state) and proposes concrete fixes (new rule / updated skill step / new DoD entry / next `/we:*` move).
+A conversation partner for two distinct situations, one skill:
 
-> **Renamed from `/we:sm` in v2.28.0.** The scope-expansion to full APO advisory (altitude mapping + command-launcher with confirmation gate) lands in v2.29.0.
+- **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires.
+- **RETRO mode** — something broke twice. The Coach diagnoses the process gap (missing rule / vague step / DoR-DoD hole) and proposes 2-3 concrete fixes with file paths and costs; you approve one and it applies.
+
+Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended → ADVISOR; friction or breakage → RETRO. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
+
+> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory (altitude mapping + command-launcher with `[y/n]` gate) in v2.29.0.
 
 **When to use:**
-- After something didn't work ("X broke the pipeline, should never happen again")
-- After a retro reveals a recurring friction
-- When you don't know which `/we:*` skill to reach for next
-- To audit a specific skill's quality
+- You merged a Story / Epic and want to know the sensible next move (ADVISOR)
+- A PRD exists but you're not sure whether to write Sagas Solo or convene `/we:meet vision` (ADVISOR)
+- Something didn't work ("X broke the pipeline, should never happen again") (RETRO)
+- A retro reveals a recurring friction (RETRO)
+- You want to audit a specific skill's quality (RETRO)
 
 **Won't do:**
 - Generic reports without a prompt
 - Audit all skills in one invocation
 - Re-plan an active initiative (that's `/we:meet` or the Solo Plan skill at the relevant altitude)
+- Silent-fire any `/we:*` command. Every launch is `[y/n]`-gated. The Coach proposes; the user decides.
+- Fire `/we:build` from a Coach session (even after `[y/n]`) — Build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
 
-**Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + surfaces active-initiative state. Then engages in dialog.
+**Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + reads the APO altitude map (`docs/concepts/meetings.md`) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
 
 ---
 

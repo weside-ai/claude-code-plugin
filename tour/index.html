@@ -1204,29 +1204,29 @@
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
 
-  <!-- ============ 8. COACH — /we:coach (renamed from /we:sm) ============ -->
+  <!-- ============ 8. COACH — /we:coach (two modes) ============ -->
   <section id="coach">
-    <div class="kicker">Station 08 · Coach · improve how we work</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — the APO advisor.</h2>
-    <p class="lede">The pipeline ships stories. Once in a while something flatlines — a CI cycle that won't converge, a refinement that took five rounds, an AC that should have been clearer. Or you simply don't know which altitude to reach for next. <code>/we:coach</code> reflects on the situation and asks: <strong style="color: var(--fg)">where are we in APO right now, and what changes?</strong> The plugin improves itself, through its own cross-altitude advisor. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:sm</code> in v2.28.0; full APO advisor scope-expansion in v2.29.0.)</span></p>
+    <div class="kicker">Station 08 · Coach · two modes, one skill</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — the APO advisor + retro partner.</h2>
+    <p class="lede">Two situations, one conversation partner. <strong style="color:var(--fg)">ADVISOR</strong> mode answers <em>„where am I in APO, what's next?"</em> — the Coach reads repo state, maps to altitude, and proposes the next <code>/we:*</code> command with a <code>[y/n]</code> gate. <strong style="color:var(--fg)">RETRO</strong> mode answers <em>„this broke twice, how do we stop it?"</em> — the Coach diagnoses the process gap and proposes concrete fixes. Companion-aware: with weside, the Coach speaks as your Companion. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:sm</code> in v2.28.0; scope expanded in v2.29.0.)</span></p>
 
     <div class="sm-flow">
       <div class="sm-step">
-        <div class="sm-step-num">01 · TRIGGER</div>
-        <h4>Friction or fork</h4>
-        <p>Pipeline thrashes on the same gate, a Story keeps cycling, or you're staring at the repo wondering whether the next move is <code>/we:saga</code>, <code>/we:epic</code>, or <code>/we:story</code>. You feel it, or the circuit breaker tells you.</p>
+        <div class="sm-step-num">A · ADVISOR</div>
+        <h4>„where am I, what's next?"</h4>
+        <p>Coach reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Never silent-fires. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
+      </div>
+      <div class="sm-arrow">↔</div>
+      <div class="sm-step">
+        <div class="sm-step-num">R · RETRO</div>
+        <h4>„this broke twice"</h4>
+        <p>Coach reads rules + skill landscape + DoR/DoD. Diagnoses the gap (missing rule? vague step? DoD hole?). Proposes 2-3 fixes with file paths and costs, leads with a recommendation. You pick; it applies.</p>
       </div>
       <div class="sm-arrow">→</div>
       <div class="sm-step">
-        <div class="sm-step-num">02 · REFLECT</div>
-        <h4>/we:coach convenes</h4>
-        <p>Coach reads the situation — recent commits, plan files, ticket history, what the council said and what the gates flagged. Maps it to the APO hierarchy and proposes <strong style="color:var(--fg)">one focused change</strong> (or the right next command), not a list.</p>
-      </div>
-      <div class="sm-arrow">→</div>
-      <div class="sm-step">
-        <div class="sm-step-num">03 · LAND</div>
-        <h4>Plugin improves itself</h4>
-        <p>The change lands in <code>.claude/rules/</code>, in a plan template, in a skill's behaviour — or the next <code>/we:*</code> command runs with your nod. Next Story benefits.</p>
+        <div class="sm-step-num">CONFIRMATION</div>
+        <h4>You decide. Always.</h4>
+        <p>Every advisor-launched command waits for <code>[y/n]</code>. Every retro fix waits for approval. The Coach proposes; the user decides — that's the discipline. Doc changes are delegated to <code>/we:docs</code>; the Coach owns process artefacts (rules / skills / quality / orchestration).</p>
       </div>
     </div>
 
