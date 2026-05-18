@@ -230,7 +230,7 @@ If the committed file had identity text (fat schema), check the git history for 
 
 **Fix (today):** filter the roster — use `--council=role1,role2` to convene only the voices you need for *this* topic. The full crew should be reserved for vision meetings or initiatives that genuinely need all perspectives.
 
-**Fix (future):** the Phase-6 plugin work adds on-disk caching with `identity_updated_at` invalidation. Identity loads happen once per Companion per cache window, not per `/we:council` call. Tracked as part of the WA-1087 family.
+**Fix (future):** the Phase-6 plugin work adds on-disk caching with `identity_updated_at` invalidation. Identity loads happen once per Companion per cache window, not per `/we:council` call. On the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4----orchestrated-roadmap--phase-6).
 
 ---
 

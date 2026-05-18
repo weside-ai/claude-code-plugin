@@ -65,19 +65,17 @@ The PR/CI data source via `gh api` is intrinsically engineering-only — that's 
 
 ---
 
-## The Coach is additive
+## Relationship to `/we:coach`
 
-The `/we:coach` skill already has a RETRO mode. That is **not** what `/we:retro` is. They sit at different shapes:
+Before v2.33.0, `/we:coach` included a RETRO mode that handled single-friction fixes inline. As of v2.33.0 that surface has been extracted into its own skill — `/we:retro` now owns the full retro workflow. The two skills serve distinct triggers and scopes:
 
-| | `/we:coach` RETRO mode | `/we:retro` |
+| | `/we:coach` | `/we:retro` |
 |---|---|---|
 | **Trigger** | User describes a specific friction | Manual or Coach-suggested |
 | **Scope** | One pain-point | Whole PR + CI cycle, all friction surfaces |
 | **Output** | 2-3 fix options for the user to pick from | Wins / Pain / Proposals report |
 | **Action** | Applies one chosen fix | Applies N approved fixes after per-item gate |
 | **Use when** | "X broke again, fix the gap" | "Retro the last cycle, find everything" |
-
-Coach RETRO stays. `/we:retro` is additive. They reach for different situations.
 
 The Coach can *suggest* `/we:retro` proactively when it detects retro-worthy signals in its Boot Protocol — a PR just merged, CI cycles ≥ 3 on the current branch, end-of-session prompts ("bis morgen", "wrap up"). The suggestion is always a `[y/n]` gate; Coach never auto-fires.
 
@@ -132,4 +130,4 @@ Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log still writ
 - **Full skill spec:** [`we/skills/retro/SKILL.md`](../../we/skills/retro/SKILL.md)
 - **Workflow context:** [`workflow.md` Phase 4](../workflow.md#phase-4-retro-with-weretro)
 - **Coach integration:** [`/we:coach` Suggesting `/we:retro` section](../../we/skills/coach/SKILL.md#suggesting-weretro)
-- **APO compendium (private, when reachable):** `lc-startup/02-weside/product/AGENTIC_PO/` (Retro is the fourth phase of the APO loop, sibling to Plan / Build / Deliver)
+- **APO cycle overview:** [workflow.md](../workflow.md) — Retro is the fourth phase of the APO loop, sibling to Plan / Build / Deliver

@@ -168,7 +168,7 @@ When you need more than one voice on a topic.
 
 > *Convene a council of role-lens agents on a topic; orchestrator synthesises.*
 
-The core deliberation mechanic. Spawns one agent per role (parallel), each reasons from its lens, an orchestrator combines them into *agreement / tension / recommendation*.
+The core deliberation mechanic. Opens a live Claude Code Agent Team (one named agent per role); members deliberate through `SendMessage` turns in real time; quiescence detection closes the debate; the lead synthesises *agreement / tension / recommendation*. Since v2.31.0 — agents address each other directly rather than writing parallel memos.
 
 **Usage:**
 
@@ -202,40 +202,27 @@ Wraps a council in a workflow tuned to the altitude. Each meeting validates the 
 
 ---
 
-## Architecture + process skills
-
-### `/we:arch`
-
-> *Architecture advisor for technical planning.*
-
-Writes implementation notes, ADRs, security review decisions. Standalone — for technical guidance outside a specific story.
-
-**When to use:**
-- Designing a new primitive or pattern
-- Drafting an ADR
-- Working through a technical trade-off before refinement starts
-
----
+## Process skills
 
 ### `/we:coach`
 
-> *APO Coach — cross-altitude advisor and process-improvement partner.*
+> *APO Coach — cross-altitude advisor and onboarding partner.*
 
-A conversation partner for two distinct situations, one skill:
+A conversation partner for three situations, one skill:
 
 - **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires.
-- **RETRO mode** — something broke twice. The Coach diagnoses the process gap (missing rule / vague step / DoR-DoD hole) and proposes 2-3 concrete fixes with file paths and costs; you approve one and it applies.
+- **BEGINNER mode** — you're new to APO or the plugin. The Coach walks you through the four-altitude workflow, checks whether `.weside/config.json` exists, and proposes a sensible starting command. Triggered by "I'm new" / "what is this" / first-session markers.
+- **EPIC-STATUS mode** — you want a snapshot of what Epics are currently in flight. The Coach reads `docs/plans/*/05-epics/**/CONCEPT.md` files and open tickets to report active / paused / completed state, next actionable Story per Epic, and flag stalled Epics.
 
-Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended → ADVISOR; friction or breakage → RETRO. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
+Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended → ADVISOR; "I'm new" / "help me start" → BEGINNER; "which Epics" / "status" / "what's in flight" → EPIC-STATUS. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
 
-> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory (altitude mapping + command-launcher with `[y/n]` gate) in v2.29.0.
+> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory in v2.29.0. RETRO mode extracted to standalone `/we:retro` skill in v2.33.0. Beginner + Epic-Status modes added in v2.33.0.
 
 **When to use:**
 - You merged a Story / Epic and want to know the sensible next move (ADVISOR)
 - A PRD exists but you're not sure whether to write Sagas Solo or convene `/we:meet vision` (ADVISOR)
-- Something didn't work ("X broke the pipeline, should never happen again") (RETRO)
-- A retro reveals a recurring friction (RETRO)
-- You want to audit a specific skill's quality (RETRO)
+- You're coming to the plugin for the first time or returning after a long gap (BEGINNER)
+- You want a structured summary of which Epics are active / stalled / done (EPIC-STATUS)
 
 **Won't do:**
 - Generic reports without a prompt
@@ -243,6 +230,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Re-plan an active initiative (that's `/we:meet` or the Solo Plan skill at the relevant altitude)
 - Silent-fire any `/we:*` command. Every launch is `[y/n]`-gated. The Coach proposes; the user decides.
 - Fire `/we:build` from a Coach session (even after `[y/n]`) — Build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
+- Handle post-PR engineering-friction analysis — that's `/we:retro`
 
 **Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + reads the APO altitude map (`docs/concepts/meetings.md`) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
 
@@ -269,10 +257,9 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Quote personal content from the transcript (privacy guard)
 - Modify source code (MDs only — code-level lessons flow back through `/we:build` if needed)
 - Auto-create Jira / GitHub tickets (skill can scaffold one on explicit `--ticket` request, off by default)
-- Push directly to `weside-core` `main` (rule + CLAUDE.md edits always go through PR)
-- Replace Coach RETRO mode (additive — Coach handles single-pain, `/we:retro` handles full-cycle)
+- Push without PR review — rule + CLAUDE.md edits always go through a PR in repos without explicit direct-commit config
 
-**Differs from Coach RETRO:** Coach RETRO is reactive (user names one pain → 2–3 fix options → apply 1). `/we:retro` is proactive + comprehensive (scan everything → N proposals → apply N after per-item gate).
+**Differs from `/we:coach`:** Coach ADVISOR reads repo state and proposes the next `/we:*` command. `/we:retro` proactively scans the full PR + CI cycle and proposes concrete engineering rule fixes — a different artifact with a different purpose.
 
 > **New in v2.30.0.**
 
@@ -301,7 +288,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Replace `/compact` — they cover different problems (cross-session vs in-session)
 - Auto-fire from a hook — CC `SessionEnd` hooks can't trigger skills, and even if they could the `[y/n]` discipline would still apply
 - Cross-repo handoffs — one repo per handoff; multi-repo coordination is out of scope
-- Push directly to `weside-core` `main` — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without standing direct-auth
+- Push without PR review — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without direct-commit config
 
 **Differs from `/we:retro`:** Both write to `docs/<category>/YYYY-MM-DD-<slug>.md`. `/we:retro` captures *lessons* — frictions in the cycle that should become rules so they don't recur. `/we:handoff` captures *position* — where the work is, what was decided, what the next concrete step is. Different artifact, different purpose; both live in the user repo.
 
@@ -369,19 +356,6 @@ Checks claims vs. implementation, finds drift, identifies redundancy with siblin
 
 ---
 
-### `/we:audit-architecture`
-
-> *Multi-phase backend architecture audit.*
-
-Healthcheck → Hotspot map → Subsystem deep-read → Cross-cutting lenses → Findings. Configurable per-project via `docs/.audit-architecture.yml`.
-
-**When to use:**
-- Periodic architecture health-checks (suggest quarterly)
-- After significant growth — when the codebase outgrew its old structure
-- Before a major refactor — to know what the current shape *actually* is
-
----
-
 ### `/we:audit`
 
 > *Tool-driven security scan.*
@@ -392,6 +366,21 @@ Runs `semgrep / trivy / kubescape / gitleaks` (or your project's own `scripts/se
 - Pre-release security pass
 - After integrating a new external dependency
 - Compliance check-ins
+
+---
+
+## Dev Utilities
+
+### `/we:audit-architecture`
+
+> *Multi-phase backend architecture audit.*
+
+Healthcheck → Hotspot map → Subsystem deep-read → Cross-cutting lenses → Findings. Configurable per-project via `docs/.audit-architecture.yml`.
+
+**When to use:**
+- Periodic architecture health-checks (suggest quarterly)
+- After significant growth — when the codebase outgrew its old structure
+- Before a major refactor — to know what the current shape *actually* is
 
 ---
 

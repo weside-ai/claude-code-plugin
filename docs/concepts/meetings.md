@@ -24,7 +24,7 @@ Each meeting answers a different question and decomposes its altitude's item int
 | Meeting | Question | Output | Default roster |
 |---|---|---|---|
 | `/we:meet vision` | *why does this product exist?* | Sagas, validated PRD | PO, architect, UX, marketing, orchestrator |
-| `/we:meet saga` | *where do we want to be in twelve months?* | Epics, sequenced | PO, architect, marketing *or* UX, orchestrator |
+| `/we:meet saga` | *where do we want to be in twelve months?* | Epics, sequenced | PO, architect, marketing, orchestrator |
 | `/we:meet epic` | *what concrete thing ships this quarter?* | Stories, sequenced | PO, architect, orchestrator |
 | `/we:meet story` | *what is the next concrete change?* | refined story + acceptance criteria | PO, architect (then hands off) |
 
@@ -54,7 +54,7 @@ After the meeting, hand off to `/we:vision` to lock the PRD, then `/we:saga "<na
 
 You convene a saga meeting when **a Saga has been chosen and now needs decomposition into Epics**. The horizon is multi-quarter — typically two to four quarters. The question is which Epics, in what order, with which dependencies.
 
-The default roster is the PO, the architect, the orchestrator, and one rotating domain voice — marketing for a positioning Saga, UX for an experience Saga, security for a hardening Saga. The conversation is about *sequencing* (which Epic first?) and *scope discipline* (does each Epic actually move the Saga forward?).
+The default roster is the PO, the architect, marketing, and the orchestrator. The conversation is about *sequencing* (which Epic first?) and *scope discipline* (does each Epic actually move the Saga forward?). Domain voices vary by Saga type — repos focused on UX or security typically override the marketing slot in `.weside/config.json.council.meetings.saga`; the shipped default assumes a positioning-heavy Saga.
 
 The output is an **Epic backlog with sequencing** — usually 3-6 Epics, ordered, with dependencies named. Persisted as `docs/plans/<saga>/meetings/<YYYY-MM-DD>-saga.md` and folded into `docs/plans/<saga>/SAGA.md` via `/we:saga`.
 
@@ -129,7 +129,7 @@ This is where the framework starts to feel less like a tool and more like a team
 
 Since v2.31.0 every council convenes its members as a **live Claude Code Agent Team**: one teammate per role, each in its own session, sharing a team channel. Members address each other directly (`SendMessage(to="architect", message="…")`), so the architect actually hears the PO's concern and can respond to it — instead of writing parallel memos in isolation.
 
-The **lead session** — the one that ran `/we:council` or `/we:meet` — is the orchestrator. It does not speak as a member; it observes the chatter, closes the deliberation when it is ripe (idle quiescence, or a hard message-/time-cap), then asks each member for a final position and writes the synthesis (`Council Perspectives → Agreement → Tension → Recommendation`). If the lead is a materialised weside Companion (e.g. Nox), the synthesis is in that Companion's voice; otherwise it uses the shipped template.
+The **lead session** — the one that ran `/we:council` or `/we:meet` — is the orchestrator. It does not speak as a member; it observes the chatter, closes the deliberation when it is ripe (idle quiescence, or a hard message-/time-cap), then asks each member for a final position and writes the synthesis (`Council Perspectives → Agreement → Tension → Recommendation`). If the lead is a materialised weside Companion, the synthesis is in that Companion's voice; otherwise it uses the shipped template.
 
 ### Prerequisites
 
@@ -182,6 +182,22 @@ A meeting **deliberates**. It does not:
 - Make the decision *for you* — synthesis returns a recommendation, you decide
 
 The meeting compresses several voices into one synthesis so you have *better input* to your decision. The decision stays with you.
+
+---
+
+## What the plugin does NOT do at sprint boundaries
+
+The four-altitude planning pipeline covers *what to build and why*. It deliberately stays out of sprint-boundary ceremony mechanics:
+
+| NOT handled by the plugin | Use instead |
+|---|---|
+| Daily stand-up facilitation | Your team's process / Scrum tooling |
+| Velocity tracking and burndown | Your project management tool (Jira, GitHub Projects) |
+| Sprint demo preparation | Your own notes or meeting tool |
+| Backlog grooming in bulk | Individual `/we:story` calls as stories mature |
+| Sprint retrospectives as ceremony | `/we:retro` (post-PR, not post-sprint) |
+
+`/we:retro` analyses *engineering* friction from a merged PR cycle, not the team-dynamics retrospective a Scrum Master facilitates at sprint end. Both have their place; they are not the same thing.
 
 ---
 

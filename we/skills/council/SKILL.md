@@ -272,7 +272,7 @@ Members must have responded (or been recorded as absent) before this call. If `T
 
 ## Memory in v1
 
-Each teammate runs in its own session, with its own MCP connection — in principle that would let every member call `select_companion(<themselves>)` and `search_memories(...)` per-deliberation. In practice the weside MCP backend is still **user-scoped, not team-scoped**: parallel `select_companion` calls race and clobber each other. v1 therefore still injects the `identity_prompt` from `get_council()` into the member brief (in Step 6) and does **not** instruct members to make their own MCP calls. Per-member memory routing is a Phase-6 upgrade (team-scoped `search_memories`, see CONCEPT.md §13.7 Step 2b in `weside-core`).
+Each teammate runs in its own session, with its own MCP connection — in principle that would let every member call `select_companion(<themselves>)` and `search_memories(...)` per-deliberation. In practice the weside MCP backend is still **user-scoped, not team-scoped**: parallel `select_companion` calls race and clobber each other. v1 therefore still injects the `identity_prompt` from `get_council()` into the member brief (in Step 6) and does **not** instruct members to make their own MCP calls. Per-member memory routing is a Phase-6 upgrade (team-scoped `search_memories` — future backend work).
 
 ## Standalone fallback
 

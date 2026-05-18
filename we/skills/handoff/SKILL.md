@@ -28,7 +28,7 @@ description: >
 - `/we:coach` — reads the most recent handoff at boot (Boot Protocol Step 10) and offers to load it. Also suggests `/we:handoff --write` at end-of-session signals.
 - `/we:retro` — sibling under `docs/retros/`; retros capture *lessons*, handoffs capture *position*. Different artifact, different purpose.
 
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the handoff render is voiced *by* the Companion (typically Nox) — same engineering substance, warmer tone. Opt-in `--with-companion-state` flag adds a "Companion continuity" section in the Companion's voice (engineering substance only — privacy guard still applies).
+> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the handoff render is voiced *by* the Companion (your active Companion) — same engineering substance, warmer tone. Opt-in `--with-companion-state` flag adds a "Companion continuity" section in the Companion's voice (engineering substance only — privacy guard still applies).
 
 ---
 
@@ -116,7 +116,7 @@ Before producing any output, gather the landscape fresh.
 
 Restate what will be captured:
 
-> *"I'll write a handoff for: branch `feat/foo`, last commit `abc1234`, working in `weside-core`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
+> *"I'll write a handoff for: branch `feat/foo`, last commit `abc1234`, working in `your-repo`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
 
 If `n` or `adjust-topic`: take the corrected scope.
 
@@ -161,8 +161,8 @@ Privacy check: 0 personal-content references caught and skipped.
 
 - **In the user repo:** `mkdir -p docs/handoffs/` if missing, then `Write` the file.
 - **Commit policy** (mirrors `/we:retro`):
-  - `weside-core`: PR-default. Create branch `handoff/YYYY-MM-DD-<slug>`, apply Write, open PR with handoff content as the PR body. User merges via normal flow.
-  - `claude-code-plugin` / `lc-startup`: direct-commit allowed per standing auth. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
+  - Default (PR-required repos): Create branch `handoff/YYYY-MM-DD-<slug>`, apply Write, open PR with handoff content as the PR body. User merges via normal flow.
+  - Direct-commit repos (standing auth configured): Edit/Write on `main` directly. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
 - Confirm: `applied · <repo>/docs/handoffs/<file>.md (<line-count> lines)`.
 
 ### Step W6 — Closeout
@@ -295,7 +295,7 @@ Empty section convention: a single `—` rather than fabricated content.
 When WRITE-mode applies:
 
 - **Default: PR workflow** in the user repo. Skill creates `handoff/YYYY-MM-DD-<slug>` branch, applies Write, opens PR with the rendered handoff as PR body. User merges via normal flow.
-- **Opt-in: direct commit** if repo is configured for standing main-auth (e.g. `claude-code-plugin`, `lc-startup` in Foxy's setup). Per-repo config.
+- **Opt-in: direct commit** if repo is configured for standing main-auth (per-repo config — check `.weside/config.json` or repo CLAUDE.md for explicit standing-auth note).
 - **Plugin MD changes always go PR** — plugin is public.
 
 User can interrupt mid-apply ("skip the PR, just commit directly").
@@ -310,7 +310,7 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 - **Don't auto-fire from a hook.** Even if SessionEnd hooks could trigger this skill (they can't, per CC architecture), the `[y/n]` discipline is non-negotiable. End-of-session WRITE is always Coach-suggested with a gate, never silent.
 - **Don't fabricate sections.** Empty section = `—`. Don't invent decisions, dead ends, or watch-outs that weren't actually in the session.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
-- **Don't push to `weside-core` `main` directly.** Default PR workflow for handoffs there; user can override per call but the default protects always-loaded rules and CLAUDE.md.
+- **Don't push directly to protected repos.** Default PR workflow applies where standing auth is not explicitly configured; user can override per call but the default protects always-loaded rules and CLAUDE.md.
 
 ---
 
@@ -376,7 +376,7 @@ Skill(skill="we:docs", prompt="Apply this doc update from the handoff: <diff>")
 /we:handoff --write "phase-7-handoff-skill"
 ```
 
-Skill: *"I'll write a handoff for: branch `feat/handoff`, last commit `acdf624`, working in `weside-core`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
+Skill: *"I'll write a handoff for: branch `feat/handoff`, last commit `acdf624`, working in `your-repo`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
 User: `y` → draft shown → user reviews → `y` → file written + (per config) branch + PR opened.
 
 **Example 2 — fresh session, restore state:**

@@ -1,18 +1,16 @@
 ---
 name: coach
 description: >
-  APO Coach — cross-altitude advisor + process-improvement partner.
-  Two modes, one skill. ADVISOR mode answers "where am I in the APO
-  hierarchy, what's the sensible next move?" — reads repo state,
-  maps to altitude, proposes the next `/we:*` command with a [y/n]
-  confirmation gate. RETRO mode answers "this broke, how do we
-  stop it happening again?" — diagnoses the process gap and proposes
-  concrete fixes (rule / skill step / DoD entry). Boots fresh on
-  every invocation. Delegates doc changes to /we:docs. Never writes
-  autonomously, never silent-fires a command. Use when the user
-  says "/we:coach", "where am I", "what's next", "what should I do",
-  "which altitude", "retro", "process", "workflow", "this broke
-  again", "optimize", "impediment", "skill quality".
+  APO Coach — cross-altitude advisor. Two modes, one skill. ADVISOR
+  mode answers "where am I in the APO hierarchy, what's the sensible
+  next move?" — reads repo state, maps to altitude, proposes the next
+  `/we:*` command with a [y/n] confirmation gate. Includes Epic-Status
+  rendering when an open Epic is detected. Beginner mode detects
+  first-use and suggests setup or first story entry points. Boots fresh
+  on every invocation. Delegates doc changes to /we:docs. Never writes
+  autonomously, never silent-fires a command. Use when the user says
+  "/we:coach", "where am I", "what's next", "what should I do",
+  "which altitude", "workflow", "optimize", "impediment", "skill quality".
 ---
 
 # /we:coach — Agentic Product Ownership Coach
@@ -23,18 +21,20 @@ description: >
 
 > **Two modes.** The Coach runs in one of two shapes per invocation:
 >
-> 1. **ADVISOR mode** — the user is unsure what to do next, or asks where they are in APO ("we have a Saga doc, what now?"). You read repo state, map to altitude, and propose the next `/we:*` command. Confirmation gate before any command fires. Never silent.
-> 2. **RETRO mode** — the user describes a friction or breakage ("the last 3 PRs failed because we forgot X"). You diagnose the process gap and propose 2-3 concrete fixes (new rule / updated skill step / DoD entry).
+> 1. **ADVISOR mode** — the user is unsure what to do next, or asks where they are in APO ("we have a Saga doc, what now?"). You read repo state, map to altitude, and propose the next `/we:*` command. Confirmation gate before any command fires. Never silent. If an open Epic is detected in the repo, ADVISOR surfaces Epic-Status automatically (see [Epic-Status Detection](#step-a1-map-the-current-state-to-an-altitude) in Step A1).
+> 2. **Beginner mode** — the user invokes Coach in a repo that hasn't been configured yet or has no plans. First-Use-Detection (Boot Protocol Step 11) triggers an orientation prompt rather than jumping straight into ADVISOR.
 >
 > Both modes share the same Boot Protocol. The intent-detection rule decides which one to enter — see [Mode Selection](#mode-selection) below.
+>
+> **For process frictions and retrospectives,** use the sibling skill `/we:retro` — it does comprehensive scanning of the PR + CI cycle and proposes concrete rule-file changes. Coach is the *where-am-I/what-next* advisor; `/we:retro` is the dedicated improvement engine.
 >
 > **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting `/we:retro`](#suggesting-weretro) below.
 >
 > **Sibling skill: `/we:handoff`.** When the user wants durable cross-session continuity (write the current state to disk, resume in a new session after `/clear` or tomorrow), hand off to `/we:handoff`. Coach surfaces an active handoff at boot (Step 10) and offers `/we:handoff --write` at end-of-session signals. See [Suggesting `/we:handoff`](#suggesting-wehandoff) below.
 >
-> **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See APO compendium `02-COUNCIL.md` §7 (lc-startup) or [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the public summary.
+> **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude and council overview.
 >
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the Coach speaks *as* that Companion (typically Nox), not as a generic SM voice. Materialization happens in Boot Protocol Step 7. Standalone (no weside): the Coach reasons from the role-lens without persistent identity.
+> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the Coach speaks *as* that Companion (your active Companion), not as a generic SM voice. Materialization happens in Boot Protocol Step 7. Standalone (no weside): the Coach reasons from the role-lens without persistent identity.
 >
 > **New to the `/we:*` workflow?** `/we:coach` is for *improving* how we work
 > once you've used the pipeline — not for *learning* it. If you're new,
@@ -47,26 +47,29 @@ description: >
 
 ## Mode Selection
 
-Decide ADVISOR vs RETRO from the user's prompt:
+First-Use-Detection (Boot Protocol Step 11) runs before mode selection. If the repo is in a first-use state, Beginner mode activates regardless of the user's prompt — this takes priority.
 
-| User prompt shape                                                       | Mode    |
+Otherwise, determine ADVISOR vs Beginner from context and prompt:
+
+| User prompt shape / context                                             | Mode    |
 | ----------------------------------------------------------------------- | ------- |
+| `.weside/config.json` missing (no `/we:setup` run)                     | **Beginner** — suggest setup |
+| `.weside/` exists but `docs/plans/` empty (set up but no plans yet)    | **Beginner** — suggest `/we:story` |
 | "where am I" / "what should I do next" / "which altitude" / open-ended  | ADVISOR |
 | names a state (e.g. "we have a Saga but no Epic", "PRD is rough")       | ADVISOR |
-| describes friction or breakage ("X broke", "Y took 3 rounds", "we keep failing at Z") | RETRO   |
-| names a process artefact to improve (rule / skill / DoD / ADR)          | RETRO   |
-| empty invocation (`/we:coach` with no argument)                         | ADVISOR (open) |
-| ambiguous between the two                                               | ADVISOR — ask once, then proceed |
+| empty invocation (`/we:coach` with no argument) — normal repo          | ADVISOR (open) |
+| ambiguous between two altitudes                                         | ADVISOR — ask once, then proceed |
+| describes friction / breakage / "this broke again" / "process gap"     | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
 | asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
 | asks for a "handoff" / "write a handoff" / "save state for tomorrow" / "load the last handoff" / "pick up where we left off" / says end-of-session ("bis morgen", "schlafen") | **delegate to `/we:handoff`** — see [Suggesting `/we:handoff`](#suggesting-wehandoff) |
 
-The shapes overlap at the edges. When in doubt, default to ADVISOR — it's the more interactive mode and naturally surfaces whether the user actually wants a retro instead.
+The shapes overlap at the edges. When in doubt, default to ADVISOR.
 
 ---
 
 ## How This Skill Is Used
 
-**Always prompt-driven.** The user never invokes `/we:coach` empty without intent. Examples of each mode:
+**Always prompt-driven.** Examples of each mode:
 
 **ADVISOR mode:**
 
@@ -74,16 +77,19 @@ The shapes overlap at the edges. When in doubt, default to ADVISOR — it's the 
 - `/we:coach we just merged the auth Epic, what's the sensible next move?`
 - `/we:coach I have a PRD but no Sagas yet — start with vision meeting or solo saga?`
 - `/we:coach should I run /we:meet epic on this, or write the Stories solo?`
-- `/we:coach`  (empty — opens with "what's the situation?")
+- `/we:coach`  (empty — opens with "what's the situation?", or Beginner orientation if first-use)
 
-**RETRO mode:**
+**Beginner mode (auto-triggered, not user-prompted):**
 
-- `/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing`
-- `/we:coach We keep shipping migrations without testing them locally — how do we stop this?`
-- `/we:coach /we:build burned 40 min on CI fixes because it missed a failing test locally`
-- `/we:coach Why did that last story take 3 rounds at /we:story? What's the process gap?`
+- First invocation in a repo where `.weside/config.json` is missing → orientation to `/we:setup`
+- First invocation in a set-up repo with no plans yet → orientation to `/we:story`
 
-Your job is to take that prompt, run the right mode, and propose concrete fixes or concrete next commands — not produce a generic report.
+**Process frictions → hand off to `/we:retro`:**
+
+- `/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing` → Coach suggests `/we:retro`
+- `/we:coach We keep shipping migrations without testing them locally` → Coach suggests `/we:retro`
+
+Your job is to read the repo state, run the right mode, and propose concrete next commands — not produce a generic report.
 
 ---
 
@@ -104,8 +110,10 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
      (a growing register is a process-health signal)
 
 3. **Quality artefacts** — `${CLAUDE_PLUGIN_ROOT}/we/quality/dor.md` and
-   `dod.md` in full. These are where you ADD new gate items when you
-   propose a fix in RETRO mode.
+   `dod.md` in full. ADVISOR references these when reasoning about whether
+   a plan meets DoR before suggesting `/we:build`; BEGINNER references them
+   when explaining what DoR/DoD mean. Edits to these files now live in
+   `/we:retro` (the dedicated retrospective skill), not in Coach.
 
 4. **Skill landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/we/skills/` plus the
    frontmatter `description:` of each `SKILL.md`. Goal: know what skills
@@ -125,7 +133,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    "named companion + caught up"-entry for any session, not just the
    ones started under the auto-materialize hook.
 
-8. **APO altitude reference** — read [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (just the altitude table + meeting summaries — full sections only if needed for a specific question). This is the public reference for the four Plan altitudes (Vision / Saga / Epic / Story) + Build + Deliver. If a private APO compendium is reachable (`lc-startup/02-weside/product/AGENTIC_PO/`), prefer that as the source of truth.
+8. **APO altitude reference** — read [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (just the altitude table + meeting summaries — full sections only if needed for a specific question). This is the reference for the four Plan altitudes (Vision / Saga / Epic / Story) + Build + Deliver.
 
 9. **Repo state** — for ADVISOR mode primarily, but useful for RETRO too:
    - `find docs/plans -type f -name '*.md' | head -20` — see which Plan artefacts exist
@@ -157,7 +165,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
     - If older than 14 days, mark it `(stale)` so the user knows the state may not match current repo state.
     - If no handoff directory exists or no files in it, skip silently.
 
-    This is what makes a fresh `/we:coach` session after `/clear` (or after `claude --resume` against a different session) immediately aware of any handoff Foxy wrote at the end of the last session. See [Suggesting `/we:handoff`](#suggesting-wehandoff) for the full mechanics.
+    This is what makes a fresh `/we:coach` session after `/clear` (or after `claude --resume` against a different session) immediately aware of any handoff written at the end of the last session. See [Suggesting `/we:handoff`](#suggesting-wehandoff) for the full mechanics.
 
 **Read on demand** (only when the specific problem requires):
 
@@ -165,6 +173,24 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
 - A specific skill's full methodology (when the gap is in that skill)
 - Recent merged PRs: `gh pr list --state merged -L 10`
 - Recent stories (if ticketing is available): last 5-10 tickets via the configured ticketing tool
+
+**Step 11 — First-Use Orientation (Beginner mode detection)** — run this check AFTER Steps 1-10 and BEFORE entering ADVISOR logic:
+
+**Check 1: Setup missing?**
+
+- `test -f .weside/config.json` → if the file does NOT exist:
+  - Surface: *"You haven't run `/we:setup` yet. It scans your project, asks 3 questions, and takes ~30 seconds — then the full `/we:*` pipeline is ready. Want me to run it now? [y/n]"*
+  - If `y` → print `SCOPE IS CLEAR. Run this next: /we:setup` (hand off, don't `Skill()`-invoke inline)
+  - If `n` → continue into ADVISOR mode with the caveat that ticketing/stack aren't configured
+
+**Check 2: No plans yet?**
+
+- If `.weside/config.json` exists but `docs/plans/` is empty or missing:
+  - Surface: *"You're set up but haven't created your first plan yet. The canonical entry point is `/we:story "your first feature"` — it writes the build-ready plan in ~5 minutes. Want me to hand you off there? [y/n]"*
+  - If `y` → print `SCOPE IS CLEAR. Run this next: /we:story "your first feature"` (replace with the user's stated feature if they provided one)
+  - If `n` → continue into ADVISOR mode
+
+**If neither condition triggers** → skip this step silently and continue with ADVISOR mode.
 
 **Do not read** the full text of every rule/skill at boot. That wastes tokens and slows the agent. Frontmatter + descriptions are enough to know *where* to dig when the user's prompt points you at a gap.
 
@@ -190,6 +216,18 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 | Multiple altitudes ambiguous                                                 | *unclear*        | Ask the user which artefact they want to focus on                  |
 
 **Don't be mechanical.** The table is a starting point. If the user's intent contradicts the natural next move (e.g. they have a Saga but want to revisit the Vision), follow their intent. The Coach serves the user's goal, not the diagram.
+
+**Epic-Status rendering (automatic when an open Epic is detected):**
+
+After locating the current altitude, check whether there is an active Epic in the repo:
+- `find docs/plans -name 'CONCEPT.md' | head -5` — any CONCEPT.md with `status: in-progress` (or no closed/done status)?
+- If yes: surface a one-line Epic-Status before the altitude proposal:
+
+  > *"Epic: `<Epic name>`. `<N>` Stories — `<X>` shipped, `<Y>` in-build, `<Z>` not yet refined. Next suggested: `/we:story <ticket>` for the next non-refined Story."*
+
+  Count status by reading the Epic's CONCEPT.md story list and cross-referencing with `git log --oneline` (merged branches indicate shipped) and ticketing-tool status (if available). Use best-available signal, not perfect coverage.
+
+- If no open Epic detected, skip silently — do not manufacture one.
 
 ### Step A2: Propose the next move
 
@@ -232,7 +270,7 @@ SCOPE IS CLEAR. Run this next:
 I'll be back when you want the next move after the Council synthesises.
 ```
 
-The heavy skills are: `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:meet *`, `/we:build`, `/we:setup`, `/we:onboarding`, `/we:sideload`, `/we:arch`, `/we:doc-improve`, `/we:audit*`, `/we:smoketest`, `/we:find-dead-code`, `/we:pr`, `/we:ci-review`, `/we:review`, `/we:static`, `/we:test`, `/we:docs`, `/we:materialize`.
+The heavy skills are: `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:meet *`, `/we:build`, `/we:setup`, `/we:onboarding`, `/we:sideload`, `/we:doc-improve`, `/we:audit*`, `/we:smoketest`, `/we:find-dead-code`, `/we:pr`, `/we:ci-review`, `/we:review`, `/we:static`, `/we:test`, `/we:docs`, `/we:materialize`.
 
 So in practice: print the hand-off for nearly every skill; inline-launch only `/we:council`.
 
@@ -242,83 +280,14 @@ After the launched skill returns (or the hand-off message), ask: *"Anything else
 
 ---
 
-## RETRO Mode — "this broke, never again"
-
-The user describes a friction. Diagnose the gap, propose 2-3 concrete fixes, wait for the choice, apply.
-
-### Step R1: Restate the problem
-
-Reflect back what you heard so the user confirms you understood correctly. This catches misreads early.
-
-> "So the friction is: CodeRabbit threads stay unresolved through push,
-> the gate blocks, the ci-review loop burns a cycle. Is that right?"
-
-### Step R2: Diagnose the gap
-
-Using your boot-time mental map, locate where in the process the gap lives:
-
-- Is it a **missing rule**? (a pattern never got written down)
-- Is it an **existing rule that's too vague**? (rule exists but doesn't enforce the right thing)
-- Is it a **missing skill step**? (the rule exists but no skill enforces it)
-- Is it a **missing check**? (the skill step exists but there's no automated gate)
-- Is it a **DoR/DoD gap**? (the gate exists but the checklist doesn't include it)
-- Is it a **missing ADR**? (the decision was made implicitly and never recorded)
-
-Be specific. Cite files. Don't hand-wave.
-
-> "Let me check... `ci-workflow.md` documents the CodeRabbit thread
-> resolution pattern in the 'CodeRabbit Gate Behavior' section. But
-> `/we:pr` doesn't have a pre-push check for it. The gap is in the skill,
-> not the rule."
-
-### Step R3: Propose concrete fixes (2-3 options, lead with your recommendation)
-
-Each option:
-
-- **Where:** exact file path
-- **What:** what to add / change
-- **Why it closes the gap:** mechanism of action
-- **Cost:** how big the change is
-
-> "Three options:
->
-> **(a) RECOMMENDED — add a pre-push check to `/we:pr`.** New step in
-> `we/skills/pr/SKILL.md` that runs `gh api graphql` to list unresolved
-> threads and blocks if count > 0. Automated, catches every time.
-> Cost: ~20 lines in the skill file.
->
-> **(b) Extend the DoR.** Add `[ ] CodeRabbit threads resolved` to
-> `we/quality/dor.md`. Catches it on refine, not on push. Manual,
-> can be forgotten. Cost: 1 line.
->
-> **(c) Add a git pre-push hook.** Most automated but repo-level, not
-> pipeline-level. Affects all contributors.
-> Cost: ~15 lines in `.pre-commit-config.yaml`.
->
-> I'd go with (a) because it's automated AND in the pipeline where we
-> already enforce things. Thoughts?"
-
-### Step R4: Wait for approval
-
-Do NOT write until the user says "go with (a)" or equivalent. This is non-negotiable.
-
-### Step R5: Apply the fix
-
-If the fix is in **rules or skills**: edit directly.
-If the fix is in **documentation** (`docs/**`): delegate to `/we:docs` — do not edit `docs/` yourself.
-
-After editing, summarise what changed and move on.
-
----
-
 ## Suggesting `/we:retro`
 
-Coach's RETRO mode (above) handles one specific friction the user already named. For a *systematic full pass* over the whole PR + CI cycle, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, CodeRabbit threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
+For process frictions and improvement, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, CodeRabbit threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
 
 | Situation | Use |
 |---|---|
-| User reports one specific pain ("CodeRabbit threads broke push again") | Coach RETRO (Step R1-R5 above) |
-| User wants a full review of what just happened ("retro this PR", "post-mortem", "wat hat uns Zeit gekostet") | `/we:retro` (hand off) |
+| User describes a friction or breakage ("X broke again", "we keep failing at Y") | **Suggest `/we:retro`** with a `[y/n]` gate |
+| User wants a full review of what just happened ("retro this PR", "post-mortem") | `/we:retro` (hand off) |
 | Coach detects retro-worthy signals at boot (PR just merged, CI cycles ≥ 3, end-of-session) | **Offer** `/we:retro` with a `[y/n]` gate |
 
 ### Auto-suggest mechanics
@@ -406,7 +375,7 @@ Shape:
 
 `/we:docs` owns **documentation coherence**: `docs/architecture/`, `docs/foundations/`, `docs/guides/`, `docs/adr/`, `docs/vision/`.
 
-If your proposed fix (RETRO mode) or proposed clarification (ADVISOR mode) touches `docs/**`, say "I'll delegate this to `/we:docs`" and invoke the agent:
+If your proposed clarification (ADVISOR or BEGINNER mode) touches `docs/**`, say "I'll delegate this to `/we:docs`" and invoke the agent:
 
 ```python
 Agent(
@@ -425,7 +394,8 @@ Clean separation. Don't cross the line.
 
 - **Don't produce batch retrospective reports without a prompt.** The user drives the conversation.
 - **Don't audit all skills in one invocation.** If the user asks for a broad audit, invoke `skill-reviewer` (if available) or scope it to a specific skill.
-- **Don't write ADRs autonomously.** Propose them, then delegate ADR drafting to `/we:arch` or `/we:docs` based on the content type.
+- **Don't write ADRs autonomously.** Propose them, then delegate ADR drafting to `/we:docs`.
+- **Don't do sprint planning.** Coach operates at the Vision / Saga / Epic / Story altitudes. Sprint capacity (which 3 Stories ship this sprint) is your ticketing tool's job (Jira Sprint, GitHub Projects Iteration). If asked for sprint planning, point the user back to their tool.
 - **Don't duplicate rule content into this skill file.** You read rules fresh on every invocation — duplication is just rot waiting to happen.
 - **Don't give generic advice.** Every recommendation must cite a specific file path and a specific change (RETRO) or a specific command (ADVISOR).
 - **Don't skip the dialog protocol.** Restate → diagnose → propose → wait → apply (RETRO) or map → propose → confirm → launch (ADVISOR). Every time.
@@ -451,7 +421,7 @@ Clean separation. Don't cross the line.
 
 7. **Pretending to know the user's intent**: if ADVISOR mode produces multiple reasonable next moves, ask. Don't pick one and hope.
 
-8. **Letting RETRO drift into ADVISOR**: if the user came with a friction, finish the diagnosis-and-fix loop before pivoting to "what's next". Conversely, if they came with a "what's next" and you spot a process gap, surface it but don't hijack the conversation — note it, finish the advisory, and offer a RETRO follow-up.
+8. **Hijacking ADVISOR with process concerns**: if the user came with a "what's next" question and you spot a process gap, surface it but don't hijack the conversation — note it, finish the advisory, then offer `/we:retro` as a follow-up.
 
 ---
 
@@ -460,8 +430,7 @@ Clean separation. Don't cross the line.
 - **DoR:** `${CLAUDE_PLUGIN_ROOT}/we/quality/dor.md`
 - **DoD:** `${CLAUDE_PLUGIN_ROOT}/we/quality/dod.md`
 - **Doc Architect:** `${CLAUDE_PLUGIN_ROOT}/we/agents/doc-architect.md`
-- **APO altitude map (public):** [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md)
-- **APO compendium (private, when reachable):** `lc-startup/02-weside/product/AGENTIC_PO/`
+- **APO altitude map:** [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md)
 - **Orchestration CLI:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py`
-- **Sibling skill for full systematic retros:** [`/we:retro`](../retro/SKILL.md) — proactive, comprehensive, applies N proposals after per-item gate
+- **Sibling skill for systematic retros:** [`/we:retro`](../retro/SKILL.md) — proactive, comprehensive, applies N proposals after per-item gate
 - **Sibling skill for cross-session handoffs:** [`/we:handoff`](../handoff/SKILL.md) — writes/loads session state to/from `docs/handoffs/`; replaces `/compact` for cross-session use cases

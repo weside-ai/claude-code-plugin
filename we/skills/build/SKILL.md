@@ -104,6 +104,24 @@ If interrupted → ask user whether to resume from last checkpoint.
 
 Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-plan.md`).
 
+**Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output.
+
+Check all three:
+
+1. **ACs present and structured:** the plan contains at least one occurrence of `Given` AND `When` AND `Then` (GWT acceptance-criteria tokens). A plan with no GWT ACs hasn't been accepted as DoR-complete.
+2. **Context section non-empty:** the plan has a Context section with > 50 characters of actual content (not just a header).
+3. **Phase headers present:** at least one `### Phase \d+:` header exists (regex: `^### Phase [0-9]+:`).
+
+**On failure:** stop the pipeline immediately with a specific message:
+
+```
+Plan at `docs/plans/{TICKET}-plan.md` is incomplete: missing <ACs|Context|Phase headers>.
+Run `/we:story {TICKET}` to complete it before `/we:build`.
+See we/quality/dor.md for the full DoR checklist.
+```
+
+Name the specific missing item(s). Do NOT proceed with an incomplete plan.
+
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
 **Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP

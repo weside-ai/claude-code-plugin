@@ -191,12 +191,26 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
 ### Step 6: Confirm
 
+If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` was set (or already enabled) during Step 5.0:
+
 ```
 Ready to go:
   /we:story        — Create/refine the Story (Solo) — build-ready plan
   /we:build        — Implement the Story end-to-end (autonomous pipeline)
-  /we:council      — Convene a council of companions on a topic
-  /we:meet         — Run a vision / saga / epic / story meeting
+  /we:council      — Convene a council of companions on a topic  ✓ ready
+  /we:meet         — Run a vision / saga / epic / story meeting   ✓ ready
+  /we:sideload .   — Reload context for this repo (Companion Framework)
+```
+
+If Agent Teams were **not** enabled (user declined or Step 5 was skipped):
+
+```
+Ready to go:
+  /we:story        — Create/refine the Story (Solo) — build-ready plan
+  /we:build        — Implement the Story end-to-end (autonomous pipeline)
+  /we:council      — needs Agent Teams (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+                     in ~/.claude/settings.json and restart, or run /we:setup again)
+  /we:meet         — needs Agent Teams (same — will run meetings solo without council)
   /we:sideload .   — Reload context for this repo (Companion Framework)
 ```
 

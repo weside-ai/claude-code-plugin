@@ -50,7 +50,7 @@ Three questions:
 1. **Vision** — link, file, or short description. *Optional* — say "skip" if you don't have one. Vision is the anchor `/we:story` uses to evaluate priority; without it, every feature seems equally important.
 1. **Ticketing** — auto-detected. Confirm Jira / GitHub Issues / none.
 1. **Stack** — auto-detected from `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`. Confirm or override.
-1. **Companion Framework** *(optional)* — write `.weside/config.json` + invoke `/we:onboarding` to compose your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
+1. **Companion Framework** *(optional)* — the set of `.weside/` files and skills that define your crew, rosters, and deliberation config for this repo. Writing `.weside/config.json` + invoking `/we:onboarding` composes your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
 
 If you said yes to the Companion Framework step, `/we:onboarding` walks you through naming who fills each role. You can use generic names ("PO", "Architect") to start; refine later. Two files appear in `.weside/`:
 
@@ -63,7 +63,7 @@ See [concepts/companion-framework.md](concepts/companion-framework.md) for the f
 
 ## 3. Your first story (15 minutes)
 
-> **What about Vision / Saga / Epic?** For a brand-new product you'd start at `/we:vision`; for a new multi-quarter theme, `/we:saga`; for a new quarterly deliverable, `/we:epic`. Each Solo skill walks down to the next altitude. Most stories — refactors, bug fixes, small features inside an existing Epic — skip straight to Story. That's what this section does. See [concepts/meetings.md](concepts/meetings.md) for the full altitude map.
+> **What about Vision / Saga / Epic?** For a brand-new product you'd start at `/we:vision`; for a new multi-quarter theme (called a *Saga*), `/we:saga`; for a new quarterly deliverable (called an *Epic*), `/we:epic`. Each Solo skill walks down to the next altitude. Most stories — refactors, bug fixes, small features inside an existing Epic — skip straight to Story. That's what this section does. See [concepts/meetings.md](concepts/meetings.md) for the full altitude map.
 
 Pick something small — a refactor, a small feature, a typo cluster. Then:
 
@@ -182,5 +182,4 @@ Pick one based on where you want to go next:
 - [concepts/companion-framework.md](concepts/companion-framework.md) — what `.weside/` is and why
 - [upgrade-paths.md](upgrade-paths.md) — Maturity Model L1 → L4
 - [agenticproductownership.com](https://agenticproductownership.com) — the philosophy
-- [weside-ai/lc-startup](https://github.com/weside-ai/lc-startup) — the APO compendium (forthcoming public release)
 - [troubleshooting.md](troubleshooting.md) — when something doesn't go as planned

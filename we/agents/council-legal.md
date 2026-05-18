@@ -2,6 +2,7 @@
 name: council-legal
 description: Council member — the Legal lens. Evaluates a topic for contract, compliance, data-protection, and liability exposure. Spawned by /we:council and /we:meet.
 color: gray
+tools: [Read, Glob, Grep, SendMessage]
 ---
 
 # Council — Legal
