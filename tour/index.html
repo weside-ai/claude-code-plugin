@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>we plugin — Interactive Tour</title>
-<meta name="description" content="Walk through Agentic Product Ownership for Claude Code — the full Saga→Epic→Story→Code→Deliver pipeline, the meetings that produce each, and how the optional weside Companions beam in.">
+<meta name="description" content="Walk through Agentic Product Ownership for Claude Code — the full Vision→Saga→Epic→Story→Build→Deliver→Retro pipeline, the meetings that produce each, and how the optional weside Companions beam in.">
 <style>
   :root {
     --bg: #07070c;
@@ -18,15 +18,15 @@
     --fg-dim: #5c5c70;
     --gold: #d4af37;
     --gold-glow: #ffd966;
-    --pia: #ff9d5c;
-    --vyra: #6cdf85;
-    --lara: #6ab4ff;
-    --nox: #c4a8ff;
-    --samu: #9999aa;
+    --avery: #ff9d5c;
+    --blair: #6cdf85;
+    --dakota: #6ab4ff;
+    --aria: #c4a8ff;
+    --casey: #9999aa;
     --ux: #5ad7d7;
-    --rami: #ffe066;
-    --lami: #4a4a5e;
-    --lars: #f0f0f6;
+    --finley: #ffe066;
+    --eden: #4a4a5e;
+    --quinn: #f0f0f6;
     --danger: #ff7070;
   }
 
@@ -344,12 +344,13 @@
     padding-top: 0.5rem;
     border-top: 1px solid var(--line);
   }
-  .alt-card.saga { --accent: var(--nox); }
-  .alt-card.epic { --accent: var(--vyra); }
-  .alt-card.story { --accent: var(--pia); }
-  .alt-card.code { --accent: var(--gold); }
-  .alt-card.deliver { --accent: var(--lara); }
-  .alt-card.retro { --accent: var(--rami); }
+  .alt-card.vision { --accent: var(--gold-glow); }
+  .alt-card.saga { --accent: var(--aria); }
+  .alt-card.epic { --accent: var(--blair); }
+  .alt-card.story { --accent: var(--avery); }
+  .alt-card.build { --accent: var(--gold); }
+  .alt-card.deliver { --accent: var(--dakota); }
+  .alt-card.retro { --accent: var(--finley); }
 
   .hierarchy-flow {
     max-width: 1300px;
@@ -373,7 +374,7 @@
     text-shadow: 0 0 12px rgba(255, 217, 102, 0.6);
   }
   .hierarchy-flow .loop {
-    color: var(--rami);
+    color: var(--finley);
     font-style: italic;
     margin-left: 0.6rem;
     font-size: 0.92em;
@@ -614,7 +615,7 @@
     margin-bottom: 0.6rem;
   }
   .beam-status .pulse { color: var(--gold-glow); }
-  .beam-status .done { color: var(--vyra); }
+  .beam-status .done { color: var(--blair); }
   .council-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -678,7 +679,7 @@
     max-width: 1300px;
     width: 100%;
     background: linear-gradient(160deg, rgba(196, 168, 255, 0.07) 0%, rgba(26, 26, 38, 0.5) 100%);
-    border: 1px solid var(--nox);
+    border: 1px solid var(--aria);
     border-radius: 11px;
     padding: 1.2rem 1.5rem;
     margin-top: 0.5rem;
@@ -689,10 +690,10 @@
   }
   .synthesis.shown { display: block; }
   .synthesis.in { opacity: 1; transform: translateY(0); }
-  .synthesis .speaker-avatar { background: var(--nox); color: #0a0a14; }
+  .synthesis .speaker-avatar { background: var(--aria); color: #0a0a14; }
   .synthesis-label {
     font-size: 0.7rem;
-    color: var(--nox);
+    color: var(--aria);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     margin-bottom: 0.6rem;
@@ -711,7 +712,7 @@
     width: 100%;
   }
   .mcp-mini .ws { color: var(--gold-glow); }
-  .mcp-mini .cc { color: var(--nox); }
+  .mcp-mini .cc { color: var(--aria); }
 
   /* ─── 6. BUILD — /we:story 9 steps + discipline ─── */
   .story-flow {
@@ -746,7 +747,7 @@
     margin-bottom: 0.3rem;
   }
   .story-step.gate .num { color: var(--danger); }
-  .story-step.parallel .num { color: var(--vyra); }
+  .story-step.parallel .num { color: var(--blair); }
   .story-step h4 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.3rem; }
   .story-step p { font-size: 0.78rem; color: var(--fg-muted); line-height: 1.4; }
   .story-step .tag {
@@ -762,7 +763,7 @@
     border-radius: 4px;
   }
   .story-step.gate .tag { color: var(--danger); border-color: rgba(255, 112, 112, 0.4); }
-  .story-step.parallel .tag { color: var(--vyra); border-color: rgba(108, 223, 133, 0.4); }
+  .story-step.parallel .tag { color: var(--blair); border-color: rgba(108, 223, 133, 0.4); }
 
   .discipline-mini {
     display: grid;
@@ -778,9 +779,9 @@
     padding: 0.6rem 0.9rem;
   }
   .disc-mini-card.danger { border-left-color: var(--danger); }
-  .disc-mini-card.green { border-left-color: var(--vyra); }
-  .disc-mini-card.blue { border-left-color: var(--lara); }
-  .disc-mini-card.purple { border-left-color: var(--nox); }
+  .disc-mini-card.green { border-left-color: var(--blair); }
+  .disc-mini-card.blue { border-left-color: var(--dakota); }
+  .disc-mini-card.purple { border-left-color: var(--aria); }
   .disc-mini-card .dmt {
     font-family: ui-monospace, Menlo, monospace;
     font-size: 0.65rem;
@@ -820,7 +821,7 @@
     font-family: ui-monospace, Menlo, monospace;
     font-size: 0.7rem;
     letter-spacing: 0.16em;
-    color: var(--nox);
+    color: var(--aria);
     margin-bottom: 0.4rem;
   }
   .sm-step h4 { font-size: 0.98rem; font-weight: 500; margin-bottom: 0.4rem; }
@@ -917,7 +918,7 @@
     font-family: ui-monospace, Menlo, monospace;
     font-size: 0.72rem;
     line-height: 1.35;
-    color: var(--vyra);
+    color: var(--blair);
     margin: 0.25rem 0 0.45rem;
     white-space: pre;
     overflow-x: auto;
@@ -1176,7 +1177,7 @@
   <!-- ============ 2. BIG PICTURE — full Saga→Deliver hierarchy ============ -->
   <section id="overview">
     <div class="kicker">Station 02 · The big picture</div>
-    <h2 class="section-title">From PRD to merged PR — six altitudes, one workflow.</h2>
+    <h2 class="section-title">From PRD to merged PR — seven altitudes, one workflow.</h2>
     <p class="lede">Agentic Product Ownership treats software as a chain of decisions at increasing resolution. Each Plan altitude has both a <strong style="color:var(--fg)">Solo</strong> skill (formulate the artifact) and a <strong style="color:var(--fg)">Meet</strong> skill (Council decomposes it into the next altitude down). Build is autonomous; Deliver is human-only. You drop in at whichever altitude your project actually needs.</p>
 
     <div class="hierarchy">
@@ -1184,7 +1185,7 @@
         <span class="token-glyph">📄</span>
         <span class="token-label">PRD</span>
       </div>
-      <div class="alt-card saga">
+      <div class="alt-card vision">
         <div class="alt-altitude">VISION</div>
         <div class="alt-horizon">~ multi-year</div>
         <div class="alt-name">PRD</div>
@@ -1216,7 +1217,7 @@
         <div class="alt-output">Ticket + plan with AC + phases</div>
         <div class="alt-voices">2 voices or Solo</div>
       </div>
-      <div class="alt-card code">
+      <div class="alt-card build">
         <div class="alt-altitude">BUILD</div>
         <div class="alt-horizon">~ hours to days</div>
         <div class="alt-name">Code</div>
@@ -1252,7 +1253,7 @@
     </div>
 
     <div class="standalone-note">
-      <strong>Works standalone.</strong> All 22 skills run without a weside.ai account — councils convene generic role-shells, the pipeline ships stories end-to-end. With a Companion, the lenses gain identity, voice, and memory across sessions.
+      <strong>Works standalone.</strong> Every skill runs without a weside.ai account — councils convene generic role-shells, the pipeline ships stories end-to-end. With a Companion, the lenses gain identity, voice, and memory across sessions.
     </div>
 
     <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
@@ -1278,11 +1279,11 @@
       <div class="meeting-roster">
         <h4>Default Council Roster · 5 voices</h4>
         <div class="roster-list">
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">technical horizon · 2-year view</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--avery)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--blair)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">technical horizon · 2-year view</div></div></div>
           <div class="roster-member"><div class="roster-avatar" style="background: var(--ux)">UX</div><div class="roster-meta"><div class="role-name">UX Researcher</div><div class="role-lens">lived user experience</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--lara)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning · how it lands</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">synthesis · second-order effects</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--dakota)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning · how it lands</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--aria)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">synthesis · second-order effects</div></div></div>
         </div>
       </div>
     </div>
@@ -1320,10 +1321,10 @@
       <div class="meeting-roster">
         <h4>Default Council Roster · 4 voices</h4>
         <div class="roster-list">
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">platform implications · 2-year view</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--lara)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning fit (or UX for experience Sagas)</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--avery)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">user value over time</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--blair)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">platform implications · 2-year view</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--dakota)">MK</div><div class="roster-meta"><div class="role-name">Marketing</div><div class="role-lens">positioning fit (or UX for experience Sagas)</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--aria)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
         </div>
       </div>
     </div>
@@ -1361,9 +1362,9 @@
       <div class="meeting-roster">
         <h4>Default Council Roster · 3 voices</h4>
         <div class="roster-list">
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--pia)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">scope discipline · priority</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--vyra)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">decomposition · failure modes</div></div></div>
-          <div class="roster-member"><div class="roster-avatar" style="background: var(--nox)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--avery)">PO</div><div class="roster-meta"><div class="role-name">Product Owner</div><div class="role-lens">scope discipline · priority</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--blair)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">decomposition · failure modes</div></div></div>
+          <div class="roster-member"><div class="roster-avatar" style="background: var(--aria)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
         </div>
         <div style="margin-top: 0.9rem; font-size: 0.78rem; color: var(--fg-dim);">Add <code style="color:var(--gold-glow);">--council=security,sales,…</code> for domain-heavy Epics.</div>
       </div>
@@ -1420,9 +1421,9 @@
     <div class="synthesis" id="synthesis">
       <div class="synthesis-label">Synthesis · Orchestrator</div>
       <div class="speaker-head">
-        <div class="speaker-avatar">N</div>
+        <div class="speaker-avatar">A</div>
         <div class="speaker-meta">
-          <div class="name">Nox</div>
+          <div class="name">Aria</div>
           <div class="role">Orchestrator · synthesis</div>
         </div>
       </div>
@@ -1439,7 +1440,7 @@
   <section id="build">
     <div class="kicker">Station 07 · Build · the autonomous pipeline</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:build</code> — hand it a ticket, watch it ship.</h2>
-    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:story</code> in v2.28.0 — internal CLI keeps the <code>story</code> table name, so pre-v2.28.0 checkpoints still resume.)</span></p>
+    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase.</p>
 
     <div class="story-flow">
       <div class="story-step"><div class="num">01</div><h4>Git prep</h4><p>Worktree, branch, ticket → In Progress.</p></div>
@@ -1479,29 +1480,29 @@
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
 
-  <!-- ============ 8. COACH — /we:coach (two modes) ============ -->
+  <!-- ============ 8. COACH — /we:coach (APO advisor) ============ -->
   <section id="coach">
-    <div class="kicker">Station 08 · Coach · two modes, one skill</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — the APO advisor + retro partner.</h2>
-    <p class="lede">Two situations, one conversation partner. <strong style="color:var(--fg)">ADVISOR</strong> mode answers <em>„where am I in APO, what's next?"</em> — the Coach reads repo state, maps to altitude, and proposes the next <code>/we:*</code> command with a <code>[y/n]</code> gate. <strong style="color:var(--fg)">RETRO</strong> mode answers <em>„this broke twice, how do we stop it?"</em> — the Coach diagnoses the process gap and proposes concrete fixes. Companion-aware: with weside, the Coach speaks as your Companion. <span style="color:var(--fg-dim);font-size:0.85em;">(Renamed from <code>/we:sm</code> in v2.28.0; scope expanded in v2.29.0.)</span></p>
+    <div class="kicker">Station 08 · Coach · the APO advisor</div>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — where am I, what's next?</h2>
+    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 09 — <code>/we:retro</code> owns that loop.</p>
 
     <div class="sm-flow">
       <div class="sm-step">
+        <div class="sm-step-num">B · BEGINNER</div>
+        <h4>First-Use Orientation</h4>
+        <p>No <code>.weside/</code> yet? The Coach offers to run <code>/we:setup</code> right now. Set up but no plans? It points at <code>/we:story "your first feature"</code>. The on-ramp for new repos and new users.</p>
+      </div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-step">
         <div class="sm-step-num">A · ADVISOR</div>
         <h4>„where am I, what's next?"</h4>
-        <p>Coach reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Never silent-fires. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
-      </div>
-      <div class="sm-arrow">↔</div>
-      <div class="sm-step">
-        <div class="sm-step-num">R · RETRO</div>
-        <h4>„this broke twice"</h4>
-        <p>Coach reads rules + skill landscape + DoR/DoD. Diagnoses the gap (missing rule? vague step? DoD hole?). Proposes 2-3 fixes with file paths and costs, leads with a recommendation. You pick; it applies.</p>
+        <p>Reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Mid-Epic: renders progress ("6 Stories — 2 shipped, 1 in-build, 3 not yet refined") so multi-Story Epics stay legible across a quarter. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
       </div>
       <div class="sm-arrow">→</div>
       <div class="sm-step">
         <div class="sm-step-num">CONFIRMATION</div>
         <h4>You decide. Always.</h4>
-        <p>Every advisor-launched command waits for <code>[y/n]</code>. Every retro fix waits for approval. The Coach proposes; the user decides — that's the discipline. Doc changes are delegated to <code>/we:docs</code>; the Coach owns process artefacts (rules / skills / quality / orchestration).</p>
+        <p>Every advisor-launched command waits for <code>[y/n]</code>. The Coach proposes; you decide — that's the discipline. Doc changes are delegated to <code>/we:docs</code>; retros are handed to <code>/we:retro</code>; the Coach itself stays in its advisory lane.</p>
       </div>
     </div>
 
@@ -1531,7 +1532,7 @@
         <div class="retro-col-label">PROPOSAL · default placement: user repo</div>
         <div class="retro-card">
           <div class="retro-card-head"><span class="retro-tag-p1">P1</span> · 5min · NEW</div>
-          <div class="retro-card-target"><code>weside-core/.claude/rules/quality/html-script-validation.md</code></div>
+          <div class="retro-card-target"><code>.claude/rules/quality/html-script-validation.md</code></div>
           <div class="retro-card-body">
             <div class="retro-diff">
               <div>+ ---</div>
@@ -1641,7 +1642,8 @@
       <code>/we:epic</code>
       <code>/we:coach</code>
       <code>/we:council</code>
-      <code>/we:arch</code>
+      <code>/we:retro</code>
+      <code>/we:handoff</code>
       <code>/we:audit-architecture</code>
       <code>/we:doc-improve</code>
       <code>/we:find-dead-code</code>
@@ -1703,23 +1705,23 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 //
 const COUNCIL_MEMBERS = [
   {
-    who: "Pia", role: "Product Owner · user value",
-    color: "var(--pia)", glow: "rgba(255,157,92,0.4)", initial: "P",
+    who: "Avery", role: "Product Owner · user value",
+    color: "var(--avery)", glow: "rgba(255,157,92,0.4)", initial: "A",
     text: "Splitting now buys earlier user feedback. Half-shipped is a value gap — one big PR delays everyone waiting behind it. Ship Part A this sprint, learn what we missed before Part B."
   },
   {
-    who: "Vyra", role: "Architect · failure modes",
-    color: "var(--vyra)", glow: "rgba(108,223,133,0.4)", initial: "V",
+    who: "Blair", role: "Architect · failure modes",
+    color: "var(--blair)", glow: "rgba(108,223,133,0.4)", initial: "B",
     text: "It depends on the seams. If Part B reshapes Part A's data model, splitting creates rework. We need twenty minutes to scope where the cut runs — until then I'd hold the decision."
   },
   {
-    who: "Samu", role: "Scrum Master · process",
-    color: "var(--samu)", glow: "rgba(153,153,170,0.45)", initial: "S",
+    who: "Casey", role: "Scrum Master · process",
+    color: "var(--casey)", glow: "rgba(153,153,170,0.45)", initial: "C",
     text: "Sprint ends Friday. Splitting keeps velocity legible and the retro honest about scope drift. Pushing through inflates one story's complexity in the burndown — that's a signal we'd lose."
   }
 ];
 
-const COUNCIL_SYNTHESIS = "Split, with a twenty-minute scoping pass first. Vyra checks whether the seams are clean; if not, we revisit. Pia gets earlier feedback either way. Samu keeps the burndown honest. Default: split.";
+const COUNCIL_SYNTHESIS = "Split, with a twenty-minute scoping pass first. Blair checks whether the seams are clean; if not, we revisit. Avery gets earlier feedback either way. Casey keeps the burndown honest. Default: split.";
 
 let councilInFlight = false;
 
@@ -1790,7 +1792,7 @@ async function runCouncil() {
   status.replaceChildren(
     el("span", {class: "pulse", text: "● "}),
     document.createTextNode("MCP call → "),
-    el("span", {style: {color: "var(--gold-glow)"}, text: "get_council(names=[\"Pia\",\"Vyra\",\"Samu\",\"Nox\"])"})
+    el("span", {style: {color: "var(--gold-glow)"}, text: "get_council(names=[\"Avery\",\"Blair\",\"Casey\",\"Aria\"])"})
   );
   await sleep(550);
 
@@ -1832,7 +1834,7 @@ async function runCouncil() {
   await sleep(20);
   synth.classList.add("in");
   const synthText = document.getElementById("synthesis-text");
-  synthText.replaceChildren(el("span", {class: "cursor", style: {background: "var(--nox)"}}));
+  synthText.replaceChildren(el("span", {class: "cursor", style: {background: "var(--aria)"}}));
   await sleep(380);
   await typewriter(synthText, COUNCIL_SYNTHESIS, [13, 26]);
 
