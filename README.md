@@ -1,10 +1,16 @@
 # we — Agentic Product Ownership for Claude Code
 
-> *Shape products, don't just build them.* The first Agentic Product Ownership toolkit for Claude Code — story refinement, autonomous development, multi-voice deliberation, and CI automation, in one plugin.
+> *Shape products, don't just build them.* The first Agentic Product Ownership toolkit for Claude Code — story refinement, autonomous development, multi-voice deliberation, CI automation, and a built-in continuous-improvement loop, in one plugin.
 
-[![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+<p align="center">
+  <a href="https://plugin.weside.ai/tour/">
+    <img alt="Take the interactive tour" src="https://img.shields.io/badge/%F0%9F%8E%AC%20Interactive%20Tour-11%20stations%20%C2%B7%20run%20it%20live-d4af37?style=for-the-badge&labelColor=11111a" />
+  </a>
+  <br/>
+  <sub><em>Walk through Agentic Product Ownership: Vision → Saga → Epic → Story → Build → Deliver → <b>Retro</b> · live council demo · runs in your browser, no install.</em></sub>
+</p>
 
-> 🎬 **[Take the interactive tour →](https://plugin.weside.ai/tour/)** — walkthrough of the APO altitudes: Vision → Saga → Epic → Story → Build, council live demo, architecture. Runs in your browser, no install. *(Source: [`tour/`](tour/))*
+[![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE) · *Tour source: [`tour/`](tour/)*
 
 ---
 
