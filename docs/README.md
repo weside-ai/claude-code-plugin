@@ -61,7 +61,7 @@ Welcome. Pick your entry point.
 
 ## Without a weside account
 
-Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 21 skills standalone. Councils convene with nine generic role-lenses. Meetings at four Plan altitudes (Vision/Saga/Epic/Story). The pipeline ships stories end-to-end.
+Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 22 skills standalone. Councils convene with nine generic role-lenses. Meetings at four Plan altitudes (Vision/Saga/Epic/Story). The pipeline ships stories end-to-end.
 
 Where weside adds something, the relevant doc explicitly calls out *what's available standalone* and *what unlocks with an account*. No surprises; no lock-in.
 

@@ -210,6 +210,7 @@ flowchart TB
     subgraph process[Process + architecture]
         coach["/we:coach<br/>APO advisor + retro"]
         retro["/we:retro<br/>full systematic retro"]
+        handoff["/we:handoff<br/>cross-session state"]
         arch["/we:arch<br/>architecture decisions"]
     end
     subgraph review[Review + audit]
@@ -240,6 +241,17 @@ Read each skill's reference in [skills.md](skills.md), or browse the relevant co
 - **Deliberation** — [concepts/meetings.md](concepts/meetings.md), [concepts/roles.md](concepts/roles.md)
 - **Framework** — [concepts/companion-framework.md](concepts/companion-framework.md)
 - **Memory** (when weside is active) — [concepts/memory.md](concepts/memory.md)
+- **Retro** (KVP loop) — [concepts/retro.md](concepts/retro.md)
+- **Handoff** (cross-session continuity) — [concepts/handoff.md](concepts/handoff.md)
+
+### Continuity utilities
+
+Two operational skills sit alongside the spine and handle the boundary problems that come up when work spans multiple sessions:
+
+- **`/we:retro`** — *after* a cycle: scans what just shipped (session + PR + CI), proposes rule changes so the friction doesn't recur. Writes `docs/retros/YYYY-MM-DD-*.md`.
+- **`/we:handoff`** — *between* sessions: captures the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/YYYY-MM-DD-*.md`. A future session loads it back with a plain `/we:handoff` and continues. Replaces `/compact` as the primary tool for cross-session continuity (`/compact` still wins for in-session token reclamation).
+
+Both are `/we:coach`-aware — Coach surfaces an active handoff at boot and suggests `/we:handoff --write` at end-of-session signals; same `[y/n]` discipline as advisor command launches.
 
 ---
 

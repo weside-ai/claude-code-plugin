@@ -62,6 +62,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
 | `/we:coach` | APO Coach — two modes, one skill: ADVISOR (read repo state, map to altitude, propose next `/we:*` command with `[y/n]` gate) + RETRO (diagnose process gap, propose 2-3 fixes). Companion-aware. Renamed from `/we:sm` in v2.28.0; scope expanded in v2.29.0. |
 | `/we:retro` | Systematic post-cycle retrospective. Reads session transcript + `gh api` (PR / CI / CodeRabbit) for the just-shipped PR, classifies frictions, proposes concrete MD-file edits — primarily user-repo `.claude/rules/` + `CLAUDE.md`, rarely plugin MDs. Per-item `[y/n/edit-path/skip-for-later]` gate. Writes `docs/retros/YYYY-MM-DD-*.md` log; optional `--scan N` reads last N retros for recurring patterns. Privacy guard skips personal/Companion-mode content. Coach can suggest it after PR merge / CI cycles ≥ 3 / end-of-session. New in v2.30.0. |
+| `/we:handoff` | Durable cross-session handoff. Captures decisions, dead ends, files touched + status, open questions, next steps, watch-outs into `docs/handoffs/YYYY-MM-DD-*.md`. Two modes: `--write` (with `[y/n/edit]` preview) and default/`--load` (resume from latest); `--list` shows what's available. Complements `/compact` — `/compact` reclaims tokens in-place, `/we:handoff` writes a durable, human-editable, version-controlled artifact that survives `/clear` or a new session tomorrow. Coach surfaces an active handoff at boot (Step 10) and suggests `--write` at end-of-session signals. Privacy guard same as `/we:retro`. New in v2.32.0. |
 | `/we:arch` | Architecture guidance, ADRs |
 | `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap. Real-world use cases + 28-file sweep case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |
@@ -90,6 +91,20 @@ User         → reviews PR, merges, closes ticket
 | `pr-creator` | PR with prerequisite checkpoint validation |
 | `doc-architect` | Documentation coherence steward — classify, integrate, audit doc drift |
 | `council-*` (9) | Role-lens council agents — orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing, security, sales, legal — spawned by `/we:council` and `/we:meet` |
+
+---
+
+## Durable Docs Categories
+
+The plugin writes to three durable directories in the **user repo** — version-controlled, human-readable, cross-session. When in doubt about where to capture state that should survive a session, write to one of these:
+
+| Directory | Owner skills | What lives there |
+|---|---|---|
+| `docs/plans/<topic>/CONCEPT.md` (and per-altitude files) | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:coach` | Initiative plans at all four Plan altitudes — Vision (PRD), Saga (Theme), Epic (Initiative), Story (Feature slice). The "what to build" + "why" + "how phased". |
+| `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *Wins / Pain / Proposals* from the just-shipped cycle. Proposed MD-file edits land in `.claude/rules/` or `CLAUDE.md` so the next cycle is cleaner. The "what we learned" + "how the harness should change". |
+| `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *Identity / Current State / Decisions / Tried-and-rejected / Open questions / Files touched / Next steps / Watch-outs / References*. The "where we are right now" + "what the next session should pick up". |
+
+Skills read existing files in these directories at boot (e.g. `/we:coach` Boot Protocol Step 10 reads both `docs/plans/*/CONCEPT.md` and `docs/handoffs/*.md`) and write new ones per the per-skill conventions documented in each `SKILL.md`. The three categories are the **plugin's durable surface in the user repo** — anything that should outlive a single session belongs here, not in CC's opaque session jsonl or in ephemeral memory.
 
 ---
 

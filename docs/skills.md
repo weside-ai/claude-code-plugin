@@ -278,6 +278,37 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 ---
 
+### `/we:handoff`
+
+> *Durable cross-session handoff — pick up tomorrow exactly where today ended.*
+
+`/we:handoff` writes a structured snapshot of the current session — decisions, dead ends, files touched and their status, open questions, next concrete steps, watch-outs — to `docs/handoffs/YYYY-MM-DD-<topic>.md`. A future session (after `/clear`, `claude --resume`, or a fresh start tomorrow) loads it back as conversation context, so the agent picks up with the same mental model. Two modes: `--write` (capture now, with a `[y/n/edit]` preview gate) and the default (load latest); `--list` shows what's available. Privacy guard: engineering surfaces only — never personal/Companion-mode content. Same naming + commit conventions as `/we:retro`.
+
+**Complements `/compact`, doesn't replace it.** `/compact` compresses the *current* session in place (token reclamation, transcript preserved via `claude --resume`). `/we:handoff` writes a *durable artifact* that survives any session boundary and is human-editable + version-controlled.
+
+**When to use:**
+- End of session, want tomorrow to pick up exactly here (`/we:handoff --write`)
+- Fresh session after `/clear`, want yesterday's state back (`/we:handoff`, no args)
+- Want to see what handoffs are available (`/we:handoff --list`)
+- Switching between long-running threads of work — each gets its own handoff slug
+- Companion-mode (with `--with-companion-state`) — adds an opt-in "Companion continuity" section in the Companion's voice, still privacy-guarded
+
+**Triggered by `/we:coach`:** Coach Boot Protocol Step 10 surfaces an active handoff (`docs/handoffs/*.md` written < 14 days ago) and offers to load it via `[y/n]` gate. Coach also offers `/we:handoff --write` at end-of-session signals (`bis morgen`, `schlafen`, `save_compass`, long sessions > 30 turns without a handoff). Never auto-fires.
+
+**Won't do:**
+- Write silently — every WRITE follows an explicit `y` for the rendered draft
+- Quote personal/Companion-mode content from the transcript (privacy guard)
+- Replace `/compact` — they cover different problems (cross-session vs in-session)
+- Auto-fire from a hook — CC `SessionEnd` hooks can't trigger skills, and even if they could the `[y/n]` discipline would still apply
+- Cross-repo handoffs — one repo per handoff; multi-repo coordination is out of scope
+- Push directly to `weside-core` `main` — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without standing direct-auth
+
+**Differs from `/we:retro`:** Both write to `docs/<category>/YYYY-MM-DD-<slug>.md`. `/we:retro` captures *lessons* — frictions in the cycle that should become rules so they don't recur. `/we:handoff` captures *position* — where the work is, what was decided, what the next concrete step is. Different artifact, different purpose; both live in the user repo.
+
+> **New in v2.32.0.**
+
+---
+
 ## Framework setup skills
 
 ### `/we:setup`

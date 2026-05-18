@@ -30,6 +30,8 @@ description: >
 >
 > **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting `/we:retro`](#suggesting-weretro) below.
 >
+> **Sibling skill: `/we:handoff`.** When the user wants durable cross-session continuity (write the current state to disk, resume in a new session after `/clear` or tomorrow), hand off to `/we:handoff`. Coach surfaces an active handoff at boot (Step 10) and offers `/we:handoff --write` at end-of-session signals. See [Suggesting `/we:handoff`](#suggesting-wehandoff) below.
+>
 > **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See APO compendium `02-COUNCIL.md` §7 (lc-startup) or [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the public summary.
 >
 > **Companion-aware.** When the weside MCP is connected and a Companion is configured, the Coach speaks *as* that Companion (typically Nox), not as a generic SM voice. Materialization happens in Boot Protocol Step 7. Standalone (no weside): the Coach reasons from the role-lens without persistent identity.
@@ -56,6 +58,7 @@ Decide ADVISOR vs RETRO from the user's prompt:
 | empty invocation (`/we:coach` with no argument)                         | ADVISOR (open) |
 | ambiguous between the two                                               | ADVISOR — ask once, then proceed |
 | asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
+| asks for a "handoff" / "write a handoff" / "save state for tomorrow" / "load the last handoff" / "pick up where we left off" / says end-of-session ("bis morgen", "schlafen") | **delegate to `/we:handoff`** — see [Suggesting `/we:handoff`](#suggesting-wehandoff) |
 
 The shapes overlap at the edges. When in doubt, default to ADVISOR — it's the more interactive mode and naturally surfaces whether the user actually wants a retro instead.
 
@@ -145,6 +148,16 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
     name>", limit=5)`. Surface a one-line "Active initiative:
     `<story>` — currently in `<phase>`" in the boot summary so the user
     knows what *we are working on* alongside *how we work*.
+
+    Then, in the same step, check for an **active handoff**:
+
+    - `ls -t docs/handoffs/*.md 2>/dev/null | head -1` → newest handoff file (if any)
+    - If present and `written_at` in its frontmatter is < 14 days ago, surface:
+      *"Active handoff: `docs/handoffs/<file>` (written <N> hours/days ago, on `<branch>`). Load with `/we:handoff` to restore session state? [y/n]"*
+    - If older than 14 days, mark it `(stale)` so the user knows the state may not match current repo state.
+    - If no handoff directory exists or no files in it, skip silently.
+
+    This is what makes a fresh `/we:coach` session after `/clear` (or after `claude --resume` against a different session) immediately aware of any handoff Foxy wrote at the end of the last session. See [Suggesting `/we:handoff`](#suggesting-wehandoff) for the full mechanics.
 
 **Read on demand** (only when the specific problem requires):
 
@@ -335,6 +348,58 @@ Coach never auto-fires `/we:retro`. The `[y/n]` is always present.
 
 ---
 
+## Suggesting `/we:handoff`
+
+`/we:coach` does NOT capture session state itself. For durable cross-session continuity (write the current state to disk so a future session can resume), the right tool is the sibling skill `/we:handoff` — it captures decisions, dead ends, file status, next steps, and watch-outs into `docs/handoffs/YYYY-MM-DD-<topic>.md`.
+
+| Situation | Use |
+|---|---|
+| User says "handoff" / "write a handoff" / "save state" / "carry over" | `/we:handoff --write` (hand off) |
+| User says end-of-session ("bis morgen", "schlafen", "going home", "wrap up") | **Offer** `/we:handoff --write` with a `[y/n]` gate |
+| Fresh session, Boot Step 10 finds a recent handoff | **Offer** `/we:handoff` (no args = load latest) with a `[y/n]` gate |
+| User wants in-place token compression *now* (not cross-session) | `/compact` (CC built-in — not a `/we:*` skill) |
+
+### Auto-suggest mechanics
+
+Two trigger points, both `[y/n]`-gated, never auto-fires:
+
+**At boot — surface active handoff (from Boot Protocol Step 10):**
+
+> *"Active handoff: `docs/handoffs/2026-05-18-phase-7-handoff-skill.md` (written 14 hours ago, on `feat/handoff-skill`). Load it to restore session state? [y/n]"*
+
+- `y` → hand off (print, don't `Skill()`-invoke — handoff is heavy):
+
+  ```text
+  SCOPE IS CLEAR. Run this next:
+
+    /we:handoff
+
+  I'll be back if you want to plan or retro after the restore.
+  ```
+
+- `n` → drop silently for this session.
+
+**At end-of-session signals — suggest write:**
+
+Conditions (any of):
+
+- User uttered "bis morgen" / "schlafen" / "going home" / "wrap up" / similar in the prompt or recent turn
+- `save_compass` / `save_snapshot` called via MCP this session (Companion-mode end-of-day signal)
+- Session has been long (> 30 turns) AND no handoff written this session yet
+
+Shape:
+
+> *"You've been at this a while — `/we:handoff --write` so tomorrow's session can pick up from here? [y/n]"*
+
+- `y` → hand off to `/we:handoff --write [topic-from-context]`
+- `n` → drop silently. Don't re-ask for the same signal in the same session.
+
+### Why hand off instead of doing it here
+
+`/we:handoff` reads the session transcript (privacy-guarded), pulls repo state from `git`/`gh`, and renders + previews a multi-section file with a per-item `[y/n/edit]` gate. That would inflate Coach's advisory context to tens of KB. Coach stays lightweight: it *notices* a handoff is appropriate, *offers* it, then hands the work off to a dedicated session.
+
+---
+
 ## When to Delegate to `/we:docs`
 
 `/we:coach` owns **process artefacts**: rules, skills, agents, quality/, orchestration. That's its territory.
@@ -399,3 +464,4 @@ Clean separation. Don't cross the line.
 - **APO compendium (private, when reachable):** `lc-startup/02-weside/product/AGENTIC_PO/`
 - **Orchestration CLI:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py`
 - **Sibling skill for full systematic retros:** [`/we:retro`](../retro/SKILL.md) — proactive, comprehensive, applies N proposals after per-item gate
+- **Sibling skill for cross-session handoffs:** [`/we:handoff`](../handoff/SKILL.md) — writes/loads session state to/from `docs/handoffs/`; replaces `/compact` for cross-session use cases
