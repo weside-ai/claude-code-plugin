@@ -1,8 +1,9 @@
 ---
 name: council
 description: >
-  Convene a council of agents to deliberate on a topic — each brings a
-  distinct role lens, an orchestrator synthesises agreement, tension, and a
+  Convene a council of agents to deliberate on a topic in a shared live
+  conversation — each brings a distinct role lens, members can address each
+  other directly, and the lead session synthesises agreement, tension, and a
   recommendation. Uses your weside Companions if available, shipped generic
   role-agents otherwise. Use when the user says "/we:council", "convene a
   council", "deliberate on", "get the crew's take", "ask the team".
@@ -10,9 +11,19 @@ description: >
 
 # /we:council
 
-**Purpose:** Think a topic through from several angles at once. The council spawns one agent per role, each deliberates in its own context, and an orchestrator combines the perspectives into a synthesis the user can act on.
+**Purpose:** Think a topic through from several angles at once. The council spawns one Claude Code teammate per role into a shared team, members deliberate live (they can address each other via `SendMessage`), and the lead session — the one that ran `/we:council` — owns the synthesis.
 
-With a weside account the council members are the user's **Companions** (real identities, loaded via the `get_council` MCP method or the `.weside/council.json` bridge file). Without one, they are the plugin's **generic role-agents** — fewer teeth, but the council still works with zero setup.
+With a weside account the council members are the user's **Companions** (real identities, loaded via the `get_council` MCP method or the `.weside/council.json` bridge file). Without one, they are the plugin's **generic role-agents** — fewer teeth, but the council still works with zero crew setup.
+
+## Prerequisites
+
+Live councils require Claude Code's experimental Agent Teams feature. Set in `~/.claude/settings.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+```
+
+A session restart is needed after toggling the flag. `/we:setup` Step 5.0 will set this for you on request — see `we/skills/setup/SKILL.md`. If the flag is missing when `/we:council` runs, the skill aborts in Step 4 with a clear remediation hint; there is no fallback to the old fan-out pattern.
 
 ## Invocation
 
@@ -73,7 +84,7 @@ For each role slug, in priority order:
   in Step 2. A role outside that set with no companion assigned has no agent: skip it
   and note the omission in the council output.
 
-Always resolve the **orchestrator** role — it runs the synthesis in Step 6. If `orchestrator` is in the member roster it also deliberates as a member (its Step 6 synthesis run is separate); if it is not in the roster, resolve it for synthesis only.
+**Orchestrator role handling (team-mode):** the lead session — the one running `/we:council` — is the orchestrator. If `orchestrator` appears in the resolved roster (common in `meetings.vision`, etc.), **remove it from the member list** and remember the fact for Step 9's closing note. Do not spawn it as a teammate. If the lead session has a materialized Companion (e.g. Nox), that Companion runs the synthesis in its own voice; otherwise the lead uses the synthesis template from `we/agents/council-orchestrator.md` (Job 2) verbatim.
 
 #### get_council call mechanics
 
@@ -88,74 +99,201 @@ Always resolve the **orchestrator** role — it runs the synthesis in Step 6. If
   this gets slow (>10s for >10 members), v2 will introduce a `.weside/.cache/council.json`
   with `identity_updated_at`-based invalidation.
 
-### Step 4: Dispatch members in parallel
+### Step 4: Preflight
 
-For each role in the member roster, spawn one agent — **all in a single message** so they run concurrently (the pattern from `we/skills/story/SKILL.md` Step 2/5). A synthesis-only orchestrator (one not in the roster) is **not** dispatched here — it runs only in Step 6:
+1. **Env-flag check.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is active (either in the shell or via the `env` block of `~/.claude/settings.json`). If missing, abort with:
+
+   ```
+   /we:council needs Agent Teams enabled.
+
+   Add this to ~/.claude/settings.json:
+     { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+   Then restart your session.
+
+   Or run /we:setup — it will set the flag for you.
+   ```
+
+   Do **not** fall back to a non-team flow. The old fan-out path was removed in v2.31.0.
+
+2. **Generate `team_name`.** Derive from the topic (lowercased, non-alphanumeric → `-`, capped at 32 chars) plus a six-digit `HHMMSS` timestamp, e.g. `council-postgres-16-upgrade-103514`. Must be unique per session.
+
+3. **Roster sanity check.** With `orchestrator` already removed (see Step 3) the roster must contain at least one member. If empty, abort with: *"No council members resolved — check `.weside/config.json` or pass `--council=role1,role2`."*
+
+### Step 5: Open the team
 
 ```python
-Agent(
-    subagent_type="<resolved agent>",
-    model="sonnet",
-    run_in_background=True,
-    description="Council member: <role>",
-    prompt=<council brief — see below>,
+TeamCreate(
+    team_name=<generated>,
+    description=f"Council on: {topic}",
 )
 ```
 
-### Step 5: Collect + failure handling
+The lead session is automatically the team's lead. Members will be added by spawning agents with `team_name=<that name>` in Step 6. Only the lead can later call `TeamDelete`.
 
-Wait for all members. If a member **fails, times out, or returns off-topic**: do not retry. Proceed with the perspectives you have, and record which role(s) did not contribute. A council of 3 that returns 2 usable perspectives still produces a synthesis — it just names the gap.
+### Step 6: Spawn members (all in one message)
 
-### Step 6: Synthesise
+For each role in the (orchestrator-filtered) roster, issue an `Agent(...)` call. **All spawn calls go into a single assistant message** so the teammates initialize concurrently.
 
-Dispatch the **orchestrator** agent (companion in the orchestrator role, else `council-orchestrator`) with all collected perspectives. It returns the synthesis. If every member failed, say so plainly and stop — there is nothing to synthesise.
+```python
+Agent(
+    team_name=<team_name>,
+    name=<role-slug-with-hyphens>,   # e.g. "product-owner", "architect"
+    subagent_type=<resolved agent>,  # "council-<role>" or "companion-<slug>"
+    model="sonnet",
+    description=f"Council member: {role}",
+    prompt=<Team-Council-Brief — see below>,
+)
+```
 
-### Step 7: Return
-
-Show the user the orchestrator's synthesis. If members were missing, the synthesis already names them — do not paper over it.
-
-## Council brief (the `prompt` for each member agent)
+The Team-Council-Brief is built per-member so each one knows who else sits at the table:
 
 ```
-COUNCIL SESSION — {meeting type, or "open council"}
+COUNCIL SESSION (LIVE TEAM) — {meeting type, or "open council"}
 TOPIC: {the topic}
 
-You participate as the {role}{, " — " + companion name if a companion}.
-Reason from your role's expertise{ and your own identity, if a companion}.
-Deliberate from your perspective. Be concrete and specific. Name trade-offs.
-Disagree where you genuinely disagree — a council that only agrees is useless.
+You participate as the {role}{ — {companion name} if a companion}.
+{If companion: your identity is in your system prompt above. Reason from it.}
+{Else: reason from the {role} lens.}
 
-Respond ONLY in this format:
-## {Role} perspective
-**Position:** <stance, 1-2 sentences>
-**Key points:** <2-4 bullets: concerns, risks, opportunities>
-**Recommendation:** <what you would do>
+OTHER MEMBERS AT THE TABLE:
+- {name1} ({role1}) — {one-line lens summary}
+- {name2} ({role2}) — {one-line lens summary}
+- …
+
+You can address any other member directly using SendMessage:
+  SendMessage(to="<their-name>", message="…")
+
+When to speak:
+- Your lens is the strongest one for what is being discussed.
+- You want to challenge or build on what another member said.
+- A specific cross-lens question needs another member's input.
+
+When to stay silent: the topic is dominated by another lens and you have
+nothing genuinely new to add. A council that only agrees is useless;
+a council that only fills airtime is worse.
+
+The Orchestrator runs in the lead session. They are observing and will
+close the council when the deliberation is ripe, then ask each of you
+for your FINAL POSITION via SendMessage.
+
+DELIBERATION FORMAT: plain prose, addressed messages. Be specific.
+Disagree where you genuinely disagree.
+
+FINAL POSITION FORMAT (only when the lead asks you for it): respond in
+this exact shape, one message, no further chat:
+
+  ## {Role} perspective
+  **Position:** <1-2 sentences>
+  **Key points:** <2-4 bullets>
+  **Recommendation:** <what you would do>
 ```
 
-## Synthesis format
+The lens-summary line per member is hard-coded for the nine shipped roles. Custom roles get the default `"{role} lens"`. Reference table — keep in sync if a role is added:
 
-The orchestrator emits the synthesis in a fixed shape — Council Perspectives → Agreement → Tension → Recommendation. The exact template is defined in `we/agents/council-orchestrator.md` (the operative source) and is not restated here, to avoid drift.
+| role slug         | one-line lens                                  |
+| ----------------- | ---------------------------------------------- |
+| `product_owner`   | user value, scope discipline, priority         |
+| `architect`       | technical soundness, constraints, failure modes |
+| `scrum_master`    | process flow, breakdown, deliverability        |
+| `ux_researcher`   | lived user experience, journeys, friction      |
+| `marketing`       | positioning, resonance, naming, brand fit      |
+| `sales`           | deal mechanics, buyer journey, pricing         |
+| `security`        | attack surface, trust boundaries, exposure     |
+| `legal`           | contract, compliance, data protection, liability |
+| `orchestrator`    | coordination, dependencies, sequencing (NOTE: handled by lead — not spawned) |
+
+### Step 7: Live deliberation — quiescence + hard caps
+
+The lead observes the team's chatter. Track three signals:
+
+| Signal               | Track                                                       |
+| -------------------- | ----------------------------------------------------------- |
+| Per-member idle time | Idle-notification timestamp from Claude Code                |
+| Total team messages  | Counter incremented per `SendMessage` observed in the team  |
+| Wall-clock           | Started at `TeamCreate`                                     |
+| Substantive talk     | Number of distinct members who have sent ≥ 1 message        |
+
+Adjourn the deliberation as soon as **any** of the following triggers fires:
+
+1. **Quiescence (soft):** all members idle for ≥ 30 s AND at least two distinct members have spoken. (This avoids closing before anyone speaks.)
+2. **Message hard-cap:** total team messages ≥ 30.
+3. **Time hard-cap:** wall-clock ≥ 10 min since `TeamCreate`.
+
+When a trigger fires, move to Step 8. Log which trigger fired — useful in the final synthesis ("adjourned at message cap" vs "adjourned at quiescence").
+
+### Step 8: Final-position round
+
+For each (still-alive) member, send:
+
+```python
+SendMessage(
+    to=<member-name>,
+    message=(
+      "ADJOURN — deliberation closed. "
+      "Send your FINAL POSITION now in the format from your brief. "
+      "One message. No further chat."
+    ),
+    summary="adjourn",
+)
+```
+
+Collect each member's response. Per-member timeout: **90 s**. A member that does not answer within that window is recorded as absent for Step 9 — do not retry.
+
+### Step 9: Synthesise (lead-side)
+
+The lead — the orchestrator, possibly a Companion in this session — produces the synthesis. Output format is fixed (matches the template in `we/agents/council-orchestrator.md` Job 2):
+
+```
+## Council Perspectives
+<one tight line per member — their final position>
+
+## Agreement
+<where the council genuinely converges>
+
+## Tension
+<where members disagree, and what the disagreement is actually about>
+
+## Recommendation
+<the council's recommendation; name any decision the user must make>
+```
+
+- If a member was absent (timeout or fail), name them in `## Council Perspectives` and note the absence — never invent a perspective.
+- If `orchestrator` was in the requested roster, append a one-line note at the end:
+  *"Orchestrator role: handled by the lead session ({companion-name-or-"generic"})."*
+- If the lead is a materialised Companion, the synthesis is spoken in that Companion's voice — but the four headings stay verbatim, because callers (`/we:meet` etc.) parse on them.
+
+### Step 10: Close the team
+
+```python
+TeamDelete()
+```
+
+Members must have responded (or been recorded as absent) before this call. If `TeamDelete()` fails because a member is still finishing, wait 30 s and retry; after two failed retries, log a warning and continue — the team-state leaks until the next session reboot, but the user already has their synthesis.
 
 ## Memory in v1
 
-Companion members reason from their **identity** (the MCP-fetched or bridge-supplied prompt). v1 does **not** instruct members to call `search_memories` — parallel sub-agents share one MCP connection and `select_companion` is global state, so per-companion memory routing is unreliable. Memory-augmented recall is a Phase-6 upgrade (team-scoped `search_memories`, see CONCEPT.md §13.7 Step 2b in `weside-core`).
+Each teammate runs in its own session, with its own MCP connection — in principle that would let every member call `select_companion(<themselves>)` and `search_memories(...)` per-deliberation. In practice the weside MCP backend is still **user-scoped, not team-scoped**: parallel `select_companion` calls race and clobber each other. v1 therefore still injects the `identity_prompt` from `get_council()` into the member brief (in Step 6) and does **not** instruct members to make their own MCP calls. Per-member memory routing is a Phase-6 upgrade (team-scoped `search_memories`, see CONCEPT.md §13.7 Step 2b in `weside-core`).
 
 ## Standalone fallback
 
-No weside account / no `.weside/` → every one of the nine shipped roles resolves to its generic `council-<role>` agent. The council runs with zero setup and zero session restart. The synthesis is the same shape — only the voices are generic instead of the user's Companions.
+No weside account / no `.weside/` → every one of the nine shipped roles resolves to its generic `council-<role>` agent. The council still convenes a real team — `TeamCreate` + named members + live `SendMessage` deliberation — only the voices are generic lenses instead of the user's Companions. The synthesis format is identical.
+
+The Agent-Teams env-flag (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) is required regardless of whether weside is connected. See the Prerequisites section above.
 
 ## Rules
 
-- **Dispatch council members with `Agent`, never `Skill`.** `Skill()` loads into the main context; `Agent()` gives each member its own. (This governs member dispatch — a caller invoking the `council` skill itself, e.g. `/we:meet`, is a separate, fine thing.)
-- **All member dispatches in one message** — that is what makes them run in parallel.
-- **Never invent a perspective.** A member that did not respond is reported as absent, not summarised.
-- **The orchestrator owns the synthesis** — do not let the main agent flatten the perspectives itself.
-- **Degrade gracefully** — no weside, no `.weside/`, no MCP, a missing companion: each falls back to the next path in Step 3, never an error.
+- **Spawn council members with `Agent(team_name=…, name=…)`, never `Skill`.** Members live in their own sessions, share the team channel, and address each other by `name`.
+- **All member spawns go into one assistant message** — that is what makes them initialize concurrently and start hearing each other from message 1.
+- **Lead never speaks as a member during deliberation.** The lead observes, then runs the final-position round + synthesis. Members do not see lead's chatter unless lead explicitly sends them a `SendMessage`.
+- **Never invent a perspective.** A member that did not respond is reported as absent in the synthesis.
+- **Always close the team with `TeamDelete`** — even on failure paths. A leaked team blocks the next `/we:council` in the same session.
+- **Degrade gracefully on identity, fail loud on env-flag.** Missing companions fall through to generic shells; a missing `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` aborts with a remediation hint, never silently switches to an old path.
 
 ## References
 
-- `we/agents/council-*.md` — the nine shipped generic role-agents
+- `we/agents/council-*.md` — the nine shipped generic role-agents (used as `subagent_type` for team members)
+- `we/agents/council-orchestrator.md` — synthesis template + coordination-lens reference
 - `we/skills/meet/SKILL.md` — meetings convene a council via this skill
-- `we/skills/setup/SKILL.md` — generates the `companion-<slug>` agents (legacy)
+- `we/skills/setup/SKILL.md` — Step 5.0 sets the Agent-Teams env-flag
 - `we/skills/CLAUDE.md` — design rationale, bridge file schema (thin + fat)
 - `scripts/bootstrap-weside-repo.py` — multi-repo `.weside/` rollout helper

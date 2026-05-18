@@ -125,6 +125,24 @@ This is where the framework starts to feel less like a tool and more like a team
 
 ---
 
+## How a council actually runs — the live-team mechanic
+
+Since v2.31.0 every council convenes its members as a **live Claude Code Agent Team**: one teammate per role, each in its own session, sharing a team channel. Members address each other directly (`SendMessage(to="architect", message="…")`), so the architect actually hears the PO's concern and can respond to it — instead of writing parallel memos in isolation.
+
+The **lead session** — the one that ran `/we:council` or `/we:meet` — is the orchestrator. It does not speak as a member; it observes the chatter, closes the deliberation when it is ripe (idle quiescence, or a hard message-/time-cap), then asks each member for a final position and writes the synthesis (`Council Perspectives → Agreement → Tension → Recommendation`). If the lead is a materialised weside Companion (e.g. Nox), the synthesis is in that Companion's voice; otherwise it uses the shipped template.
+
+### Prerequisites
+
+Live councils require Claude Code's experimental Agent Teams feature. Set in `~/.claude/settings.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+```
+
+A session restart is needed after toggling the flag. `/we:setup` (Step 5.0) will set it on request. Without the flag, `/we:council` aborts with a remediation hint — there is no fallback to the pre-v2.31.0 parallel-memo path.
+
+---
+
 ## Configuring meetings in your repo
 
 `.weside/config.json` holds the roster per meeting type:

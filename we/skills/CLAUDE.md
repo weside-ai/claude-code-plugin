@@ -68,7 +68,9 @@ Rule of thumb: if a human or companion reads it to *understand the repo* → `we
 
 ## Meetings & council — the cycle motif
 
-A meeting (`/we:meet vision|initiative|refinement`) wraps a council in a structured workflow. A council convenes role-lens agents that deliberate in parallel; an orchestrator synthesises *agreement, tension, and recommendation* (full mechanics in `we/skills/council/SKILL.md`).
+A meeting (`/we:meet vision|saga|epic|story`) wraps a council in a structured workflow. A council convenes role-lens agents into a **live Claude Code Agent Team** — they deliberate in a shared channel, addressing each other directly via `SendMessage`. The **lead session** (the one that ran `/we:council`) is the orchestrator: it observes the chatter, closes the deliberation when it is ripe, runs the final-position round, and writes the synthesis (*agreement, tension, and recommendation*). Full mechanics in `we/skills/council/SKILL.md`.
+
+Live councils require Claude Code's experimental Agent Teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `~/.claude/settings.json`'s `env` block). `/we:setup` Step 5.0 sets this on request. The pre-v2.31.0 fan-out path — parallel sub-agents writing isolated memos — was removed; there is no fallback. If the flag is missing, the skill aborts with a remediation hint.
 
 The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the Phase-6 form of `get_council` (team-scoped memory + workspace_id) will close the loop automatically. Design rationale: WA-718 CONCEPT §13.7 Step 2 (in the weside-core repo).
 

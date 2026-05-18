@@ -128,6 +128,22 @@ If **no** → skip to Step 6.
 
 If **yes** — this step is **idempotent**: if `.weside/config.json` already exists, report the current state (vault, crew, `onboarded_at`) and ask before overwriting anything.
 
+0. **Enable Agent Teams (prerequisite for `/we:council` and `/we:meet`)**
+
+   `/we:council` (v2.31.0+) convenes its members as a live Claude Code team — `TeamCreate` + named teammates that address each other via `SendMessage`. That requires the experimental Agent Teams feature:
+
+   ```json
+   { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+   ```
+
+   Check whether the flag is already set:
+   - Read `~/.claude/settings.json`. If `.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS == "1"` → already enabled, move on.
+   - Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after — Claude Code reads env once at session start.)"*
+   - If yes: Read the file, merge `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` into the existing `env` block (create the block if missing), write it back. Tell the user: *"Flag set. Restart your session to activate Agent Teams."*
+   - If no: warn that `/we:council` and `/we:meet` will abort with a remediation hint until the flag is set, then continue.
+
+   This is the only step that touches user-scope settings — the rest of Setup writes only into the repo.
+
 1. **Ensure `.weside/config.json`** — create or extend. Schema:
 
    ```json
