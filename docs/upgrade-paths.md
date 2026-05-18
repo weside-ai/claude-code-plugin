@@ -81,7 +81,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 ---
 
-## Level 4 — Orchestrated
+## Level 4 — Orchestrated `[Roadmap — Phase 6]`
 
 **What you add:** team-scoped Companions + cross-Companion coordination (the Enterprise tier).
 
@@ -89,10 +89,10 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 - **Multiple Companions per team** — your PO and your Architect aren't *your* personal Companions; they're the *team's* PO and Architect. Memory is team-scoped (with privacy boundaries to your personal scope intact).
 - **Council write-back** — councils don't just *read* memory anymore; they *write* the outcome to team memory. Next week's council remembers what was decided.
-- **Cross-repo, cross-team awareness** — Companions in different repos can coordinate. A story in `weside-core` can surface in the `weside-landing` team's vision meeting automatically.
+- **Cross-repo, cross-team awareness** — Companions in different repos can coordinate. A story in one repo can surface in another team's vision meeting automatically.
 - **External-user-safe projections** — the Companion's professional projection (persona + role + team lens) is cleanly separated from her personal scope, so customer-facing or partner-facing surfaces are safe.
 
-**Status:** this is the active roadmap (Phase 6 in the WA-718 initiative). Most of it is being built. See the public roadmap on [agenticproductownership.com](https://agenticproductownership.com) for the current status.
+**Status:** this is the active roadmap. Most of it is being built. See the public roadmap on [agenticproductownership.com](https://agenticproductownership.com) for the current status.
 
 **Who this fits:**
 - Multi-person teams
@@ -115,7 +115,6 @@ Each level is a step. You don't skip; the lower one supports the next.
 | `/we:council` | ✓ generic role-agents | + real Companion voices | + memory of past councils | + write-back, team lenses |
 | `/we:meet` | ✓ structured workflows | + named Companions | + continuity across meetings | + cross-team coordination |
 | `/we:coach` | ✓ rules + landscape | + Companion-as-coach identity | + proactive process drift surfacing | + team-wide process awareness |
-| `/we:arch` | ✓ technical guidance | + Companion-as-architect identity | + memory of past ADRs | + team architectural history |
 | `/we:sideload` | ✓ legacy mode | + crew loaded | + Companion-knows-the-target-repo | + cross-team crew shared |
 
 The skill list is identical at every level. The richness changes.

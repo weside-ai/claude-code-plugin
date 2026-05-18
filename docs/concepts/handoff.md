@@ -130,7 +130,7 @@ Always `[y/n]`-gated. Never auto-fires. Coach won't suggest the same signal twic
 When a WRITE-mode draft is approved:
 
 1. **Default: PR workflow** in the user repo. Skill creates `handoff/YYYY-MM-DD-<slug>` branch, applies Write, opens PR with the handoff content as the PR body. User merges via normal flow.
-2. **Opt-in: direct commit** if the repo is configured for standing main-auth (e.g. `claude-code-plugin`, `lc-startup`). Per-repo convention.
+2. **Opt-in: direct commit** if the repo is configured for standing main-auth. Per-repo convention.
 3. **Plugin MD changes always go PR** — plugin is public.
 
 User can interrupt mid-apply ("skip the PR, just commit directly").
@@ -159,7 +159,7 @@ All three are version-controlled, human-readable, cross-session. Anything that s
 /we:handoff --write "phase-7-handoff-skill"
 ```
 
-Skill restates scope, drafts the file, shows full preview, gates `[y/n/edit]`. On `y`, writes (PR-default for `weside-core`, direct-commit for `claude-code-plugin`/`lc-startup`).
+Skill restates scope, drafts the file, shows full preview, gates `[y/n/edit]`. On `y`, writes using the repo's configured commit path (PR-workflow by default; direct-commit when the repo is configured for it).
 
 **2. Fresh session, restore state:**
 
@@ -194,4 +194,4 @@ User opens `/we:coach`. Coach Boot Step 10 detects yesterday's handoff. Coach of
 - **Workflow context:** [`workflow.md` § Continuity utilities](../workflow.md#continuity-utilities)
 - **Coach integration:** [`/we:coach` Suggesting `/we:handoff` section](../../we/skills/coach/SKILL.md#suggesting-wehandoff)
 - **Sibling skill for retrospectives:** [`/we:retro`](../skills.md#weretro) — captures *lessons* (under `docs/retros/`); handoffs capture *position* (under `docs/handoffs/`)
-- **APO compendium (private, when reachable):** `lc-startup/02-weside/product/AGENTIC_PO/` — handoffs are a continuity utility around the Plan/Build/Deliver/Retro cycle, not a methodology pillar themselves
+- **APO cycle overview:** [workflow.md](../workflow.md) — handoffs are a continuity utility around the Plan/Build/Deliver/Retro cycle, not a methodology pillar themselves

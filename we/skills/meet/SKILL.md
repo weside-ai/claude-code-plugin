@@ -46,7 +46,11 @@ If no meeting type is given, list the four and ask which one.
 2. **Council decision** — unless a flag forces it:
    - `--council` → convene it. `--no-council` → run solo.
    - Neither flag → **offer it**: *"Convene the council for this {type} meeting? [y/n]"*. No "complexity" guessing — always a plain offer.
-   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. (Unlike the Solo plan skills, the council skill is light — its own sub-agents do the heavy work — so invoking it inline is fine.) The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default — see table below). Feed the synthesis into the meeting workflow.
+   - **Env-flag preflight (before offering council):** check whether `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set (read `~/.claude/settings.json`). If the flag is missing:
+     - **Skip the council offer entirely.** Run the meeting solo.
+     - Name the loss explicitly: *"Agent Teams not enabled — running this meeting without multi-voice deliberation. To enable: run `/we:setup` or add `\"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\"` to the `env` block in `~/.claude/settings.json` and restart your session."*
+   - If flag is present → proceed with the council offer as described above.
+   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team since v2.31.0 — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default — see table below). Feed the synthesis into the meeting workflow.
 3. **Run the meeting workflow** for the type (see the four sections below).
 4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is `docs/plans/<saga>/` for Saga-and-below, `docs/plans/<vision>/PRD.md` for the Vision.
 
@@ -113,7 +117,7 @@ The story meeting is the natural upgrade path for `/we:story` (Solo) when the St
 
 - **Always offer the council** (unless a flag decides) — never infer "complexity".
 - **story hands off by instruction**, not by inline `Skill()` call. Same rule for vision/saga/epic when they hand off to the corresponding Solo skill.
-- **Degrade gracefully** — no council configured, no weside: the council falls back to generic agents (handled by `/we:council`), or the meeting runs solo.
+- **Degrade gracefully** — no council configured, no weside: the council falls back to generic agents (handled by `/we:council`), or the meeting runs solo. If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is missing, skip the council offer and run the meeting solo, naming the loss explicitly (see Step 2 env-flag preflight).
 - A meeting produces **decomposition + a synthesis**, not code and not the artifact itself. The Solo skill at the same altitude writes the artifact; the Solo skill at the next altitude down picks up the decomposition.
 - Implementation is `/we:build`. Meetings never call `/we:build`.
 

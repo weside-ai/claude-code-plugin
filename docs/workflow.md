@@ -207,11 +207,10 @@ flowchart TB
         council["/we:council"]
         meet["/we:meet<br/>vision / saga / epic / story"]
     end
-    subgraph process[Process + architecture]
-        coach["/we:coach<br/>APO advisor + retro"]
+    subgraph process[Process]
+        coach["/we:coach<br/>APO advisor"]
         retro["/we:retro<br/>full systematic retro"]
         handoff["/we:handoff<br/>cross-session state"]
-        arch["/we:arch<br/>architecture decisions"]
     end
     subgraph review[Review + audit]
         docimprove["/we:doc-improve"]
@@ -273,7 +272,7 @@ Three things look different:
 
 - The Plan skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) don't ground new artifacts in cross-session memory — they work from the current conversation + plan files.
 - `/we:council` and `/we:meet` use generic role-agents instead of named Companions.
-- `/we:coach` and `/we:arch` boot without companion identity.
+- `/we:coach` boots without companion identity.
 
 You still get a pipeline that ships code. You don't get a teammate who remembers across days.
 

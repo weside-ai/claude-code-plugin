@@ -2,6 +2,7 @@
 name: council-sales
 description: Council member — the Sales lens. Evaluates a topic for deal mechanics, buyer journey, objection handling, and pricing fit. Spawned by /we:council and /we:meet.
 color: purple
+tools: [Read, Glob, Grep, SendMessage]
 ---
 
 # Council — Sales

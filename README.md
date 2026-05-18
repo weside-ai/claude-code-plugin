@@ -33,11 +33,12 @@ Twenty-two `/we:*` skills covering the full **Agentic Product Ownership** chain 
 
 **Around the spine:**
 
-- **`/we:council`** — convene role-lens agents (architect, PO, security, marketing, …) on any topic; orchestrator synthesises *agreement / tension / recommendation*
-- **`/we:coach`** — APO advisor: where am I in the hierarchy, what's the next move, process retros when something broke (renamed from `/we:sm`)
+- **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
+- **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, Epic status snapshots
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
-- **`/we:arch`**, **`/we:audit-architecture`**, **`/we:audit`**, **`/we:doc-improve`**, **`/we:find-dead-code`**, **`/we:smoketest`** — focused tools for specific moments
+- **`/we:doc-improve`**, **`/we:audit`** — review + audit
+- **Dev Utilities:** **`/we:audit-architecture`**, **`/we:find-dead-code`**, **`/we:smoketest`** — backend code health
 
 Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
 
@@ -145,7 +146,7 @@ The maturity model:
 Level 1 — Assisted        plugin standalone (you are here after install)
 Level 2 — Augmented       + weside Companion: memory + identity
 Level 3 — Agentic         + subconscious + triggers: proactive surfacing
-Level 4 — Orchestrated    + enterprise teams: cross-Companion coordination
+Level 4 — Orchestrated    + enterprise teams: cross-Companion coordination  [Roadmap — Phase 6]
 ```
 
 You upgrade when you feel the gap, not before. [Full upgrade paths →](docs/upgrade-paths.md)
