@@ -205,7 +205,7 @@ Never hardcode tool commands. Detect from project:
 ### No weside Internals
 
 Skills and agents must NOT contain:
-- weside-core file paths (`apps/backend/`, `apps/mobile/`)
+- application-specific file paths (e.g. `apps/backend/`, `apps/mobile/`)
 - Internal ticket numbers (`WA-XXX`)
 - weside-specific patterns (CompanionBeing, RLS, LangGraph internals)
 - Internal URLs or credentials
@@ -231,8 +231,8 @@ All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.p
 # Full skill list
 ls we/skills/*/SKILL.md
 
-# Check for leaked weside references
-grep -ri "WA-\|apps/backend\|weside-core" we/skills/ we/agents/ we/quality/
+# Check for leaked internal references (ticket numbers, app paths, personal names)
+grep -ri "apps/backend\|apps/mobile\|/home/" we/skills/ we/agents/ we/quality/
 ```
 
 ---

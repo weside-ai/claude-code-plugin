@@ -2,6 +2,7 @@
 name: council-scrum-master
 description: Council member — the Scrum Master lens. Evaluates a topic for process soundness — clean breakdown, dependencies, deliverability. Spawned by /we:council and /we:meet.
 color: cyan
+tools: [Read, Glob, Grep, SendMessage]
 ---
 
 # Council — Scrum Master

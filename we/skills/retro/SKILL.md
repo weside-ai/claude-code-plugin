@@ -24,7 +24,7 @@ description: >
 
 **Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once — the retro catches it, an MD-file change in the user repo's `.claude/rules/` or `CLAUDE.md` bans it forever.
 
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the retro report is *voiced* by that Companion (typically Nox) — same engineering substance, richer tone. Standalone (no weside): the skill reasons from its own role definition without persistent identity.
+> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the retro report is *voiced* by that Companion (your active Companion) — same engineering substance, richer tone. Standalone (no weside): the skill reasons from its own role definition without persistent identity.
 
 ---
 
@@ -131,7 +131,7 @@ If `n` or `adjust`: take the new scope.
 
 Run these as parallel tool calls:
 
-- **Transcript:** if no Compact happened, the agent has it in head — skim mentally. After a Compact: `Read /home/fbiebl/.claude/projects/<repo-id>/<session-id>.jsonl` (last N turns). Scope: this PR's life on the current branch, not the whole day. Apply privacy guard.
+- **Transcript:** if no Compact happened, the agent has it in head — skim mentally. After a Compact: `Read ~/.claude/projects/<repo-id>/<session-id>.jsonl` (last N turns). Scope: this PR's life on the current branch, not the whole day. Apply privacy guard.
 - **PR overview:** `gh pr view <N> --json number,state,mergedAt,title,headRefName,baseRefName,reviews,comments,statusCheckRollup,commits`
 - **PR checks:** `gh pr checks <N>` — see which check runs flipped red across cycles
 - **Failed check logs (only red ones, tail):** for each failed check run, `gh run view <run-id> --log` and tail to the failure block (don't pull full logs)
@@ -182,8 +182,8 @@ RETRO — PR #1998 (feat/apo-refactor-phase-4, merged 2026-05-17)
 
 WINS — keep doing
   · [memo] Cards animation cascade worked first try — CSS-only, no JS observer
-  · [memo] Single-commit batch of fixes (boundary tone + layout + hero) reused
-    Foxy's existing "consolidate phases + PRs" preference
+  · [memo] Single-commit batch of fixes (boundary tone + layout + hero) applied
+    "consolidate phases + PRs" preference from existing session rules
 
 PAIN — what cost time this cycle
   · 30+ min: chased IntersectionObserver, then layout overflow, before finding
@@ -197,7 +197,7 @@ PAIN — what cost time this cycle
        └ root: markdownlint MD028 not in pre-push hook
 
 PROPOSALS — concrete file changes
-  · [P1 / 5min] NEW  weside-core/.claude/rules/quality/html-script-validation.md
+  · [P1 / 5min] NEW  .claude/rules/quality/html-script-validation.md
                 ───  "When editing JS inside HTML <script>, node --check the whole script"
                 Default placement: user repo (project-specific).
                 Diff preview:
@@ -212,14 +212,14 @@ PROPOSALS — concrete file changes
                   + (even pre-existing) will mask your edit's intent.
                 Override placement? [y/n/edit-path/skip-for-later]
 
-  · [P2 / 2min] EDIT weside-core/.claude/rules/workflows/ci-workflow.md
+  · [P2 / 2min] EDIT .claude/rules/workflows/ci-workflow.md
                 ───  Add markdownlint-cli2 to local pre-push checklist
                 Diff:
                   ## Local Tests (Run Before Push)
                   + - markdownlint-cli2 (catches MD025, MD028 before CI)
                 [y/n/edit-path/skip-for-later]
 
-  · [P3 / 30s ] EDIT weside-core/CLAUDE.md
+  · [P3 / 30s ] EDIT CLAUDE.md
                 ───  one-liner under "Critical Rules": "lint MD files locally"
                 [y/n/edit-path/skip-for-later]
 
@@ -233,7 +233,7 @@ SUMMARY
   · 3 proposals, ~7min of edits total if all accepted
   · Estimated CI minutes saved next cycle: 8-12 min
   · Retro log will be written to:
-       weside-core/docs/retros/2026-05-17-tour-quote-bug.md
+       docs/retros/2026-05-17-tour-quote-bug.md
 ```
 
 ### Step R6 — Per-item gate
@@ -254,11 +254,11 @@ For each proposal in order, present and wait. Accepted tokens:
 For each `y`'d proposal:
 
 - **In the user repo:**
-  - If repo is configured for direct-commit (plugin / lc-startup): Edit/Write on `main` directly.
-  - Otherwise (default, including `weside-core`): create branch `retro/YYYY-MM-DD-<short-topic>`, apply Edit/Write, open PR via `gh pr create` with the full retro report as PR body. User merges via normal flow.
+  - If repo is configured for direct-commit (e.g. `plugin` repos with standing auth): Edit/Write on `main` directly.
+  - Otherwise (default): create branch `retro/YYYY-MM-DD-<short-topic>`, apply Edit/Write, open PR via `gh pr create` with the full retro report as PR body. User merges via normal flow.
 - **In the plugin repo:** always PR (plugin is public).
 
-After each apply, confirm in one short line: `applied · weside-core/.claude/rules/quality/html-script-validation.md (NEW, 12 lines)`.
+After each apply, confirm in one short line: `applied · .claude/rules/quality/html-script-validation.md (NEW, 12 lines)`.
 
 ### Step R8 — Write the retro log
 
@@ -281,8 +281,8 @@ proposals_accepted: 2
 proposals_deferred: 1
 proposals_rejected: 0
 applied_files:
-  - weside-core/.claude/rules/quality/html-script-validation.md
-  - weside-core/.claude/rules/workflows/ci-workflow.md
+  - .claude/rules/quality/html-script-validation.md
+  - .claude/rules/workflows/ci-workflow.md
 ---
 
 # Retro — PR #1998 (tour animation pass)
@@ -300,7 +300,7 @@ If `docs/retros/` does not exist in the user repo, create it on first run.
 
 One-line summary:
 
-> *Retro done. 2 of 3 proposals applied → 1 PR open (retro/2026-05-17-tour-quote-bug, weside-core#NN). 1 deferred. Log: docs/retros/2026-05-17-tour-quote-bug.md. Run `/we:retro --scan 10` next time to surface patterns.*
+> *Retro done. 2 of 3 proposals applied → 1 PR open (retro/2026-05-17-tour-quote-bug, #NN). 1 deferred. Log: docs/retros/2026-05-17-tour-quote-bug.md. Run `/we:retro --scan 10` next time to surface patterns.*
 
 If a PR was opened, print its URL.
 
@@ -314,8 +314,7 @@ If a PR was opened, print its URL.
 - **Don't open the PR before applying the file changes.** Branch → apply → PR — in that order, so the PR body can reference the actual diff.
 - **Don't auto-create tickets.** Skill can scaffold a Jira/GitHub issue stub only on explicit user request (`--ticket` flag, off by default).
 - **Don't analyse cross-repo merges in one pass.** One PR per invocation; multi-PR retrospection is a future enhancement.
-- **Don't push to main of `weside-core` directly** even with standing auth elsewhere — `weside-core` changes always go through PR (rules and CLAUDE.md edits need human review).
-- **Don't replace Coach RETRO mode.** Coach RETRO is reactive + single-pain; this skill is proactive + comprehensive. Both stay.
+- **Don't push to protected repos directly** — repos without standing direct-commit auth always go through PR (rules and CLAUDE.md edits need human review).
 
 ---
 
@@ -359,7 +358,7 @@ Coach never auto-fires retro. The `[y/n]` is always present.
 **With Companion (weside MCP + configured Companion):**
 
 - Boot Protocol Step 5 materializes the Companion via `Skill(skill="we:materialize")`
-- Report is voiced *by* the Companion (e.g. Nox) — same engineering substance, richer tone
+- Report is voiced *by* the Companion (your active Companion) — same engineering substance, richer tone
 - Optional: skill can save a `memory` after each run noting the patterns the Companion saw — but only if explicitly enabled in user config (off by default, privacy)
 
 The engineering substance is identical in both modes. The Companion makes the experience continuous; standalone keeps the value fully accessible to teams without weside.

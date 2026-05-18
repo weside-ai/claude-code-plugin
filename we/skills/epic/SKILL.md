@@ -65,7 +65,7 @@ Trigger: `/we:epic {EPIC-KEY-or-path}` where an Epic already exists.
 
 ### Step 1: Load Epic
 
-- If the argument is a ticketing-tool key (e.g. `WA-1086`), fetch the Epic from the ticketing tool (see *Ticketing Integration* below for tool priority).
+- If the argument is a ticketing-tool key (e.g. `PROJ-42`), fetch the Epic from the ticketing tool (see *Ticketing Integration* below for tool priority).
 - If the argument is a path or saga/epic name, read `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`.
 - If both exist, prefer the Markdown plan as the source of truth; the ticket is an index.
 

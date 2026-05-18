@@ -18,7 +18,7 @@ description: >
 ```
 /we:sideload <repo-name-or-path>
 /we:sideload .                     # current repo
-/we:sideload weside-core           # sibling repo by basename
+/we:sideload backend-repo          # sibling repo by basename
 /we:sideload ../another-repo        # explicit path
 /we:sideload <repo> --role=architect   # filter need-to-know docs by role
 /we:sideload <repo> --full              # ignore role filter, load everything

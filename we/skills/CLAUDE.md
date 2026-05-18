@@ -72,7 +72,7 @@ A meeting (`/we:meet vision|saga|epic|story`) wraps a council in a structured wo
 
 Live councils require Claude Code's experimental Agent Teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `~/.claude/settings.json`'s `env` block). `/we:setup` Step 5.0 sets this on request. The pre-v2.31.0 fan-out path — parallel sub-agents writing isolated memos — was removed; there is no fallback. If the flag is missing, the skill aborts with a remediation hint.
 
-The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the Phase-6 form of `get_council` (team-scoped memory + workspace_id) will close the loop automatically. Design rationale: WA-718 CONCEPT §13.7 Step 2 (in the weside-core repo).
+The council is a **cycle**, not a one-shot read: load → deliberate → **write-back**. A Companion that sat in a council *comes out changed* — what the council decided is part of what they know next time. Today, the write-back path is manual (the user copies the synthesis into a memory or doc); the Phase-6 form of `get_council` (team-scoped memory + workspace_id) will close the loop automatically. Design rationale: see the associated team repo's plan for the Phase-6 backend work.
 
 ## Identity loading — two paths
 
@@ -115,6 +115,6 @@ The bridge file declares **which Companions are in this repo's crew, in which ro
 - Fat schema → role/color/membership + identity (the pre-MCP path, still works).
 - Either way the bridge stays **gitignored** — Companion IDs and crew structure are private; the bootstrap script appends `.weside/council.json` to `.gitignore`.
 
-**Why workspace_id is null in v1:** the bridge's selector role (which team in weside is this repo serving?) is gated on Phase 6 (team/workspace model). Until then, every bridge is implicitly user-scoped. CONCEPT.md §13.7 Step 2b in `weside-core` covers what changes when Phase 6 lands.
+**Why workspace_id is null in v1:** the bridge's selector role (which team in weside is this repo serving?) is gated on Phase 6 (team/workspace model). Until then, every bridge is implicitly user-scoped. Phase-6 backend work will cover what changes when Phase 6 lands.
 
 **Refresh:** thin bridge changes only when the crew composition changes (new member, role swap, color change). Identity changes are picked up automatically via MCP on the next `/we:council`; no file edit needed.

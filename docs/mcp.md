@@ -69,7 +69,7 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `search_memories(query, memory_type?, limit?)` | Semantic search across the Companion's memory |
 | `save_memory(title, content, type, tags?)` | Save a new memory of the given type (fact, journal, highlight, experience, plan, todo) |
 | `list_memories(memory_type?, limit?, autoload?)` | Browse with filters, sorted by date |
-| `store_conversations(items)` | Batch-store conversation turns as memories (WA-695) |
+| `store_conversations(items)` | Batch-store conversation turns as memories |
 
 ### Goals
 
@@ -114,7 +114,7 @@ The plugin's skills detect MCP absence and fall through cleanly. Specifically:
 
 - **`/we:council`** — uses the nine shipped `council-<role>` generic agents. Same mechanic, generic voices.
 - **`/we:meet`** — same as above, structured workflow with generic voices.
-- **`/we:coach`**, **`/we:arch`** — boot without Companion identity; reason from rules + skill landscape.
+- **`/we:coach`** — boots without Companion identity; reasons from rules + skill landscape.
 - **`/we:setup`**, **`/we:onboarding`** — write `.weside/` files with `Companion ID: null`; the bridge is filled with structure but no live linkage.
 - **`/we:sideload`** — degrades to legacy mode (reads CLAUDE.md + always-loaded rules; skips vault step).
 - **`/we:story`**, **`/we:build`** — pipeline runs unchanged. No memory grounding, but full pipeline.
@@ -170,7 +170,7 @@ get_council(
 
 **Used by:** `/we:council`, `/we:meet`. The plugin pairs the returned identities with the bridge file's role/color mapping (see [companion-framework.md](concepts/companion-framework.md)).
 
-**Privacy caveat for v1:** the `identity_prompt` is the MCP-delivery composed prompt (~5K tokens) — it may include Compass / Snapshot / personal memory layers. Safe for the user's own crew in their own Claude Code session. **Not safe** for cross-user/cross-org exposure without the Phase-6 team-scoping work (tracked as WA-1087 in the weside backend).
+**Privacy caveat for v1:** the `identity_prompt` is the MCP-delivery composed prompt (~5K tokens) — it may include Compass / Snapshot / personal memory layers. Safe for the user's own crew in their own Claude Code session. **Not safe** for cross-user/cross-org exposure without the Phase-6 team-scoping work (on the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4----orchestrated-roadmap--phase-6)).
 
 ---
 

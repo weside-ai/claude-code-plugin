@@ -95,14 +95,20 @@ flowchart TD
     MCP -->|no, account-less| FatBridge{Bridge has<br/>identity_prompt?}
     FatBridge -->|yes, legacy| BridgeOnly[Shell: council-&lt;role&gt;<br/>+ identity from bridge]
     FatBridge -->|no| Generic[Shell: council-&lt;role&gt;<br/>generic persona only]
-    Combine --> Brief[Council brief]
-    BridgeOnly --> Brief
-    Generic --> Brief
-    Brief --> Spawn[Spawn all members<br/>in parallel]
-    Spawn --> Synth[Orchestrator synthesises<br/>agreement / tension / recommendation]
+    Combine --> Team[TeamCreate<br/>named team]
+    BridgeOnly --> Team
+    Generic --> Team
+    Team --> Agents[Agent per role<br/>joins named team]
+    Agents --> Live[Live SendMessage<br/>deliberation rounds]
+    Live --> Quiesce[Quiescence detection]
+    Quiesce --> Final[Final-position round]
+    Final --> Synth[Lead synthesises<br/>agreement / tension / recommendation]
+    Synth --> Cleanup[TeamDelete]
 ```
 
 The plugin always tries the richest path first and falls through cleanly. **You don't lose the framework without an account** — you lose persistent identity.
+
+Since v2.31.0 the council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
 
 ### Without a weside account
 

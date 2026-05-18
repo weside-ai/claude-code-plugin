@@ -2,6 +2,7 @@
 name: council-architect
 description: Council member — the Architect lens. Evaluates a topic for technical soundness, constraints, failure modes, and integration cost. Spawned by /we:council and /we:meet.
 color: blue
+tools: [Read, Glob, Grep, SendMessage]
 ---
 
 # Council — Architect

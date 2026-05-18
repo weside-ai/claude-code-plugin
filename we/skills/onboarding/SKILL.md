@@ -102,7 +102,7 @@ vault: <vault-name>
 
 ## Cross-repo relations
 
-<Which sagas live here as master? Which as follower? Example: "Master for Metering Saga — weside-core + weside-landing are followers.">
+<Which sagas live here as master? Which as follower? Example: "Master for Billing Saga — backend-repo + frontend-repo are followers.">
 
 ## Notes
 
