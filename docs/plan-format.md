@@ -187,8 +187,92 @@ parallel_groups: []
 
 ---
 
+## Concept Doc Format — Saga + Epic Mirror Block
+
+The Saga (`docs/plans/<saga>/SAGA.md`) and Epic (`docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`) docs are not part of the Build contract above — `/we:build` never reads them. They are written and updated by `/we:saga` and `/we:epic`, and they carry an auto-generated *mirror block* that reflects child items from the ticketing tool. The mirror is the contract between the Plan skill (writer + consumer of its own block) and the user (owner of all surrounding prose).
+
+### Frontmatter
+
+```yaml
+---
+saga: <saga-slug>             # Saga only
+epic: <epic-slug>             # Epic only
+vision: <parent-vision-slug>  # Saga only, optional
+saga: <parent-saga-slug>      # Epic only
+ticket: <TICKETING-KEY>       # Epic only, optional
+created: YYYY-MM-DD           # both
+updated: YYYY-MM-DD           # both — refreshed by Mirror-refresh + Refine
+status: <enum>                # both
+---
+```
+
+Status enums:
+- Saga: `draft | active | landed | abandoned`
+- Epic: `draft | in-progress | selected | backlog | done`
+
+### Mirror block — marker convention
+
+Both docs include a section (`## Sub-Epics` in SAGA.md, `## Stories` in CONCEPT.md) that contains a marker-enclosed table:
+
+```markdown
+## Sub-Epics
+
+<!-- mirror:start (auto-generated; do not edit by hand — run /we:saga to refresh) -->
+
+_Mirror of child Epics in the ticketing tool, refreshed YYYY-MM-DD._
+
+| Key | Title | Status | Last activity | Notes |
+|---|---|---|---|---|
+| <KEY> | <Title> | Done | YYYY-MM-DD | <free-form> |
+
+<!-- mirror:end -->
+```
+
+Rules:
+
+| Rule | Why |
+|---|---|
+| Markers `<!-- mirror:start ... -->` / `<!-- mirror:end -->` are MANDATORY | Lets the skill replace the block without scanning prose |
+| Everything between markers is owned by the skill | Overwritten on every Mirror-refresh and every Refine |
+| Everything outside markers is owned by the user | Never touched by the skill |
+| Saga columns: `Key, Title, Status, Last activity, Notes` | Five columns; Notes is free-form (blockers, links) |
+| Epic columns: `Key, Title, Status, Plan, Last activity, Notes` | Six columns — `Plan` is `✓` if `docs/plans/{KEY}-plan.md` exists, `—` otherwise |
+| Status vocabulary normalised | Saga: Done / Active / Backlog / Blocked. Epic: Done / Active / Refined / Backlog / Blocked |
+| Refresh updates only the mirror block, `updated:` field, and Updates Log | Lightweight, no plan-mode, no user prose touched |
+
+### Updates Log
+
+Both docs carry an `## Updates Log` section appended to (never rewritten by) the skill:
+
+```markdown
+## Updates Log
+
+- 2026-05-14 — created
+- 2026-05-22 — mirror refresh (10 child epics; +1 added, −0 removed, !2 status-changed)
+- 2026-05-27 — refined via /we:saga
+```
+
+### Drift detection (read-only, run on every Status)
+
+The Status mode compares the mirror block in the doc with the live ticketing fetch and surfaces:
+
+- Children in ticketing not in the mirror (`+`)
+- Mirror entries that no longer exist in ticketing (`−`)
+- Status mismatches between mirror and ticketing (`!`)
+- Epic-specific: children marked Active in ticketing without a refined plan on disk (`⚠`)
+- Free-form notes the skill picked up from the prose (`•`) — e.g. a hypothesis marked falsified while frontmatter still reads draft, a sequencing phase referenced as next that is already Done
+
+### Concept Doc References
+
+- [`we/skills/saga/SKILL.md`](../we/skills/saga/SKILL.md) — Saga writer + consumer
+- [`we/skills/epic/SKILL.md`](../we/skills/epic/SKILL.md) — Epic writer + consumer
+- [`we/skills/coach/SKILL.md`](../we/skills/coach/SKILL.md) — surfaces a one-line Plan-status from the mirror
+
+---
+
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-05-18 | Initial spec extracted from `/we:story` + `/we:build` implementation |
+| 1.1 | 2026-05-28 | Concept Doc Format section added — Saga + Epic mirror block contract (v2.34.0) |
