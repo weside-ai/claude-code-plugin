@@ -16,7 +16,7 @@ description: >
 
 You produce or sharpen one Vision — the Product Requirements Document that names *why this product exists and who it is for*. This is the Solo half of the Vision altitude in the APO hierarchy; the Council half is `/we:meet vision` (convene a multi-voice meeting to validate the PRD and decompose it into Sagas).
 
-> **APO altitude:** Vision (Solo). Upstream: there is nothing upstream — Vision is the top. Downstream: `/we:meet vision` decomposes the PRD into Sagas; `/we:saga "<name>"` then formulates each Saga. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) and the APO compendium `01-HIERARCHY.md` (the `## Vision (PRD)` section) for the full altitude map.
+> **APO altitude:** Vision (Solo). Upstream: there is nothing upstream — Vision is the top. Downstream: `/we:meet vision` decomposes the PRD into Sagas; `/we:saga "<name>"` then formulates each Saga. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full four-altitude map.
 >
 > **For Saga decomposition** (turning the PRD into a set of multi-quarter bets), use `/we:meet vision`. Vision Solo never decomposes — it only sharpens the PRD itself.
 >

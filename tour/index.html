@@ -1187,7 +1187,7 @@
       </div>
       <div class="alt-card vision">
         <div class="alt-altitude">VISION</div>
-        <div class="alt-horizon">~ multi-year</div>
+        <div class="alt-horizon">reason a product exists</div>
         <div class="alt-name">PRD</div>
         <code class="alt-skill">/we:vision · /we:meet vision</code>
         <div class="alt-output">PRD.md · candidate Sagas</div>
@@ -1195,23 +1195,23 @@
       </div>
       <div class="alt-card saga">
         <div class="alt-altitude">SAGA</div>
-        <div class="alt-horizon">~ multi-quarter</div>
+        <div class="alt-horizon">multi-bet theme</div>
         <div class="alt-name">Theme</div>
         <code class="alt-skill">/we:saga · /we:meet saga</code>
-        <div class="alt-output">SAGA.md · Epic backlog · sequencing</div>
+        <div class="alt-output">SAGA.md · Epic mirror · sequencing</div>
         <div class="alt-voices">4 voices · domain-flavoured</div>
       </div>
       <div class="alt-card epic">
         <div class="alt-altitude">EPIC</div>
-        <div class="alt-horizon">~ a quarter</div>
+        <div class="alt-horizon">bounded initiative</div>
         <div class="alt-name">Initiative</div>
         <code class="alt-skill">/we:epic · /we:meet epic</code>
-        <div class="alt-output">CONCEPT.md · Story list · acceptance shape</div>
+        <div class="alt-output">CONCEPT.md · Story mirror · acceptance shape</div>
         <div class="alt-voices">3 voices · focused</div>
       </div>
       <div class="alt-card story">
         <div class="alt-altitude">STORY</div>
-        <div class="alt-horizon">~ days to weeks</div>
+        <div class="alt-horizon">one concrete change</div>
         <div class="alt-name">Feature slice</div>
         <code class="alt-skill">/we:story · /we:meet story</code>
         <div class="alt-output">Ticket + plan with AC + phases</div>
@@ -1263,7 +1263,7 @@
   <section id="vision">
     <div class="kicker">Station 03 · Vision · PRD altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:vision</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — why does this product exist?</h2>
-    <p class="lede">The Vision altitude is where you say what this product is, who it's for, and which bets you will <em>not</em> make. Solo (<code>/we:vision</code>) sharpens the PRD; Meet (<code>/we:meet vision</code>) convenes a Council to validate the PRD and decompose it into Sagas. The horizon is multi-year. The output isn't code — it's <em>clarity</em>, captured as <code>docs/plans/&lt;vision&gt;/PRD.md</code>.</p>
+    <p class="lede">The Vision altitude is where you say what this product is, who it's for, and which bets you will <em>not</em> make. Solo (<code>/we:vision</code>) sharpens the PRD; Meet (<code>/we:meet vision</code>) convenes a Council to validate the PRD and decompose it into Sagas. The output isn't code — it's <em>clarity</em>, captured as <code>docs/plans/&lt;vision&gt;/PRD.md</code>.</p>
 
     <div class="meeting-grid">
       <div class="meeting-frame">
@@ -1271,7 +1271,7 @@
         <dl class="meeting-meta">
           <dt>Solo</dt><dd><code>/we:vision</code> — refine the PRD</dd>
           <dt>Meet</dt><dd><code>/we:meet vision</code> — Council → Sagas</dd>
-          <dt>Altitude</dt><dd>PRD — multi-year</dd>
+          <dt>Altitude</dt><dd>PRD — reason a product exists</dd>
           <dt>Artefact</dt><dd>PRD.md · candidate Sagas · priorities</dd>
           <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;vision&gt;/PRD.md</code></dd>
         </dl>
@@ -1305,15 +1305,15 @@
   <section id="saga">
     <div class="kicker">Station 04 · Saga · Theme altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:saga</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet saga</code> — the year-shaping bet.</h2>
-    <p class="lede">A Saga is a multi-quarter bet inside the Vision — something big enough not to fit in one quarter, small enough to name the win. „Make the platform multi-tenant." „Launch the marketplace." Solo (<code>/we:saga</code>) tightens the wording so creep has no foothold; Meet (<code>/we:meet saga</code>) validates the bet against the PRD and decomposes it into Epics.</p>
+    <p class="lede">A Saga is a multi-bet theme inside the Vision — something big enough to need decomposition, small enough to name the win. „Make the platform multi-tenant." „Launch the marketplace." Solo (<code>/we:saga</code>) runs Status by default (mirror child Epics from ticketing, snapshot + drift + risk-driven next move) and tightens wording on explicit refine intent; Meet (<code>/we:meet saga</code>) validates the bet against the PRD and decomposes it into Epics.</p>
 
     <div class="meeting-grid">
       <div class="meeting-frame">
-        <div class="question">Where do we want to be in twelve months on this bet? Which Epics break it down, in what sequence?</div>
+        <div class="question">What bet are we pointing energy at? Which Epics break it down, in what sequence? — and where do we stand right now?</div>
         <dl class="meeting-meta">
           <dt>Solo</dt><dd><code>/we:saga</code> — refine the SAGA.md</dd>
           <dt>Meet</dt><dd><code>/we:meet saga</code> — Council → Epics</dd>
-          <dt>Altitude</dt><dd>Theme — multi-quarter (2-4)</dd>
+          <dt>Altitude</dt><dd>Theme — multi-bet, no calendar cap</dd>
           <dt>Artefact</dt><dd>SAGA.md · Epic backlog · rough sequencing</dd>
           <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;saga&gt;/SAGA.md</code></dd>
         </dl>
@@ -1333,7 +1333,7 @@
       <strong>Use when:</strong>
       <ul>
         <li>The Vision is set and you're choosing where to point energy for the next year</li>
-        <li>A quarterly planning rhythm just landed and you need to pick the next bet</li>
+        <li>A planning rhythm just landed and you need to pick the next bet</li>
         <li>Multiple Epics are in flight that secretly belong to different themes — extract the Sagas</li>
         <li>An Epic keeps spawning more Epics — there's a hidden Saga underneath</li>
       </ul>
@@ -1345,17 +1345,17 @@
   <!-- ============ 5. EPIC — /we:epic + /we:meet epic ============ -->
   <section id="epic">
     <div class="kicker">Station 05 · Epic · Initiative altitude</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:epic</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet epic</code> — what we ship this quarter.</h2>
-    <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> into Epics — bounded, dated, with named Stories. „Ledger Foundation." „Stripe Connect Onboarding." „Voice Pipeline Migration." Solo (<code>/we:epic</code>) is where the design thinking lives; Meet (<code>/we:meet epic</code>) decomposes the Epic into Stories with acceptance shape.</p>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:epic</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet epic</code> — what we ship next.</h2>
+    <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> into Epics — bounded initiatives with named Stories. „Ledger Foundation." „Stripe Connect Onboarding." „Voice Pipeline Migration." Solo (<code>/we:epic</code>) runs Status by default (mirror child Stories from ticketing, flag refined-vs-not-refined, drift + next-move) and shifts to Refine on explicit intent; Meet (<code>/we:meet epic</code>) decomposes the Epic into Stories with acceptance shape.</p>
 
     <div class="meeting-grid">
       <div class="meeting-frame">
-        <div class="question">What's the concrete thing we will deliver this quarter? Which Stories does it break into?</div>
+        <div class="question">What concrete thing do we ship next? Which Stories does it break into — and where do we stand right now?</div>
         <dl class="meeting-meta">
-          <dt>Solo</dt><dd><code>/we:epic</code> — refine the Epic plan</dd>
+          <dt>Solo</dt><dd><code>/we:epic</code> — Status (default) · Refine · Create · Mirror-refresh</dd>
           <dt>Meet</dt><dd><code>/we:meet epic</code> — Council → Stories</dd>
-          <dt>Altitude</dt><dd>Initiative — quarter horizon</dd>
-          <dt>Artefact</dt><dd>CONCEPT.md · Story list · acceptance shape</dd>
+          <dt>Altitude</dt><dd>Initiative — bounded slice, no calendar cap</dd>
+          <dt>Artefact</dt><dd>CONCEPT.md · Story mirror · acceptance shape</dd>
           <dt>Persist</dt><dd>Markdown <em>or</em> ticketing-tool Epic (pick per Epic)</dd>
         </dl>
       </div>
@@ -1496,7 +1496,7 @@
       <div class="sm-step">
         <div class="sm-step-num">A · ADVISOR</div>
         <h4>„where am I, what's next?"</h4>
-        <p>Reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Mid-Epic: renders progress ("6 Stories — 2 shipped, 1 in-build, 3 not yet refined") so multi-Story Epics stay legible across a quarter. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
+        <p>Reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Mid-Saga or mid-Epic: surfaces a one-line Plan-status ("Epic: Ledger — 6 Stories, 2 shipped, 1 active, 3 refined") and points you to <code>/we:saga</code> or <code>/we:epic</code> for the full Status dashboard. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
       </div>
       <div class="sm-arrow">→</div>
       <div class="sm-step">

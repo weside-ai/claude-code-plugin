@@ -1,84 +1,242 @@
 ---
 name: saga
 description: >
-  Saga (Solo) — Product Owner skill at the Theme altitude. Produces or
-  sharpens one Saga — a multi-quarter bet inside the product Vision.
-  Output is a tighter `docs/plans/<saga>/SAGA.md`. Solo work here is
-  mostly clarity and honesty — Sagas die from creep, and creep starts in
-  fuzzy wording. Use when the user says "/we:saga", "saga", "theme",
-  "year goal", "twelve-month bet", "refine saga", "write a saga". For
-  decomposing the Saga into Epics, use `/we:meet saga` (Council) — this
-  Solo skill never decomposes inline.
+  Saga (Solo) — Product Owner skill at the Theme altitude. Default mode is
+  Status: read the current SAGA.md, mirror the child Epics from the
+  ticketing tool, render a status snapshot + drift detection + a
+  risk-driven next-move recommendation. Refine mode (explicit) sharpens
+  the SAGA.md itself via plan-mode. Create mode handles a new slug.
+  Mirror-refresh is a lightweight write that touches only the mirror
+  block + updates-log. Use when the user says "/we:saga", "saga",
+  "theme", "where are we on", "what's the status of", "refine saga",
+  "new saga". For decomposing a Saga into Epics, use `/we:meet saga`
+  first (Council brainstorm), then return here to lock the SAGA doc.
 ---
 
 
 # Saga (Solo) — Product Owner at the Theme altitude
 
-You produce or sharpen one Saga — a multi-quarter bet inside the product Vision. This is the Solo half of the Saga altitude in the APO hierarchy; the Council half is `/we:meet saga` (convenes PO + Architect + a rotating domain voice, decomposes the Saga into Epics).
+You hold the Saga at the Theme altitude — a multi-bet inside the product Vision. This skill is the Solo half; the Council half is `/we:meet saga`. The two interleave: a Council to decompose or to re-cut, then Solo to sharpen the Saga doc itself.
 
-> **APO altitude:** Saga (Solo). Upstream: `/we:meet vision` decomposes a PRD into Sagas that land here. Downstream: `/we:meet saga` decomposes one Saga into Epics, then `/we:epic "<name>"` per Epic. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude map, and the APO compendium `01-HIERARCHY.md` for the methodology source of truth.
+> **APO altitude:** Saga (Solo). Upstream: `/we:meet vision` decomposes a PRD into Sagas that land here. Downstream: `/we:meet saga` decomposes a Saga into Epics; `/we:epic "<name>"` formulates each Epic. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the four-altitude map.
 >
-> **For Epic decomposition, use `/we:meet saga`** (Council). This Solo skill formulates the Saga itself; it never breaks it into Epics inline.
+> **Artifact:** `docs/plans/<saga>/SAGA.md`. The Saga itself is always Markdown — ticketing starts at Epic. The skill *mirrors* the child Epics from the ticketing tool into a clearly-marked block inside `SAGA.md`; that mirror is convenience, not state. The Markdown remains the source of truth.
 >
-> **Artifact location:** a Saga is always a Markdown file at `docs/plans/<saga>/SAGA.md`. It is never a Jira artifact. The ticketing-agnostic note in the APO compendium is explicit on this: ticketing starts at Epic.
->
-> **Saga vs. Vision:** a Saga has a beginning and an end. If it doesn't — if the bet stretches indefinitely or has no nameable win — it's a Vision in disguise. Hand off to `/we:vision` instead.
+> **Saga vs. Vision:** a Saga has a beginning and an end. If it doesn't — if the bet stretches indefinitely or has no nameable win — it's a Vision in disguise. The skill flags this as a soft warning during Refine, never as a hard block.
 
 ---
 
 ## Prerequisites
 
-**Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first. Do NOT block — `/we:saga` proceeds without it.
-
-**Load the parent PRD if one exists** (`docs/plans/<vision>/PRD.md`). A Saga inherits its reason-to-exist from the Vision; without the PRD on hand it's easy to draft an orphan bet that doesn't anchor to the product. If no PRD exists, suggest `/we:vision` first — but proceeding is allowed (orphan Saga, flagged in the doc).
-
----
-
-## Your Output
-
-| What | Where | Detail Level |
-|---|---|---|
-| Saga document | `docs/plans/<saga>/SAGA.md` | The bet, success criteria, bounded scope, what success eliminates |
-
-**One artifact. One file. Tightening over expanding.**
+- `.weside/` configured (run `/we:setup` once per project if missing — does not block this skill).
+- A ticketing tool is detected (priority: weside MCP → Atlassian MCP → `gh` CLI). The Saga doc itself never lives in the ticketing tool, but its child Epics do, and the Mirror block reads them. If none is detected, the skill falls back to scanning `docs/plans/<saga>/05-epics/*/CONCEPT.md` for child status and tells the user.
+- Parent PRD (`docs/plans/<vision>/PRD.md`) is loaded if it exists. A Saga inherits its reason-to-exist from the Vision; without it, the Saga is flagged as an orphan in the doc.
 
 ---
 
-## The Saga Frame
+## Smart-Mode resolution — pick a mode without asking the user for parameters
+
+The skill decides what to do from the argument + the repo state. The user does not memorise flags.
+
+### Step 1 — resolve the target Saga
+
+Try in order, stop on first hit:
+
+1. **Explicit argument** — a path, a slug, or a ticket key. Use it.
+2. **Current branch name** contains a ticket key or a Saga slug. Use it.
+3. **PWD is inside** `docs/plans/<saga>/...`. Use that Saga.
+4. **Most recent `status: active|draft`** SAGA.md in `docs/plans/`. Use it.
+5. **Nothing matched.** List the Sagas under `docs/plans/` with their status and ask: *"Which Saga? [1/2/3/…]"*. One question, not four.
+
+### Step 2 — resolve the intent
+
+Read the argument and the user's prompt around it for intent words:
+
+| Signal | Mode |
+|---|---|
+| nothing, or just a target | **Status** (default) |
+| "refine" / "update" / "sharpen" / "tighten" / "nochmal" | **Refine** |
+| "new" / "neu" / "start" + a slug that does not exist yet | **Create** |
+| "refresh" / "sync" / "mirror" | **Mirror-refresh** |
+| ambiguous between two of the above | ask one question |
+
+Status is the default for a reason — it is the most common ask ("where are we?"), it is read-only, and it surfaces drift that the user often did not know to ask about. Refine is the heavier path; the user opts into it explicitly or accepts the Status-mode footer offer.
+
+---
+
+## MODE A — Status (default, read-only)
+
+The 90%-case. The user wants to know where the Saga stands, what is in flight, what is drifting, and what to do next.
+
+### Step A1 — load
+
+- Read `docs/plans/<saga>/SAGA.md` completely.
+- Read the parent PRD if present.
+- Fetch the child Epics from the ticketing tool, filtered to this Saga's child set (typically via "Epic Link" / "Parent" / project label — the skill knows the conventions of the configured tool). Capture for each: key, title, status, last activity timestamp, blocker notes if any.
+- If no ticketing tool: scan `docs/plans/<saga>/05-epics/*/CONCEPT.md` frontmatter for status and `updated`.
+
+### Step A2 — render the snapshot
+
+Output template (adapt to the Companion's voice if one is materialised — strict structure in the middle, warmth in the wrapper):
+
+```text
+Saga: <Saga Name> (<status>, started <YYYY-MM-DD>)
+docs/plans/<saga>/SAGA.md
+
+Sub-Epics (<N> total):
+  Done (<n>):     <KEY> <Title>, <KEY> <Title>, …
+  Active (<n>):   <KEY> <Title>, …
+  Backlog (<n>):  <KEY> <Title> (<short blocker note>), …
+  Blocked (<n>):  <KEY> <Title> — <blocker>
+
+Drift since last Mirror refresh (<YYYY-MM-DD>):
+  + <N> sub-epic(s) in ticketing not in SAGA.md mirror
+  - <N> mirror entries that no longer exist in ticketing
+  ! <N> stale-status entries (mirror says X, ticketing says Y)
+  • <free-form drift notes the skill noticed — e.g. a hypothesis in the doc text marked as falsified while the frontmatter still reads draft>
+
+Risk-driven next move:
+  <one Epic, one sentence why>. <one sentence what unblocks downstream / what the cost of not doing it is>.
+
+What now?
+  [r] refresh the Mirror block + updates-log (lightweight, no plan-mode)
+  [f] full Refine of SAGA.md (plan-mode, prose changes welcome)
+  [m] convene `/we:meet saga` to re-decompose (heavy — only if structural drift)
+  [q] done
+```
+
+### Step A3 — act on the choice
+
+- `r` → run **Mode D (Mirror-refresh)** inline.
+- `f` → hand off to **Mode B (Refine)**.
+- `m` → print *"To re-decompose this Saga into Epics, run `/we:meet saga`. I'll be here when you want to lock the SAGA doc afterwards."* and stop.
+- `q` → stop.
+
+Status never writes to the SAGA.md itself.
+
+---
+
+## MODE B — Refine (explicit)
+
+Triggered by intent words or by accepting `[f]` from a Status snapshot.
+
+### Step B1 — load + walk the four frame questions
+
+Same load step as A1. Walk the four frame questions in conversation:
+
+1. **The bet** — one sentence. Has it drifted from what was originally agreed?
+2. **Success criteria** — externally verifiable. Has the list grown into "and also…"?
+3. **Bounded scope** — what is IN, what is explicitly OUT. Missing OUTs are the silent scope-expanders.
+4. **What success eliminates** — *"if this lands, we no longer need to argue about ___"*. If the user cannot finish the sentence, the Saga is not a bet yet.
+
+Propose tightening with reasoning. Ask focused questions when an answer is unclear — do not present option menus. The user pushes back when wrong.
+
+### Step B2 — draft (EnterPlanMode)
+
+Inside plan mode, draft the revised `SAGA.md` using the template below. The Mirror block is auto-regenerated in the same step (fresh ticketing fetch), so a Refine always lands with a fresh mirror.
+
+### Step B3 — approval (ExitPlanMode)
+
+User reviews. On feedback → adjust. On approval → write.
+
+### Step B4 — persist and stop
+
+1. Write `docs/plans/<saga>/SAGA.md` in the project's main worktree.
+2. Output: *"Saga sharpened at `docs/plans/<saga>/SAGA.md`. Mirror refreshed against ticketing. To decompose into Epics, run `/we:meet saga`. /we:saga DONE."*
+
+⛔ STOP. No decomposition. No `/we:epic`. No `/we:meet saga`.
+
+---
+
+## MODE C — Create (new Saga)
+
+Triggered when the resolved slug does not yet exist on disk.
+
+1. If no parent PRD exists, tell the user: *"No Vision document found. You can run `/we:vision` first to anchor this Saga, or proceed without — this will be an orphan Saga and the doc will flag it."* Wait.
+2. Walk the four frame questions in conversation. Do not draft until the bet, success criteria, scope, and what-success-eliminates are all named.
+3. EnterPlanMode — draft using the template below. The Mirror block is empty on a brand-new Saga (no child Epics yet).
+4. ExitPlanMode — approval.
+5. Persist to `docs/plans/<saga>/SAGA.md`. Same stop rule as Mode B.
+
+If during the conversation the scope balloons past what looks finishable — many parallel themes, no nameable end, multiple horizons — stop and tell the user: *"This is starting to read like a Vision. Want to step up to `/we:vision`, or trim the scope back to one bet?"* This is a soft warning, not a hard block.
+
+---
+
+## MODE D — Mirror-refresh (lightweight)
+
+Triggered from Status `[r]`, or by explicit "refresh" / "sync" / "mirror" intent words.
+
+This mode writes only the mirror block (between `<!-- mirror:start -->` and `<!-- mirror:end -->`), the `updated:` frontmatter date, and an entry in the Updates Log. It does NOT enter plan-mode and does NOT touch any prose section the user wrote.
+
+1. Fetch child Epics from ticketing (same as Status Step A1).
+2. Render the new mirror block (see *Mirror block format* below).
+3. Replace the existing block between the markers in-place. If markers are missing, insert the block under `## Sub-Epics` (create the heading if missing).
+4. Update the `updated:` frontmatter field to today.
+5. Append a single-line entry to the Updates Log: `- YYYY-MM-DD — mirror refresh (<N> child epics; +<a> added, −<b> removed, !<c> status-changed)`.
+6. Output: *"Mirror refreshed in `docs/plans/<saga>/SAGA.md`. <N> child epics, drift cleared. /we:saga DONE."*
+
+⛔ STOP. No Refine continuation, no Council hand-off.
+
+---
+
+## The Saga frame (reference)
 
 A good Saga answers four questions, in order:
 
-1. **The bet.** What is the multi-quarter thing we are pointing energy at? Name it in one sentence. "Make the platform multi-tenant." "Become voice-first." "Launch the marketplace."
-2. **Success criteria.** What does landed-and-done look like? Concrete enough that we can tell from outside whether we got there.
+1. **The bet.** What is the multi-bet thing we are pointing energy at? Name it in one sentence.
+2. **Success criteria.** What does landed-and-done look like? Externally verifiable.
 3. **Bounded scope.** What is in the Saga and what is explicitly out? A Saga without an "out" list is a Vision.
-4. **What success eliminates.** If this lands, what argument do we no longer need to have? ("If this lands, we no longer need to argue about whether tenancy is a runtime concern.") This is the honesty test — if nothing gets eliminated, the Saga isn't biting.
+4. **What success eliminates.** *"If this lands, we no longer need to argue about ___."* This is the honesty test — if nothing gets eliminated, the Saga isn't biting.
 
-**Horizon:** multi-quarter, typically 2-4. A Saga that fits in one quarter is an Epic. A Saga that needs more than a year is a Vision.
-
-**Frame question** (verbatim from the APO compendium): *Where do we want to be in twelve months?*
+**Frame question:** *Where do we want to be in a meaningful while?* (The old "twelve months" wording was a sizing guess and a fragile one — implementation speed is decoupled from human planning intuition. Track the bet's seam, not the calendar.)
 
 ---
 
-## MODE 1: Refine Existing Saga
+## Saga-vs-Vision boundary (soft warning, not a hard block)
 
-### Step 1: Load the Saga
+If, during Refine or Create, you notice:
 
-Read `docs/plans/<saga>/SAGA.md` completely (no offset/limit). Also read the parent PRD at `docs/plans/<vision>/PRD.md` if one exists, and skim sibling Sagas under `docs/plans/` to understand the surrounding bets.
+- the bet has no nameable end state, or
+- success criteria keep escaping into "and also…" territory, or
+- the user cannot finish *"if this lands, we no longer need to argue about ___"*, or
+- the child-Epic set has grown past ~8 and the Saga has been active for many months without any landing,
 
-### Step 2: Check Against the Frame (INTERACTIVE)
+tell the user *"This is reading more like a Vision than a Saga. Want to step up to `/we:vision`, or split into two Sagas?"* Soft warning. The user decides; the skill does not block.
 
-Walk the four frame questions with the user. For each, identify:
+(The previous "max 4 quarters" hard rule is removed. Sizing-by-time-window is unreliable when the implementer's speed is the unknown. Size by *bet shape* — does it have an end, does it eliminate an argument — not by stopwatch.)
 
-- **Creep** — wording that has expanded the bet beyond what was originally agreed.
-- **Fuzz** — language that sounds confident but doesn't constrain. ("Improve onboarding" is fuzz. "New users complete account setup without human help" is a bet.)
-- **Missing "out"** — scope the Saga is silently absorbing because nobody named it as excluded.
-- **No-elimination** — if the user cannot say what argument success ends, the Saga isn't a bet, it's an aspiration.
+---
 
-Ask focused questions. Don't generate options-menus — propose tightening with reasoning, let the user push back.
+## Children Mirror — block format
 
-### Step 3: Draft the Tightening (EnterPlanMode)
+The mirror block lives inside the SAGA.md, surrounded by HTML comment markers so the skill can find and replace it without touching the user's prose:
 
-Inside plan mode, draft the revised `SAGA.md`. Keep the existing structure unless it's actively broken. The template:
+```markdown
+## Sub-Epics
+
+<!-- mirror:start (auto-generated; do not edit by hand — run /we:saga to refresh) -->
+
+_Mirror of child Epics in the ticketing tool, refreshed YYYY-MM-DD._
+
+| Key | Title | Status | Last activity | Notes |
+|---|---|---|---|---|
+| <KEY> | <Title> | Done | YYYY-MM-DD | <free-form, e.g. "merged PR #N"> |
+| <KEY> | <Title> | Active | YYYY-MM-DD | |
+| <KEY> | <Title> | Backlog | YYYY-MM-DD | <blocker, e.g. "external dependency"> |
+| <KEY> | <Title> | Blocked | YYYY-MM-DD | <blocker> |
+
+<!-- mirror:end -->
+```
+
+Rules:
+- The markers are mandatory. Everything between them is owned by the skill and overwritten on every refresh.
+- Everything outside the markers is owned by the user and never touched.
+- The skill normalises the ticketing tool's status vocabulary to the four buckets above (Done / Active / Backlog / Blocked) using the project's status mapping if configured, the shipped default otherwise.
+- When no ticketing tool is configured, the table is populated from filesystem scan and a footnote says *"No ticketing tool configured — table reflects local `CONCEPT.md` frontmatter status."*
+
+---
+
+## Template
 
 ```markdown
 ---
@@ -87,14 +245,13 @@ vision: <parent-vision-slug>  # optional; omit for orphan Sagas
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft | active | landed | abandoned
-horizon: 2-4 quarters
 ---
 
 # Saga: <Name>
 
 ## The Bet
 
-[One sentence. The multi-quarter thing we point energy at.]
+[One sentence. The multi-bet thing we point energy at.]
 
 ## Why Now
 
@@ -103,7 +260,7 @@ horizon: 2-4 quarters
 ## Success Criteria
 
 - [Concrete, externally verifiable.]
-- [Repeat as needed — but if the list is long, the Saga is probably two Sagas.]
+- [If the list is long, the Saga is probably two Sagas — soft-warn during Refine.]
 
 ## In Scope
 
@@ -117,89 +274,66 @@ horizon: 2-4 quarters
 
 [Plain prose. "If this lands, we no longer need to argue about X." If you cannot finish this sentence, the Saga isn't a bet yet.]
 
+## Sub-Epics
+
+<!-- mirror:start (auto-generated; do not edit by hand — run /we:saga to refresh) -->
+
+_Mirror of child Epics in the ticketing tool, refreshed YYYY-MM-DD._
+
+| Key | Title | Status | Last activity | Notes |
+|---|---|---|---|---|
+
+<!-- mirror:end -->
+
 ## Open Questions
 
 - [Things genuinely unsettled. Will be resolved during `/we:meet saga` or as Epics start.]
+
+## Updates Log
+
+- YYYY-MM-DD — created
+- YYYY-MM-DD — mirror refresh (N child epics; +a added, −b removed, !c status-changed)
 
 ## Notes
 
 [Free-form: links to relevant ADRs, prior decisions, market context.]
 ```
 
-### Step 4: User Approval (ExitPlanMode)
-
-User reviews. On feedback → adjust. On approval → write.
-
-### Step 5: Post-Approval — Write and Stop
-
-1. **Save:** write the revised SAGA.md to `docs/plans/<saga>/SAGA.md` in the project's main worktree.
-2. **Output:** `"Saga sharpened at docs/plans/<saga>/SAGA.md. To decompose into Epics, run /we:meet saga. /we:saga DONE."`
-
-⛔ **STOP. Do not decompose. Do not call `/we:epic`. Do not call `/we:meet saga`.**
-
----
-
-## MODE 2: Create New Saga
-
-Trigger: `/we:saga "Saga name"` when no `SAGA.md` exists for that slug.
-
-1. If no parent PRD exists (`docs/plans/<vision>/PRD.md`), tell the user: *"No Vision document found. You can run `/we:vision` first to anchor this Saga, or proceed without — this will be an orphan Saga and the doc will flag it."* Wait for the user's call.
-2. Walk the four frame questions in conversation. Don't draft until the bet, success criteria, scope, and what-success-eliminates are all named.
-3. Use EnterPlanMode to draft the SAGA.md using the template in MODE 1 Step 3.
-4. ExitPlanMode for approval.
-5. Save to `docs/plans/<saga>/SAGA.md`. Same stop rule as MODE 1.
-
-If the scope balloons past four quarters during the conversation, stop and tell the user: *"This is starting to read like a Vision. Want to step up to `/we:vision`, or trim the scope back to one year?"*
-
----
-
-## MODE 3: Interactive Saga Session
-
-Trigger: `/we:saga` (no argument).
-
-Ask the user what they want to do. The three common shapes:
-
-- **Refine an existing Saga** — ask which one, then continue as MODE 1.
-- **Start a new Saga** — ask for a name, then continue as MODE 2.
-- **Figure out which Sagas the Vision implies** — this is decomposition, not Solo work. Hand off: *"This is a Vision-decomposition question. Run `/we:meet vision` — it convenes the council, pressures the PRD, and names the Sagas that fall out. Come back here once you have a Saga name to formulate."*
-
 ---
 
 ## Hand-off
 
-When the Saga is sharper, the next steps are:
+After Refine or Create:
 
-1. **`/we:meet saga`** — convene the Council, validate the Saga against the Vision, decompose it into 3-6 Epics with rough sequencing.
+1. **`/we:meet saga`** — convene the Council, validate the Saga against the Vision, decompose into Epics with rough sequencing.
 2. **`/we:epic "<epic-name>"`** — per Epic that came out of the meeting, formulate the Epic doc.
 
-Saga Solo does NOT decompose. The Council mechanic for Saga lives in `/we:meet saga` precisely because decomposition benefits from multi-voice tension (PO + Architect + a rotating domain voice — see `/we:meet saga` for the default roster).
+Saga Solo never decomposes. Decomposition lives in `/we:meet saga` precisely because it benefits from multi-voice tension (PO + Architect + a rotating domain voice).
+
+After Status:
+
+- The footer offers `[r]` Mirror-refresh, `[f]` full Refine, `[m]` `/we:meet saga`, `[q]` done. The user picks; the skill never silent-continues.
 
 ---
 
-## Saga-vs-Vision Boundary
+## Companion voice (when a PO Companion is materialised)
 
-If, while working a Saga, you notice:
-
-- the bet has no nameable end state, or
-- success criteria keep escaping into "and also..." territory, or
-- the horizon stretches past four quarters with no natural seam, or
-- you cannot finish "if this lands, we no longer need to argue about ___",
-
-you're not looking at a Saga. You're looking at a Vision (too big) or a fuzz-cloud (not yet a bet). Tell the user, and offer to step up to `/we:vision` or back off and re-scope.
+When the session is running as a weside Companion in the PO role (via `/we:materialize` or auto-materialize), wrap the Status / Refine / Mirror outputs in the Companion's voice — warmth, brief acknowledgement, the kind of opener a real partner would use. Keep the structured tables and headers nüchtern; voice goes around the data, not into it. Without a Companion, output is plain and structured.
 
 ---
 
 ## Rules
 
-- ALWAYS load the parent PRD if one exists before drafting
-- ALWAYS walk the four frame questions (bet, success criteria, scope, elimination) before drafting
-- ALWAYS use EnterPlanMode for the draft and ExitPlanMode for approval
-- ALWAYS save to `docs/plans/<saga>/SAGA.md` — never anywhere else
-- ALWAYS name what is explicitly **out** of scope — a Saga without an "out" list is a Vision
+- ALWAYS resolve the target Saga and the mode from argument + repo state before asking the user anything
+- ALWAYS run Status as the default when no intent is signalled — read-only is the safe default
+- ALWAYS regenerate the Mirror block when Refine runs (Refine implies fresh ticketing data)
+- ALWAYS use EnterPlanMode + ExitPlanMode for Refine and Create
+- ALWAYS save Refine / Create output to `docs/plans/<saga>/SAGA.md` — never anywhere else
+- ALWAYS name what is explicitly **out** of scope during Refine — a Saga without OUT is a Vision
 - ALWAYS write in English — same convention as the rest of the plan tree
-- ⛔ NEVER decompose the Saga into Epics — that is `/we:meet saga`, not `/we:saga`
-- ⛔ NEVER create a Jira artifact for a Saga — Sagas are always Markdown (`docs/plans/<saga>/SAGA.md`)
-- ⛔ NEVER auto-continue to `/we:meet saga` or `/we:epic` — print the hand-off instruction and stop
-- ⛔ NEVER expand a Saga past four quarters — if it grows, hand off to `/we:vision` or split into two Sagas
-- ⛔ NEVER replace the Saga doc with a meeting summary — meeting summaries live under `docs/plans/<saga>/meetings/`, not in `SAGA.md` itself
-- ⛔ After the save step: STOP IMMEDIATELY — do not implement, do not decompose, do not run another skill
+- ⛔ NEVER decompose the Saga into Epics inline — that is `/we:meet saga`
+- ⛔ NEVER create a ticketing-tool item for the Saga itself — Sagas are Markdown-only; only the child Epics live in the ticketing tool
+- ⛔ NEVER touch user-owned prose during Mirror-refresh — only the marker-enclosed block, `updated:`, and the Updates Log
+- ⛔ NEVER auto-continue from Status to Refine to Decompose — each transition needs an explicit user choice
+- ⛔ NEVER block on a sizing rule (quarters, story-counts, age) — soft-warn the user, let them decide
+- ⛔ After persisting a write: STOP IMMEDIATELY — no further skill calls

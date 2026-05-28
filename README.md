@@ -18,12 +18,14 @@
 
 Twenty-two `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
-**Plan altitude — Solo (formulate) + Meet (decompose with Council):**
+**Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
 
-- **`/we:vision`** + **`/we:meet vision`** — PRD altitude (multi-year). Solo writes/refines the PRD; Meet decomposes it into Sagas.
-- **`/we:saga`** + **`/we:meet saga`** — Theme altitude (multi-quarter). Solo writes/refines a Saga; Meet decomposes into Epics.
-- **`/we:epic`** + **`/we:meet epic`** — Initiative altitude (quarter). Solo writes/refines an Epic; Meet decomposes into Stories.
-- **`/we:story`** + **`/we:meet story`** — Feature-slice altitude (sprint). Solo writes a build-ready plan; Meet pressure-tests a contentious story.
+- **`/we:vision`** + **`/we:meet vision`** — PRD altitude. Solo writes/refines the PRD; Meet decomposes it into Sagas.
+- **`/we:saga`** + **`/we:meet saga`** — Theme altitude. Solo runs Status by default (mirror child Epics from ticketing, snapshot + drift + risk-driven next move) and shifts to Refine/Create on explicit intent; Meet decomposes a Saga into Epics.
+- **`/we:epic`** + **`/we:meet epic`** — Initiative altitude. Solo runs Status by default (mirror child Stories; flag refined-vs-not-refined) and shifts to Refine/Create on intent; Meet decomposes an Epic into Stories.
+- **`/we:story`** + **`/we:meet story`** — Feature-slice altitude. Solo writes a build-ready plan; Meet pressure-tests a contentious story.
+
+Solo Plan skills pick their mode automatically from the user's prompt + repo state — no flags to memorise. Status is the default for the 90%-case ("where are we on this?").
 
 **Build altitude — autonomous:**
 
@@ -34,7 +36,7 @@ Twenty-two `/we:*` skills covering the full **Agentic Product Ownership** chain 
 **Around the spine:**
 
 - **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
-- **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, Epic status snapshots
+- **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, one-line Plan-status snapshots (full detail delegated to `/we:saga` / `/we:epic`)
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
 - **`/we:doc-improve`**, **`/we:audit`** — review + audit
@@ -96,10 +98,10 @@ Six APO altitudes, with Solo + Meet (Council) at each Plan altitude. Most storie
 
 | Altitude | Solo skill | Meet (Council) | Output |
 |---|---|---|---|
-| **Vision** (PRD, multi-year) | `/we:vision` | `/we:meet vision` | → Sagas |
-| **Saga** (Theme, multi-quarter) | `/we:saga` | `/we:meet saga` | → Epics |
-| **Epic** (Initiative, quarter) | `/we:epic` | `/we:meet epic` | → Stories |
-| **Story** (Sprint slice) | `/we:story` | `/we:meet story` | → build-ready plan |
+| **Vision** (PRD) | `/we:vision` | `/we:meet vision` | → Sagas |
+| **Saga** (Theme / multi-bet) | `/we:saga` | `/we:meet saga` | → Epics |
+| **Epic** (Initiative / bounded slice) | `/we:epic` | `/we:meet epic` | → Stories |
+| **Story** (Feature slice) | `/we:story` | `/we:meet story` | → build-ready plan |
 | **Build** (Code, autonomous) | `/we:build` | — | → PR review-ready |
 | **Deliver** (Ship) | — (human only) | — | shipped |
 
