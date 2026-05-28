@@ -30,37 +30,59 @@ Produces or sharpens a Product Requirements Document — the multi-year reason a
 
 ### `/we:saga`
 
-> *Solo — Product Owner at the Theme altitude.*
+> *Solo — Product Owner at the Theme altitude. Status-default; smart-mode resolution.*
 
-Produces or sharpens a Saga — a multi-quarter bet inside the Vision. "Make the platform multi-tenant." "Become voice-first." Sagas have a beginning and an end; if they don't, they're a Vision in disguise.
+Holds a Saga — a multi-bet inside the Vision. "Make the platform multi-tenant." "Become voice-first." Sagas have a beginning and an end; if they don't, they're a Vision in disguise.
+
+**Four modes, picked automatically from argument + repo state:**
+
+- **Status** (default) — read `SAGA.md`, mirror child Epics from the ticketing tool, render snapshot + drift detection + risk-driven next-move recommendation. Read-only.
+- **Refine** (explicit intent: "refine" / "update" / "sharpen") — walks the four frame questions, drafts a tightened `SAGA.md` via plan-mode.
+- **Create** (slug doesn't exist yet) — walks the frame from scratch.
+- **Mirror-refresh** (intent: "refresh" / "sync" / "mirror") — lightweight write of just the mirror block + frontmatter date + Updates Log.
+
+No flags to memorise. Target Saga is resolved from explicit argument → branch name → PWD → most-recent draft/active doc → ask one question.
 
 **When to use:**
-- The Vision is set and you're choosing where to point energy for the next year
-- A quarterly planning rhythm just landed and you need to pick the next bet
-- Multiple Epics are in flight that secretly belong to different themes — extract the Sagas to make the conflict legible
+- "Where are we on this Saga?" — Status default; the 90%-case
+- The Vision is set and you're choosing where to point energy next — Create
+- A long-running Saga showing drift — Refine after a `/we:meet saga` Council
+- Multiple Epics in flight that secretly belong to different themes — surface them by running Status across each candidate
 
 **What it produces:**
-- `docs/plans/<saga>/SAGA.md` — Markdown only; ticketing starts at Epic
+- `docs/plans/<saga>/SAGA.md` — Markdown only; ticketing starts at Epic. The doc contains an auto-generated `## Sub-Epics` mirror block between `<!-- mirror:start --> … <!-- mirror:end -->` markers.
 
-**Hand-off:** to `/we:meet saga` (decompose into Epics) or `/we:epic "<name>"` (formulate one Epic).
+**Hand-off:** Status footer offers `[r]` refresh, `[f]` Refine, `[m]` `/we:meet saga`, `[q]` done. After Refine, hand off to `/we:meet saga` (decompose) or `/we:epic "<name>"` (formulate one Epic).
 
 ---
 
 ### `/we:epic`
 
-> *Solo — Product Owner at the Initiative altitude.*
+> *Solo — Product Owner at the Initiative altitude. Status-default; smart-mode resolution.*
 
-Produces or sharpens an Epic — a concrete, quarter-sized deliverable that serves a Saga. "Ledger Foundation." "Stripe Connect Onboarding." "Voice Pipeline Migration."
+Holds an Epic — a concrete, bounded deliverable that serves a Saga. "Ledger Foundation." "Stripe Connect Onboarding." "Voice Pipeline Migration." Epics finish; permanent areas of work ("Mobile", "Backend") don't.
+
+**Four modes, picked automatically from argument + repo state:**
+
+- **Status** (default) — read `CONCEPT.md`, mirror child Stories from the ticketing tool, render snapshot + drift detection + risk-driven next-move. The mirror table flags refined-vs-not-refined per Story (does `docs/plans/{KEY}-plan.md` exist?). Read-only.
+- **Refine** (explicit intent) — checks the frame (why-now, target architecture seam, sequencing, success metric), drafts via plan-mode.
+- **Create** (new slug) — walks the frame from scratch; optionally creates the ticketing-tool Epic alongside.
+- **Mirror-refresh** — lightweight write of just the mirror block + frontmatter date + Updates Log.
+
+No flags to memorise. Same resolution chain as `/we:saga`.
 
 **When to use:**
-- A Saga has been agreed and the next Epic needs scoping
-- A long-running Epic is showing scope drift — re-cut the slice
-- A Story has been refined three times and never converged — the real problem is at the Epic level
+- "Where are we on this Epic?" — Status default
+- A Saga has been decomposed and the next Epic needs scoping — Create
+- A long-running Epic is showing scope drift — Refine after `/we:meet epic`
+- A Story has been refined three times and never converged — the real problem is at Epic level, run Status to confirm
 
 **What it produces:**
-- `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`, optionally a Jira Epic with the same name
+- `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`, optionally a ticketing-tool Epic with the same name. The doc contains an auto-generated `## Stories` mirror block.
 
-**Hand-off:** to `/we:meet epic` (decompose into Stories) or `/we:story "<name>"` (write one Story).
+**Hand-off:** Status footer offers `[r]` refresh, `[f]` Refine, `[m]` `/we:meet epic`, `[s]` `/we:story <KEY>` (recommended next Story), `[q]` done.
+
+**Sizing posture:** no quarter-hard-block. Soft warnings for permanent-category Epics, Saga-in-disguise (child set growing past ~10 with no landings), Story-in-disguise (one obvious AC set), or multi-seam Epics. The user decides; the skill never blocks.
 
 ---
 
@@ -208,21 +230,20 @@ Wraps a council in a workflow tuned to the altitude. Each meeting validates the 
 
 > *APO Coach — cross-altitude advisor and onboarding partner.*
 
-A conversation partner for three situations, one skill:
+A conversation partner for two situations, one skill:
 
-- **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires.
+- **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires. If an open Saga or Epic is detected, ADVISOR also surfaces a one-line Plan-status — and delegates the detail to `/we:saga` or `/we:epic` (which both run a full Status dashboard as their default mode).
 - **BEGINNER mode** — you're new to APO or the plugin. The Coach walks you through the four-altitude workflow, checks whether `.weside/config.json` exists, and proposes a sensible starting command. Triggered by "I'm new" / "what is this" / first-session markers.
-- **EPIC-STATUS mode** — you want a snapshot of what Epics are currently in flight. The Coach reads `docs/plans/*/05-epics/**/CONCEPT.md` files and open tickets to report active / paused / completed state, next actionable Story per Epic, and flag stalled Epics.
 
-Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended → ADVISOR; "I'm new" / "help me start" → BEGINNER; "which Epics" / "status" / "what's in flight" → EPIC-STATUS. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
+Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended / "which Epics" / "status" → ADVISOR; "I'm new" / "help me start" → BEGINNER. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
 
-> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory in v2.29.0. RETRO mode extracted to standalone `/we:retro` skill in v2.33.0. Beginner + Epic-Status modes added in v2.33.0.
+> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory in v2.29.0. RETRO mode extracted to standalone `/we:retro` skill in v2.33.0. Beginner mode added in v2.33.0. Plan-status detail delegated to `/we:saga` / `/we:epic` (Status-default modes) in v2.34.0 — Coach renders only the one-line snapshot.
 
 **When to use:**
 - You merged a Story / Epic and want to know the sensible next move (ADVISOR)
 - A PRD exists but you're not sure whether to write Sagas Solo or convene `/we:meet vision` (ADVISOR)
 - You're coming to the plugin for the first time or returning after a long gap (BEGINNER)
-- You want a structured summary of which Epics are active / stalled / done (EPIC-STATUS)
+- You want a structured summary of which Sagas / Epics are in flight (ADVISOR — Coach surfaces the one-liner and points you to `/we:saga` or `/we:epic` for the full Status dashboard)
 
 **Won't do:**
 - Generic reports without a prompt

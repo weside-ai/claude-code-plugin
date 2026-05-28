@@ -12,9 +12,9 @@ For the underlying council mechanic, see [companion-framework.md](companion-fram
 
 ```mermaid
 flowchart TB
-    V["/we:meet vision<br/>Vision-altitude<br/>multi-year horizon"] --> S["/we:meet saga<br/>Saga-altitude<br/>multi-quarter horizon"]
-    S --> E["/we:meet epic<br/>Epic-altitude<br/>quarter horizon"]
-    E --> R["/we:meet story<br/>Story-altitude<br/>sprint horizon"]
+    V["/we:meet vision<br/>Vision-altitude<br/>reason a product exists"] --> S["/we:meet saga<br/>Saga-altitude<br/>multi-bet theme"]
+    S --> E["/we:meet epic<br/>Epic-altitude<br/>bounded initiative"]
+    E --> R["/we:meet story<br/>Story-altitude<br/>concrete change"]
     R --> Solo[hands off to /we:story<br/>→ ticket + plan]
     Solo --> Build["/we:build<br/>→ implementation"]
 ```
@@ -24,9 +24,11 @@ Each meeting answers a different question and decomposes its altitude's item int
 | Meeting | Question | Output | Default roster |
 |---|---|---|---|
 | `/we:meet vision` | *why does this product exist?* | Sagas, validated PRD | PO, architect, UX, marketing, orchestrator |
-| `/we:meet saga` | *where do we want to be in twelve months?* | Epics, sequenced | PO, architect, marketing, orchestrator |
-| `/we:meet epic` | *what concrete thing ships this quarter?* | Stories, sequenced | PO, architect, orchestrator |
+| `/we:meet saga` | *what bet are we pointing energy at?* | Epics, sequenced | PO, architect, marketing, orchestrator |
+| `/we:meet epic` | *what concrete thing ships next?* | Stories, sequenced | PO, architect, orchestrator |
 | `/we:meet story` | *what is the next concrete change?* | refined story + acceptance criteria | PO, architect (then hands off) |
+
+The four altitudes used to carry time labels (multi-year / multi-quarter / quarter / sprint). The labels are dropped because implementer speed varies wildly — calendar windows are unreliable when an AI partner can ship a Story in hours that a human estimated as a week. Size by *bet shape* (does it have an end, does it ship a coherent change) not by stopwatch. The Solo Plan skills enforce this with soft warnings, never hard blocks.
 
 Rosters are defaults; each repo can override them in `.weside/config.json.council.meetings.<type>`.
 
@@ -34,7 +36,7 @@ Rosters are defaults; each repo can override them in `.weside/config.json.counci
 
 ## `/we:meet vision` — Vision-altitude
 
-You convene a vision meeting when **the product's reason for existing needs alignment or revision** — a new product, a strategic pivot, a brand-shaping decision. The horizon is multi-year; the artifact is a Product Requirements Document.
+You convene a vision meeting when **the product's reason for existing needs alignment or revision** — a new product, a strategic pivot, a brand-shaping decision. The artifact is a Product Requirements Document.
 
 The default roster pulls in voices that see different futures: PO (user value over time), architect (technical horizon), UX researcher (lived experience), marketing (how this lands externally), orchestrator (synthesis). For business-heavy visions, add `sales` and `legal`.
 
@@ -52,7 +54,7 @@ After the meeting, hand off to `/we:vision` to lock the PRD, then `/we:saga "<na
 
 ## `/we:meet saga` — Saga-altitude
 
-You convene a saga meeting when **a Saga has been chosen and now needs decomposition into Epics**. The horizon is multi-quarter — typically two to four quarters. The question is which Epics, in what order, with which dependencies.
+You convene a saga meeting when **a Saga has been chosen and now needs decomposition into Epics**. The question is which Epics, in what order, with which dependencies.
 
 The default roster is the PO, the architect, marketing, and the orchestrator. The conversation is about *sequencing* (which Epic first?) and *scope discipline* (does each Epic actually move the Saga forward?). Domain voices vary by Saga type — repos focused on UX or security typically override the marketing slot in `.weside/config.json.council.meetings.saga`; the shipped default assumes a positioning-heavy Saga.
 
@@ -70,9 +72,9 @@ After the meeting, hand off to `/we:saga` to lock the Saga doc, then `/we:epic "
 
 ## `/we:meet epic` — Epic-altitude
 
-You convene an epic meeting when **an Epic has been chosen and now needs decomposition into Stories**. The horizon is the quarter. The question is which Stories, in what risk-driven sequence, with which acceptance shape.
+You convene an epic meeting when **an Epic has been chosen and now needs decomposition into Stories**. The question is which Stories, in what risk-driven sequence, with which acceptance shape.
 
-The default roster is leaner — PO, architect, orchestrator. Add domain voices when the Epic demands it: security and legal for a compliance Epic, security alone for a hardening Epic, sales for an enterprise feature, UX for a user-facing Epic. The conversation is about *concrete slices* and *risk sequencing* — what's the smallest version that delivers the win, and what do we cut if the quarter runs short.
+The default roster is leaner — PO, architect, orchestrator. Add domain voices when the Epic demands it: security and legal for a compliance Epic, security alone for a hardening Epic, sales for an enterprise feature, UX for a user-facing Epic. The conversation is about *concrete slices* and *risk sequencing* — what's the smallest version that delivers the win, and what do we cut if the slice runs long.
 
 The output is a **Story list with acceptance shape** — sequenced, with dependencies, with hot Stories flagged for `/we:meet story`. Persisted as `docs/plans/<saga>/05-epics/<epic>/meetings/<YYYY-MM-DD>-epic.md` and folded into the Epic's `CONCEPT.md` via `/we:epic`.
 
@@ -88,7 +90,7 @@ After the meeting, hand off to `/we:epic` to lock the Epic doc, then `/we:story 
 
 ## `/we:meet story` — Story-altitude
 
-You convene a story meeting when **a Story is contentious enough that two perspectives are better than one**. The horizon is the sprint. The output isn't deliberation — it's a *refined ticket* with a plan ready for Build.
+You convene a story meeting when **a Story is contentious enough that two perspectives are better than one**. The output isn't deliberation — it's a *refined ticket* with a plan ready for Build.
 
 The default roster is two: PO and architect. The PO drives content (what the user gets); the architect checks feasibility (can we build this cleanly).
 

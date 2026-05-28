@@ -48,14 +48,18 @@ Plan has four altitudes. Each one has a **Solo** skill (formulate / refine the i
 
 | Altitude | Item | Solo | Council | Produces |
 |---|---|---|---|---|
-| **Vision** | PRD (multi-year) | `/we:vision` | `/we:meet vision` | Sagas |
-| **Saga** | Theme (multi-quarter) | `/we:saga` | `/we:meet saga` | Epics |
-| **Epic** | Initiative (quarter) | `/we:epic` | `/we:meet epic` | Stories |
-| **Story** | Feature slice (sprint) | `/we:story` | `/we:meet story` | Build-ready plan |
+| **Vision** | PRD (reason a product exists) | `/we:vision` | `/we:meet vision` | Sagas |
+| **Saga** | Theme (multi-bet) | `/we:saga` | `/we:meet saga` | Epics |
+| **Epic** | Initiative (bounded slice) | `/we:epic` | `/we:meet epic` | Stories |
+| **Story** | Feature slice (one concrete change) | `/we:story` | `/we:meet story` | Build-ready plan |
+
+The altitudes used to carry time labels (multi-year / multi-quarter / quarter / sprint). They're gone because implementer speed varies wildly — calendar windows are unreliable when an AI partner ships in hours what a human estimates in days. Size by *bet shape* — does it have an end, does it ship a coherent change. The Plan skills enforce this with soft warnings, never hard blocks.
 
 **Solo formulates an N-item; Meet decomposes an N-item into N+1-items.** A useful cadence is: Solo to sharpen the current item → Meet to decompose into the next level → Solo on each child → and so on. The two modes interleave naturally as you walk the altitudes down. See [concepts/meetings.md](concepts/meetings.md) for when to convene a Council.
 
-The most common entry point is `/we:story`. It asks the questions that turn an idea (a sentence, a Jira ticket key, a description) into a sprint-sized Story you can build.
+The Saga and Epic Solo skills run **Status as their default mode** — `/we:saga` with no further intent loads the SAGA doc, mirrors child Epics from the ticketing tool, renders a snapshot + drift + a risk-driven next-move recommendation. Same for `/we:epic` with its child Stories. Refine, Create, and Mirror-refresh are alternative modes the skill picks automatically from the user's prompt. No flags to memorise.
+
+The most common entry point is `/we:story`. It asks the questions that turn an idea (a sentence, a Jira ticket key, a description) into a Story you can build.
 
 `/we:story` produces two things:
 
