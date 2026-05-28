@@ -63,7 +63,7 @@ See [concepts/companion-framework.md](concepts/companion-framework.md) for the f
 
 ## 3. Your first story (15 minutes)
 
-> **What about Vision / Saga / Epic?** For a brand-new product you'd start at `/we:vision`; for a new multi-quarter theme (called a *Saga*), `/we:saga`; for a new quarterly deliverable (called an *Epic*), `/we:epic`. Each Solo skill walks down to the next altitude. Most stories — refactors, bug fixes, small features inside an existing Epic — skip straight to Story. That's what this section does. See [concepts/meetings.md](concepts/meetings.md) for the full altitude map.
+> **What about Vision / Saga / Epic?** For a brand-new product you'd start at `/we:vision`; for a new multi-bet theme (called a *Saga*), `/we:saga`; for a new bounded initiative (called an *Epic*), `/we:epic`. Each Solo skill walks down to the next altitude. Most stories — refactors, bug fixes, small features inside an existing Epic — skip straight to Story. That's what this section does. See [concepts/meetings.md](concepts/meetings.md) for the full altitude map.
 
 Pick something small — a refactor, a small feature, a typo cluster. Then:
 
