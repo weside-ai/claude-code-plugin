@@ -25,7 +25,7 @@ description: >
 
 A meeting is a *facilitated workflow*; the **council** (`/we:council`) is the deliberation engine each meeting convenes. The meeting produces synthesis + decomposition; the activity skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) produce the artifact at each altitude. The Build pipeline (`/we:build`) is downstream of `/we:story` and is not a meeting type.
 
-For the methodology source of truth, see the APO compendium `01-HIERARCHY.md` (altitudes), `02-COUNCIL.md` (Council mechanic + nine role lenses), and `00-BIG-PICTURE.md` (one-page poster).
+For the methodology source of truth, see [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (altitude map, meeting summaries, roster defaults) and [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) (council mechanic + role lenses).
 
 ## Invocation
 
@@ -130,4 +130,4 @@ The story meeting is the natural upgrade path for `/we:story` (Solo) when the St
 - `we/skills/story/SKILL.md` — Story-altitude Solo (what `/we:meet story` hands off to)
 - `we/skills/build/SKILL.md` — Build pipeline (downstream of Story; not a meeting type)
 - `we/skills/CLAUDE.md` — Activity-vs-Meeting design rationale
-- APO compendium `01-HIERARCHY.md` + `02-COUNCIL.md` — the methodology source of truth
+- [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) + [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) — methodology + council mechanic

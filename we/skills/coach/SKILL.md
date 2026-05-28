@@ -4,7 +4,7 @@ description: >
   APO Coach — cross-altitude advisor. Two modes, one skill. ADVISOR
   mode answers "where am I in the APO hierarchy, what's the sensible
   next move?" — reads repo state, maps to altitude, proposes the next
-  `/we:*` command with a [y/n] confirmation gate. Includes Epic-Status
+  `/we:*` command with a [y/n] confirmation gate. Includes Plan-status
   rendering when an open Epic is detected. Beginner mode detects
   first-use and suggests setup or first story entry points. Boots fresh
   on every invocation. Delegates doc changes to /we:docs. Never writes
@@ -21,7 +21,7 @@ description: >
 
 > **Two modes.** The Coach runs in one of two shapes per invocation:
 >
-> 1. **ADVISOR mode** — the user is unsure what to do next, or asks where they are in APO ("we have a Saga doc, what now?"). You read repo state, map to altitude, and propose the next `/we:*` command. Confirmation gate before any command fires. Never silent. If an open Epic is detected in the repo, ADVISOR surfaces Epic-Status automatically (see [Epic-Status Detection](#step-a1-map-the-current-state-to-an-altitude) in Step A1).
+> 1. **ADVISOR mode** — the user is unsure what to do next, or asks where they are in APO ("we have a Saga doc, what now?"). You read repo state, map to altitude, and propose the next `/we:*` command. Confirmation gate before any command fires. Never silent. If an open Saga or Epic is detected in the repo, ADVISOR surfaces a one-line Plan-status automatically (see [Plan-status rendering](#step-a1-map-the-current-state-to-an-altitude) in Step A1) and delegates detail to `/we:saga` or `/we:epic`.
 > 2. **Beginner mode** — the user invokes Coach in a repo that hasn't been configured yet or has no plans. First-Use-Detection (Boot Protocol Step 11) triggers an orientation prompt rather than jumping straight into ADVISOR.
 >
 > Both modes share the same Boot Protocol. The intent-detection rule decides which one to enter — see [Mode Selection](#mode-selection) below.
@@ -217,17 +217,20 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 
 **Don't be mechanical.** The table is a starting point. If the user's intent contradicts the natural next move (e.g. they have a Saga but want to revisit the Vision), follow their intent. The Coach serves the user's goal, not the diagram.
 
-**Epic-Status rendering (automatic when an open Epic is detected):**
+**Plan-status rendering (automatic when an open Saga or Epic is detected):**
 
-After locating the current altitude, check whether there is an active Epic in the repo:
-- `find docs/plans -name 'CONCEPT.md' | head -5` — any CONCEPT.md with `status: in-progress` (or no closed/done status)?
-- If yes: surface a one-line Epic-Status before the altitude proposal:
+After locating the current altitude, check whether there is an active Plan-altitude artefact in the repo:
+- `find docs/plans -name 'SAGA.md' -o -name 'CONCEPT.md' | head -10` — any with `status: active|draft|in-progress|selected`?
+- If yes: surface a one-line Plan-status before the altitude proposal:
 
-  > *"Epic: `<Epic name>`. `<N>` Stories — `<X>` shipped, `<Y>` in-build, `<Z>` not yet refined. Next suggested: `/we:story <ticket>` for the next non-refined Story."*
+  > *"Saga: `<Saga name>` — `<n>` Epics (<x> done, <y> active, <z> backlog). Detail: `/we:saga`."*
+  > *"Epic: `<Epic name>` — `<n>` Stories (<x> done, <y> active, <z> refined, <w> backlog). Detail: `/we:epic`."*
 
-  Count status by reading the Epic's CONCEPT.md story list and cross-referencing with `git log --oneline` (merged branches indicate shipped) and ticketing-tool status (if available). Use best-available signal, not perfect coverage.
+  Use the artefact's mirror block (the `<!-- mirror:start --> … <!-- mirror:end -->` table inside the SAGA.md / CONCEPT.md) as the source of truth — it is already normalised. If the mirror is missing or older than 7 days, mention it and suggest `/we:saga` or `/we:epic` (Status default mode) to refresh.
 
-- If no open Epic detected, skip silently — do not manufacture one.
+  Keep the Coach line to ONE sentence per altitude. For the full status snapshot, drift detection, and next-move beratung, **delegate to `/we:saga` / `/we:epic`** — those skills run Status as their default and render the full dashboard. The Coach does not duplicate that detail.
+
+- If no open Saga or Epic detected, skip silently — do not manufacture one.
 
 ### Step A2: Propose the next move
 
