@@ -24,7 +24,7 @@ You produce or sharpen one Story — a sprint-sized feature slice with a build-r
 ## Prerequisites
 
 ```
-Read("quality/dor.md")
+Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
 ```
 
 **Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first to verify prerequisites (`gh` CLI, Jira access, recommended plugins). Do NOT block — `/we:story` can proceed in degraded modes (no ticketing → Plan-only).

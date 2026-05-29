@@ -100,7 +100,7 @@ Before producing any output, gather the landscape fresh.
 3. **Rules + skills + docs landscape (user repo)** — frontmatter + first 10 lines only:
    - `.claude/rules/**/*.md` — to know which rules exist (for placement decisions later)
    - `CLAUDE.md` files at root + any sub-area (`apps/*/CLAUDE.md`) — to know what's always-loaded
-   - `${CLAUDE_PLUGIN_ROOT}/we/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
+   - `${CLAUDE_PLUGIN_ROOT}/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
    - Don't load full contents — that's thousands of tokens.
 
 4. **Historical retros (if `--scan N`)**:

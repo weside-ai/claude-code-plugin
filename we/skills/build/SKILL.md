@@ -44,8 +44,8 @@ If your reason to interrupt does not fit one of those four buckets, the answer i
 ## Prerequisites
 
 ```
-Read("quality/dor.md")
-Read("quality/dod.md")
+Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
+Read("${CLAUDE_PLUGIN_ROOT}/quality/dod.md")
 ```
 
 ---
@@ -117,7 +117,7 @@ Check all three:
 ```
 Plan at `docs/plans/{TICKET}-plan.md` is incomplete: missing <ACs|Context|Phase headers>.
 Run `/we:story {TICKET}` to complete it before `/we:build`.
-See we/quality/dor.md for the full DoR checklist.
+See ${CLAUDE_PLUGIN_ROOT}/quality/dor.md for the full DoR checklist.
 ```
 
 Name the specific missing item(s). Do NOT proceed with an incomplete plan.

@@ -109,20 +109,20 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    - `docs/architecture/BYPASS-REGISTER.md` — current bypass landscape
      (a growing register is a process-health signal)
 
-3. **Quality artefacts** — `${CLAUDE_PLUGIN_ROOT}/we/quality/dor.md` and
+3. **Quality artefacts** — `${CLAUDE_PLUGIN_ROOT}/quality/dor.md` and
    `dod.md` in full. ADVISOR references these when reasoning about whether
    a plan meets DoR before suggesting `/we:build`; BEGINNER references them
    when explaining what DoR/DoD mean. Edits to these files now live in
    `/we:retro` (the dedicated retrospective skill), not in Coach.
 
-4. **Skill landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/we/skills/` plus the
+4. **Skill landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/skills/` plus the
    frontmatter `description:` of each `SKILL.md`. Goal: know what skills
    exist and what they do — without reading the full skill contents.
 
-5. **Agent landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/we/agents/` plus the
+5. **Agent landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/agents/` plus the
    frontmatter `description:` of each `.md`.
 
-6. **Command landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/we/commands/` (if the
+6. **Command landscape** — `ls ${CLAUDE_PLUGIN_ROOT}/commands/` (if the
    directory exists).
 
 7. **Companion identity** — if the weside MCP is available and a
@@ -430,9 +430,9 @@ Clean separation. Don't cross the line.
 
 ## References
 
-- **DoR:** `${CLAUDE_PLUGIN_ROOT}/we/quality/dor.md`
-- **DoD:** `${CLAUDE_PLUGIN_ROOT}/we/quality/dod.md`
-- **Doc Architect:** `${CLAUDE_PLUGIN_ROOT}/we/agents/doc-architect.md`
+- **DoR:** `${CLAUDE_PLUGIN_ROOT}/quality/dor.md`
+- **DoD:** `${CLAUDE_PLUGIN_ROOT}/quality/dod.md`
+- **Doc Architect:** `${CLAUDE_PLUGIN_ROOT}/agents/doc-architect.md`
 - **APO altitude map:** [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md)
 - **Orchestration CLI:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py`
 - **Sibling skill for systematic retros:** [`/we:retro`](../retro/SKILL.md) — proactive, comprehensive, applies N proposals after per-item gate
