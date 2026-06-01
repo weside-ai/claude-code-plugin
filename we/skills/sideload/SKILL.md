@@ -1,17 +1,28 @@
 ---
 name: sideload
 description: >
-  Load a repo's essential context (CLAUDE.md + need-to-know docs/rules + crew) into the
-  current session — even for repos you haven't cd'd into. Sideloading means pulling a
-  neighbor repo's context in from the side without leaving the current one. Optionally
-  filters by your current role. Trigger keywords: sideload, switch repo, load context for,
-  work on other repo, cross-repo, need-to-know, load crew, come up to speed, enter repo.
+  Load a repo's essential context (CLAUDE.md + ALL rules + crew) into the current session —
+  even for repos you haven't cd'd into. Sideloading means pulling a neighbor repo's context
+  in from the side without leaving the current one. A stopgap: prefer a native session in the
+  target repo when you can. Trigger keywords: sideload, switch repo, load context for,
+  work on other repo, cross-repo, load crew, come up to speed, enter repo.
 ---
 
 
 # /we:sideload
 
-**Purpose:** When you're about to work on a repo — either switching from another or collaborating across repos — load the minimum essential context without flooding your window with every rule.
+> **Sideload is a stopgap — avoid it when you can.** A native Claude Code session
+> started *inside* the target repo gets that repo's path-filtered rules lazily from
+> the harness, exactly when it touches a matching file. A sideloaded main agent is
+> rooted in the *wrong* repo, so the harness never injects those rules for it. There is
+> no reliable subset to load — either everything, or gaps the moment you edit. So
+> sideload loads **every** rule eagerly (expensive, fills the window). Use it only for
+> genuine cross-repo situations where switching to a native session in the target repo
+> is not practical. When in doubt, open the target repo natively instead.
+
+**Purpose:** When you must work on a neighbor repo without leaving the current session,
+load enough context — CLAUDE.md, every rule, the crew — that the main agent can actually
+work there, not just orient itself.
 
 ## Invocation
 
@@ -20,8 +31,6 @@ description: >
 /we:sideload .                     # current repo
 /we:sideload backend-repo          # sibling repo by basename
 /we:sideload ../another-repo        # explicit path
-/we:sideload <repo> --role=architect   # filter need-to-know docs by role
-/we:sideload <repo> --full              # ignore role filter, load everything
 ```
 
 ## Workflow
@@ -29,73 +38,71 @@ description: >
 1. **Resolve target repo**
    - Input is a repo basename (sibling-directory search) or an absolute path
    - If basename: search the sibling directories of the current repo's parent
-   - Verify `.weside/config.json` exists → else print: "Run `/we:setup` in that repo first"
+   - Verify `.weside/config.json` exists → else use the [Fallback](#fallback-legacy-repo-without-setup-yet)
 
-2. **Activate vault**
+2. **Activate vault** (best-effort — skip silently if MCP/vault unavailable)
    - Read `.weside/config.json` → `vault` name
    - `mcp__turbovault__set_active_vault(<vault>)` (if MCP available)
    - If vault not registered yet → offer to `add_vault` now (edge case)
 
 3. **Layer 1 — SHAPE (cheap overview)**
-   - `mcp__turbovault__explain_vault()` → structure/stats summary
+   - `mcp__turbovault__explain_vault()` → structure/stats summary (if MCP available)
    - Keep this short — just gives shape of the repo
 
 4. **Layer 2 — ESSENTIALS (the actual must-knows)**
-   Always load:
-   - `<repo>/CLAUDE.md` — unconditional, the entry point
 
-   Then search for flagged docs:
-   - `mcp__turbovault__search_by_frontmatter(key="need_to_know", value="true")`
-   - If `--role=<slug>` passed: filter results where `for_role` includes that slug OR is missing (missing = applies to all roles)
-   - If `--full` passed: no role filter, load all `need_to_know: true`
-   - Read each matching file → inject into context
+   - `<repo>/CLAUDE.md` — unconditional, the entry point. Load first.
+
+   - **ALL rules, eager.** If `<repo>/.claude/rules/` exists, glob `**/*.md` under it and
+     read **every** file — no frontmatter filter, no role filter, no path filter.
+     A native agent would receive the always-loaded rules immediately and the
+     path-filtered ones lazily as it edits matching files; a sideloaded main agent gets
+     neither for free, so it must load the whole set up front. This is the expensive part
+     and the reason sideload is a stopgap (see the banner above).
 
 5. **Layer 3 — WESIDE (companion-facing knowledge)**
-   - Read `<repo>/.weside/weside.md` — everything the companion needs to know to work here: repo purpose, crew, meetings, cross-repo relations
-   - Print a short summary derived from its `## Crew` section, e.g. "Crew on this repo: <PO name> (PO), <Architect name> (Architect), <SM name> (SM)"
+   - Read `<repo>/.weside/weside.md` — everything the companion needs to know to work here:
+     repo purpose, crew, meetings, cross-repo relations
+   - Print a short summary derived from its `## Crew` section, e.g. "Crew on this repo:
+     <PO name> (PO), <Architect name> (Architect), <SM name> (SM)"
 
 6. **Report**
    ```
-   Contextualized for <repo-name>.
+   Contextualized for <repo-name>.  (stopgap — prefer a native session here)
      Shape: <N docs, M rules>
-     Essentials loaded: <K files>
-     Role filter: <architect | none>
+     Rules loaded: <K> (all, eager)
      Crew: <names and roles>
    Ask for specific docs via `/we:search` or just ask naturally.
    ```
 
-## Frontmatter it consumes
-
-```yaml
----
-need_to_know: true              # enter will load this
-for_role: [architect, product_owner]   # optional; omit = all roles
-need_to_know_reason: "..."      # optional; human-readable rationale
----
-```
-
 ## Fallback (legacy repo without setup yet)
 
-If `.weside/config.json` doesn't exist but the user insists:
+If `.weside/config.json` doesn't exist:
 - Read `<repo>/CLAUDE.md` (if exists)
-- Read `<repo>/.claude/rules/core/*.md` (always-loaded convention)
-- Read `<repo>/.claude/rules/workflows/*.md` (always-loaded convention)
+- Glob `<repo>/.claude/rules/**/*.md` and read **all** of them (same eager load as the
+  happy path — no directory-name assumptions, just every rule under `.claude/rules/`)
 - Skip vault steps
-- Print: "No .weside/ found — ran in legacy mode. Run `/we:setup` in that repo for full context loading."
+- Print: "No .weside/ found — ran in legacy mode. Run `/we:setup` in that repo for vault + crew context."
 
 This makes `/we:sideload` useful even before any repo is fully onboarded.
 
 ## Rules
 
-- **Don't load everything.** Role filter + need_to_know flag are the point. "Full" mode is opt-in, not default.
-- **CLAUDE.md is always loaded.** Non-negotiable, independent of frontmatter.
-- **Degrade gracefully.** No MCP / no vault / no frontmatter → still useful (legacy mode).
-- **Read-only operation.** `/we:sideload` never modifies the target repo. Migration/curation belongs in `/we:setup` or `/we:docs`.
-- **Session state.** Track which repos are currently "entered" so we don't reload redundantly within one session. (Implementation detail — maybe session-scoped file under `/tmp`.)
+- **Load ALL rules — on purpose.** Sideload is not a frugal mode; it is a stopgap for a
+  main agent rooted in the wrong repo. A native session in the target repo is always the
+  better choice — prefer it whenever switching is practical.
+- **CLAUDE.md is always loaded.** Non-negotiable, first.
+- **No directory-name assumptions.** Find rules via the `.claude/rules/**/*.md` glob, never
+  by hardcoded subfolders — the plugin is generic and can't anticipate a repo's layout.
+- **Degrade gracefully.** No MCP / no vault → still load CLAUDE.md + all rules (legacy mode).
+- **Read-only operation.** `/we:sideload` never modifies the target repo. Migration/curation
+  belongs in `/we:setup` or `/we:docs`.
+- **Session state.** Track which repos are currently "entered" so we don't reload redundantly
+  within one session. (Implementation detail — maybe session-scoped file under `/tmp`.)
 
 ## References
 
 - `we/skills/setup/SKILL.md` — sets up a repo for `/we:sideload` to work
 - `we/skills/onboarding/SKILL.md` — produces the `weside.md` this skill reads
-- `we/skills/CLAUDE.md` — design rationale + frontmatter vocabulary
+- `we/skills/CLAUDE.md` — design rationale
 - Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4
