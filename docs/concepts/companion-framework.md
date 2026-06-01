@@ -161,14 +161,14 @@ Custom roles (e.g. `geschaeftsfuehrung`, `data_science`) can appear in your `con
 
 ## How `/we:sideload` uses the framework
 
-`/we:sideload <repo>` loads a sibling repo's essential context into your current Claude Code session:
+`/we:sideload <repo>` loads a sibling repo's full context into your current Claude Code session — a stopgap for when you can't start a native session in the target repo:
 
 1. Reads the target's `.weside/config.json` → activates the TurboVault for that repo
 2. Loads its `CLAUDE.md`
-3. Loads files marked `need_to_know: true` in their frontmatter (optionally filtered by role)
+3. Loads **every** rule under `.claude/rules/**/*.md` (eager, no filter — a main agent rooted in the wrong repo never gets path-filtered rules from the harness, so they must be loaded up front)
 4. Loads its `.weside/weside.md` → prints the crew summary
 
-This makes cross-repo work cheap. You're in `repo-a`, working on something that affects `repo-b` — `/we:sideload repo-b` and you have its crew, its purpose, and its essential docs without leaving where you are.
+Prefer a native Claude Code session started inside the target repo whenever switching is practical. Sideload is for genuine cross-repo situations where that isn't possible.
 
 ---
 

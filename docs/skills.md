@@ -345,18 +345,17 @@ Interview pattern: one role at a time. "Who is your Product Owner on this repo?"
 
 ### `/we:sideload`
 
-> *Load a sibling repo's essential context into the current session.*
+> *Load a sibling repo's full context into the current session. A stopgap — prefer a native session in the target repo when you can.*
 
-Cross-repo work without leaving your current repo. Three layers:
+Cross-repo work without leaving your current repo. A main agent rooted in the wrong repo never receives path-filtered rules from the harness, so sideload compensates by loading everything eagerly. Three layers:
 
 1. **Shape** — `mcp__turbovault__explain_vault(<vault>)` overview
-2. **Essentials** — CLAUDE.md + any files tagged `need_to_know: true` in their frontmatter (optionally filtered by your role)
+2. **Essentials** — CLAUDE.md + **every** rule under `.claude/rules/**/*.md` (all of them, eager, no filter)
 3. **Crew** — reads the target's `.weside/weside.md` and prints the crew summary
 
 **When to use:**
-- Working on something that affects two repos (the API change you're making here needs the consumer's perspective)
-- Coming back to a repo after weeks away
-- Onboarding into a new repo
+- Genuine cross-repo situations where switching to a native session in the target repo is not practical
+- The eager rule load is expensive; if you can `cd` into the target repo and start a native session, do that instead
 
 ---
 
