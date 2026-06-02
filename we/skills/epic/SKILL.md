@@ -154,9 +154,9 @@ User reviews. On feedback → adjust. On approval → write.
 
 ### Step B4 — persist and stop
 
-1. Write `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md` in the project's main worktree.
+1. Write `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md` **directly to main** — no feature branch. CONCEPT.md is a planning artifact (like SAGA.md), not implementation code.
 2. If a ticketing-tool Epic exists for this slug, update its description with a pointer to the `CONCEPT.md` path. Do not duplicate content into the ticket — the Markdown is the source of truth.
-3. Output: *"Epic sharpened at `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`. Mirror refreshed against ticketing. To decompose into Stories, run `/we:meet epic`. /we:epic DONE."*
+3. Output: see **Hand-off** section — the message depends on whether stories are already in the Mirror table.
 
 ⛔ STOP. No decomposition. No `/we:story`. No `/we:meet epic`.
 
@@ -167,11 +167,11 @@ User reviews. On feedback → adjust. On approval → write.
 Triggered when the resolved slug does not yet exist on disk.
 
 1. Locate the parent Saga. Read `docs/plans/<saga>/SAGA.md`. If no Saga exists, ask: *"No Saga document found. Run `/we:saga \"<saga-name>\"` first, or proceed Saga-less and flag it in the Epic? Default suggestion: run the Saga first."* Wait for the user's call.
-2. Walk the frame questions (see Step B1) in conversation. Do not draft until the why-now, the target architecture seam, the success metric, and the rough Story set are all named or explicitly deferred to `/we:meet epic`.
+2. Walk the frame questions (see Step B1) in conversation. Do not draft until the why-now, the target architecture seam, the success metric, and the rough Story set are all named or explicitly deferred. If stories were already sketched in the conversation, create them as ticketing shells now so they appear in the Mirror table — this lets the hand-off skip `/we:meet epic`.
 3. Decide Markdown-only vs. with-ticket. If a ticketing tool is detected and the user has not said otherwise, default to creating the ticketing-tool Epic alongside the Markdown plan; Markdown-only is a fine first cut.
-4. EnterPlanMode — draft using the template below. The Mirror block is empty on a brand-new Epic (no child Stories yet).
+4. EnterPlanMode — draft using the template below. The Mirror block is empty on a brand-new Epic if no child Stories were created yet.
 5. ExitPlanMode — approval.
-6. Persist: write `CONCEPT.md`, optionally create the ticket, then stop. Same stop rule as Mode B.
+6. Persist: write `CONCEPT.md` **directly to main** (no feature branch — it's a planning artifact), optionally create the ticket, then stop. Same stop rule as Mode B.
 
 If during the conversation the scope balloons — many parallel themes, no nameable end, dependencies stretching across multiple areas — stop and tell the user: *"This is starting to read like a Saga, not an Epic. Want to step up to `/we:saga`, or trim the scope back to one finishable initiative?"* If the scope shrinks to a single change — one user-visible behaviour, one obvious AC set — tell the user: *"This is Story-sized. Want to drop down to `/we:story` instead?"* Both are soft warnings.
 
@@ -363,12 +363,25 @@ couldn't before, what telemetry confirms "this worked". One paragraph.]
 
 ## Hand-off
 
-After Refine or Create:
+After Refine or Create, the path depends on whether the Stories table already has entries:
 
-1. **`/we:meet epic`** — convene the Council, validate the slice against the Saga, decompose into Stories with rough sequencing.
-2. **`/we:story "<ticket-or-name>"`** — per Story that came out of the meeting, write the build-ready plan.
+**Stories already in the Mirror table** (sketched during Create, or child tickets exist):
+→ Go directly to **`/we:story <KEY>`** per Story to write the build-ready plan.
+  Skip `/we:meet epic` unless the decomposition feels contentious or the sequencing is unclear.
 
-Epic Solo never decomposes inline. Decomposition lives in `/we:meet epic` precisely because it benefits from multi-voice tension (PO + Architect + Orchestrator, plus domain voices where the Epic demands them).
+**Stories table is empty** (brand-new Epic, no stories yet):
+→ Either run **`/we:meet epic`** — the Council validates the slice and decomposes it into
+  Stories with rough AC and sequencing (worth it when the Epic is new, the scope is
+  contentious, or architecture seams compete); or sketch stories yourself and run another
+  Refine pass, then go straight to `/we:story`.
+
+**`/we:meet epic` is not a mandatory step.** It adds value for contentious decomposition;
+it is overhead for a well-formulated Epic with clear stories. The Council produces story
+*shapes* (names, rough AC, sequencing) — you still need `/we:story <KEY>` per Story
+afterwards to write the build-ready implementation plan.
+
+Epic Solo never decomposes inline. Stories produced by the hand-off path (with or without
+a Council meeting) each need their own `/we:story` run.
 
 After Status:
 
@@ -389,6 +402,8 @@ When the session is running as a weside Companion in the PO role (via `/we:mater
 - ALWAYS regenerate the Mirror block when Refine runs (Refine implies fresh ticketing data)
 - ALWAYS use EnterPlanMode + ExitPlanMode for Refine and Create
 - ALWAYS save Refine / Create output to `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md` — never anywhere else
+- ALWAYS commit CONCEPT.md directly to main — it is a planning artifact, not implementation code
+- ⛔ NEVER create a feature branch for CONCEPT.md — feature branches are for /we:story + /we:build
 - ALWAYS write a Vision section as a narrative during Refine — the decomposition meeting reads it FIRST
 - ALWAYS name explicit OUT-of-scope items during Refine — they are the easiest cut if the slice runs long
 - ALWAYS write in English — same convention as the rest of the plan tree

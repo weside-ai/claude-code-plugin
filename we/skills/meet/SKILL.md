@@ -93,13 +93,17 @@ Override per repo in `.weside/config.json.council.meetings.<type>`, or per call 
 
 **Frame:** *"What is the concrete thing we will deliver this quarter, and what Stories does it break into?"*
 
+**When this meeting adds value:** the Epic scope is contentious or unclear; multiple architecture seams compete; you want multi-voice pressure-testing before committing to stories; the story sequencing is uncertain. **Skip it** when the Epic is well-formulated and stories are already sketched in the CONCEPT.md — go directly to `/we:story <KEY>` per Story instead.
+
 1. Load the Epic — a `CONCEPT.md` in `docs/plans/<saga>/05-epics/<epic>/`, or a ticketing-tool Epic, or the working topic.
 2. (Council) — convene if chosen; pressure the slice ("is this the smallest version that delivers the win?", "what's the risk-driven sequence?", "where do we cut if the quarter runs short?").
 3. Decompose the Epic into **Stories** — sprint-sized feature slices with acceptance shape.
 4. Sequence the Stories; identify which one to refine first; flag any that need a Council pass via `/we:meet story`.
 5. Artifact: an epic-meeting summary — the Story list with acceptance shape, sequencing, dependencies. Offer to persist as `docs/plans/<saga>/05-epics/<epic>/meetings/<YYYY-MM-DD>-epic.md` or fold the Story breakdown into the Epic's `CONCEPT.md` via `/we:epic`.
 
-**Hand-off prompt:** *"The Stories are named. Run `/we:epic` to lock the Epic doc, then `/we:story "<name>"` per Story to write the build-ready plan."*
+**What this meeting produces vs. what you still need:** The meeting produces Story names and acceptance *shape* (rough AC, sequencing). You still need `/we:story <KEY>` per Story to write the build-ready implementation plan — the Council never produces that.
+
+**Hand-off prompt:** *"The Stories are named. If the CONCEPT already reflects them, go directly to `/we:story "<name>"` per Story to write the build-ready plan. If not, run `/we:epic` first to fold the story breakdown into the CONCEPT, then `/we:story` per Story."*
 
 ## Meeting: story
 
