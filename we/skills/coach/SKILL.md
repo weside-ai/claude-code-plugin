@@ -148,7 +148,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
      - User uttered an end-of-session signal in the prompt or prior turn ("bis morgen", "schlafen", "going home", "wrap up")
 
 10. **Active initiative state** — for the consuming repo, search for
-    any *living* concept document (`docs/plans/*/CONCEPT.md` with
+    any *living* concept document (`docs/plans/*-epic.md` with
     frontmatter `status: draft`); read its frontmatter + intro + the
     most recent updates-log entry. Then, if MCP is available, search
     companion memories for relevant initiative anchors:
@@ -206,11 +206,11 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 
 | Repo state                                                                   | Current altitude | Natural next move                                                  |
 | ---------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------ |
-| No `docs/plans/<vision>/PRD.md` and the user is starting fresh               | *below Vision*   | `/we:vision` (Solo PRD), or `/we:meet vision` if direction is unclear |
-| PRD exists, no `docs/plans/<saga>/SAGA.md`                                   | Vision → Saga    | `/we:meet vision` (decompose PRD into Sagas), then `/we:saga` per Saga |
-| SAGA.md exists, no Epic under `docs/plans/<saga>/05-epics/`                  | Saga → Epic      | `/we:meet saga` (decompose Saga into Epics), then `/we:epic` per Epic |
+| No `docs/plans/<vision>-prd.md` and the user is starting fresh               | *below Vision*   | `/we:vision` (Solo PRD), or `/we:meet vision` if direction is unclear |
+| PRD exists, no `docs/plans/<saga>-saga.md`                                   | Vision → Saga    | `/we:meet vision` (decompose PRD into Sagas), then `/we:saga` per Saga |
+| SAGA.md exists, no Epic at `docs/plans/<saga>-*-epic.md`                     | Saga → Epic      | `/we:meet saga` (decompose Saga into Epics), then `/we:epic` per Epic |
 | Epic `CONCEPT.md` exists, no Stories under `…/stories/`                      | Epic → Story     | `/we:meet epic` (decompose Epic into Stories), then `/we:story` per Story |
-| Story plan exists at `docs/plans/<saga>/05-epics/<epic>/stories/<TICKET>-plan.md` | Story → Build    | `/we:build {TICKET}`                                               |
+| Story plan exists at `docs/plans/<TICKET>-story.md` (prefer `<TICKET>-story.md`; fall back to legacy `<TICKET>-plan.md` if the new-suffix file is absent) | Story → Build    | `/we:build {TICKET}`                                               |
 | Story plan exists but feels fuzzy / contentious                              | Story (Solo)     | `/we:story {TICKET}` (re-refine Solo) OR `/we:meet story {TICKET}` (Council) |
 | PR is open, ticket in "In Review"                                            | Deliver          | *human* — read PR, merge, close                                    |
 | Multiple altitudes ambiguous                                                 | *unclear*        | Ask the user which artefact they want to focus on                  |
@@ -220,7 +220,7 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 **Plan-status rendering (automatic when an open Saga or Epic is detected):**
 
 After locating the current altitude, check whether there is an active Plan-altitude artefact in the repo:
-- `find docs/plans -name 'SAGA.md' -o -name 'CONCEPT.md' | head -10` — any with `status: active|draft|in-progress|selected`?
+- `find docs/plans -name '*-saga.md' -o -name '*-epic.md' | head -10` — any with `status: active|draft|in-progress|selected`?
 - If yes: surface a one-line Plan-status before the altitude proposal:
 
   > *"Saga: `<Saga name>` — `<n>` Epics (<x> done, <y> active, <z> backlog). Detail: `/we:saga`."*
@@ -236,8 +236,8 @@ After locating the current altitude, check whether there is an active Plan-altit
 
 State the proposal in one sentence with a clear command. Examples:
 
-- *"You're at Saga-altitude — `docs/plans/multi-tenant-saga/SAGA.md` exists but no Epics yet. The natural next move is `/we:meet saga` to decompose into Epics. Shall I run it on this? [y/n]"*
-- *"You have a Story plan at `docs/plans/.../stories/PROJ-123-plan.md` and the AC look tight. The natural next move is `/we:build PROJ-123`. Shall I run it? [y/n]"*
+- *"You're at Saga-altitude — `docs/plans/multi-tenant-saga.md` exists but no Epics yet. The natural next move is `/we:meet saga` to decompose into Epics. Shall I run it on this? [y/n]"*
+- *"You have a Story plan at `docs/plans/PROJ-123-story.md` and the AC look tight. The natural next move is `/we:build PROJ-123`. Shall I run it? [y/n]"*
 - *"PRD looks solid but you mentioned the marketplace bet feels different — that's a new Saga. Solo path: `/we:saga "Marketplace launch"`. Council path: `/we:meet vision` to surface all the Sagas the PRD implies, including Marketplace. Which one? [solo / meet]"*
 
 Always:

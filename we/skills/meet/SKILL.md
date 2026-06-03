@@ -52,7 +52,7 @@ If no meeting type is given, list the four and ask which one.
    - If flag is present → proceed with the council offer as described above.
    - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team since v2.31.0 — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default — see table below). Feed the synthesis into the meeting workflow.
 3. **Run the meeting workflow** for the type (see the four sections below).
-4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is `docs/plans/<saga>/` for Saga-and-below, `docs/plans/<vision>/PRD.md` for the Vision.
+4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is the flat `docs/plans/` directory (e.g. `docs/plans/<saga>-saga.md`, `docs/plans/<saga>-<epic>-epic.md`) for Saga-and-below, `docs/plans/<vision>-prd.md` for the Vision.
 
 ## Default council rosters (shipped)
 
@@ -69,11 +69,11 @@ Override per repo in `.weside/config.json.council.meetings.<type>`, or per call 
 
 **Frame:** *"Why does this product exist, and who is it for? Which Sagas does that imply?"*
 
-1. Load the inputs — the existing PRD (`docs/plans/<vision>/PRD.md`) if any, plus market / strategic context the user brings.
+1. Load the inputs — the existing PRD (`docs/plans/<vision>-prd.md`) if any, plus market / strategic context the user brings.
 2. (Council) — convene if chosen; pressure-test the bets ("is the audience real?", "is the change ambitious enough?", "what are we ignoring?").
 3. Identify candidate **Sagas** — coherent multi-quarter bets implied by the Vision.
 4. Prioritise them with the user; mark which are active this year.
-5. Artifact: a vision-meeting summary — the Sagas, the priorities, the reasoning. Offer to persist as `docs/plans/<vision>/meetings/<YYYY-MM-DD>-vision.md` or fold the Sagas into the PRD via `/we:vision`.
+5. Artifact: a vision-meeting summary — the Sagas, the priorities, the reasoning. Offer to persist as `docs/plans/<vision>-vision-meeting-<YYYY-MM-DD>.md` or fold the Sagas into the PRD via `/we:vision`.
 
 **Hand-off prompt** (printed to the user at close): *"The Sagas are named. Run `/we:vision` to sharpen the PRD with the new Saga bets, then `/we:saga "<name>"` per Saga to formulate each one."*
 
@@ -81,11 +81,11 @@ Override per repo in `.weside/config.json.council.meetings.<type>`, or per call 
 
 **Frame:** *"Where do we want to be in twelve months on this Saga? Which Epics does it break into, in what order?"*
 
-1. Load the Saga (`docs/plans/<saga>/SAGA.md`) or the working draft.
+1. Load the Saga (`docs/plans/<saga>-saga.md`) or the working draft.
 2. (Council) — convene if chosen; ask "does this Saga actually serve the PRD, or is it a side quest?" and "what are the 3-6 Epics that, in sequence, deliver the bet?".
 3. Decompose the Saga into **Epics** — each a quarter-sized, finishable deliverable.
 4. Sequence the Epics; name dependencies; identify the first one to commit to.
-5. Artifact: a saga-meeting summary — the Epic set, sequencing, dependencies, open questions. Offer to persist as `docs/plans/<saga>/meetings/<YYYY-MM-DD>-saga.md` or fold the Epics into `SAGA.md` via `/we:saga`.
+5. Artifact: a saga-meeting summary — the Epic set, sequencing, dependencies, open questions. Offer to persist as `docs/plans/<saga>-saga-meeting-<YYYY-MM-DD>.md` or fold the Epics into `SAGA.md` via `/we:saga`.
 
 **Hand-off prompt:** *"The Epics are named and sequenced. Run `/we:saga` to lock the Saga doc, then `/we:epic "<name>"` per Epic to start formulating the first one."*
 
@@ -95,11 +95,11 @@ Override per repo in `.weside/config.json.council.meetings.<type>`, or per call 
 
 **When this meeting adds value:** the Epic scope is contentious or unclear; multiple architecture seams compete; you want multi-voice pressure-testing before committing to stories; the story sequencing is uncertain. **Skip it** when the Epic is well-formulated and stories are already sketched in the CONCEPT.md — go directly to `/we:story <KEY>` per Story instead.
 
-1. Load the Epic — a `CONCEPT.md` in `docs/plans/<saga>/05-epics/<epic>/`, or a ticketing-tool Epic, or the working topic.
+1. Load the Epic — `docs/plans/<saga>-<epic>-epic.md`, or a ticketing-tool Epic, or the working topic.
 2. (Council) — convene if chosen; pressure the slice ("is this the smallest version that delivers the win?", "what's the risk-driven sequence?", "where do we cut if the quarter runs short?").
 3. Decompose the Epic into **Stories** — sprint-sized feature slices with acceptance shape.
 4. Sequence the Stories; identify which one to refine first; flag any that need a Council pass via `/we:meet story`.
-5. Artifact: an epic-meeting summary — the Story list with acceptance shape, sequencing, dependencies. Offer to persist as `docs/plans/<saga>/05-epics/<epic>/meetings/<YYYY-MM-DD>-epic.md` or fold the Story breakdown into the Epic's `CONCEPT.md` via `/we:epic`.
+5. Artifact: an epic-meeting summary — the Story list with acceptance shape, sequencing, dependencies. Offer to persist as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` or fold the Story breakdown into the Epic's `CONCEPT.md` via `/we:epic`.
 
 **What this meeting produces vs. what you still need:** The meeting produces Story names and acceptance *shape* (rough AC, sequencing). You still need `/we:story <KEY>` per Story to write the build-ready implementation plan — the Council never produces that.
 

@@ -32,6 +32,36 @@ The four altitudes used to carry time labels (multi-year / multi-quarter / quart
 
 Rosters are defaults; each repo can override them in `.weside/config.json.council.meetings.<type>`.
 
+### How plan artifacts are named, stored, and mapped to ticketing
+
+The plan tree is **flat** under `docs/plans/` — no nested directories, no separate
+index file. The **filename suffix** is the altitude marker; the **saga-slug prefix**
+is the grouping. The slug (e.g. `presence`) is the human-memorable key — you never
+have to remember a ticket number to find a Saga.
+
+| Altitude | Filename | In ticketing? |
+|---|---|---|
+| Vision | `docs/plans/<vision>-prd.md` | No (Markdown-only) |
+| Saga | `docs/plans/<saga>-saga.md` | **No** — Sagas never get a ticket |
+| Epic | `docs/plans/<saga>-<epic>-epic.md` | Optional ticketing Epic, titled `[<saga>] <Epic Title>` |
+| Story | `docs/plans/<TICKET>-story.md` | Required ticket; parent = the Epic |
+
+- **Iteration without an index:** `ls docs/plans/*-saga.md` lists every Saga;
+  `*-epic.md` every Epic; `*-story.md` every Story. `ls docs/plans/<saga>-*` shows one
+  Saga and all its Epics grouped together — that glob is a built-in mini-dashboard
+  (`/we:map` renders the full tree on top of it).
+- **Linkage lives in frontmatter:** a Story's `epic:` field points to its parent Epic;
+  an Epic's `saga:` field + filename prefix point to its parent Saga.
+- **The Jira gap:** most ticketing tools have only Epic→Story, no Saga level. The Saga
+  is therefore expressed two ways only — the `<saga>-saga.md` Markdown file, and the
+  `[<saga>]` bracket-prefix on each child Epic's title. To see one Saga's Epics in Jira:
+  `summary ~ "[<saga>]"`. There is deliberately **no `.weside` saga index** — the
+  filename suffix + the title prefix carry everything, so nothing can drift out of sync.
+- **Brownfield promotion:** if a ticketing Epic has quietly grown into a Saga (many
+  Stories, multiple themes, no landing), `/we:saga promote <EPIC-KEY>` cuts it into
+  Epics and emits a re-parenting plan. The `/we:epic` Status dashboard surfaces the same
+  "this Epic is becoming a Saga" signal so the drift gets caught in the 90%-path.
+
 ---
 
 ## `/we:meet vision` — Vision-altitude
@@ -40,7 +70,7 @@ You convene a vision meeting when **the product's reason for existing needs alig
 
 The default roster pulls in voices that see different futures: PO (user value over time), architect (technical horizon), UX researcher (lived experience), marketing (how this lands externally), orchestrator (synthesis). For business-heavy visions, add `sales` and `legal`.
 
-The output is the **set of Sagas** the Vision implies, plus a tighter PRD. The meeting doesn't ship code; it ships *clarity at the highest altitude*. Typical artifacts: `docs/plans/<vision>/PRD.md` (updated) and `docs/plans/<vision>/meetings/<YYYY-MM-DD>-vision.md` (the meeting summary with Saga candidates).
+The output is the **set of Sagas** the Vision implies, plus a tighter PRD. The meeting doesn't ship code; it ships *clarity at the highest altitude*. Typical artifacts: `docs/plans/<vision>-prd.md` (updated) and `docs/plans/<vision>-vision-meeting-<YYYY-MM-DD>.md` (the meeting summary with Saga candidates).
 
 Use when:
 - A new product (or sub-product) is being framed from scratch
@@ -58,7 +88,7 @@ You convene a saga meeting when **a Saga has been chosen and now needs decomposi
 
 The default roster is the PO, the architect, marketing, and the orchestrator. The conversation is about *sequencing* (which Epic first?) and *scope discipline* (does each Epic actually move the Saga forward?). Domain voices vary by Saga type — repos focused on UX or security typically override the marketing slot in `.weside/config.json.council.meetings.saga`; the shipped default assumes a positioning-heavy Saga.
 
-The output is an **Epic backlog with sequencing** — usually 3-6 Epics, ordered, with dependencies named. Persisted as `docs/plans/<saga>/meetings/<YYYY-MM-DD>-saga.md` and folded into `docs/plans/<saga>/SAGA.md` via `/we:saga`.
+The output is an **Epic backlog with sequencing** — usually 3-6 Epics, ordered, with dependencies named. Persisted as `docs/plans/<saga>-saga-meeting-<YYYY-MM-DD>.md` and folded into `docs/plans/<saga>-saga.md` via `/we:saga`.
 
 Use when:
 - A Vision has been agreed and now needs the first Saga decomposed
@@ -76,7 +106,7 @@ You convene an epic meeting when **an Epic has been chosen and now needs decompo
 
 The default roster is leaner — PO, architect, orchestrator. Add domain voices when the Epic demands it: security and legal for a compliance Epic, security alone for a hardening Epic, sales for an enterprise feature, UX for a user-facing Epic. The conversation is about *concrete slices* and *risk sequencing* — what's the smallest version that delivers the win, and what do we cut if the slice runs long.
 
-The output is a **Story list with acceptance shape** — sequenced, with dependencies, with hot Stories flagged for `/we:meet story`. Persisted as `docs/plans/<saga>/05-epics/<epic>/meetings/<YYYY-MM-DD>-epic.md` and folded into the Epic's `CONCEPT.md` via `/we:epic`.
+The output is a **Story list with acceptance shape** — sequenced, with dependencies, with hot Stories flagged for `/we:meet story`. Persisted as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` and folded into the Epic's `CONCEPT.md` via `/we:epic`.
 
 Use when:
 - A Saga has been broken down and now the first Epic needs Stories
@@ -96,7 +126,7 @@ The default roster is two: PO and architect. The PO drives content (what the use
 
 After the deliberation, the meeting **hands off to `/we:story`** (Solo) — the dedicated story-creation skill that:
 - Writes the ticket (minimal: "As X I want Y so that Z" + link)
-- Writes the plan (`docs/plans/{TICKET}-plan.md` with acceptance criteria, phases, security review)
+- Writes the plan (`docs/plans/{TICKET}-story.md` with acceptance criteria, phases, security review)
 - Creates the ticket in your ticketing tool
 
 `/we:meet story` is essentially the upgrade for `/we:story` (Solo) — same outcome, but with multi-voice input before the plan crystallises.

@@ -226,6 +226,30 @@ Wraps a council in a workflow tuned to the altitude. Each meeting validates the 
 
 ## Process skills
 
+### `/we:map`
+
+> *Plan-tree dashboard — type one thing, see the whole landscape.*
+
+A fast, read-only text overview of everything in flight: every Saga, its Epics, and the Stories under each, with status buckets (Done / Active / Refined / Backlog / Blocked). Scans `docs/plans/` by filename suffix (`*-saga.md`, `*-epic.md`, `*-story.md`), groups stories under epics via the `epic:` frontmatter and epics under sagas via the `saga:` prefix, joins build-pipeline phase from the orchestration DB (`orchestration.py story list`), and optionally live ticket status. No nested directories, no separate index — the filename suffix is the altitude marker; the saga-slug prefix is the grouping.
+
+**When to use:**
+- You want the bird's-eye view across ALL Sagas/Epics/Stories at once (`/we:map`)
+- You want one Saga's full subtree expanded to story level (`/we:map presence`)
+- You want to locate a ticket in the tree (`/we:map WA-1206`)
+
+**Differs from `/we:saga` / `/we:epic`:** those render a *deep* Status dashboard for ONE artifact (drift, next-move). `/we:map` is the *wide, shallow* view across all artifacts — the bird's eye. It hands off to `/we:saga <slug>` or `/we:epic <slug-or-key>` for detail.
+
+**Won't do:**
+- Write any file — strictly read-only, no plan-mode
+- Invoke another skill inline — prints the hand-off commands, the user picks
+- Block on a missing ticketing tool or orchestration DB — degrades to frontmatter status
+
+**Transition-tolerant:** also picks up legacy `*-plan.md` stories and `*/CONCEPT.md` nested epics during the suffix migration, flagging them with `~` so you see what still needs renaming.
+
+> **New in v2.35.0.**
+
+---
+
 ### `/we:coach`
 
 > *APO Coach — cross-altitude advisor and onboarding partner.*

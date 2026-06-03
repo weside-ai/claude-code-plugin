@@ -1,9 +1,14 @@
 # Plan File Format — Cross-Skill Contract
 
-Plan files at `docs/plans/{TICKET}-plan.md` are the **build contract** between
+Plan files at `docs/plans/{TICKET}-story.md` are the **build contract** between
 `/we:story` (which writes them) and `/we:build` (which consumes them). This
 document specifies the exact format both sides depend on. Changes here are
 versioned and require explicit consideration of both sides.
+
+> **Filename suffix (v2.35.0):** story plans use the `-story.md` suffix. `/we:build`
+> reads `docs/plans/{TICKET}-story.md` first and falls back to the legacy
+> `{TICKET}-plan.md` so pre-existing plans keep building during migration. New plans
+> are always written with `-story.md`.
 
 ---
 
@@ -112,7 +117,7 @@ parallel_groups: [[2, 3], [5, 6]]  # Two parallel groups
 | Context section non-empty | More than 50 characters of narrative text |
 | At least one Phase header | Matches `^### Phase (\d+): (.+)$` |
 
-Failure message: `"Plan at docs/plans/{TICKET}-plan.md is incomplete: missing <ACs|Context|Phase>. Run /we:story {TICKET} to complete it before /we:build."`
+Failure message: `"Plan at docs/plans/{TICKET}-story.md is incomplete: missing <ACs|Context|Phase>. Run /we:story {TICKET} to complete it before /we:build."`
 
 ---
 
@@ -189,7 +194,7 @@ parallel_groups: []
 
 ## Concept Doc Format — Saga + Epic Mirror Block
 
-The Saga (`docs/plans/<saga>/SAGA.md`) and Epic (`docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`) docs are not part of the Build contract above — `/we:build` never reads them. They are written and updated by `/we:saga` and `/we:epic`, and they carry an auto-generated *mirror block* that reflects child items from the ticketing tool. The mirror is the contract between the Plan skill (writer + consumer of its own block) and the user (owner of all surrounding prose).
+The Saga (`docs/plans/<saga>-saga.md`) and Epic (`docs/plans/<saga>-<epic>-epic.md`) docs are not part of the Build contract above — `/we:build` never reads them. (Both are flat under `docs/plans/`, distinguished by filename suffix; the saga-slug prefix on epics groups them — `ls docs/plans/<saga>-*` shows a saga and all its epics.) They are written and updated by `/we:saga` and `/we:epic`, and they carry an auto-generated *mirror block* that reflects child items from the ticketing tool. The mirror is the contract between the Plan skill (writer + consumer of its own block) and the user (owner of all surrounding prose).
 
 ### Frontmatter
 
@@ -212,7 +217,7 @@ Status enums:
 
 ### Mirror block — marker convention
 
-Both docs include a section (`## Sub-Epics` in SAGA.md, `## Stories` in CONCEPT.md) that contains a marker-enclosed table:
+Both docs include a section (`## Sub-Epics` in the `-saga.md`, `## Stories` in the `-epic.md`) that contains a marker-enclosed table:
 
 ```markdown
 ## Sub-Epics
@@ -236,7 +241,7 @@ Rules:
 | Everything between markers is owned by the skill | Overwritten on every Mirror-refresh and every Refine |
 | Everything outside markers is owned by the user | Never touched by the skill |
 | Saga columns: `Key, Title, Status, Last activity, Notes` | Five columns; Notes is free-form (blockers, links) |
-| Epic columns: `Key, Title, Status, Plan, Last activity, Notes` | Six columns — `Plan` is `✓` if `docs/plans/{KEY}-plan.md` exists, `—` otherwise |
+| Epic columns: `Key, Title, Status, Plan, Last activity, Notes` | Six columns — `Plan` is `✓` if `docs/plans/{KEY}-story.md` exists (legacy `{KEY}-plan.md` also counts), `—` otherwise |
 | Status vocabulary normalised | Saga: Done / Active / Backlog / Blocked. Epic: Done / Active / Refined / Backlog / Blocked |
 | Refresh updates only the mirror block, `updated:` field, and Updates Log | Lightweight, no plan-mode, no user prose touched |
 
