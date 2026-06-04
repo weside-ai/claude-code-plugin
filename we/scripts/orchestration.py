@@ -95,6 +95,22 @@ STORY_PHASES = [
     "ci_passed",  # /we:build — CI/Reviews green
 ]
 
+
+def phase_index_of(phase: str) -> int:
+    """Resolve a phase name to its canonical index, or -1 if unknown.
+
+    The ``phase_index`` column on ``story_checkpoints`` is a denormalized cache
+    written at insert time. The phase NAME is the source of truth: recomputing
+    the index from the name on every read keeps resume/list correct even after
+    ``STORY_PHASES`` is reordered (which silently invalidates stored indices for
+    rows written under the old order).
+    """
+    try:
+        return STORY_PHASES.index(phase)
+    except ValueError:
+        return -1
+
+
 # Stale checkpoint threshold in hours
 STALE_CHECKPOINT_HOURS = 24
 
@@ -1101,6 +1117,8 @@ def story_checkpoint(
             "error": f"Invalid phase: {phase}. Valid: {STORY_PHASES}",
         }
 
+    # Denormalized cache only — readers recompute the index from `phase` via
+    # phase_index_of(), so a STORY_PHASES reorder can't poison resume/list.
     phase_index = STORY_PHASES.index(phase)
 
     conn = get_db()
@@ -1155,21 +1173,24 @@ def story_resume(story_key: str) -> dict[str, Any]:
     """Get the latest checkpoint for a story to enable resume."""
     conn = get_db()
     try:
-        # Get all checkpoints for this story, ordered by phase
+        # Get all checkpoints for this story. Pick the furthest-along by
+        # recomputing the index from the phase NAME — the stored phase_index
+        # column is a cache that goes stale if STORY_PHASES is reordered.
         cursor = conn.execute(
             """
             SELECT * FROM story_checkpoints
             WHERE story_key = ?
-            ORDER BY phase_index DESC, created_at DESC
-            LIMIT 1
+            ORDER BY created_at DESC
             """,
             (story_key,),
         )
-        checkpoint = cursor.fetchone()
+        rows = cursor.fetchall()
 
-        if not checkpoint:
+        if not rows:
             return {"success": False, "error": f"No checkpoint found for {story_key}"}
 
+        # rows are newest-first; max() keeps the first row on ties (latest write)
+        checkpoint = max(rows, key=lambda r: phase_index_of(r["phase"]))
         checkpoint_data = dict(checkpoint)
 
         # Parse JSON fields
@@ -1184,8 +1205,9 @@ def story_resume(story_key: str) -> dict[str, Any]:
         created_at = datetime.fromisoformat(checkpoint_data["created_at"])
         is_stale = datetime.now() - created_at > timedelta(hours=STALE_CHECKPOINT_HOURS)
 
-        # Get next phase to continue from
-        current_phase_index = checkpoint_data["phase_index"]
+        # Get next phase to continue from — recompute from the phase name so a
+        # reordered STORY_PHASES can't map a stale stored index to the wrong phase.
+        current_phase_index = phase_index_of(checkpoint_data["phase"])
         next_phase = (
             STORY_PHASES[current_phase_index + 1]
             if current_phase_index < len(STORY_PHASES) - 1
@@ -1209,10 +1231,13 @@ def story_list(active_only: bool = False) -> list[dict[str, Any]]:
     """List stories with their checkpoint status."""
     conn = get_db()
     try:
+        # Aggregate the phase NAMES per story; recompute the latest index from
+        # the names so a reordered STORY_PHASES can't mislabel progress via the
+        # stale phase_index cache.
         query = """
             SELECT
                 story_key,
-                MAX(phase_index) as latest_phase_index,
+                GROUP_CONCAT(phase) as phases,
                 MAX(created_at) as last_checkpoint,
                 COUNT(*) as checkpoint_count
             FROM story_checkpoints
@@ -1224,8 +1249,11 @@ def story_list(active_only: bool = False) -> list[dict[str, Any]]:
 
         for row in cursor.fetchall():
             story = dict(row)
-            story["latest_phase"] = STORY_PHASES[story["latest_phase_index"]]
-            story["is_complete"] = story["latest_phase_index"] == len(STORY_PHASES) - 1
+            phases = (story.pop("phases") or "").split(",")
+            latest_index = max((phase_index_of(p) for p in phases), default=-1)
+            story["latest_phase_index"] = latest_index
+            story["latest_phase"] = STORY_PHASES[latest_index] if latest_index >= 0 else None
+            story["is_complete"] = latest_index == len(STORY_PHASES) - 1
 
             # Check if stale
             last_cp = datetime.fromisoformat(story["last_checkpoint"])
