@@ -36,6 +36,7 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 **Around the spine:**
 
 - **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
+- **`/we:map`** — plan-tree dashboard: a read-only text overview of every Saga › Epics › Stories with status buckets, scanned flat from `docs/plans/` by filename suffix and joined with build-pipeline state. The bird's-eye view (`/we:saga` / `/we:epic` give the deep per-artifact view).
 - **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, one-line Plan-status snapshots (full detail delegated to `/we:saga` / `/we:epic`)
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.

@@ -102,7 +102,7 @@ If interrupted → ask user whether to resume from last checkpoint.
 
 ## Step 1: DoR + Load Story + Reality Check
 
-Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-plan.md`).
+Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
 
 **Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output.
 
@@ -115,7 +115,7 @@ Check all three:
 **On failure:** stop the pipeline immediately with a specific message:
 
 ```
-Plan at `docs/plans/{TICKET}-plan.md` is incomplete: missing <ACs|Context|Phase headers>.
+Plan at `docs/plans/{TICKET}-story.md` is incomplete: missing <ACs|Context|Phase headers>.
 Run `/we:story {TICKET}` to complete it before `/we:build`.
 See ${CLAUDE_PLUGIN_ROOT}/quality/dor.md for the full DoR checklist.
 ```
@@ -127,7 +127,7 @@ Name the specific missing item(s). Do NOT proceed with an incomplete plan.
 **Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP
 (if available) to surface related architecture docs:
 ```
-mcp__turbovault__find_similar_notes("docs/plans/{TICKET}-plan.md")
+mcp__turbovault__find_similar_notes("docs/plans/{TICKET}-story.md")
 ```
 Read the top 3 results — they contain patterns, primitives, and ADRs relevant
 to this story. Keep them in mind during implementation.
@@ -218,7 +218,7 @@ Agent(
 
 **Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
 
-1. The full path to the plan (`docs/plans/{TICKET}-plan.md`) and which phase number it owns
+1. The full path to the plan (`docs/plans/{TICKET}-story.md`) and which phase number it owns
 2. The phase's Goal, Files, and Approach block **verbatim** from the plan
 3. The ticket key, feature branch name, and absolute repo path
 4. The project conventions file (`CLAUDE.md` path)
@@ -236,7 +236,7 @@ Agent(
 
 **Setup (once, before any phase):**
 
-1. **Load plan** from `docs/plans/{TICKET}-plan.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
+1. **Load plan** from `docs/plans/{TICKET}-story.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
 2. **Formulate goal**: "The user should be able to X so that Y."
 
 **For each phase** (after it completes — inline or agent returns):

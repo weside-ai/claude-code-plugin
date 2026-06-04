@@ -36,7 +36,7 @@ Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
 | What | Where | Detail Level |
 |---|---|---|
 | User Story | Ticket (minimal) | "As X I want Y so that Z" |
-| **Plan** | `docs/plans/{TICKET}-plan.md` | Acceptance Criteria, Technical Approach, Phases, Tests |
+| **Plan** | `docs/plans/{TICKET}-story.md` | Acceptance Criteria, Technical Approach, Phases, Tests |
 
 **Ticket is MINIMAL. Plan contains ALL details.**
 
@@ -75,7 +75,7 @@ Then the UI updates to dark theme immediately
 
 ### Step 1: Load Story
 
-Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-plan.md`.
+Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-story.md`.
 
 ### Step 2: Understand Context (INTERACTIVE)
 
@@ -90,7 +90,7 @@ Ask user about unclear points. Clarify scope, requirements, edge cases.
 As [role] I want [feature] so that [benefit].
 
 ## Plan
-Implementation Plan: docs/plans/{TICKET}-plan.md
+Implementation Plan: docs/plans/{TICKET}-story.md
 ```
 
 ### Step 4: Create Plan (EnterPlanMode)
@@ -197,18 +197,18 @@ User reviews plan. On feedback → adjust. On approval → continue.
 
 **Execute these 5 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
-1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-plan.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
+1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-story.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
 2. **Update ticket:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
 3. **Commit plan to main:** Only if the main worktree has `main` checked out (do NOT switch branches). Resolve `MAIN_WORKTREE=$(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}')`. Then:
    ```bash
    cd "$MAIN_WORKTREE" && \
    [ "$(git branch --show-current)" = "main" ] && \
-   git add docs/plans/{TICKET}-plan.md && \
+   git add docs/plans/{TICKET}-story.md && \
    git commit -m "docs: add {TICKET} plan — {Story Title}" && \
    git push || echo "WARN: main worktree not on main branch — plan saved but not committed. Commit manually."
    ```
 4. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined` (CLI keeps the `story` table name for back-compat — see Build skill note.)
-5. **Output:** `"Plan saved to docs/plans/{TICKET}-plan.md. /we:story DONE."`
+5. **Output:** `"Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE."`
 
 ⛔ **STOP after step 5. No implementation. No /we:build. No branch. No code.**
 
@@ -286,7 +286,8 @@ Detect available ticketing tool (in priority order):
 - ALWAYS create MINIMAL ticket + DETAILED plan
 - ALWAYS use EnterPlanMode for plan creation
 - ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
-- ALWAYS save plan to `docs/plans/{TICKET}-plan.md` via Write() — `~/.claude/plans/` is NOT permanent
+- ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
+- The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).
 - ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.
