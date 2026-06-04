@@ -16,7 +16,7 @@
 
 ## What you get
 
-Twenty-two `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
+Twenty-three `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
 **Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
 
@@ -30,6 +30,7 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 **Build altitude — autonomous:**
 
 - **`/we:build`** — autonomous build pipeline: code → AC verify → quality gates → docs → PR → CI, with checkpoints + circuit breaker. Hands off PR to you.
+- **`/we:orchestrate`** *(spike, WA-1231)* — Epic-driven build orchestration: boots from state, computes the ready Stories, and dispatches one builder-teammate per Story (each running `/we:build`), capped at ≤2 concurrent. The Build-altitude sibling of `/we:council`.
 
 **Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
 
@@ -54,7 +55,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 22 skills are available.
+That's it. The plugin is enabled. All 23 skills are available.
 
 ---
 
@@ -124,7 +125,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 22 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 23 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 

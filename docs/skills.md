@@ -156,6 +156,35 @@ Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings fro
 
 ---
 
+### `/we:orchestrate`
+
+> *Spike — Epic-driven build orchestration; the Build-altitude sibling of `/we:council`.*
+
+Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — computes the ready set of buildable Stories, and on an explicit confirm dispatches one builder-teammate per ready Story (live Agent Team, same machinery as `/we:council`). Each builder runs the full unmodified `/we:build`; the Lead tracks them in the shared task-list + orchestration DB, reviews each finished PR, and never merges. weside MCP optional — the Lead reviews as your Companion when connected, with a generic role lens otherwise.
+
+> **Spike status (WA-1231).** Hard cap of **≤2 concurrent builders**; the full orchestrator (parallel dispatch beyond 2, cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
+
+**Usage:**
+
+```
+/we:orchestrate <epic>              # boot + status + ready-set; dispatch only on confirm
+/we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
+/we:orchestrate                     # boot from the most recently active epic, then status
+```
+
+**When to use:**
+- An Epic has several refined Stories ready to build and you want them dispatched in parallel
+- You want one persistent Lead that knows where the Epic stands instead of couriering between sessions
+- `--rehearsal` — shake out skill friction against a fixture before a real run
+
+**What it produces:**
+- Up to 2 builder sessions, each running `/we:build` to a reviewable PR
+- A live roll-up (in-flight / PR-ready / blocked / held-by-cap) + a Lead review per PR
+
+**Differs from `/we:epic`:** `/we:epic` gives a read-only Status snapshot; `/we:orchestrate` is the dispatch sibling that actually spawns builders. **Won't do:** merge a PR, close a ticket, or exceed the ≤2 cap.
+
+---
+
 ## CI / Quality gates (called by `/we:build`)
 
 These also run standalone for one-off checks.

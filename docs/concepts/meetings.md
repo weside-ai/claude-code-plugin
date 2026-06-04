@@ -21,6 +21,8 @@ flowchart TB
 
 Each meeting answers a different question and decomposes its altitude's item into the next altitude's items.
 
+Below Story sits **Build**, where deliberation gives way to dispatch. `/we:orchestrate` is the Build-altitude sibling of the council: instead of convening role-lenses to deliberate, it dispatches one builder-teammate per ready Story (each running the full `/we:build`) and rolls up their PRs — currently a WA-1231 spike capped at ≤2 concurrent builders.
+
 | Meeting | Question | Output | Default roster |
 |---|---|---|---|
 | `/we:meet vision` | *why does this product exist?* | Sagas, validated PRD | PO, architect, UX, marketing, orchestrator |

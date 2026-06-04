@@ -56,6 +56,9 @@ def validate_file(filepath: str) -> list[str]:
     if path.name in DOC_FILENAMES:
         return []  # Documentation files, not skills/commands/agents
 
+    if any(part in {"references", "assets"} for part in path.parts):
+        return []  # Bundled resources (skill-development convention), not definitions
+
     content = path.read_text(encoding="utf-8")
     category = get_category(filepath)
 

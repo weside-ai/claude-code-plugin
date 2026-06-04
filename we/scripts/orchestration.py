@@ -2548,6 +2548,199 @@ def cifix_list(story_key: str | None = None, active_only: bool = False) -> dict[
         conn.close()
 
 
+# =============================================================================
+# Ready-Set Computation (WA-1231 Phase 1)
+# =============================================================================
+
+# Frontmatter status values that indicate a story is effectively built.
+_BUILT_STATUSES = {"In Review", "Done", "Merged"}
+
+# Story checkpoint phases that indicate a story has reached a build milestone.
+_BUILT_CHECKPOINT_PHASES = {"pr_created", "ci_passed"}
+
+# Regex for a "### Phase N" header anywhere in the body.
+_PHASE_HEADER_RE = re.compile(r"^### Phase \d+", re.MULTILINE)
+
+
+def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, Any]:
+    """Compute which stories are ready to build and which are held back.
+
+    Pure function: no I/O, no DB, no globbing. Given a list of story dicts,
+    it returns the ready set (up to ``cap`` stories) and a list of held
+    stories each with the reason they were held.
+
+    Args:
+        stories: list of dicts, each with keys::
+
+            {
+                "key": str,        # story key, e.g. "WA-1231"
+                "refined": bool,   # has a refined (DoR-passing) plan
+                "built": bool,     # already built
+                "deps": list[str], # keys this story depends on
+            }
+
+        cap: maximum number of stories that may be placed in the ready set.
+
+    Returns:
+        ``{"ready": [keys...], "held": [{"key": k, "reason": r}, ...]}``.
+
+    Rules are applied IN ORDER per story; the FIRST failing rule decides the
+    held reason. Stories are processed sorted by ``key`` ascending:
+
+        1. not ``refined``  -> held, reason ``"no refined plan"``
+        2. ``built``        -> held, reason ``"already built"``
+        3. any dep ``d`` not in built keys -> held, reason ``"waiting on {d}"``
+           (the first such dep, in ``deps`` order)
+        4. ready set already at ``cap`` -> held, reason ``"cap reached"``
+        5. otherwise        -> ready
+    """
+    built_keys = {s["key"] for s in stories if s["built"]}
+    ready: list[str] = []
+    held: list[dict[str, str]] = []
+
+    for story in sorted(stories, key=lambda s: s["key"]):
+        key = story["key"]
+        if not story["refined"]:
+            held.append({"key": key, "reason": "no refined plan"})
+            continue
+        if story["built"]:
+            held.append({"key": key, "reason": "already built"})
+            continue
+        unmet_dep = next((d for d in story.get("deps", []) if d not in built_keys), None)
+        if unmet_dep is not None:
+            held.append({"key": key, "reason": f"waiting on {unmet_dep}"})
+            continue
+        if len(ready) == cap:
+            held.append({"key": key, "reason": "cap reached"})
+            continue
+        ready.append(key)
+
+    return {"ready": ready, "held": held}
+
+
+def _parse_frontmatter(text: str) -> dict[str, Any]:
+    """Parse a leading ``---``...``---`` YAML frontmatter block (stdlib only).
+
+    Handles simple ``key: value`` lines and an optional inline list value of
+    the form ``key: [a, b, c]``. Returns an empty dict if no frontmatter
+    block is present.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+
+    fm: dict[str, Any] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" not in line:
+            continue
+        raw_key, _, raw_value = line.partition(":")
+        key = raw_key.strip()
+        value = raw_value.strip()
+        if not key:
+            continue
+        if value.startswith("[") and value.endswith("]"):
+            inner = value[1:-1].strip()
+            items = [item.strip() for item in inner.split(",")] if inner else []
+            fm[key] = [item for item in items if item]
+        else:
+            fm[key] = value
+    return fm
+
+
+def _body_is_refined(text: str) -> bool:
+    """DoR scan of a story body (case-sensitive tokens).
+
+    Refined iff the body contains ``Given``, ``When`` and ``Then``, a
+    ``### Phase N`` header, and a ``## Context`` section with more than 50
+    non-whitespace characters following the header.
+    """
+    if "Given" not in text or "When" not in text or "Then" not in text:
+        return False
+    if not _PHASE_HEADER_RE.search(text):
+        return False
+
+    idx = text.find("## Context")
+    if idx == -1:
+        return False
+    after = text[idx + len("## Context") :]
+    # Stop the context section at the next top-level header, if any.
+    next_header = re.search(r"^## ", after, re.MULTILINE)
+    if next_header:
+        after = after[: next_header.start()]
+    non_ws = "".join(after.split())
+    return len(non_ws) > 50
+
+
+def _resolve_epic_identifiers(epic: str, plans_path: Path) -> set[str]:
+    """Resolve an epic slug-or-key to every identifier its Stories might use.
+
+    A Story references its epic by either the epic plan's slug (``epic:``) or its
+    ticketing key (``ticket:``) — e.g. the ``circles`` epic plan carries
+    ``epic: circles, ticket: WA-1205`` while its Stories use ``epic: WA-1205``.
+    Given the ``epic`` arg, collect both from any matching ``*<epic>*-epic.md``
+    plan so Stories keyed by either slug or key are found.
+    """
+    identifiers = {epic}
+    if plans_path.is_dir():
+        for epic_path in plans_path.glob(f"*{epic}*-epic.md"):
+            try:
+                fm = _parse_frontmatter(epic_path.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            for field in ("epic", "ticket", "story"):
+                val = fm.get(field)
+                if isinstance(val, str) and val:
+                    identifiers.add(val)
+    return identifiers
+
+
+def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
+    """Read story plan files for ``epic`` and shape them for compute_ready_set.
+
+    Globs ``{plans_dir}/*-story.md``, parses frontmatter + body, filters to
+    stories whose ``epic`` frontmatter matches the epic's slug OR ticketing key
+    (see _resolve_epic_identifiers), and derives refined/built/deps.
+    """
+    stories: list[dict[str, Any]] = []
+    plans_path = Path(plans_dir)
+    if not plans_path.is_dir():
+        return stories
+
+    identifiers = _resolve_epic_identifiers(epic, plans_path)
+    for path in sorted(plans_path.glob("*-story.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        fm = _parse_frontmatter(text)
+        if fm.get("epic") not in identifiers:
+            continue
+
+        key = fm.get("story") or path.name[: -len("-story.md")]
+        deps = fm.get("depends_on", [])
+        if not isinstance(deps, list):
+            deps = [deps]
+        status = fm.get("status")
+
+        built = status in _BUILT_STATUSES
+        if not built:
+            status_info = story_status(key)
+            phases = {cp["phase"] for cp in status_info.get("checkpoints", [])}
+            built = bool(phases & _BUILT_CHECKPOINT_PHASES)
+
+        stories.append(
+            {
+                "key": key,
+                "refined": _body_is_refined(text),
+                "built": built,
+                "deps": deps,
+            }
+        )
+    return stories
+
+
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="SQLite Orchestration CLI")
@@ -2663,6 +2856,15 @@ def main() -> None:
 
     story_status_p = story_sub.add_parser("status", help="Get comprehensive story status")
     story_status_p.add_argument("story_key")
+
+    story_ready_p = story_sub.add_parser(
+        "ready", help="Compute the ready-set for an epic's stories"
+    )
+    story_ready_p.add_argument("epic", help="Epic key, e.g. WA-1231")
+    story_ready_p.add_argument(
+        "--plans-dir", default="docs/plans", help="Directory of *-story.md plan files"
+    )
+    story_ready_p.add_argument("--cap", type=int, default=2, help="Max stories in the ready set")
 
     story_sub.add_parser("phases", help="List valid story phases")
 
@@ -2836,6 +3038,9 @@ def main() -> None:
             result = story_clear(args.story_key, args.keep_latest)
         elif args.action == "status":
             result = story_status(args.story_key)
+        elif args.action == "ready":
+            stories = _load_epic_stories(args.epic, args.plans_dir)
+            result = compute_ready_set(stories, cap=args.cap)
         elif args.action == "phases":
             result = {"phases": STORY_PHASES, "count": len(STORY_PHASES)}
 
