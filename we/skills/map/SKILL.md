@@ -68,7 +68,7 @@ Read fresh — the tree moves between sessions.
    when frontmatter is missing).
 3. **Build state (optional join):** run
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story list
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story list --active
    ```
    to annotate stories that are mid-pipeline with their latest phase
    (`git_prepared` / `implementation_complete` / `pr_created` / `ci_passed` …).

@@ -21,7 +21,11 @@ color: purple
 ## Step 1: Determine Scope
 
 ```bash
-git diff --name-only main...HEAD 2>/dev/null || git diff --name-only HEAD~5
+# Derive the merge base — don't hardcode 'main'
+BASE=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null) \
+  || BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') \
+  || BASE="main"
+git diff --name-only "origin/${BASE}...HEAD" 2>/dev/null || git diff --name-only HEAD~5
 ```
 
 Decide scope based on changed files.

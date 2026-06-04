@@ -102,7 +102,13 @@ If interrupted → ask user whether to resume from last checkpoint.
 
 ## Step 1: DoR + Load Story + Reality Check
 
-Load story from ticketing tool. Verify DoR: User Story, Plan exists (`docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
+**Resolve repo root** (do this once and reuse throughout):
+
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+```
+
+Load story from ticketing tool. Verify DoR: User Story, Plan exists (`${REPO_ROOT}/docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
 
 **Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output.
 
@@ -115,7 +121,7 @@ Check all three:
 **On failure:** stop the pipeline immediately with a specific message:
 
 ```
-Plan at `docs/plans/{TICKET}-story.md` is incomplete: missing <ACs|Context|Phase headers>.
+Plan at `${REPO_ROOT}/docs/plans/{TICKET}-story.md` is incomplete: missing <ACs|Context|Phase headers>.
 Run `/we:story {TICKET}` to complete it before `/we:build`.
 See ${CLAUDE_PLUGIN_ROOT}/quality/dor.md for the full DoR checklist.
 ```
@@ -127,7 +133,7 @@ Name the specific missing item(s). Do NOT proceed with an incomplete plan.
 **Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP
 (if available) to surface related architecture docs:
 ```
-mcp__turbovault__find_similar_notes("docs/plans/{TICKET}-story.md")
+mcp__turbovault__find_similar_notes("${REPO_ROOT}/docs/plans/{TICKET}-story.md")
 ```
 Read the top 3 results — they contain patterns, primitives, and ADRs relevant
 to this story. Keep them in mind during implementation.
@@ -218,12 +224,12 @@ Agent(
 
 **Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
 
-1. The full path to the plan (`docs/plans/{TICKET}-story.md`) and which phase number it owns
+1. The full path to the plan (`${REPO_ROOT}/docs/plans/{TICKET}-story.md`) and which phase number it owns
 2. The phase's Goal, Files, and Approach block **verbatim** from the plan
 3. The ticket key, feature branch name, and absolute repo path
 4. The project conventions file (`CLAUDE.md` path)
 5. **Instruction:** implement the phase, commit with message `{TICKET}: phase {N} — {description}`, push to the feature branch
-6. **Instruction:** follow TDD convention — write failing tests first, then implementation. Run `ruff`/`eslint` auto-fix before committing.
+6. **Instruction:** follow TDD convention — write failing tests first, then implementation. Run the repo's linter/formatter (e.g. `ruff`, `eslint`, `gofmt`, `rustfmt` — whichever is present) auto-fix before committing.
 7. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
 
 **The orchestrator retains all pipeline ownership.** Sub-agents implement + commit only. They do NOT open PRs, transition Jira, write checkpoints, make decisions outside their phase scope, or run quality gates.
@@ -236,12 +242,12 @@ Agent(
 
 **Setup (once, before any phase):**
 
-1. **Load plan** from `docs/plans/{TICKET}-story.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
+1. **Load plan** from `${REPO_ROOT}/docs/plans/{TICKET}-story.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
 2. **Formulate goal**: "The user should be able to X so that Y."
 
 **For each phase** (after it completes — inline or agent returns):
 
-1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint); commit.
+1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint/gofmt/rustfmt — whichever tool is present in the repo); commit.
 2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
 3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
 
@@ -292,11 +298,12 @@ Three subagents via `Agent(run_in_background=True)`:
 enforces CRITICAL/MAJOR thread resolution after PR creation. Local CodeRabbit
 CLI is not part of this pipeline — the GitHub review has better context
 (PR diff, commit history, prior reviews) and is the authoritative gate.
+If no GitHub remote or no CodeRabbit app is present, skip Steps 8d–8e (thread resolution) and treat local quality gates as authoritative.
 
 **Wait for ALL THREE.** Then verify checkpoints:
 - `review_passed` (code-reviewer clean)
 - `static_analysis_passed` (static-analyzer clean)
-- `test_passed` (tests green + coverage met)
+- `test_passed` (tests green; coverage met if a coverage tool is configured — unmeasured if absent)
 
 If any fail → fix and re-run. Circuit breaker opens after 3 failures.
 
@@ -324,9 +331,13 @@ When the agent returns with proposals:
 1. Present them to the user (concise list — the agent already formatted it)
 2. User approves / adjusts / rejects each proposal
 3. On approval → apply the diffs via Edit
-4. If any bypass annotation changed → also run
-   `bash scripts/generate-bypass-register.sh --write` and commit the
-   regenerated register in the same docs commit
+4. If any bypass annotation changed → also run (if the script exists):
+   ```bash
+   if [ -f "${REPO_ROOT}/scripts/generate-bypass-register.sh" ]; then
+     bash "${REPO_ROOT}/scripts/generate-bypass-register.sh" --write
+   fi
+   ```
+   Commit the regenerated register in the same docs commit (skip silently if the script is absent)
 5. Commit the doc changes and write checkpoint `docs_updated`
 
 If the agent returns "nothing needs updating" — write `docs_updated` immediately
@@ -337,11 +348,11 @@ and continue. Do not invent work.
 **BLOCKING:** Verify ALL THREE quality gate checkpoints exist before creating PR:
 - `review_passed` (code review clean)
 - `static_analysis_passed` (lint/format/types clean)
-- `test_passed` (tests green + coverage met)
+- `test_passed` (tests green; coverage met if measured)
 
 If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
 
-CodeRabbit runs on GitHub after PR creation. `/we:ci-review` handles thread resolution.
+CodeRabbit runs on GitHub after PR creation. `/we:ci-review` handles thread resolution. If no GitHub remote is configured, skip CodeRabbit steps — local gates are authoritative.
 
 Call PR creator agent:
 
@@ -355,12 +366,18 @@ Extract PR number. Write checkpoint `pr_created`.
 
 ⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute CI-review steps inline:
 
-1. **Collect** findings from CI, Claude Review, and CodeRabbit (use `gh` CLI)
+**Precheck — GitHub availability:**
+```bash
+gh auth status 2>/dev/null && HAS_GH=1 || HAS_GH=0
+```
+If `HAS_GH=0`: skip steps 1, 5, and 6 below. Write `ci_passed` after local quality gates pass and continue.
+
+1. **Collect** findings from CI, Claude Review, and CodeRabbit (use `gh` CLI — skip if `HAS_GH=0`)
 2. **Triage**: BLOCKING = must fix, WARNING = fix unless wrong, INFO = evaluate
 3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
 4. **Batch fix** all issues locally, ONE commit with all fixes
-5. **Resolve** CodeRabbit threads via GraphQL, verify 0 unresolved
-6. **Push** only when all threads resolved
+5. **Resolve** CodeRabbit threads via GraphQL, verify 0 unresolved (skip if no `coderabbitai[bot]` reviews exist)
+6. **Push** only when all threads resolved (or when CodeRabbit is absent)
 7. **Repeat** (max 3 cycles). After 3 → stop, ask user.
 
 After reviews green → write checkpoint `ci_passed`.

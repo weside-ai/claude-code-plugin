@@ -27,37 +27,57 @@ Iteratively collects findings from CI + reviews, fixes ALL of them, and pushes o
 
 ## Phase 1: Collect (Iterative)
 
-Detect PR and repo automatically:
+Detect PR and repo. If `gh` is unavailable or unauthenticated, skip GitHub-dependent steps and treat local quality gates as authoritative.
 
 ```bash
-PR=$(gh pr list --head "$(git branch --show-current)" --json number --jq '.[0].number')
-REPO=$(gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"')
-OWNER=$(echo $REPO | cut -d/ -f1)
-REPO_NAME=$(echo $REPO | cut -d/ -f2)
+# Precheck: gh available and authenticated?
+GH_AVAILABLE=false
+if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+  GH_AVAILABLE=true
+fi
+
+if [ "$GH_AVAILABLE" = true ]; then
+  PR=$(gh pr list --head "$(git branch --show-current)" --json number --jq '.[0].number')
+  # Derive base branch from remote HEAD rather than assuming 'main'
+  BASE=$(gh pr view "$PR" --json baseRefName --jq '.baseRefName' 2>/dev/null \
+    || git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' \
+    || echo "main")
+  REPO=$(gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"')
+  OWNER=$(echo $REPO | cut -d/ -f1)
+  REPO_NAME=$(echo $REPO | cut -d/ -f2)
+fi
 ```
 
 ### 1a. Start with what's ready
 
-Collect from all sources that have completed. Don't wait for everything — start building the findings table with what's available:
+Collect from all sources that have completed. Don't wait for everything — start building the findings table with what's available. Skip GitHub steps when `gh` is unavailable:
 
 ```bash
-# CI status
-gh pr checks $PR
+if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
+  # CI status
+  gh pr checks $PR
 
-# Claude Review (may not exist yet if check is pending)
-gh pr view $PR --json comments --jq '.comments[] | select(.body | test("VERDICT")) | .body'
+  # Claude Review (may not exist yet if check is pending)
+  gh pr view $PR --json comments --jq '.comments[] | select(.body | test("VERDICT")) | .body'
 
-# CodeRabbit threads (unresolved only)
-gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
-  repository(owner:$owner,name:$repo){
-    pullRequest(number:$pr){reviewThreads(first:100){nodes{
-      isResolved id comments(first:3){nodes{author{login} body}}
-    }}}}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)'
+  # CodeRabbit threads — only when coderabbitai[bot] reviews exist
+  CR_COUNT=$(gh api repos/$REPO/pulls/$PR/reviews \
+    --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | length' 2>/dev/null || echo 0)
+  if [ "$CR_COUNT" -gt 0 ]; then
+    gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
+      repository(owner:$owner,name:$repo){
+        pullRequest(number:$pr){reviewThreads(first:100){nodes{
+          isResolved id comments(first:3){nodes{author{login} body}}
+        }}}}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
+      --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)'
 
-# CodeRabbit review body (for "outside diff range" findings)
-gh api repos/$REPO/pulls/$PR/reviews \
-  --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | last | .body'
+    # CodeRabbit review body (for "outside diff range" findings)
+    gh api repos/$REPO/pulls/$PR/reviews \
+      --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | last | .body'
+  fi
+else
+  echo "INFO: gh unavailable or no PR found — skipping remote CI/review collection. Local quality gates are authoritative."
+fi
 ```
 
 ### 1b. If CI is still running
@@ -125,28 +145,51 @@ A finding may be skipped ONLY when:
 After ALL fixes — run local validation. **Affected tests only**, not the full suite (CI runs that on push):
 
 ```bash
-# Determine scope: files changed vs main
-CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null)
+# Determine scope: files changed vs base
+BASE_REF=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo "main")
+CHANGED=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null)
 [ -z "$CHANGED" ] && CHANGED=$(git diff --name-only HEAD~1)
 
-# Python: lint/format/types on the package
-ruff check . --fix && ruff format . && mypy app/
+# Detect source root (first of: src/, app/, lib/, or repo root)
+SRC_ROOT=$(git rev-parse --show-toplevel)
+for candidate in src app lib; do
+  if [ -d "${SRC_ROOT}/${candidate}" ]; then SRC_ROOT="${SRC_ROOT}/${candidate}"; break; fi
+done
 
-# TypeScript: lint + typecheck (project-wide regardless of scope)
-yarn lint --fix && yarn typecheck
+# Python: lint/format/types — if ruff is present
+if command -v ruff &>/dev/null; then
+  ruff check . --fix && ruff format .
+fi
+# mypy — detect config and run on detected source root
+if command -v mypy &>/dev/null && [ -f mypy.ini -o -f pyproject.toml -o -f setup.cfg ]; then
+  mypy "$SRC_ROOT"
+fi
+
+# JavaScript/TypeScript: detect package manager and run lint + typecheck
+if [ -f package.json ]; then
+  if [ -f yarn.lock ] && command -v yarn &>/dev/null; then
+    yarn lint --fix && yarn typecheck
+  elif [ -f pnpm-lock.yaml ] && command -v pnpm &>/dev/null; then
+    pnpm lint --fix && pnpm typecheck
+  elif command -v npm &>/dev/null; then
+    npm run lint --if-present && npm run typecheck --if-present
+  fi
+fi
 
 # Tests — only those covering the diff. If CHANGED touches conftest/jest config or >50 files,
 # fall back to the full suite (same policy as the test-runner agent).
-# Backend (pytest): map app/<path>.py → tests/unit/<path> + tests/integration/test_<basename>*.py
-#   pytest <mapped paths> --no-cov -x
+# Backend (pytest): map <src>/<path>.py → tests/unit/<path> + tests/integration/test_<basename>*.py
+#   COVFLAG=; python -c 'import pytest_cov' 2>/dev/null && COVFLAG="--no-cov"
+#   pytest <mapped paths> $COVFLAG -x
 # Frontend (Jest):
 #   yarn test --findRelatedTests <changed .ts/.tsx files>
 
-# Platform Primitive bypass checks:
+# Platform Primitive bypass checks (skip silently if scripts are absent):
 for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
-  [ -f "$s" ] && bash "$s" || { echo "FAIL: $s"; exit 1; }
+  [ -f "$s" ] || continue
+  bash "$s" || { echo "FAIL: $s"; exit 1; }
 done
-# Bypass register:
+# Bypass register (weside-specific, skip if absent):
 [ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
 ```
 
@@ -163,43 +206,51 @@ git commit -m "fix: address CI and review findings
 {TICKET}"
 ```
 
-### 3d. Resolve ALL CodeRabbit Threads (MANDATORY before push)
+### 3d. Resolve ALL CodeRabbit Threads (MANDATORY before push when CodeRabbit is active)
 
-⛔ **Do NOT skip this step. The `check-coderabbit` gate WILL fail if threads are unresolved.**
+If `gh` is available and CodeRabbit reviewed this PR (`CR_COUNT > 0` from Phase 1): ⛔ **Do NOT skip. The `check-coderabbit` gate WILL fail if threads are unresolved.**
+
+If no `coderabbitai[bot]` reviews exist, skip 3d/3e entirely and proceed to 3f.
 
 For EVERY CodeRabbit thread from the findings table — whether fixed or skipped-with-reason — resolve it:
 
 ```bash
-# Get all unresolved thread IDs
-THREADS=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
-  repository(owner:$owner,name:$repo){pullRequest(number:$pr){
-    reviewThreads(first:100){nodes{isResolved id}}
-  }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id')
+if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ] && [ "${CR_COUNT:-0}" -gt 0 ]; then
+  # Get all unresolved thread IDs
+  THREADS=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
+    repository(owner:$owner,name:$repo){pullRequest(number:$pr){
+      reviewThreads(first:100){nodes{isResolved id}}
+    }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
+    --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id')
 
-# Resolve each one
-for id in $THREADS; do
-  gh api graphql -f query="mutation(\$id:ID!){resolveReviewThread(input:{threadId:\$id}){thread{isResolved}}}" -f id="$id"
-done
+  # Resolve each one
+  for id in $THREADS; do
+    gh api graphql -f query="mutation(\$id:ID!){resolveReviewThread(input:{threadId:\$id}){thread{isResolved}}}" -f id="$id"
+  done
+fi
 ```
 
-### 3e. Verify Zero Unresolved (HARD GATE)
+### 3e. Verify Zero Unresolved (HARD GATE — skip when CodeRabbit absent)
 
 ```bash
-UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
-  repository(owner:$owner,name:$repo){pullRequest(number:$pr){
-    reviewThreads(first:100){nodes{isResolved}}
-  }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)] | length')
+if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ] && [ "${CR_COUNT:-0}" -gt 0 ]; then
+  UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
+    repository(owner:$owner,name:$repo){pullRequest(number:$pr){
+      reviewThreads(first:100){nodes{isResolved}}
+    }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
+    --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)] | length')
 
-if [ "$UNRESOLVED" -gt 0 ]; then
-  echo "⛔ BLOCKED: $UNRESOLVED unresolved CodeRabbit threads. Resolve them before pushing."
-  exit 1
+  if [ "$UNRESOLVED" -gt 0 ]; then
+    echo "⛔ BLOCKED: $UNRESOLVED unresolved CodeRabbit threads. Resolve them before pushing."
+    exit 1
+  fi
+  echo "All threads resolved ($UNRESOLVED unresolved)"
+else
+  echo "INFO: CodeRabbit not active — thread-resolution gate skipped."
 fi
-echo "✅ All threads resolved ($UNRESOLVED unresolved)"
 ```
 
-⛔ **If UNRESOLVED > 0: STOP. Go back to 3d. Do NOT proceed to push.**
+⛔ **If UNRESOLVED > 0 (when CodeRabbit is active): STOP. Go back to 3d. Do NOT proceed to push.**
 
 ### 3f. Push
 

@@ -84,7 +84,7 @@ For each role slug, in priority order:
   in Step 2. A role outside that set with no companion assigned has no agent: skip it
   and note the omission in the council output.
 
-**Orchestrator role handling (team-mode):** the lead session — the one running `/we:council` — is the orchestrator. If `orchestrator` appears in the resolved roster (common in `meetings.vision`, etc.), **remove it from the member list** and remember the fact for Step 9's closing note. Do not spawn it as a teammate. If the lead session has a materialized Companion (e.g. Nox), that Companion runs the synthesis in its own voice; otherwise the lead uses the synthesis template from `we/agents/council-orchestrator.md` (Job 2) verbatim.
+**Orchestrator role handling (team-mode):** the lead session — the one running `/we:council` — is the orchestrator. If `orchestrator` appears in the resolved roster (common in `meetings.vision`, etc.) and was **not** explicitly added via `--council=orchestrator,...`, **remove it from the member list** and remember the fact for Step 9's closing note; do not spawn it as a teammate. If it was explicitly requested via `--council`, spawn it as a normal member using `council-orchestrator` as the shell agent. If the lead session has a materialized Companion, that Companion runs the synthesis in its own voice; otherwise the lead uses the synthesis template from `we/agents/council-orchestrator.md` (Job 2) verbatim.
 
 #### get_council call mechanics
 
@@ -113,9 +113,9 @@ For each role slug, in priority order:
    Or run /we:setup — it will set the flag for you.
    ```
 
-   Do **not** fall back to a non-team flow. The old fan-out path was removed in v2.31.0.
+   Do **not** fall back to a non-team flow. The old fan-out path has been removed.
 
-2. **Generate `team_name`.** Derive from the topic (lowercased, non-alphanumeric → `-`, capped at 32 chars) plus a six-digit `HHMMSS` timestamp, e.g. `council-postgres-16-upgrade-103514`. Must be unique per session.
+2. **Generate `team_name`.** Build as `council-<slug>-<HHMMSS>` where `<slug>` is the topic lowercased with non-alphanumeric characters replaced by `-`; truncate the entire name to 32 chars if needed, e.g. `council-postgres-16-upgrade-103514`. Must be unique per session.
 
 3. **Roster sanity check.** With `orchestrator` already removed (see Step 3) the roster must contain at least one member. If empty, abort with: *"No council members resolved — check `.weside/config.json` or pass `--council=role1,role2`."*
 
@@ -263,6 +263,20 @@ The lead — the orchestrator, possibly a Companion in this session — produces
 - If the lead is a materialised Companion, the synthesis is spoken in that Companion's voice — but the four headings stay verbatim, because callers (`/we:meet` etc.) parse on them.
 
 ### Step 10: Close the team
+
+First send a shutdown signal to every member so their sessions terminate cleanly before the team is deleted:
+
+```python
+# Send to each member (including those recorded as absent — idempotent)
+for member_name in roster:
+    SendMessage(
+        to=member_name,
+        message="SESSION COMPLETE — you may stop.",
+        summary="shutdown_request",
+    )
+```
+
+Then tear down the team:
 
 ```python
 TeamDelete()

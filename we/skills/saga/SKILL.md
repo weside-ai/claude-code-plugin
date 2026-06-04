@@ -30,7 +30,7 @@ You hold the Saga at the Theme altitude — a multi-bet inside the product Visio
 
 - `.weside/` configured (run `/we:setup` once per project if missing — does not block this skill).
 - A ticketing tool is detected (priority: weside MCP → Atlassian MCP → `gh` CLI). The Saga doc itself never lives in the ticketing tool, but its child Epics do, and the Mirror block reads them. If none is detected, the skill falls back to scanning `docs/plans/<saga>-*-epic.md` for child status and tells the user.
-- Parent PRD (`docs/plans/<vision>-prd.md`) is loaded if it exists. A Saga inherits its reason-to-exist from the Vision; without it, the Saga is flagged as an orphan in the doc.
+- Parent PRD (`docs/plans/<vision>/PRD.md`) is loaded if it exists. A Saga inherits its reason-to-exist from the Vision; without it, the Saga is flagged as an orphan in the doc.
 
 ---
 
@@ -295,7 +295,7 @@ Rules:
 - The markers are mandatory. Everything between them is owned by the skill and overwritten on every refresh.
 - Everything outside the markers is owned by the user and never touched.
 - The skill normalises the ticketing tool's status vocabulary to the four buckets above (Done / Active / Backlog / Blocked) using the project's status mapping if configured, the shipped default otherwise.
-- When no ticketing tool is configured, the table is populated from filesystem scan and a footnote says *"No ticketing tool configured — table reflects local `CONCEPT.md` frontmatter status."*
+- When no ticketing tool is configured, the table is populated from filesystem scan of `<saga>-*-epic.md` files and a footnote says *"No ticketing tool configured — table reflects local epic file frontmatter status."*
 
 ---
 

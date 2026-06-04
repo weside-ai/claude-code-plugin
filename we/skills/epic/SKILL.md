@@ -117,8 +117,8 @@ What now?
 ```
 
 The **Size check** is F6: the "Saga in disguise" soft-warning used to fire only in
-Refine, which nobody re-runs on a healthy Epic — so an Epic could quietly grow to 40
-children (the WA-718 case) without the warning ever surfacing. Status is the 90%-path,
+Refine, which nobody re-runs on a healthy Epic — so an Epic could quietly grow to 40+
+children without the warning ever surfacing. Status is the 90%-path,
 so the check lives here too. Fire it when child Stories exceed ~10 **and** the Epic has
 been active for months with no clean landing. Do not hard-block; it is a soft nudge.
 

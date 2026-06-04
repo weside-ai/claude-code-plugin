@@ -10,7 +10,7 @@
 
 - [ ] **Clear Summary** — One-line description (max 80 chars)
 - [ ] **User Story** — "As [role] I want [feature] so that [benefit]" format
-- [ ] **Plan exists** — `docs/plans/{TICKET}-plan.md` with implementation details. Once the plan is final, `/we:build` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the pipeline. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers) to enable parallel sub-agent dispatch in Step 2.
+- [ ] **Plan exists** — `docs/plans/{TICKET}-story.md` with implementation details. Once the plan is final, `/we:build` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the pipeline. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers) to enable parallel sub-agent dispatch in Step 2.
 - [ ] **Ticket linked** — Connected to parent Epic (if using ticketing tool)
 
 ### In Plan (Details)
@@ -64,7 +64,7 @@ Stories with these patterns are **NOT READY** — send back for refinement:
 | Section | Where | Command |
 |---------|-------|---------|
 | User Story | Ticket (minimal) | `/we:story` |
-| **Implementation Plan** | `docs/plans/{TICKET}-plan.md` | `/we:story` |
+| **Implementation Plan** | `docs/plans/{TICKET}-story.md` | `/we:story` |
 | → Context | Plan | (in /we:story) |
 | → Acceptance Criteria | Plan | (in /we:story) |
 | → User Journey | Plan | (in /we:story) |
@@ -87,7 +87,7 @@ As [role] I want [feature] so that [benefit].
 
 ## Plan
 
-Implementation Plan: docs/plans/{TICKET}-plan.md
+Implementation Plan: docs/plans/{TICKET}-story.md
 ```
 
 **Details are in the Plan, NOT in the ticket.**
@@ -98,7 +98,7 @@ Implementation Plan: docs/plans/{TICKET}-plan.md
 
 ```
 User Story in ticket?
-Plan exists? (docs/plans/{TICKET}-plan.md)
+Plan exists? (docs/plans/{TICKET}-story.md)
 Context section written? (in plan — why this story, what matters)
 ACs defined? (in plan, Given/When/Then)
 Design Decisions documented? (in plan — alternatives + reasoning)

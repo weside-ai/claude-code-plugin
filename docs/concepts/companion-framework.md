@@ -74,7 +74,7 @@ The thin bridge holds **structure only** — role-slug → display-name + role +
 
 ### Fat schema (legacy, v1)
 
-Earlier bridges (pre-plugin-v2.25.0) included an `identity_prompt` per member. Those still work — when MCP is unavailable, `/we:council` reads identity from the fat bridge directly. The bootstrap script migrates fat → thin in place when you re-run it.
+Earlier bridges (legacy v1 schema) included an `identity_prompt` per member. Those still work — when MCP is unavailable, `/we:council` reads identity from the fat bridge directly. The bootstrap script migrates fat → thin in place when you re-run it.
 
 ### Why gitignored
 
@@ -108,7 +108,7 @@ flowchart TD
 
 The plugin always tries the richest path first and falls through cleanly. **You don't lose the framework without an account** — you lose persistent identity.
 
-Since v2.31.0 the council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
+The council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
 
 ### Without a weside account
 
@@ -180,12 +180,12 @@ First run in a fresh repo:
 /we:setup
 ```
 
-Walks you through three questions:
+Walks you through three questions, plus one optional step:
 
 1. **Vision** — do you have one (link, file, brief description)?
-1. **Ticketing** — Jira / GitHub Issues / none? Auto-detected; confirm or override.
-1. **Stack** — Python / Node / Rust / Go / monorepo? Auto-detected; confirm or override.
-1. **Companion Framework** *(optional)* — write `.weside/config.json` + invoke `/we:onboarding` to compose the crew + (with a weside account) register the TurboVault.
+2. **Ticketing** — Jira / GitHub Issues / none? Auto-detected; confirm or override.
+3. **Stack** — Python / Node / Rust / Go / monorepo? Auto-detected; confirm or override.
+4. **Companion Framework** *(optional)* — write `.weside/config.json` + invoke `/we:onboarding` to compose the crew + (with a weside account) register the TurboVault.
 
 `/we:onboarding` is the interview part. It asks one role at a time — "Who is your Product Owner on this repo?" — and writes the result into `.weside/weside.md`. You can run it standalone later to refresh the crew.
 

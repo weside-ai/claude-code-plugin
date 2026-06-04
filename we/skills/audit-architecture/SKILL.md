@@ -64,9 +64,9 @@ If `--healthcheck-only`: write only this section into master.md and exit. Filena
 Read [`references/hotspot-density.md`](references/hotspot-density.md). Run the script:
 
 ```bash
-python3 <skill_root>/scripts/audit-hotspots.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/audit-architecture/scripts/audit-hotspots.py \
   --project-config <repo_root>/docs/.audit-architecture.yml \
-  --primitives-catalog <skill_root>/scripts/primitives.default.yml \
+  --primitives-catalog ${CLAUDE_PLUGIN_ROOT}/skills/audit-architecture/scripts/primitives.default.yml \
   --top <hotspots.top_n or 15> \
   --since "<hotspots.since or '6 months ago'>" \
   --write
@@ -74,10 +74,16 @@ python3 <skill_root>/scripts/audit-hotspots.py \
 
 Outputs:
 
-- `<findings_dir>/<date>-<scope>/hotspots.md` (or `<date>-hotspots/master.md` if `--hotspots-only`)
-- `<diagrams_dir>/heatmap.mmd` (Mermaid quadrant chart, see `references/visualization.md`)
+- `<findings_dir>/<date>-hotspots.md` — flat Markdown table (written by the
+  script with `--write`; also printed to stdout without `--write`)
 
-The script computes the score formula and classifies each top-N entry as **expected** (in `expected_hubs:`) or **unexpected**. Unexpected hotspots feed Phase 3's `architectural-significance` lens.
+The `heatmap.mmd` quadrant diagram is **not** produced by the script — it is
+rendered by the model from the table data in Phase 4 (see
+`references/visualization.md`).
+
+The script computes the score formula and classifies each top-N entry as
+**expected** (in `expected_hubs:`) or **unexpected**. Unexpected hotspots
+feed Phase 3's `architectural-significance` lens.
 
 If `--hotspots-only`: stop here.
 
@@ -139,17 +145,20 @@ Read [`references/findings-template.md`](references/findings-template.md) for th
 2. **Executive Summary** — severity counts table
 3. **Three intensity views (inline Mermaid + file links):**
    - `severity-pie.mmd` — pie chart of finding counts
-   - `heatmap.mmd` — Phase-1 quadrant (only if Phase 1 ran)
+   - `heatmap.mmd` — Phase-1 quadrant (rendered by the model from hotspot
+     table data; only present if Phase 1 ran)
    - `drift-matrix.mmd` — Phase-3 doc-vs-reality matrix (only if that lens ran)
 4. **Reading-order recommendation**
 5. **Findings index** — sorted: severity → lens → file
-6. **Sub-file links** — to subsystems/*, cross-cutting.md, hotspots.md
+6. **Sub-file links** — to subsystems/*, cross-cutting.md,
+   `<findings_dir>/<date>-hotspots.md`
 7. **Open items from previous audits** (scan `<findings_dir>/` for older audits)
 
 Generate the three intensity diagrams in `<diagrams_dir>/`:
 
 - `severity-pie.mmd` — populate counts
-- `heatmap.mmd` — populated by Phase 1 already; in Phase 4, optionally re-color nodes by max-severity-finding from Phase 2
+- `heatmap.mmd` — render from Phase-1 hotspot table; optionally re-color
+  nodes by max-severity finding from Phase 2
 - `drift-matrix.mmd` — populated by Phase 3 doc-vs-reality lens
 
 Write a backward-compat redirect at `<findings_dir>/<date>-<scope>.md` (top-level) pointing to the new master.md (see `findings-template.md` § Backward Compatibility).
@@ -186,17 +195,18 @@ To opt INTO v3 features, the project YAML adds optional sections — see `refere
 Final layout per run:
 
 ```
-<findings_dir>/<date>-<scope>/
-├── master.md                  # Phase 4 entry point
-├── hotspots.md                # Phase 1 (always present unless --skip-phase=1)
-├── cross-cutting.md           # Phase 3 (present if any lens ran)
-└── subsystems/
-    ├── <id1>.md               # Phase 2 per subsystem
-    └── <id2>.md
+<findings_dir>/
+├── <date>-hotspots.md         # Phase 1 flat file (written by audit-hotspots.py --write)
+└── <date>-<scope>/
+    ├── master.md              # Phase 4 entry point
+    ├── cross-cutting.md       # Phase 3 (present if any lens ran)
+    └── subsystems/
+        ├── <id1>.md           # Phase 2 per subsystem
+        └── <id2>.md
 
 <diagrams_dir>/
 ├── severity-pie.mmd           # Phase 4
-├── heatmap.mmd                # Phase 1, Phase 4 may recolor
+├── heatmap.mmd                # Phase 4 (rendered from Phase-1 hotspot data)
 ├── drift-matrix.mmd           # Phase 3
 └── <id>.mmd                   # Phase 2 per subsystem
 ```

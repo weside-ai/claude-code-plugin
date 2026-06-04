@@ -67,7 +67,7 @@ The PR/CI data source via `gh api` is intrinsically engineering-only — that's 
 
 ## Relationship to `/we:coach`
 
-Before v2.33.0, `/we:coach` included a RETRO mode that handled single-friction fixes inline. As of v2.33.0 that surface has been extracted into its own skill — `/we:retro` now owns the full retro workflow. The two skills serve distinct triggers and scopes:
+Previously, `/we:coach` included a RETRO mode that handled single-friction fixes inline. That surface has since been extracted into its own skill — `/we:retro` now owns the full retro workflow. The two skills serve distinct triggers and scopes:
 
 | | `/we:coach` | `/we:retro` |
 |---|---|---|

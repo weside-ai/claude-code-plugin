@@ -38,7 +38,11 @@ Check for implementation plan at `docs/plans/${TICKET}-plan.md`.
 if [ -n "$(git status --porcelain)" ]; then
   git diff && git diff --staged
 else
-  git diff main...HEAD
+  # Derive the merge base — don't hardcode 'main'
+  BASE=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null) \
+    || BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') \
+    || BASE="main"
+  git diff "origin/${BASE}...HEAD"
 fi
 ```
 
@@ -65,7 +69,7 @@ For each issue: **file:line + severity + issue + fix suggestion**.
 - **Feature reachable?** User can navigate to the feature
 - **End-to-end?** Complete user flow works
 - **Plan alignment?** Implementation matches the plan (if available)
-- **DoD Quick Check:** Architecture compliance, security, wiring, test depth (see `quality/dod.md`)
+- **DoD Quick Check:** Architecture compliance, security, wiring, test depth (see `${CLAUDE_PLUGIN_ROOT}/quality/dod.md` if available, otherwise apply the four criteria: architecture patterns followed, security patterns applied, state wiring complete, tests verify behaviour)
 - **Platform Primitive compliance:** Any new `# *-BYPASS-OK:` annotations in the diff? Each one needs a specific reason (not "legacy" or "TODO"). If the project has a `docs/architecture/BYPASS-REGISTER.md` and it grew, verify the PR description cites an ADR or justifies inline. Flag any new primitive bypass as a WARNING if unjustified.
 - **Horizontal scalability (backend):** Grep the diff for process-local mutable state added in backend code: `TTLCache`, `cachetools`, module-level `dict`/`list`/`set` mutation, `@lru_cache` on non-pure funcs (DB/IO), class-level mutable on singletons, `global` mutation, `asyncio.Lock()` / `threading.Lock()` used for cross-request coordination. Each hit is BLOCKING unless annotated with `# SCALABILITY-EXEMPT: <reason>` explaining why it's safe (e.g. immutable-after-startup, identical in every worker). State that outlives a request must live in a database, cache, or queue.
 

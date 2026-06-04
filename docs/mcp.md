@@ -170,7 +170,7 @@ get_council(
 
 **Used by:** `/we:council`, `/we:meet`. The plugin pairs the returned identities with the bridge file's role/color mapping (see [companion-framework.md](concepts/companion-framework.md)).
 
-**Privacy caveat for v1:** the `identity_prompt` is the MCP-delivery composed prompt (~5K tokens) — it may include Compass / Snapshot / personal memory layers. Safe for the user's own crew in their own Claude Code session. **Not safe** for cross-user/cross-org exposure without the Phase-6 team-scoping work (on the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4----orchestrated-roadmap--phase-6)).
+**Privacy caveat for v1:** the `identity_prompt` is the MCP-delivery composed prompt (~5K tokens) — it may include Compass / Snapshot / personal memory layers. Safe for the user's own crew in their own Claude Code session. **Not safe** for cross-user/cross-org exposure without the Phase-6 team-scoping work (on the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4--orchestrated-roadmap--phase-6)).
 
 ---
 

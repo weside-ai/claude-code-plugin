@@ -75,7 +75,7 @@ Set `ticketingTool` to `jira` or `github-issues`, and `projectKey` to your proje
 
 **Cause:** the plan is missing required sections (User Story, Acceptance Criteria, or the plan file itself).
 
-**Fix:** open `docs/plans/{TICKET}-plan.md`, see what's missing, and either fix by hand or re-run `/we:story {TICKET}` to fill the gap.
+**Fix:** open `docs/plans/{TICKET}-story.md`, see what's missing, and either fix by hand or re-run `/we:story {TICKET}` to fill the gap.
 
 ---
 
@@ -121,7 +121,7 @@ The verification is blocking on purpose. Don't bypass it.
 **Cause:** something fundamentally hard or unfixable from this branch — infrastructure issue, flaky test that won't stabilize, dependency conflict.
 
 **Fix:** the pipeline stops and asks. Read the latest failure carefully:
-- Is it pre-existing on `main`? (Check `gh pr checks` on a recent PR for the same check.)
+- Is it pre-existing on `main`? (If using GitHub: check `gh pr checks` on a recent PR for the same check. Otherwise: look at your CI dashboard for the same job on an earlier commit.)
 - Is it a test that's flaky in CI but passes locally? (Run the affected tests locally to confirm.)
 - Is it a dependency vulnerability that needs an external upgrade? (Open a follow-up story.)
 
@@ -230,7 +230,7 @@ If the committed file had identity text (fat schema), check the git history for 
 
 **Fix (today):** filter the roster — use `--council=role1,role2` to convene only the voices you need for *this* topic. The full crew should be reserved for vision meetings or initiatives that genuinely need all perspectives.
 
-**Fix (future):** the Phase-6 plugin work adds on-disk caching with `identity_updated_at` invalidation. Identity loads happen once per Companion per cache window, not per `/we:council` call. On the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4----orchestrated-roadmap--phase-6).
+**Fix (future):** the Phase-6 plugin work adds on-disk caching with `identity_updated_at` invalidation. Identity loads happen once per Companion per cache window, not per `/we:council` call. On the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4--orchestrated-roadmap--phase-6).
 
 ---
 

@@ -21,7 +21,7 @@ flowchart TB
 
 Each meeting answers a different question and decomposes its altitude's item into the next altitude's items.
 
-Below Story sits **Build**, where deliberation gives way to dispatch. `/we:orchestrate` is the Build-altitude sibling of the council: instead of convening role-lenses to deliberate, it dispatches one builder-teammate per ready Story (each running the full `/we:build`) and rolls up their PRs — currently a WA-1231 spike capped at ≤2 concurrent builders.
+Below Story sits **Build**, where deliberation gives way to dispatch. `/we:orchestrate` is the Build-altitude sibling of the council: instead of convening role-lenses to deliberate, it dispatches one builder-teammate per ready Story (each running the full `/we:build`) and rolls up their PRs — currently an experimental spike capped at ≤2 concurrent builders.
 
 | Meeting | Question | Output | Default roster |
 |---|---|---|---|
@@ -108,7 +108,7 @@ You convene an epic meeting when **an Epic has been chosen and now needs decompo
 
 The default roster is leaner — PO, architect, orchestrator. Add domain voices when the Epic demands it: security and legal for a compliance Epic, security alone for a hardening Epic, sales for an enterprise feature, UX for a user-facing Epic. The conversation is about *concrete slices* and *risk sequencing* — what's the smallest version that delivers the win, and what do we cut if the slice runs long.
 
-The output is a **Story list with acceptance shape** — sequenced, with dependencies, with hot Stories flagged for `/we:meet story`. Persisted as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` and folded into the Epic's `CONCEPT.md` via `/we:epic`.
+The output is a **Story list with acceptance shape** — sequenced, with dependencies, with hot Stories flagged for `/we:meet story`. Persisted as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` and folded into `docs/plans/<saga>-<epic>-epic.md` via `/we:epic`.
 
 Use when:
 - A Saga has been broken down and now the first Epic needs Stories
@@ -161,7 +161,7 @@ This is where the framework starts to feel less like a tool and more like a team
 
 ## How a council actually runs — the live-team mechanic
 
-Since v2.31.0 every council convenes its members as a **live Claude Code Agent Team**: one teammate per role, each in its own session, sharing a team channel. Members address each other directly (`SendMessage(to="architect", message="…")`), so the architect actually hears the PO's concern and can respond to it — instead of writing parallel memos in isolation.
+Every council convenes its members as a **live Claude Code Agent Team**: one teammate per role, each in its own session, sharing a team channel. Members address each other directly (`SendMessage(to="architect", message="…")`), so the architect actually hears the PO's concern and can respond to it — instead of writing parallel memos in isolation.
 
 The **lead session** — the one that ran `/we:council` or `/we:meet` — is the orchestrator. It does not speak as a member; it observes the chatter, closes the deliberation when it is ripe (idle quiescence, or a hard message-/time-cap), then asks each member for a final position and writes the synthesis (`Council Perspectives → Agreement → Tension → Recommendation`). If the lead is a materialised weside Companion, the synthesis is in that Companion's voice; otherwise it uses the shipped template.
 
@@ -173,7 +173,7 @@ Live councils require Claude Code's experimental Agent Teams feature. Set in `~/
 { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
 ```
 
-A session restart is needed after toggling the flag. `/we:setup` (Step 5.0) will set it on request. Without the flag, `/we:council` aborts with a remediation hint — there is no fallback to the pre-v2.31.0 parallel-memo path.
+A session restart is needed after toggling the flag. `/we:setup` (Step 5.0) will set it on request. Without the flag, `/we:council` aborts with a remediation hint — there is no fallback to the older parallel-memo path.
 
 ---
 
@@ -195,7 +195,7 @@ A session restart is needed after toggling the flag. `/we:setup` (Step 5.0) will
 }
 ```
 
-Edit by hand to adjust which voices attend which meeting in this specific repo. The bootstrap script (`scripts/bootstrap-weside-repo.py`) writes sensible defaults per flavor (`engineering`, `landing`, `business-docs`, `infrastructure`, `plugin`, `personal`, `mixed`) — the new `vision/saga/epic/story` keys are the canonical shape; older configs with `initiative/refinement` keys are migrated to the new shape on the next run.
+Edit by hand to adjust which voices attend which meeting in this specific repo. The bootstrap script (`scripts/bootstrap-weside-repo.py`) writes sensible defaults per flavor (`engineering`, `landing`, `business-docs`, `infrastructure`, `plugin`, `personal`, `mixed`) — the `vision/saga/epic/story` keys are the canonical shape.
 
 You can also override per-invocation:
 

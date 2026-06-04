@@ -26,15 +26,24 @@ Decide scope from `$CHANGED`. If it touches >50 files **or** crosses test config
 
 ## Step 2: Detect Stack & Run Affected Tests
 
+**Python — detect pytest-cov before using `--no-cov`:**
+
+```bash
+# --no-cov is registered by pytest-cov; the flag errors when the plugin is absent.
+python -c 'import pytest_cov' 2>/dev/null && COVFLAG="--no-cov" || COVFLAG=""
+```
+
+Use `pytest <paths> -v $COVFLAG` (or `pytest tests/ -v $COVFLAG` for the full suite).
+
 | Stack | Affected-Tests Command (default) | Full-Suite Fallback |
 |---|---|---|
-| Python (`pyproject.toml`) | Map each changed `app/<path>.py` → `tests/unit/<path>` and `tests/integration/test_<basename>*.py`, then `pytest <paths> -v --no-cov` | `pytest tests/ -v --no-cov` |
+| Python (`pyproject.toml`) | Map each changed `<src>/<path>.py` → `tests/unit/<path>` and `tests/integration/test_<basename>*.py`, then `pytest <paths> -v $COVFLAG` | `pytest tests/ -v $COVFLAG` |
 | Node (`package.json`, Jest) | `yarn test --findRelatedTests <changed .ts/.tsx files>` (built-in Jest flag, no extra dep) | `yarn test` |
 | Node (Vitest) | `npx vitest related <changed files>` | `npx vitest run` |
 | Rust (`Cargo.toml`) | `cargo test -p <changed crate>` | `cargo test` |
 | Go (`go.mod`) | `go test ./<changed pkg dirs>/...` | `go test ./...` |
 
-**Coverage:** intentionally `--no-cov` locally. Coverage gates run in GitHub Actions CI — duplicating them here only burns time. If you need a coverage spot-check (e.g. before claiming a new test exercises a path), call out which file you measured.
+**Coverage:** skip locally unless pytest-cov is present. Coverage gates run in CI — duplicating them here only burns time. If you need a coverage spot-check (e.g. before claiming a new test exercises a path), call out which file you measured.
 
 For monorepos: detect stack per top-level app dir (e.g. `apps/<service>`, `packages/<lib>`) and run only the ones with changes.
 

@@ -146,8 +146,8 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    - Active ticketing-tool tickets (Jira via MCP, or `gh issue list -L 10`) — what's open
    - `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story list` — pipeline state for recent stories
    - **Retro-worthy signals** (for the [Suggesting `/we:retro`](#suggesting-weretro) decision):
-     - `gh pr list --state merged -L 1 --json mergedAt,number` — was a PR merged very recently (last few hours)?
-     - On the current branch's open PR (if any): count of `synchronize` events on the PR timeline as a proxy for CI cycles. ≥ 3 is the threshold.
+     - `gh pr list --state merged -L 1 --json mergedAt,number` — was a PR merged very recently (last few hours)? (if `gh` is available and authenticated; skip silently otherwise)
+     - On the current branch's open PR (if any): count of `synchronize` events on the PR timeline as a proxy for CI cycles. ≥ 3 is the threshold. (skip if `gh` is unavailable — end-of-session signal alone is still sufficient to offer `/we:retro`)
      - User uttered an end-of-session signal in the prompt or prior turn ("bis morgen", "schlafen", "going home", "wrap up")
 
 10. **Active initiative state** — for the consuming repo, search for
@@ -174,7 +174,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
 
 - A specific rule's full content (when the gap is in that rule)
 - A specific skill's full methodology (when the gap is in that skill)
-- Recent merged PRs: `gh pr list --state merged -L 10`
+- Recent merged PRs: `gh pr list --state merged -L 10` (if `gh` is available and authenticated; skip silently otherwise)
 - Recent stories (if ticketing is available): last 5-10 tickets via the configured ticketing tool
 
 **Step 11 — First-Use Orientation (Beginner mode detection)** — run this check AFTER Steps 1-10 and BEFORE entering ADVISOR logic:

@@ -157,8 +157,9 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
        "default": ["product_owner", "architect", "scrum_master"],
        "meetings": {
          "vision": ["product_owner", "architect", "ux_researcher", "marketing", "orchestrator"],
-         "initiative": ["product_owner", "architect", "orchestrator"],
-         "refinement": ["product_owner", "architect"]
+         "saga": ["product_owner", "architect", "orchestrator"],
+         "epic": ["product_owner", "architect", "orchestrator"],
+         "story": ["product_owner", "architect"]
        }
      }
    }
@@ -246,4 +247,3 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 - `we/skills/onboarding/SKILL.md` — invoked by Step 5
 - `we/skills/sideload/SKILL.md` — counterpart for "already set up"
 - `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
-- Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4

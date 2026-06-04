@@ -64,7 +64,7 @@ Holds an Epic — a concrete, bounded deliverable that serves a Saga. "Ledger Fo
 
 **Four modes, picked automatically from argument + repo state:**
 
-- **Status** (default) — read `CONCEPT.md`, mirror child Stories from the ticketing tool, render snapshot + drift detection + risk-driven next-move. The mirror table flags refined-vs-not-refined per Story (does `docs/plans/{KEY}-plan.md` exist?). Read-only.
+- **Status** (default) — read the epic doc, mirror child Stories from the ticketing tool, render snapshot + drift detection + risk-driven next-move. The mirror table flags refined-vs-not-refined per Story (does `docs/plans/{KEY}-story.md` exist?). Read-only.
 - **Refine** (explicit intent) — checks the frame (why-now, target architecture seam, sequencing, success metric), drafts via plan-mode.
 - **Create** (new slug) — walks the frame from scratch; optionally creates the ticketing-tool Epic alongside.
 - **Mirror-refresh** — lightweight write of just the mirror block + frontmatter date + Updates Log.
@@ -78,7 +78,7 @@ No flags to memorise. Same resolution chain as `/we:saga`.
 - A Story has been refined three times and never converged — the real problem is at Epic level, run Status to confirm
 
 **What it produces:**
-- `docs/plans/<saga>/05-epics/<epic>/CONCEPT.md`, optionally a ticketing-tool Epic with the same name. The doc contains an auto-generated `## Stories` mirror block.
+- `docs/plans/<saga>-<epic>-epic.md`, optionally a ticketing-tool Epic with the same name. The doc contains an auto-generated `## Stories` mirror block.
 
 **Hand-off:** Status footer offers `[r]` refresh, `[f]` Refine, `[m]` `/we:meet epic`, `[s]` `/we:story <KEY>` (recommended next Story), `[q]` done.
 
@@ -99,7 +99,7 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 
 **What it produces:**
 - Ticket in your ticketing tool (minimal: user-story format)
-- `docs/plans/{TICKET}-plan.md` (detailed: context, ACs, phases, design decisions, security review)
+- `docs/plans/{TICKET}-story.md` (detailed: context, ACs, phases, design decisions, security review)
 
 **Hand-off:** to `/we:build` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
 
@@ -113,7 +113,7 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 
 Build orchestrator — the autonomous half of the pipeline. Once you trigger it, it runs all nine steps + delivery hand-off without pausing unless something is genuinely blocking. No Solo/Meet split at this altitude — there is one mode, and it's autonomous.
 
-> **Internal CLI back-compat:** the orchestration CLI keeps `story` as the table and command name. Checkpoints from pre-v2.28.0 sessions resume cleanly under `/we:build`.
+> **Internal CLI back-compat:** the orchestration CLI keeps `story` as the table and command name. Interrupted builds always resume cleanly when re-invoked.
 
 **When to use:**
 - After `/we:story` has produced a plan you're happy with
@@ -140,7 +140,7 @@ Build orchestrator — the autonomous half of the pipeline. Once you trigger it,
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
 
-Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures, Claude Review, and CodeRabbit; triages them; fixes them in one batch; resolves all CodeRabbit threads; pushes once.
+Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures, Claude Review, and CodeRabbit (when present on GitHub); triages them; fixes them in one batch; pushes once. On repos without CodeRabbit, local quality gates serve as the sole review signal.
 
 **When to use standalone:**
 - After CI failed on a PR not driven by `/we:build`
@@ -149,7 +149,7 @@ Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings fro
 
 **What it produces:**
 - A single commit with all fixes (per cycle)
-- All CodeRabbit threads resolved
+- CodeRabbit threads resolved (if CodeRabbit is active on the repo)
 - A push only after every blocker is addressed
 
 **Limit:** 3 cycles max. After the third, stops and asks.
@@ -162,7 +162,7 @@ Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings fro
 
 Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — computes the ready set of buildable Stories, and on an explicit confirm dispatches one builder-teammate per ready Story (live Agent Team, same machinery as `/we:council`). Each builder runs the full unmodified `/we:build`; the Lead tracks them in the shared task-list + orchestration DB, reviews each finished PR, and never merges. weside MCP optional — the Lead reviews as your Companion when connected, with a generic role lens otherwise.
 
-> **Spike status (WA-1231).** Hard cap of **≤2 concurrent builders**; the full orchestrator (parallel dispatch beyond 2, cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
+> **Spike status.** Hard cap of **≤2 concurrent builders**; the full orchestrator (parallel dispatch beyond 2, cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
 
 **Usage:**
 
@@ -203,7 +203,7 @@ Runs tests affected by the current changes. Auto-detects framework (pytest, jest
 
 ### `/we:pr`
 
-Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket, attaches the plan, and triggers CodeRabbit on GitHub.
+Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. On GitHub with CodeRabbit installed, it also triggers an automated review; on other hosts or without CodeRabbit, the local quality gates are treated as authoritative.
 
 ### `/we:docs`
 
@@ -219,7 +219,7 @@ When you need more than one voice on a topic.
 
 > *Convene a council of role-lens agents on a topic; orchestrator synthesises.*
 
-The core deliberation mechanic. Opens a live Claude Code Agent Team (one named agent per role); members deliberate through `SendMessage` turns in real time; quiescence detection closes the debate; the lead synthesises *agreement / tension / recommendation*. Since v2.31.0 — agents address each other directly rather than writing parallel memos.
+The core deliberation mechanic. Opens a live Claude Code Agent Team (one named agent per role); members deliberate through `SendMessage` turns in real time; quiescence detection closes the debate; the lead synthesises *agreement / tension / recommendation*. Agents address each other directly rather than writing parallel memos.
 
 **Usage:**
 
@@ -264,7 +264,7 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 **When to use:**
 - You want the bird's-eye view across ALL Sagas/Epics/Stories at once (`/we:map`)
 - You want one Saga's full subtree expanded to story level (`/we:map presence`)
-- You want to locate a ticket in the tree (`/we:map WA-1206`)
+- You want to locate a ticket in the tree (`/we:map PROJ-1206`)
 
 **Differs from `/we:saga` / `/we:epic`:** those render a *deep* Status dashboard for ONE artifact (drift, next-move). `/we:map` is the *wide, shallow* view across all artifacts — the bird's eye. It hands off to `/we:saga <slug>` or `/we:epic <slug-or-key>` for detail.
 
@@ -274,8 +274,6 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 - Block on a missing ticketing tool or orchestration DB — degrades to frontmatter status
 
 **Transition-tolerant:** also picks up legacy `*-plan.md` stories and `*/CONCEPT.md` nested epics during the suffix migration, flagging them with `~` so you see what still needs renaming.
-
-> **New in v2.35.0.**
 
 ---
 
@@ -291,7 +289,7 @@ A conversation partner for three situations, one skill:
 
 Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended / "which Epics" / "status" → ADVISOR; "I'm new" / "help me start" → BEGINNER. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
 
-> **Renamed from `/we:sm` in v2.28.0.** Scope expanded to full APO advisory in v2.29.0. RETRO mode extracted to standalone `/we:retro` skill in v2.33.0. Beginner mode added in v2.33.0. Plan-status detail delegated to `/we:saga` / `/we:epic` (Status-default modes) in v2.34.0 — Coach renders only the one-line snapshot.
+> **Renamed from `/we:sm`.** Scope expanded to full APO advisory, RETRO mode extracted to standalone `/we:retro`, Beginner mode added, and Plan-status detail delegated to `/we:saga` / `/we:epic` (Status-default modes) — Coach renders only the one-line snapshot.
 
 **When to use:**
 - You merged a Story / Epic and want to know the sensible next move (ADVISOR)
@@ -336,8 +334,6 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 **Differs from `/we:coach`:** Coach ADVISOR reads repo state and proposes the next `/we:*` command. `/we:retro` proactively scans the full PR + CI cycle and proposes concrete engineering rule fixes — a different artifact with a different purpose.
 
-> **New in v2.30.0.**
-
 ---
 
 ### `/we:handoff`
@@ -366,8 +362,6 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Push without PR review — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without direct-commit config
 
 **Differs from `/we:retro`:** Both write to `docs/<category>/YYYY-MM-DD-<slug>.md`. `/we:retro` captures *lessons* — frictions in the cycle that should become rules so they don't recur. `/we:handoff` captures *position* — where the work is, what was decided, what the next concrete step is. Different artifact, different purpose; both live in the user repo.
-
-> **New in v2.32.0.**
 
 ---
 

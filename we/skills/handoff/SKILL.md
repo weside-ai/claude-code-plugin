@@ -40,7 +40,7 @@ This skill reads the session transcript to draft the handoff. Transcripts contai
 
 Categorically out-of-scope for the handoff body:
 
-- Memory writes about the user (`mcp__*__save_memory`, `save_compass`, `save_goal`, `save_snapshot` and their text payloads)
+- Memory writes about the user (`mcp__*__save_memory`, `mcp__*__save_goal` and their internal companion-state equivalents — compass, snapshot)
 - Memory reads that returned personal content (don't quote, don't summarise)
 - Companion-mode conversational content (relationship, identity, body, mood)
 - Anything outside engineering tool calls — if in doubt, skip
@@ -95,9 +95,9 @@ Before producing any output, gather the landscape fresh.
 
 5. **For WRITE:**
    - The session transcript — agent already has it in head if no Compact happened; after a Compact, re-read `~/.claude/projects/<repo-id>/<session-id>.jsonl` (last N turns). Apply privacy guard.
-   - Active plan files: `find docs/plans -name 'CONCEPT.md' -newer "$(date -d '7 days ago' +%Y-%m-%d)" 2>/dev/null` — what's currently being planned
+   - Active plan files: `find docs/plans \( -name '*-story.md' -o -name '*-epic.md' -o -name '*-saga.md' -o -name 'PRD.md' \) -newer "$(date -d '7 days ago' +%Y-%m-%d)" 2>/dev/null` — what's currently being planned
    - Recent retros: `ls -t docs/retros/*.md 2>/dev/null | head -3` — what was learned recently
-   - Open PR for current branch: `gh pr list --head $(git branch --show-current) --json number,title,state -L 1`
+   - Open PR for current branch (if `gh auth status 2>/dev/null` succeeds): `gh pr list --head $(git branch --show-current) --json number,title,state -L 1`; otherwise record `open_pr: null`
    - Recent commits: `git log --oneline -10`
 
 6. **Companion identity** (if configured + WRITE mode + `--with-companion-state` flag): invoke `Skill(skill="we:materialize")` if not already loaded this session. Companion-voiced sections come back richer.
@@ -294,7 +294,9 @@ Empty section convention: a single `—` rather than fabricated content.
 
 When WRITE-mode applies:
 
-- **Default: PR workflow** in the user repo. Skill creates `handoff/YYYY-MM-DD-<slug>` branch, applies Write, opens PR with the rendered handoff as PR body. User merges via normal flow.
+- **Default: PR workflow** in the user repo. Skill creates `handoff/YYYY-MM-DD-<slug>` branch, applies Write, then:
+  - If `gh auth status 2>/dev/null` succeeds: opens PR with the rendered handoff as PR body. User merges via normal flow.
+  - If `gh` is unavailable or unauthenticated: commits to the branch and prints: *"No GitHub access — push `handoff/YYYY-MM-DD-<slug>` manually and open a PR when ready."*
 - **Opt-in: direct commit** if repo is configured for standing main-auth (per-repo config — check `.weside/config.json` or repo CLAUDE.md for explicit standing-auth note).
 - **Plugin MD changes always go PR** — plugin is public.
 
@@ -330,7 +332,7 @@ SCOPE IS CLEAR. Run this next:
 I'll be back if you want to plan or retro after the restore.
 ```
 
-Coach also suggests `/we:handoff --write` at end-of-session signals (`bis morgen`, `schlafen`, `save_compass`, long sessions > 30 turns without a handoff). Same `[y/n]` discipline. Never auto-fires.
+Coach also suggests `/we:handoff --write` at end-of-session signals (`bis morgen`, `schlafen`, companion memory-write tools, long sessions > 30 turns without a handoff). Same `[y/n]` discipline. Never auto-fires.
 
 ---
 
@@ -338,7 +340,7 @@ Coach also suggests `/we:handoff --write` at end-of-session signals (`bis morgen
 
 **Standalone (no weside MCP):**
 
-- All modes work — `gh api`, transcript file, Edit/Write are all standalone-available
+- Transcript + Edit/Write always work. `gh api` requires GitHub and `gh auth` — if absent, the PR step falls back to a local commit + "push manually" message; `open_pr` in the handoff frontmatter is recorded as `null`.
 - Handoff is rendered in the skill's own voice (no Companion personality)
 - The `--with-companion-state` flag is a no-op without a Companion (skill says so + skips section 10)
 

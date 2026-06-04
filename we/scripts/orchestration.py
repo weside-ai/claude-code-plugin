@@ -5,7 +5,7 @@ SQLite Orchestration CLI for the 'we' Claude Code Plugin.
 Provides:
 - Atomic task claiming with SQLite locking
 - Worker heartbeat and timeout detection
-- Checkpoint/resume support for /story phases
+- Checkpoint/resume support for /we:build phases
 - Headless multi-instance management with worktree coordination
 - Event logging for debugging
 
@@ -32,6 +32,8 @@ Usage:
     python cli.py story resume <story_key>  # Get latest checkpoint for resume
     python cli.py story status <story_key>  # Get comprehensive story status
     python cli.py story list [--active]  # List stories with checkpoints
+    python cli.py story ready <epic> [--plans-dir <dir>] [--cap <n>]  # Compute ready set
+    python cli.py story phases  # List valid story phases
 
     python cli.py circuit check <story_key> <phase>  # Check if phase is allowed
     python cli.py circuit fail <story_key> <phase> [--error <msg>]  # Record failure
@@ -75,22 +77,21 @@ from typing import Any
 WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 
 # Story phases for checkpoint tracking
-# Planning phases (before /story):
-#   - refined: /refine completed (Business Context, AC, Testing Req)
-#   - architected: /arch completed (Implementation Notes, ADRs, Security)
-# Development phases (during /story):
-#   - git_prepared through jira_transitioned
+# Planning phases (before implementation):
+#   - refined: Story + plan created (/we:story)
+# Development phases (during /we:build):
+#   - git_prepared through ci_passed
 STORY_PHASES = [
-    "refined",  # /we:story (Solo Story) — Story + Plan created
-    "git_prepared",  # /we:develop — Branch created, story loaded
-    "implementation_complete",  # /we:develop — Code + tests committed
+    "refined",  # /we:story — Story + Plan created
+    "git_prepared",  # /we:build — Branch created, story loaded
+    "implementation_complete",  # /we:build — Code + tests committed
     "ac_verified",  # /we:build — All ACs verified with evidence
     "simplified",  # /we:build — Code simplified
-    "docs_updated",  # /we:docs — Documentation updated
-    "review_passed",  # /we:review — Code review passed
-    "static_analysis_passed",  # /we:static — Lint/format/types passed
-    "test_passed",  # /we:test — Tests + coverage passed
-    "pr_created",  # /we:pr — PR created
+    "review_passed",  # /we:build — Code review passed (Step 5)
+    "static_analysis_passed",  # /we:build — Lint/format/types passed (Step 5)
+    "test_passed",  # /we:build — Tests + coverage passed (Step 5)
+    "docs_updated",  # /we:build — Documentation updated (Step 6, AFTER quality gates)
+    "pr_created",  # /we:build — PR created
     "ci_passed",  # /we:build — CI/Reviews green
 ]
 
@@ -738,21 +739,51 @@ def worker_unregister(worker_id: str, cleanup_worktree: bool = False) -> dict[st
         conn.close()
 
 
+def _resolve_repo_root(worktree_path: str) -> Path | None:
+    """Resolve the git repository root for a given worktree path.
+
+    Uses ``git -C <path> rev-parse --show-toplevel`` so we operate on the
+    user's repo, not the plugin install directory.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", worktree_path, "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return Path(result.stdout.strip()).resolve()
+    except Exception:
+        pass
+    return None
+
+
 def _remove_worktree(worktree_path: str) -> bool:
     """Remove a git worktree safely.
 
-    Security: Validates path is under workspace root to prevent path traversal attacks.
+    Resolves the repo root from the worktree itself (via ``git rev-parse``)
+    so git commands run against the user's repository, not the plugin install
+    directory.  Security: validates path is under the resolved repo root to
+    prevent path traversal attacks.
     """
     try:
         path = Path(worktree_path).resolve()
-        workspace_root = Path(__file__).parent.parent.parent.resolve()
-
-        # Security: Validate path is under workspace root to prevent path traversal
-        if workspace_root not in path.parents and path != workspace_root:
-            return False  # Path escape attempt blocked
 
         if not path.exists():
             return False
+
+        # Resolve the repo root from the worktree's own git metadata.
+        # Fall back to the worktree's parent directory if git is unavailable.
+        repo_root = _resolve_repo_root(str(path))
+        if repo_root is None:
+            # Worktree may already be partially removed; use parent as guard.
+            repo_root = path.parent.resolve()
+
+        # Security: Validate path is under repo root to prevent path traversal.
+        if repo_root not in path.parents and path != repo_root:
+            return False  # Path escape attempt blocked
 
         # Try git worktree remove first
         result = subprocess.run(
@@ -760,7 +791,7 @@ def _remove_worktree(worktree_path: str) -> bool:
             check=False,
             capture_output=True,
             text=True,
-            cwd=workspace_root,
+            cwd=repo_root,
         )
 
         if result.returncode == 0:
@@ -1302,7 +1333,8 @@ def story_status(story_key: str) -> dict[str, Any]:
 
         # Determine overall status
         phases_completed = {cp["phase"] for cp in checkpoints}
-        if "jira_transitioned" in phases_completed:
+        terminal_phases = {"ci_passed", "pr_created"}
+        if phases_completed & terminal_phases:
             result["status"] = "complete"
         elif result["current_phase"]:
             result["status"] = "in_progress"
@@ -1944,61 +1976,95 @@ def _perform_rollback(conn: sqlite3.Connection, story_key: str, phase: str) -> d
     git_result: dict[str, Any] = {"performed": False}
     if rollback_commit:
         try:
-            # Get the repository root
-            workspace_root = Path(__file__).parent.parent.parent.resolve()
+            # Resolve the repo root from the stored branch/worktree path so we
+            # operate on the user's repository, not the plugin install directory.
+            # We look up the worker whose worktree recorded this story's branch.
+            worktree_root: Path | None = None
+            if branch:
+                wt_cursor = conn.execute(
+                    "SELECT worktree_path FROM workers WHERE worktree_path IS NOT NULL LIMIT 1"
+                )
+                wt_row = wt_cursor.fetchone()
+                if wt_row and wt_row["worktree_path"]:
+                    worktree_root = _resolve_repo_root(wt_row["worktree_path"])
 
-            # Check for uncommitted changes first (with timeout to prevent hangs)
-            status_result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=workspace_root,
-                timeout=30,
-            )
+            # Fall back to resolving from cwd (which is the story repo when
+            # the skill invokes this via the CLI from the worktree directory).
+            if worktree_root is None:
+                cwd_root = _resolve_repo_root(".")
+                worktree_root = cwd_root
 
-            if status_result.stdout.strip():
-                # Stash uncommitted changes and save reference for recovery
-                stash_result = subprocess.run(
-                    [
-                        "git",
-                        "stash",
-                        "push",
-                        "-u",  # Include untracked files to prevent data loss
-                        "-m",
-                        f"Auto-stash before rollback for {story_key}",
-                    ],
+            if worktree_root is None:
+                git_result["error"] = (
+                    "Cannot resolve repo root for rollback; no worktree path available"
+                )
+            else:
+                # Check for uncommitted changes first (with timeout to prevent hangs)
+                status_result = subprocess.run(
+                    ["git", "status", "--porcelain"],
                     check=False,
                     capture_output=True,
                     text=True,
-                    cwd=workspace_root,
+                    cwd=worktree_root,
                     timeout=30,
                 )
-                if stash_result.returncode == 0:
-                    git_result["stashed"] = True
-                    git_result["stash_ref"] = "stash@{0}"  # Save for manual recovery
-                    _log_event(
-                        conn,
-                        "rollback_stash",
-                        f"Uncommitted changes stashed as stash@{{0}} before rollback for {story_key}",
+
+                if status_result.stdout.strip():
+                    # Stash uncommitted changes; capture the stash SHA for recovery.
+                    stash_result = subprocess.run(
+                        [
+                            "git",
+                            "stash",
+                            "push",
+                            "-u",  # Include untracked files to prevent data loss
+                            "-m",
+                            f"Auto-stash before rollback for {story_key}",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        cwd=worktree_root,
+                        timeout=30,
                     )
+                    if stash_result.returncode == 0:
+                        # Capture the stash SHA so it survives subsequent stash ops.
+                        sha_result = subprocess.run(
+                            ["git", "rev-parse", "stash@{0}"],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                            cwd=worktree_root,
+                            timeout=10,
+                        )
+                        stash_sha = (
+                            sha_result.stdout.strip()
+                            if sha_result.returncode == 0
+                            else "stash@{0}"
+                        )
+                        git_result["stashed"] = True
+                        git_result["stash_ref"] = stash_sha
+                        _log_event(
+                            conn,
+                            "rollback_stash",
+                            f"Uncommitted changes stashed ({stash_sha[:8] if len(stash_sha) >= 8 else stash_sha}) before rollback for {story_key}",
+                        )
 
-            # Reset to the checkpoint commit (with timeout)
-            reset_result = subprocess.run(
-                ["git", "reset", "--hard", rollback_commit],
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=workspace_root,
-                timeout=60,
-            )
+                # Reset to the checkpoint commit (with timeout)
+                reset_result = subprocess.run(
+                    ["git", "reset", "--hard", rollback_commit],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=worktree_root,
+                    timeout=60,
+                )
 
-            if reset_result.returncode == 0:
-                git_result["performed"] = True
-                git_result["commit"] = rollback_commit
-                git_result["message"] = f"Reset to {rollback_commit[:8]}"
-            else:
-                git_result["error"] = reset_result.stderr
+                if reset_result.returncode == 0:
+                    git_result["performed"] = True
+                    git_result["commit"] = rollback_commit
+                    git_result["message"] = f"Reset to {rollback_commit[:8]}"
+                else:
+                    git_result["error"] = reset_result.stderr
 
         except subprocess.TimeoutExpired:
             git_result["error"] = "Git operation timed out"
@@ -2549,7 +2615,7 @@ def cifix_list(story_key: str | None = None, active_only: bool = False) -> dict[
 
 
 # =============================================================================
-# Ready-Set Computation (WA-1231 Phase 1)
+# Ready-Set Computation
 # =============================================================================
 
 # Frontmatter status values that indicate a story is effectively built.
@@ -2573,7 +2639,7 @@ def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, 
         stories: list of dicts, each with keys::
 
             {
-                "key": str,        # story key, e.g. "WA-1231"
+                "key": str,        # story key, e.g. "PROJ-42"
                 "refined": bool,   # has a refined (DoR-passing) plan
                 "built": bool,     # already built
                 "deps": list[str], # keys this story depends on
@@ -2860,7 +2926,7 @@ def main() -> None:
     story_ready_p = story_sub.add_parser(
         "ready", help="Compute the ready-set for an epic's stories"
     )
-    story_ready_p.add_argument("epic", help="Epic key, e.g. WA-1231")
+    story_ready_p.add_argument("epic", help="Epic key or slug, e.g. PROJ-42 or my-epic")
     story_ready_p.add_argument(
         "--plans-dir", default="docs/plans", help="Directory of *-story.md plan files"
     )

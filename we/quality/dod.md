@@ -21,7 +21,7 @@
 - [ ] ADRs referenced in story were followed
 - [ ] Security patterns applied (if Security Review = Yes in plan)
 - [ ] **Platform Primitive compliance** — No new primitive bypasses without an annotated reason; if the project has `docs/architecture/BYPASS-REGISTER.md` and it grew, the PR description cites an ADR or justifies inline
-- [ ] **Bypass register regenerated** — if any new `# *-BYPASS-OK:` annotation was added, the register was regenerated (`bash scripts/generate-bypass-register.sh --write`) and committed
+- [ ] **Bypass register regenerated** — if any new `# *-BYPASS-OK:` annotation was added AND `scripts/generate-bypass-register.sh` exists in the repo, the register was regenerated (`bash scripts/generate-bypass-register.sh --write`) and committed; skip silently if the script is absent
 - [ ] Not applicable → skip if no architecture constraints in plan
 
 ### Testing
@@ -57,7 +57,7 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] `/we:review` passed (review_passed checkpoint)
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
-- [ ] CodeRabbit threads resolved on GitHub — `check-coderabbit` CI gate blocks on unresolved CRITICAL/MAJOR threads. Use `/we:ci-review` to fix and resolve after PR creation.
+- [ ] CodeRabbit threads resolved on GitHub — `check-coderabbit` CI gate blocks on unresolved CRITICAL/MAJOR threads. Use `/we:ci-review` to fix and resolve after PR creation. Skip if no GitHub remote or no CodeRabbit app is installed; local quality gates (review + static + test) are authoritative in that case.
 
 ### Documentation
 
@@ -110,7 +110,7 @@ Feature reachable for user?
 End-to-end flow works?
 Architecture compliance? (patterns, ADRs, security)
 Post-implementation semantic checks? (migrations, timezone, wiring, ...)
-Quality gates passed? (review + static + test locally, CodeRabbit on GitHub)
+Quality gates passed? (review + static + test locally, CodeRabbit on GitHub if available)
 Docs updated? (per Documentation Impact in plan)
 PR created and CI green?
 All BLOCKING/WARNING fixed?

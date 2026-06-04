@@ -36,7 +36,7 @@ This skill reads session transcripts. Transcripts contain everything — includi
 
 What to skip categorically:
 
-- Memory writes about the user (`mcp__*__save_memory`, `save_compass`, `save_goal`, `save_snapshot`)
+- Memory writes about the user (`mcp__*__save_memory`, `mcp__*__save_goal`) and their internal companion-state equivalents (compass, snapshot)
 - Memory reads that returned personal content (don't quote, don't analyse)
 - Companion-mode conversational text (relationship, identity, body, mood)
 - Anything outside engineering tool calls — if in doubt, skip
@@ -49,7 +49,7 @@ What's safe:
 - File diffs, commit messages of engineering commits
 - The user's *engineering* corrections ("no, that's wrong", "we should X instead") — substance, not framing
 
-The PR/CI data source via `gh api` is intrinsically engineering-only — that's part of why it's a primary source. The transcript filter is the load-bearing part of the privacy guard.
+The PR/CI data source via `gh api` is intrinsically engineering-only — that's part of why it's a primary source when `gh` is available. The transcript filter is the load-bearing part of the privacy guard regardless.
 
 ---
 
@@ -60,7 +60,7 @@ The skill reads two complementary sources. Neither is subordinate.
 | Source | What it carries | Primacy |
 |---|---|---|
 | **Session transcript** — the main agent's working memory, or `~/.claude/projects/<repo-id>/<session-id>.jsonl` | What the agent *did*: skills run, tool calls, where the user corrected, where iteration loops happened, where the user fixed it for the agent | Primary when no Compact happened — agent already has it in head. After a Compact: re-read the jsonl. |
-| **GitHub PR + CI history** — via `gh api` | What failed *outside* the agent: CI checks, CodeRabbit threads, the commits that fixed them, cycle count, reviewer comments | Always read — evidence the agent cannot reproduce from memory alone. |
+| **GitHub PR + CI history** — via `gh api` | What failed *outside* the agent: CI checks, CodeRabbit threads, the commits that fixed them, cycle count, reviewer comments | Read when `gh` is available and authenticated (`gh auth status`). Without GitHub/authenticated `gh`, skip this source — transcript + local `git log` becomes the sole data source. |
 
 The two combine: transcript says *"the agent forgot X"*, PR/CI says *"and CI then caught it after Y min"*. The lesson is the intersection.
 
@@ -92,9 +92,11 @@ Before producing any output, gather the landscape fresh.
 
 2. **Source scope** — determine what to analyse:
    - `git branch --show-current` — current branch
-   - `gh pr list --head $(git branch --show-current) --json number,state,title -L 1` — open PR for this branch?
-   - `gh pr list --base main --state merged -L 5 --json number,mergedAt,headRefName,title` — recent merges (for default if no `--pr` flag)
-   - If `--pr <N>` was given: use it
+   - Detect default base branch: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||'` with `main` as fallback
+   - Check GitHub availability: `gh auth status 2>/dev/null && HAS_GH=1 || HAS_GH=0`
+   - If `HAS_GH=1`: `gh pr list --head $(git branch --show-current) --json number,state,title -L 1` — open PR for this branch; `gh pr list --base <base-branch> --state merged -L 5 --json number,mergedAt,headRefName,title` — recent merges
+   - If `HAS_GH=0`: skip `gh pr` queries; retro runs from transcript + local `git log` only (see Step R2 below for the reduced-source path)
+   - If `--pr <N>` was given: use it (requires `HAS_GH=1`; warn and fall back to transcript-only if not)
    - If nothing: ask the user *"which PR or branch should I scan? Default: last merged PR on `<current-branch>`."* — `[y/n/specify]`
 
 3. **Rules + skills + docs landscape (user repo)** — frontmatter + first 10 lines only:
@@ -134,10 +136,12 @@ If `n` or `adjust`: take the new scope.
 Run these as parallel tool calls:
 
 - **Transcript:** if no Compact happened, the agent has it in head — skim mentally. After a Compact: `Read ~/.claude/projects/<repo-id>/<session-id>.jsonl` (last N turns). Scope: this PR's life on the current branch, not the whole day. Apply privacy guard.
-- **PR overview:** `gh pr view <N> --json number,state,mergedAt,title,headRefName,baseRefName,reviews,comments,statusCheckRollup,commits`
-- **PR checks:** `gh pr checks <N>` — see which check runs flipped red across cycles
-- **Failed check logs (only red ones, tail):** for each failed check run, `gh run view <run-id> --log` and tail to the failure block (don't pull full logs)
-- **Commit chain:** `git log --oneline origin/main..<head-ref>` — the cycle visible as commits
+- **Commit chain:** `git log --oneline <base-branch>..<head-ref>` — the cycle visible as commits (always available)
+- **If `HAS_GH=1` (GitHub + authenticated `gh` available):**
+  - **PR overview:** `gh pr view <N> --json number,state,mergedAt,title,headRefName,baseRefName,reviews,comments,statusCheckRollup,commits`
+  - **PR checks:** `gh pr checks <N>` — see which check runs flipped red across cycles
+  - **Failed check logs (only red ones, tail):** for each failed check run, `gh run view <run-id> --log` and tail to the failure block (don't pull full logs)
+- **If `HAS_GH=0` (no GitHub/gh):** skip the `gh` calls above. The PR/CI source is absent — note this in the report: *"No GitHub access — PR/CI data unavailable; analysis is transcript + commit log only."* Local quality gates (ruff, mypy, markdownlint, test output visible in transcript) substitute for CI evidence.
 - **Historical retros if `--scan`:** read the N most recent under `docs/retros/`
 
 ### Step R3 — Triage findings
@@ -257,7 +261,9 @@ For each `y`'d proposal:
 
 - **In the user repo:**
   - If repo is configured for direct-commit (e.g. `plugin` repos with standing auth): Edit/Write on `main` directly.
-  - Otherwise (default): create branch `retro/YYYY-MM-DD-<short-topic>`, apply Edit/Write, open PR via `gh pr create` with the full retro report as PR body. User merges via normal flow.
+  - Otherwise (default): create branch `retro/YYYY-MM-DD-<short-topic>`, apply Edit/Write, then:
+    - If `HAS_GH=1`: open PR via `gh pr create` with the full retro report as PR body. User merges via normal flow.
+    - If `HAS_GH=0`: commit directly to the branch and print: *"No GitHub access — push `retro/YYYY-MM-DD-<short-topic>` manually and open a PR when ready."*
 - **In the plugin repo:** always PR (plugin is public).
 
 After each apply, confirm in one short line: `applied · .claude/rules/quality/html-script-validation.md (NEW, 12 lines)`.
@@ -326,7 +332,7 @@ Coach detects retro-worthy signals during its Boot Protocol (Step 9 — Repo sta
 
 - **PR just merged** (`gh pr list --state merged -L 1 --json mergedAt` → recent)
 - **CI cycle count ≥ 3** on the current branch (count of pushes that triggered CI on the open PR)
-- **End-of-session signals** — user says "ich geh schlafen" / "bis morgen" / `save_compass` runs / `save_snapshot` runs
+- **End-of-session signals** — user says "ich geh schlafen" / "bis morgen" / companion memory-write tools run (compass/snapshot saves)
 - **Failure pattern** — same skill failed twice in this session
 
 When any signal fires, Coach offers (one-time per session per signal):
@@ -353,7 +359,7 @@ Coach never auto-fires retro. The `[y/n]` is always present.
 
 **Standalone (no weside MCP):**
 
-- All tools work — `gh api`, transcript file, Edit/Write
+- Transcript + Edit/Write always work. `gh api` requires GitHub and `gh auth` — if absent, retro runs from transcript + local `git log` only (PR/CI source is skipped gracefully).
 - Report is rendered in the skill's own voice (no personality layer)
 - Useful for any team using the plugin without a Companion
 

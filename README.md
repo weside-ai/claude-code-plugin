@@ -30,7 +30,7 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 **Build altitude — autonomous:**
 
 - **`/we:build`** — autonomous build pipeline: code → AC verify → quality gates → docs → PR → CI, with checkpoints + circuit breaker. Hands off PR to you.
-- **`/we:orchestrate`** *(spike, WA-1231)* — Epic-driven build orchestration: boots from state, computes the ready Stories, and dispatches one builder-teammate per Story (each running `/we:build`), capped at ≤2 concurrent. The Build-altitude sibling of `/we:council`.
+- **`/we:orchestrate`** *(spike)* — Epic-driven build orchestration: boots from state, computes the ready Stories, and dispatches one builder-teammate per Story (each running `/we:build`), capped at ≤2 concurrent. The Build-altitude sibling of `/we:council`.
 
 **Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
 

@@ -53,12 +53,13 @@ Examples:
 Before reviewing the first file, read the **truth sources** the project uses
 for documentation conventions. Don't reinvent or guess them.
 
-1. `.claude/rules/quality/doc-standards.md` — full body. This rule defines:
-   the 4-layer knowledge system, `docs/` tree structure, doc-format templates
-   (architecture, journey, primitive-detail), TurboVault frontmatter standard,
-   placement decision tree, promotion criteria, rules structure, size
-   guidelines. **Reference it; do not duplicate it.** When you propose a
-   change, cite the rule by section.
+1. `.claude/rules/quality/doc-standards.md` (if it exists) — full body. This
+   rule defines: the 4-layer knowledge system, `docs/` tree structure,
+   doc-format templates (architecture, journey, primitive-detail), TurboVault
+   frontmatter standard, placement decision tree, promotion criteria, rules
+   structure, size guidelines. **Reference it; do not duplicate it.** When you
+   propose a change, cite the rule by section. If absent, fall back to the
+   four universal pillars below as the authoritative standard.
 2. `docs/.doc-architect.yml` (if it exists) — promotion criteria + writable_paths.
 3. `docs/architecture/PRIMITIVES.md` (if it exists) — primitive index, used to
    detect duplicate invariants between `architecture/*.md` and
@@ -79,7 +80,7 @@ For each input file, detect the type by path. Load the matching reference doc
 | `**/.claude/rules/**/*.md` | Rule | `references/rules.md` |
 | `**/CLAUDE.md` | CLAUDE.md | `references/claude-md.md` |
 | `**/docs/**/*.md` | Project Doc | `references/docs-tree.md` |
-| `**/we/skills/*/SKILL.md`, `**/agents/*.md` | Skill / Agent | (no reference — apply universal pillars only) |
+| `**/skills/*/SKILL.md`, `**/agents/*.md` | Skill / Agent | (no reference — apply universal pillars only) |
 
 If a file falls outside all of these (e.g. a `README.md` at repo root that
 isn't `CLAUDE.md`): apply the universal pillars only, note in the verdict
@@ -368,9 +369,14 @@ For each approved finding, in order:
    the user "fix downstream too?". If yes — extend the loop to cover the
    downstream file using the same diff.
 3. If a primitive bypass annotation was added or removed: regenerate
-   `docs/architecture/BYPASS-REGISTER.md` via
-   `bash scripts/generate-bypass-register.sh --write` (this is `doc-architect`
-   territory but the skill knows when to flag it).
+   `docs/architecture/BYPASS-REGISTER.md` if the script exists:
+   ```bash
+   if [ -f scripts/generate-bypass-register.sh ]; then
+     bash scripts/generate-bypass-register.sh --write
+   fi
+   ```
+   (This is `doc-architect` territory but the skill knows when to flag it.
+   Skip silently on repos that don't ship this script.)
 4. After all approved findings are applied: re-emit the verdict line so the
    user sees the new state.
 

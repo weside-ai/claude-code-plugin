@@ -102,7 +102,17 @@ git push -u origin $BRANCH --force-with-lease
 
 If ticketing tool available → fetch story summary for PR body.
 
-### Step 6: Create PR
+### Step 6: Check GitHub CLI availability
+
+```bash
+gh auth status 2>/dev/null && GH_AVAILABLE=true || GH_AVAILABLE=false
+```
+
+If `GH_AVAILABLE=false`: skip Steps 7-8, tell the user to open the PR manually
+(branch is pushed; copy the suggested title and body below), and proceed to
+Step 9 to save the checkpoint.
+
+### Step 7: Create PR
 
 ```bash
 gh pr create \
@@ -124,7 +134,7 @@ EOF
 )"
 ```
 
-### Step 7: Link PR to Ticket & Transition
+### Step 8: Link PR to Ticket & Transition
 
 If ticketing tool available:
 
@@ -135,7 +145,7 @@ If ticketing tool available:
 
 See "Ticketing Integration" section below for tool detection.
 
-### Step 8: Save Checkpoint
+### Step 9: Save Checkpoint
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint $TICKET pr_created
@@ -160,7 +170,8 @@ Detect available ticketing tool (in priority order):
 - **STOP** if any checkpoint missing
 - **ALWAYS** rebase on main before push
 - **ALWAYS** save `pr_created` checkpoint after success
-- **ALWAYS** transition ticket → "In Review" in Step 7 (soft-fail only)
-- **ALWAYS** remind user: *"CodeRabbit will review on GitHub. After CI runs, use `/we:ci-review` to resolve threads — unresolved CRITICAL/MAJOR threads block merge via `check-coderabbit` gate."*
+- **ALWAYS** transition ticket → "In Review" in Step 8 (soft-fail only)
+- **If GitHub PR was created:** remind user: *"CodeRabbit will review on GitHub. After CI runs, use `/we:ci-review` to resolve threads — unresolved CRITICAL/MAJOR threads block merge via `check-coderabbit` gate."*
+- **If no `gh` CLI:** remind user to open the PR manually; the branch is pushed and ready.
 - **NEVER** merge PR — that's the user's job
 - **NEVER** transition ticket to "Done" — that's the user's job

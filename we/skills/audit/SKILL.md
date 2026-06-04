@@ -32,7 +32,7 @@ automated scanning tools.
 Check which tools are installed. Missing tools are warnings, not blockers.
 
 ```bash
-for tool in semgrep trivy kubescape gitleaks; do
+for tool in semgrep trivy kubescape gitleaks bandit; do
   if command -v "$tool" &>/dev/null; then
     echo "OK: $tool ($($tool --version 2>/dev/null | head -1))"
   else

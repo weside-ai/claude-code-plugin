@@ -14,7 +14,7 @@ description: Documentation coherence steward — delegates to doc-architect agen
 
 **User Input:** $ARGUMENTS
 
-Invokes the `doc-architect` agent via the `/we:docs` skill. The agent reads
+Directly launches the `doc-architect` agent. The agent reads
 the doc landscape fresh on every invocation (rules, indices, tree) and
 answers the user's request in one of 5 modes: question, classify, integrate,
 audit, or register.

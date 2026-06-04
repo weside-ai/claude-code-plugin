@@ -97,12 +97,20 @@ Implementation Plan: docs/plans/{TICKET}-story.md
 
 Research codebase thoroughly, then create detailed plan.
 
-**Architecture Context (TurboVault):** Before writing the plan, search for relevant
-architecture docs using TurboVault MCP (if available):
+**Architecture Context:** Before writing the plan, search for relevant architecture docs.
+
+If TurboVault MCP is available:
 ```
 mcp__turbovault__semantic_search("topic of this story")
 mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", value:"<relevant-domain>"}])
 ```
+
+If TurboVault MCP is unavailable, fall back to local search:
+```
+Grep(pattern="<topic keyword>", include="*.md", path="docs/")
+Glob(pattern="docs/architecture/**/*.md")
+```
+
 Read the top 3-5 results to understand existing patterns, primitives, and ADRs
 that apply. Reference them in the plan's Technical Approach section.
 
@@ -285,7 +293,7 @@ Detect available ticketing tool (in priority order):
 - ALWAYS load DoR first
 - ALWAYS create MINIMAL ticket + DETAILED plan
 - ALWAYS use EnterPlanMode for plan creation
-- ALWAYS follow Step 6 post-approval checklist IN ORDER: Jira → Save plan → Checkpoint → Stop
+- ALWAYS follow Step 6 post-approval checklist IN ORDER: Save plan → Update ticket → Commit → Checkpoint → Stop
 - ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
 - The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
 - ALWAYS use Given/When/Then for ACs
@@ -296,4 +304,4 @@ Detect available ticketing tool (in priority order):
 - ⛔ NEVER start implementation — your job is ONLY Story + Plan
 - ⛔ NEVER auto-continue to /we:build — user decides when
 - ⛔ NEVER create branches, write code, or run tests after plan approval
-- ⛔ After Step 6d: STOP IMMEDIATELY — do not continue under any circumstances
+- ⛔ After Step 6 (step 5 — Output): STOP IMMEDIATELY — do not continue under any circumstances

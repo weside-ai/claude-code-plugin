@@ -35,7 +35,7 @@ flowchart TB
 You have:
 
 - **Conversation memory** — Claude Code keeps the current session in context. Refer back to earlier turns freely.
-- **File-based memory** — `docs/plans/<ticket>-plan.md`, `docs/architecture/*.md`, `.weside/weside.md`, `.claude/rules/` — anything you commit to the repo is "memory" the next session will read when relevant.
+- **File-based memory** — `docs/plans/<ticket>-story.md`, `docs/architecture/*.md`, `.weside/weside.md`, `.claude/rules/` — anything you commit to the repo is "memory" the next session will read when relevant.
 - **`.claude/memory/` (optional)** — a session-scoped scratchpad some teams use; convention varies. Not part of the plugin contract.
 
 This is enough for a single developer who keeps good notes. The pipeline still works:

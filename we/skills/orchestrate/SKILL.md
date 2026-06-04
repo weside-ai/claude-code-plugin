@@ -24,10 +24,9 @@ This is the **Build-altitude sibling of `/we:council`/`/we:meet`**: the same Age
 machinery (`TeamCreate` → `Agent(team_name=…, name=…)` → `SendMessage` → `TeamDelete`), but the
 teammates are **builders** running `/we:build`, not deliberators.
 
-> **Spike status (WA-1231).** This skill is a spike: it proves the dispatch+tracking loop on
-> one real Epic with a **hard cap of ≤2 concurrent builders**. The full orchestrator (parallel
-> dispatch beyond 2, cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
-> Design + evidence: `weside-core/docs/plans/WA-1231-design.md`.
+> **Spike status.** This skill is a spike: it proves the dispatch+tracking loop on one real Epic
+> with a **hard cap of ≤2 concurrent builders**. The full orchestrator (parallel dispatch beyond 2,
+> cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
 
 ## Prerequisites
 
@@ -179,10 +178,10 @@ which the shell may reset between commands — so START EVERY bash command with 
 and confirm `git rev-parse --show-toplevel` is {repo_root} before any git operation. NEVER let
 EnterWorktree or a quality-gate subagent run against a different repo.
 
-ISOLATION: create your own worktree so concurrent builders never share a working tree —
-EnterWorktree(name="{branch}") (or `git worktree add`). Do all work inside it.
+ISOLATION: /we:build creates its own worktree — do NOT call EnterWorktree before invoking the
+skill, as a nested worktree-create is rejected. The build manages isolation internally.
 
-Your job: run the COMPLETE weside build pipeline for {TICKET} by invoking the skill:
+Your job: run the COMPLETE build pipeline for {TICKET} by invoking the skill:
   Skill(skill="build")  with the ticket {TICKET}
 Run it to a reviewable PR — Mode A or B, all quality gates, docs, PR, CI — UNCHANGED.
 You own only this one Story. Do NOT merge the PR (Deliver is the human's job).
@@ -255,7 +254,7 @@ stumble and optimise them. Repeatable via the built-in `/loop` skill
    branch and delete it on teardown, or stop before push.
 3. Run the **real** Step 1–8 build logic so genuine skill bugs surface.
 4. Append the friction points (which step stumbled, the exact error) to a rehearsal log:
-   `weside-core/docs/retros/YYYY-MM-DD-orchestrate-rehearsal.md`.
+   `docs/retros/YYYY-MM-DD-orchestrate-rehearsal.md` (repo-relative, under the story repo root).
 5. `TeamDelete`, delete the scratch worktree/branch. Loop to repeat.
 
 This is the lab for the broader skill clean-up: each iteration → `plugin-dev:skill-reviewer` /
@@ -276,8 +275,8 @@ required regardless of weside connection.
 - **Dispatch only on an explicit confirm** — the ready set is shown first; the human gates it.
 - **Hard cap ≤2 concurrent builders** — refuse and log any attempt to exceed it (runaway guard).
 - **Builders run the full unmodified `/we:build`** — never reimplement or degrade the build/QA;
-  a teammate spawns the build's own subagents (validated WA-1231: a builder ran `/we:build`
-  through Step 5's parallel quality-gate subagents and wrote durable checkpoints).
+  a teammate spawns the build's own subagents (validated: a builder ran `/we:build` through
+  Step 5's parallel quality-gate subagents and wrote durable checkpoints).
 - **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
   teammates. Builders live in their own watchable sessions.
 - **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
@@ -296,5 +295,3 @@ required regardless of weside connection.
 - `scripts/orchestration.py` — `story status|list|checkpoint|ready` (tracking + ready-set)
 - `scripts/test_ready_set.py` — unit tests for the `compute_ready_set` pure helper
 - `skills/orchestrate/references/fixture-story.md` — the rehearsal fixture template
-- `weside-core/docs/plans/WA-1231-design.md` — full design, evidence, and the sibling program
-- `weside-core/docs/retros/2026-06-04-orchestrate-rehearsal.md` — first rehearsal findings

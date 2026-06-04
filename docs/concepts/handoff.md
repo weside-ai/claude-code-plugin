@@ -61,7 +61,7 @@ ticket_or_initiative: <Jira key | initiative slug | null>
 session_id: <CC session-id from ~/.claude/projects/...>
 written_at: <ISO8601 timestamp>
 written_by: <"manual" | "coach-suggested" | "auto">
-plan_files: [<docs/plans/.../CONCEPT.md>, ...]
+plan_files: [<docs/plans/...-story.md>, ...]
 retro_files: [<docs/retros/...>, ...]
 companion: <name if MCP active, else null>
 last_commit: <SHA>
@@ -143,7 +143,7 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 
 | Directory | Skills | What lives there |
 |---|---|---|
-| `docs/plans/<topic>/CONCEPT.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` `/we:coach` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* |
+| `docs/plans/<slug>-{prd,saga,epic,story}.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` `/we:coach` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *what we learned, how the harness should change* |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *where we are now, what the next session should pick up* |
 

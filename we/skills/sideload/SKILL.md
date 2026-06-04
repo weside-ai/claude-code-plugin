@@ -105,4 +105,3 @@ This makes `/we:sideload` useful even before any repo is fully onboarded.
 - `we/skills/setup/SKILL.md` — sets up a repo for `/we:sideload` to work
 - `we/skills/onboarding/SKILL.md` — produces the `weside.md` this skill reads
 - `we/skills/CLAUDE.md` — design rationale
-- Source brainstorm: the Agentic Product Ownership framework design notes, § 2.4

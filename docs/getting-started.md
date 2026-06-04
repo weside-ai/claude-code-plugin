@@ -45,12 +45,12 @@ Two plugins enhance the pipeline. They're optional — the framework works witho
 /we:setup
 ```
 
-Three questions:
+Four questions:
 
 1. **Vision** — link, file, or short description. *Optional* — say "skip" if you don't have one. Vision is the anchor `/we:story` uses to evaluate priority; without it, every feature seems equally important.
-1. **Ticketing** — auto-detected. Confirm Jira / GitHub Issues / none.
-1. **Stack** — auto-detected from `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`. Confirm or override.
-1. **Companion Framework** *(optional)* — the set of `.weside/` files and skills that define your crew, rosters, and deliberation config for this repo. Writing `.weside/config.json` + invoking `/we:onboarding` composes your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
+2. **Ticketing** — auto-detected. Confirm Jira / GitHub Issues / none.
+3. **Stack** — auto-detected from `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`. Confirm or override.
+4. **Companion Framework** *(optional)* — the set of `.weside/` files and skills that define your crew, rosters, and deliberation config for this repo. Writing `.weside/config.json` + invoking `/we:onboarding` composes your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
 
 If you said yes to the Companion Framework step, `/we:onboarding` walks you through naming who fills each role. You can use generic names ("PO", "Architect") to start; refine later. Two files appear in `.weside/`:
 
@@ -78,11 +78,11 @@ Pick something small — a refactor, a small feature, a typo cluster. Then:
 3. Propose acceptance criteria and ask you to confirm or adjust
 4. Sketch a phased implementation plan
 5. Write the ticket (in your ticketing tool, if connected)
-6. Write `docs/plans/{TICKET}-plan.md` with the full plan
+6. Write `docs/plans/{TICKET}-story.md` with the full plan
 
 You'll know it worked when:
 
-- A new file exists at `docs/plans/{TICKET}-plan.md`
+- A new file exists at `docs/plans/{TICKET}-story.md`
 - The ticket has been created in Jira / GitHub Issues
 - The plan has a *Context* section (the why), *Acceptance Criteria*, and *Phases*
 
@@ -110,16 +110,16 @@ Step 5: review_passed          ← parallel: review + static + test
         test_passed
 Step 6: docs_updated           ← doc-architect proposes diffs, you approve
 Step 7: pr_created             ← PR opened with all gates passed
-Step 8: ci_passed              ← CI + CodeRabbit findings, fixed in batch
+Step 8: ci_passed              ← CI + review findings, fixed in batch
 Step 9: ticket → In Review     ← awaiting your merge
 ```
 
-Checkpoint names (`git_prepared`, `ac_verified`, etc.) and the internal orchestration CLI still use the `story` table for back-compat with pre-v2.28.0 sessions — that's why a long-interrupted Build resumes cleanly. The user-facing skill is `/we:build`.
+Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal orchestration CLI — if a build is interrupted, just re-invoke `/we:build {TICKET}` and it resumes from the last checkpoint.
 
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
 - **Step 3 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
-- **Step 8 (CI fix)** — if CodeRabbit raises blocking issues, you'll see them addressed; if 3 cycles can't clear them, you're asked.
+- **Step 8 (CI fix)** — review findings (CodeRabbit on GitHub, or local quality gates elsewhere) are addressed here; if 3 cycles can't clear them, you're asked.
 
 Otherwise it runs.
 
@@ -129,8 +129,8 @@ Otherwise it runs.
 
 When `/we:build` finishes, you have a PR. Open it. Review it like any PR — your eyes, your call. When you're happy:
 
-- Merge via GitHub UI
-- Close the ticket (or watch it auto-transition, depending on your Jira config)
+- Merge via your platform's UI (GitHub, GitLab, Bitbucket, or `git merge` locally)
+- Close the ticket (or watch it auto-transition, depending on your ticketing config)
 
 Done. You've shipped a story end-to-end through Agentic Product Ownership.
 
@@ -144,7 +144,7 @@ You went from a sentence to a merged PR with:
 - A detailed plan you can refer back to
 - Implementation that meets every acceptance criterion
 - Tests with coverage
-- Code review (programmatic + CodeRabbit)
+- Code review (programmatic + automated review bot, if configured)
 - Static analysis (lint, format, types)
 - Updated docs (whatever the change touched)
 - A passing CI

@@ -5,7 +5,7 @@ Plan files at `docs/plans/{TICKET}-story.md` are the **build contract** between
 document specifies the exact format both sides depend on. Changes here are
 versioned and require explicit consideration of both sides.
 
-> **Filename suffix (v2.35.0):** story plans use the `-story.md` suffix. `/we:build`
+> **Filename suffix:** story plans use the `-story.md` suffix. `/we:build`
 > reads `docs/plans/{TICKET}-story.md` first and falls back to the legacy
 > `{TICKET}-plan.md` so pre-existing plans keep building during migration. New plans
 > are always written with `-story.md`.

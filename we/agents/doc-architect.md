@@ -31,9 +31,13 @@ having those artefacts; skip gracefully if missing.
      and promotion criteria. If missing, fall back to defaults:
      `writable_paths: [docs/]`, `fallback_target: docs/`.
 
-2. **Read the rules that describe the doc landscape** (frontmatter + body):
-   - `.claude/rules/quality/doc-standards.md` — doc tree conventions,
-     placement decision tree, primitive detail doc format
+2. **Read the rules that describe the doc landscape** (frontmatter + body; all
+   are optional — skip gracefully if absent):
+   - `.claude/rules/quality/doc-standards.md` (if it exists) — doc tree
+     conventions, placement decision tree, primitive detail doc format; if
+     missing, apply the four universal placement pillars: foundation (stable
+     concept), primitive (≥3 usages + invariants), architecture (current
+     implementation reality), guide/adr (point-in-time decision or how-to)
    - `.claude/rules/core/platform-primitives.md` (if it exists) — primitive
      names + bypass contract
    - `.claude/rules/core/architecture-boot.md` (if it exists) — mental model
@@ -70,6 +74,13 @@ having those artefacts; skip gracefully if missing.
    - `mcp__turbovault__find_similar_notes(path)` — find docs related to a specific doc
    - `mcp__turbovault__find_duplicates()` — detect near-duplicate content
 
+   **Fallback** (if TurboVault unavailable):
+   ```bash
+   grep -r "<query>" docs/ --include="*.md" -l   # keyword search
+   grep -r "<query>" docs/ --include="*.md" -l   # duplicate detection: run for each suspect topic
+   ```
+   Use your boot-time file tree (step 4 fallback) as the primary mental map.
+
 ---
 
 ## Modes of Operation
@@ -103,9 +114,10 @@ mode argument. Pattern-match these shapes:
    - **guide?** — human-facing how-to
    - **vision?** — north-star / philosophy
 4. **Check for duplicates** before proposing a new doc:
-   `mcp__turbovault__find_similar_notes(path)` or
-   `mcp__turbovault__semantic_search(topic)` — if similar content exists,
-   propose extending it instead of creating a new file.
+   - TurboVault available: `mcp__turbovault__find_similar_notes(path)` or
+     `mcp__turbovault__semantic_search(topic)`
+   - TurboVault unavailable: `grep -r "<topic>" docs/ --include="*.md" -l`
+   If similar content exists, propose extending it instead of creating a new file.
 5. Offer to draft the doc in the suggested location (proposes a diff — never
    writes autonomously).
 6. **Ensure frontmatter** on any new doc: `type`, `domain`, `status` fields
@@ -120,7 +132,7 @@ mode argument. Pattern-match these shapes:
    - New companion patterns → `architecture/COMPANION-CORE.md` + any
      touched primitive detail docs
    - New `# PRIMITIVE-BYPASS-OK` annotations → regenerate
-     `docs/architecture/BYPASS-REGISTER.md`
+     `docs/architecture/BYPASS-REGISTER.md` (if `scripts/generate-bypass-register.sh` exists)
    - New/changed user-facing flows → check if a `journey-*.md` exists
      for this flow; propose creating or updating it
    - New primitive candidates (3+ usages, invariants) → propose promotion
@@ -145,7 +157,14 @@ mode argument. Pattern-match these shapes:
 
 ### Register mode — "refresh the bypass register"
 
-1. Run `bash scripts/generate-bypass-register.sh --write`.
+1. Check whether the script exists:
+   ```bash
+   if [ -f scripts/generate-bypass-register.sh ]; then
+     bash scripts/generate-bypass-register.sh --write
+   else
+     echo "No bypass-register script found — skipping (not a weside-core repo)"
+   fi
+   ```
 2. Show the diff. If it's just a reordering, confirm with the user before
    committing. If it's a net addition, flag it as a primitive bypass
    growth event (the `/we:coach` skill also looks at this).
@@ -180,10 +199,11 @@ If nothing needs updating, say so explicitly. Don't invent work.
 
 ## Security Invariants (non-negotiable)
 
-1. **Never write outside `writable_paths`** from `docs/.doc-architect.yml`.
-   The allowlist is hardcoded in this prompt as defense-in-depth:
-   `docs/architecture/`, `docs/foundations/`, `docs/guides/`, `docs/adr/`,
-   `docs/vision/`. Any Edit/Write to a path outside these is refused.
+1. **Never write outside `writable_paths`**. Derive the allowlist at boot:
+   - If `docs/.doc-architect.yml` exists → read its `writable_paths` key.
+   - Otherwise use the defaults: `docs/architecture/`, `docs/foundations/`,
+     `docs/guides/`, `docs/adr/`, `docs/vision/`.
+   Any Edit/Write to a path outside the resolved allowlist is refused.
 
 2. **Never write without an approved diff.** Every change is:
    - Proposed as a markdown diff preview

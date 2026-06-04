@@ -64,7 +64,7 @@ The most common entry point is `/we:story`. It asks the questions that turn an i
 `/we:story` produces two things:
 
 - **Ticket** (minimal): "As X I want Y so that Z" + link to the plan
-- **Plan** (`docs/plans/{TICKET}-plan.md`, detailed): context, acceptance criteria, phased implementation, tests, security review, design decisions
+- **Plan** (`docs/plans/{TICKET}-story.md`, detailed): context, acceptance criteria, phased implementation, tests, security review, design decisions
 
 Context flows: the plan's *Context* and *Design Decisions* sections capture why you decided what you decided — including rejected alternatives. `/we:build` reads this and understands intent, not just spec.
 
@@ -76,7 +76,7 @@ For contentious stories, run `/we:meet story` first — convenes a small council
 
 You hand the ticket key to `/we:build`. It runs the entire build pipeline autonomously — you can watch, you don't have to drive.
 
-> **Back-compat:** the orchestration CLI keeps the internal `story` table name; checkpoints from pre-v2.28.0 sessions still resume cleanly under `/we:build`.
+> **Back-compat:** the orchestration CLI keeps the internal `story` table name; interrupted builds always resume cleanly when re-invoked.
 
 ```mermaid
 flowchart TB
@@ -108,8 +108,8 @@ flowchart TB
 | **4. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers |
 | **5. Quality gates** | Code review + static analysis + tests, all in parallel | Three subagents, single message dispatch — concurrent execution |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
-| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. CodeRabbit then runs on GitHub. |
-| **8. CI fix** | Inline loop — collect findings, fix all, resolve threads, push once | Max 3 cycles. CodeRabbit threads MUST be resolved before push. |
+| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. CodeRabbit runs on GitHub if installed; other hosts use local quality gates. |
+| **8. CI fix** | Inline loop — collect findings, fix all, push once | Max 3 cycles. CodeRabbit threads resolved when present; otherwise local gates are authoritative. |
 | **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
 
 ### Robustness
@@ -141,7 +141,7 @@ You receive a PR with:
 
 - All acceptance criteria implemented
 - Tests passing
-- Code reviewed (by `code-reviewer` + CodeRabbit on GitHub)
+- Code reviewed (by `code-reviewer` + CodeRabbit when on GitHub, local quality gates otherwise)
 - Docs proposed and applied
 - CI green
 - Ticket in *In Review*
@@ -174,7 +174,7 @@ flowchart LR
 | Step | What |
 |---|---|
 | **Source scope** | Default: current branch + last merged PR. `--pr N` for a specific PR. `--scan N` to also read the last N retros in `docs/retros/` for recurring patterns. |
-| **Data fetch** | Session transcript (what the agent did) + `gh api` (what failed externally — CI checks, CodeRabbit threads, push-fix-push cycles). Two-source model — both required. |
+| **Data fetch** | Session transcript (what the agent did) + external CI/review data via `gh api` on GitHub (CI checks, CodeRabbit threads, push-fix-push cycles) — or the session transcript alone when `gh` is unavailable. |
 | **Triage** | Each friction classified by surface: CI/static, CI/tests, CI/build, Review/CodeRabbit, Review/human, Workflow/cycle-count, Agent/manual-correction, Agent/iteration-loop, Tooling/friction. |
 | **Propose** | Each friction → 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/` over `CLAUDE.md` over `docs/`; plugin MDs rare and explicitly flagged), effort tag, diff preview. |
 | **Per-item gate** | `[y / n / edit-path / skip-for-later]` for each proposal. Never silent. |
