@@ -446,7 +446,7 @@ def ensure_gitignore(repo_path: Path) -> bool:
         gi.write_text(f"{GITIGNORE_MARKER}\n{GITIGNORE_PATH_LINE}\n", encoding="utf-8")
         return True
     content = gi.read_text(encoding="utf-8")
-    if GITIGNORE_PATH_LINE in content:
+    if GITIGNORE_PATH_LINE in content.splitlines():
         return False
     sep = "" if content.endswith("\n") else "\n"
     gi.write_text(
@@ -599,7 +599,7 @@ def main() -> int:
     profile = FLAVOR_PROFILES[args.flavor]
     stack = [s.strip() for s in args.stack.split(",")] if args.stack else profile["stack_default"]
 
-    crew = DEFAULT_CREW
+    crew = list(DEFAULT_CREW)
     if args.crew_from:
         crew_path = Path(args.crew_from).expanduser().resolve()
         if not crew_path.is_file():
@@ -607,7 +607,7 @@ def main() -> int:
             return 2
         try:
             crew = load_crew_override(str(crew_path))
-        except (ValueError, json.JSONDecodeError) as exc:
+        except (ValueError, json.JSONDecodeError, OSError) as exc:
             print(f"error: --crew-from {crew_path}: {exc}", file=sys.stderr)
             return 2
         print(f"# crew loaded from {crew_path} ({len(crew)} members)")
@@ -643,6 +643,7 @@ def main() -> int:
         print(weside_md)
         print("\n## .weside/council.json")
         print(json.dumps(council, indent=2))
+        print(f"\n## .gitignore\n# would append: {GITIGNORE_PATH_LINE}")
         return 0
 
     report = write_files(
