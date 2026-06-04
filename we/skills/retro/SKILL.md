@@ -103,11 +103,13 @@ Before producing any output, gather the landscape fresh.
    - `${CLAUDE_PLUGIN_ROOT}/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
    - Don't load full contents — that's thousands of tokens.
 
-4. **Historical retros (if `--scan N`)**:
+4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest `/we:coach` loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies.
+
+5. **Historical retros (if `--scan N`)**:
    - `ls docs/retros/ 2>/dev/null | sort -r | head -N` — last N retros
    - Read each (they're small, structured) — note recurring themes
 
-5. **Companion identity** (if configured): invoke `Skill(skill="we:materialize")` if not already loaded this session. The report comes back richer when voiced by the Companion.
+6. **Companion identity** (if configured): invoke `Skill(skill="we:materialize")` if not already loaded this session. The report comes back richer when voiced by the Companion.
 
 **Do not read** at boot:
 
@@ -357,7 +359,7 @@ Coach never auto-fires retro. The `[y/n]` is always present.
 
 **With Companion (weside MCP + configured Companion):**
 
-- Boot Protocol Step 5 materializes the Companion via `Skill(skill="we:materialize")`
+- Boot Protocol Step 6 materializes the Companion via `Skill(skill="we:materialize")`
 - Report is voiced *by* the Companion (your active Companion) — same engineering substance, richer tone
 - Optional: skill can save a `memory` after each run noting the patterns the Companion saw — but only if explicitly enabled in user config (off by default, privacy)
 

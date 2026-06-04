@@ -10,7 +10,9 @@ description: >
   on every invocation. Delegates doc changes to /we:docs. Never writes
   autonomously, never silent-fires a command. Use when the user says
   "/we:coach", "where am I", "what's next", "what should I do",
-  "which altitude", "workflow", "optimize", "impediment", "skill quality".
+  "which altitude", "workflow", "optimize", "impediment", "skill quality",
+  "how we work", "improve our workflow", "rethink the process",
+  "discuss how we could do this better".
 ---
 
 # /we:coach — Agentic Product Ownership Coach
@@ -59,6 +61,7 @@ Otherwise, determine ADVISOR vs Beginner from context and prompt:
 | names a state (e.g. "we have a Saga but no Epic", "PRD is rough")       | ADVISOR |
 | empty invocation (`/we:coach` with no argument) — normal repo          | ADVISOR (open) |
 | ambiguous between two altitudes                                         | ADVISOR — ask once, then proceed |
+| wants to discuss or improve the workflow / a skill / "how we work" (not a specific breakage — e.g. "how could we improve story refinement", "let's rethink our build loop") | **ADVISOR (process lens)** — grounded discussion, then hand off — see [Process-improvement front door](#process-improvement-front-door-scrum-master) |
 | describes friction / breakage / "this broke again" / "process gap"     | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
 | asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
 | asks for a "handoff" / "write a handoff" / "save state for tomorrow" / "load the last handoff" / "pick up where we left off" / says end-of-session ("bis morgen", "schlafen") | **delegate to `/we:handoff`** — see [Suggesting `/we:handoff`](#suggesting-wehandoff) |
@@ -133,7 +136,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    "named companion + caught up"-entry for any session, not just the
    ones started under the auto-materialize hook.
 
-8. **APO altitude reference** — read [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (just the altitude table + meeting summaries — full sections only if needed for a specific question). This is the reference for the four Plan altitudes (Vision / Saga / Epic / Story) + Build + Deliver.
+8. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index of the APO method, and load the compact sections it points to (the altitude table in `meetings.md`, the pipeline in `workflow.md`, the skill catalog in `skills.md`). This is what lets the Coach explain the plugin + the APO method accurately and currently **without the user explaining anything**. Load the indexed *sections*, not full skill bodies. `/we:retro` loads the same manifest — the two stay grounded identically.
 
 9. **Repo state** — for ADVISOR mode primarily, but useful for RETRO too:
    - `find docs/plans -type f -name '*.md' | head -20` — see which Plan artefacts exist
@@ -280,6 +283,26 @@ So in practice: print the hand-off for nearly every skill; inline-launch only `/
 ### Step A5: Loop or close
 
 After the launched skill returns (or the hand-off message), ask: *"Anything else? Want the next move after `<command>` finishes, or are we done for this session?"* If yes, return to Step A1 with the new state. If done, summarise what was decided and close.
+
+---
+
+## Process-improvement front door (Scrum-Master)
+
+The Coach is the **Scrum-Master front door** for "how we work" conversations — not just a
+next-move advisor. When the user wants to *discuss or improve* the workflow, a skill, or the
+method itself (as opposed to reporting a specific breakage), engage the conversation directly,
+grounded in the method you loaded at boot (Boot Protocol Step 8 — the
+[`how-we-work.md`](../../../docs/concepts/how-we-work.md) manifest). Reason from the altitudes,
+the pipeline, and the skill catalog; name where in the method the friction or opportunity sits.
+
+Then route to the right altitude — do not try to *be* the fix:
+
+- A systematic pass over what just happened (frictions the cycle actually cost) → hand off to
+  **`/we:retro`** (see below).
+- A concrete change to a skill / rule / doc, ready to build → hand off to **`/we:story`** (spec
+  it) — or `/we:docs` for a pure doc change.
+
+Stay advisory: discuss and route. Never rewrite a skill or rule yourself from here.
 
 ---
 

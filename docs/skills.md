@@ -283,10 +283,11 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 
 > *APO Coach — cross-altitude advisor and onboarding partner.*
 
-A conversation partner for two situations, one skill:
+A conversation partner for three situations, one skill:
 
 - **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires. If an open Saga or Epic is detected, ADVISOR also surfaces a one-line Plan-status — and delegates the detail to `/we:saga` or `/we:epic` (which both run a full Status dashboard as their default mode).
 - **BEGINNER mode** — you're new to APO or the plugin. The Coach walks you through the four-altitude workflow, checks whether `.weside/config.json` exists, and proposes a sensible starting command. Triggered by "I'm new" / "what is this" / first-session markers.
+- **Process-improvement front door (Scrum-Master)** — you want to *discuss or improve* how we work — a skill, the pipeline, the method — not report a specific breakage. The Coach engages a grounded discussion (from the `how-we-work.md` method it loaded at boot) and routes to `/we:retro` (a systematic pass) or `/we:story` (spec the change). Triggered by "how could we improve…", "let's rethink…", "discuss the workflow".
 
 Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended / "which Epics" / "status" → ADVISOR; "I'm new" / "help me start" → BEGINNER. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
 
@@ -306,7 +307,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Fire `/we:build` from a Coach session (even after `[y/n]`) — Build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
 - Handle post-PR engineering-friction analysis — that's `/we:retro`
 
-**Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + reads the APO altitude map (`docs/concepts/meetings.md`) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
+**Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + **self-grounds in the method via the [`how-we-work.md`](concepts/how-we-work.md) manifest** (APO altitudes, pipeline, skill catalog — the same manifest `/we:retro` loads) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
 
 ---
 

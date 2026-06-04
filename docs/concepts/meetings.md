@@ -237,6 +237,7 @@ The four-altitude planning pipeline covers *what to build and why*. It deliberat
 
 ## References
 
+- [how-we-work.md](how-we-work.md) — the canonical method manifest `/we:coach` + `/we:retro` load at boot
 - [companion-framework.md](companion-framework.md) — the council mechanic underneath every meeting
 - [roles.md](roles.md) — the nine role-lenses
 - [../workflow.md](../workflow.md) — where meetings sit in the full pipeline
