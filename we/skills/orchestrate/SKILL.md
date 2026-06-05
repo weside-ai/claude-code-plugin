@@ -279,6 +279,40 @@ For that case, run the **lead-integrated phase mode**:
 One ready Story that is really a phased change the Lead has decomposed → this lead-integrated mode
 (Mode B). When in doubt, ask the human which shape the work is.
 
+### Sequencing the chunks (hard-won on the first real run)
+
+- **The parallelism is usually less than it looks — run the discriminating check before fanning out.**
+  Ask of each "disjoint" chunk: *can it land touching only its own files, with zero edits to any
+  shared file the other chunks also need?* The trap is a shared file every phase has to make real —
+  not just the named interface you froze, but any common helper the phases fill in. If two chunks
+  would both edit it, they are **not** disjoint; that shared work is **another serial foundation
+  chunk**, done once before the per-unit chunks parallelize. Found the hard way: two units looked
+  independent but both had to fill the same shared scaffolding — parallel dispatch would have collided
+  at integration. Rule of thumb: a chunk that *makes shared scaffolding real* (freezes a contract every
+  later chunk consumes) is **foundation-completion → serial-first**. You cannot race a chunk against
+  the thing it depends on becoming real. The real parallelism appears late — in the per-unit wiring,
+  once the shared scaffolding is frozen.
+- **Worktree hygiene is non-negotiable.** Each teammate works in its **own** worktree branched off the
+  integration branch (so it carries the prior integrated chunks); the Lead integrates in a **dedicated
+  lead worktree**; the Lead **never** flips the *main* worktree's branch. Flipping the shared main
+  worktree between branches mid-orchestration lands commits on the wrong branch and lets a stray rebase
+  rewrite a teammate's pushed work — a real, repeated failure mode. The main worktree stays on the
+  default branch, untouched, for the whole run.
+
+### Reviewing a chunk (the Lead's core act)
+
+- **"All green" is the start of review, not the end.** When a builder honestly surfaces a decision it
+  made at a fork (the good ones do — invite it in the brief), evaluate it against the **acceptance
+  criterion**, not the test status. Green tests pin what they cover; the edge that breaks the AC is
+  usually the one no pin covers (e.g. a happy-path net that silently changes an error-path contract).
+  An over-claimed safety net — a characterization docstring claiming more than it pins — is worse than
+  an honest gap, because it reads as covered when it isn't.
+- **Moving a behaviour's locus is an allowed, explicit characterization change.** When a refactor moves
+  *where* a behaviour is produced — same observable outcome, different internal actor — the Lead may
+  explicitly approve rewriting the pin to the new locus, noted in the commit. That is reviewed and
+  intentional, categorically different from silently weakening an assertion to make a build pass: the
+  test still proves the observable behaviour; only the thing it watches moved.
+
 ---
 
 ## Rehearsal mode (`--rehearsal`)
@@ -326,6 +360,15 @@ required regardless of weside connection.
   build/QA; a teammate spawns the build's own subagents (validated: a builder ran `/we:build` through
   Step 5's parallel quality-gate subagents and wrote durable checkpoints). In Mode B, teammates run a
   scoped chunk (not the full build) and the Lead owns the single end-of-change QS.
+- **Mode B: run the parallelism discriminating check before fanning out** — chunks parallelize only if
+  each touches solely its own files; shared scaffolding that several phases must fill is a serial
+  foundation chunk, not parallel work. A chunk that makes shared scaffolding real runs serial-first.
+- **Mode B: worktree-per-teammate; the Lead never flips the main worktree** — teammates branch their
+  own worktree off the integration branch; the Lead integrates in a dedicated lead worktree; the main
+  worktree stays on the default branch for the whole run.
+- **Mode B: green is the start of review, not the end** — evaluate a builder's surfaced fork-decision
+  against the acceptance criterion, not the test status; never accept an over-claimed characterization
+  net, and approve a behaviour-locus move only explicitly, in the commit.
 - **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
   teammates. Builders live in their own watchable sessions.
 - **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
