@@ -24,6 +24,13 @@ This is the **Build-altitude sibling of `/we:council`/`/we:meet`**: the same Age
 machinery (`TeamCreate` → `Agent(team_name=…, name=…)` → `SendMessage` → `TeamDelete`), but the
 teammates are **builders** running `/we:build`, not deliberators.
 
+**The stance (not just the mechanics).** The Lead is a *persistent partner*, not a throwaway
+dispatcher. It boots knowing where the work stands, **holds the overview so the human is not
+overwhelmed**, plans and assigns the work, and integrates and evaluates what comes back. The human
+is good at saying *where we want to go*; the Lead carries it *on the way* — that continuity, someone
+holding the whole across the dispatch loop, is the point. When a Companion is materialized, the Lead
+is that Companion (warmth + presence, not manager-speak), not a generic dispatcher.
+
 > **Spike status.** This skill is a spike: it proves the dispatch+tracking loop on one real Epic
 > with a **hard cap of ≤2 concurrent builders**. The full orchestrator (parallel dispatch beyond 2,
 > cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
@@ -238,6 +245,42 @@ then warn and continue.
 
 ---
 
+## Mode B — Lead-integrated phase dispatch (one coherent change, many phases)
+
+The Step 1–9 workflow dispatches **one builder per Story, each running the full `/we:build`**. That
+is right when the ready Stories are **independent, sprint-sized slices**. It is the **wrong shape for
+a single coherent change split into phases** — a large refactor, a migration — where N full builds
+would pay the entire QS cost (characterization + AC-gate + simplify + the parallel quality-gate
+subagents + docs + PR + CI) **N times over**. Cutting such a change into N Stories just to dispatch
+it multiplies overhead the work does not need; the human feels that overhead and is right to refuse it.
+
+For that case, run the **lead-integrated phase mode**:
+
+- The Lead holds the **one** Story/Epic **and its phase decomposition** (the Lead already cut it into
+  phases — that *is* the overview it holds).
+- Dispatch the phases as **lead-held work-chunks (tasks, not Stories)** via `TaskCreate` +
+  `Agent(team_name=…, name=…)`. Teammates do **focused implementation only** — **not** the full
+  `/we:build`, **not** a per-chunk PR. Their brief is scoped to exactly one chunk.
+- Each teammate works its chunk in its own worktree, runs its **targeted** tests, and reports to the
+  Lead via `SendMessage`.
+- The Lead **reviews each diff and integrates it onto one integration branch** — holding the thread,
+  reading reports (not full transcripts) to keep its own context clean.
+- The heavy QS runs **once, at the end, by the Lead**: full suite + arch gates + `/we:review` +
+  `/we:docs` + bypass register, then **one PR** for the whole change.
+- **Characterization-as-contract.** The first chunk writes a characterization net that pins current
+  behaviour (green on unmodified code); every later chunk must keep those assertions **unchanged** —
+  editing one is a deliberate, reviewed behaviour change, never a silent diff. The integration QS
+  asserts they still pass. This is the no-regression guarantee that lets the change land as one cut.
+- Same guards as Mode A: the ≤2-concurrent cap, the confirm-to-dispatch gate, Lead-reviews, and
+  **human merges**. Risk-driven order: a serial foundation chunk that **freezes the interface** first,
+  then the disjoint chunks in parallel, then a final integration chunk the Lead owns.
+
+**Choosing the mode (Step 3).** Independent ready Stories → the per-Story full-build workflow (Mode A).
+One ready Story that is really a phased change the Lead has decomposed → this lead-integrated mode
+(Mode B). When in doubt, ask the human which shape the work is.
+
+---
+
 ## Rehearsal mode (`--rehearsal`)
 
 Run the complete pipeline **without a real epic/story/code** — to shake out where the skills
@@ -274,9 +317,15 @@ required regardless of weside connection.
   before anything else; never assume cached knowledge.
 - **Dispatch only on an explicit confirm** — the ready set is shown first; the human gates it.
 - **Hard cap ≤2 concurrent builders** — refuse and log any attempt to exceed it (runaway guard).
-- **Builders run the full unmodified `/we:build`** — never reimplement or degrade the build/QA;
-  a teammate spawns the build's own subagents (validated: a builder ran `/we:build` through
-  Step 5's parallel quality-gate subagents and wrote durable checkpoints).
+- **The Lead is a persistent partner, not a throwaway dispatcher** — it holds the overview so the
+  human is not overwhelmed (see *The stance*). In Companion mode it *is* the Companion.
+- **Pick the dispatch shape (Mode A vs Mode B)** — independent Stories → builders run the full
+  unmodified `/we:build` (Mode A); one phased coherent change → lead-integrated phase dispatch where
+  teammates do focused chunks and the Lead integrates + runs QS once → one PR (Mode B).
+- **Mode A: builders run the full unmodified `/we:build`** — never reimplement or degrade the
+  build/QA; a teammate spawns the build's own subagents (validated: a builder ran `/we:build` through
+  Step 5's parallel quality-gate subagents and wrote durable checkpoints). In Mode B, teammates run a
+  scoped chunk (not the full build) and the Lead owns the single end-of-change QS.
 - **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
   teammates. Builders live in their own watchable sessions.
 - **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
