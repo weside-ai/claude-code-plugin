@@ -13,6 +13,15 @@ Iteratively collects findings from CI + reviews, fixes ALL of them, and pushes o
 
 **Core principle: Fix everything. Push once. No leftovers.**
 
+**Default to a single pass.** Collect → fix all findings → push, then **stop** and report —
+one round is the normal case. Only re-enter the post-push loop (Phase 4) when there is a
+**concrete reason** to expect a second round: a fix you are genuinely unsure resolved the
+finding, a flaky/environment-dependent check, interdependent findings where fixing one may
+surface another, or a **high-stakes PR** (security-sensitive, migration, release-blocking)
+where you want to *confirm* green rather than assume it. Absent such a reason, do not sit in a
+multi-cycle wait — push once, report the resulting CI state, and let the user decide. The
+ability to iterate up to the cycle cap remains; it is opt-in by judgement, not the default.
+
 ## Workflow
 
 ```
@@ -262,9 +271,14 @@ git push
 
 ---
 
-## Phase 4: Post-Push Check
+## Phase 4: Post-Push Check (opt-in — only with a reason to expect a second round)
 
-After pushing, CI + reviews will re-run (~3-5 min). If new findings appear:
+By default, stop after the first push and report (Phase 5). Enter this loop **only** when one of
+the single-pass exceptions applies (uncertain fix, flaky/env-dependent check, interdependent
+findings, or a high-stakes PR you want to confirm green). When it does not apply, push once and
+let the next CI run speak for itself — do not block in a multi-cycle wait.
+
+When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings appear:
 
 ### Self-loop (max 3 total cycles)
 
@@ -298,5 +312,6 @@ After pushing, CI + reviews will re-run (~3-5 min). If new findings appear:
 - **NEVER** ignore the review body — it has "outside diff range" findings
 - **FIX warnings** — they are not optional. The only exception is when the reviewer is factually wrong.
 - **FIX INFO items** if they take <2 min. Skip only if truly out-of-scope.
-- **Max 3 cycles** — after third push still has findings → stop and ask user
+- **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
+- **Max 3 cycles** — when you do loop: after third push still has findings → stop and ask user
 - **`--ci-only` flag** — skip reviews, only check CI status
