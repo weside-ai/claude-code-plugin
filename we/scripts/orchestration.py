@@ -2773,20 +2773,29 @@ def _resolve_epic_identifiers(epic: str, plans_path: Path) -> set[str]:
     A Story references its epic by either the epic plan's slug (``epic:``) or its
     ticketing key (``ticket:``) — e.g. the ``circles`` epic plan carries
     ``epic: circles, ticket: WA-1205`` while its Stories use ``epic: WA-1205``.
-    Given the ``epic`` arg, collect both from any matching ``*<epic>*-epic.md``
-    plan so Stories keyed by either slug or key are found.
+
+    Epic plan files are named by slug (``<slug>-epic.md``), so a glob on the
+    passed identifier only matches when the arg IS the slug. To make slug-OR-key
+    work as documented, scan every ``*-epic.md`` plan and match the requested
+    epic against each plan's filename stem AND its frontmatter ids (``epic`` /
+    ``ticket`` / ``story``); when a plan matches, union all of its ids so Stories
+    keyed by either form are found regardless of which identifier was passed.
     """
     identifiers = {epic}
     if plans_path.is_dir():
-        for epic_path in plans_path.glob(f"*{epic}*-epic.md"):
+        for epic_path in plans_path.glob("*-epic.md"):
             try:
                 fm = _parse_frontmatter(epic_path.read_text(encoding="utf-8"))
             except OSError:
                 continue
-            for field in ("epic", "ticket", "story"):
-                val = fm.get(field)
-                if isinstance(val, str) and val:
-                    identifiers.add(val)
+            fm_ids = {
+                fm.get(field)
+                for field in ("epic", "ticket", "story")
+                if isinstance(fm.get(field), str) and fm.get(field)
+            }
+            stem = epic_path.name[: -len("-epic.md")]
+            if epic == stem or epic in fm_ids:
+                identifiers |= fm_ids
     return identifiers
 
 

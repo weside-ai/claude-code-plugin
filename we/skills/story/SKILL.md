@@ -127,6 +127,7 @@ Distill into the plan:
 ```markdown
 ---
 story: {TICKET}
+epic: {EPIC-SLUG-OR-KEY}  # parent epic's slug or ticketing key — REQUIRED when the story belongs to an Epic, so /we:orchestrate can match it into the ready-set. Omit only for standalone stories with no Epic.
 created: YYYY-MM-DD
 status: draft
 parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files + no ordering dependency). See independence-check note in Implementation Phases before filling.
@@ -295,6 +296,7 @@ Detect available ticketing tool (in priority order):
 - ALWAYS use EnterPlanMode for plan creation
 - ALWAYS follow Step 6 post-approval checklist IN ORDER: Save plan → Update ticket → Commit → Checkpoint → Stop
 - ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
+- ALWAYS set the `epic:` frontmatter field to the parent Epic's slug-or-key when the story belongs to an Epic — `/we:orchestrate`'s ready-set matching filters stories by this field; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
 - The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).

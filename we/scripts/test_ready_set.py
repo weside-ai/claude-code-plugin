@@ -5,9 +5,11 @@ Run with: python3 we/scripts/test_ready_set.py
 No pytest required.
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 
-from orchestration import compute_ready_set
+from orchestration import _resolve_epic_identifiers, compute_ready_set
 
 
 def _story(key, refined=True, built=False, deps=None):
@@ -49,6 +51,40 @@ class ComputeReadySetTest(unittest.TestCase):
         result = compute_ready_set(stories)
         self.assertEqual(result["ready"], ["WA-2"])
         self.assertEqual(result["held"], [{"key": "WA-1", "reason": "already built"}])
+
+
+class ResolveEpicIdentifiersTest(unittest.TestCase):
+    """Regression: an epic plan is named by slug (<slug>-epic.md), so resolving
+    by the ticketing KEY must still find it via frontmatter, not just by filename."""
+
+    def _make_epic_plan(self, dir_path, slug, ticket):
+        (Path(dir_path) / f"{slug}-epic.md").write_text(
+            f"---\nepic: {slug}\nticket: {ticket}\nstatus: draft\n---\n# Epic\n",
+            encoding="utf-8",
+        )
+
+    def test_resolves_by_key_against_slug_named_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._make_epic_plan(d, "docs-portal", "WA-1263")
+            ids = _resolve_epic_identifiers("WA-1263", Path(d))
+            # The key must pull in the slug so slug-keyed stories are matched.
+            self.assertIn("docs-portal", ids)
+            self.assertIn("WA-1263", ids)
+
+    def test_resolves_by_slug(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._make_epic_plan(d, "docs-portal", "WA-1263")
+            ids = _resolve_epic_identifiers("docs-portal", Path(d))
+            self.assertIn("docs-portal", ids)
+            self.assertIn("WA-1263", ids)
+
+    def test_unrelated_epic_not_pulled_in(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._make_epic_plan(d, "docs-portal", "WA-1263")
+            self._make_epic_plan(d, "billing", "WA-2000")
+            ids = _resolve_epic_identifiers("WA-1263", Path(d))
+            self.assertNotIn("billing", ids)
+            self.assertNotIn("WA-2000", ids)
 
 
 if __name__ == "__main__":
