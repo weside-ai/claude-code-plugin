@@ -46,6 +46,17 @@ Agent Teams must be enabled — same flag as `/we:council`. In `~/.claude/settin
 A session restart is needed after toggling. If the flag is missing when dispatch runs, the
 skill aborts in Step 4 with a remediation hint — there is no non-team fallback.
 
+**Permission mode must allow teammate Bash (hard-won on the first real run).** A builder runs
+`/we:build`, which is almost entirely Bash (git, npm, docker, gh, the orchestration CLI). Under
+the **default/auto** permission mode, the auto-mode classifier denies *every* teammate Bash call
+on the grounds that a `teammate-message → agent` invocation carries no direct user intent — so
+the builder is dispatched, reaches Step 1, and is dead-on-arrival with "Bash denied", no code
+written. Autonomous dispatch therefore requires the user to run the session in **`acceptEdits`**
+(or `bypassPermissions`), or to add a Bash allowlist for the multi-agent path, BEFORE dispatch.
+Surface this in Step 3's confirm gate; if you cannot tell the mode, ask the user to confirm they
+are on `acceptEdits`/bypass. A single ready Story is often faster as a direct `/we:build` in the
+user's own session (user intent is then unambiguous) — orchestrate earns its keep at ≥2 builders.
+
 ## Invocation
 
 ```
@@ -200,8 +211,12 @@ REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead — y
 SendMessage tool. When the build reaches a reviewable PR (or hits its circuit breaker / a
 blocker), send EXACTLY ONE structured message:
   SendMessage(to="team-lead", summary="builder-{TICKET} done|blocked",
-              message="<state: PR #N created | blocked at <step> because <reason>>")
-Even if you stop early, send the message first. Then mark your task completed via TaskUpdate.
+              message="<state: PR #N created, CI <green|red: which checks> | blocked at <step> because <reason>>")
+REPORT CI HONESTLY: before you report "done", run `gh pr checks {PR}` and include the real check
+state in your message. A PR with a failing check or unresolved CodeRabbit Major/Critical thread is
+**not** "done/all-green" — say "PR #N created, CI red: <checks>" so the lead reviews the truth, not
+an over-claim. Do not assert "tests pass / review passed" from your local run alone; CI is the
+source of truth. Even if you stop early, send the message first. Then mark your task completed via TaskUpdate.
 ```
 
 ### Step 7: Monitor + roll-up (Lead observes)
@@ -228,6 +243,15 @@ MCP-resolved, else the generic review lens) against the Story's ACs. This is the
 gate — surface the review to the user; the Lead does **not** merge. The completion is already in
 `orchestration.py` (the builder's `/we:build` wrote `pr_created`/`ci_passed`) — confirm it via
 `story status {TICKET}` for the roll-up rather than writing it.
+
+**Check CI status before declaring the review passed — a diff read is not a review (hard-won).**
+A clean-looking diff can still fail CI: the new build target breaks, a CodeRabbit gate has
+unresolved Major/Critical threads, an env-only check goes red. Always pull the live check rollup
+— `gh pr checks {PR}` (or `gh pr view {PR} --json statusCheckRollup`) — and treat **any** red
+check as "not reviewable-passed yet". A builder reporting "done, all green" is a *claim*, not
+evidence; the rollup is the evidence. When CI is red, the review verdict is **changes-needed**,
+and the next move is `/we:ci-review {PR}` (fix the checks + threads), not merge. Never tell the
+user a PR is merge-ready while a single required check is red.
 
 If a builder reported blocked, surface the blocker — do not silently retry.
 
