@@ -57,7 +57,7 @@ Verify each item that applies. Skip items that don't apply to your change.
 - [ ] `/we:review` passed (review_passed checkpoint)
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
-- [ ] CodeRabbit threads resolved on GitHub — `check-coderabbit` CI gate blocks on unresolved CRITICAL/MAJOR threads. Use `/we:ci-review` to fix and resolve after PR creation. Skip if no GitHub remote or no CodeRabbit app is installed; local quality gates (review + static + test) are authoritative in that case.
+- [ ] AI-reviewer + Claude-review threads resolved on GitHub — the repo's review gate(s) block on unresolved BLOCKING/WARNING (Critical/Major) threads. Use `/we:ci-review` to fix and resolve all bot threads after PR creation. Skip if no GitHub remote or no AI reviewer is installed; local quality gates (review + static + test) are authoritative in that case.
 
 ### Documentation
 
@@ -110,7 +110,7 @@ Feature reachable for user?
 End-to-end flow works?
 Architecture compliance? (patterns, ADRs, security)
 Post-implementation semantic checks? (migrations, timezone, wiring, ...)
-Quality gates passed? (review + static + test locally, CodeRabbit on GitHub if available)
+Quality gates passed? (review + static + test locally, AI reviewer(s) + Claude review on GitHub if available)
 Docs updated? (per Documentation Impact in plan)
 PR created and CI green?
 All BLOCKING/WARNING fixed?

@@ -89,7 +89,7 @@ The shapes overlap at the edges. When in doubt, default to ADVISOR.
 
 **Process frictions → hand off to `/we:retro`:**
 
-- `/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing` → Coach suggests `/we:retro`
+- `/we:coach The last 3 PRs failed because we forgot to resolve review threads before pushing` → Coach suggests `/we:retro`
 - `/we:coach We keep shipping migrations without testing them locally` → Coach suggests `/we:retro`
 
 Your job is to read the repo state, run the right mode, and propose concrete next commands — not produce a generic report.
@@ -308,7 +308,7 @@ Stay advisory: discuss and route. Never rewrite a skill or rule yourself from he
 
 ## Suggesting `/we:retro`
 
-For process frictions and improvement, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, CodeRabbit threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
+For process frictions and improvement, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, review threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
 
 | Situation | Use |
 |---|---|

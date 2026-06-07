@@ -294,11 +294,11 @@ Three subagents via `Agent(run_in_background=True)`:
 - **static-analyzer** — Lint, format, types
 - **test-runner** — Tests + coverage
 
-**CodeRabbit runs on GitHub, not locally.** The `check-coderabbit` CI gate
-enforces CRITICAL/MAJOR thread resolution after PR creation. Local CodeRabbit
-CLI is not part of this pipeline — the GitHub review has better context
-(PR diff, commit history, prior reviews) and is the authoritative gate.
-If no GitHub remote or no CodeRabbit app is present, skip Steps 8d–8e (thread resolution) and treat local quality gates as authoritative.
+**AI code reviewers run on GitHub, not locally.** Whatever reviewer the repo uses
+(Greptile, CodeRabbit, …) plus Claude Review post resolvable threads + their own check
+gates after PR creation. The GitHub review has better context (PR diff, commit history,
+prior reviews) and is the authoritative gate. If no GitHub remote or no AI reviewer is
+present, skip Steps 8d–8e (thread resolution) and treat local quality gates as authoritative.
 
 **Wait for ALL THREE.** Then verify checkpoints:
 - `review_passed` (code-reviewer clean)
@@ -352,7 +352,7 @@ and continue. Do not invent work.
 
 If any is missing → go back to Step 5 and fix. **NEVER create a PR with failing gates.**
 
-CodeRabbit runs on GitHub after PR creation. `/we:ci-review` handles thread resolution. If no GitHub remote is configured, skip CodeRabbit steps — local gates are authoritative.
+AI code reviewers run on GitHub after PR creation. `/we:ci-review` handles thread resolution across all of them. If no GitHub remote is configured, skip the review-thread steps — local gates are authoritative.
 
 Call PR creator agent:
 
@@ -372,12 +372,12 @@ gh auth status 2>/dev/null && HAS_GH=1 || HAS_GH=0
 ```
 If `HAS_GH=0`: skip steps 1, 5, and 6 below. Write `ci_passed` after local quality gates pass and continue.
 
-1. **Collect** findings from CI, Claude Review, and CodeRabbit (use `gh` CLI — skip if `HAS_GH=0`)
-2. **Triage**: BLOCKING = must fix, WARNING = fix unless wrong, INFO = evaluate
+1. **Collect** findings from CI plus all PR review sources — every AI reviewer (Greptile, CodeRabbit, …) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body (use `gh` CLI — skip if `HAS_GH=0`)
+2. **Triage** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason
 3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
 4. **Batch fix** all issues locally, ONE commit with all fixes
-5. **Resolve** CodeRabbit threads via GraphQL, verify 0 unresolved (skip if no `coderabbitai[bot]` reviews exist)
-6. **Push** only when all threads resolved (or when CodeRabbit is absent)
+5. **Resolve** every bot-authored thread via GraphQL (the once-forgotten, now-unconditional step), verify 0 unresolved bot threads; never auto-resolve human threads
+6. **Push** only when all bot threads resolved
 7. **Repeat** (max 3 cycles). After 3 → stop, ask user.
 
 After reviews green → write checkpoint `ci_passed`.

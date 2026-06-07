@@ -1,8 +1,10 @@
 ---
 name: ci-review
 description: >
-  CI/Review checker and fixer. Iteratively collects ALL findings from CI, Claude Review,
-  and CodeRabbit, fixes everything, and only pushes when ALL sources are addressed.
+  CI/Review checker and fixer. Iteratively collects ALL findings from CI plus every PR review
+  source — any AI code reviewer (Greptile, CodeRabbit, …) and Claude Review — fixes everything
+  per a clear severity policy, resolves all bot review threads, and only pushes when nothing
+  blocking or warning is left. Reviewer-agnostic: one collection path, one resolve step.
   Use when user says "/we:ci-review", "fix ci", "fix reviews", "ci failed".
 ---
 
@@ -12,6 +14,19 @@ description: >
 Iteratively collects findings from CI + reviews, fixes ALL of them, and pushes only when everything is addressed. Runs in the main agent (not a subagent) so the user can observe every step.
 
 **Core principle: Fix everything. Push once. No leftovers.**
+
+## Severity policy (applies to EVERY source — reviewer-agnostic)
+
+| Severity | What counts | Policy |
+|---|---|---|
+| **BLOCKING / ERROR** | CI failure · Claude BLOCKING · any reviewer Critical/Major | **MUST fix.** Only exception: the reviewer is demonstrably factually wrong (cite evidence). |
+| **WARNING** | Claude WARNING · any reviewer Minor | **MUST fix.** Same single exception. |
+| **SUGGESTION / NITPICK / INFO** | Suggestion · Nitpick · Style | **Should** do it; **may** be consciously skipped — with a short explicit reason in the report. |
+
+"I don't think it's important" is NOT a valid skip reason for BLOCKING/WARNING.
+Resolving is mandatory for **every bot-authored thread** you handled — fixed **or**
+consciously skipped. It is the central, non-skippable step (the old failure mode was
+forgetting it). Human-authored threads are never auto-resolved — surface them to the user.
 
 **Default to a single pass.** Collect → fix all findings → push, then **stop** and report —
 one round is the normal case. Only re-enter the post-push loop (Phase 4) when there is a
@@ -61,29 +76,30 @@ fi
 
 Collect from all sources that have completed. Don't wait for everything — start building the findings table with what's available. Skip GitHub steps when `gh` is unavailable:
 
+There is **ONE** collection path, regardless of which reviewer posted (Greptile, CodeRabbit,
+Claude, …). Do not special-case any reviewer by name.
+
 ```bash
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
-  # CI status
+  # 1) CI status
   gh pr checks $PR
 
-  # Claude Review (may not exist yet if check is pending)
-  gh pr view $PR --json comments --jq '.comments[] | select(.body | test("VERDICT")) | .body'
+  # 2) PRIMARY — the resolvable unit: ALL unresolved review threads, ANY author.
+  #    Each open thread is a finding. author.login tells us bot vs human (see 1d).
+  gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
+    repository(owner:$owner,name:$repo){
+      pullRequest(number:$pr){reviewThreads(first:100){nodes{
+        id isResolved isOutdated
+        comments(first:1){nodes{author{login} body path line}}
+      }}}}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
+    --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)'
 
-  # CodeRabbit threads — only when coderabbitai[bot] reviews exist
-  CR_COUNT=$(gh api repos/$REPO/pulls/$PR/reviews \
-    --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | length' 2>/dev/null || echo 0)
-  if [ "$CR_COUNT" -gt 0 ]; then
-    gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
-      repository(owner:$owner,name:$repo){
-        pullRequest(number:$pr){reviewThreads(first:100){nodes{
-          isResolved id comments(first:3){nodes{author{login} body}}
-        }}}}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-      --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)'
-
-    # CodeRabbit review body (for "outside diff range" findings)
-    gh api repos/$REPO/pulls/$PR/reviews \
-      --jq '[.[] | select(.user.login=="coderabbitai[bot]")] | last | .body'
-  fi
+  # 3) SECONDARY — context only: latest review body per BOT reviewer, uniform loop
+  #    (catches "outside diff range" / summary findings). Bot = login ends in [bot].
+  gh api repos/$REPO/pulls/$PR/reviews \
+    --jq 'group_by(.user.login)[] | last
+          | select(.user.login | endswith("[bot]"))
+          | "=== \(.user.login) ===\n\(.body)"'
 else
   echo "INFO: gh unavailable or no PR found — skipping remote CI/review collection. Local quality gates are authoritative."
 fi
@@ -109,13 +125,17 @@ Only skip a CI failure if it's truly unfixable from this branch (e.g., infrastru
 ### 1d. Build Findings Table
 
 ```
-| # | Source | Severity | File:Line | Issue | Thread ID | Action |
+| # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |
 ```
 
-Severity mapping:
-- **BLOCKING** = CI failure, Claude BLOCKING, CodeRabbit CRITICAL/MAJOR
-- **WARNING** = Claude WARNING, CodeRabbit MINOR
-- **INFO** = CodeRabbit NITPICK, Suggestions
+- **Source** = the reviewer/check that raised it (Greptile, CodeRabbit, Claude, CI) —
+  derived from `author.login` / check name, never special-cased in logic.
+- **Bot?** = yes if the thread's first-comment `author.login` ends in `[bot]` or is in the
+  allowlist (`greptile`, `coderabbit`, `claude`). Only bot threads get auto-resolved (3d).
+  Human threads → mark "needs user confirm", never auto-close.
+- **Severity** = read from the thread/body **text** (markers like Critical/Major/Minor/
+  Nitpick or 🔴/🟡/🟢 / `VERDICT:`/`SEV:`), per the Severity policy table above — NOT from
+  the reviewer's name.
 
 ---
 
@@ -215,51 +235,55 @@ git commit -m "fix: address CI and review findings
 {TICKET}"
 ```
 
-### 3d. Resolve ALL CodeRabbit Threads (MANDATORY before push when CodeRabbit is active)
+### 3d. Resolve ALL bot review threads (MANDATORY before push)
 
-If `gh` is available and CodeRabbit reviewed this PR (`CR_COUNT > 0` from Phase 1): ⛔ **Do NOT skip. The `check-coderabbit` gate WILL fail if threads are unresolved.**
-
-If no `coderabbitai[bot]` reviews exist, skip 3d/3e entirely and proceed to 3f.
-
-For EVERY CodeRabbit thread from the findings table — whether fixed or skipped-with-reason — resolve it:
+⛔ **This is the step that used to get forgotten. It is NOT conditional on any specific
+reviewer.** Whenever `gh` is available and a PR exists, resolve every **bot-authored**
+unresolved thread you handled — fixed **or** consciously skipped-with-reason. Human-authored
+threads are left for the user (never auto-resolved).
 
 ```bash
-if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ] && [ "${CR_COUNT:-0}" -gt 0 ]; then
-  # Get all unresolved thread IDs
+if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
+  # All unresolved thread IDs whose first-comment author is a bot ([bot] suffix or allowlist).
   THREADS=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
     repository(owner:$owner,name:$repo){pullRequest(number:$pr){
-      reviewThreads(first:100){nodes{isResolved id}}
+      reviewThreads(first:100){nodes{isResolved id comments(first:1){nodes{author{login}}}}}
     }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-    --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id')
+    --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+          | select(.isResolved==false)
+          | select(.comments.nodes[0].author.login
+                   | (endswith("[bot]")) or test("greptile|coderabbit|claude";"i"))
+          | .id')
 
-  # Resolve each one
   for id in $THREADS; do
     gh api graphql -f query="mutation(\$id:ID!){resolveReviewThread(input:{threadId:\$id}){thread{isResolved}}}" -f id="$id"
   done
 fi
 ```
 
-### 3e. Verify Zero Unresolved (HARD GATE — skip when CodeRabbit absent)
+### 3e. Verify zero unresolved bot threads (HARD GATE)
 
 ```bash
-if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ] && [ "${CR_COUNT:-0}" -gt 0 ]; then
+if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
   UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
     repository(owner:$owner,name:$repo){pullRequest(number:$pr){
-      reviewThreads(first:100){nodes{isResolved}}
+      reviewThreads(first:100){nodes{isResolved comments(first:1){nodes{author{login}}}}}
     }}}' -F pr=$PR -F owner="$OWNER" -F repo="$REPO_NAME" \
-    --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false)] | length')
+    --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
+           | select(.isResolved==false)
+           | select(.comments.nodes[0].author.login
+                    | (endswith("[bot]")) or test("greptile|coderabbit|claude";"i"))] | length')
 
   if [ "$UNRESOLVED" -gt 0 ]; then
-    echo "⛔ BLOCKED: $UNRESOLVED unresolved CodeRabbit threads. Resolve them before pushing."
+    echo "⛔ BLOCKED: $UNRESOLVED unresolved bot review thread(s). Resolve them before pushing."
     exit 1
   fi
-  echo "All threads resolved ($UNRESOLVED unresolved)"
-else
-  echo "INFO: CodeRabbit not active — thread-resolution gate skipped."
+  echo "All bot threads resolved. (Human threads, if any, are listed in the report for the user.)"
 fi
 ```
 
-⛔ **If UNRESOLVED > 0 (when CodeRabbit is active): STOP. Go back to 3d. Do NOT proceed to push.**
+⛔ **If UNRESOLVED > 0: STOP. Go back to 3d. Do NOT proceed to push.**
+Human-authored threads do not block this gate — list them in the report instead.
 
 ### 3f. Push
 
@@ -305,13 +329,15 @@ When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings 
 ## Rules
 
 - **NEVER** commit between fixes — all fixes in one commit per cycle
-- **NEVER** push before resolving ALL threads
-- **NEVER** push if Claude Review WARNINGs are unaddressed
-- **NEVER** skip warnings without factual justification
+- **NEVER** push before resolving ALL bot review threads (the once-forgotten step — it is now
+  unconditional, not gated on any specific reviewer)
+- **NEVER** push if any BLOCKING or WARNING finding is unaddressed — from CI, Claude, or any AI reviewer
+- **NEVER** skip BLOCKING/WARNING without factual justification (reviewer demonstrably wrong)
+- **NEVER** auto-resolve a human-authored thread — surface it to the user
 - **NEVER** ignore pre-existing CI failures that block the PR — fix them
-- **NEVER** ignore the review body — it has "outside diff range" findings
-- **FIX warnings** — they are not optional. The only exception is when the reviewer is factually wrong.
-- **FIX INFO items** if they take <2 min. Skip only if truly out-of-scope.
+- **NEVER** ignore the review summary bodies — they carry "outside diff range" findings
+- **FIX BLOCKING + WARNING** — not optional. Only exception: the reviewer is factually wrong.
+- **SUGGESTION/NITPICK** — do them; may be consciously skipped with a short explicit reason.
 - **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
 - **Max 3 cycles** — when you do loop: after third push still has findings → stop and ask user
 - **`--ci-only` flag** — skip reviews, only check CI status

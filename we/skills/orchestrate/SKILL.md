@@ -213,7 +213,7 @@ blocker), send EXACTLY ONE structured message:
   SendMessage(to="team-lead", summary="builder-{TICKET} done|blocked",
               message="<state: PR #N created, CI <green|red: which checks> | blocked at <step> because <reason>>")
 REPORT CI HONESTLY: before you report "done", run `gh pr checks {PR}` and include the real check
-state in your message. A PR with a failing check or unresolved CodeRabbit Major/Critical thread is
+state in your message. A PR with a failing check or unresolved Major/Critical review thread is
 **not** "done/all-green" — say "PR #N created, CI red: <checks>" so the lead reviews the truth, not
 an over-claim. Do not assert "tests pass / review passed" from your local run alone; CI is the
 source of truth. Even if you stop early, send the message first. Then mark your task completed via TaskUpdate.
@@ -245,7 +245,7 @@ gate — surface the review to the user; the Lead does **not** merge. The comple
 `story status {TICKET}` for the roll-up rather than writing it.
 
 **Check CI status before declaring the review passed — a diff read is not a review (hard-won).**
-A clean-looking diff can still fail CI: the new build target breaks, a CodeRabbit gate has
+A clean-looking diff can still fail CI: the new build target breaks, a review gate has
 unresolved Major/Critical threads, an env-only check goes red. Always pull the live check rollup
 — `gh pr checks {PR}` (or `gh pr view {PR} --json statusCheckRollup`) — and treat **any** red
 check as "not reviewable-passed yet". A builder reporting "done, all green" is a *claim*, not

@@ -30,7 +30,7 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:story    → PO + Claude create Story + plan (INTERACTIVE; Solo)
 /we:build    → Claude runs full pipeline AUTONOMOUSLY:
-               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → CodeRabbit on GitHub
+               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → AI reviewer(s) + Claude review on GitHub
                → docs → PR → CI fix → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
@@ -61,7 +61,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:build` | Build-altitude autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
 | `/we:coach` | APO Coach — two modes, one skill: ADVISOR (read repo state, map to altitude, propose next `/we:*` command with `[y/n]` gate) + RETRO (diagnose process gap, propose 2-3 fixes). Companion-aware. |
-| `/we:retro` | Systematic post-cycle retrospective. Reads session transcript + `gh api` (PR / CI / CodeRabbit) for the just-shipped PR, classifies frictions, proposes concrete MD-file edits — primarily user-repo `.claude/rules/` + `CLAUDE.md`, rarely plugin MDs. Per-item `[y/n/edit-path/skip-for-later]` gate. Writes `docs/retros/YYYY-MM-DD-*.md` log; optional `--scan N` reads last N retros for recurring patterns. Privacy guard skips personal/Companion-mode content. Coach can suggest it after PR merge / CI cycles ≥ 3 / end-of-session. |
+| `/we:retro` | Systematic post-cycle retrospective. Reads session transcript + `gh api` (PR / CI / review threads) for the just-shipped PR, classifies frictions, proposes concrete MD-file edits — primarily user-repo `.claude/rules/` + `CLAUDE.md`, rarely plugin MDs. Per-item `[y/n/edit-path/skip-for-later]` gate. Writes `docs/retros/YYYY-MM-DD-*.md` log; optional `--scan N` reads last N retros for recurring patterns. Privacy guard skips personal/Companion-mode content. Coach can suggest it after PR merge / CI cycles ≥ 3 / end-of-session. |
 | `/we:handoff` | Durable cross-session handoff. Captures decisions, dead ends, files touched + status, open questions, next steps, watch-outs into `docs/handoffs/YYYY-MM-DD-*.md`. Two modes: `--write` (with `[y/n/edit]` preview) and default/`--load` (resume from latest); `--list` shows what's available. Complements `/compact` — `/compact` reclaims tokens in-place, `/we:handoff` writes a durable, human-editable, version-controlled artifact that survives `/clear` or a new session tomorrow. Coach surfaces an active handoff at boot (Step 10) and suggests `--write` at end-of-session signals. Privacy guard same as `/we:retro`. |
 | `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness, trigger-overlap. Real-world use cases + 28-file sweep case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |

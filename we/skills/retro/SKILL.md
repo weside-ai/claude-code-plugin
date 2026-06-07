@@ -3,7 +3,7 @@ name: retro
 description: >
   Systematic continuous-improvement pass on a session + PR/CI cycle.
   Reads what the agent did (transcript) and what failed externally
-  (gh api: CI checks, CodeRabbit threads, push-fix-push cycles),
+  (gh api: CI checks, review threads, push-fix-push cycles),
   finds engineering frictions the user paid time for, and proposes
   concrete MD-file changes — primarily in the user repo's
   .claude/rules/ and CLAUDE.md, rarely in plugin docs — so the same
@@ -45,7 +45,7 @@ What's safe:
 
 - `Bash`, `Edit`, `Write`, `Read` of code/doc files
 - `gh` / `git` operations and their outputs
-- CI logs, PR comments by reviewers (CodeRabbit, claude-review, humans)
+- CI logs, PR comments by reviewers (AI reviewers like Greptile/CodeRabbit, claude-review, humans)
 - File diffs, commit messages of engineering commits
 - The user's *engineering* corrections ("no, that's wrong", "we should X instead") — substance, not framing
 
@@ -60,7 +60,7 @@ The skill reads two complementary sources. Neither is subordinate.
 | Source | What it carries | Primacy |
 |---|---|---|
 | **Session transcript** — the main agent's working memory, or `~/.claude/projects/<repo-id>/<session-id>.jsonl` | What the agent *did*: skills run, tool calls, where the user corrected, where iteration loops happened, where the user fixed it for the agent | Primary when no Compact happened — agent already has it in head. After a Compact: re-read the jsonl. |
-| **GitHub PR + CI history** — via `gh api` | What failed *outside* the agent: CI checks, CodeRabbit threads, the commits that fixed them, cycle count, reviewer comments | Read when `gh` is available and authenticated (`gh auth status`). Without GitHub/authenticated `gh`, skip this source — transcript + local `git log` becomes the sole data source. |
+| **GitHub PR + CI history** — via `gh api` | What failed *outside* the agent: CI checks, review threads, the commits that fixed them, cycle count, reviewer comments | Read when `gh` is available and authenticated (`gh auth status`). Without GitHub/authenticated `gh`, skip this source — transcript + local `git log` becomes the sole data source. |
 
 The two combine: transcript says *"the agent forgot X"*, PR/CI says *"and CI then caught it after Y min"*. The lesson is the intersection.
 
@@ -153,7 +153,7 @@ For each friction surfaced, classify by surface:
 | `CI / static` | ruff / mypy / eslint / tsc / markdownlint flipped red, pushed a fix-commit |
 | `CI / tests` | test failed on CI but not locally (env gap), or wasn't run locally |
 | `CI / build` | docker / EAS / native build broke after a tag push |
-| `Review / CodeRabbit` | CRITICAL or MAJOR thread blocked merge; the fix was small but not pre-empted |
+| `Review / AI reviewer` | CRITICAL or MAJOR thread blocked merge; the fix was small but not pre-empted |
 | `Review / human` | reviewer asked for X that should have been default; author had to redo |
 | `Workflow / cycle count` | the same PR pushed 3+ times to land — workflow gap, not just one bug |
 | `Workflow / latent bug` | a pre-existing bug surfaced now; should retros earlier have caught it? |
