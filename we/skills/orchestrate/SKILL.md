@@ -105,14 +105,23 @@ we / what's next" from this reconstructed stand. Do not dispatch without an expl
 
 ### Step 2: Compute the ready set (pure, explainable)
 
-A Story is **ready** iff ALL hold; otherwise it is **held** with the first failing reason:
+Each Story lands in exactly one of three buckets. Rules are applied **in order**; the first match
+wins (so `built` is decided before the refined/refinable split — a built story is never refinable):
 
-| Rule | Ready needs | Held reason if it fails |
+| # | Condition | Bucket / held reason |
 |---|---|---|
-| Refined plan | plan file exists AND passes the DoR scan (GWT ACs, Context, Phase headers) | `no refined plan` |
-| Not built | no `pr_created`/`ci_passed` checkpoint AND ticket not already In Review/Done | `already built` |
-| Dependencies met | every declared dependency Story is built/merged | `waiting on {dep}` |
-| Cap | fewer than the spike cap (2) already dispatched this run | `cap reached` |
+| 1 | `built` (status In Review/Done/Merged **or** a `pr_created`/`ci_passed` checkpoint) | **held** `already built` |
+| 2 | not refined (plan missing or fails the DoR scan: GWT ACs, Context, Phase headers), deps met | **refinable** |
+| 3 | not refined, a dep is not yet met | **held** `waiting on {dep}` |
+| 4 | refined, a dep is not built | **held** `waiting on {dep}` |
+| 5 | refined, deps built, ready set already at the cap (2) | **held** `cap reached` |
+| 6 | refined, deps built, under cap | **ready** |
+
+**`refinable`** is the producer queue for the refine lane (the `--refine-ahead` pipeline, Step 7). A
+refine-dependency counts as met when it is built **or** refined (`REFINABLE_DEP_MODE="refined"` in
+`orchestration.py` — so a story can be refined against its dependency's plan/seam while that
+dependency is still building; build *dispatch* still gates on deps-**built**, rule 4). In the default
+(passive) mode `refinable` is informational; under `--refine-ahead` it is consumed by the scheduler.
 
 The rules are computed by a tested pure helper — **call it, do not re-derive them**:
 
@@ -120,10 +129,11 @@ The rules are computed by a tested pure helper — **call it, do not re-derive t
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story ready <epic> --plans-dir docs/plans
 ```
 
-It returns `{"ready": [...], "held": [{"key", "reason"}]}` by applying exactly the rules above
-(`compute_ready_set` in `orchestration.py`, unit-tested in `test_ready_set.py`). Render its two
-lists as **READY** (would dispatch) and **HELD** (with each reason). The table above is the
-spec, the CLI is the implementation — they must not drift.
+It returns `{"ready": [...], "refinable": [...], "held": [{"key", "reason"}]}` by applying exactly
+the rules above (`compute_ready_set` in `orchestration.py`, unit-tested in `test_ready_set.py`).
+Render the three lists as **READY** (would dispatch), **REFINABLE** (the refine-lane queue), and
+**HELD** (with each reason). The table above is the spec, the CLI is the implementation — they must
+not drift.
 
 ### Step 3: Confirm gate (human-in-the-loop)
 

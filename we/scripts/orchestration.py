@@ -2655,12 +2655,22 @@ _BUILT_CHECKPOINT_PHASES = {"pr_created", "ci_passed"}
 # Regex for a "### Phase N" header anywhere in the body.
 _PHASE_HEADER_RE = re.compile(r"^### Phase \d+", re.MULTILINE)
 
+# What a dependency must be for a story to count as *refinable* (the refine lane,
+# the `--refine-ahead` pipeline). "refined" lets us refine a story against its
+# dependency's plan/seam while that dependency is still building — the overlap the
+# refine lane exists for (without it the lane is inert on A->B->C chains). "built"
+# is the conservative switch: only refine once the dependency is actually built.
+# NOTE: build *dispatch* always gates on deps-built (see the ready path below);
+# this constant only governs when speculative *planning* may run ahead.
+REFINABLE_DEP_MODE = "refined"  # "refined" | "built"
+
 
 def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, Any]:
-    """Compute which stories are ready to build and which are held back.
+    """Compute which stories are ready to build, refinable, or held back.
 
     Pure function: no I/O, no DB, no globbing. Given a list of story dicts,
-    it returns the ready set (up to ``cap`` stories) and a list of held
+    it returns the ready set (up to ``cap`` stories), the *refinable* set (the
+    producer queue for the ``--refine-ahead`` refine lane), and a list of held
     stories each with the reason they were held.
 
     Args:
@@ -2676,31 +2686,46 @@ def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, 
         cap: maximum number of stories that may be placed in the ready set.
 
     Returns:
-        ``{"ready": [keys...], "held": [{"key": k, "reason": r}, ...]}``.
+        ``{"ready": [keys...], "refinable": [keys...],
+           "held": [{"key": k, "reason": r}, ...]}``.
 
-    Rules are applied IN ORDER per story; the FIRST failing rule decides the
-    held reason. Stories are processed sorted by ``key`` ascending:
+    Rules are applied IN ORDER per story; the FIRST matching rule decides the
+    bucket. Stories are processed sorted by ``key`` ascending:
 
-        1. not ``refined``  -> held, reason ``"no refined plan"``
-        2. ``built``        -> held, reason ``"already built"``
-        3. any dep ``d`` not in built keys -> held, reason ``"waiting on {d}"``
-           (the first such dep, in ``deps`` order)
-        4. ready set already at ``cap`` -> held, reason ``"cap reached"``
-        5. otherwise        -> ready
+        1. ``built``         -> held, reason ``"already built"``
+           (checked BEFORE the refined split: a built story is never refinable)
+        2. not ``refined``:
+             - all deps met (per ``REFINABLE_DEP_MODE``) -> ``refinable``
+             - else                                      -> held, ``"waiting on {d}"``
+        3. refined + not built:
+             - any dep ``d`` not in built keys -> held, ``"waiting on {d}"``
+             - ready set already at ``cap``    -> held, ``"cap reached"``
+             - otherwise                       -> ready
     """
     built_keys = {s["key"] for s in stories if s["built"]}
+    refined_keys = {s["key"] for s in stories if s["refined"]}
+    # A refine-dependency is satisfied when the dep is built, or (in "refined"
+    # mode) refined — so we can plan against its seam before it finishes building.
+    refine_ok_keys = built_keys if REFINABLE_DEP_MODE == "built" else (refined_keys | built_keys)
+
     ready: list[str] = []
+    refinable: list[str] = []
     held: list[dict[str, str]] = []
 
     for story in sorted(stories, key=lambda s: s["key"]):
         key = story["key"]
-        if not story["refined"]:
-            held.append({"key": key, "reason": "no refined plan"})
-            continue
+        deps = story.get("deps", [])
         if story["built"]:
             held.append({"key": key, "reason": "already built"})
             continue
-        unmet_dep = next((d for d in story.get("deps", []) if d not in built_keys), None)
+        if not story["refined"]:
+            unmet_refine_dep = next((d for d in deps if d not in refine_ok_keys), None)
+            if unmet_refine_dep is not None:
+                held.append({"key": key, "reason": f"waiting on {unmet_refine_dep}"})
+            else:
+                refinable.append(key)
+            continue
+        unmet_dep = next((d for d in deps if d not in built_keys), None)
         if unmet_dep is not None:
             held.append({"key": key, "reason": f"waiting on {unmet_dep}"})
             continue
@@ -2709,7 +2734,7 @@ def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, 
             continue
         ready.append(key)
 
-    return {"ready": ready, "held": held}
+    return {"ready": ready, "refinable": refinable, "held": held}
 
 
 def _parse_frontmatter(text: str) -> dict[str, Any]:

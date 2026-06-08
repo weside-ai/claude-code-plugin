@@ -22,15 +22,61 @@ class ComputeReadySetTest(unittest.TestCase):
         self.assertEqual(result["ready"], ["WA-1"])
         self.assertEqual(result["held"], [])
 
-    def test_no_refined_plan_held(self):
+    def test_unrefined_no_deps_is_refinable(self):
+        # Was test_no_refined_plan_held. With the refine lane, an unrefined story
+        # with no unmet deps is the producer queue, not a dead held entry.
         result = compute_ready_set([_story("WA-1", refined=False)])
         self.assertEqual(result["ready"], [])
-        self.assertEqual(result["held"], [{"key": "WA-1", "reason": "no refined plan"}])
+        self.assertEqual(result["refinable"], ["WA-1"])
+        self.assertEqual(result["held"], [])
 
     def test_already_built_held(self):
         result = compute_ready_set([_story("WA-1", built=True)])
         self.assertEqual(result["ready"], [])
+        self.assertEqual(result["refinable"], [])
         self.assertEqual(result["held"], [{"key": "WA-1", "reason": "already built"}])
+
+    def test_built_is_checked_before_refined_split(self):
+        # A built-but-unrefined story is "already built", never refinable
+        # (built is evaluated before the refined/refinable carve-out).
+        result = compute_ready_set([_story("WA-1", refined=False, built=True)])
+        self.assertEqual(result["refinable"], [])
+        self.assertEqual(result["held"], [{"key": "WA-1", "reason": "already built"}])
+
+    def test_unrefined_with_refined_dep_is_refinable(self):
+        # deps-refined mode: refine WA-2 against WA-1's plan/seam while WA-1 builds.
+        # WA-1 is refined+not-built (ready); WA-2 is unrefined with dep WA-1 (refined) -> refinable.
+        stories = [
+            _story("WA-1", refined=True),
+            _story("WA-2", refined=False, deps=["WA-1"]),
+        ]
+        result = compute_ready_set(stories)
+        self.assertEqual(result["ready"], ["WA-1"])
+        self.assertEqual(result["refinable"], ["WA-2"])
+        self.assertEqual(result["held"], [])
+
+    def test_unrefined_with_built_dep_is_refinable(self):
+        # A built dep also satisfies the refine-dependency.
+        stories = [
+            _story("WA-1", built=True),
+            _story("WA-2", refined=False, deps=["WA-1"]),
+        ]
+        result = compute_ready_set(stories)
+        self.assertEqual(result["refinable"], ["WA-2"])
+        self.assertEqual(result["held"], [{"key": "WA-1", "reason": "already built"}])
+
+    def test_unrefined_with_unmet_dep_is_held_not_refinable(self):
+        # WA-2 is unrefined and its dep WA-3 is neither refined nor built -> held,
+        # NOT refinable (don't refine ahead of an unmet dep).
+        stories = [
+            _story("WA-2", refined=False, deps=["WA-3"]),
+            _story("WA-3", refined=False),
+        ]
+        result = compute_ready_set(stories)
+        self.assertEqual(result["ready"], [])
+        # WA-3 has no deps -> refinable; WA-2 waits on WA-3.
+        self.assertEqual(result["refinable"], ["WA-3"])
+        self.assertEqual(result["held"], [{"key": "WA-2", "reason": "waiting on WA-3"}])
 
     def test_unmet_dependency_held(self):
         result = compute_ready_set([_story("WA-2", deps=["WA-1"])])
