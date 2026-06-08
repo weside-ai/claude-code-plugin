@@ -271,12 +271,17 @@ loop:
   # REFINE LANE (producer) — keep ~1 story ahead, never over-produce
   if (refined-but-not-built count) < cap+1 and refinable non-empty:
       R = lowest-key refinable story
-      → the Lead refines R interactively WITH the user (the conversational refinement: clarify,
-        draft the plan to docs/plans/{R}-story.md with the DoR sections, get the user's nod)
-      → then run `story ready` again: if R now passes (left `refinable`), it enters the build lane
-        next pass; if not, keep refining or surface what's blocking the user
+      if R needs human design input  → the Lead refines R interactively WITH the user        (P2)
+                                        (clarify, draft docs/plans/{R}-story.md with the DoR
+                                         sections, get the user's nod)
+      elif a refiner slot is free    → dispatch ONE refiner-teammate(R)                        (P3)
+                                        (Write-only; the Lead verifies + checkpoints on return)
+      → then run `story ready` again: if R now passes (left `refinable`) it enters the build lane
+        next pass; if not, keep refining / retry once / surface what's blocking
   # DRAIN on events
   on builder-done:  review the PR (Step 8) + `gh pr checks`; recompute and refill the build lane
+  on refiner-done:  the Lead runs `story ready` (verify R left `refinable`) → pass: `story checkpoint
+                    refined` + commit the plan to main; fail: retry once, else hand to the P2 lane
   # TERMINATION — the predicate that prevents spin/hang
   if dispatchable-ready empty AND refinable(+the ~1 buffer) empty AND in-flight empty:
       terminate + report the held set with reasons   # never loop
@@ -303,6 +308,69 @@ builder-done + recompute. A `depends_on` **cycle** (`compute_ready_set` does not
 drains to the termination predicate and is reported as `waiting on …` — name the cycle, don't wait
 forever. A refine succeeds **iff** the story leaves `refinable` (i.e. `_body_is_refined` now passes) —
 NOT merely "file written" and NOT "appears in `ready`" (it may be held by cap/disjoint).
+
+### Step 7+ P3: the autonomous refiner-teammate lane (gated on a rehearsal go/no-go)
+
+P2 has the Lead refine interactively. P3 adds a **second refine lane**: for a `refinable` story whose
+context the Lead can fully front-load (no human design input needed), dispatch **one** refiner-teammate
+(`refiner-{TICKET}`) so refinement *also* parallelizes — the Lead discusses story N+1 with the user
+while a refiner drafts N+2 and builders build N. **Cap: ≤1 refiner** (a symmetric runaway guard to the
+≤2 build cap). Enable this lane **only after a `--rehearsal` go/no-go proves a teammate writes a
+DoR-passing plan without stalling** (see Rehearsal mode). If it does not, P2's Lead-interactive lane is
+the permanent fallback.
+
+**Strict duty split (this is what makes it safe).** The refiner-teammate **produces the plan file and
+nothing else** — it needs only the **Write** tool. The **Lead** is the single writer + verifier:
+
+- **Refiner:** draft → `Write` `docs/plans/{TICKET}-story.md` → one `SendMessage` with the path. No
+  git, no `orchestration.py`, no `story ready`, no checkpoint.
+- **Lead, on refiner-done:** run `story ready` (the real DoR gate on the actual body) → if the story
+  left `refinable` (passed), run `story checkpoint refined` + commit the plan to the main worktree → if
+  it failed, **retry once** (re-dispatch with the specific missing-token feedback, e.g. "no `### Phase`
+  header") → still failing, hand it to the P2 Lead-interactive lane and mark it held `refine failed —
+  needs human`.
+
+Why the split: (a) under default/auto permission mode every teammate **Bash** call is denied (the same
+reason builders need `acceptEdits`) — a Write-only refiner sidesteps that. (b) It keeps the Lead the
+sole writer of `docs/plans/` + `orchestration.db` on main (no two-writer git/DB race; the Mode B
+"Lead never lets a teammate commit to main" invariant). (c) DoR-verify becomes a **Lead** act —
+state-as-truth: never trust the refiner's "done", run the scan yourself.
+
+**Refiner-Brief** (Write-only; a *direct template*, NOT a `/we:story` invocation — `/we:story` is
+interactive by construction and would stall a teammate at its ExitPlanMode approval gate):
+
+```
+You are refiner-{TICKET}, a teammate in team {team_name}. The lead is "team-lead".
+
+Your ONLY job: write a build-ready story plan to docs/plans/{TICKET}-story.md, then report its path.
+You have NO user to ask — all the context you need is below. Do NOT use EnterPlanMode/ExitPlanMode.
+Do NOT run git, gh, or any orchestration command. Use the Write tool for the file. Nothing else.
+
+CONTEXT (front-loaded — this replaces the interactive clarification a human would give):
+  Epic frame:        {epic success-criteria + scope, 3-5 lines}
+  This story:        {ticket title + the one-paragraph intent}
+  Scope boundaries:  {what is IN / explicitly OUT}
+  Known constraints: {seams, deps, prior decisions, the files it will touch}
+  Architecture refs: {the 1-3 docs/ files most relevant — read them before drafting}
+
+Write docs/plans/{TICKET}-story.md with frontmatter (story, epic, created, status: draft) and these
+sections — they are the readiness gate, all are required:
+  ## Context              — a real narrative brief (NOT one line): why, the seam, what done means (>50 words)
+  ## Acceptance Criteria  — numbered, each in GWT form: "**Given** … **When** … **Then** …"
+  ## Technical Approach    — the patterns/files; reuse over rebuild
+  ## Implementation Phases — "### Phase 1", "### Phase 2", … (these exact headers are gate-checked)
+  ## Design Decisions      — a table of the real forks + why this option (so the builder doesn't relitigate)
+  ## Testing Requirements  — unit/integration/security per AC
+Also: ## User Journey, ## Code Guidance, ## Security Review Required, ## Documentation Impact.
+If you hit a genuine design fork you cannot resolve from the context above, do NOT guess — SendMessage
+the fork to team-lead and wait, so the Lead's call shapes the plan instead of forcing a rework.
+
+REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead. When the file is written,
+send EXACTLY ONE message:
+  SendMessage(to="team-lead", summary="refiner-{TICKET} done|blocked",
+              message="wrote docs/plans/{TICKET}-story.md | blocked: <fork/reason>")
+Do not run `story ready` or claim it passed — the Lead verifies. Just write + report.
+```
 
 ### Step 8: Review each finished PR + record end
 
@@ -466,6 +534,19 @@ stumble and optimise them. Repeatable via the built-in `/loop` skill
 This is the lab for the broader skill clean-up: each iteration → `plugin-dev:skill-reviewer` /
 `plugin-validator` against the skill that stumbled → targeted fix → re-loop.
 
+### `--refine-ahead` P3 go/no-go (the refiner-teammate gate)
+
+Before enabling the autonomous refiner lane (Step 7+ P3) on real work, prove it in rehearsal. Use a
+**two-story fixture** — one already-refined (→ `ready`) and one stub that is unrefined-but-deps-met
+(→ `refinable`) — and run `/we:orchestrate FIXTURE --rehearsal --refine-ahead`. The go/no-go question:
+**does the refiner-teammate write a DoR-passing `docs/plans/{TICKET}-story.md` (the Lead's `story
+ready` shows it left `refinable`) without stalling in plan mode, under the session's permission mode?**
+
+- **GO** → the refiner lane is safe to enable on real epics.
+- **NO-GO** (stalls at ExitPlanMode, or its output fails the DoR scan, or teammate Bash/Write is denied)
+  → leave P3 disabled; P2's Lead-interactive lane already delivers the build/refine overlap. Log the
+  exact failure to the rehearsal log so the brief can be tuned and re-looped.
+
 ---
 
 ## Standalone fallback
@@ -519,6 +600,10 @@ required regardless of weside connection.
 - **`--refine-ahead`: never spin or hang** — terminate iff dispatchable-ready, refinable(+buffer), and
   in-flight are ALL empty; report the held set (incl. any `depends_on` cycle) with reasons rather than
   looping.
+- **`--refine-ahead` P3 (refiner-teammate): ≤1 refiner, and the refiner only Writes** — the Lead is the
+  single writer/verifier (runs `story ready` + `story checkpoint refined` + commit); the refiner never
+  runs git/orchestration. Use a *direct template* brief, never a `/we:story` invocation (it would stall
+  at ExitPlanMode). Enable the P3 lane only after a `--rehearsal` go/no-go proves it; P2 is the fallback.
 - **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
   teammates. Builders live in their own watchable sessions.
 - **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
