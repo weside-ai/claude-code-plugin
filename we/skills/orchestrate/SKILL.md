@@ -145,7 +145,8 @@ not drift.
 
 Present the ready set and ask the user to confirm dispatch. This is the first of three human
 gates (the others: Lead reviews each PR in Step 8; human merges). **Never dispatch without an
-explicit confirm.** If `--rehearsal`, skip to the Rehearsal section instead.
+explicit confirm.** If `--rehearsal`, skip to the Rehearsal section instead. (Under `--refine-ahead`
+this one-shot gate becomes a **rolling** confirm — one per new dispatch — see Step 7+.)
 
 ### Step 4: Preflight
 
@@ -256,8 +257,12 @@ others keep running. Emit a running roll-up: `in-flight: {…} | PR-ready: {…}
 
 When invoked with `--refine-ahead`, the idle window above becomes productive: the Lead refines the
 **next** `refinable` story while builders run, so the build lane never starves. This is a **scheduler
-overlay on Step 7**, not a new dispatch mode — it composes with Mode A. (In **P2 / today** the Lead
-refines *itself, interactively with the user*; the autonomous refiner-teammate lane is P3, below.)
+overlay on Step 7**, not a new dispatch mode — it composes with Mode A.
+
+> **P2 / P3 = the two rollout increments of this lane.** **P2** (phase 2, the default behaviour
+> today): the Lead refines the next story **itself, interactively with the user**. **P3** (phase 3,
+> below — OFF by default, gated on a rehearsal go/no-go): a Write-only **refiner-teammate** drafts the
+> plan in parallel. Until a rehearsal GO enables P3, all refinement runs the P2 path.
 
 The Lead runs this loop, re-running `story ready <epic>` each pass for fresh `{ready, refinable, held}`:
 
@@ -269,21 +274,24 @@ loop:
       if S is DISJOINT from every in-flight build (see the disjoint guard) → rolling-confirm → dispatch builder(S)
       else → HOLD S (waiting on the conflicting build); stop filling (don't busy-pick a blocked story)
   # REFINE LANE (producer) — keep ~1 story ahead, never over-produce
-  if (refined-but-not-built count) < cap+1 and refinable non-empty:
+  if refined-but-not-built < cap+1 and refinable non-empty:        # the buffer throttle
       R = lowest-key refinable story
-      if R needs human design input  → the Lead refines R interactively WITH the user        (P2)
-                                        (clarify, draft docs/plans/{R}-story.md with the DoR
-                                         sections, get the user's nod)
-      elif a refiner slot is free    → dispatch ONE refiner-teammate(R)                        (P3)
-                                        (Write-only; the Lead verifies + checkpoints on return)
+      if R needs human design input              → Lead refines R interactively WITH the user   (P2)
+                                                    (clarify, draft docs/plans/{R}-story.md with the
+                                                     DoR sections, get the user's nod)
+      elif P3 ENABLED (rehearsal GO) and a refiner slot is free → dispatch ONE refiner-teammate(R) (P3)
+                                                    (Write-only; the Lead verifies + checkpoints on return)
+      else                                       → Lead refines R itself                          (P2)
+      # (P3 is OFF by default — so absent a passed rehearsal go/no-go, refinement always runs P2)
       → then run `story ready` again: if R now passes (left `refinable`) it enters the build lane
         next pass; if not, keep refining / retry once / surface what's blocking
   # DRAIN on events
   on builder-done:  review the PR (Step 8) + `gh pr checks`; recompute and refill the build lane
-  on refiner-done:  the Lead runs `story ready` (verify R left `refinable`) → pass: `story checkpoint
-                    refined` + commit the plan to main; fail: retry once, else hand to the P2 lane
+  on refiner-done:  the Lead runs `story ready` (verify R left `refinable` — the body scan, not any
+                    checkpoint, is what moves it) → pass: `story checkpoint refined` (durable record)
+                    + commit the plan to main; fail: retry once, else hand to the P2 lane
   # TERMINATION — the predicate that prevents spin/hang
-  if dispatchable-ready empty AND refinable(+the ~1 buffer) empty AND in-flight empty:
+  if no dispatchable-ready story AND refinable is empty AND in-flight (builders+refiner) is empty:
       terminate + report the held set with reasons   # never loop
   else: wait for the next event   (idle ≠ done — do not nudge on idle alone)
 ```
@@ -297,6 +305,9 @@ same function, not an obviously-shared filename) is invisible to a naive interse
 cannot see a builder's *uncommitted* edits. **When in doubt, serialize** (the Mode B rule): missing
 file lists, any detected overlap, or any doubt → surface it in the rolling confirm ("WA-X and
 in-flight WA-Y may both touch `select_responders.py` — dispatch or hold?") and default to hold.
+(The base Step-6 dispatch does **not** run this guard — there the ≤2 ready Stories are assumed
+independent by `depends_on`; the file-level check is added only here, because `--refine-ahead` lets a
+*just-refined* story join a build that is already in flight, which `depends_on` never vetted.)
 
 **Rolling confirm, not one-shot.** Step 3's confirm gate becomes continuous: each new build dispatch
 gets a lightweight user confirm in the loop. The human stays the tiebreaker for the disjoint guard
@@ -536,9 +547,12 @@ This is the lab for the broader skill clean-up: each iteration → `plugin-dev:s
 
 ### `--refine-ahead` P3 go/no-go (the refiner-teammate gate)
 
-Before enabling the autonomous refiner lane (Step 7+ P3) on real work, prove it in rehearsal. Use a
-**two-story fixture** — one already-refined (→ `ready`) and one stub that is unrefined-but-deps-met
-(→ `refinable`) — and run `/we:orchestrate FIXTURE --rehearsal --refine-ahead`. The go/no-go question:
+Before enabling the autonomous refiner lane (Step 7+ P3) on real work, prove it in rehearsal. Stage a
+**two-story fixture** into the throwaway repo's `docs/plans/`: copy
+`${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/references/fixture-story.md` → `FIXTURE-story.md` (already
+refined → `ready`) **and** `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/references/fixture-refinable-story.md`
+→ `FIXTURE2-story.md` (unrefined, `depends_on: [FIXTURE]` → `refinable`). Then run
+`/we:orchestrate rehearsal --rehearsal --refine-ahead`. The go/no-go question:
 **does the refiner-teammate write a DoR-passing `docs/plans/{TICKET}-story.md` (the Lead's `story
 ready` shows it left `refinable`) without stalling in plan mode, under the session's permission mode?**
 
@@ -621,4 +635,6 @@ required regardless of weside connection.
 - `we/skills/handoff/SKILL.md` — the durable cross-session bridge the Lead reads at boot
 - `scripts/orchestration.py` — `story status|list|checkpoint|ready` (tracking + ready-set)
 - `scripts/test_ready_set.py` — unit tests for the `compute_ready_set` pure helper
-- `skills/orchestrate/references/fixture-story.md` — the rehearsal fixture template
+- `skills/orchestrate/references/fixture-story.md` — the rehearsal fixture template (refined → `ready`)
+- `skills/orchestrate/references/fixture-refinable-story.md` — the `--refine-ahead` P3 counterpart
+  (unrefined, `depends_on: [FIXTURE]` → `refinable`; gates the refiner go/no-go)
