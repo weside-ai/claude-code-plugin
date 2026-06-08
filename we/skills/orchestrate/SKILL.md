@@ -60,10 +60,16 @@ user's own session (user intent is then unambiguous) — orchestrate earns its k
 ## Invocation
 
 ```
-/we:orchestrate <epic>              # boot + status + ready-set; dispatch only on confirm
-/we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
-/we:orchestrate                     # boot from the most recently active epic, then status
+/we:orchestrate <epic>                 # boot + status + ready-set; dispatch only on confirm
+/we:orchestrate <epic> --refine-ahead  # build the ready stories AND refine the next during build idle
+/we:orchestrate <epic> --rehearsal     # run the pipeline against a fixture, no real PR/ticket
+/we:orchestrate                        # boot from the most recently active epic, then status
 ```
+
+`--refine-ahead` turns the Step-7 monitoring window into a **two-lane pipeline**: while builders run
+(minutes of Lead idle), the Lead refines the **next** `refinable` story so it is build-ready by the
+time a builder frees — overlapping build-time and refine-time. It composes with the per-Story build
+shape (Mode A); it is **not** a third dispatch mode. Default (flag off) = today's passive monitoring.
 
 `<epic>` is an Epic **slug** (e.g. `circles`) or a ticketing Epic key (e.g. `WA-1205`) — either
 works. Stories may reference their epic by slug or by key; `story ready` resolves both via the
@@ -245,6 +251,58 @@ message, read its `story status` + branch directly to determine state, and nudge
 
 When a builder is done/blocked (by message or by state), continue to Step 8 for that Story;
 others keep running. Emit a running roll-up: `in-flight: {…} | PR-ready: {…} | blocked: {…}`.
+
+### Step 7+ (`--refine-ahead`): refine the next story during build idle
+
+When invoked with `--refine-ahead`, the idle window above becomes productive: the Lead refines the
+**next** `refinable` story while builders run, so the build lane never starves. This is a **scheduler
+overlay on Step 7**, not a new dispatch mode — it composes with Mode A. (In **P2 / today** the Lead
+refines *itself, interactively with the user*; the autonomous refiner-teammate lane is P3, below.)
+
+The Lead runs this loop, re-running `story ready <epic>` each pass for fresh `{ready, refinable, held}`:
+
+```
+loop:
+  # BUILD LANE (consumer) — fill to the ≤2 cap, disjoint-gated
+  while in_flight_builds < 2 and ready non-empty:
+      S = lowest-key ready story
+      if S is DISJOINT from every in-flight build (see the disjoint guard) → rolling-confirm → dispatch builder(S)
+      else → HOLD S (waiting on the conflicting build); stop filling (don't busy-pick a blocked story)
+  # REFINE LANE (producer) — keep ~1 story ahead, never over-produce
+  if (refined-but-not-built count) < cap+1 and refinable non-empty:
+      R = lowest-key refinable story
+      → the Lead refines R interactively WITH the user (the conversational refinement: clarify,
+        draft the plan to docs/plans/{R}-story.md with the DoR sections, get the user's nod)
+      → then run `story ready` again: if R now passes (left `refinable`), it enters the build lane
+        next pass; if not, keep refining or surface what's blocking the user
+  # DRAIN on events
+  on builder-done:  review the PR (Step 8) + `gh pr checks`; recompute and refill the build lane
+  # TERMINATION — the predicate that prevents spin/hang
+  if dispatchable-ready empty AND refinable(+the ~1 buffer) empty AND in-flight empty:
+      terminate + report the held set with reasons   # never loop
+  else: wait for the next event   (idle ≠ done — do not nudge on idle alone)
+```
+
+**The disjoint guard (a hint, not a guarantee).** Before dispatching a ready story while another
+build is in flight, check file overlap: union each story plan's per-phase `**Files:**` lists and
+set-intersect the to-dispatch story's union against each in-flight build's union; non-empty → **hold
+until the conflicting build lands**. Be honest about its limits — cross-story file lists are coarse
+(the plans were authored independently), a shared *seam* (the `select_responders`/`pending` case —
+same function, not an obviously-shared filename) is invisible to a naive intersection, and the Lead
+cannot see a builder's *uncommitted* edits. **When in doubt, serialize** (the Mode B rule): missing
+file lists, any detected overlap, or any doubt → surface it in the rolling confirm ("WA-X and
+in-flight WA-Y may both touch `select_responders.py` — dispatch or hold?") and default to hold.
+
+**Rolling confirm, not one-shot.** Step 3's confirm gate becomes continuous: each new build dispatch
+gets a lightweight user confirm in the loop. The human stays the tiebreaker for the disjoint guard
+and the cap.
+
+**Termination correctness:** "all `refinable` conflict with in-flight builds" is correct
+serialization (hold-until-clear), **not** deadlock — a held story becomes dispatchable on the next
+builder-done + recompute. A `depends_on` **cycle** (`compute_ready_set` does not detect cycles)
+drains to the termination predicate and is reported as `waiting on …` — name the cycle, don't wait
+forever. A refine succeeds **iff** the story leaves `refinable` (i.e. `_body_is_refined` now passes) —
+NOT merely "file written" and NOT "appears in `ready`" (it may be held by cap/disjoint).
 
 ### Step 8: Review each finished PR + record end
 
@@ -450,6 +508,17 @@ required regardless of weside connection.
 - **Mode B: brief builders to surface forks before pinning, and to pin existing behaviour only** — a real
   design fork goes to the Lead *before* the characterization is written; pins capture what already exists
   (green on unmodified code), never a property the migration newly adds.
+- **`--refine-ahead` is a Step-7 overlay, not a third mode** — it composes with Mode A; the build
+  lane stays ≤2 and disjoint-gated, the refine lane keeps ~1 story ahead (`refined-not-built < cap+1`,
+  never over-produce). Default (flag off) = passive monitoring, unchanged.
+- **`--refine-ahead`: serialize on doubt (the disjoint guard is a hint)** — only dispatch a ready
+  story alongside an in-flight build when their plan `**Files:**` are disjoint; missing lists, any
+  overlap, or a shared *seam* you can't see in the file lists → surface it in the rolling confirm and
+  default to hold. A refine succeeds only when the story leaves `refinable` (`_body_is_refined`
+  passes), never on "file written" alone.
+- **`--refine-ahead`: never spin or hang** — terminate iff dispatchable-ready, refinable(+buffer), and
+  in-flight are ALL empty; report the held set (incl. any `depends_on` cycle) with reasons rather than
+  looping.
 - **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
   teammates. Builders live in their own watchable sessions.
 - **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
