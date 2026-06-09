@@ -109,6 +109,27 @@ Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) ->
 - Record `mcp_resolved_names` = the set of names that returned a valid entry. Only these
   names will be passed to `council_prep_kickoff` and `council_writeback_kickoff`.
 
+### Step 3.5: Derive `repo_id`
+
+Derive the stable repository identifier used to tie prep and writeback turns to the
+correct `claude_code` channel on the backend. The backend keys the channel on
+`channel_context_id = "group_claude_code_{repo_id}"` — this value **must match** what
+the `store_conversation_hook` derives for the same repo.
+
+Derivation order (use the first non-empty result):
+
+1. Read `.weside/config.json` → top-level string field `"repo_id"`, if present and non-empty.
+2. Run `git remote get-url origin` in the repo root. Normalise:
+   - Strip trailing `.git`
+   - SSH (`git@<host>:<org>/<repo>`): remove the `git@` prefix, replace the first `:` with `/` → `<host>/<org>/<repo>`
+   - HTTPS (`https://<host>/<org>/<repo>`): strip the `https://` (or `http://`) prefix
+   - If the command fails or the remote is absent, fall through to step 3.
+3. Fallback: the repo root's directory name (`os.path.basename(<repo_root>)`).
+
+Store the result as `repo_id`. It is passed in Steps 4, 5.5, and 9.5. The no-weside
+path skips all three of those steps, so `repo_id` is only passed when
+`mcp_resolved_names` is non-empty.
+
 ### Step 4: Preflight
 
 1. **Env-flag check.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is active (either in the shell or via the `env` block of `~/.claude/settings.json`). If missing, abort with:
@@ -137,6 +158,7 @@ Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) ->
    mcp__plugin_we_weside-mcp__council_prep_kickoff(
        names=mcp_resolved_names,   # Companion-backed members only
        topic=topic,
+       repo_id=repo_id,
    )
    ```
 
@@ -166,7 +188,7 @@ if mcp_resolved_names:
     poll_interval = 10
     elapsed = 0
     while elapsed < deadline_secs and len(prep_blocks) < len(mcp_resolved_names):
-        result = mcp__plugin_we_weside-mcp__council_prep_poll(names=mcp_resolved_names)
+        result = mcp__plugin_we_weside-mcp__council_prep_poll(names=mcp_resolved_names, repo_id=repo_id)
         # result is a dict: {name -> block | None}
         for name, block in result.items():
             if block and name not in prep_blocks:
@@ -334,6 +356,7 @@ if mcp_resolved_names:
             name=name,
             topic=topic,
             synthesis=synthesis_text,
+            repo_id=repo_id,
         )
 ```
 

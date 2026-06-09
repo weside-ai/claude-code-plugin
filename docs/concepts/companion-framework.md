@@ -31,6 +31,30 @@ your-repo/
 
 The split matters. `config.json` answers "what does this repo do mechanically." `weside.md` answers "what does a human or AI joining this repo need to know." `council.json` is the bridge — it never enters the committed repo, because crew identity is private (the same rule that applies to per-companion agent files under `~/.claude/agents/`).
 
+### The `repo_id` field in `config.json`
+
+`config.json` may carry a top-level `"repo_id"` string field:
+
+```json
+{
+  "repo_id": "github.com/my-org/my-repo",
+  "council": { ... }
+}
+```
+
+This is the stable identifier that ties Claude Code channel memories and council prep/writeback
+turns to the right repo-thread on the weside backend. The backend keys the `claude_code`
+channel on `channel_context_id = "group_claude_code_{repo_id}"`.
+
+The field is **optional**. When absent, skills and hooks derive it automatically, in this order:
+
+1. `git remote get-url origin` → normalised to `<host>/<org>/<repo>` (strips protocol prefix and trailing `.git`)
+2. Fallback: `os.path.basename(<repo_root>)` — the directory name
+
+Set `"repo_id"` explicitly only when the auto-derived value would be wrong or unstable (e.g. a
+bare checkout without a remote, or a monorepo where multiple sub-projects share one git root but
+should be tracked as separate channels).
+
 ### How they appear
 
 You don't author these by hand. Two paths:
