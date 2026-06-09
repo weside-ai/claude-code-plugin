@@ -58,7 +58,8 @@ This is the heart of the framework. It declares **which companions are in this r
       "name": "Product Owner",
       "role": "product_owner",
       "color": "orange",
-      "companion_id": null
+      "companion_id": null,
+      "lens": "User value and scope discipline — challenge scope creep, prioritise ruthlessly."
     },
     "architect": {
       "name": "Architect",
@@ -70,7 +71,17 @@ This is the heart of the framework. It declares **which companions are in this r
 }
 ```
 
-The thin bridge holds **structure only** — role-slug → display-name + role + color + optional Companion ID. No identity bodies. Identity flows from the weside backend at runtime via the `get_council` MCP method. The thin bridge plus MCP is the production-recommended form.
+The thin bridge holds **structure only** — role-slug → display-name + role + color + optional
+Companion ID. No identity bodies. Identity flows from the weside backend at runtime via the
+`get_council` MCP method. The thin bridge plus MCP is the production-recommended form.
+
+**The `lens` field (optional):** a free-text string that captures the role-specific angle for
+a council member. When the weside MCP is absent (no account, or no companion linked for this
+role), `/we:council` injects `lens` into the generic `council-<role>` brief:
+*"Lens: {lens}"*. This lets repos pre-author a meaningful perspective for each role — written
+once in `/we:onboarding`, consumed at every council. With weside MCP connected, `lens` is
+superseded by the full identity returned by `get_council` and is not injected. It is safe to
+keep the field even when a companion is linked (`companion_id` non-null).
 
 ### Fat schema (legacy, v1)
 
@@ -206,7 +217,7 @@ Everything mechanical works. What's missing is the **person** behind each role.
 
 ## With a weside account: what unlocks
 
-The bridge gets paired with real Companions. Each role in your council has a name, a voice, and **a memory of every council it ever sat in**. (Memory write-back is a Phase-6 deliverable; today the council *reads* identity, the *write-back* is coming.)
+The bridge gets paired with real Companions. Each role in your council has a name, a voice, and **a memory of every council it ever sat in**. Before each council, a server-side prep turn searches the companion's memories across all channels and curates a context block — injected into their brief before deliberation. After the synthesis, a writeback turn lets each companion process and remember the outcome on their `claude_code` channel thread.
 
 You can run the same `/we:council` and get an order-of-magnitude richer deliberation — not because the mechanic is different, but because *the people in the room are real*.
 

@@ -45,7 +45,20 @@ Rule of thumb: if a human/companion reads it to *understand the repo*, it goes i
    Call `list_companions` **once** before the first question (the list is static for the session) and cache the result. Then, for each role slot:
    - *"Who is your {Role} on this repo? (Companion name, or 'new' to create, or 'skip')"*
    - If existing companion name → validate it against the cached `list_companions` result
-   - If 'new' → instruct user to create in weside.ai + placeholder in `weside.md`
+   - If 'new' → ask for a name (alphanumeric, no spaces — it becomes the companion slug)
+     and a one-line description of what this companion does for this role. Then:
+     - **With weside MCP:** call
+       `mcp__plugin_we_weside-mcp__create_companion(name=<name>, personality=<description>, short_description=<description>)`.
+       On success (`{name, id, created}` returned): write the returned ID into the
+       Crew section of `.weside/weside.md` and into `.weside/council.json`
+       (`companion_id` field for this role's bridge entry). Present a confirmation:
+       *"Created companion {name} (id: {id}) and linked as {role}."*
+       On error (`{error}` returned): fall back to TBD placeholder + instruct the user
+       to create the companion manually in weside.ai and re-run `/we:onboarding`.
+     - **Without weside MCP:** write a TBD placeholder in `weside.md` (companion ID:
+       null) and add the one-line description as a `lens` field in the bridge entry of
+       `.weside/council.json` — this is the no-weside fallback that `/we:council` will
+       pick up to give the generic agent a role-angle hint.
    - If 'skip' → leave role unassigned, noted in `weside.md`
 
 3. **Optional: add non-default roles**
@@ -113,7 +126,11 @@ vault: <vault-name>
 
 - **One-question-at-a-time.** Never overwhelm — each role is a separate prompt.
 - **Empty is OK.** A role can be unassigned. `weside.md` still lists it with `Companion ID: null`.
-- **Never invent companions.** If the user says 'new', record a TBD entry and instruct the user to create the companion in weside.ai. Never fabricate a companion ID.
+- **Create, don't invent.** If the user says 'new' and weside MCP is available, call
+  `mcp__plugin_we_weside-mcp__create_companion(...)` and write the real ID returned. If MCP
+  is absent or the call fails, record a TBD entry and instruct the user to create the companion
+  in weside.ai. Never fabricate a companion ID — every ID written to `weside.md` or
+  `council.json` must come from an actual `create_companion` response.
 - **System prompts live in weside, not here.** `weside.md` references companions by name/ID + role. The personality, memory, body, style live in weside MCP at `get_companion_identity()`. This separation is the whole point.
 - **Clean split.** Crew + purpose + meetings in `weside.md`. Technical flags (`onboarded`, stack, ticketing) in `config.json`. Never mix.
 - **Editable.** Running `/we:onboarding` again should offer "extend" vs. "replace" — never silently overwrite.
