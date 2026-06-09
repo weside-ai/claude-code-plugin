@@ -101,9 +101,9 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 
 | Tool | Purpose |
 |---|---|
-| `council_prep_kickoff(names, topic)` | Schedule server-side prep turns for the named companions on the given topic. Returns immediately; turns run async in the background (20-90s). Only Companion-backed members (MCP-resolved) are eligible — generic role shells have no server-side state to draw from. |
-| `council_prep_poll(names)` | Read back the prep result blocks produced by `council_prep_kickoff`. Returns a dict mapping each name to its block string (or null). Poll in a bounded loop (≤75s, 10s intervals) until blocks arrive or the deadline passes; members without a block are spawned without it. |
-| `council_writeback_kickoff(name, topic, synthesis)` | Fire a writeback turn for one companion: the backend asks them to process the council synthesis and store a memory on their `claude_code` channel thread. Fire-and-forget — no poll needed. Call once per MCP-resolved member after Step 9's synthesis is complete. |
+| `council_prep_kickoff(names, topic, repo_id)` | Schedule server-side prep turns for the named companions on the given topic. `repo_id` ties the prep to the correct `claude_code` channel so the backend can stamp `origin_channel_ref` when memories are saved. Returns immediately; turns run async in the background (20-90s). Only Companion-backed members (MCP-resolved) are eligible — generic role shells have no server-side state to draw from. |
+| `council_prep_poll(names, repo_id)` | Read back the prep result blocks produced by `council_prep_kickoff`. Returns a dict mapping each name to its block string (or null). Poll in a bounded loop (≤75s, 10s intervals) until blocks arrive or the deadline passes; members without a block are spawned without it. |
+| `council_writeback_kickoff(name, topic, synthesis, repo_id)` | Fire a writeback turn for one companion: the backend asks them to process the council synthesis and store a memory on their `claude_code` channel thread. `repo_id` ensures the memory is written to the correct `claude_code` channel context. Fire-and-forget — no poll needed. Call once per MCP-resolved member after Step 9's synthesis is complete. |
 
 ### External tools (Composio)
 
