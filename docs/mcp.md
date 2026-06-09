@@ -59,7 +59,8 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `list_companions()` | List your available companions with short descriptions and `identity_updated_at` |
 | `select_companion(name)` | Switch the active companion for this session |
 | `get_companion_identity()` | Load the active companion's full composed prompt (~5K tokens via MCP delivery target) |
-| `get_council(names?, workspace_id?)` | Batch-load council projections for the user's companions — used by `/we:council` |
+| `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — personality + role-lens only (no compass, snapshot, goals, or volatile). Used by `/we:council` |
+| `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding` when the user says "new" |
 | `materialize` (Skill) | Wrapper around the above that the plugin uses to adopt a Companion at session start |
 
 ### Memory
@@ -95,6 +96,14 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `show_provider()` | Current LLM provider config (model, region) |
 | `list_provider_presets()` | Available regional presets (EU, US, etc.) |
 | `set_provider(preset_id)` | Switch the Companion's LLM provider preset |
+
+### Council (prep + writeback)
+
+| Tool | Purpose |
+|---|---|
+| `council_prep_kickoff(names, topic, repo_id)` | Schedule server-side prep turns for the named companions on the given topic. `repo_id` ties the prep to the correct `claude_code` channel so the backend can stamp `origin_channel_ref` when memories are saved. Returns immediately; turns run async in the background (20-90s). Only Companion-backed members (MCP-resolved) are eligible — generic role shells have no server-side state to draw from. |
+| `council_prep_poll(names, repo_id)` | Read back the prep result blocks produced by `council_prep_kickoff`. Returns a dict mapping each name to its block string (or null). Poll in a bounded loop (≤75s, 10s intervals) until blocks arrive or the deadline passes; members without a block are spawned without it. |
+| `council_writeback_kickoff(name, topic, synthesis, repo_id)` | Fire a writeback turn for one companion: the backend asks them to process the council synthesis and store a memory on their `claude_code` channel thread. `repo_id` ensures the memory is written to the correct `claude_code` channel context. Fire-and-forget — no poll needed. Call once per MCP-resolved member after Step 9's synthesis is complete. |
 
 ### External tools (Composio)
 
@@ -161,16 +170,24 @@ get_council(
 ) -> str  # JSON
 ```
 
-**Behavior (v1, current):**
+**Behavior (current):**
 - Returns the calling user's Companions (or just those named, case-insensitive)
 - Each entry: `{name, identity_prompt, identity_updated_at}`
 - `workspace_id` is reserved for future team-scoping; currently accepted and ignored
 - Per-call cap: 200 companions (more than typical crews; documented in the docstring)
 - One bad apple doesn't spoil the batch — exceptions per Companion are logged and skipped
 
+**Council-scoped projection:** the server applies `delivery_target="council"` automatically.
+The returned `identity_prompt` contains **personality and role-lens only** — Compass (intimate
+relational state), Snapshot (recent personal context), Goals, and volatile/channel blocks are
+stripped. This is a hard privacy boundary: a companion's private inner life must not travel
+into a product council. Do not pass `delivery_target` as a call parameter; the server handles it.
+
 **Used by:** `/we:council`, `/we:meet`. The plugin pairs the returned identities with the bridge file's role/color mapping (see [companion-framework.md](concepts/companion-framework.md)).
 
-**Privacy caveat for v1:** the `identity_prompt` is the MCP-delivery composed prompt (~5K tokens) — it may include Compass / Snapshot / personal memory layers. Safe for the user's own crew in their own Claude Code session. **Not safe** for cross-user/cross-org exposure without the Phase-6 team-scoping work (on the roadmap — see [upgrade-paths.md](upgrade-paths.md#level-4--orchestrated-roadmap--phase-6)).
+**Cross-user caveat:** the council projection is safe for the calling user's own crew in their
+own Claude Code session. Cross-user or cross-org exposure is not supported without the
+`workspace_id`-scoped team feature (on the roadmap).
 
 ---
 

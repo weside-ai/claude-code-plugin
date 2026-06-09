@@ -25,6 +25,7 @@ import base64
 import contextlib
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -84,12 +85,62 @@ def _get_valid_token() -> str | None:
     return None
 
 
+def _derive_repo_id(cwd: str) -> str:
+    """Derive a stable repo identifier for the claude_code channel.
+
+    Derivation order (first non-empty result wins):
+    1. `.weside/config.json` top-level ``"repo_id"`` string field.
+    2. ``git remote get-url origin`` normalised to ``<host>/<org>/<repo>``
+       (strips the protocol prefix and a trailing ``.git``).
+    3. ``os.path.basename(cwd)`` — the repo directory name.
+
+    The backend keys the claude_code channel on
+    ``channel_context_id = "group_claude_code_{repo_id}"``, so this value
+    must be identical to what the council skill derives for the same repo.
+    """
+    # 1. .weside/config.json repo_id field
+    with contextlib.suppress(Exception):
+        config_path = os.path.join(cwd, ".weside", "config.json")
+        with open(config_path) as f:
+            cfg = json.load(f)
+        rid = cfg.get("repo_id", "")
+        if isinstance(rid, str) and rid.strip():
+            return rid.strip()
+
+    # 2. git origin remote URL → normalise to host/org/repo
+    with contextlib.suppress(Exception):
+        result = subprocess.run(
+            ["git", "-C", cwd, "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        url = result.stdout.strip()
+        if url:
+            # Strip trailing .git
+            if url.endswith(".git"):
+                url = url[:-4]
+            # SSH: git@github.com:org/repo → github.com/org/repo
+            if url.startswith("git@"):
+                url = url[4:].replace(":", "/", 1)
+            # HTTPS/HTTP: https://github.com/org/repo → github.com/org/repo
+            elif "://" in url:
+                url = url.split("://", 1)[1]
+            if url:
+                return url
+
+    # 3. Fallback: directory name
+    return os.path.basename(cwd) or "unknown"
+
+
 def _call_store_conversations(
     token: str,
     conversations: list[dict],
     source: str,
     source_detail: str,
     companion_name: str | None = None,
+    repo_id: str | None = None,
 ) -> bool:
     """Call store_conversations via MCP JSON-RPC endpoint.
 
@@ -100,6 +151,14 @@ def _call_store_conversations(
     if companion_name:
         url = f"{MCP_URL}?companion={urllib.parse.quote(companion_name)}"
 
+    arguments: dict = {
+        "conversations": json.dumps(conversations),
+        "source": source,
+        "source_detail": source_detail,
+    }
+    if repo_id:
+        arguments["repo_id"] = repo_id
+
     payload = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -107,11 +166,7 @@ def _call_store_conversations(
             "method": "tools/call",
             "params": {
                 "name": "store_conversations",
-                "arguments": {
-                    "conversations": json.dumps(conversations),
-                    "source": source,
-                    "source_detail": source_detail,
-                },
+                "arguments": arguments,
             },
         }
     ).encode()
@@ -289,7 +344,9 @@ def main() -> None:
     # 6. Store directly via MCP
     # Pass companion_name to pin routing to the configured companion.
     companion_name = config.get("companion") or None
-    project = os.path.basename(hook_input.get("cwd", os.getcwd()))
+    cwd = hook_input.get("cwd", os.getcwd())
+    project = os.path.basename(cwd)
+    repo_id = _derive_repo_id(cwd)
     exchange = [
         {
             "user_message": condense(user_msg),
@@ -297,7 +354,9 @@ def main() -> None:
         }
     ]
 
-    ok = _call_store_conversations(token, exchange, "claude_code", project, companion_name)
+    ok = _call_store_conversations(
+        token, exchange, "claude_code", project, companion_name, repo_id
+    )
     if not ok:
         _warn("store_conversations call failed — this turn was NOT stored as memory.")
 

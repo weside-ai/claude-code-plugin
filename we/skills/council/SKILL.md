@@ -63,13 +63,23 @@ For each role slug, in priority order:
   `identity_updated_at`. This is the *active* path — backend is the single source of truth
   for identity, the repo holds only role-membership.
 
+  **Council-scoped projection (privacy boundary):** `get_council` uses `delivery_target="council"`
+  server-side. The returned `identity_prompt` contains personality and role-lens only —
+  compass (intimate relational state), snapshot (recent personal context), goals, and
+  volatile/channel blocks are stripped. This is intentional: a companion's private inner
+  life must not travel into a product council. Do **not** pass a `delivery_target` param —
+  the server applies it automatically. Track MCP-resolved member names; only these are
+  eligible for prep and writeback turns.
+
 - **Bridge-only path (no MCP available, or MCP returns nothing for a name)** — if
   `.weside/council.json` exists in the active repo and contains an entry for the role's
   assigned member: use `council-<role>` as the shell agent. If the bridge entry has a
   full `identity_prompt` (legacy "fat" schema), inject that into the brief — this is the
   pre-MCP behaviour, kept for back-compat in repos that have not migrated. New "thin"
   bridges (only `role`/`color`) without an identity fall through to the generic shell.
-  See "The bridge file" in `we/skills/CLAUDE.md`.
+  If the bridge entry carries a `lens` field (string), inject it into the brief as a
+  role-angle hint: *"Lens: {lens}"* — this is the no-weside home for a companion's
+  role-specific viewpoint when MCP is absent. See "The bridge file" in `we/skills/CLAUDE.md`.
 
 - **Companion path (legacy)** — else if `.weside/weside.md` exists and its Crew section
   names a companion for that role: use `companion-<slug>` (slug = companion name,
@@ -88,16 +98,37 @@ For each role slug, in priority order:
 
 #### get_council call mechanics
 
-`get_council(names: list[str] | None = None) -> dict[name, {name, identity_prompt, identity_updated_at}]`.
+Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) -> dict[name, {name, identity_prompt, identity_updated_at}]`
 
-- One MCP roundtrip returns all members' identities — no select/get loops in the plugin.
-- `workspace_id` is part of the contract but ignored in the v1 backend stub (Phase-6
-  follow-up). Plugin omits it.
-- Missing names return as absent keys, not as errors — fall through to the next path
-  in Step 3.
-- Identity bodies are not cached on disk in v1 — every `/we:council` fetches fresh. If
-  this gets slow (>10s for >10 members), v2 will introduce a `.weside/.cache/council.json`
-  with `identity_updated_at`-based invalidation.
+- One MCP roundtrip returns all members' council-scoped projections — no select/get loops in the plugin.
+- `workspace_id` is reserved for future team-scoping; the plugin omits it.
+- The server applies `delivery_target="council"` automatically — the returned `identity_prompt`
+  is already stripped of compass, snapshot, goals, and volatile context.
+- Missing names return as absent keys, not errors — fall through to the next path in Step 3.
+- Identity bodies are not cached on disk — every `/we:council` fetches fresh.
+- Record `mcp_resolved_names` = the set of names that returned a valid entry. Only these
+  names will be passed to `council_prep_kickoff` and `council_writeback_kickoff`.
+
+### Step 3.5: Derive `repo_id`
+
+Derive the stable repository identifier used to tie prep and writeback turns to the
+correct `claude_code` channel on the backend. The backend keys the channel on
+`channel_context_id = "group_claude_code_{repo_id}"` — this value **must match** what
+the `store_conversation_hook` derives for the same repo.
+
+Derivation order (use the first non-empty result):
+
+1. Read `.weside/config.json` → top-level string field `"repo_id"`, if present and non-empty.
+2. Run `git remote get-url origin` in the repo root. Normalise:
+   - Strip trailing `.git`
+   - SSH (`git@<host>:<org>/<repo>`): remove the `git@` prefix, replace the first `:` with `/` → `<host>/<org>/<repo>`
+   - HTTPS (`https://<host>/<org>/<repo>`): strip the `https://` (or `http://`) prefix
+   - If the command fails or the remote is absent, fall through to step 3.
+3. Fallback: the repo root's directory name (`os.path.basename(<repo_root>)`).
+
+Store the result as `repo_id`. It is passed in Steps 4, 5.5, and 9.5. The no-weside
+path skips all three of those steps, so `repo_id` is only passed when
+`mcp_resolved_names` is non-empty.
 
 ### Step 4: Preflight
 
@@ -119,6 +150,21 @@ For each role slug, in priority order:
 
 3. **Roster sanity check.** With `orchestrator` already removed (see Step 3) the roster must contain at least one member. If empty, abort with: *"No council members resolved — check `.weside/config.json` or pass `--council=role1,role2`."*
 
+4. **Fire prep kickoff (weside path only).** If `mcp_resolved_names` is non-empty, kick off
+   server-side prep turns now — before `TeamCreate` — so the 20-90s turns overlap with
+   team setup and member spawn:
+
+   ```python
+   mcp__plugin_we_weside-mcp__council_prep_kickoff(
+       names=mcp_resolved_names,   # Companion-backed members only
+       topic=topic,
+       repo_id=repo_id,
+   )
+   ```
+
+   This call returns immediately. **No-weside path:** skip this substep entirely (no error,
+   no placeholder).
+
 ### Step 5: Open the team
 
 ```python
@@ -129,6 +175,32 @@ TeamCreate(
 ```
 
 The lead session is automatically the team's lead. Members will be added by spawning agents with `team_name=<that name>` in Step 6. Only the lead can later call `TeamDelete`.
+
+### Step 5.5: Await prep blocks (weside path only)
+
+If prep was kicked off in Step 4, poll for results before spawning members so the context
+can be injected into each brief. **No-weside path:** skip entirely — `prep_blocks = {}`.
+
+```python
+prep_blocks = {}  # name -> prep block string
+if mcp_resolved_names:
+    deadline_secs = 75   # generous upper bound; turns run 20-90s
+    poll_interval = 10
+    elapsed = 0
+    while elapsed < deadline_secs and len(prep_blocks) < len(mcp_resolved_names):
+        result = mcp__plugin_we_weside-mcp__council_prep_poll(names=mcp_resolved_names, repo_id=repo_id)
+        # result is a dict: {name -> block | None}
+        for name, block in result.items():
+            if block and name not in prep_blocks:
+                prep_blocks[name] = block
+        if len(prep_blocks) < len(mcp_resolved_names):
+            sleep(poll_interval)
+            elapsed += poll_interval
+    # Members whose block didn't arrive get spawned without it — prep is additive, not a gate.
+```
+
+Members missing a prep block are spawned normally in Step 6 with no block section — do not
+abort or delay beyond the deadline.
 
 ### Step 6: Spawn members (all in one message)
 
@@ -145,7 +217,9 @@ Agent(
 )
 ```
 
-The Team-Council-Brief is built per-member so each one knows who else sits at the table:
+The Team-Council-Brief is built per-member so each one knows who else sits at the table.
+If `prep_blocks[member_name]` exists (from Step 5.5), inject it as a "CONTEXT BLOCK" section
+after the identity section and before "OTHER MEMBERS AT THE TABLE":
 
 ```
 COUNCIL SESSION (LIVE TEAM) — {meeting type, or "open council"}
@@ -153,7 +227,13 @@ TOPIC: {the topic}
 
 You participate as the {role}{ — {companion name} if a companion}.
 {If companion: your identity is in your system prompt above. Reason from it.}
+{If lens field in bridge entry (no-weside path): Lens: {lens}}
 {Else: reason from the {role} lens.}
+
+{If prep_blocks[this member's name] exists:}
+CONTEXT BLOCK — from your memories and prior work on this topic:
+{prep_blocks[member_name]}
+{End if}
 
 OTHER MEMBERS AT THE TABLE:
 - {name1} ({role1}) — {one-line lens summary}
@@ -262,6 +342,26 @@ The lead — the orchestrator, possibly a Companion in this session — produces
   *"Orchestrator role: handled by the lead session ({companion-name-or-"generic"})."*
 - If the lead is a materialised Companion, the synthesis is spoken in that Companion's voice — but the four headings stay verbatim, because callers (`/we:meet` etc.) parse on them.
 
+### Step 9.5: Fire writeback (weside path only)
+
+After synthesis is complete, fire a writeback turn for each MCP-resolved member so they
+carry the council outcome forward into their own memory (across all channels).
+This is fire-and-forget — no poll, no wait.
+
+```python
+if mcp_resolved_names:
+    synthesis_text = <the full synthesis text from Step 9>
+    for name in mcp_resolved_names:
+        mcp__plugin_we_weside-mcp__council_writeback_kickoff(
+            name=name,
+            topic=topic,
+            synthesis=synthesis_text,
+            repo_id=repo_id,
+        )
+```
+
+**No-weside path:** skip entirely. No error, no placeholder.
+
 ### Step 10: Close the team
 
 First send a shutdown signal to every member so their sessions terminate cleanly before the team is deleted:
@@ -284,15 +384,44 @@ TeamDelete()
 
 Members must have responded (or been recorded as absent) before this call. If `TeamDelete()` fails because a member is still finishing, wait 30 s and retry; after two failed retries, log a warning and continue — the team-state leaks until the next session reboot, but the user already has their synthesis.
 
-## Memory in v1
+## Memory
 
-Each teammate runs in its own session, with its own MCP connection — in principle that would let every member call `select_companion(<themselves>)` and `search_memories(...)` per-deliberation. In practice the weside MCP backend is still **user-scoped, not team-scoped**: parallel `select_companion` calls race and clobber each other. v1 therefore still injects the `identity_prompt` from `get_council()` into the member brief (in Step 6) and does **not** instruct members to make their own MCP calls. Per-member memory routing is a Phase-6 upgrade (team-scoped `search_memories` — future backend work).
+Per-member memory routing is handled via server-side Companion turns (Steps 4, 5.5, 9.5),
+not client-side MCP calls from within the member session. This is intentional:
+
+- The `?companion=` query param routes per-request without clobbering (no Redis write) —
+  the old concern about parallel `select_companion` calls racing is resolved at the backend
+  level. However, orchestrating N parallel in-session memory searches is still noisy and
+  latency-unpredictable.
+- The **prep turn** (Steps 4 + 5.5) runs server-side: the backend kicks off a real
+  Companion turn that searches memories across all channels and curates a context block.
+  The result is injected into the member brief before spawn — richer than a raw dump and
+  in the Companion's own voice.
+- The **writeback turn** (Step 9.5) runs server-side: each Companion processes the council
+  synthesis and stores a memory on its `claude_code` channel thread. This persists across
+  sessions — the Companion will remember this council the next time they meet.
+
+Member sessions themselves do **not** make MCP memory calls during deliberation — identity
+flows from `get_council()` via the brief (Step 6).
 
 ## Standalone fallback
 
-No weside account / no `.weside/` → every one of the nine shipped roles resolves to its generic `council-<role>` agent. The council still convenes a real team — `TeamCreate` + named members + live `SendMessage` deliberation — only the voices are generic lenses instead of the user's Companions. The synthesis format is identical.
+No weside account / no `.weside/` → every one of the nine shipped roles resolves to its
+generic `council-<role>` agent. The council still convenes a real team — `TeamCreate` +
+named members + live `SendMessage` deliberation — only the voices are generic lenses instead
+of the user's Companions. The synthesis format is identical.
 
-The Agent-Teams env-flag (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) is required regardless of whether weside is connected. See the Prerequisites section above.
+If `.weside/council.json` exists but weside MCP is absent, the bridge's optional `lens`
+field per member is injected into the generic brief as a role-angle hint:
+*"Lens: {lens}"*. This lets repos pre-author a meaningful angle for each role without
+a weside account.
+
+Steps 4 (prep kickoff), 5.5 (await prep), and 9.5 (writeback) are **cleanly skipped** when
+the weside MCP is absent — no error, no degraded output. The council runs at full fidelity
+for the generic path.
+
+The Agent-Teams env-flag (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) is required regardless
+of whether weside is connected. See the Prerequisites section above.
 
 ## Rules
 
