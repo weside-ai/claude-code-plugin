@@ -143,6 +143,7 @@ Settings via `/plugin settings`:
 - **projectKey** — Jira project key or GitHub repo
 - **companion** — weside Companion name (optional, requires account)
 - **autoMaterialize** — Auto-load Companion at session start (default: off)
+- **loadCouncilFromWeside** — boolean, default `true`. Use weside-backed Companions as council members where the bridge links them; `false` = always use the generic role-lenses (Retorte), even if Companions exist.
 
 ---
 

@@ -167,6 +167,7 @@ If `council` is missing, run `/we:setup` (it'll add the section without disturbi
 1. MCP not connected (no weside account active in this session)
 2. Bridge file (`.weside/council.json`) missing
 3. Bridge file is empty or doesn't map roles to Companions
+4. `loadCouncilFromWeside` is set to `false` in plugin settings — that's the convene-time switch that forces generic lenses even when Companions exist
 
 **Diagnose:**
 
@@ -188,7 +189,8 @@ cat .weside/council.json | jq '.members'
    python3 ~/.claude/plugins/cache/weside-ai/we/<version>/scripts/bootstrap-weside-repo.py \
      --repo $(pwd) --flavor engineering --purpose "..." --crew-from ~/.weside/crew.json
    ```
-3. If bridge maps to `companion_id: null` for everyone: re-run `/we:onboarding` and provide real Companion names.
+3. If bridge maps to `companion_id: null` for everyone: re-run `/we:onboarding` and use the council builder's *assign* or *create* path so roles bind to real Companions.
+4. If `loadCouncilFromWeside` is `false`: open `/plugin settings we@weside-ai` and set it back to `true` (the default) — `false` forces generic lenses regardless of the bridge.
 
 ---
 

@@ -420,4 +420,4 @@ Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log is still w
 
 ## Tour pointer
 
-This skill appears in the interactive tour as **Station 09 — "Retro · the harness improves itself"** at <https://plugin.weside.ai/tour/>. The tour walks through a sample report and shows how a friction becomes a rule.
+This skill appears in the interactive tour as **Station 10 — "Retro · the harness improves itself"** at <https://plugin.weside.ai/tour/>. The tour walks through a sample report and shows how a friction becomes a rule.

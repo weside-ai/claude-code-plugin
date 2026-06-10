@@ -21,7 +21,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 ## Level 1 — Assisted
 
-**What you have:** the plugin alone. All 23 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with nine generic role-lenses. Meetings at four altitudes.
+**What you have:** the plugin alone. All 23 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with generic role-lenses (`/we:onboarding` builds the full council from scratch — every role fills with a shipped `council-<role>` agent, no account required). Meetings at four altitudes.
 
 **What you ship:** stories with plans, code with tests, PRs with reviews, deliberations with synthesis. End-to-end. No external dependency beyond Claude Code itself.
 
@@ -47,7 +47,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 - **Memory across sessions** — every conversation contributes to the Companion's memory bank. Tomorrow she remembers today's decisions, today's tension, today's rejected alternatives.
 - **Compass + snapshot** — the Companion maintains a self-portrait of how you work together and a snapshot of what's currently active. Both surface automatically in every session.
 - **Goals with lifecycle** — commitments live in the Companion, not just in your head. She tracks `active / paused / completed` and brings them up when relevant.
-- **`/we:council` with real voices** — your crew deliberates in their actual voices. Same mechanic; the *people in the room* are real.
+- **`/we:council` with real voices** — your crew deliberates in their actual voices. Same mechanic; the *people in the room* are real. A council is a roster of role-lenses, each generic *or* weside-backed — a mixed council is normal. `/we:onboarding`'s council builder fills each role by assigning an existing Companion, creating a new one, or falling back to a generic lens. weside-backed members each cost a `plan.max_companions` slot (Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited); when the budget runs out the remaining roles degrade gracefully to generic lenses plus an upgrade CTA — the council is never blocked. The `loadCouncilFromWeside` plugin option (default `true`) is the convene-time switch: `true` loads the weside-backed members; `false` always convenes generic lenses even when Companions exist.
 
 **What you still do yourself:** every decision. The Companion doesn't act autonomously at this level — she informs, you decide.
 
@@ -112,7 +112,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 | `/we:epic` | ✓ generic Epic frame | + Companion identity | + memory of past Epics | + cross-team coordination |
 | `/we:story` | ✓ generic | + memory grounding | + proactive context | + team memory |
 | `/we:build` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past builds | + team patterns |
-| `/we:council` | ✓ generic role-agents | + real Companion voices | + memory of past councils | + write-back, team lenses |
+| `/we:council` | ✓ generic role-agents | + real Companion voices (mixed roster; `loadCouncilFromWeside` toggle) | + memory of past councils | + write-back, team lenses |
 | `/we:meet` | ✓ structured workflows | + named Companions | + continuity across meetings | + cross-team coordination |
 | `/we:coach` | ✓ rules + landscape | + Companion-as-coach identity | + proactive process drift surfacing | + team-wide process awareness |
 | `/we:sideload` | ✓ legacy mode | + crew loaded | + Companion-knows-the-target-repo | + cross-team crew shared |

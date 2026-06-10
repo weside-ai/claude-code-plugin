@@ -101,6 +101,8 @@ Plugin (Claude Code) → MCP OAuth → weside Backend API → Companion Memory/G
 - **With MCP:** Skills can load companion identity, search memories, check goals.
 - **MCP tools:** Defined in `we/.mcp.json`, implemented by the weside backend service.
 
+**Config (`userConfig` in `we/.claude-plugin/plugin.json`):** `companion`, `autoMaterialize`, `ticketingTool`, `projectKey`, `autoStoreConversations`, and `loadCouncilFromWeside` (boolean, default `true` — use weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses). Read at `pluginConfigs["we@weside-ai"].options.<key>`.
+
 When changing MCP tool signatures, both sides need updating:
 - The weside backend — MCP tool implementation.
 - This repo — skill references to MCP tools.

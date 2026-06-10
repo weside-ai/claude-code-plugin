@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "version": "2.48.0",
+  "version": "2.49.0",
   "description": "Agentic Product Ownership toolkit for Claude Code — four Plan altitudes (Vision/Saga/Epic/Story) with Solo + Council deliberation, autonomous Build pipeline, CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
@@ -52,6 +52,12 @@
       "title": "Auto-store Conversations",
       "description": "Store each meaningful conversation turn as a companion memory (requires weside.ai account + MCP connection)",
       "default": false
+    },
+    "loadCouncilFromWeside": {
+      "type": "boolean",
+      "title": "Load Council Members from weside",
+      "description": "Use your weside Companions as council members where the bridge links them (requires weside.ai account). Off = always use the generic role-lenses (Retorte), even if Companions exist.",
+      "default": true
     }
   }
 }

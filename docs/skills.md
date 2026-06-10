@@ -219,7 +219,9 @@ When you need more than one voice on a topic.
 
 > *Convene a council of role-lens agents on a topic; orchestrator synthesises.*
 
-The core deliberation mechanic. Opens a live Claude Code Agent Team (one named agent per role); members deliberate through `SendMessage` turns in real time; quiescence detection closes the debate; the lead synthesises *agreement / tension / recommendation*. Agents address each other directly rather than writing parallel memos.
+The core deliberation mechanic. Opens a live Claude Code Agent Team (one agent per role); members deliberate through `SendMessage` turns in real time; quiescence detection closes the debate; the lead synthesises *agreement / tension / recommendation*. Agents address each other directly rather than writing parallel memos.
+
+Each role-lens is filled by either a generic `council-<role>` agent or a weside-backed Companion (mixed is normal) — `/we:onboarding` decides the mapping, written into `.weside/council.json`. At convene time the `loadCouncilFromWeside` plugin option (default `true`) governs which actually load: `true` resolves to the weside-backed Companions where the bridge links them; `false` convenes every role as a generic lens even if Companions exist.
 
 **Usage:**
 
@@ -381,13 +383,13 @@ Run once per project. Interactive (3 core questions, ~5 minutes).
 
 ### `/we:onboarding`
 
-> *Compose the repo's crew + author `.weside/weside.md`.*
+> *Build the repo's council from scratch + author `.weside/weside.md`.*
 
-Invoked by `/we:setup` Step 5; standalone for refreshing the crew.
+Invoked by `/we:setup` Step 5; standalone for rebuilding the crew. Works with zero Companions, no `.weside/`, and no weside account.
 
-Interview pattern: one role at a time. "Who is your Product Owner on this repo?" — Companion name, "new" (to create later in weside), or "skip" (leave the role unassigned).
+Guided council builder: for each role it offers three ways to fill the lens — **assign** an existing Companion (appends the role-lens to its identity via `update_companion`), **create** a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or **generic** (the shipped `council-<role>` agent — the "Retorte" lens, free, no account, no plan-limit). A mixed council is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit (Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited) runs out, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA — never stuck.
 
-**Output:** updates `.weside/weside.md` (crew section) + `.weside/config.json` (roles_enabled, repo_flavor).
+**Output:** writes the full `.weside/council.json` thin bridge (envelope + a `members` entry per role, gitignored) + updates `.weside/weside.md` (crew section) + `.weside/config.json` (roles_enabled, repo_flavor).
 
 ---
 

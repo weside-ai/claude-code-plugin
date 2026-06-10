@@ -52,7 +52,17 @@ Role slugs the plugin ships generic agents for: `product_owner`, `architect`, `s
 
 ### Step 3: Resolve each role to an agent
 
-For each role slug, in priority order:
+**Member-source toggle (read first).** Read `~/.claude/settings.json` →
+`pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside` (missing → default `true`).
+- **`true` (default)** — resolve members from weside where the bridge links them: the
+  MCP and bridge-`companion_id` paths below are live (a weside-backed council).
+- **`false`** — the user opted out of weside-backed members for councils. Skip the MCP
+  path and the bridge-`companion_id` linkage entirely; resolve **every** role through the
+  generic `council-<role>` shell (the bridge's `lens` hint is still injected). The council
+  runs fully on generic role-lenses (Retorte) even when Companions exist. Skip Steps 3.6,
+  4's prep kickoff, 5.5, and 9.5 (those are weside-backed-only).
+
+For each role slug, in priority order (the first two paths apply only when the toggle is `true`):
 
 - **MCP path (preferred when weside MCP is available)** — if the weside MCP exposes
   `mcp__plugin_we_weside-mcp__get_council`, call it once with `names=[<member-name>, …]`

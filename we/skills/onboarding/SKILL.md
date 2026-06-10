@@ -1,85 +1,176 @@
 ---
 name: onboarding
 description: >
-  Interactive crew composition + repo-knowledge authoring for a repo — produces
-  `.weside/weside.md` (companion-facing: crew, meetings, repo purpose, cross-repo
-  relations) and updates `.weside/config.json` (technical). Invoked by `/we:setup`
-  Step 5, or standalone when you want to (re)compose the crew. Trigger keywords:
-  onboarding, crew setup, add crew member, compose team, who works here, define roles.
+  Interactive crew composition + repo-knowledge authoring for a repo — guides the
+  user to build a real council from scratch (assign existing Companions, create new
+  ones, or use generic role-lenses) and produces `.weside/weside.md` (companion-facing),
+  `.weside/council.json` (the council bridge), and updates `.weside/config.json`
+  (technical). Invoked by `/we:setup` Step 5, or standalone when you want to (re)compose
+  the crew or build a council. Trigger keywords: onboarding, crew setup, build a council,
+  add crew member, compose team, who works here, define roles, council from scratch.
 ---
 
 
 # /we:onboarding
 
-**Purpose:** Define what a companion needs to know to work on this repo — who is in the crew, which meetings happen here, what the repo is for — and persist it as `.weside/weside.md` (human- and companion-readable), plus bookkeeping in `.weside/config.json` (machine-readable).
+**Purpose:** Build the repo's **council** — the roster of role-lenses `/we:council` and `/we:meet` convene — and persist what a companion needs to know to work here. Produces `.weside/weside.md` (human- and companion-readable), `.weside/council.json` (the council bridge), and bookkeeping in `.weside/config.json` (machine-readable).
+
+This skill works **from scratch**: with no Companions, no `.weside/`, and no weside account, it still produces a working council (generic role-lenses). With a weside account it guides the user to back individual lenses with real Companions — for the value, the memory, the voice.
 
 ## Prerequisite
 
-`.weside/config.json` must exist. If not, suggest `/we:setup` first.
+`.weside/config.json` must exist. If not, suggest `/we:setup` first (it creates it, then delegates here).
 
-## Two Files — Why Split
+## The mental model — lenses, real or generic
+
+A **council** convenes one agent per role to think a topic through from several angles. Each role is a **lens**. Two ways a lens can be filled:
+
+- **Generic lens (Retorte)** — the shipped `council-<role>` agent. Free, works with no account, no limit. A solid role-angle, but no identity or memory.
+- **weside-backed lens** — one of the user's weside Companions, carrying real identity + memory + voice. Costs a Companion slot (`plan.max_companions`).
+
+A good council is **mixed**: the roles the user cares most about backed by real Companions, the rest generic. This skill builds exactly that, degrading gracefully when the plan's Companion budget runs out.
+
+## Three files — why split
 
 | File | Audience | Content |
 |---|---|---|
 | `.weside/weside.md` | **Companion** (human-readable, Markdown) | Repo purpose, crew + roles + companion IDs, meetings held here, cross-repo relations, anything else the companion needs to *know* to be useful on this repo |
-| `.weside/config.json` | **Tooling** (machine-readable, JSON) | `vault`, `framework_version`, `onboarded`, `onboarded_at`, `ticketing`, `stack`, future integration-specific config keys |
+| `.weside/council.json` | **Tooling** (machine-readable, **gitignored**) | The council bridge: per-role membership — `role`, `color`, `companion_id` (weside-backed) or `lens` (generic), display `name`. `/we:council` reads this to resolve members. |
+| `.weside/config.json` | **Tooling** (machine-readable) | `vault`, `framework_version`, `onboarded`, `onboarded_at`, `ticketing`, `stack`, `council` rosters, future integration keys |
 
-Rule of thumb: if a human/companion reads it to *understand the repo*, it goes in `weside.md`. If a skill/agent reads it to *decide what to do*, it goes in `config.json`.
+Rule of thumb: human/companion reads it to *understand the repo* → `weside.md`; a skill reads it to *resolve members* → `council.json`; a skill reads it to *decide what to do* → `config.json`.
 
 ## Workflow
 
-1. **Greet + detect repo flavor**
-   - Read `CLAUDE.md` + existing `.weside/config.json` + `.weside/weside.md` (if any)
-   - Detect repo type: backend code? landing page? business docs? mixed?
-   - Suggest a default role mix based on flavor:
+### 1. Greet + detect repo flavor + read state
 
-     | Repo flavor | Suggested default crew |
-     |---|---|
-     | Backend/Engineering | Scrum Master, Product Owner, Architect |
-     | Landing/Marketing | Scrum Master, Product Owner, Marketing, UX Researcher |
-     | Business docs | Scrum Master, Product Owner, Leadership, Marketing |
-     | Plugin / toolkit | Scrum Master, Product Owner, Architect, UX Researcher |
-     | Mixed / custom | full list, user picks |
+- Read `CLAUDE.md` + existing `.weside/config.json` + `.weside/weside.md` + `.weside/council.json` (if any).
+- Detect repo type: backend code? landing page? business docs? plugin/toolkit? mixed?
+- Suggest a default council roster based on flavor:
 
-2. **Interview — one question at a time, user answers with name or "skip"**
-   Call `list_companions` **once** before the first question (the list is static for the session) and cache the result. Then, for each role slot:
-   - *"Who is your {Role} on this repo? (Companion name, or 'new' to create, or 'skip')"*
-   - If existing companion name → validate it against the cached `list_companions` result
-   - If 'new' → ask for a name (alphanumeric, no spaces — it becomes the companion slug)
-     and a one-line description of what this companion does for this role. Then:
-     - **With weside MCP:** call
-       `mcp__plugin_we_weside-mcp__create_companion(name=<name>, personality=<description>, short_description=<description>)`.
-       On success (`{name, id, created}` returned): write the returned ID into the
-       Crew section of `.weside/weside.md` and into `.weside/council.json`
-       (`companion_id` field for this role's bridge entry). Present a confirmation:
-       *"Created companion {name} (id: {id}) and linked as {role}."*
-       On error (`{error}` returned): fall back to TBD placeholder + instruct the user
-       to create the companion manually in weside.ai and re-run `/we:onboarding`.
-     - **Without weside MCP:** write a TBD placeholder in `weside.md` (companion ID:
-       null) and add the one-line description as a `lens` field in the bridge entry of
-       `.weside/council.json` — this is the no-weside fallback that `/we:council` will
-       pick up to give the generic agent a role-angle hint.
-   - If 'skip' → leave role unassigned, noted in `weside.md`
+  | Repo flavor | Suggested council roster |
+  |---|---|
+  | Backend/Engineering | Scrum Master, Product Owner, Architect, Security |
+  | Landing/Marketing | Scrum Master, Product Owner, Marketing, UX Researcher |
+  | Business docs | Scrum Master, Product Owner, Marketing, Legal |
+  | Plugin / toolkit | Scrum Master, Product Owner, Architect, UX Researcher |
+  | Mixed / custom | full list, user picks |
 
-3. **Optional: add non-default roles**
-   - *"Any other crew members? (e.g. Sales, Legal, custom role)"*
-   - Free-form: user provides name + role + one-line description
+- **Re-run check:** if `council.json` already has members, offer **extend** vs **replace** — never silently overwrite.
 
-4. **Ask about meetings held on this repo**
-   - Default: `refinement` always. `initiative` if repo is source-of-truth for any Saga. `vision` if leadership lives here.
-   - User can override.
+### 2. Frame the council (the new opener)
 
-5. **Write `.weside/weside.md`** (see schema below)
+Briefly (2-3 sentences) tell the user what they're building: *"I'll build this repo's council — the lenses your `/we:council` and `/we:meet` convene. Each lens is a role. Lenses run generic for free, or you can back them with your real weside Companions for identity and memory. We'll mix as your plan allows."*
 
-6. **Update `.weside/config.json`**
-   - `onboarded: true`
-   - `onboarded_at: <ISO-timestamp>`
-   - `roles_enabled: [product_owner, architect, ...]`
-   - `repo_flavor: <detected|overridden>`
-   - (never crew data itself — that's in `weside.md`)
+If there is **no weside MCP / no account**: say the council will run on generic role-lenses, fully functional, and note that a weside.ai account later lets them back lenses with real Companions. Then run the same roster loop, choosing generic for every role.
 
-7. **Next steps prompt**
-   - *"Crew onboarded. Try `/we:sideload .` to see how it loads."*
+### 3. Load existing Companions once
+
+With weside MCP: call `mcp__plugin_we_weside-mcp__list_companions` **once** before the role loop (static for the session) and cache it. This is the menu for "assign an existing Companion" below.
+
+### 4. Walk the roster — one role at a time, three ways each
+
+For each role in the proposed roster, ask one question and offer three ways to fill the lens:
+
+> *"{Role} lens — how do you want to fill it?
+> (a) assign an existing Companion · (b) create a new Companion for it · (c) generic lens (free)"*
+
+- **(a) Assign an existing Companion** *(weside account)* — validate the name against the cached `list_companions`. Then **append the role-lens to that Companion's identity** so it argues from the lens in council:
+  1. Read its current identity body — `get_companion_identity()` (after `select_companion`) or `get_council(names=[<name>])`.
+  2. Compose the role-lens section (see *Seed identity* below) and **append** it to the existing body — do not replace the personality.
+  3. `mcp__plugin_we_weside-mcp__update_companion(name=<name>, system_prompt=<existing body + lens section>)`.
+  4. Bridge entry: `companion_id` = the Companion's id, `color` from `we/agents/council-<role>.md` frontmatter.
+  - Confirm: *"{name} now carries the {Role} lens."* Identity versions are restorable, so this is reversible.
+
+- **(b) Create a new Companion** *(weside account)* — ask for a name (**alphanumeric, no spaces** — it's the slug) and a one-line description. Then:
+  `mcp__plugin_we_weside-mcp__create_companion(name=<name>, personality=<neutral starter>, system_prompt=<seed identity — see below>)`.
+  - On success (`{name, id, created}`): bridge entry with `companion_id` = the returned id. Confirm: *"Created {name} (id {id}) as your {Role}."*
+  - On error → **graceful degrade**, see step 5.
+
+- **(c) Generic lens (Retorte)** — no Companion. Bridge entry with `companion_id: null` and a `lens` field = a one-line role-angle hint (the user's words, or the role's default angle). `/we:council` injects this hint into the generic `council-<role>` brief.
+
+- **Skip** is always allowed → role unassigned, noted in `weside.md` with `Companion ID: null` and no bridge entry.
+
+### 5. Graceful degrade on the Companion limit
+
+`create_companion` is plan-gated (`plan.max_companions`: Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited). When it returns `{error}` containing `COMPANION_LIMIT_REACHED` (or "limit reached"):
+
+- Switch **this role and every remaining create-intent** to a **generic lens** (option c) automatically.
+- Say it once, plainly, with the CTA — do not abort, never leave the user stuck:
+  > *"Your plan allows N Companions (M/N used), so I'll fill the rest of the council with generic lenses — fully functional. Want more real Companions in your council? Upgrade at weside.ai, then re-run `/we:onboarding` to back the remaining lenses."*
+- The result is a **mixed council**: the first roles backed by real Companions, the rest generic. That's the intended shape, not a failure.
+
+### 6. Optional: add non-default roles
+
+*"Any other lenses? (e.g. Sales, Legal, a custom role)"* — free-form: name + role + how to fill it (same three ways). Custom roles (no shipped `council-<role>` agent) **must** be weside-backed, else `/we:council` skips them.
+
+### 7. Meetings held on this repo
+
+Default: `refinement` always. `initiative` if the repo is source-of-truth for a Saga. `vision` if leadership lives here. User can override.
+
+### 8. Write `.weside/council.json` (the bridge) — always, fully
+
+Initialize the **thin** envelope and write a `members` entry for **every filled role** (assigned, created, and generic). This is the file `/we:council` resolves members from — it must be complete, not just the `create` cases.
+
+```json
+{
+  "version": 2,
+  "schema": "thin",
+  "workspace_id": null,
+  "members": {
+    "<slug>": {
+      "name": "<Display Name>",
+      "role": "<role slug>",
+      "color": "<color from council-<role>.md frontmatter>",
+      "companion_id": <int or null>,
+      "lens": "<one-line hint — only for generic (companion_id null) members>"
+    }
+  }
+}
+```
+
+- `companion_id` set → weside-backed; `null` + `lens` → generic.
+- Then ensure `.weside/council.json` is **gitignored** — if not already, append the line `\.weside/council\.json` to the repo's `.gitignore` (Companion IDs + crew structure are private to the user's account; they must not propagate into public repos).
+
+### 9. Write `.weside/weside.md`
+
+Schema below — crew section lists every role with name, role slug(s), focus, meetings, and `Companion ID` (the id for weside-backed, `null` for generic).
+
+### 10. Update `.weside/config.json`
+
+- `onboarded: true`
+- `onboarded_at: <ISO-timestamp>`
+- `roles_enabled: [product_owner, architect, ...]`
+- `repo_flavor: <detected|overridden>`
+- (never crew data itself — that's in `weside.md`; never identity — that's in weside)
+
+### 11. Next steps
+
+- *"Council built — {N} lenses ({k} backed by Companions, {m} generic). Try `/we:council \"<a topic>\"` to convene it, or `/we:sideload .` to see how it loads."*
+- If new Companions were created → remind that `/we:setup` Step 5.4 can generate their `~/.claude/agents/` files (or that they're already reachable via the MCP `get_council` path on the next council).
+
+## Seed identity — lens + neutral starter (for create / assign)
+
+When creating a new Companion (b) or appending a lens to an existing one (a), the **role-lens** is sourced from the shipped `we/agents/council-<role>.md` so the lens stays consistent and there's no duplicate definition to drift:
+
+1. Read `we/agents/council-<role>.md`. Take the body of its `## Your lens` section.
+2. Compose a **lens section** for the identity:
+
+   ```
+   ## Your council lens: {Human-Readable Role}
+
+   {the "## Your lens" body from council-<role>.md, lightly adapted to second person}
+   ```
+
+3. **For create (b)**, prepend a light, neutral **personality starter** so the Companion has somewhere to grow (no two users get clones):
+
+   > *You are {Name}, the {Role} of this crew. You're just getting to know this team and repo — your character will grow as you work. You bring the {Role} lens to the table.*
+
+   The full `system_prompt` = starter paragraph + the lens section. The `personality` field = the user's one-line description (or the starter, condensed).
+
+4. **For assign (a)**, append **only** the lens section to the existing identity body — leave the personality untouched.
+
+Constraints: `system_prompt` must be ≥ 10 chars (it always is here) so the backend keeps it as a user identity instead of substituting its generic onboarding template. `name` must match `^[a-zA-Z0-9]+$` (no spaces/punctuation) — suggest a clean slug if the user's name has spaces.
 
 ## `weside.md` Schema (minimum)
 
@@ -100,8 +191,9 @@ vault: <vault-name>
 ## Crew
 
 ### <Name> — <Human-Readable Role>
-- **Companion ID:** <id from weside MCP, or null>
+- **Companion ID:** <id from weside MCP, or null for a generic lens>
 - **Role(s):** <role_slug>[, <role_slug>]
+- **Lens source:** <weside Companion | generic>
 - **Focus:** <one sentence>
 - **In meetings:** <comma-separated meeting names>
 
@@ -124,20 +216,21 @@ vault: <vault-name>
 
 ## Rules
 
-- **One-question-at-a-time.** Never overwhelm — each role is a separate prompt.
-- **Empty is OK.** A role can be unassigned. `weside.md` still lists it with `Companion ID: null`.
-- **Create, don't invent.** If the user says 'new' and weside MCP is available, call
-  `mcp__plugin_we_weside-mcp__create_companion(...)` and write the real ID returned. If MCP
-  is absent or the call fails, record a TBD entry and instruct the user to create the companion
-  in weside.ai. Never fabricate a companion ID — every ID written to `weside.md` or
-  `council.json` must come from an actual `create_companion` response.
-- **System prompts live in weside, not here.** `weside.md` references companions by name/ID + role. The personality, memory, body, style live in weside MCP at `get_companion_identity()`. This separation is the whole point.
-- **Clean split.** Crew + purpose + meetings in `weside.md`. Technical flags (`onboarded`, stack, ticketing) in `config.json`. Never mix.
-- **Editable.** Running `/we:onboarding` again should offer "extend" vs. "replace" — never silently overwrite.
-- **Standalone fallback.** Without weside MCP: `weside.md` still gets written with names/roles/descriptions. Companion IDs remain null. `/we:sideload` degrades gracefully.
+- **From scratch always works.** No Companions, no account → every lens is generic and the council is fully functional. An account upgrades it; it is never a prerequisite.
+- **Build a mixed council, don't crash.** The `create_companion` plan limit is *expected*, not an error — degrade remaining roles to generic lenses and surface the upgrade CTA once. Never leave the user with a half-built council.
+- **Write the bridge fully.** `.weside/council.json` gets the thin envelope **and** a `members` entry for every filled role — assigned, created, **and** generic. Not just the create case. Gitignore it.
+- **Create, don't invent.** Every `companion_id` written must come from an actual `create_companion`/`list_companions`/`get_council` response. Never fabricate an ID. If MCP is absent, every lens is generic (`companion_id: null`).
+- **One-question-at-a-time.** Each role is a separate prompt with its three ways. Never overwhelm.
+- **Empty is OK.** A role can be unassigned (skip). `weside.md` lists it with `Companion ID: null` and it gets no bridge entry.
+- **Assign appends, never replaces.** Option (a) appends the lens section to a Companion's identity; it never overwrites the personality. Identity versions are restorable.
+- **System prompts live in weside, not here.** `weside.md` + `council.json` reference companions by name/ID + role; identity, memory, body, style live in weside (`get_council` / `get_companion_identity`). That separation is the whole point.
+- **Clean split.** Crew membership → `council.json`. Crew + purpose + meetings → `weside.md`. Technical flags → `config.json`. Never mix.
+- **Editable.** Re-running offers "extend" vs "replace" — never silently overwrite an existing council.
 
 ## References
 
-- `we/skills/setup/SKILL.md` — the parent skill, invokes this
+- `we/skills/setup/SKILL.md` — the parent skill, invokes this (Step 5)
+- `we/skills/council/SKILL.md` — consumes `council.json` to resolve members; the `loadCouncilFromWeside` option gates weside-vs-generic
 - `we/skills/sideload/SKILL.md` — consumes `weside.md` at entry time
-- `we/skills/CLAUDE.md` — design rationale
+- `we/agents/council-<role>.md` — the shipped generic lenses + the lens source for seed identities
+- `we/skills/CLAUDE.md` — design rationale + the bridge-file schema

@@ -50,12 +50,15 @@ Four questions:
 1. **Vision** — link, file, or short description. *Optional* — say "skip" if you don't have one. Vision is the anchor `/we:story` uses to evaluate priority; without it, every feature seems equally important.
 2. **Ticketing** — auto-detected. Confirm Jira / GitHub Issues / none.
 3. **Stack** — auto-detected from `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`. Confirm or override.
-4. **Companion Framework** *(optional)* — the set of `.weside/` files and skills that define your crew, rosters, and deliberation config for this repo. Writing `.weside/config.json` + invoking `/we:onboarding` composes your crew. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
+4. **Companion Framework** *(optional)* — the set of `.weside/` files and skills that define your crew, rosters, and deliberation config for this repo. Writing `.weside/config.json` + invoking `/we:onboarding` builds your council. Say yes if you want to use `/we:council` and `/we:meet` — otherwise skip and revisit later.
 
-If you said yes to the Companion Framework step, `/we:onboarding` walks you through naming who fills each role. You can use generic names ("PO", "Architect") to start; refine later. Two files appear in `.weside/`:
+If you said yes to the Companion Framework step, `/we:onboarding` builds the council from scratch — it works even with zero Companions and no weside account. For each role it offers three ways to fill the lens: assign an existing Companion, create a new one seeded with the role-lens, or use the shipped generic `council-<role>` agent. A mixed council (some generic, some weside-backed) is normal; if you have no account, every role fills with a generic lens. Files appear in `.weside/`:
 
 - `config.json` — machine-readable: rosters, meetings, ticketing, stack
+- `council.json` — the thin bridge mapping each role to its lens (gitignored)
 - `weside.md` — human-readable: crew, repo purpose, meetings held here
+
+> **With an account:** by default (`loadCouncilFromWeside: true`) councils convene the weside-backed members in their real voices wherever the bridge links them. Set it to `false` in plugin settings to always convene generic lenses instead.
 
 See [concepts/companion-framework.md](concepts/companion-framework.md) for the full mechanics.
 

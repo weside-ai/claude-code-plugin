@@ -171,9 +171,10 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    - `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
    - weside MCP NOT available → skip silently, set `"vault": null`.
 
-3. **Compose the crew** — run the onboarding skill via `Skill(skill="onboarding")`
-   - Delegates to the onboarding skill: the user declares which Companions exist and what role each holds. Onboarding writes `.weside/weside.md` (crew + roles + meetings + repo purpose).
-   - Standalone (no weside account): onboarding still records role names with `Companion ID: null`.
+3. **Build the council** — run the onboarding skill via `Skill(skill="onboarding")`
+   - Delegates to onboarding, which **actively builds this repo's council from scratch**: for each role it offers to assign an existing Companion, create a new one, or use a generic lens — degrading gracefully to generic when the plan's Companion budget runs out (a mixed council). It writes `.weside/weside.md` (crew + roles + meetings + purpose) **and** `.weside/council.json` (the council bridge `/we:council` resolves members from).
+   - Standalone (no weside account): onboarding still builds a working council — every lens generic, `Companion ID: null`.
+   - Member source at convene-time is governed by the `loadCouncilFromWeside` option (default `true` — see `config.json` / plugin settings); onboarding fills the bridge regardless, the toggle decides whether `/we:council` uses the weside-backed members or runs everything generic.
 
 4. **Generate companion agent definitions (weside account only)**
    For each Companion named in `.weside/weside.md` — **sequentially**, because `select_companion` sets global MCP state and cannot be parallelised:

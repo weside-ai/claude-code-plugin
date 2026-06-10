@@ -2,7 +2,7 @@
 
 The Companion Framework is what turns the plugin from a collection of skills into a **team you work with**. It defines who is in your crew, what role each plays, and how decisions get made by *several voices* instead of one.
 
-You don't need a weside account to use it. The framework ships with nine generic role-agents that work standalone. With a weside account, those generic agents become *your crew* — Companions with names, persistent memory, and continuity across sessions.
+You don't need a weside account, an existing Companion, or even a `.weside/` directory to use it — `/we:onboarding` builds a council from scratch. A council is a roster of role-lenses, each filled one of two ways: **generic** (the shipped `council-<role>` agent — free, no account, no limit) or **weside-backed** (one of your real Companions, with name, persistent memory, and continuity). A good council is **mixed**: key roles backed by real Companions, the rest generic. The framework ships nine generic lenses so it works fully standalone; a weside account lets you back any subset of them with your crew.
 
 This page covers the mechanics. For when to convene a council or run a meeting, see [meetings.md](meetings.md). For the nine role-lenses themselves, see [roles.md](roles.md).
 
@@ -119,7 +119,7 @@ The bridge carries the link between a generic role and *your* companions. Even i
 
 ## How `/we:council` consumes the framework
 
-A council convenes one agent per role from your roster. The mechanics are the same with or without a weside account; only the voices change.
+A council convenes one agent per role from your roster. Each role runs either generic (the shipped `council-<role>` agent) or weside-backed (the Companion the bridge links for that role). The mechanics are the same with or without a weside account; only the voices change. The `loadCouncilFromWeside` toggle (see below) decides, at convene time, whether linked Companions are used at all.
 
 ```mermaid
 flowchart TD
@@ -144,6 +144,20 @@ flowchart TD
 The plugin always tries the richest path first and falls through cleanly. **You don't lose the framework without an account** — you lose persistent identity.
 
 The council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
+
+### The `loadCouncilFromWeside` toggle
+
+A plugin-level config option decides whether a council uses weside-backed members at all:
+
+```jsonc
+// in your Claude Code settings, under pluginConfigs["we@weside-ai"].options
+{ "loadCouncilFromWeside": true }
+```
+
+- **`true`** (default) — use weside-backed members wherever the bridge links a Companion to a role; roles without a link fall through to the generic lens. This is the mixed-council path.
+- **`false`** — always use the generic `council-<role>` lens ("Retorte"), even when Companions exist and are linked. Useful for a fast, free, account-less deliberation when you don't want to spend Companion turns.
+
+`/we:council` reads it at `pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`, and `/we:meet` inherits the same setting. It only gates *whether* the weside path is tried; the identity-resolution fall-through (MCP → fat-bridge → generic) is unchanged.
 
 ### Sleeping companions
 
@@ -181,9 +195,9 @@ A meeting wraps a council in a workflow at one of four altitudes:
 
 ---
 
-## Roles — the nine generic lenses
+## Roles — the nine role-lenses
 
-The plugin ships nine shipped role-lenses under `we/agents/council-<role>.md`:
+The plugin ships nine role-lenses under `we/agents/council-<role>.md`. Each can run **generic** (the shipped agent) or be **backed by a weside Companion** via the bridge:
 
 | Role slug | Lens |
 |---|---|
@@ -231,7 +245,13 @@ Walks you through three questions, plus one optional step:
 3. **Stack** — Python / Node / Rust / Go / monorepo? Auto-detected; confirm or override.
 4. **Companion Framework** *(optional)* — write `.weside/config.json` + invoke `/we:onboarding` to compose the crew + (with a weside account) register the TurboVault.
 
-`/we:onboarding` is the interview part. It asks one role at a time — "Who is your Product Owner on this repo?" — and writes the result into `.weside/weside.md`. You can run it standalone later to refresh the crew.
+`/we:onboarding` is the interview part — and it actively **builds a council from scratch**, working even with zero Companions, no `.weside/`, and no weside account. It asks one role at a time — "Who is your Product Owner on this repo?" — and for each role offers three ways to fill the lens:
+
+1. **Assign an existing Companion** — appends the role-lens to that Companion's identity via the `update_companion` MCP tool, then links it in the bridge.
+2. **Create a new Companion** — seeded with the role-lens plus a neutral personality starter (`create_companion`), then linked.
+3. **Generic lens** — the shipped `council-<role>` agent ("Retorte"); free, no slot consumed.
+
+It writes the full `.weside/council.json` thin bridge (envelope + one `members` entry per role) and gitignores it. Creating Companions is gated by `plan.max_companions` (Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited); when the budget runs out, onboarding fills the remaining roles with generic lenses (a mixed council) and surfaces an upgrade CTA — it never leaves you stuck. You can run it standalone later to refresh or extend the crew.
 
 ---
 
@@ -239,7 +259,7 @@ Walks you through three questions, plus one optional step:
 
 | Capability | Standalone | What's missing vs. weside |
 |---|---|---|
-| `/we:council` | ✅ nine generic role-agents | No persistent personas; agents are role-lenses without memory |
+| `/we:council` | ✅ nine generic role-lenses (the whole council is generic) | No persistent personas; no roles can be weside-backed, so the council can't be mixed |
 | `/we:meet` | ✅ structured workflows | Same — generic voices, no memory |
 | `/we:sideload` | ✅ reads `.weside/weside.md` + repo essentials | No Companion to ground the context in |
 | `.weside/` directory | ✅ all three files | `council.json` bridge points to nothing live |
@@ -260,7 +280,7 @@ For the full upgrade path and what unlocks at each step, see [upgrade-paths.md](
 
 ## References
 
-- [roles.md](roles.md) — the nine role-lenses
+- [roles.md](roles.md) — the nine role-lenses (generic or weside-backed)
 - [meetings.md](meetings.md) — vision, saga, epic, story
 - [memory.md](memory.md) — memory mechanics (without and with weside)
 - [../mcp.md](../mcp.md) — MCP layer + `get_council` contract

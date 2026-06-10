@@ -1141,12 +1141,13 @@
 <body>
 
 <div class="station-counter">
-  <span class="now" id="counter-now">01</span> · 11
+  <span class="now" id="counter-now">01</span> · 12
 </div>
 
 <nav class="dots" id="dotnav">
   <a data-target="hero" data-label="Welcome"></a>
   <a data-target="overview" data-label="Big picture"></a>
+  <a data-target="crew" data-label="Crew · Council"></a>
   <a data-target="vision" data-label="Vision · PRD"></a>
   <a data-target="saga" data-label="Saga · Theme"></a>
   <a data-target="epic" data-label="Epic · Initiative"></a>
@@ -1259,9 +1260,22 @@
     <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
   </section>
 
-  <!-- ============ 3. VISION — /we:vision + /we:meet vision ============ -->
+  <!-- ============ 3. CREW & COUNCIL — your lenses, real or generic ============ -->
+  <section id="crew">
+    <div class="kicker">Station 03 · Crew & Council</div>
+    <h2 class="section-title">Crew &amp; Council — your lenses, real or generic.</h2>
+    <p class="lede">Every Council and Meeting convenes a <strong style="color:var(--fg)">roster of role-lenses</strong> — Architect, Product Owner, Security, UX, and more. <code>/we:onboarding</code> builds that council from scratch, even with zero Companions and no account. For each role you pick one of three: assign an existing Companion, seed a fresh one with the role-lens, or take the shipped generic lens (a „Retorte"). A council where some lenses are real Companions and others are generic is the normal case — mixed by design.</p>
+
+    <div class="standalone-note">
+      <strong>The <code>loadCouncilFromWeside</code> toggle.</strong> At convene time this boolean (default <code>true</code>) decides the source: <code>true</code> uses your weside-backed Companions wherever the <code>.weside/council.json</code> bridge links them; <code>false</code> always convenes the generic role-lenses (Retorte), even if Companions exist. Either way the council convenes — an account upgrades the lenses with identity, voice, and memory; it is never a prerequisite.
+    </div>
+
+    <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
+  </section>
+
+  <!-- ============ 4. VISION — /we:vision + /we:meet vision ============ -->
   <section id="vision">
-    <div class="kicker">Station 03 · Vision · PRD altitude</div>
+    <div class="kicker">Station 04 · Vision · PRD altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:vision</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — why does this product exist?</h2>
     <p class="lede">The Vision altitude is where you say what this product is, who it's for, and which bets you will <em>not</em> make. Solo (<code>/we:vision</code>) sharpens the PRD; Meet (<code>/we:meet vision</code>) convenes a Council to validate the PRD and decompose it into Sagas. The output isn't code — it's <em>clarity</em>, captured as <code>docs/plans/&lt;vision&gt;/PRD.md</code>.</p>
 
@@ -1303,7 +1317,7 @@
 
   <!-- ============ 4. SAGA — /we:saga + /we:meet saga ============ -->
   <section id="saga">
-    <div class="kicker">Station 04 · Saga · Theme altitude</div>
+    <div class="kicker">Station 05 · Saga · Theme altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:saga</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet saga</code> — the year-shaping bet.</h2>
     <p class="lede">A Saga is a multi-bet theme inside the Vision — something big enough to need decomposition, small enough to name the win. „Make the platform multi-tenant." „Launch the marketplace." Solo (<code>/we:saga</code>) runs Status by default (mirror child Epics from ticketing, snapshot + drift + risk-driven next move) and tightens wording on explicit refine intent; Meet (<code>/we:meet saga</code>) validates the bet against the PRD and decomposes it into Epics.</p>
 
@@ -1344,7 +1358,7 @@
 
   <!-- ============ 5. EPIC — /we:epic + /we:meet epic ============ -->
   <section id="epic">
-    <div class="kicker">Station 05 · Epic · Initiative altitude</div>
+    <div class="kicker">Station 06 · Epic · Initiative altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:epic</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet epic</code> — what we ship next.</h2>
     <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> into Epics — bounded initiatives with named Stories. „Ledger Foundation." „Stripe Connect Onboarding." „Voice Pipeline Migration." Solo (<code>/we:epic</code>) runs Status by default (mirror child Stories from ticketing, flag refined-vs-not-refined, drift + next-move) and shifts to Refine on explicit intent; Meet (<code>/we:meet epic</code>) decomposes the Epic into Stories with acceptance shape.</p>
 
@@ -1385,7 +1399,7 @@
 
   <!-- ============ 6. STORY — two paths + council live demo ============ -->
   <section id="story">
-    <div class="kicker">Station 06 · Story · Feature-slice altitude</div>
+    <div class="kicker">Station 07 · Story · Feature-slice altitude</div>
     <h2 class="section-title">Story altitude — two paths to the same plan.</h2>
     <p class="lede">When a Story needs scoping before development, you have two paths. The Solo path is fast and works for routine Stories. The Council path adds <strong style="color:var(--fg)">tension</strong> before the plan crystallizes — for the harder calls.</p>
 
@@ -1438,7 +1452,7 @@
 
   <!-- ============ 7. BUILD — /we:build 9-step + discipline ============ -->
   <section id="build">
-    <div class="kicker">Station 07 · Build · the autonomous pipeline</div>
+    <div class="kicker">Station 08 · Build · the autonomous pipeline</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:build</code> — hand it a ticket, watch it ship.</h2>
     <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase.</p>
 
@@ -1482,9 +1496,9 @@
 
   <!-- ============ 8. COACH — /we:coach (APO advisor) ============ -->
   <section id="coach">
-    <div class="kicker">Station 08 · Coach · the APO advisor</div>
+    <div class="kicker">Station 09 · Coach · the APO advisor</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — where am I, what's next?</h2>
-    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 09 — <code>/we:retro</code> owns that loop.</p>
+    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 10 — <code>/we:retro</code> owns that loop.</p>
 
     <div class="sm-flow">
       <div class="sm-step">
@@ -1511,7 +1525,7 @@
 
   <!-- ============ 9. RETRO — /we:retro (KVP loop) ============ -->
   <section id="retro">
-    <div class="kicker">Station 09 · Retro · the harness improves itself</div>
+    <div class="kicker">Station 10 · Retro · the harness improves itself</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:retro</code> — every error happens exactly once.</h2>
     <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the shipped PR — session transcript + <code>gh api</code> (CI, CodeRabbit, push-fix cycles) — and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter every cycle.</p>
 
@@ -1570,7 +1584,7 @@
 
   <!-- ============ 10. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 10 · Deliver — you</div>
+    <div class="kicker">Station 11 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
     <p class="lede">By the time <code>/we:build</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
@@ -1606,7 +1620,7 @@
 
   <!-- ============ 10. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 11 · Try it</div>
+    <div class="kicker">Station 12 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -1850,7 +1864,7 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation
 //
-const sections = ["hero", "overview", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "cta"];
+const sections = ["hero", "overview", "crew", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");
@@ -1891,7 +1905,7 @@ document.addEventListener("keydown", (e) => {
   } else if (/^[1-9]$/.test(e.key)) {
     document.getElementById(sections[parseInt(e.key, 10) - 1]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key === "0") {
-    document.getElementById(sections[9]).scrollIntoView({ behavior: "smooth" });
+    document.getElementById(sections[10]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key.toLowerCase() === "f") {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();

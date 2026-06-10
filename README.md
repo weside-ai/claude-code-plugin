@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://plugin.weside.ai/tour/">
-    <img alt="Take the interactive tour" src="https://img.shields.io/badge/%F0%9F%8E%AC%20Interactive%20Tour-11%20stations%20%C2%B7%20run%20it%20live-d4af37?style=for-the-badge&labelColor=11111a" />
+    <img alt="Take the interactive tour" src="https://img.shields.io/badge/%F0%9F%8E%AC%20Interactive%20Tour-12%20stations%20%C2%B7%20run%20it%20live-d4af37?style=for-the-badge&labelColor=11111a" />
   </a>
   <br/>
   <sub><em>Walk through Agentic Product Ownership: Vision → Saga → Epic → Story → Build → Deliver → <b>Retro</b> · live council demo · runs in your browser, no install.</em></sub>

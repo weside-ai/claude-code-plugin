@@ -65,6 +65,8 @@ If no meeting type is given, list the four and ask which one.
 
 Override per repo in `.weside/config.json` key `council.meetings.<type>`, or per call with `--council=role,role,…`. See `we/skills/council/SKILL.md` for the role resolution path.
 
+**Member source is inherited.** A meeting convenes `/we:council`, so the `loadCouncilFromWeside` option (`pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`, default `true`) applies here too: `true` → meeting voices are your weside Companions where the bridge links them; `false` → every voice is the generic role-lens (Retorte). No separate meeting-level switch.
+
 ## Meeting: vision
 
 **Frame:** *"Why does this product exist, and who is it for? Which Sagas does that imply?"*

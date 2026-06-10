@@ -153,7 +153,7 @@ For one-off deliberations, this is fine. For an ongoing Saga — where the same 
 
 ## With a weside account
 
-Each meeting convenes **your Companions**. The architect in today's meeting is the *same architect* who sat in last week's; she remembers the trade-offs you flagged then, the decisions you parked, the open questions. (Memory write-back from councils is a roadmap item — currently the council *reads* identity and memory; the *write-back* is Phase-6 work in the weside backend.)
+Each weside-backed seat is filled by **one of your Companions**. The architect in today's meeting is the *same architect* who sat in last week's; she remembers the trade-offs you flagged then, the decisions you parked, the open questions. (Memory write-back from councils is a roadmap item — currently the council *reads* identity and memory; the *write-back* is Phase-6 work in the weside backend.) A meeting roster is usually **mixed** — the key roles backed by Companions, the rest running the generic lens — and `loadCouncilFromWeside: false` can force every seat back to generic for a fast, free deliberation.
 
 This is where the framework starts to feel less like a tool and more like a team. The roster you convene isn't just a set of lenses — it's a working group with shared context.
 
@@ -162,6 +162,8 @@ This is where the framework starts to feel less like a tool and more like a team
 ## How a council actually runs — the live-team mechanic
 
 Every council convenes its members as a **live Claude Code Agent Team**: one teammate per role, each in its own session, sharing a team channel. Members address each other directly (`SendMessage(to="architect", message="…")`), so the architect actually hears the PO's concern and can respond to it — instead of writing parallel memos in isolation.
+
+Each teammate's voice is either **generic** (the shipped `council-<role>` agent) or **weside-backed** (the Companion the bridge links for that role), decided per role by the `loadCouncilFromWeside` toggle. `/we:meet` inherits that setting from `/we:council` — see [companion-framework.md](companion-framework.md#the-loadcouncilfromweside-toggle).
 
 The **lead session** — the one that ran `/we:council` or `/we:meet` — is the orchestrator. It does not speak as a member; it observes the chatter, closes the deliberation when it is ripe (idle quiescence, or a hard message-/time-cap), then asks each member for a final position and writes the synthesis (`Council Perspectives → Agreement → Tension → Recommendation`). If the lead is a materialised weside Companion, the synthesis is in that Companion's voice; otherwise it uses the shipped template.
 

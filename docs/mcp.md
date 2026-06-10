@@ -61,8 +61,8 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `get_companion_identity()` | Load the active companion's full composed prompt (~5K tokens via MCP delivery target) |
 | `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — returns `{members, status}`: `members` = awake companions only; `status` = `"OK"` or a bucketed string listing asleep/unavailable/not\_found names. Used by `/we:council` |
 | `wake_companion(name)` | Wake a hibernated companion. Returns `{name, woken: true}` on success, `{woken: false}` if already awake, or `{error, woken: false}` if not found. Used by `/we:council` Step 3.6 |
-| `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding` when the user says "new" |
-| `update_companion(name, system_prompt?, personality?, short_description?)` | Update an existing companion (partial). `name` resolves the target, never renames. `system_prompt` versions the identity body (restorable). Returns `{name, id, updated}` or `{error, updated: false}`. Used to curate crew members as council lenses |
+| `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding`'s council builder to seed a new member for a role-lens (role-lens + neutral personality starter) |
+| `update_companion(name, system_prompt?, personality?, short_description?)` | Update an existing companion (partial). `name` resolves the target, never renames. `system_prompt` versions the identity body (restorable). Returns `{name, id, updated}` or `{error, updated: false}`. Used by `/we:onboarding`'s council builder to append a role-lens to an existing companion's identity, and to curate crew members as council lenses |
 | `materialize` (Skill) | Wrapper around the above that the plugin uses to adopt a Companion at session start |
 
 ### Memory
@@ -123,10 +123,10 @@ The Composio layer is what lets a Companion send a Slack message, create a Jira 
 
 The plugin's skills detect MCP absence and fall through cleanly. Specifically:
 
-- **`/we:council`** — uses the nine shipped `council-<role>` generic agents. Same mechanic, generic voices.
+- **`/we:council`** — uses the shipped `council-<role>` generic agents. Same mechanic, generic voices.
 - **`/we:meet`** — same as above, structured workflow with generic voices.
 - **`/we:coach`** — boots without Companion identity; reasons from rules + skill landscape.
-- **`/we:setup`**, **`/we:onboarding`** — write `.weside/` files with `Companion ID: null`; the bridge is filled with structure but no live linkage.
+- **`/we:setup`**, **`/we:onboarding`** — `/we:onboarding` still builds the full council from scratch, but every role fills with a generic `council-<role>` lens (`Companion ID: null` in the bridge); the structure is complete, with no live Companion linkage.
 - **`/we:sideload`** — degrades to legacy mode (reads CLAUDE.md + always-loaded rules; skips vault step).
 - **`/we:story`**, **`/we:build`** — pipeline runs unchanged. No memory grounding, but full pipeline.
 
@@ -145,6 +145,7 @@ Get an account at [weside.ai](https://weside.ai). Create at least one Companion 
 Set:
 - **`companion`** — the name of the Companion you want to use in Claude Code
 - **`autoMaterialize`** — true to auto-load at session start (or false, and call `/we:materialize` manually)
+- **`loadCouncilFromWeside`** — boolean, default `true`. Convene-time switch for `/we:council` and `/we:meet`: when `true`, council roles resolve to their weside-backed Companions wherever the bridge links them; when `false`, every role convenes as a generic `council-<role>` lens (Retorte) even if Companions exist. Read from `pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`; `/we:meet` inherits it.
 
 First MCP call triggers an OAuth flow in your browser. Confirm, and you're connected.
 
@@ -152,10 +153,12 @@ Then in your project:
 
 ```
 /we:setup    # if you haven't already
-/we:onboarding   # compose the crew, this time with real Companion IDs
+/we:onboarding   # build the council, this time with real Companions available
 ```
 
-The bridge file (`.weside/council.json`) gets populated with your real crew. From here, every `/we:council` and `/we:meet` runs with their voices.
+`/we:onboarding` builds a council from scratch. For each role it offers three ways to fill the lens: assign an existing Companion (it appends the role-lens to that Companion's identity via `update_companion`), create a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or use the generic `council-<role>` agent. A mixed council — some weside-backed, some generic — is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit is reached, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA, so the builder never gets stuck.
+
+The bridge file (`.weside/council.json`) gets populated with one `members` entry per role. From here, every `/we:council` and `/we:meet` runs with the weside-backed members in their real voices (subject to `loadCouncilFromWeside`, below).
 
 ---
 
@@ -224,7 +227,9 @@ own Claude Code session. Cross-user or cross-org exposure is not supported witho
 `update_companion` is the write sibling of `create_companion` — it edits an existing
 Companion's identity and metadata from Claude Code, scoped to the calling weside.ai user.
 This is what lets you curate crew members into real council lenses (trim a personality,
-append a role-lens to the identity body) without leaving the session.
+append a role-lens to the identity body) without leaving the session. It is the
+lens-append path `/we:onboarding`'s council builder uses when you assign an existing
+Companion to a role (see [the `/we:onboarding` council builder](#with-a-weside-account)).
 
 **Signature:**
 
@@ -254,7 +259,8 @@ intend to clear the identity body.
 is not possible. The backend delegates to the same service the app's Personality Settings
 use, so versioning + the attention-profile refresh happen automatically (no raw writes).
 
-**Used by:** crew curation and `/we:council` setup — pair with `get_council` (read the
+**Used by:** `/we:onboarding`'s council builder (the assign-an-existing-Companion path),
+crew curation, and `/we:council` setup — pair with `get_council` (read the
 current projection) → `update_companion` (write the trimmed body + lens) → `get_council`
 (verify the lens is present in the council projection).
 

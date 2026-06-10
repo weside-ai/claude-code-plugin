@@ -275,7 +275,7 @@ The pipeline runs end-to-end. Checkpoints work. Quality gates work. Docs get pro
 Three things look different:
 
 - The Plan skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) don't ground new artifacts in cross-session memory — they work from the current conversation + plan files.
-- `/we:council` and `/we:meet` use generic role-agents instead of named Companions.
+- `/we:council` and `/we:meet` convene each role as a generic role-agent rather than a named Companion. (With an account, a council is a mix: each role-lens is either generic or weside-backed, governed by the `loadCouncilFromWeside` toggle — see [upgrade-paths.md](upgrade-paths.md).)
 - `/we:coach` boots without companion identity.
 
 You still get a pipeline that ships code. You don't get a teammate who remembers across days.

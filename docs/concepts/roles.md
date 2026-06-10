@@ -2,7 +2,9 @@
 
 A council is a deliberation across **distinct angles** on the same topic. Each role brings one specific lens — a way of seeing the problem that the others won't.
 
-The plugin ships nine generic role-agents under `we/agents/council-<role>.md`. Any of them can be convened by `/we:council` or used as a roster member in a meeting. Each is ~30 lines of focused system prompt — small on purpose, so the agent stays in its lane.
+The plugin ships nine role-agents under `we/agents/council-<role>.md`. Any of them can be convened by `/we:council` or used as a roster member in a meeting. Each is ~30 lines of focused system prompt — small on purpose, so the agent stays in its lane.
+
+Each lens can run two ways: **generic** — the shipped agent above, reasoning from the role-lens alone (free, no account, no limit) — or **backed by a weside Companion**, where one of your real Companions carries the lens with their own voice, memory, and continuity. `/we:onboarding` builds the roster a lens at a time, letting you back the key roles with Companions and leave the rest generic. A **mixed** council is the normal, healthy shape; a fully-generic one is the standalone default.
 
 This page describes each lens — what it sees, what it pushes back on, what it tends to ignore. Use it to pick a roster for a council, or to understand why a particular voice landed where it did in a synthesis.
 
@@ -146,16 +148,14 @@ Override per topic with `/we:council "<topic>" --council=architect,security,lega
 
 ---
 
-## Without a weside account
+## Generic vs. weside-backed lenses
 
-Each role-lens is a generic `council-<role>` agent. Strong opinions, clean lenses, no persona. The synthesis still works. You get *agreement / tension / recommendation* on every topic.
+Each role-lens is filled one of two ways, independently per role.
 
-For many use cases this is enough. The role-lenses are well-tuned; the discipline of separating perspectives is most of the value.
+**Generic** — a shipped `council-<role>` agent. Strong opinions, clean lenses, no persona. The synthesis still works; you get *agreement / tension / recommendation* on every topic. For many use cases this is enough — the role-lenses are well-tuned, and the discipline of separating perspectives is most of the value. With no weside account, every lens is generic.
 
-## With a weside account
+**weside-backed** — the lens is filled by **one of your Companions**: a person with their own voice, communication style, and (eventually) memory of past councils. Your Product Owner doesn't sound like *the* Product Owner; they sound like themselves.
 
-Each role-lens is filled by **one of your Companions** — a person with their own voice, communication style, and (eventually) memory of past councils. Your Product Owner doesn't sound like *the* Product Owner; they sound like themselves.
-
-The mechanic is identical. The presence in the room is different.
+The mechanic is identical either way — the presence in the room is different. A real council is usually **mixed**: the roles you care most about backed by Companions, the rest generic. `/we:onboarding` composes that roster; the `loadCouncilFromWeside` toggle can force every lens back to generic at convene time.
 
 See [companion-framework.md](companion-framework.md) for how the bridge file + MCP combine to make this happen, and [memory.md](memory.md) for what Companion memory adds.
