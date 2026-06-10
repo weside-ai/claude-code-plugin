@@ -110,9 +110,17 @@ The response object:
 - `status` — `"OK"` if every requested companion is awake and present; otherwise a pipe-separated string of non-OK buckets in fixed order: `"asleep: Pia, Rami | unavailable: Dino | not_found: Xyz"`. Each bucket is `"<bucket>: name1, name2"` (comma-space-separated). Buckets are omitted when empty.
 - `names=None` → all the user's companions; no `not_found` bucket in that case.
 
-Parsing `status`:
+Normalise the response (back-compat shim) then parse `status`:
 
 ```python
+resp = mcp__plugin_we_weside-mcp__get_council(names=...)
+# Shim: a pre-2.46 backend returns a flat {name: {...}} dict with no members/status.
+# Accept both shapes so the plugin works against an un-upgraded backend (no deploy-order coupling).
+if isinstance(resp, dict) and "members" in resp and "status" in resp:
+    members, status = resp["members"], resp["status"]
+else:
+    members, status = resp, "OK"   # old backend: whole object is the flat members dict
+
 asleep, unavailable, not_found = [], [], []
 if status != "OK":
     for segment in status.split(" | "):
@@ -457,6 +465,12 @@ TeamDelete()
 ```
 
 Members must have responded (or been recorded as absent) before this call. If `TeamDelete()` fails because a member is still finishing, wait 30 s and retry; after two failed retries, log a warning and continue — the team-state leaks until the next session reboot, but the user already has their synthesis.
+
+**`TeamDelete` ≠ full teardown.** It removes only team metadata; a done/idle member's agent process
+and tmux pane survive (ghost members in tmux). After `TeamDelete`, also run
+`pkill -f -- "--team-name <team_name>"` (kills this team's agent procs via argv — precise), then
+`tmux kill-pane` the leftover idle panes (`tmux list-panes -a` to find them; skip the lead's own).
+Order: shutdown → `TeamDelete` → `pkill` → `kill-pane`.
 
 ## Memory
 

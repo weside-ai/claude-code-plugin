@@ -414,6 +414,12 @@ Always close the team, even on failure paths — a leaked team blocks the next r
 session. If `TeamDelete` fails because a builder is still finishing, wait 30 s and retry twice,
 then warn and continue.
 
+**`TeamDelete` ≠ full teardown.** It removes only team metadata; a done/idle builder's agent process
+and tmux pane survive (ghost builders in tmux). After `TeamDelete`, also run
+`pkill -f -- "--team-name <team_name>"` (kills this team's agent procs via argv — precise), then
+`tmux kill-pane` the leftover idle panes (`tmux list-panes -a` to find them; skip the lead's own).
+Order: shutdown → `TeamDelete` → `pkill` → `kill-pane`.
+
 ---
 
 ## Mode B — Lead-integrated phase dispatch (one coherent change, many phases)
