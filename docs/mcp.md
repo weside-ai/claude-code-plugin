@@ -62,6 +62,7 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — returns `{members, status}`: `members` = awake companions only; `status` = `"OK"` or a bucketed string listing asleep/unavailable/not\_found names. Used by `/we:council` |
 | `wake_companion(name)` | Wake a hibernated companion. Returns `{name, woken: true}` on success, `{woken: false}` if already awake, or `{error, woken: false}` if not found. Used by `/we:council` Step 3.6 |
 | `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding` when the user says "new" |
+| `update_companion(name, system_prompt?, personality?, short_description?)` | Update an existing companion (partial). `name` resolves the target, never renames. `system_prompt` versions the identity body (restorable). Returns `{name, id, updated}` or `{error, updated: false}`. Used to curate crew members as council lenses |
 | `materialize` (Skill) | Wrapper around the above that the plugin uses to adopt a Companion at session start |
 
 ### Memory
@@ -215,6 +216,47 @@ and merges it into the council's `members` dict.
 **Cross-user caveat:** the council projection is safe for the calling user's own crew in their
 own Claude Code session. Cross-user or cross-org exposure is not supported without the
 `workspace_id`-scoped team feature (on the roadmap).
+
+---
+
+## The `update_companion` tool
+
+`update_companion` is the write sibling of `create_companion` — it edits an existing
+Companion's identity and metadata from Claude Code, scoped to the calling weside.ai user.
+This is what lets you curate crew members into real council lenses (trim a personality,
+append a role-lens to the identity body) without leaving the session.
+
+**Signature:**
+
+```python
+update_companion(
+    name: str,
+    system_prompt: str | None = None,
+    personality: str | None = None,
+    short_description: str | None = None,
+) -> {name?, id?, updated, error?}
+```
+
+**Partial update.** Only the fields you pass change; leave the rest `None`. `name`
+**resolves** the target companion (case-insensitive) — it never renames it.
+
+**`system_prompt` is the identity-prompt body**, where a council member's role-lens lives.
+When provided it is versioned in the `companion_identity` layer — **previous versions are
+preserved and restorable** (Personality Settings). Do not pass an empty string unless you
+intend to clear the identity body.
+
+**Response:**
+- `{"name": "<canonical-name>", "id": <id>, "updated": true}` — success
+- `{"error": "<message>", "updated": false}` — name matched no companion, or the new data
+  failed validation (e.g. an empty `personality`)
+
+**Scope:** user-scoped via RLS — you can only update your own companions; cross-user update
+is not possible. The backend delegates to the same service the app's Personality Settings
+use, so versioning + the attention-profile refresh happen automatically (no raw writes).
+
+**Used by:** crew curation and `/we:council` setup — pair with `get_council` (read the
+current projection) → `update_companion` (write the trimmed body + lens) → `get_council`
+(verify the lens is present in the council projection).
 
 ---
 
