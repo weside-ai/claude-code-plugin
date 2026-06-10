@@ -63,13 +63,18 @@ For each role slug, in priority order:
   `identity_updated_at`. This is the *active* path — backend is the single source of truth
   for identity, the repo holds only role-membership.
 
+  `get_council` returns `{members, status}` (see "get_council call mechanics" below).
+  Build `mcp_resolved_names` from the **keys of `members`** (awake companions only).
+  Parse `status` for sleeping/unavailable/not-found companions — those are handled in
+  Step 3.6 before prep is kicked off.
+
   **Council-scoped projection (privacy boundary):** `get_council` uses `delivery_target="council"`
   server-side. The returned `identity_prompt` contains personality and role-lens only —
   compass (intimate relational state), snapshot (recent personal context), goals, and
   volatile/channel blocks are stripped. This is intentional: a companion's private inner
   life must not travel into a product council. Do **not** pass a `delivery_target` param —
-  the server applies it automatically. Track MCP-resolved member names; only these are
-  eligible for prep and writeback turns.
+  the server applies it automatically. Only `mcp_resolved_names` (awake + successfully
+  woken companions, after Step 3.6) are eligible for prep and writeback turns.
 
 - **Bridge-only path (no MCP available, or MCP returns nothing for a name)** — if
   `.weside/council.json` exists in the active repo and contains an entry for the role's
@@ -98,16 +103,34 @@ For each role slug, in priority order:
 
 #### get_council call mechanics
 
-Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) -> dict[name, {name, identity_prompt, identity_updated_at}]`
+Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) -> {members, status}`
 
-- One MCP roundtrip returns all members' council-scoped projections — no select/get loops in the plugin.
+The response object:
+- `members` — dict of `name → {name, identity_prompt, identity_updated_at}` for **awake companions only**. Asleep, unavailable, and not-found companions are **not** present here.
+- `status` — `"OK"` if every requested companion is awake and present; otherwise a pipe-separated string of non-OK buckets in fixed order: `"asleep: Pia, Rami | unavailable: Dino | not_found: Xyz"`. Each bucket is `"<bucket>: name1, name2"` (comma-space-separated). Buckets are omitted when empty.
+- `names=None` → all the user's companions; no `not_found` bucket in that case.
+
+Parsing `status`:
+
+```python
+asleep, unavailable, not_found = [], [], []
+if status != "OK":
+    for segment in status.split(" | "):
+        bucket, _, names_str = segment.partition(": ")
+        names_list = [n.strip() for n in names_str.split(", ")]
+        if bucket == "asleep":      asleep = names_list
+        elif bucket == "unavailable": unavailable = names_list
+        elif bucket == "not_found":   not_found = names_list
+```
+
+- One MCP roundtrip returns all awake members' council-scoped projections — no select/get loops in the plugin.
 - `workspace_id` is reserved for future team-scoping; the plugin omits it.
 - The server applies `delivery_target="council"` automatically — the returned `identity_prompt`
   is already stripped of compass, snapshot, goals, and volatile context.
-- Missing names return as absent keys, not errors — fall through to the next path in Step 3.
 - Identity bodies are not cached on disk — every `/we:council` fetches fresh.
-- Record `mcp_resolved_names` = the set of names that returned a valid entry. Only these
-  names will be passed to `council_prep_kickoff` and `council_writeback_kickoff`.
+- Initialize `mcp_resolved_names` = set of keys from `members`. Names for sleeping/unavailable/not-found
+  companions are handled in Step 3.6 (wake or generic-lens); only after that step does
+  `mcp_resolved_names` reach its final value for Step 4 and beyond.
 
 ### Step 3.5: Derive `repo_id`
 
@@ -129,6 +152,57 @@ Derivation order (use the first non-empty result):
 Store the result as `repo_id`. It is passed in Steps 4, 5.5, and 9.5. The no-weside
 path skips all three of those steps, so `repo_id` is only passed when
 `mcp_resolved_names` is non-empty.
+
+### Step 3.6: Handle sleeping / unavailable / not-found companions
+
+If `status == "OK"` (all companions awake), skip this step entirely.
+
+Otherwise use the `asleep`, `unavailable`, and `not_found` lists parsed in the
+`get_council call mechanics` section above.
+
+**Sleeping companions (`asleep`):** For each sleeping companion, ask the user what to do — one question per sleeper, two options. Batch up to 4 in a single `AskUserQuestion` call; loop for more. Determine the companion's role by looking up their name in the bridge file's member entries (`role` field). Fall back to `"Rolle"` if not found.
+
+```json
+{
+  "question": "<Name> schläft gerade. Wie soll sie/er am Council teilnehmen?",
+  "header": "<Name>",
+  "options": [
+    {
+      "label": "Wecken",
+      "description": "Echter Turn mit ihren/seinen Memories — kostet Geld, weckt sie/ihn dauerhaft."
+    },
+    {
+      "label": "Generische <Rolle>-Lens",
+      "description": "Kostenlos, kein Wecken; nimmt mit der Rollensicht teil."
+    }
+  ],
+  "multiSelect": false
+}
+```
+
+**Apply the decisions:**
+
+- **"Wecken" chosen** → call `mcp__plugin_we_weside-mcp__wake_companion(name=<name>)`.
+  After all wake calls, re-call `get_council(names=[<all woken names>])` in one batch to
+  fetch their now-awake projections. Merge each returned entry into `members` and add the
+  name to `mcp_resolved_names`. If `wake_companion` returns `{"woken": false, "error": "..."}`,
+  fall back to generic-lens for that member (do not add to `mcp_resolved_names`).
+
+- **"Generische Lens" chosen** → leave the member out of `mcp_resolved_names`. It falls
+  through to the existing generic `council-<role>` brief path in Step 6 (with `lens` from
+  the bridge entry if present). No prep or writeback for this member.
+
+**Unavailable companions (`unavailable`):** Cannot be woken via `wake_companion` (inactive,
+not hibernated). Note their names briefly — e.g. *"Dino ist inaktiv und kann nicht geweckt
+werden — nimmt mit generischer Lens teil."* Treat as generic-lens (not added to
+`mcp_resolved_names`).
+
+**Not-found names (`not_found`):** Note the names to the user and offer:
+*"Diese Namen wurden in deinem weside-Account nicht gefunden. Führe `/we:onboarding` aus,
+um neue Companions zu erstellen."* Do **not** auto-create. Fall through to the generic path
+if a bridge entry for the role exists; otherwise skip.
+
+After Step 3.6, `mcp_resolved_names` is final.
 
 ### Step 4: Preflight
 
@@ -184,7 +258,7 @@ can be injected into each brief. **No-weside path:** skip entirely — `prep_blo
 ```python
 prep_blocks = {}  # name -> prep block string
 if mcp_resolved_names:
-    deadline_secs = 75   # generous upper bound; turns run 20-90s
+    deadline_secs = 150  # generous upper bound; live prep turns measured up to 104s in prod
     poll_interval = 10
     elapsed = 0
     while elapsed < deadline_secs and len(prep_blocks) < len(mcp_resolved_names):

@@ -145,6 +145,15 @@ The plugin always tries the richest path first and falls through cleanly. **You 
 
 The council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
 
+### Sleeping companions
+
+When a Companion is hibernated, `get_council` reports them in the `status` string under the `asleep` bucket rather than projecting them in `members`. `/we:council` Step 3.6 surfaces this to the user with a per-sleeper `AskUserQuestion`:
+
+- **Wecken** — calls `wake_companion(name)`, then re-fetches the projection via `get_council`. The companion joins the council with full identity and is eligible for prep and writeback turns. Costs a real weside turn; wakes the companion persistently.
+- **Generische Lens** — skips the companion from `mcp_resolved_names`. They participate via the generic `council-<role>` shell (with the bridge entry's `lens` field if present), exactly like the no-account path. Free; no waking.
+
+Companions that are inactive (`unavailable`) cannot be woken and always fall through to the generic lens. Companions not found in the account (`not_found`) are noted and the user is directed to `/we:onboarding`.
+
 ### Without a weside account
 
 The nine shipped `council-<role>` agents under `we/agents/` provide the role-lens. Each one is a focused system prompt — *"You are the Product Owner voice on a deliberation council. Evaluate the topic for user value and scope discipline..."*. The agent reasons from that lens for the topic. No persistent state between sessions; no identity beyond the role.

@@ -59,7 +59,8 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `list_companions()` | List your available companions with short descriptions and `identity_updated_at` |
 | `select_companion(name)` | Switch the active companion for this session |
 | `get_companion_identity()` | Load the active companion's full composed prompt (~5K tokens via MCP delivery target) |
-| `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — personality + role-lens only (no compass, snapshot, goals, or volatile). Used by `/we:council` |
+| `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — returns `{members, status}`: `members` = awake companions only; `status` = `"OK"` or a bucketed string listing asleep/unavailable/not\_found names. Used by `/we:council` |
+| `wake_companion(name)` | Wake a hibernated companion. Returns `{name, woken: true}` on success, `{woken: false}` if already awake, or `{error, woken: false}` if not found. Used by `/we:council` Step 3.6 |
 | `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding` when the user says "new" |
 | `materialize` (Skill) | Wrapper around the above that the plugin uses to adopt a Companion at session start |
 
@@ -167,12 +168,15 @@ The bridge file (`.weside/council.json`) gets populated with your real crew. Fro
 get_council(
     names: list[str] | None = None,
     workspace_id: str | None = None,
-) -> str  # JSON
+) -> str  # JSON: {members, status}
 ```
 
-**Behavior (current):**
+**Response shape:**
+- `members` — dict of `name → {name, identity_prompt, identity_updated_at}` for **awake companions only**. Asleep, unavailable, and not-found companions are absent.
+- `status` — `"OK"` if every requested companion is awake and present. Otherwise a pipe-separated string of non-OK buckets in fixed order: `"asleep: Pia, Rami | unavailable: Dino | not_found: Xyz"`. Each bucket is `"<bucket>: name1, name2"` (comma-space-separated). Empty buckets are omitted. `names=None` → no `not_found` bucket.
+
+**Behavior:**
 - Returns the calling user's Companions (or just those named, case-insensitive)
-- Each entry: `{name, identity_prompt, identity_updated_at}`
 - `workspace_id` is reserved for future team-scoping; currently accepted and ignored
 - Per-call cap: 200 companions (more than typical crews; documented in the docstring)
 - One bad apple doesn't spoil the batch — exceptions per Companion are logged and skipped
@@ -183,7 +187,30 @@ relational state), Snapshot (recent personal context), Goals, and volatile/chann
 stripped. This is a hard privacy boundary: a companion's private inner life must not travel
 into a product council. Do not pass `delivery_target` as a call parameter; the server handles it.
 
+**Sleeping companions:** companions in the `asleep` bucket are hibernated and must be woken via `wake_companion` before their projection is available. `/we:council` Step 3.6 handles this by asking the user whether to wake each sleeper (real turn, costs money) or use a generic role-lens instead (free).
+
 **Used by:** `/we:council`, `/we:meet`. The plugin pairs the returned identities with the bridge file's role/color mapping (see [companion-framework.md](concepts/companion-framework.md)).
+
+---
+
+## The `wake_companion` tool
+
+`wake_companion` resumes a hibernated Companion so it can participate in a council or any other session.
+
+**Signature:**
+
+```python
+wake_companion(name: str) -> {name?, woken, error?}
+```
+
+**Response:**
+- `{"name": "<canonical-name>", "woken": true}` — companion was asleep and is now awake
+- `{"woken": false}` — companion was already awake; no-op
+- `{"error": "<message>", "woken": false}` — companion not found or wake failed
+
+**Used by:** `/we:council` Step 3.6 when the user chooses "Wecken" for a sleeping companion.
+After waking, the plugin re-calls `get_council(names=[...])` to fetch the now-awake projection
+and merges it into the council's `members` dict.
 
 **Cross-user caveat:** the council projection is safe for the calling user's own crew in their
 own Claude Code session. Cross-user or cross-org exposure is not supported without the
