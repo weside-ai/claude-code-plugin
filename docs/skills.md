@@ -387,7 +387,7 @@ Run once per project. Interactive (3 core questions, ~5 minutes).
 
 Invoked by `/we:setup` Step 5; standalone for rebuilding the crew. Works with zero Companions, no `.weside/`, and no weside account.
 
-Guided council builder: for each role it offers three ways to fill the lens — **assign** an existing Companion (appends the role-lens to its identity via `update_companion`), **create** a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or **generic** (the shipped `council-<role>` agent — the "Retorte" lens, free, no account, no plan-limit). A mixed council is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit (Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited) runs out, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA — never stuck.
+Guided council builder: for each role it offers three ways to fill the lens — **assign** an existing Companion (links it by id; the lens reaches it via the council brief, no identity edit), **create** a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or **generic** (the shipped `council-<role>` agent — the "Retorte" lens, free, no account, no plan-limit). A mixed council is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit (Spark 1, Bond 3, Companion 5, Soulmate/Mascot unlimited) runs out, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA — never stuck.
 
 **Output:** writes the full `.weside/council.json` thin bridge (envelope + a `members` entry per role, gitignored) + updates `.weside/weside.md` (crew section) + `.weside/config.json` (roles_enabled, repo_flavor).
 

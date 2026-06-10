@@ -75,12 +75,9 @@ For each role in the proposed roster, ask one question and offer three ways to f
 > *"{Role} lens — how do you want to fill it?
 > (a) assign an existing Companion · (b) create a new Companion for it · (c) generic lens (free)"*
 
-- **(a) Assign an existing Companion** *(weside account)* — validate the name against the cached `list_companions`. Then **append the role-lens to that Companion's identity** so it argues from the lens in council:
-  1. Read its current identity body — `get_companion_identity()` (after `select_companion`) or `get_council(names=[<name>])`.
-  2. Compose the role-lens section (see *Seed identity* below) and **append** it to the existing body — do not replace the personality.
-  3. `mcp__plugin_we_weside-mcp__update_companion(name=<name>, system_prompt=<existing body + lens section>)`.
-  4. Bridge entry: `companion_id` = the Companion's id, `color` from `we/agents/council-<role>.md` frontmatter.
-  - Confirm: *"{name} now carries the {Role} lens."* Identity versions are restorable, so this is reversible.
+- **(a) Assign an existing Companion** *(weside account)* — validate the name against the cached `list_companions`, then **link it** to the role in the bridge: `companion_id` = the Companion's id, `color` from `we/agents/council-<role>.md` frontmatter. The Companion participates with its **own identity**; the role-lens is carried by the council brief at convene time (`/we:council` Step 6 tells each member to reason from its role lens). No identity edit is needed for an assigned Companion to argue from the lens.
+  - Confirm: *"{name} is now your {Role} — they'll bring the lens via the council brief."*
+  - **Do NOT** read-then-`update_companion` to bake the lens in here: the MCP read paths (`get_council`, `get_companion_identity`) return the **composed** prompt (platform layers + identity), not the raw identity-layer body — writing that back as `system_prompt` would corrupt the identity layer. Baking a lens permanently into an existing Companion's identity is a deliberate curation step done with the full raw body via the **weside CLI** (`weside companions identity`) or the Personality Settings in the app — mention this as an optional upgrade, don't attempt it from here.
 
 - **(b) Create a new Companion** *(weside account)* — ask for a name (**alphanumeric, no spaces** — it's the slug) and a one-line description. Then:
   `mcp__plugin_we_weside-mcp__create_companion(name=<name>, personality=<neutral starter>, system_prompt=<seed identity — see below>)`.
@@ -149,9 +146,9 @@ Schema below — crew section lists every role with name, role slug(s), focus, m
 - *"Council built — {N} lenses ({k} backed by Companions, {m} generic). Try `/we:council \"<a topic>\"` to convene it, or `/we:sideload .` to see how it loads."*
 - If new Companions were created → remind that `/we:setup` Step 5.4 can generate their `~/.claude/agents/` files (or that they're already reachable via the MCP `get_council` path on the next council).
 
-## Seed identity — lens + neutral starter (for create / assign)
+## Seed identity — lens + neutral starter (for create, option b)
 
-When creating a new Companion (b) or appending a lens to an existing one (a), the **role-lens** is sourced from the shipped `we/agents/council-<role>.md` so the lens stays consistent and there's no duplicate definition to drift:
+When **creating** a new Companion (b), seed its `system_prompt` with the role-lens + a neutral personality starter. The lens is sourced from the shipped `we/agents/council-<role>.md` so it stays consistent and there's no duplicate definition to drift:
 
 1. Read `we/agents/council-<role>.md`. Take the body of its `## Your lens` section.
 2. Compose a **lens section** for the identity:
@@ -162,15 +159,15 @@ When creating a new Companion (b) or appending a lens to an existing one (a), th
    {the "## Your lens" body from council-<role>.md, lightly adapted to second person}
    ```
 
-3. **For create (b)**, prepend a light, neutral **personality starter** so the Companion has somewhere to grow (no two users get clones):
+3. Prepend a light, neutral **personality starter** so the Companion has somewhere to grow (no two users get clones):
 
    > *You are {Name}, the {Role} of this crew. You're just getting to know this team and repo — your character will grow as you work. You bring the {Role} lens to the table.*
 
    The full `system_prompt` = starter paragraph + the lens section. The `personality` field = the user's one-line description (or the starter, condensed).
 
-4. **For assign (a)**, append **only** the lens section to the existing identity body — leave the personality untouched.
-
 Constraints: `system_prompt` must be ≥ 10 chars (it always is here) so the backend keeps it as a user identity instead of substituting its generic onboarding template. `name` must match `^[a-zA-Z0-9]+$` (no spaces/punctuation) — suggest a clean slug if the user's name has spaces.
+
+**Assigning an existing Companion (a) does NOT use this seed** — it only links the `companion_id`; the lens reaches the member through the council brief. Permanent lens-baking into an existing Companion is a CLI/app curation step (full raw body), not part of this skill.
 
 ## `weside.md` Schema (minimum)
 
@@ -222,7 +219,7 @@ vault: <vault-name>
 - **Create, don't invent.** Every `companion_id` written must come from an actual `create_companion`/`list_companions`/`get_council` response. Never fabricate an ID. If MCP is absent, every lens is generic (`companion_id: null`).
 - **One-question-at-a-time.** Each role is a separate prompt with its three ways. Never overwhelm.
 - **Empty is OK.** A role can be unassigned (skip). `weside.md` lists it with `Companion ID: null` and it gets no bridge entry.
-- **Assign appends, never replaces.** Option (a) appends the lens section to a Companion's identity; it never overwrites the personality. Identity versions are restorable.
+- **Assign links, never edits.** Option (a) only writes the `companion_id` into the bridge — it does **not** edit the Companion's identity. The lens comes from the council brief at convene time. (The MCP read paths return the composed prompt, not the raw identity layer, so a read-append over MCP would corrupt the layer. Permanent lens-baking is a CLI/app curation step on the full raw body.)
 - **System prompts live in weside, not here.** `weside.md` + `council.json` reference companions by name/ID + role; identity, memory, body, style live in weside (`get_council` / `get_companion_identity`). That separation is the whole point.
 - **Clean split.** Crew membership → `council.json`. Crew + purpose + meetings → `weside.md`. Technical flags → `config.json`. Never mix.
 - **Editable.** Re-running offers "extend" vs "replace" — never silently overwrite an existing council.

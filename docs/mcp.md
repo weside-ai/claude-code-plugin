@@ -62,7 +62,7 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `get_council(names?, workspace_id?)` | Batch-load council-scoped projections — returns `{members, status}`: `members` = awake companions only; `status` = `"OK"` or a bucketed string listing asleep/unavailable/not\_found names. Used by `/we:council` |
 | `wake_companion(name)` | Wake a hibernated companion. Returns `{name, woken: true}` on success, `{woken: false}` if already awake, or `{error, woken: false}` if not found. Used by `/we:council` Step 3.6 |
 | `create_companion(name, personality, system_prompt?, short_description?)` | Create a new companion; returns `{name, id, created}` or `{error}`. `name` must be alphanumeric (no spaces). Used by `/we:onboarding`'s council builder to seed a new member for a role-lens (role-lens + neutral personality starter) |
-| `update_companion(name, system_prompt?, personality?, short_description?)` | Update an existing companion (partial). `name` resolves the target, never renames. `system_prompt` versions the identity body (restorable). Returns `{name, id, updated}` or `{error, updated: false}`. Used by `/we:onboarding`'s council builder to append a role-lens to an existing companion's identity, and to curate crew members as council lenses |
+| `update_companion(name, system_prompt?, personality?, short_description?)` | Update an existing companion (partial). `name` resolves the target, never renames. `system_prompt` versions the identity body (restorable). Returns `{name, id, updated}` or `{error, updated: false}`. Used to curate crew members into council lenses by authoring the full identity body (not by `/we:onboarding`, which links assigned Companions without an identity edit) |
 | `materialize` (Skill) | Wrapper around the above that the plugin uses to adopt a Companion at session start |
 
 ### Memory
@@ -156,7 +156,7 @@ Then in your project:
 /we:onboarding   # build the council, this time with real Companions available
 ```
 
-`/we:onboarding` builds a council from scratch. For each role it offers three ways to fill the lens: assign an existing Companion (it appends the role-lens to that Companion's identity via `update_companion`), create a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or use the generic `council-<role>` agent. A mixed council — some weside-backed, some generic — is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit is reached, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA, so the builder never gets stuck.
+`/we:onboarding` builds a council from scratch. For each role it offers three ways to fill the lens: assign an existing Companion (links it by id — the lens reaches it through the council brief, no identity edit), create a new Companion seeded with the role-lens + a neutral personality starter (via `create_companion`), or use the generic `council-<role>` agent. A mixed council — some weside-backed, some generic — is normal. weside-backed members each cost a `plan.max_companions` slot; when the plan limit is reached, the remaining roles degrade gracefully to generic lenses plus an upgrade CTA, so the builder never gets stuck.
 
 The bridge file (`.weside/council.json`) gets populated with one `members` entry per role. From here, every `/we:council` and `/we:meet` runs with the weside-backed members in their real voices (subject to `loadCouncilFromWeside`, below).
 
@@ -226,10 +226,17 @@ own Claude Code session. Cross-user or cross-org exposure is not supported witho
 
 `update_companion` is the write sibling of `create_companion` — it edits an existing
 Companion's identity and metadata from Claude Code, scoped to the calling weside.ai user.
-This is what lets you curate crew members into real council lenses (trim a personality,
-append a role-lens to the identity body) without leaving the session. It is the
-lens-append path `/we:onboarding`'s council builder uses when you assign an existing
-Companion to a role (see [the `/we:onboarding` council builder](#with-a-weside-account)).
+This is what lets you curate crew members into real council lenses by **authoring the
+full identity body** (trim a personality, write in a role-lens section) without leaving
+the session — `system_prompt` versions the identity layer, so it is restorable.
+
+Note it is **not** how `/we:onboarding` handles an *assigned* existing Companion: the
+builder only links that Companion's id in the bridge, and the lens reaches it through the
+council brief at convene time. The MCP read paths (`get_council`, `get_companion_identity`)
+return the **composed** prompt, not the raw identity layer, so a read-append-write cycle
+would corrupt the layer. Permanent lens-baking is a deliberate full-body curation step —
+done with the raw body via the `weside` CLI / the app, or by passing a complete new
+`system_prompt` here.
 
 **Signature:**
 

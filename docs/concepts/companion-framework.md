@@ -247,7 +247,7 @@ Walks you through three questions, plus one optional step:
 
 `/we:onboarding` is the interview part — and it actively **builds a council from scratch**, working even with zero Companions, no `.weside/`, and no weside account. It asks one role at a time — "Who is your Product Owner on this repo?" — and for each role offers three ways to fill the lens:
 
-1. **Assign an existing Companion** — appends the role-lens to that Companion's identity via the `update_companion` MCP tool, then links it in the bridge.
+1. **Assign an existing Companion** — links it in the bridge by id; the role-lens reaches it through the council brief at convene time (no identity edit — the Companion keeps its own personality).
 2. **Create a new Companion** — seeded with the role-lens plus a neutral personality starter (`create_companion`), then linked.
 3. **Generic lens** — the shipped `council-<role>` agent ("Retorte"); free, no slot consumed.
 
