@@ -114,6 +114,22 @@ Glob(pattern="docs/architecture/**/*.md")
 Read the top 3-5 results to understand existing patterns, primitives, and ADRs
 that apply. Reference them in the plan's Technical Approach section.
 
+**Blast Radius (code knowledge graph, optional):** If the repo has a graphify
+graph (`Glob("**/graphify-out/graph.json")` non-empty), query it with the
+story's key identifiers to ground the plan's `Files:` lists and the
+`parallel_groups` decision:
+
+```bash
+# prefer the repo's wrapper if present (relevance-ranked); else the stock CLI
+python3 scripts/graphify/query.py "<story key identifiers>" --top 10
+# fallback: graphify query "<story key identifiers>" --graph <path-to-graph.json>
+```
+
+Use identifier-style terms (`ChannelAdapter`, `DispatchService`), not prose.
+The result names the entry points and dependents the story will touch — feed
+them into the per-phase `Files:` lists and check phase disjointness for
+`parallel_groups`. If no graph exists, skip silently — never block on it.
+
 **Session Context → Plan:** Before writing the plan, review the conversation so far.
 Distill into the plan:
 - **Context section:** Write as a narrative brief — what problem, why now, what the
@@ -204,7 +220,7 @@ User reviews plan. On feedback → adjust. On approval → continue.
 
 ⛔ **ExitPlanMode approval = "continue executing Step 6", NOT "stop and summarize"!**
 
-**Execute these 5 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
+**Execute these 6 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
 
 1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-story.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
 2. **Update ticket:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
@@ -217,9 +233,10 @@ User reviews plan. On feedback → adjust. On approval → continue.
    git push || echo "WARN: main worktree not on main branch — plan saved but not committed. Commit manually."
    ```
 4. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined` (CLI keeps the `story` table name for back-compat — see Build skill note.)
-5. **Output:** `"Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE."`
+5. **Vault links (optional, TurboVault only):** If TurboVault MCP is available, run `mcp__turbovault__suggest_links` on the new plan doc and offer the suggestions to the user (`[y/n]` per link). Skip silently without TurboVault.
+6. **Output:** `"Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE."`
 
-⛔ **STOP after step 5. No implementation. No /we:build. No branch. No code.**
+⛔ **STOP after step 6. No implementation. No /we:build. No branch. No code.**
 
 ---
 

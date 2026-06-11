@@ -52,6 +52,7 @@ Read [`references/healthcheck.md`](references/healthcheck.md). Three checks (eac
 1. **Doc-Drift** — invoke `/we:doc-improve` over the configured `target_glob`.
 2. **Bypass-Register-Drift** — re-run the generator script, diff against committed register.
 3. **Missing-Primitive-Scan** — call `scripts/scan-recent-primitives.sh` with the project's config.
+4. **Graph-Drift (optional, output-only)** — if the project has a graphify graph (`**/graphify-out/graph.json`) AND a drift script (`scripts/graphify-drift.sh`), run it across the two most recent snapshots and include the node-churn + cohesion-trend output as an informational subsection. Never gates — skip silently when graph or script is absent.
 
 Output: section under `## Healthcheck` in `<findings_dir>/<date>-<scope>/master.md`.
 
