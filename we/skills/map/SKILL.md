@@ -1,13 +1,10 @@
 ---
 name: map
 description: >
-  APO Map — a fast, read-only text dashboard of the whole plan tree.
-  Scans docs/plans/ for sagas, epics, and stories (by filename suffix),
-  joins build state from the orchestration DB, and renders a grouped
-  Saga › Epics › Stories tree with status buckets. Optional argument
-  filters to one saga slug. Use when the user says "/we:map", "map",
-  "overview", "show the plan tree", "where do all the stories stand",
-  "dashboard", "übersicht", "was läuft gerade". Never writes — pure view.
+  Read-only dashboard of the whole plan tree — scans docs/plans/ for
+  sagas/epics/stories, joins build state, renders a grouped status tree;
+  optional saga-slug filter. Use when the user says "/we:map", "map",
+  "overview", "dashboard", "übersicht", "show the plan tree". Never writes.
 ---
 
 # /we:map — Plan-Tree Dashboard

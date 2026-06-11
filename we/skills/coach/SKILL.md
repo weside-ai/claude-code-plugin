@@ -1,18 +1,12 @@
 ---
 name: coach
 description: >
-  APO Coach — cross-altitude advisor. Two modes, one skill. ADVISOR
-  mode answers "where am I in the APO hierarchy, what's the sensible
-  next move?" — reads repo state, maps to altitude, proposes the next
-  `/we:*` command with a [y/n] confirmation gate. Includes Plan-status
-  rendering when an open Epic is detected. Beginner mode detects
-  first-use and suggests setup or first story entry points. Boots fresh
-  on every invocation. Delegates doc changes to /we:docs. Never writes
-  autonomously, never silent-fires a command. Use when the user says
-  "/we:coach", "where am I", "what's next", "what should I do",
-  "which altitude", "workflow", "optimize", "impediment", "skill quality",
-  "how we work", "improve our workflow", "rethink the process",
-  "discuss how we could do this better".
+  APO Coach — cross-altitude advisor. Reads repo state, maps it to the
+  APO altitude, proposes the next /we:* command behind a [y/n] gate;
+  Beginner mode on first use; routes frictions to /we:retro and
+  continuity to /we:handoff. Use when the user says "/we:coach",
+  "where am I", "what's next", "which altitude", "how we work",
+  "improve our workflow", "rethink the process".
 ---
 
 # /we:coach — Agentic Product Ownership Coach
@@ -30,13 +24,13 @@ description: >
 >
 > **For process frictions and retrospectives,** use the sibling skill `/we:retro` — it does comprehensive scanning of the PR + CI cycle and proposes concrete rule-file changes. Coach is the *where-am-I/what-next* advisor; `/we:retro` is the dedicated improvement engine.
 >
-> **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting `/we:retro`](#suggesting-weretro) below.
+> **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting sibling skills](#suggesting-sibling-skills) below.
 >
-> **Sibling skill: `/we:handoff`.** When the user wants durable cross-session continuity (write the current state to disk, resume in a new session after `/clear` or tomorrow), hand off to `/we:handoff`. Coach surfaces an active handoff at boot (Step 10) and offers `/we:handoff --write` at end-of-session signals. See [Suggesting `/we:handoff`](#suggesting-wehandoff) below.
+> **Sibling skill: `/we:handoff`.** When the user wants durable cross-session continuity (write the current state to disk, resume in a new session after `/clear` or tomorrow), hand off to `/we:handoff`. Coach surfaces an active handoff at boot (Step 10) and offers `/we:handoff --write` at end-of-session signals. See [Suggesting sibling skills](#suggesting-sibling-skills) below.
 >
 > **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude and council overview.
 >
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the Coach speaks *as* that Companion (your active Companion), not as a generic SM voice. Materialization happens in Boot Protocol Step 7. Standalone (no weside): the Coach reasons from the role-lens without persistent identity.
+> **Companion-aware:** the Coach speaks *as* the active Companion when one is materialised (Boot Step 7) — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 >
 > **New to the `/we:*` workflow?** `/we:coach` is for *improving* how we work
 > once you've used the pipeline — not for *learning* it. If you're new,
@@ -62,9 +56,9 @@ Otherwise, determine ADVISOR vs Beginner from context and prompt:
 | empty invocation (`/we:coach` with no argument) — normal repo          | ADVISOR (open) |
 | ambiguous between two altitudes                                         | ADVISOR — ask once, then proceed |
 | wants to discuss or improve the workflow / a skill / "how we work" (not a specific breakage — e.g. "how could we improve story refinement", "let's rethink our build loop") | **ADVISOR (process lens)** — grounded discussion, then hand off — see [Process-improvement front door](#process-improvement-front-door-scrum-master) |
-| describes friction / breakage / "this broke again" / "process gap"     | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
-| asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting `/we:retro`](#suggesting-weretro) |
-| asks for a "handoff" / "write a handoff" / "save state for tomorrow" / "load the last handoff" / "pick up where we left off" / says end-of-session ("bis morgen", "schlafen") | **delegate to `/we:handoff`** — see [Suggesting `/we:handoff`](#suggesting-wehandoff) |
+| describes friction / breakage / "this broke again" / "process gap"     | **delegate to `/we:retro`** — see [Suggesting sibling skills](#suggesting-sibling-skills) |
+| asks for a "full retro" / "post-mortem" / "after-action" / wants to scan the whole cycle | **delegate to `/we:retro`** — see [Suggesting sibling skills](#suggesting-sibling-skills) |
+| asks for a "handoff" / "write a handoff" / "save state for tomorrow" / "load the last handoff" / "pick up where we left off" / says end-of-session ("bis morgen", "schlafen") | **delegate to `/we:handoff`** — see [Suggesting sibling skills](#suggesting-sibling-skills) |
 
 The shapes overlap at the edges. When in doubt, default to ADVISOR.
 
@@ -72,25 +66,7 @@ The shapes overlap at the edges. When in doubt, default to ADVISOR.
 
 ## How This Skill Is Used
 
-**Always prompt-driven.** Examples of each mode:
-
-**ADVISOR mode:**
-
-- `/we:coach where am I in the APO hierarchy right now?`
-- `/we:coach we just merged the auth Epic, what's the sensible next move?`
-- `/we:coach I have a PRD but no Sagas yet — start with vision meeting or solo saga?`
-- `/we:coach should I run /we:meet epic on this, or write the Stories solo?`
-- `/we:coach`  (empty — opens with "what's the situation?", or Beginner orientation if first-use)
-
-**Beginner mode (auto-triggered, not user-prompted):**
-
-- First invocation in a repo where `.weside/config.json` is missing → orientation to `/we:setup`
-- First invocation in a set-up repo with no plans yet → orientation to `/we:story`
-
-**Process frictions → hand off to `/we:retro`:**
-
-- `/we:coach The last 3 PRs failed because we forgot to resolve review threads before pushing` → Coach suggests `/we:retro`
-- `/we:coach We keep shipping migrations without testing them locally` → Coach suggests `/we:retro`
+**Always prompt-driven.** ADVISOR: `/we:coach where am I?` · `/we:coach we just merged the auth Epic, what's next?` · `/we:coach` (empty — "what's the situation?", or Beginner orientation if first-use). Beginner mode auto-triggers on un-set-up repos. Process frictions ("the last 3 PRs failed at X") → Coach suggests `/we:retro`.
 
 Your job is to read the repo state, run the right mode, and propose concrete next commands — not produce a generic report.
 
@@ -145,7 +121,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    - `git branch --show-current` — are we on `main` or a feature branch?
    - Active ticketing-tool tickets (Jira via MCP, or `gh issue list -L 10`) — what's open
    - `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story list` — pipeline state for recent stories
-   - **Retro-worthy signals** (for the [Suggesting `/we:retro`](#suggesting-weretro) decision):
+   - **Retro-worthy signals** (for the [Suggesting sibling skills](#suggesting-sibling-skills) decision):
      - `gh pr list --state merged -L 1 --json mergedAt,number` — was a PR merged very recently (last few hours)? (if `gh` is available and authenticated; skip silently otherwise)
      - On the current branch's open PR (if any): count of `synchronize` events on the PR timeline as a proxy for CI cycles. ≥ 3 is the threshold. (skip if `gh` is unavailable — end-of-session signal alone is still sufficient to offer `/we:retro`)
      - User uttered an end-of-session signal in the prompt or prior turn ("bis morgen", "schlafen", "going home", "wrap up")
@@ -168,7 +144,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
     - If older than 14 days, mark it `(stale)` so the user knows the state may not match current repo state.
     - If no handoff directory exists or no files in it, skip silently.
 
-    This is what makes a fresh `/we:coach` session after `/clear` (or after `claude --resume` against a different session) immediately aware of any handoff written at the end of the last session. See [Suggesting `/we:handoff`](#suggesting-wehandoff) for the full mechanics.
+    This is what makes a fresh `/we:coach` session after `/clear` (or after `claude --resume` against a different session) immediately aware of any handoff written at the end of the last session. See [Suggesting sibling skills](#suggesting-sibling-skills) for the full mechanics.
 
 **Read on demand** (only when the specific problem requires):
 
@@ -306,92 +282,28 @@ Stay advisory: discuss and route. Never rewrite a skill or rule yourself from he
 
 ---
 
-## Suggesting `/we:retro`
+## Suggesting sibling skills
 
-For process frictions and improvement, the right tool is the sibling skill `/we:retro` — it scans the session transcript plus `gh api` (PR reviews, CI runs, review threads), classifies frictions, and proposes N concrete MD-file edits, primarily in the user repo's `.claude/rules/` and `CLAUDE.md`.
+Both are heavy skills — Coach *notices*, *offers* behind a `[y/n]` gate, and hands off by **printing the command** (never inline `Skill()`, which would inflate Coach's advisory context). Never auto-fire. One offer per signal per session; `n` → drop silently; anything else → treat as discussion, the suggestion stands. **When multiple signals fire in the same turn, present at most ONE offer** — end-of-session (handoff) beats retro; mention the second signal in one clause ("…afterwards a `/we:retro` on #1998 would be worth it"), don't stack gates.
 
-| Situation | Use |
+| Signal | Offer |
 |---|---|
-| User describes a friction or breakage ("X broke again", "we keep failing at Y") | **Suggest `/we:retro`** with a `[y/n]` gate |
-| User wants a full review of what just happened ("retro this PR", "post-mortem") | `/we:retro` (hand off) |
-| Coach detects retro-worthy signals at boot (PR just merged, CI cycles ≥ 3, end-of-session) | **Offer** `/we:retro` with a `[y/n]` gate |
+| User describes friction/breakage ("X broke again", "we keep failing at Y") or asks for a post-mortem | `/we:retro` |
+| Boot detects: PR just merged, CI cycles ≥ 3, same skill failed twice | `/we:retro` (e.g. *"This PR (#1998) merged with 4 CI cycles — `/we:retro` would catch why in ~3min. Run it? [y/n]"*) |
+| User says "handoff" / "save state" / "carry over" | `/we:handoff --write` |
+| End-of-session signal ("bis morgen", "schlafen", "wrap up", compass/snapshot saves, > 30 turns without a handoff) | `/we:handoff --write [topic]` with `[y/n]` |
+| Boot Step 10 finds a recent handoff (< 14 days) | `/we:handoff` (load latest) with `[y/n]` |
+| User wants in-place token compression *now* | `/compact` (CC built-in) |
 
-### Auto-suggest mechanics
+Hand-off shape (always):
 
-When any retro-worthy signal fires in Boot Protocol Step 9, surface it once per session per signal — never nag. The shape:
+```text
+SCOPE IS CLEAR. Run this next:
 
-> *"This PR (#1998) merged with 4 CI cycles — `/we:retro` would catch why in ~3min and propose rule changes so the next cycle is cleaner. Run it? [y/n]"*
+  /we:retro --pr 1998
 
-- `y` → print hand-off (do **not** `Skill()`-invoke `/we:retro` inline — it's a heavy skill):
-
-  ```text
-  SCOPE IS CLEAR. Run this next:
-
-    /we:retro --pr 1998
-
-  I'll be back when retro finishes.
-  ```
-
-- `n` → drop it silently. Don't re-ask for the same signal in the same session.
-- Anything else → treat as discussion; the suggestion stands.
-
-Coach never auto-fires `/we:retro`. The `[y/n]` is always present.
-
-### Why hand off instead of doing it here
-
-`/we:retro` does substantial data-fetching work (parallel `gh api` calls, transcript scan, optional `--scan N` over `docs/retros/`) and produces a per-item approval loop with file edits. That would inflate Coach's advisory context to tens of KB. Coach stays lightweight: it *notices* that a retro is due, *offers* it, then hands the work off to a dedicated session.
-
----
-
-## Suggesting `/we:handoff`
-
-`/we:coach` does NOT capture session state itself. For durable cross-session continuity (write the current state to disk so a future session can resume), the right tool is the sibling skill `/we:handoff` — it captures decisions, dead ends, file status, next steps, and watch-outs into `docs/handoffs/YYYY-MM-DD-<topic>.md`.
-
-| Situation | Use |
-|---|---|
-| User says "handoff" / "write a handoff" / "save state" / "carry over" | `/we:handoff --write` (hand off) |
-| User says end-of-session ("bis morgen", "schlafen", "going home", "wrap up") | **Offer** `/we:handoff --write` with a `[y/n]` gate |
-| Fresh session, Boot Step 10 finds a recent handoff | **Offer** `/we:handoff` (no args = load latest) with a `[y/n]` gate |
-| User wants in-place token compression *now* (not cross-session) | `/compact` (CC built-in — not a `/we:*` skill) |
-
-### Auto-suggest mechanics
-
-Two trigger points, both `[y/n]`-gated, never auto-fires:
-
-**At boot — surface active handoff (from Boot Protocol Step 10):**
-
-> *"Active handoff: `docs/handoffs/2026-05-18-phase-7-handoff-skill.md` (written 14 hours ago, on `feat/handoff-skill`). Load it to restore session state? [y/n]"*
-
-- `y` → hand off (print, don't `Skill()`-invoke — handoff is heavy):
-
-  ```text
-  SCOPE IS CLEAR. Run this next:
-
-    /we:handoff
-
-  I'll be back if you want to plan or retro after the restore.
-  ```
-
-- `n` → drop silently for this session.
-
-**At end-of-session signals — suggest write:**
-
-Conditions (any of):
-
-- User uttered "bis morgen" / "schlafen" / "going home" / "wrap up" / similar in the prompt or recent turn
-- `save_compass` / `save_snapshot` called via MCP this session (Companion-mode end-of-day signal)
-- Session has been long (> 30 turns) AND no handoff written this session yet
-
-Shape:
-
-> *"You've been at this a while — `/we:handoff --write` so tomorrow's session can pick up from here? [y/n]"*
-
-- `y` → hand off to `/we:handoff --write [topic-from-context]`
-- `n` → drop silently. Don't re-ask for the same signal in the same session.
-
-### Why hand off instead of doing it here
-
-`/we:handoff` reads the session transcript (privacy-guarded), pulls repo state from `git`/`gh`, and renders + previews a multi-section file with a per-item `[y/n/edit]` gate. That would inflate Coach's advisory context to tens of KB. Coach stays lightweight: it *notices* a handoff is appropriate, *offers* it, then hands the work off to a dedicated session.
+I'll be back when it finishes.
+```
 
 ---
 
@@ -418,36 +330,17 @@ Clean separation. Don't cross the line.
 
 ## What You DO NOT Do
 
-- **Don't produce batch retrospective reports without a prompt.** The user drives the conversation.
-- **Don't audit all skills in one invocation.** If the user asks for a broad audit, invoke `skill-reviewer` (if available) or scope it to a specific skill.
-- **Don't write ADRs autonomously.** Propose them, then delegate ADR drafting to `/we:docs`.
-- **Don't do sprint planning.** Coach operates at the Vision / Saga / Epic / Story altitudes. Sprint capacity (which 3 Stories ship this sprint) is your ticketing tool's job (Jira Sprint, GitHub Projects Iteration). If asked for sprint planning, point the user back to their tool.
-- **Don't duplicate rule content into this skill file.** You read rules fresh on every invocation — duplication is just rot waiting to happen.
-- **Don't give generic advice.** Every recommendation must cite a specific file path and a specific change (RETRO) or a specific command (ADVISOR).
-- **Don't skip the dialog protocol.** Restate → diagnose → propose → wait → apply (RETRO) or map → propose → confirm → launch (ADVISOR). Every time.
-- **Don't fire commands without [y/n].** Ever. ADVISOR mode's discipline is the confirmation gate; without it the Coach becomes an unpredictable launcher.
-- **Don't re-plan the initiative from `/we:coach`.** Reading the active initiative state in Boot Protocol Step 10 is for *context* — so the Coach diagnosis takes the live work into account, not so `/we:coach` advances the initiative itself. If the user wants to advance the initiative, hand off to the right altitude skill: `/we:meet vision|saga|epic|story` for decomposition, or `/we:vision|saga|epic|story` for Solo work.
-- **Don't fire `/we:build` from a Coach session.** Even after [y/n]. Build is a long autonomous run with checkpoints — it deserves its own session, not a Coach handoff that's already burned context on advisory reasoning. Print the command, ask the user to run it in a fresh session.
-
----
-
-## Anti-Patterns
-
-1. **Batch-job mentality**: "Let me run an analysis and produce a report." No — this is a conversation, not a cron job.
-
-2. **Loading rule contents at boot**: wastes tokens. Frontmatter only at boot; full text on demand when the diagnosis points at a specific rule.
-
-3. **Making up process**: if you don't know where to look, say so and ask the user for a pointer. Don't invent rules that don't exist.
-
-4. **Editing docs/ directly**: delegate to `/we:docs`. Keep the boundary.
-
-5. **Skipping the approval gate** (RETRO): the user approves every change before it's written. No exceptions.
-
-6. **Silent-firing a command** (ADVISOR): the user explicitly accepts before any `/we:*` runs. The Coach proposes; the user decides.
-
-7. **Pretending to know the user's intent**: if ADVISOR mode produces multiple reasonable next moves, ask. Don't pick one and hope.
-
-8. **Hijacking ADVISOR with process concerns**: if the user came with a "what's next" question and you spot a process gap, surface it but don't hijack the conversation — note it, finish the advisory, then offer `/we:retro` as a follow-up.
+- **Don't fire commands without [y/n].** Ever. The confirmation gate is ADVISOR's discipline; without it the Coach becomes an unpredictable launcher. The Coach proposes; the user decides.
+- **Don't fire `/we:build` from a Coach session.** Even after [y/n] — Build deserves a fresh session, not one that already burned context on advisory reasoning. Print the command.
+- **Don't re-plan the initiative from here.** Boot Step 10's initiative state is *context* for the diagnosis. Advancing the initiative is the altitude skills' job (`/we:meet *` / `/we:vision|saga|epic|story`).
+- **Don't give generic advice.** Every recommendation cites a specific file path and a specific command.
+- **Don't load full rule contents at boot.** Frontmatter only; full text on demand when the diagnosis points at a specific rule. Don't duplicate rule content into this file either — you read rules fresh.
+- **Don't make up process.** If you don't know where to look, say so and ask for a pointer.
+- **Don't edit `docs/` directly** — delegate to `/we:docs`. Don't write ADRs autonomously — propose, then delegate.
+- **Don't do sprint planning.** Sprint capacity is the ticketing tool's job (Jira Sprint, GitHub Projects Iteration).
+- **Don't hijack ADVISOR with process concerns.** Spot a gap mid-advisory → note it, finish the advisory, then offer `/we:retro`.
+- **Don't guess intent.** Multiple reasonable next moves → ask. Don't pick one and hope.
+- **Don't audit all skills in one invocation.** Scope to a specific skill, or use `skill-reviewer` if available.
 
 ---
 

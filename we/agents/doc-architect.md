@@ -113,6 +113,9 @@ mode argument. Pattern-match these shapes:
      lives in `architecture/journey-*.md`
    - **guide?** — human-facing how-to
    - **vision?** — north-star / philosophy
+   - **glossary term?** — a domain term definition (term → meaning + avoid-list)
+     belongs in the repo-root `CONTEXT.md`, not in `architecture/` or
+     `foundations/` (those explain concepts; the glossary names them)
 4. **Check for duplicates** before proposing a new doc:
    - TurboVault available: `mcp__turbovault__find_similar_notes(path)` or
      `mcp__turbovault__semantic_search(topic)`

@@ -23,6 +23,7 @@ Lenses are composable units of audit logic. Each lens answers one question. The 
 | architectural-significance | project-wide | default | 3 cross_cutting | `architectural-significance.md` |
 | doc-vs-reality-drift | project-wide | default | 3 cross_cutting | `doc-vs-reality-drift.md` |
 | personality-cohesion | project-wide | opt-in | 3 optional | `personality-cohesion.md` |
+| module-depth | per-subsystem OR project-wide | opt-in | 2 (`extra_lens`) or 3 (`--lens=`) | `module-depth.md` |
 | privacy | per-subsystem OR project-wide | opt-in | 2 (`extra_lens`) or 3 (`--lens=`) | `audit-checklist.md` § Privacy |
 | gdpr | project-wide | opt-in | 3 optional (future) | TBD |
 | performance | project-wide | opt-in | 3 optional (future) | TBD |

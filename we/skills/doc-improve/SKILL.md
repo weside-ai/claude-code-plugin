@@ -1,6 +1,6 @@
 ---
 name: doc-improve
-description: Use when reviewing one or more existing documentation files for substantive content improvement — claims drifted from implementation, redundancy with sibling docs, stale plans, content that can be deleted, missing reader context. Operates on a single file, multiple files, or a glob. For Claude Code rules in `.claude/rules/`, additionally enforces token-efficiency and path-pattern correctness.
+description: Substantive review of existing doc files — claims drifted from code, redundancy, staleness, missing reader context; for .claude/rules/ also token budget + path-pattern correctness. Single file, list, or glob; diffs only. Use when reviewing or improving existing documentation files.
 ---
 
 # /we:doc-improve — Substantive Documentation Review

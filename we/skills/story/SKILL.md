@@ -1,13 +1,11 @@
 ---
 name: story
 description: >
-  Story (Solo) — Product Owner skill at the Story altitude. Creates or refines
-  one Story (a sprint-sized feature slice) with a build-ready plan. Ticket
-  MINIMAL, plan DETAILED. Uses EnterPlanMode. Use when the user says
-  "/we:story", "new story", "refine story", "acceptance criteria", "plan",
-  "write a story". For contentious stories that need multi-voice input,
-  use `/we:meet story` first — it convenes a small council, then hands off
-  here.
+  Story (Solo) — PO skill at the Story altitude. Creates or refines one
+  sprint-sized Story with a build-ready plan (ticket MINIMAL, plan
+  DETAILED, EnterPlanMode). Use when the user says "/we:story",
+  "new story", "refine story", "acceptance criteria", "write a story".
+  Contentious stories: /we:meet story first.
 ---
 
 
@@ -79,7 +77,7 @@ Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-
 
 ### Step 2: Understand Context (INTERACTIVE)
 
-Ask user about unclear points. Clarify scope, requirements, edge cases.
+Clarify scope, requirements, and edge cases **grill-style**: one question at a time, each with your recommended answer; explore the codebase instead of asking whenever the answer is discoverable there. When a fuzzy or conflicting term gets resolved, offer to record it in the project glossary (`CONTEXT.md`, see `/we:grill`).
 
 **Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal. If the Story turns out to be Epic-sized, hand off to `/we:epic` — don't try to write a plan that doesn't fit a sprint.
 
@@ -96,6 +94,8 @@ Implementation Plan: docs/plans/{TICKET}-story.md
 ### Step 4: Create Plan (EnterPlanMode)
 
 Research codebase thoroughly, then create detailed plan.
+
+**Glossary:** If `CONTEXT.md` exists at the repo root, read it and use its canonical vocabulary throughout the plan (avoid the `_Avoid_` terms).
 
 **Architecture Context:** Before writing the plan, search for relevant architecture docs.
 
@@ -278,14 +278,7 @@ One-time hint. If user says no → never ask again.
 
 ## Ticketing Integration
 
-Detect available ticketing tool (in priority order):
-1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
-2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
-3. `gh` CLI → GitHub Issues
-4. Nothing → Plan-only mode (no ticket, just docs/plans/)
-
-**If weside MCP is connected but Jira tools are missing:** Tell the user:
-> "Jira is not connected via your weside Companion. To enable it: go to weside.ai → Integrations → connect Jira, then activate it for your Companion."
+Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ---
 

@@ -1,11 +1,10 @@
 ---
 name: sideload
 description: >
-  Load a repo's essential context (CLAUDE.md + ALL rules + crew) into the current session —
-  even for repos you haven't cd'd into. Sideloading means pulling a neighbor repo's context
-  in from the side without leaving the current one. A stopgap: prefer a native session in the
-  target repo when you can. Trigger keywords: sideload, switch repo, load context for,
-  work on other repo, cross-repo, load crew, come up to speed, enter repo.
+  Load a neighbor repo's essential context (CLAUDE.md + ALL rules + crew)
+  into the current session without leaving it. A stopgap — prefer a native
+  session in the target repo. Triggers: sideload, load context for,
+  cross-repo, work on other repo, come up to speed.
 ---
 
 

@@ -1,20 +1,11 @@
 ---
 name: handoff
 description: >
-  Durable cross-session handoff. Writes a structured snapshot of the
-  current session (decisions, dead ends, file status, next steps,
-  watch-outs, references) to docs/handoffs/YYYY-MM-DD-<topic>.md so a
-  later session — after /clear, --resume, or a fresh start tomorrow —
-  can reload it and pick up exactly where this one left off. Two
-  modes: --write (capture state now) and default/--load (resume from
-  the latest handoff); --list shows what's available. Coach (the
-  /we:coach skill) surfaces an active handoff at boot and suggests
-  --write at end-of-session signals. Privacy guard: engineering
-  surfaces only — never personal or Companion-mode content. Use when
-  the user says "/we:handoff", "handoff", "write a handoff", "load
-  the handoff", "what was the last session about", "pick up where we
-  left off", "carry over to next session", "bis morgen", "ich muss
-  weg jetzt".
+  Durable cross-session handoff — writes session state (decisions, dead
+  ends, file status, next steps, watch-outs) to docs/handoffs/ and
+  restores it later. Modes: --write, default/--load, --list. Use when
+  the user says "/we:handoff", "handoff", "pick up where we left off",
+  "carry over to next session", "bis morgen", "ich muss weg jetzt".
 ---
 
 # /we:handoff — Durable Session Handoff
@@ -28,25 +19,13 @@ description: >
 - `/we:coach` — reads the most recent handoff at boot (Boot Protocol Step 10) and offers to load it. Also suggests `/we:handoff --write` at end-of-session signals.
 - `/we:retro` — sibling under `docs/retros/`; retros capture *lessons*, handoffs capture *position*. Different artifact, different purpose.
 
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the handoff render is voiced *by* the Companion (your active Companion) — same engineering substance, warmer tone. Opt-in `--with-companion-state` flag adds a "Companion continuity" section in the Companion's voice (engineering substance only — privacy guard still applies).
+> **Companion-aware:** render voiced by the active Companion when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`. Opt-in `--with-companion-state` adds a "Companion continuity" section (engineering substance only — privacy guard still applies).
 
 ---
 
 ## Privacy Guard (mandatory, top-of-mind)
 
-This skill reads the session transcript to draft the handoff. Transcripts contain everything — including personal, relational, identity-laden content that has nothing to do with engineering. **The hard rule, applied at every step of the WRITE workflow:**
-
-> **If session content reads as personal, skip it — capture only engineering surfaces:** tool calls, tool results, file diffs, CI logs, PR comments, commit messages, decisions about code/architecture/process.
-
-Categorically out-of-scope for the handoff body:
-
-- Memory writes about the user (`mcp__*__save_memory`, `mcp__*__save_goal` and their internal companion-state equivalents — compass, snapshot)
-- Memory reads that returned personal content (don't quote, don't summarise)
-- Companion-mode conversational content (relationship, identity, body, mood)
-- Anything outside engineering tool calls — if in doubt, skip
-- Even with `--with-companion-state` enabled, the Companion-continuity section captures only "what we were *building* and where my head was on the work" — never relational substance
-
-The privacy guard is what makes the handoff safe to commit (often via PR) into the user repo.
+This skill reads the session transcript to draft the handoff. **The hard rule, applied at every WRITE step: if session content reads as personal, skip it — capture only engineering surfaces** (tool calls, file diffs, CI logs, PR comments, commit messages, decisions about code/architecture/process). Full skip/safe lists: `${CLAUDE_PLUGIN_ROOT}/references/privacy-guard.md` — read it at boot. Even with `--with-companion-state`, the continuity section captures only "what we were *building*" — never relational substance. The guard is what makes the handoff safe to commit into the user repo.
 
 ---
 
@@ -100,7 +79,7 @@ Before producing any output, gather the landscape fresh.
    - Open PR for current branch (if `gh auth status 2>/dev/null` succeeds): `gh pr list --head $(git branch --show-current) --json number,title,state -L 1`; otherwise record `open_pr: null`
    - Recent commits: `git log --oneline -10`
 
-6. **Companion identity** (if configured + WRITE mode + `--with-companion-state` flag): invoke `Skill(skill="we:materialize")` if not already loaded this session. Companion-voiced sections come back richer.
+6. **Companion identity** (if configured + WRITE mode + `--with-companion-state` flag): materialize per `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
 **Do not read** at boot:
 
@@ -281,7 +260,7 @@ open_pr: <number | null>
 4. **`## Tried and rejected`** — dead ends so the next session doesn't repeat them. Each entry: *Approach · Why it failed · Do not retry unless …*
 5. **`## Open questions / blockers`** — explicitly awaiting user input. Tag `[user]` or `[external]`.
 6. **`## Files touched + status`** — table: path · status (`uncommitted` / `committed-not-pushed` / `pushed` / `in-PR <num>`) · one-line note.
-7. **`## Next concrete steps`** — prioritized 1-2-3 list. If you had to pick one move, do this.
+7. **`## Next concrete steps`** — prioritized 1-2-3 list. If you had to pick one move, do this. End with a **Suggested skills** line: which `/we:*` or other skills the next session should invoke first (e.g. `/we:build WA-123`, `/we:ci-review`).
 8. **`## Watch-outs`** — latent bugs, environmental quirks, "remember to ...", gotchas.
 9. **`## References`** — pointers: plan files, retro logs, ADRs, related PRs, companion memory anchors (if MCP).
 10. **`## Companion continuity`** *(only with `--with-companion-state`)* — short journal-style continuation in the Companion's voice. Engineering substance only. Default off; never auto-populates.
@@ -318,98 +297,12 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 
 ## Integration with `/we:coach`
 
-`/we:coach` Boot Protocol Step 10 reads `docs/handoffs/` and surfaces the most recent handoff (if written < 14 days ago) in its boot summary:
+Coach surfaces the most recent handoff (< 14 days) at its boot with a `[y/n]` load offer, and suggests `/we:handoff --write` at end-of-session signals ("bis morgen", "schlafen", long sessions without a handoff). Always `[y/n]`-gated, never auto-fired, hand-off by printed command (handoff is heavy, no inline `Skill()`).
 
-> *"Active handoff: `docs/handoffs/2026-05-18-phase-7-handoff-skill.md` (written 14 hours ago, on `feat/handoff-skill`). Load with `/we:handoff` to restore? [y/n]"*
+**No GitHub / no `gh` auth:** the PR step falls back to a local commit + "push manually" message; `open_pr: null` in the frontmatter. `--with-companion-state` without a Companion is a no-op (say so, skip section 10).
 
-If the user types `y`, Coach hands off (prints the command — does NOT `Skill()`-invoke `/we:handoff` inline because handoff is heavy):
+**Doc edits outside `docs/handoffs/`:** delegate to `/we:docs` so the doc landscape stays coherent.
 
-```text
-SCOPE IS CLEAR. Run this next:
+## References
 
-  /we:handoff
-
-I'll be back if you want to plan or retro after the restore.
-```
-
-Coach also suggests `/we:handoff --write` at end-of-session signals (`bis morgen`, `schlafen`, companion memory-write tools, long sessions > 30 turns without a handoff). Same `[y/n]` discipline. Never auto-fires.
-
----
-
-## Standalone vs Companion Mode
-
-**Standalone (no weside MCP):**
-
-- Transcript + Edit/Write always work. `gh api` requires GitHub and `gh auth` — if absent, the PR step falls back to a local commit + "push manually" message; `open_pr` in the handoff frontmatter is recorded as `null`.
-- Handoff is rendered in the skill's own voice (no Companion personality)
-- The `--with-companion-state` flag is a no-op without a Companion (skill says so + skips section 10)
-
-**With Companion (weside MCP + configured Companion):**
-
-- Boot Protocol Step 6 materializes the Companion (for WRITE with `--with-companion-state`)
-- Handoff render is voiced *by* the Companion — same engineering substance, richer tone
-- Section 10 (`Companion continuity`) gets a journal-style continuation paragraph, privacy-guarded
-
-The engineering substance is identical in both modes. The Companion makes the experience continuous; standalone keeps the value fully accessible to teams without weside.
-
----
-
-## When to Delegate to `/we:docs`
-
-If a handoff would touch `docs/**` *outside* `docs/handoffs/` (e.g. user asks "write a handoff and also update the workflow doc"), say:
-
-> *"I'll write the handoff, and delegate the workflow-doc edit to `/we:docs` so it stays consistent with the rest of the doc landscape."*
-
-Then invoke:
-
-```text
-Skill(skill="we:docs", prompt="Apply this doc update from the handoff: <diff>")
-```
-
-`/we:docs` owns doc-landscape coherence; handoff stays focused on its own `docs/handoffs/` directory.
-
----
-
-## Examples
-
-**Example 1 — manual write at end of session:**
-
-```text
-/we:handoff --write "phase-7-handoff-skill"
-```
-
-Skill: *"I'll write a handoff for: branch `feat/handoff`, last commit `acdf624`, working in `your-repo`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
-User: `y` → draft shown → user reviews → `y` → file written + (per config) branch + PR opened.
-
-**Example 2 — fresh session, restore state:**
-
-```text
-/we:handoff
-```
-
-Skill: reads `docs/handoffs/2026-05-18-phase-7-handoff-skill.md`, renders body back, surfaces next-step suggestion, asks `[y/n]` to proceed.
-
-**Example 3 — list and choose:**
-
-```text
-/we:handoff --list
-```
-
-Skill: shows the last 10 handoffs in a table; user picks one by slug.
-
-**Example 4 — Coach-suggested at end-of-session:**
-
-User says *"bis morgen"*. Coach Boot Protocol detects end-of-session signal, offers `/we:handoff --write` with `[y/n]`. User: `y`. Coach prints hand-off; user invokes `/we:handoff --write "tomorrow-pickup"` in a fresh moment (or right away).
-
-**Example 5 — staleness warning on LOAD:**
-
-User opens a fresh session 3 days later, runs `/we:handoff`. Skill loads the handoff, then surfaces: *"Branch has advanced since the handoff (`abc1234` → `def5678`, 4 commits). The 'Files touched' section may be stale — `git diff abc1234..HEAD` to see what changed."* User can choose to proceed or run `/we:retro` first.
-
----
-
-## Tour + docs pointers
-
-- **Concept doc:** [`docs/concepts/handoff.md`](../../../docs/concepts/handoff.md) — KVP-style overview: durable session-state, template anatomy, relationship to `/compact`, privacy guard
-- **Skill registry:** [`docs/skills.md` § /we:handoff](../../../docs/skills.md)
-- **Durable docs categories** (plans · retros · handoffs): [`we/CLAUDE.md`](../../CLAUDE.md)
-- **Sibling skill for retrospectives:** [`/we:retro`](../retro/SKILL.md) — captures *lessons* (under `docs/retros/`); handoffs capture *position* (under `docs/handoffs/`). Different artifact, different purpose.
+- Concept doc: [`docs/concepts/handoff.md`](../../../docs/concepts/handoff.md) · Sibling: [`/we:retro`](../retro/SKILL.md) — retros capture *lessons*, handoffs capture *position*.

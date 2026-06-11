@@ -1,17 +1,11 @@
 ---
 name: epic
 description: >
-  Epic (Solo) — Product Owner skill at the Initiative altitude. Default
-  mode is Status: read the current `CONCEPT.md`, mirror the child Stories
-  from the ticketing tool, render a status snapshot + drift detection +
-  a risk-driven next-move recommendation. Refine mode (explicit)
-  sharpens the `CONCEPT.md` itself via plan-mode. Create mode handles a
-  new slug. Mirror-refresh is a lightweight write that touches only the
-  mirror block + updates-log. Use when the user says "/we:epic", "epic",
-  "initiative", "where are we on", "what's the status of", "refine
-  epic", "new epic". For decomposing an Epic into Stories, use
-  `/we:meet epic` first (Council brainstorm), then return here to lock
-  the `CONCEPT.md`.
+  Epic (Solo) — PO skill at the Initiative altitude. Default Status mode
+  renders snapshot + drift + next move from the Epic plan and ticketing
+  mirror; Refine/Create sharpen the doc via plan-mode; Mirror-refresh is
+  a light write. Use when the user says "/we:epic", "epic", "initiative",
+  "refine epic", "new epic". Decompose into Stories via /we:meet epic.
 ---
 
 
@@ -141,7 +135,7 @@ Triggered by intent words or by accepting `[f]` from a Status snapshot.
 
 ### Step B1 — load + check the frame
 
-Same load step as A1. Read the parent SAGA. Check the Epic against the frame:
+Same load step as A1. Read the parent SAGA. If `CONTEXT.md` exists at the repo root, use its canonical vocabulary throughout the Epic doc. Check the Epic against the frame:
 
 - **Why this slice now?** What part of the Saga does this Epic deliver, and why is it next?
 - **Target architecture seam.** The shape the implementation will take — the new primitive, the migration shape — not the implementation itself.
@@ -239,32 +233,7 @@ The user decides. The skill does not block.
 
 ## Children Mirror — block format
 
-The mirror block lives inside the `CONCEPT.md`, surrounded by HTML comment markers so the skill can find and replace it without touching the user's prose:
-
-```markdown
-## Stories
-
-<!-- mirror:start (auto-generated; do not edit by hand — run /we:epic to refresh) -->
-
-_Mirror of child Stories in the ticketing tool, refreshed YYYY-MM-DD._
-
-| Key | Title | Status | Plan | Last activity | Notes |
-|---|---|---|---|---|---|
-| <KEY> | <Title> | Done | ✓ | YYYY-MM-DD | <e.g. "merged PR #N"> |
-| <KEY> | <Title> | Active | ✓ | YYYY-MM-DD | in Build |
-| <KEY> | <Title> | Refined | ✓ | YYYY-MM-DD | plan ready, awaiting start |
-| <KEY> | <Title> | Backlog | — | YYYY-MM-DD | no plan yet |
-| <KEY> | <Title> | Blocked | ✓/— | YYYY-MM-DD | <blocker> |
-
-<!-- mirror:end -->
-```
-
-Rules:
-- The markers are mandatory. Everything between them is owned by the skill and overwritten on every refresh.
-- Everything outside the markers is owned by the user and never touched.
-- The skill normalises the ticketing tool's status vocabulary to the five buckets above using the project's status mapping if configured, the shipped default otherwise.
-- The *Plan* column is `✓` if `docs/plans/<KEY>-story.md` exists, `—` otherwise. This is the refined-vs-not-refined signal.
-- When no ticketing tool is configured, the table is populated from filesystem scan and a footnote says *"No ticketing tool configured — table reflects local `{KEY}-story.md` files."*
+Format, markers, status buckets, and refresh rules: `${CLAUDE_PLUGIN_ROOT}/references/mirror-block.md`. The epic table carries the **Plan** column (`✓` if `docs/plans/<KEY>-story.md` exists — the refined-vs-not signal).
 
 ---
 
@@ -295,16 +264,9 @@ the Saga itself never gets its own ticket (it is Markdown-only at `docs/plans/<s
 The Epic's own slug + parent saga live in its frontmatter (`epic:`, `saga:`); the
 filename `docs/plans/<saga>-<epic>-epic.md` carries the grouping on disk.
 
-Detection priority:
-
-1. **weside MCP** (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
-2. **Atlassian MCP** (`jira_*` tools) → Jira (fallback)
-3. **`gh` CLI** → GitHub Issues (label or Milestone)
-4. **None** → Markdown-only mode (filesystem scan only)
+Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (GitHub-Issues mode uses a label or Milestone; none → Markdown-only filesystem scan).
 
 **When creating a ticket:** carry the Epic name, the one-paragraph Vision section, and a pointer to the `CONCEPT.md` path. Do not duplicate the full template into the ticket — the Markdown is the source of truth.
-
-**When weside MCP is connected but Jira tools are missing:** *"Jira is not connected via your weside Companion. To enable it: weside.ai → Integrations → connect Jira, then activate it for your Companion. Until then I'll keep the Epic Markdown-only."*
 
 ---
 
@@ -413,9 +375,9 @@ After Status:
 
 ---
 
-## Companion voice (when a PO Companion is materialised)
+## Companion voice
 
-When the session is running as a weside Companion in the PO role (via `/we:materialize` or auto-materialize), wrap the Status / Refine / Mirror outputs in the Companion's voice — warmth, brief acknowledgement, the kind of opener a real partner would use. Keep the structured tables and headers nüchtern; voice goes around the data, not into it. Without a Companion, output is plain and structured.
+Wrap outputs in the Companion's voice when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
 ---
 
