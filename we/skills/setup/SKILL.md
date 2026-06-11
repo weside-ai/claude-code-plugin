@@ -56,11 +56,24 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 | security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:build` Step 2 security checks |
 | TurboVault MCP | `mcp__turbovault__*` tools available | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
 | weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:build` |
+| superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | TDD/debugging/brainstorming discipline skills used throughout `/we:build` |
+| graphify CLI | `python3 -c "import graphify"` exits 0 | `pip install graphifyy` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
+| turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
 
-If a prerequisite is missing, inform the user:
+**Guided install flow** — for each MISSING row, offer the fix interactively instead of only hinting. Full per-dependency commands and re-check instructions: [`${CLAUDE_PLUGIN_ROOT}/references/dependencies.md`](../../references/dependencies.md). Shape per item:
 
-> "Recommended plugin not installed: **{plugin-name}**. It provides {what}. Install with: `/install {plugin-name}`"
-> "The /we:* pipeline works without it, but {feature} will be skipped."
+> "Missing: **{name}** — provides {what}. Install now with `{command}`? [y/n]"
+
+- `y` → print the exact command (or run it for safe, user-scoped installs like `pip install graphifyy` after confirmation), then RE-RUN the row's detection check and report the result.
+- `n` → continue; the pipeline works without it, the dependent feature is skipped.
+
+**Persist the result** in `.weside/config.json` (Step 3 merges it):
+
+```json
+"tools": { "graphify": true, "turbovault": true, "superpowers": false }
+```
+
+Downstream skills read `tools.*` from config to decide whether to offer graph/vault features — they still verify empirically before each actual call (config can go stale) and only skip when the real call says "not found".
 
 **Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:build` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
 
@@ -86,9 +99,12 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
 ```json
 {
   "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
-  "stack": ["<detected stacks>"]
+  "stack": ["<detected stacks>"],
+  "tools": { "graphify": false, "turbovault": false, "superpowers": false }
 }
 ```
+
+The `tools` block carries the Step 1b detection results (idempotent: re-running setup re-detects and overwrites only this block).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
