@@ -1,19 +1,11 @@
 ---
 name: retro
 description: >
-  Systematic continuous-improvement pass on a session + PR/CI cycle.
-  Reads what the agent did (transcript) and what failed externally
-  (gh api: CI checks, review threads, push-fix-push cycles),
-  finds engineering frictions the user paid time for, and proposes
-  concrete MD-file changes — primarily in the user repo's
-  .claude/rules/ and CLAUDE.md, rarely in plugin docs — so the same
-  mistake does not recur. Proposes only; never applies without a
-  per-item [y/n] gate. Writes a retro log to docs/retros/ regardless.
-  Coach (the /we:coach skill) can trigger this skill after PR merges
-  or CI cycle ≥ 3. Use when the user says "/we:retro", "retro",
-  "what went wrong", "what should we fix in the harness", "ci took
-  too long", "we keep failing at X", "post-mortem", "after-action".
-  Motto: every error happens exactly once.
+  Systematic retrospective on a session + PR/CI cycle — finds frictions
+  from transcript + gh api, proposes concrete .claude/rules/ and
+  CLAUDE.md edits behind a per-item [y/n] gate, logs to docs/retros/.
+  Use when the user says "/we:retro", "retro", "post-mortem",
+  "what went wrong", "ci took too long", "we keep failing at X".
 ---
 
 # /we:retro — Continuous-Improvement Retrospective
@@ -24,32 +16,13 @@ description: >
 
 **Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once — the retro catches it, an MD-file change in the user repo's `.claude/rules/` or `CLAUDE.md` bans it forever.
 
-> **Companion-aware.** When the weside MCP is connected and a Companion is configured, the retro report is *voiced* by that Companion (your active Companion) — same engineering substance, richer tone. Standalone (no weside): the skill reasons from its own role definition without persistent identity.
+> **Companion-aware:** report voiced by the active Companion when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
 ---
 
 ## Privacy Guard (mandatory, top-of-mind)
 
-This skill reads session transcripts. Transcripts contain everything — including personal, relational, identity-laden content that has nothing to do with engineering. **The hard rule, applied at every step:**
-
-> **If session content reads as personal, skip it — analyse only engineering surfaces:** tool calls, tool results, file diffs, CI logs, PR comments, commit messages.
-
-What to skip categorically:
-
-- Memory writes about the user (`mcp__*__save_memory`, `mcp__*__save_goal`) and their internal companion-state equivalents (compass, snapshot)
-- Memory reads that returned personal content (don't quote, don't analyse)
-- Companion-mode conversational text (relationship, identity, body, mood)
-- Anything outside engineering tool calls — if in doubt, skip
-
-What's safe:
-
-- `Bash`, `Edit`, `Write`, `Read` of code/doc files
-- `gh` / `git` operations and their outputs
-- CI logs, PR comments by reviewers (AI reviewers like Greptile/CodeRabbit, claude-review, humans)
-- File diffs, commit messages of engineering commits
-- The user's *engineering* corrections ("no, that's wrong", "we should X instead") — substance, not framing
-
-The PR/CI data source via `gh api` is intrinsically engineering-only — that's part of why it's a primary source when `gh` is available. The transcript filter is the load-bearing part of the privacy guard regardless.
+This skill reads session transcripts. **The hard rule, applied at every step: if session content reads as personal, skip it — analyse only engineering surfaces** (tool calls, file diffs, CI logs, PR comments, commit messages). Full skip/safe lists: `${CLAUDE_PLUGIN_ROOT}/references/privacy-guard.md` — read it at boot. The `gh api` PR/CI source is intrinsically engineering-only; the transcript filter is the load-bearing part.
 
 ---
 
@@ -111,7 +84,7 @@ Before producing any output, gather the landscape fresh.
    - `ls docs/retros/ 2>/dev/null | sort -r | head -N` — last N retros
    - Read each (they're small, structured) — note recurring themes
 
-6. **Companion identity** (if configured): invoke `Skill(skill="we:materialize")` if not already loaded this session. The report comes back richer when voiced by the Companion.
+6. **Companion identity** (if configured): materialize per `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
 **Do not read** at boot:
 
@@ -328,96 +301,10 @@ If a PR was opened, print its URL.
 
 ## Integration with `/we:coach`
 
-Coach detects retro-worthy signals during its Boot Protocol (Step 9 — Repo state):
+Coach detects retro-worthy signals at its boot (PR just merged, CI cycles ≥ 3, end-of-session, same skill failed twice) and offers `/we:retro` behind a `[y/n]` gate — one-time per session per signal, never auto-fired, hand-off by printed command (retro is heavy, no inline `Skill()`).
 
-- **PR just merged** (`gh pr list --state merged -L 1 --json mergedAt` → recent)
-- **CI cycle count ≥ 3** on the current branch (count of pushes that triggered CI on the open PR)
-- **End-of-session signals** — user says "ich geh schlafen" / "bis morgen" / companion memory-write tools run (compass/snapshot saves)
-- **Failure pattern** — same skill failed twice in this session
+**No GitHub / no `gh` auth:** retro runs from transcript + local `git log` only — the PR/CI source is skipped gracefully.
 
-When any signal fires, Coach offers (one-time per session per signal):
+**Clean cycle (0 proposals):** still write the log — future `--scan` runs should see what went right.
 
-> *"This PR took 4 CI cycles. `/we:retro` would catch why in ~3min. Run it? [y/n]"*
-
-User types `y` → Coach hands off (prints the command, doesn't `Skill()`-invoke because retro is heavy):
-
-```text
-SCOPE IS CLEAR. Run this next:
-
-  /we:retro --pr 1998
-
-I'll be back when retro finishes.
-```
-
-User types `n` → Coach drops it silently. No nagging.
-
-Coach never auto-fires retro. The `[y/n]` is always present.
-
----
-
-## Standalone vs Companion Mode
-
-**Standalone (no weside MCP):**
-
-- Transcript + Edit/Write always work. `gh api` requires GitHub and `gh auth` — if absent, retro runs from transcript + local `git log` only (PR/CI source is skipped gracefully).
-- Report is rendered in the skill's own voice (no personality layer)
-- Useful for any team using the plugin without a Companion
-
-**With Companion (weside MCP + configured Companion):**
-
-- Boot Protocol Step 6 materializes the Companion via `Skill(skill="we:materialize")`
-- Report is voiced *by* the Companion (your active Companion) — same engineering substance, richer tone
-- Optional: skill can save a `memory` after each run noting the patterns the Companion saw — but only if explicitly enabled in user config (off by default, privacy)
-
-The engineering substance is identical in both modes. The Companion makes the experience continuous; standalone keeps the value fully accessible to teams without weside.
-
----
-
-## When to Delegate to `/we:docs`
-
-If a proposal modifies `docs/**` (not `.claude/rules/`, not `CLAUDE.md`), say:
-
-> *"I'll delegate the doc edit to `/we:docs` so it stays consistent with the rest of the doc landscape."*
-
-Then invoke:
-
-```text
-Skill(skill="we:docs", prompt="Apply this retro proposal: <P3 details + diff>")
-```
-
-`/we:docs` will own the doc-landscape coherence; retro stays focused on rule/CLAUDE.md edits.
-
----
-
-## Examples
-
-**Example 1 — manual, current branch:**
-
-```text
-/we:retro
-```
-
-Skill: *"I'll retro: PR #1998 (your open PR on `feat/foo`) + this session's transcript. Sound right? [y/n]"*
-User: `y` → skill runs.
-
-**Example 2 — specific PR with scan:**
-
-```text
-/we:retro --pr 1955 --scan 10
-```
-
-Skill scopes to PR #1955 + reads last 10 retros from `docs/retros/`. Pattern Highlights section will fire if any recurrence ≥ 2.
-
-**Example 3 — Coach-triggered:**
-
-User opens `/we:coach`. Coach Boot Protocol notices the user just merged PR #1998 with 4 CI cycles. Coach offers retro `[y/n]`. User: `y`. Coach prints hand-off; user invokes `/we:retro --pr 1998`. Skill runs.
-
-**Example 4 — no proposals to apply (clean cycle):**
-
-Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log is still written (`docs/retros/2026-05-17-clean-cycle.md`) so future `--scan` runs see "yes, clean cycles do happen, here's what we did right".
-
----
-
-## Tour pointer
-
-This skill appears in the interactive tour as **Station 10 — "Retro · the harness improves itself"** at <https://plugin.weside.ai/tour/>. The tour walks through a sample report and shows how a friction becomes a rule.
+**Doc edits outside `.claude/rules/` + `CLAUDE.md`:** delegate to `/we:docs` (`Skill(skill="we:docs", prompt="Apply this retro proposal: <details + diff>")`) so the doc landscape stays coherent.

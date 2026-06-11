@@ -409,6 +409,34 @@ Cross-repo work without leaving your current repo. A main agent rooted in the wr
 
 ---
 
+## Engineering discipline skills
+
+### `/we:grill`
+
+> *Relentless one-question-at-a-time interview on a plan or design.*
+
+Walks every branch of the decision tree — one question per turn, each with a recommended answer, exploring the codebase instead of asking where possible. As decisions crystallise it updates the project glossary (repo-root `CONTEXT.md`) inline and offers a lean ADR when a decision passes the 3-gate: hard to reverse ∧ surprising without context ∧ a real trade-off.
+
+**When to use:**
+- Before committing to a contentious design
+- When terminology is fuzzy or overloaded ("account" vs "customer" vs "user")
+- To stress-test an epic/story scope outside the formal meeting flow
+
+---
+
+### `/we:diagnose`
+
+> *Disciplined diagnosis loop for hard bugs and performance regressions.*
+
+Phase 1 is the skill: build a fast, deterministic, agent-runnable feedback loop (failing test, curl script, replay harness, bisection — 10 escalating options). Then reproduce → 3-5 ranked falsifiable hypotheses → instrument one variable at a time → fix with a regression test at a correct seam → cleanup + post-mortem.
+
+**When to use:**
+- A bug survives the first obvious fix attempt
+- Non-deterministic / flaky failures
+- Performance regressions (measure first, fix second)
+
+---
+
 ## Review + audit skills
 
 ### `/we:doc-improve`

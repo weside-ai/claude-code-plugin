@@ -1,15 +1,11 @@
 ---
 name: meet
 description: >
-  Run a structured Council meeting at one of four APO altitudes — vision,
-  saga, epic, or story. Each meeting validates the current artifact and
-  decomposes it into the next altitude's items (Vision → Sagas, Saga →
-  Epics, Epic → Stories, Story → build-ready). Convenes the council
-  (`/we:council`) with a roster tuned to the altitude. Story meetings hand
-  off to `/we:story` (Solo); the others hand off to the corresponding
-  Solo skill (`/we:vision`, `/we:saga`, `/we:epic`). Use when the user says
-  "/we:meet", "vision meeting", "saga meeting", "epic meeting", "story
-  meeting", "let's meet", "run a meeting".
+  Structured Council meeting at one of four APO altitudes — vision, saga,
+  epic, or story. Validates the current artifact, decomposes it into the
+  next altitude's items, then hands off to the matching Solo skill. Use
+  when the user says "/we:meet", "vision meeting", "saga meeting", "epic
+  meeting", "story meeting", "let's meet", "run a meeting".
 ---
 
 # /we:meet
@@ -46,10 +42,7 @@ If no meeting type is given, list the four and ask which one.
 2. **Council decision** — unless a flag forces it:
    - `--council` → convene it. `--no-council` → run solo.
    - Neither flag → **offer it**: *"Convene the council for this {type} meeting? [y/n]"*. No "complexity" guessing — always a plain offer.
-   - **Env-flag preflight (before offering council):** check whether `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set (read `~/.claude/settings.json`). If the flag is missing:
-     - **Skip the council offer entirely.** Run the meeting solo.
-     - Name the loss explicitly: *"Agent Teams not enabled — running this meeting without multi-voice deliberation. To enable: run `/we:setup` or add `\"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\"` to the `env` block in `~/.claude/settings.json` and restart your session."*
-   - If flag is present → proceed with the council offer as described above.
+   - **Env-flag preflight (before offering council):** check `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Missing → **skip the council offer**, run the meeting solo, and name the loss explicitly with the remediation hint. Present → proceed with the offer.
    - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default — see table below). Feed the synthesis into the meeting workflow.
 3. **Run the meeting workflow** for the type (see the four sections below).
 4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is the flat `docs/plans/` directory (e.g. `docs/plans/<saga>-saga.md`, `docs/plans/<saga>-<epic>-epic.md`) for Saga-and-below, `docs/plans/<vision>/PRD.md` for the Vision.

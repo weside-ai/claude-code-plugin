@@ -1,13 +1,10 @@
 ---
 name: docs
 description: >
-  Documentation coherence steward. Ask "where is X documented?", "where
-  should this new pattern go?", "what docs need updating for this change?",
-  or "audit the docs for drift". Invokes the doc-architect agent which
-  reads the doc landscape fresh on every call and proposes diffs — never
-  writes autonomously. Use when user mentions "/we:docs", "documentation",
-  "classify doc", "where is documented", "doc drift", "doc coherence",
-  "update docs for", "bypass register".
+  Documentation coherence steward — delegates to the doc-architect agent,
+  which reads the doc landscape fresh and proposes diffs (never writes
+  autonomously). Use when user says "/we:docs", "where is X documented",
+  "doc drift", "update docs for", "bypass register".
 ---
 
 # /we:docs — Doc Architect

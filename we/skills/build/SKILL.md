@@ -1,11 +1,10 @@
 ---
 name: build
 description: >
-  Build Orchestrator — runs the autonomous development pipeline from git
-  preparation through PR creation and CI review. Loads the Story's plan,
-  manages checkpoints, circuit breaker, resume. The Build altitude in the
-  APO hierarchy — no Solo/Meet, single autonomous mode. Use when the user
-  says "/we:build", "implement", "build the ticket", or provides a ticket key.
+  Build Orchestrator — autonomous pipeline from git preparation through
+  develop, AC gate, quality gates, docs, PR, and CI review, with
+  checkpoints, circuit breaker, resume. Use when the user says
+  "/we:build", "implement", "build the ticket", or provides a ticket key.
 ---
 
 
@@ -130,6 +129,8 @@ Name the specific missing item(s). Do NOT proceed with an incomplete plan.
 
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
+**Glossary:** If `CONTEXT.md` exists at the repo root, load it alongside the plan and use its canonical vocabulary.
+
 **Architecture Context (TurboVault):** After loading the plan, use TurboVault MCP
 (if available) to surface related architecture docs:
 ```
@@ -156,10 +157,7 @@ This gives the story an isolated copy of the repo. The worktree is kept on compl
 
 **Transition ticket → "In Progress" (MANDATORY):**
 
-Detect the available ticketing tool (in priority order):
-1. Atlassian MCP (`jira_*` tools) → get transitions, find "In Progress", execute transition
-2. `gh` CLI → GitHub Issues (no status transition possible — skip silently)
-3. Nothing → skip silently
+Detect the ticketing tool per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. GitHub Issues: no status transition possible — skip silently. None: skip silently.
 
 For Jira (Atlassian MCP):
 1. Get available transitions: `jira_get_issue(issue_key=TICKET, expand="transitions")`

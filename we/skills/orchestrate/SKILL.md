@@ -1,15 +1,11 @@
 ---
 name: orchestrate
 description: >
-  Epic-driven build orchestration. The Lead boots from state like a colleague —
-  reconstructs where an Epic stands from its plans, frontmatter, ticketing mirror,
-  and build-state — computes the ready set of buildable Stories, and (on confirm)
-  dispatches one builder-teammate per Story running the full /we:build, tracking
-  each in the shared task-list + orchestration DB. The Build-altitude sibling of
-  /we:council. Use when the user says "/we:orchestrate", "orchestrate the epic",
-  "dispatch the ready stories", "run the builds", "kick off the ready builds". For a
-  read-only status snapshot of an Epic, use /we:epic instead — orchestrate is the
-  dispatch-altitude sibling that actually spawns builders.
+  Epic-driven build orchestration — the Lead boots from state, computes the
+  ready set of buildable Stories, and on confirm dispatches builder-teammates
+  running the full /we:build, tracked in the orchestration DB. Use when the
+  user says "/we:orchestrate", "orchestrate the epic", "dispatch the ready
+  stories", "run the builds". Read-only Epic status: /we:epic instead.
 ---
 
 # /we:orchestrate
@@ -37,14 +33,7 @@ is that Companion (warmth + presence, not manager-speak), not a generic dispatch
 
 ## Prerequisites
 
-Agent Teams must be enabled — same flag as `/we:council`. In `~/.claude/settings.json`:
-
-```json
-{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-```
-
-A session restart is needed after toggling. If the flag is missing when dispatch runs, the
-skill aborts in Step 4 with a remediation hint — there is no non-team fallback.
+Agent Teams must be enabled — same flag, abort text, and teardown contract as `/we:council`: see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. No non-team fallback.
 
 **Permission mode must allow teammate Bash (hard-won on the first real run).** A builder runs
 `/we:build`, which is almost entirely Bash (git, npm, docker, gh, the orchestration CLI). Under
@@ -150,15 +139,7 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
 
 ### Step 4: Preflight
 
-1. **Env-flag check** — confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. If missing, abort:
-
-   ```
-   /we:orchestrate needs Agent Teams enabled.
-
-   Add this to ~/.claude/settings.json:
-     { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-   Then restart your session. Or run /we:setup — it sets the flag for you.
-   ```
+1. **Env-flag check** — confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; if missing, abort with the remediation hint from `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`.
 
 2. **Runaway guard (mandatory)** — never dispatch more than **2** builders concurrently. If the
    ready set is larger, dispatch the first 2 (lowest Story key first) and **log** that the rest
@@ -238,17 +219,21 @@ source of truth. Even if you stop early, send the message first. Then mark your 
 
 ### Step 7: Monitor + roll-up (Lead observes)
 
+⚠️ **The two rules the Lead most often gets wrong — read them first, follow them literally:**
+
+1. **Idle ≠ done. Never nudge on idle alone.** A builder running a full build idles repeatedly
+   between turns; a contentless `idle_notification` is NOT a completion signal and NOT a problem.
+   Wait for the builder's actual `SendMessage` — it can take many minutes of silence.
+2. **State-as-truth.** Never make "is this Story done" depend on a message arriving. When you
+   need to know a builder's state (long idle, ambiguous report, before any roll-up claim), run
+   this checklist instead of guessing:
+   1. `orchestration.py story status {TICKET}` — which checkpoints exist (`pr_created`/`ci_passed`)?
+   2. `git log` on the builder's branch — are commits landing?
+   3. `gh pr checks {PR}` if a PR exists — what is CI *actually* saying?
+   4. Only after 1–3: nudge the builder, **at most once**.
+
 Builders report via the shared task-list and `SendMessage` (delivered automatically — do not
 poll a terminal). Track per-builder state (dispatched → building → PR-ready / blocked).
-
-**Idle ≠ done.** A builder running a full build idles repeatedly between turns; a contentless
-`idle_notification` is NOT a completion signal and NOT a problem. Wait for the builder's actual
-`SendMessage` — it can take minutes. Do not nudge on idle alone.
-
-**State-as-truth (the robustness rule).** Never make "is this Story done" depend on a message
-arriving. The source of truth is `orchestration.py story status {TICKET}` (checkpoints
-`pr_created`/`ci_passed`) + the builder's branch. If a builder has been idle a long time with no
-message, read its `story status` + branch directly to determine state, and nudge at most once.
 
 When a builder is done/blocked (by message or by state), continue to Step 8 for that Story;
 others keep running. Emit a running roll-up: `in-flight: {…} | PR-ready: {…} | blocked: {…}`.
@@ -320,68 +305,14 @@ drains to the termination predicate and is reported as `waiting on …` — name
 forever. A refine succeeds **iff** the story leaves `refinable` (i.e. `_body_is_refined` now passes) —
 NOT merely "file written" and NOT "appears in `ready`" (it may be held by cap/disjoint).
 
-### Step 7+ P3: the autonomous refiner-teammate lane (gated on a rehearsal go/no-go)
+### Step 7+ P3: the autonomous refiner-teammate lane (OFF by default)
 
-P2 has the Lead refine interactively. P3 adds a **second refine lane**: for a `refinable` story whose
-context the Lead can fully front-load (no human design input needed), dispatch **one** refiner-teammate
-(`refiner-{TICKET}`) so refinement *also* parallelizes — the Lead discusses story N+1 with the user
-while a refiner drafts N+2 and builders build N. **Cap: ≤1 refiner** (a symmetric runaway guard to the
-≤2 build cap). Enable this lane **only after a `--rehearsal` go/no-go proves a teammate writes a
-DoR-passing plan without stalling** (see Rehearsal mode). If it does not, P2's Lead-interactive lane is
-the permanent fallback.
-
-**Strict duty split (this is what makes it safe).** The refiner-teammate **produces the plan file and
-nothing else** — it needs only the **Write** tool. The **Lead** is the single writer + verifier:
-
-- **Refiner:** draft → `Write` `docs/plans/{TICKET}-story.md` → one `SendMessage` with the path. No
-  git, no `orchestration.py`, no `story ready`, no checkpoint.
-- **Lead, on refiner-done:** run `story ready` (the real DoR gate on the actual body) → if the story
-  left `refinable` (passed), run `story checkpoint refined` + commit the plan to the main worktree → if
-  it failed, **retry once** (re-dispatch with the specific missing-token feedback, e.g. "no `### Phase`
-  header") → still failing, hand it to the P2 Lead-interactive lane and mark it held `refine failed —
-  needs human`.
-
-Why the split: (a) under default/auto permission mode every teammate **Bash** call is denied (the same
-reason builders need `acceptEdits`) — a Write-only refiner sidesteps that. (b) It keeps the Lead the
-sole writer of `docs/plans/` + `orchestration.db` on main (no two-writer git/DB race; the Mode B
-"Lead never lets a teammate commit to main" invariant). (c) DoR-verify becomes a **Lead** act —
-state-as-truth: never trust the refiner's "done", run the scan yourself.
-
-**Refiner-Brief** (Write-only; a *direct template*, NOT a `/we:story` invocation — `/we:story` is
-interactive by construction and would stall a teammate at its ExitPlanMode approval gate):
-
-```
-You are refiner-{TICKET}, a teammate in team {team_name}. The lead is "team-lead".
-
-Your ONLY job: write a build-ready story plan to docs/plans/{TICKET}-story.md, then report its path.
-You have NO user to ask — all the context you need is below. Do NOT use EnterPlanMode/ExitPlanMode.
-Do NOT run git, gh, or any orchestration command. Use the Write tool for the file. Nothing else.
-
-CONTEXT (front-loaded — this replaces the interactive clarification a human would give):
-  Epic frame:        {epic success-criteria + scope, 3-5 lines}
-  This story:        {ticket title + the one-paragraph intent}
-  Scope boundaries:  {what is IN / explicitly OUT}
-  Known constraints: {seams, deps, prior decisions, the files it will touch}
-  Architecture refs: {the 1-3 docs/ files most relevant — read them before drafting}
-
-Write docs/plans/{TICKET}-story.md with frontmatter (story, epic, created, status: draft) and these
-sections — they are the readiness gate, all are required:
-  ## Context              — a real narrative brief (NOT one line): why, the seam, what done means (>50 words)
-  ## Acceptance Criteria  — numbered, each in GWT form: "**Given** … **When** … **Then** …"
-  ## Technical Approach    — the patterns/files; reuse over rebuild
-  ## Implementation Phases — "### Phase 1", "### Phase 2", … (these exact headers are gate-checked)
-  ## Design Decisions      — a table of the real forks + why this option (so the builder doesn't relitigate)
-  ## Testing Requirements  — unit/integration/security per AC
-Also: ## User Journey, ## Code Guidance, ## Security Review Required, ## Documentation Impact.
-If you hit a genuine design fork you cannot resolve from the context above, do NOT guess — SendMessage
-the fork to team-lead and wait, so the Lead's call shapes the plan instead of forcing a rework.
-
-REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead. When the file is written,
-send EXACTLY ONE message:
-  SendMessage(to="team-lead", summary="refiner-{TICKET} done|blocked",
-              message="wrote docs/plans/{TICKET}-story.md | blocked: <fork/reason>")
-Do not run `story ready` or claim it passed — the Lead verifies. Just write + report.
-```
+P3 adds a Write-only **refiner-teammate** (≤1) that drafts the next plan in parallel while the Lead
+talks to the user. It is **gated on a `--rehearsal` go/no-go** and disabled until that passes — absent
+a GO, all refinement runs P2. Full mechanics, duty split, and the Refiner-Brief:
+[`references/refine-ahead-p3.md`](references/refine-ahead-p3.md). Read it before dispatching a refiner.
+Core invariants (also in Rules): refiner only Writes; the Lead alone verifies (`story ready`),
+checkpoints, and commits; brief is a direct template, never a `/we:story` invocation.
 
 ### Step 8: Review each finished PR + record end
 
@@ -391,7 +322,7 @@ gate — surface the review to the user; the Lead does **not** merge. The comple
 `orchestration.py` (the builder's `/we:build` wrote `pr_created`/`ci_passed`) — confirm it via
 `story status {TICKET}` for the roll-up rather than writing it.
 
-**Check CI status before declaring the review passed — a diff read is not a review (hard-won).**
+**Check CI status before declaring the review passed — a diff read is not a review (hard-won). Order: FIRST pull the CI rollup, THEN read the diff.**
 A clean-looking diff can still fail CI: the new build target breaks, a review gate has
 unresolved Major/Critical threads, an env-only check goes red. Always pull the live check rollup
 — `gh pr checks {PR}` (or `gh pr view {PR} --json statusCheckRollup`) — and treat **any** red
@@ -414,11 +345,7 @@ Always close the team, even on failure paths — a leaked team blocks the next r
 session. If `TeamDelete` fails because a builder is still finishing, wait 30 s and retry twice,
 then warn and continue.
 
-**`TeamDelete` ≠ full teardown.** It removes only team metadata; a done/idle builder's agent process
-and tmux pane survive (ghost builders in tmux). After `TeamDelete`, also run
-`pkill -f -- "--team-name <team_name>"` (kills this team's agent procs via argv — precise), then
-`tmux kill-pane` the leftover idle panes (`tmux list-panes -a` to find them; skip the lead's own).
-Order: shutdown → `TeamDelete` → `pkill` → `kill-pane`.
+**`TeamDelete` ≠ full teardown.** Mandatory sequence: (1) shutdown message to every member → (2) `TeamDelete()` → (3) `pkill` the team's agent procs → (4) `tmux kill-pane` leftover idle panes. Exact commands + retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
 
 ---
 
@@ -456,116 +383,22 @@ For that case, run the **lead-integrated phase mode**:
 One ready Story that is really a phased change the Lead has decomposed → this lead-integrated mode
 (Mode B). When in doubt, ask the human which shape the work is.
 
-### Sequencing the chunks (hard-won on the first real run)
+### Mode B field lessons (mandatory read before dispatching chunks)
 
-- **The parallelism is usually less than it looks — run the discriminating check before fanning out.**
-  Ask of each "disjoint" chunk: *can it land touching only its own files, with zero edits to any
-  shared file the other chunks also need?* The trap is a shared file every phase has to make real —
-  not just the named interface you froze, but any common helper the phases fill in. If two chunks
-  would both edit it, they are **not** disjoint; that shared work is **another serial foundation
-  chunk**, done once before the per-unit chunks parallelize. Found the hard way: two units looked
-  independent but both had to fill the same shared scaffolding — parallel dispatch would have collided
-  at integration. Rule of thumb: a chunk that *makes shared scaffolding real* (freezes a contract every
-  later chunk consumes) is **foundation-completion → serial-first**. You cannot race a chunk against
-  the thing it depends on becoming real. The real parallelism appears late — in the per-unit wiring,
-  once the shared scaffolding is frozen.
-  - **There is often more than one shared layer — re-run the check at *every* wave boundary, not once.**
-    On the real run two distinct shared layers surfaced (a shared dispatch seam *and* a shared set of
-    gate-stage files); each needed its own serial freeze-chunk before the per-unit chunks could
-    parallelize. Don't assume one foundation chunk clears the way. Before each parallel wave, re-ask the
-    discriminating question against what's *still* unfrozen; collapse to serial whenever the answer is no.
-- **Worktree hygiene is non-negotiable.** Each teammate works in its **own** worktree branched off the
-  integration branch (so it carries the prior integrated chunks); the Lead integrates in a **dedicated
-  lead worktree**; the Lead **never** flips the *main* worktree's branch. Flipping the shared main
-  worktree between branches mid-orchestration lands commits on the wrong branch and lets a stray rebase
-  rewrite a teammate's pushed work — a real, repeated failure mode. The main worktree stays on the
-  default branch, untouched, for the whole run.
-
-### Writing the chunk brief (Mode B)
-
-- **Default builders to the mid-tier model; reserve the top tier for a deliberately-hard chunk.** Routine
-  implementation chunks run fine on the faster/cheaper model (e.g. Sonnet); spend the top tier (e.g. Opus)
-  only where the Lead can name *why* it's hard — delicate ordering, a boss-fight teardown, a contract
-  freeze every later chunk depends on. Reflexively spawning the top tier for every chunk is the wrong
-  cost/fit. Make the escalation an explicit, justified per-chunk choice, not the default.
-- **Invite the builder to surface a fork *before* it pins behaviour.** The brief should say: if you hit a
-  real design fork (which transport, which failure semantics, which seam), send it to the Lead *before*
-  writing the characterization — so the Lead's call shapes the pins, instead of forcing a rework after.
-  The best builders do this unprompted; ask for it explicitly so the rest do too.
-- **A characterization pin is for behaviour that *already exists*, not a gain the migration adds.** Tell
-  builders to pin the current behaviour (green on the unmodified code), and to flag — not pin — any
-  property the refactor newly *introduces* (it would be red-on-old-code, so it isn't characterization).
-  Confusing "preserve what's there" with "the new thing we're adding" produces a pin that can't go green
-  first; a sharp builder will push back on a brief that asks for it, and they're right.
-
-### Reviewing a chunk (the Lead's core act)
-
-- **"All green" is the start of review, not the end.** When a builder honestly surfaces a decision it
-  made at a fork (the good ones do — invite it in the brief), evaluate it against the **acceptance
-  criterion**, not the test status. Green tests pin what they cover; the edge that breaks the AC is
-  usually the one no pin covers (e.g. a happy-path net that silently changes an error-path contract).
-  An over-claimed safety net — a characterization docstring claiming more than it pins — is worse than
-  an honest gap, because it reads as covered when it isn't.
-- **Moving a behaviour's locus is an allowed, explicit characterization change.** When a refactor moves
-  *where* a behaviour is produced — same observable outcome, different internal actor — the Lead may
-  explicitly approve rewriting the pin to the new locus, noted in the commit. That is reviewed and
-  intentional, categorically different from silently weakening an assertion to make a build pass: the
-  test still proves the observable behaviour; only the thing it watches moved.
-- **Validate the *integrated* state broadly — a chunk's own green is scoped to its files.** Each teammate
-  runs narrow checks (its files, its tests). A foundation chunk that changed a shared contract can leave
-  a latent error in a *sibling* file no chunk's narrow gate covers — it only surfaces when the Lead runs
-  a broad check on the merged tree. So the Lead's integration step re-runs the type-checker/tests at full
-  scope after each merge, not just the chunk's slice. (Real run: a contract change in one foundation chunk
-  left a type error in an unrelated adapter; every chunk was green, the integrated branch was not.)
-- **The Lead owns cross-cutting integration glue.** When that broad check finds a latent error in a file
-  outside every chunk's scope, the Lead fixes it *itself* as a small, clearly-labelled integration commit
-  (delete the dead code, the one-line conformance fix) — it does not expand a teammate's scope to reach
-  into a file it was told to leave alone. Keep the glue commits separate and named so the history stays
-  honest about what was chunk work and what was integration.
-- **Watch your own working directory when integrating across worktrees.** The Lead juggles several
-  worktrees; a mid-command `cd` into the wrong one makes a validation run silently test the *wrong* tree
-  (it passes, but it proved nothing about the integration branch). Re-confirm the worktree root before
-  trusting a green. A green from the wrong directory is worse than a red.
+Read [`references/mode-b-lessons.md`](references/mode-b-lessons.md) **before the first chunk dispatch**
+— it carries the hard-won detail behind the Mode B rules below: the parallelism discriminating check
+(shared scaffolding = serial foundation chunk; re-check at every wave boundary), worktree hygiene
+(teammate worktrees off the integration branch, Lead never flips the main worktree), chunk-brief
+discipline (mid-tier model default, surface forks before pinning, pins capture existing behaviour
+only), and chunk review (green is the start of review, validate the integrated tree at full scope,
+Lead owns cross-cutting glue, confirm the worktree root before trusting a green).
 
 ---
 
 ## Rehearsal mode (`--rehearsal`)
 
-Run the complete pipeline **without a real epic/story/code** — to shake out where the skills
-stumble and optimise them. Repeatable via the built-in `/loop` skill
-(`/loop /we:orchestrate FIXTURE --rehearsal`).
-
-1. Set up a throwaway repo (or worktree) and copy the committed fixture template
-   `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/references/fixture-story.md` into it as
-   `docs/plans/FIXTURE-story.md`. Its AC is trivial but **real** (a pure `rehearsal_noop() -> 42`
-   with a test) so the real review/test/PR steps have a genuine diff to chew on — a fully mocked
-   no-op would short-circuit the skills and prove nothing.
-2. Dispatch exactly one builder for the fixture, but instruct it: target a **throwaway worktree**,
-   **plan-only ticketing** (no Jira transitions), and **no real PR** — create a draft on a scratch
-   branch and delete it on teardown, or stop before push.
-3. Run the **real** Step 1–8 build logic so genuine skill bugs surface.
-4. Append the friction points (which step stumbled, the exact error) to a rehearsal log:
-   `docs/retros/YYYY-MM-DD-orchestrate-rehearsal.md` (repo-relative, under the story repo root).
-5. `TeamDelete`, delete the scratch worktree/branch. Loop to repeat.
-
-This is the lab for the broader skill clean-up: each iteration → `plugin-dev:skill-reviewer` /
-`plugin-validator` against the skill that stumbled → targeted fix → re-loop.
-
-### `--refine-ahead` P3 go/no-go (the refiner-teammate gate)
-
-Before enabling the autonomous refiner lane (Step 7+ P3) on real work, prove it in rehearsal. Stage a
-**two-story fixture** into the throwaway repo's `docs/plans/`: copy
-`${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/references/fixture-story.md` → `FIXTURE-story.md` (already
-refined → `ready`) **and** `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/references/fixture-refinable-story.md`
-→ `FIXTURE2-story.md` (unrefined, `depends_on: [FIXTURE]` → `refinable`). Then run
-`/we:orchestrate rehearsal --rehearsal --refine-ahead`. The go/no-go question:
-**does the refiner-teammate write a DoR-passing `docs/plans/{TICKET}-story.md` (the Lead's `story
-ready` shows it left `refinable`) without stalling in plan mode, under the session's permission mode?**
-
-- **GO** → the refiner lane is safe to enable on real epics.
-- **NO-GO** (stalls at ExitPlanMode, or its output fails the DoR scan, or teammate Bash/Write is denied)
-  → leave P3 disabled; P2's Lead-interactive lane already delivers the build/refine overlap. Log the
-  exact failure to the rehearsal log so the brief can be tuned and re-looped.
+Run the complete pipeline against a committed fixture instead of a real epic — the lab for shaking
+out skill bugs and for the P3 go/no-go. Full procedure: [`references/rehearsal.md`](references/rehearsal.md).
 
 ---
 
@@ -634,13 +467,12 @@ required regardless of weside connection.
 
 ## References
 
+- `references/mode-b-lessons.md` — hard-won Mode B field lessons (mandatory read before chunk dispatch)
+- `references/refine-ahead-p3.md` — the autonomous refiner lane (off by default) + Refiner-Brief
+- `references/rehearsal.md` — `--rehearsal` procedure + P3 go/no-go
+- `references/fixture-story.md` + `references/fixture-refinable-story.md` — rehearsal fixtures
+- `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` — env-flag prerequisite + full teardown
 - `we/skills/council/SKILL.md` — the Agent-Teams machinery this skill mirrors
 - `we/skills/build/SKILL.md` — the pipeline each builder runs unmodified
-- `we/skills/epic/SKILL.md` — the boot-from-state / mirror pattern for "where we stand"
-- `we/skills/map/SKILL.md` — plan-tree rendering across `docs/plans/`
-- `we/skills/handoff/SKILL.md` — the durable cross-session bridge the Lead reads at boot
 - `scripts/orchestration.py` — `story status|list|checkpoint|ready` (tracking + ready-set)
 - `scripts/test_ready_set.py` — unit tests for the `compute_ready_set` pure helper
-- `skills/orchestrate/references/fixture-story.md` — the rehearsal fixture template (refined → `ready`)
-- `skills/orchestrate/references/fixture-refinable-story.md` — the `--refine-ahead` P3 counterpart
-  (unrefined, `depends_on: [FIXTURE]` → `refinable`; gates the refiner go/no-go)

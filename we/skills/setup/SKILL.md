@@ -36,14 +36,7 @@ Scan the project to detect:
 - `go.mod` → Go
 - Multiple → Monorepo
 
-**Ticketing Tool (check in order):**
-- weside MCP JIRA tools available (`execute_tool` with `JIRA_*`) → Jira via Composio (preferred)
-- Atlassian MCP available (`jira_*` tools) → Jira direct (fallback)
-- `gh` CLI available → GitHub Issues
-- Neither → Plan-only mode
-
-**If weside MCP is connected but Jira tools are missing:** Tell the user:
-> "Jira is not connected via your weside Companion. To enable it: go to weside.ai → Integrations → connect Jira, then activate it for your Companion."
+**Ticketing Tool:** detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 **Existing Config:**
 - `.weside/` directory exists → already configured
@@ -130,19 +123,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
 0. **Enable Agent Teams (prerequisite for `/we:council` and `/we:meet`)**
 
-   `/we:council` (v2.31.0+) convenes its members as a live Claude Code team — `TeamCreate` + named teammates that address each other via `SendMessage`. That requires the experimental Agent Teams feature:
-
-   ```json
-   { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-   ```
-
-   Check whether the flag is already set:
-   - Read `~/.claude/settings.json`. If `.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS == "1"` → already enabled, move on.
-   - Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after — Claude Code reads env once at session start.)"*
-   - If yes: Read the file, merge `"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"` into the existing `env` block (create the block if missing), write it back. Tell the user: *"Flag set. Restart your session to activate Agent Teams."*
-   - If no: warn that `/we:council` and `/we:meet` will abort with a remediation hint until the flag is set, then continue.
-
-   This is the only step that touches user-scope settings — the rest of Setup writes only into the repo.
+   Live teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Read `~/.claude/settings.json`: flag already `"1"` → move on. Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after.)"* — on yes, merge the key into the `env` block (create if missing), write back, tell the user to restart; on no, warn that council/meet will abort with a remediation hint, then continue. This is the only step that touches user-scope settings.
 
 1. **Ensure `.weside/config.json`** — create or extend. Schema:
 

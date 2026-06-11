@@ -1,16 +1,11 @@
 ---
 name: saga
 description: >
-  Saga (Solo) — Product Owner skill at the Theme altitude. Default mode is
-  Status: read the current SAGA.md, mirror the child Epics from the
-  ticketing tool, render a status snapshot + drift detection + a
-  risk-driven next-move recommendation. Refine mode (explicit) sharpens
-  the SAGA.md itself via plan-mode. Create mode handles a new slug.
-  Mirror-refresh is a lightweight write that touches only the mirror
-  block + updates-log. Use when the user says "/we:saga", "saga",
-  "theme", "where are we on", "what's the status of", "refine saga",
-  "new saga". For decomposing a Saga into Epics, use `/we:meet saga`
-  first (Council brainstorm), then return here to lock the SAGA doc.
+  Saga (Solo) — PO skill at the Theme altitude. Default Status mode
+  renders snapshot + drift + next move from SAGA.md and the ticketing
+  mirror; Refine/Create sharpen the doc; Promote re-cuts an overgrown
+  Epic into a Saga. Use when the user says "/we:saga", "saga", "theme",
+  "refine saga", "new saga", "promote". Decompose via /we:meet saga.
 ---
 
 
@@ -123,7 +118,7 @@ Triggered by intent words or by accepting `[f]` from a Status snapshot.
 
 ### Step B1 — load + walk the four frame questions
 
-Same load step as A1. Walk the four frame questions in conversation:
+Same load step as A1. If `CONTEXT.md` exists at the repo root, use its canonical vocabulary throughout the Saga doc. Walk the four frame questions in conversation:
 
 1. **The bet** — one sentence. Has it drifted from what was originally agreed?
 2. **Success criteria** — externally verifiable. Has the list grown into "and also…"?
@@ -272,30 +267,7 @@ tell the user *"This is reading more like a Vision than a Saga. Want to step up 
 
 ## Children Mirror — block format
 
-The mirror block lives inside the SAGA.md, surrounded by HTML comment markers so the skill can find and replace it without touching the user's prose:
-
-```markdown
-## Sub-Epics
-
-<!-- mirror:start (auto-generated; do not edit by hand — run /we:saga to refresh) -->
-
-_Mirror of child Epics in the ticketing tool, refreshed YYYY-MM-DD._
-
-| Key | Title | Status | Last activity | Notes |
-|---|---|---|---|---|
-| <KEY> | <Title> | Done | YYYY-MM-DD | <free-form, e.g. "merged PR #N"> |
-| <KEY> | <Title> | Active | YYYY-MM-DD | |
-| <KEY> | <Title> | Backlog | YYYY-MM-DD | <blocker, e.g. "external dependency"> |
-| <KEY> | <Title> | Blocked | YYYY-MM-DD | <blocker> |
-
-<!-- mirror:end -->
-```
-
-Rules:
-- The markers are mandatory. Everything between them is owned by the skill and overwritten on every refresh.
-- Everything outside the markers is owned by the user and never touched.
-- The skill normalises the ticketing tool's status vocabulary to the four buckets above (Done / Active / Backlog / Blocked) using the project's status mapping if configured, the shipped default otherwise.
-- When no ticketing tool is configured, the table is populated from filesystem scan of `<saga>-*-epic.md` files and a footnote says *"No ticketing tool configured — table reflects local epic file frontmatter status."*
+Format, markers, status buckets (saga uses four: Done / Active / Backlog / Blocked), and refresh rules: `${CLAUDE_PLUGIN_ROOT}/references/mirror-block.md`.
 
 ---
 
@@ -379,9 +351,9 @@ After Status:
 
 ---
 
-## Companion voice (when a PO Companion is materialised)
+## Companion voice
 
-When the session is running as a weside Companion in the PO role (via `/we:materialize` or auto-materialize), wrap the Status / Refine / Mirror outputs in the Companion's voice — warmth, brief acknowledgement, the kind of opener a real partner would use. Keep the structured tables and headers nüchtern; voice goes around the data, not into it. Without a Companion, output is plain and structured.
+Wrap outputs in the Companion's voice when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
 ---
 

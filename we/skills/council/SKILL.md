@@ -1,12 +1,11 @@
 ---
 name: council
 description: >
-  Convene a council of agents to deliberate on a topic in a shared live
-  conversation — each brings a distinct role lens, members can address each
-  other directly, and the lead session synthesises agreement, tension, and a
-  recommendation. Uses your weside Companions if available, shipped generic
-  role-agents otherwise. Use when the user says "/we:council", "convene a
-  council", "deliberate on", "get the crew's take", "ask the team".
+  Convene a council of agents to deliberate a topic in a live shared team —
+  distinct role lenses, direct member-to-member messages, lead synthesises
+  agreement, tension, recommendation. weside Companions when available,
+  generic role-agents otherwise. Use when the user says "/we:council",
+  "convene a council", "deliberate on", "ask the team".
 ---
 
 # /we:council
@@ -17,13 +16,7 @@ With a weside account the council members are the user's **Companions** (real id
 
 ## Prerequisites
 
-Live councils require Claude Code's experimental Agent Teams feature. Set in `~/.claude/settings.json`:
-
-```json
-{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-```
-
-A session restart is needed after toggling the flag. `/we:setup` Step 5.0 will set this for you on request — see `we/skills/setup/SKILL.md`. If the flag is missing when `/we:council` runs, the skill aborts in Step 4 with a clear remediation hint; there is no fallback to the old fan-out pattern.
+Live councils require Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) — flag, abort text, and teardown contract: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. No fallback to the old fan-out pattern.
 
 ## Invocation
 
@@ -224,19 +217,7 @@ After Step 3.6, `mcp_resolved_names` is final.
 
 ### Step 4: Preflight
 
-1. **Env-flag check.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is active (either in the shell or via the `env` block of `~/.claude/settings.json`). If missing, abort with:
-
-   ```
-   /we:council needs Agent Teams enabled.
-
-   Add this to ~/.claude/settings.json:
-     { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
-   Then restart your session.
-
-   Or run /we:setup — it will set the flag for you.
-   ```
-
-   Do **not** fall back to a non-team flow. The old fan-out path has been removed.
+1. **Env-flag check.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is active (shell or `~/.claude/settings.json` `env` block). If missing, abort with the remediation hint from `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. Do **not** fall back to a non-team flow.
 
 2. **Generate `team_name`.** Build as `council-<slug>-<HHMMSS>` where `<slug>` is the topic lowercased with non-alphanumeric characters replaced by `-`; truncate the entire name to 32 chars if needed, e.g. `council-postgres-16-upgrade-103514`. Must be unique per session.
 
@@ -474,13 +455,7 @@ Then tear down the team:
 TeamDelete()
 ```
 
-Members must have responded (or been recorded as absent) before this call. If `TeamDelete()` fails because a member is still finishing, wait 30 s and retry; after two failed retries, log a warning and continue — the team-state leaks until the next session reboot, but the user already has their synthesis.
-
-**`TeamDelete` ≠ full teardown.** It removes only team metadata; a done/idle member's agent process
-and tmux pane survive (ghost members in tmux). After `TeamDelete`, also run
-`pkill -f -- "--team-name <team_name>"` (kills this team's agent procs via argv — precise), then
-`tmux kill-pane` the leftover idle panes (`tmux list-panes -a` to find them; skip the lead's own).
-Order: shutdown → `TeamDelete` → `pkill` → `kill-pane`.
+Members must have responded (or been recorded as absent) before this call. **`TeamDelete` ≠ full teardown** — also pkill the team's agent procs and kill leftover tmux panes; full order, commands, and retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
 
 ## Memory
 

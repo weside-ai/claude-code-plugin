@@ -1,6 +1,6 @@
 ---
 name: audit-architecture
-description: Run a multi-phase backend architecture audit. Phases (Healthcheck → Hotspot-Map → Subsystem-Deep-Read → Cross-Cutting-Lenses → Findings) are skip-bar, lenses are composable, severity-tagged findings produce visual-intensity diagrams. Use when user types "/we:audit-architecture" or asks to "audit the backend architecture", "check architectural drift", "run an architecture review", "find architectural problem zones". Output is a directory of dated findings plus Mermaid diagrams committed to the project.
+description: Multi-phase backend architecture audit — Healthcheck → Hotspot-Map → Subsystem-Deep-Read → Cross-Cutting-Lenses → Findings with Mermaid diagrams; scope-able by subsystem. Use when user says "/we:audit-architecture", "audit the backend architecture", "architecture review", "check architectural drift".
 ---
 
 # /we:audit-architecture — Backend Architecture Audit (v3)

@@ -1,11 +1,10 @@
 ---
 name: ci-review
 description: >
-  CI/Review checker and fixer. Iteratively collects ALL findings from CI plus every PR review
-  source — any AI code reviewer (Greptile, CodeRabbit, …) and Claude Review — fixes everything
-  per a clear severity policy, resolves all bot review threads, and only pushes when nothing
-  blocking or warning is left. Reviewer-agnostic: one collection path, one resolve step.
-  Use when user says "/we:ci-review", "fix ci", "fix reviews", "ci failed".
+  CI/Review checker and fixer — collects ALL findings from CI + every PR
+  review source (reviewer-agnostic), fixes per severity policy, resolves
+  all bot threads, pushes only when nothing blocking remains. Use when
+  user says "/we:ci-review", "fix ci", "fix reviews", "ci failed".
 ---
 
 

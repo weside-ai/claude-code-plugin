@@ -16,7 +16,7 @@
 
 ## What you get
 
-Twenty-three `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
+Twenty-five `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
 **Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
 
@@ -41,6 +41,8 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 - **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, one-line Plan-status snapshots (full detail delegated to `/we:saga` / `/we:epic`)
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
+- **`/we:grill`** — relentless one-question-at-a-time interview on a plan or design; sharpens the project glossary (`CONTEXT.md`) inline and offers lean ADRs when a decision is hard to reverse, surprising, and a real trade-off
+- **`/we:diagnose`** — disciplined diagnosis loop for hard bugs: build a fast deterministic feedback loop first, then reproduce → hypothesise → instrument → fix → regression-test
 - **`/we:doc-improve`**, **`/we:audit`** — review + audit
 - **Dev Utilities:** **`/we:audit-architecture`**, **`/we:find-dead-code`**, **`/we:smoketest`** — backend code health
 

@@ -21,6 +21,7 @@
 - [ ] **Design Decisions** — Alternatives considered during refinement and why they were rejected
 - [ ] **Testing Requirements** — Which test types (Unit/Integration/E2E)? Edge cases?
 - [ ] **Technical Approach** — Layers, patterns, relevant architecture decisions
+- [ ] **Glossary vocabulary** — Terms match the repo-root `CONTEXT.md` glossary, if one exists (no `_Avoid_` terms)
 - [ ] **Security Review Required** — Yes/No with reason
 - [ ] **Code Guidance** — DO/DON'T patterns for implementation
 - [ ] **Documentation Impact** — Which docs are affected? (API, architecture, README, user-facing). Used by `/we:docs` in pipeline Step 6.

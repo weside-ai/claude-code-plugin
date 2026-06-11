@@ -1,14 +1,11 @@
 ---
 name: vision
 description: >
-  Vision (Solo) — Product Owner skill at the PRD altitude. Creates or refines
-  one Product Requirements Document — the multi-year reason a product exists,
-  the audience it serves, the change it intends, and the bets it will not
-  make. Output: a sharper `docs/plans/<vision>/PRD.md`. Uses EnterPlanMode.
-  Use when the user says "/we:vision", "PRD", "product vision",
-  "vision document", "write a vision", "refine vision", "sharpen the
-  product vision". For decomposing the PRD into Sagas, use
-  `/we:meet vision` — the Council half of this altitude.
+  Vision (Solo) — PO skill at the PRD altitude. Creates or refines the
+  Product Requirements Document (audience, problem, intended change,
+  non-bets) at docs/plans/<vision>/PRD.md. Use when the user says
+  "/we:vision", "PRD", "product vision", "write a vision", "refine vision".
+  Decompose into Sagas via /we:meet vision.
 ---
 
 
