@@ -48,7 +48,7 @@ that touches user scope, and never blocks the pipeline on a `n`.
 ## TurboVault (MCP + binary)
 
 - **Provides:** semantic search over `docs/` (`/we:story`, `/we:docs`, `/we:doc-improve`, doc-architect).
-- **Detect:** `mcp__turbovault__*` tools available. If absent, distinguish: `command -v turbovault` → binary present but MCP not registered (config problem) vs. binary missing (install problem).
+- **Detect (liveness, not just presence):** actually call `mcp__turbovault__list_vaults` and confirm it responds. A name-only check ("are `mcp__turbovault__*` tools listed") passes for a registered-but-dead MCP, which then silently degrades every doc search to grep for weeks unnoticed. Three outcomes: responds → **OK**; tool present but call errors/hangs → **DEGRADED** (warn loudly, persist `turbovault: false`); tool absent → **not registered** (then `command -v turbovault` distinguishes binary-missing from MCP-not-registered).
 - **Install (binary missing):** download/build the TurboVault binary, place it on PATH.
 - **Install (MCP not registered):** add to `~/.claude.json` `mcpServers`:
 
@@ -62,10 +62,10 @@ that touches user scope, and never blocks the pipeline on a `n`.
 ## graphify CLI
 
 - **Provides:** code knowledge graph — `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, per-repo code-graph nav rules.
-- **Detect:** `python3 -c "import graphify"` exits 0.
-- **Install:** `pip install graphifyy` (PyPI name has the double y; user-level install is fine). Safe to run directly after `[y]` — it touches only the user's Python environment.
+- **Detect:** `python3 -c "import graphify"` exits 0 AND version `>= 0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`). Older versions break the repo hooks (the `to_json(..., force=True)` write that prevents stale graphs needs `>=0.8`).
+- **Install:** `pip install -U 'graphifyy>=0.8.38'` (PyPI name has the double y; user-level install is fine). Safe to run directly after `[y]` — it touches only the user's Python environment. Must land in the same interpreter the repo hooks call (`python3`) — install via `python3 -m pip`, not pipx (pipx isolation breaks `import graphify`).
 - **Re-check:** `python3 -c "import graphify"` again; optionally `graphify --help`.
-- **Post-install (per repo, optional):** if the repo ships a graph hook (e.g. `scripts/hooks/graphify-post-commit.sh` + a `post-commit` stage in `.pre-commit-config.yaml`), remind the user to run `pre-commit install --hook-type post-commit` once.
+- **Post-install (per repo):** pre-commit hook activation is handled generically by `/we:setup` Step 1c — no graphify-specific reminder needed.
 
 ## weside MCP
 

@@ -137,7 +137,9 @@ Name the specific missing item(s). Do NOT proceed with an incomplete plan.
 mcp__turbovault__find_similar_notes("${REPO_ROOT}/docs/plans/{TICKET}-story.md")
 ```
 Read the top 3 results — they contain patterns, primitives, and ADRs relevant
-to this story. Keep them in mind during implementation.
+to this story. Keep them in mind during implementation. If TurboVault is
+unavailable, skip this lookup and note it once: "⚠️ TurboVault unavailable —
+skipping architecture-context lookup; rely on the plan + code reading."
 
 **Reality Check:** If plan exists, check creation date against recent git changes. If code changed significantly since the plan was written (files moved, APIs renamed, dependencies changed), **STOP the pipeline** and ask the user: "The plan may be outdated — key files have changed since it was written. Run `/we:story {TICKET}` to update the plan before continuing?" Do NOT proceed with a stale plan.
 

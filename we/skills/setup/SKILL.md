@@ -54,10 +54,10 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 | Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:build` ticket fetch and transitions |
 | `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:build` Step 4: Simplify |
 | security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:build` Step 2 security checks |
-| TurboVault MCP | `mcp__turbovault__*` tools available | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
+| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
 | weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:build` |
 | superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | TDD/debugging/brainstorming discipline skills used throughout `/we:build` |
-| graphify CLI | `python3 -c "import graphify"` exits 0 | `pip install graphifyy` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
+| graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
 | turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
 
 **Guided install flow** — for each MISSING row, offer the fix interactively instead of only hinting. Full per-dependency commands and re-check instructions: [`${CLAUDE_PLUGIN_ROOT}/references/dependencies.md`](../../references/dependencies.md). Shape per item:
@@ -75,7 +75,21 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 
 Downstream skills read `tools.*` from config to decide whether to offer graph/vault features — they still verify empirically before each actual call (config can go stale) and only skip when the real call says "not found".
 
+**TurboVault DEGRADED is the silent-killer case — call it out loudly.** A registered-but-dead MCP passes a name-only check and then every doc search silently falls back to grep for weeks. If the liveness probe fails, persist `"turbovault": false` AND warn explicitly:
+
+> "⚠️ TurboVault MCP is registered but NOT responding — `list_vaults` failed. Doc search (`/we:docs`, `/search`, `/we:story`) is running on grep fallback, which is much weaker. Restart the session or check the MCP config (`~/.claude.json` / `~/.claude/settings.json`)."
+
 **Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:build` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
+
+### Step 1c: Activate Pre-Commit Hooks
+
+If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its hooks are actually installed (e.g. a `post-commit` graph rebuild, a `commit-msg` linter). Activate them so the user doesn't have to remember the incantation — generic, works for any repo:
+
+1. **No `.pre-commit-config.yaml`** → skip silently.
+2. **`pre-commit` not installed** (`command -v pre-commit` fails) → inform + offer `pip install pre-commit`, then continue. Do NOT block.
+3. **`core.hooksPath` set to a non-default path** (`git config core.hooksPath` returns something other than `.git/hooks` / empty — e.g. Husky) → **warn and skip**, never clobber a custom hooks setup:
+   > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
+4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
 ### Step 2: Ask 3 Questions
 

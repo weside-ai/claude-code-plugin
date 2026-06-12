@@ -105,7 +105,8 @@ mcp__turbovault__semantic_search("topic of this story")
 mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", value:"<relevant-domain>"}])
 ```
 
-If TurboVault MCP is unavailable, fall back to local search:
+If TurboVault MCP is unavailable, fall back to local search — and tell the user once:
+> "⚠️ TurboVault unavailable — using grep fallback; architecture context may be incomplete. Check the MCP config."
 ```
 Grep(pattern="<topic keyword>", include="*.md", path="docs/")
 Glob(pattern="docs/architecture/**/*.md")

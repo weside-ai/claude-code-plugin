@@ -49,18 +49,26 @@ having those artefacts; skip gracefully if missing.
    - `docs/architecture/README.md` — architecture doc inventory
    - `docs/adr/README.md` — ADR index + promotion criteria
 
-4. **Scan the tree via TurboVault** (if TurboVault MCP is available):
+4. **Scan the tree via TurboVault** — probe liveness first, then set the
+   `tv_degraded` flag for the rest of this run:
    ```
-   mcp__turbovault__explain_vault()          — holistic overview
+   mcp__turbovault__explain_vault()          — holistic overview (doubles as liveness probe)
    mcp__turbovault__quick_health_check()     — health score + broken links count
    ```
-   **Fallback** (if TurboVault unavailable):
+   - Call succeeds → `tv_degraded = false`, use TurboVault throughout.
+   - TurboVault tools absent, OR the call errors/hangs (registered-but-dead MCP)
+     → `tv_degraded = true` and use the fallback below. **Do not fail** — doc
+     work must still complete on grep.
+
+   **Fallback** (when `tv_degraded`):
    ```bash
    find docs -maxdepth 2 -type f -name '*.md' | sort
    find docs/architecture/primitives -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
    find docs/foundations -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
    find docs/adr -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
    ```
+   When `tv_degraded`, you MUST surface the warning banner (see Output Format)
+   — a silent grep fallback is exactly how a dead MCP goes unnoticed for weeks.
 
 5. **Construct your mental map:** which categories exist, which docs live
    in each, what the index files say.
@@ -68,13 +76,13 @@ having those artefacts; skip gracefully if missing.
 6. **Never load full file contents at boot** — only frontmatter and headings.
    Open specific files on demand when the user's request needs them.
 
-7. **Use TurboVault for search** (if available) instead of grepping `docs/`:
+7. **Use TurboVault for search** (when `tv_degraded == false`) instead of grepping `docs/`:
    - `mcp__turbovault__semantic_search(query)` — find conceptually related docs
    - `mcp__turbovault__advanced_search(query, frontmatter_filters)` — filter by domain/type
    - `mcp__turbovault__find_similar_notes(path)` — find docs related to a specific doc
    - `mcp__turbovault__find_duplicates()` — detect near-duplicate content
 
-   **Fallback** (if TurboVault unavailable):
+   **Fallback** (when `tv_degraded` — reuse the flag from step 4, don't re-probe):
    ```bash
    grep -r "<query>" docs/ --include="*.md" -l   # keyword search
    grep -r "<query>" docs/ --include="*.md" -l   # duplicate detection: run for each suspect topic
@@ -243,6 +251,17 @@ If nothing needs updating, say so explicitly. Don't invent work.
 ---
 
 ## Output Format
+
+**Degraded-search banner (FIRST, when `tv_degraded`):** if TurboVault was
+unavailable or dead at boot (step 4), prepend this to your output so the main
+agent and user see it every run — a silent grep fallback is how a dead MCP goes
+unnoticed:
+
+```
+> ⚠️ TurboVault MCP unavailable — falling back to grep; doc search is DEGRADED
+> (lower recall, no semantic/duplicate detection). Check your MCP config or
+> restart the session. Findings below may be incomplete.
+```
 
 When answering a question: short, reference-heavy, no preamble.
 
