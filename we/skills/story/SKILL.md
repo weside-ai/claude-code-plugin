@@ -13,7 +13,7 @@ description: >
 
 You produce or sharpen one Story — a sprint-sized feature slice with a build-ready plan. This is the Solo half of the Story altitude in the APO hierarchy; the Council half is `/we:meet story` (convene PO + Architect when a story is contentious; the meeting hands off here).
 
-> **APO altitude:** Story (Solo). Upstream: `/we:meet epic` decomposes Epics into Stories that land here. Downstream: `/we:build {TICKET}` hands the plan to the autonomous Build pipeline. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude map.
+> **APO altitude:** Story (Solo). Upstream: `/we:meet epic` decomposes Epics into Stories that land here. Downstream: the plan goes to either `/we:build {TICKET}` (autonomous single-pass pipeline — for trivially straight-line work) or `/we:orchestrate {TICKET}` (Lead-integrated phase dispatch, Mode B — for anything you'd want to split into phases or keep off your own context). This skill **pre-decomposes the phases and recommends which surface fits** (see the *Execution Surface* section below). See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude map.
 >
 > **For Epic-altitude work** (formulating or refining an Epic), use `/we:epic` (Solo) or `/we:meet epic` (Council). Epic Operations no longer live here.
 
@@ -79,7 +79,13 @@ Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-
 
 Clarify scope, requirements, and edge cases **grill-style**: one question at a time, each with your recommended answer; explore the codebase instead of asking whenever the answer is discoverable there. When a fuzzy or conflicting term gets resolved, offer to record it in the project glossary (`CONTEXT.md`, see `/we:grill`).
 
-**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal. If the Story turns out to be Epic-sized, hand off to `/we:epic` — don't try to write a plan that doesn't fit a sprint.
+**Brainstorming first if requirements are vague.** If the story summary is vague or the "why" is unclear, establish intent BEFORE scoping ACs. If the `superpowers` plugin is available, invoke its `brainstorming` skill for a structured exploration session. If not, use targeted questions: "What does success look like?", "What are you actually trying to enable?", "What's the simplest version of this?". Only scope ACs once you understand the user's actual goal.
+
+**When the work feels too big for one `/we:build` pass, ask *which* kind of big before reaching for `/we:epic`.** Two different shapes hide under "too big":
+- **Many independent slices** (separate features, separate user value, separate PRs) → genuinely Epic-sized → hand off to `/we:epic`.
+- **One coherent change with several phases** (a refactor, a multi-layer fix, a migration) → this stays a **single Story** with a phased plan, run by `/we:orchestrate {TICKET}` (Mode B), NOT an epic. Splitting a coherent change into N stories just to dispatch it multiplies QS overhead the work doesn't need. Keep it one story; let the phase decomposition + `parallel_groups` carry the structure.
+
+If you catch yourself wanting to split the work into phases, that is the orchestrate signal — write the phases into THIS plan, don't escalate to an epic.
 
 ### Step 3: Update Ticket (MINIMAL)
 
@@ -188,7 +194,9 @@ points — narrative voice.]
 ### Phase 2: [Name]
 ...
 
-> **Independence check (fill `parallel_groups`):** For stories with 3+ phases, when phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. If that applies, list them in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). Explicit declaration here is what enables `/we:build` to fan out sub-agents; prose descriptions like "these can run in parallel" are not read by the orchestrator.
+> **Always decompose into real phases — even for a small story.** A phase is a self-contained, independently-committable chunk with its own `**Files:**` list. Cutting the work into phases is what lets `/we:orchestrate` (Mode B) dispatch focused chunks and lets `/we:build` (Mode B) fan out — and it sharpens the plan regardless of which surface runs it. Don't collapse a multi-step change into one mega-phase to "keep it simple"; the phases ARE the structure both downstream skills read.
+>
+> **Independence check (fill `parallel_groups`):** When phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. List those phase numbers in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). This explicit declaration is the parallel-wave map both `/we:orchestrate` (Mode B chunk waves) and `/we:build` (Mode B sub-agent fan-out) read; prose like "these can run in parallel" is invisible to them. The per-phase `**Files:**` lists also feed orchestrate's disjoint guard — fill them concretely (use the graphify Blast-Radius query above), not vaguely.
 
 ## Design Decisions
 
@@ -235,9 +243,38 @@ User reviews plan. On feedback → adjust. On approval → continue.
    ```
 4. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined` (CLI keeps the `story` table name for back-compat — see Build skill note.)
 5. **Vault links (optional, TurboVault only):** If TurboVault MCP is available, run `mcp__turbovault__suggest_links` on the new plan doc and offer the suggestions to the user (`[y/n]` per link). Skip silently without TurboVault.
-6. **Output:** `"Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE."`
+6. **Output + execution-surface recommendation:** Decide `/we:build` vs `/we:orchestrate` per the *Execution Surface* heuristic (section below), then emit:
+   ```
+   Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE.
 
-⛔ **STOP after step 6. No implementation. No /we:build. No branch. No code.**
+   Recommended next: /we:orchestrate {TICKET}   ← <one-line why: phases N, parallel waves {…}, or context-hygiene>
+   (or /we:build {TICKET} if you'd rather run it inline.)
+   ```
+   Lead with the recommended surface; name the phase count + which phases parallelise (from `parallel_groups`). Use `/we:build` as the lead recommendation **only** for a trivially straight-line single-phase story.
+
+⛔ **STOP after step 6. No implementation. No /we:build. No /we:orchestrate. No branch. No code.** The recommendation is a suggestion in the output — the user invokes the next surface themselves.
+
+---
+
+## Execution Surface — recommend /we:build vs /we:orchestrate
+
+Both run the same plan; they differ in *who holds the work* and *how much overhead*. Recommend the fit in Step 6's output — the user decides.
+
+| | `/we:build {TICKET}` | `/we:orchestrate {TICKET}` (single-Story, Mode B) |
+|---|---|---|
+| **Shape** | One autonomous pass in the caller's session | Lead dispatches each phase as a focused work-chunk to a teammate, integrates onto one branch, runs QS once → one PR |
+| **Best for** | Trivially straight-line work — one phase, small diff, no real decomposition | Anything you'd want to **split into phases**; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
+| **Caller's context** | Fills with the whole implementation | Stays clean — the caller reviews reports + the final PR, not every diff |
+| **Review stance** | Caller is also the implementer | Caller reviews the result **neutrally** (didn't write it) |
+| **Parallelism** | Mode B sub-agent fan-out per `parallel_groups` | Chunk waves per `parallel_groups`, ≤2 concurrent |
+
+**The heuristic (lead with orchestrate unless it's trivial):**
+
+- **Recommend `/we:orchestrate`** when ANY holds: the plan has 2+ real phases; `parallel_groups` is non-empty; it's a coherent multi-layer/refactor/migration change; or the caller would benefit from context-hygiene + neutral review (true even for a *small monolith* — that's a legitimate orchestrate target, the value is keeping the caller's context clean and the review independent).
+- **Recommend `/we:build`** only for a genuinely trivial, straight-line single-phase story (a typo, a one-function fix, a config tweak) where dispatch overhead buys nothing.
+- **The split instinct is the signal.** If during refinement you wanted to break the work into phases, recommend orchestrate — do NOT escalate to `/we:epic` for a *single coherent* change (epics are for many independent slices). Orchestrate-single-story is the low-overhead home for a phased one-PR change.
+
+The recommendation is non-binding — always offer the other surface as the fallback line.
 
 ---
 
@@ -246,7 +283,7 @@ User reviews plan. On feedback → adjust. On approval → continue.
 Trigger: `/we:story "Feature description"`
 
 1. Design session — ask clarifying questions
-2. If the scope is Epic-sized (multi-sprint, multiple slices), hand off to `/we:epic` instead of trying to fit it into a Story
+2. Scope check: **many independent slices** (multi-sprint, separate user value) → hand off to `/we:epic`. A **single coherent change that's just phased** (refactor/migration/multi-layer fix) is NOT an epic — keep it one Story and let the phased plan + `/we:orchestrate` carry it (see Step 2 of MODE 1 and Execution Surface).
 3. Create ticket via ticketing tool (minimal)
 4. Link to Epic (if applicable)
 5. Continue as MODE 1 (Steps 4-6)
@@ -309,6 +346,9 @@ Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/
 - ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS set the `epic:` frontmatter field to the parent Epic's slug-or-key when the story belongs to an Epic — `/we:orchestrate`'s ready-set matching filters stories by this field; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
 - The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
+- ALWAYS decompose the plan into real `### Phase` blocks with per-phase `**Files:**`, and fill `parallel_groups` when phases are disjoint + unordered — even for a small story. Phases are the structure `/we:orchestrate` (Mode B chunks) and `/we:build` (Mode B fan-out) both read.
+- ALWAYS recommend the execution surface in Step 6 — `/we:orchestrate {TICKET}` for anything phased / parallelisable / coherent-multi-layer / context-heavy (incl. a small monolith the caller wants reviewed neutrally); `/we:build` only for trivially straight-line single-phase work. Lead with the recommended one, offer the other as fallback. Non-binding — the user invokes it.
+- A single COHERENT change that is merely phased is NOT an epic — keep it one Story for `/we:orchestrate`. Escalate to `/we:epic` only for many INDEPENDENT slices. The urge to split into phases is the orchestrate signal, not the epic signal.
 - ALWAYS use Given/When/Then for ACs
 - ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).
 - ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.

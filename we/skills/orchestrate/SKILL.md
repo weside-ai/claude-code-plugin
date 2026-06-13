@@ -1,11 +1,13 @@
 ---
 name: orchestrate
 description: >
-  Epic-driven build orchestration — the Lead boots from state, computes the
-  ready set of buildable Stories, and on confirm dispatches builder-teammates
-  running the full /we:build, tracked in the orchestration DB. Use when the
-  user says "/we:orchestrate", "orchestrate the epic", "dispatch the ready
-  stories", "run the builds". Read-only Epic status: /we:epic instead.
+  Build orchestration — the Lead boots from state and either (epic target)
+  computes the ready set of buildable Stories and dispatches builder-teammates
+  running the full /we:build, or (single-Story target) runs that one Story's
+  phases as lead-integrated work-chunks (Mode B) → one PR. Tracked in the
+  orchestration DB. Use when the user says "/we:orchestrate", "orchestrate the
+  epic", "orchestrate this story", "dispatch the ready stories", "run the
+  builds", "run the phases". Read-only Epic status: /we:epic instead.
 ---
 
 # /we:orchestrate
@@ -49,7 +51,8 @@ user's own session (user intent is then unambiguous) — orchestrate earns its k
 ## Invocation
 
 ```
-/we:orchestrate <epic>                 # boot + status + ready-set; dispatch only on confirm
+/we:orchestrate <epic>                 # epic target: boot + status + ready-set; dispatch on confirm (Mode A)
+/we:orchestrate <story-key>            # single-Story target: run THIS story's phases as work-chunks (Mode B)
 /we:orchestrate <epic> --refine-ahead  # build the ready stories AND refine the next during build idle
 /we:orchestrate <epic> --rehearsal     # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                        # boot from the most recently active epic, then status
@@ -59,10 +62,26 @@ user's own session (user intent is then unambiguous) — orchestrate earns its k
 (minutes of Lead idle), the Lead refines the **next** `refinable` story so it is build-ready by the
 time a builder frees — overlapping build-time and refine-time. It composes with the per-Story build
 shape (Mode A); it is **not** a third dispatch mode. Default (flag off) = today's passive monitoring.
+(`--refine-ahead` and `--rehearsal` apply to **epic targets only** — a single-Story target has no
+ready-set to refine ahead of.)
+
+### Target resolution (Step 0 — do this before booting)
+
+The argument is either an **Epic** or a **single Story**. Resolve it once, it picks the whole shape:
+
+- **Single-Story target** when the argument matches a Story plan `docs/plans/{KEY}-story.md` (or its
+  ticket key resolves to one Story) AND there is no Epic plan / no other story shares it as an `epic:`.
+  → **Skip Step 2 entirely (no ready-set)** and run **Mode B** over that one plan's `### Phase` blocks.
+  This is the low-overhead path `/we:story` recommends for a single multi-phase (or context-heavy)
+  change — no synthetic epic, no ready-set. Honour the plan's `parallel_groups` for the parallel waves.
+- **Epic target** otherwise (an Epic plan exists, or ≥1 story shares the slug/key as `epic:`).
+  → the full Step 1–9 workflow (boot, ready-set, per-Story builders = Mode A; one phased Story in the
+  set may itself run Mode B per Step 3's mode choice).
 
 `<epic>` is an Epic **slug** (e.g. `circles`) or a ticketing Epic key (e.g. `WA-1205`) — either
 works. Stories may reference their epic by slug or by key; `story ready` resolves both via the
-Epic plan's `epic:`/`ticket:` frontmatter (`_resolve_epic_identifiers`).
+Epic plan's `epic:`/`ticket:` frontmatter (`_resolve_epic_identifiers`). A `<story-key>` is a single
+Story ticket/plan key (e.g. `WA-1330`).
 
 ---
 
@@ -70,8 +89,15 @@ Epic plan's `epic:`/`ticket:` frontmatter (`_resolve_epic_identifiers`).
 
 ### Step 1: Boot from state (always — this is the colleague's first act)
 
-Before anything else, reconstruct "where we stand". Read the **living** files so the picture is
-always current — never rely on cached knowledge:
+> **Single-Story target shortcut.** If Step 0 resolved a **single Story** (not an epic): read just
+> that one plan `docs/plans/{KEY}-story.md` completely + its build state
+> (`orchestration.py story status {KEY}`) + any recent handoff, render a one-line stand
+> (`{key} {title} — plan:{refined|incomplete} build:{phase|—} pr:{#|—}`), then **jump straight to
+> the confirm gate (Step 3) and Mode B** — the ready-set (Step 2) does not apply to a single story's
+> phases. The Mode-B section below is the execution path. The rest of Step 1 is the epic-target boot.
+
+Before anything else (epic target), reconstruct "where we stand". Read the **living** files so the
+picture is always current — never rely on cached knowledge:
 
 1. **Epic frame** — read the Epic plan `docs/plans/*<epic>*-epic.md` if one exists; its
    `## Success Criteria` / scope are the lens for "what done means". If there is no epic file
@@ -351,12 +377,28 @@ then warn and continue.
 
 ## Mode B — Lead-integrated phase dispatch (one coherent change, many phases)
 
+**This is the execution path for a single-Story target** (Step 0 resolved one Story, not an epic) —
+you arrive here directly from Step 1's shortcut. It is **also** reachable from an epic run when one
+ready Story is really a phased coherent change (Step 3's mode choice). Either way the shape is the same.
+
 The Step 1–9 workflow dispatches **one builder per Story, each running the full `/we:build`**. That
 is right when the ready Stories are **independent, sprint-sized slices**. It is the **wrong shape for
 a single coherent change split into phases** — a large refactor, a migration — where N full builds
 would pay the entire QS cost (characterization + AC-gate + simplify + the parallel quality-gate
 subagents + docs + PR + CI) **N times over**. Cutting such a change into N Stories just to dispatch
 it multiplies overhead the work does not need; the human feels that overhead and is right to refuse it.
+
+**The phase decomposition comes from the plan, not improvised.** `/we:story` already wrote the
+`### Phase` blocks (with per-phase `**Files:**`) and the `parallel_groups` frontmatter — read them as
+the chunk plan and the parallel-wave map. A group in `parallel_groups` is a wave of disjoint chunks
+the Lead dispatches together (still ≤2 concurrent); phases outside any group are serial. Re-run the
+parallelism discriminating check below before each wave — the plan's `parallel_groups` is a strong
+hint, not a licence to skip the disjointness check.
+
+Even a **small monolith** is a legitimate Mode-B single-Story target: the value is not only saved QS
+cost but that the **caller keeps their own context clean and reviews the result neutrally** — the
+teammate does the focused implementation, the Lead integrates and reviews. `/we:story` recommends this
+over `/we:build` whenever the work is more than trivially straight-line.
 
 For that case, run the **lead-integrated phase mode**:
 
@@ -410,8 +452,10 @@ required regardless of weside connection.
 
 ## Rules
 
-- **Boot from state on every invocation** — reconstruct where the Epic stands from living files
-  before anything else; never assume cached knowledge.
+- **Resolve the target first (Step 0)** — a single-Story key runs Mode B over that one plan's phases
+  (skip the ready-set entirely, no synthetic epic); an epic runs the full Step 1–9 ready-set workflow.
+- **Boot from state on every invocation** — reconstruct where the Epic (or single Story) stands from
+  living files before anything else; never assume cached knowledge.
 - **Dispatch only on an explicit confirm** — the ready set is shown first; the human gates it.
 - **Hard cap ≤2 concurrent builders** — refuse and log any attempt to exceed it (runaway guard).
 - **The Lead is a persistent partner, not a throwaway dispatcher** — it holds the overview so the
