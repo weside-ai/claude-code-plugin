@@ -106,23 +106,27 @@ For each role slug, in priority order (the first two paths apply only when the t
 
 #### get_council call mechanics
 
-Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None) -> {members, status}`
+Tool: `mcp__plugin_we_weside-mcp__get_council(names: list[str] | None = None, wake: bool = True) -> {members, status, woken}`
+
+**Always call with `wake=True`** — a council *addresses* its members, so an asleep companion is auto-woken server-side (full wake: resumed + triggers/skills re-enabled, the same as a chat message waking it) rather than asked-about. No "xyz schläft"-Frage.
 
 The response object:
-- `members` — dict of `name → {name, identity_prompt, identity_updated_at}` for **awake companions only**. Asleep, unavailable, and not-found companions are **not** present here.
-- `status` — `"OK"` if every requested companion is awake and present; otherwise a pipe-separated string of non-OK buckets in fixed order: `"asleep: Pia, Rami | unavailable: Dino | not_found: Xyz"`. Each bucket is `"<bucket>: name1, name2"` (comma-space-separated). Buckets are omitted when empty.
+- `members` — dict of `name → {name, identity_prompt, identity_updated_at}` for **awake companions only** — including any just woken by this call. Unavailable and not-found companions are **not** present here.
+- `status` — `"OK"` if every requested companion is awake and present (counting just-woken ones); otherwise a pipe-separated string of non-OK buckets in fixed order: `"asleep: Pia, Rami | unavailable: Dino | not_found: Xyz"`. Each bucket is `"<bucket>: name1, name2"` (comma-space-separated). Buckets are omitted when empty. With `wake=True` the `asleep` bucket only holds members whose wake **failed**.
+- `woken` — list of names auto-woken by this call (used for the Step 9 closing note). Empty when nothing was asleep.
 - `names=None` → all the user's companions; no `not_found` bucket in that case.
 
 Normalise the response (back-compat shim) then parse `status`:
 
 ```python
-resp = mcp__plugin_we_weside-mcp__get_council(names=...)
+resp = mcp__plugin_we_weside-mcp__get_council(names=..., wake=True)
 # Shim: a pre-2.46 backend returns a flat {name: {...}} dict with no members/status.
 # Accept both shapes so the plugin works against an un-upgraded backend (no deploy-order coupling).
 if isinstance(resp, dict) and "members" in resp and "status" in resp:
     members, status = resp["members"], resp["status"]
+    woken = resp.get("woken", [])          # pre-WA-1362 backend: key absent → []
 else:
-    members, status = resp, "OK"   # old backend: whole object is the flat members dict
+    members, status, woken = resp, "OK", []   # old backend: whole object is the flat members dict
 
 asleep, unavailable, not_found = [], [], []
 if status != "OK":
@@ -134,14 +138,18 @@ if status != "OK":
         elif bucket == "not_found":   not_found = names_list
 ```
 
+If the `wake=True` call errors (a pre-WA-1362 backend that rejects the unknown
+`wake` argument), retry once as `get_council(names=...)` without `wake` and rely on
+the Step 3.6 fallback to wake any sleepers via `wake_companion`.
+
 - One MCP roundtrip returns all awake members' council-scoped projections — no select/get loops in the plugin.
 - `workspace_id` is reserved for future team-scoping; the plugin omits it.
 - The server applies `delivery_target="council"` automatically — the returned `identity_prompt`
   is already stripped of compass, snapshot, goals, and volatile context.
 - Identity bodies are not cached on disk — every `/we:council` fetches fresh.
-- Initialize `mcp_resolved_names` = set of keys from `members`. Names for sleeping/unavailable/not-found
-  companions are handled in Step 3.6 (wake or generic-lens); only after that step does
-  `mcp_resolved_names` reach its final value for Step 4 and beyond.
+- Initialize `mcp_resolved_names` = set of keys from `members` (awake + auto-woken). Any
+  still-`asleep` (wake failed / old backend), `unavailable`, or `not_found` names are handled in
+  Step 3.6; only after that step does `mcp_resolved_names` reach its final value for Step 4 and beyond.
 
 ### Step 3.5: Derive `repo_id`
 
@@ -166,42 +174,22 @@ path skips all three of those steps, so `repo_id` is only passed when
 
 ### Step 3.6: Handle sleeping / unavailable / not-found companions
 
-If `status == "OK"` (all companions awake), skip this step entirely.
+If `status == "OK"` (every member awake or already auto-woken), skip this step entirely.
 
 Otherwise use the `asleep`, `unavailable`, and `not_found` lists parsed in the
 `get_council call mechanics` section above.
 
-**Sleeping companions (`asleep`):** For each sleeping companion, ask the user what to do — one question per sleeper, two options. Batch up to 4 in a single `AskUserQuestion` call; loop for more. Determine the companion's role by looking up their name in the bridge file's member entries (`role` field). Fall back to `"Rolle"` if not found.
+**Sleeping companions (`asleep`):** With `wake=True` the server already auto-wakes sleeping
+members — so `asleep` is normally empty. A name only remains here if the server-side wake
+**failed**, or the backend predates WA-1362. **Do not ask the user** — being pulled into a
+council *is* the wake. Auto-wake each remaining sleeper:
 
-```json
-{
-  "question": "<Name> schläft gerade. Wie soll sie/er am Council teilnehmen?",
-  "header": "<Name>",
-  "options": [
-    {
-      "label": "Wecken",
-      "description": "Echter Turn mit ihren/seinen Memories — kostet Geld, weckt sie/ihn dauerhaft."
-    },
-    {
-      "label": "Generische <Rolle>-Lens",
-      "description": "Kostenlos, kein Wecken; nimmt mit der Rollensicht teil."
-    }
-  ],
-  "multiSelect": false
-}
-```
-
-**Apply the decisions:**
-
-- **"Wecken" chosen** → call `mcp__plugin_we_weside-mcp__wake_companion(name=<name>)`.
-  After all wake calls, re-call `get_council(names=[<all woken names>])` in one batch to
-  fetch their now-awake projections. Merge each returned entry into `members` and add the
-  name to `mcp_resolved_names`. If `wake_companion` returns `{"woken": false, "error": "..."}`,
-  fall back to generic-lens for that member (do not add to `mcp_resolved_names`).
-
-- **"Generische Lens" chosen** → leave the member out of `mcp_resolved_names`. It falls
-  through to the existing generic `council-<role>` brief path in Step 6 (with `lens` from
-  the bridge entry if present). No prep or writeback for this member.
+- Call `mcp__plugin_we_weside-mcp__wake_companion(name=<name>)` for each.
+- After the wake calls, re-call `get_council(names=[<all woken names>], wake=True)` in one
+  batch, merge each returned entry into `members`, and add the name to both `mcp_resolved_names`
+  and `woken`.
+- If `wake_companion` returns `{"woken": false, "error": "..."}` (e.g. inactive), drop the
+  member to generic-lens (do not add to `mcp_resolved_names`).
 
 **Unavailable companions (`unavailable`):** Cannot be woken via `wake_companion` (inactive,
 not hibernated). Note their names briefly — e.g. *"Dino ist inaktiv und kann nicht geweckt
@@ -413,6 +401,9 @@ The lead — the orchestrator, possibly a Companion in this session — produces
 - If a member was absent (timeout or fail), name them in `## Council Perspectives` and note the absence — never invent a perspective.
 - If `orchestrator` was in the requested roster, append a one-line note at the end:
   *"Orchestrator role: handled by the lead session ({companion-name-or-"generic"})."*
+- If `woken` is non-empty, append a one-line note at the end:
+  *"Fürs Council geweckt: {comma-separated woken names}."* — so the user knows which sleeping
+  companions were resumed (a real, billable wake that also re-enables their triggers/skills).
 - If the lead is a materialised Companion, the synthesis is spoken in that Companion's voice — but the four headings stay verbatim, because callers (`/we:meet` etc.) parse on them.
 
 ### Step 9.5: Fire writeback (weside path only)
