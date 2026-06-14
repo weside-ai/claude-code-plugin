@@ -84,6 +84,12 @@ Field notes from real lead-integrated phase-dispatch runs. The Rules section in 
   teammate deferring frontend jest or backend pytest is fine — but the Lead MUST then actually run them at
   integration. Set that expectation in the brief. Symlink the main worktree's root `node_modules` into the
   integration worktree (instant) instead of a ~1GB `yarn install`.
+- **Run the WHOLE affected test set at integration, not just the file the builder touched.** A builder
+  that adds a required field to a schema updates *its* unit test, but the same object is often constructed
+  from mocks in sibling **integration** tests that won't set the new field — they fail (e.g. a pydantic
+  `MagicMock`-not-a-string error) only when actually run. The Lead's QS must run unit AND integration for
+  every module the change touches (`pytest tests/unit/... tests/integration/...`), not the one unit file
+  the builder reported green.
 - **Integration/merge commits need an allowed conventional-commit type.** The commitizen hook rejects
   `merge:` (not an allowed type). Use e.g. `chore({TICKET}): integrate <phase> …` for the Lead's
   `git merge` integration commits.
