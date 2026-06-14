@@ -223,6 +223,16 @@ EnterWorktree or a quality-gate subagent run against a different repo.
 ISOLATION: /we:build creates its own worktree — do NOT call EnterWorktree before invoking the
 skill, as a nested worktree-create is rejected. The build manages isolation internally.
 
+⚠️ WORK INSIDE THE BUILD WORKTREE — NEVER edit files under {repo_root} directly. The
+`cd {repo_root}` above is ONLY for the initial Skill(skill="build") invocation. Once /we:build's
+EnterWorktree has created the build worktree, EVERY file edit, git command, and test MUST run
+against that worktree path (a `.../.claude/worktrees/...` directory), NOT the Lead's main repo at
+{repo_root}. Before ANY edit or commit, confirm `git rev-parse --show-toplevel` returns the
+WORKTREE path, NOT {repo_root}. If it returns {repo_root}, your cwd reset to the Lead's main
+worktree — `cd` back into the build worktree before editing, or you will contaminate the Lead's
+main worktree with stray uncommitted changes (a real, repeated failure mode). The Lead's main
+worktree at {repo_root} MUST stay clean for the entire run.
+
 Your job: run the COMPLETE build pipeline for {TICKET} by invoking the skill:
   Skill(skill="build")  with the ticket {TICKET}
 Run it to a reviewable PR — Mode A or B, all quality gates, docs, PR, CI — UNCHANGED.
