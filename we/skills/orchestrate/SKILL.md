@@ -226,7 +226,11 @@ skill, as a nested worktree-create is rejected. The build manages isolation inte
 Your job: run the COMPLETE build pipeline for {TICKET} by invoking the skill:
   Skill(skill="build")  with the ticket {TICKET}
 Run it to a reviewable PR — Mode A or B, all quality gates, docs, PR, CI — UNCHANGED.
-You own only this one Story. Do NOT merge the PR (Deliver is the human's job).
+The build does NOT end at `pr_created`: Step 8 (the inline review-fix loop) is part of it —
+wait for CI to finish, run the ci-review loop, and resolve every bot review thread before you
+report done. Stopping at "PR opened, run /we:ci-review later" leaves blocking threads for the
+Lead to chase and forces an extra full CI cycle. You own only this one Story. Do NOT merge the
+PR (Deliver is the human's job).
 
 The Task* tools may be deferred — load them first via ToolSearch("select:TaskList,TaskUpdate")
 if you need them. Claim your task with TaskUpdate(owner="builder-{TICKET}").
@@ -239,8 +243,11 @@ blocker), send EXACTLY ONE structured message:
 REPORT CI HONESTLY: before you report "done", run `gh pr checks {PR}` and include the real check
 state in your message. A PR with a failing check or unresolved Major/Critical review thread is
 **not** "done/all-green" — say "PR #N created, CI red: <checks>" so the lead reviews the truth, not
-an over-claim. Do not assert "tests pass / review passed" from your local run alone; CI is the
-source of truth. Even if you stop early, send the message first. Then mark your task completed via TaskUpdate.
+an over-claim. A check still `pending`/running (claude-review lags the push by minutes) is ALSO not
+done — wait for it to finish rather than reporting the other checks as green; never report "done"
+while claude-review is pending or red. Do not assert "tests pass / review passed" from your local
+run alone; CI is the source of truth. Even if you stop early, send the message first. Then mark your
+task completed via TaskUpdate.
 ```
 
 ### Step 7: Monitor + roll-up (Lead observes)
