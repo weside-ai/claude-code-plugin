@@ -284,9 +284,17 @@ fi
 ⛔ **If UNRESOLVED > 0: STOP. Go back to 3d. Do NOT proceed to push.**
 Human-authored threads do not block this gate — list them in the report instead.
 
+### 3e-bis. Migration branches: rebase + re-check alembic heads before push
+
+If the branch adds an Alembic migration, rebase onto `origin/${BASE_REF}` BEFORE the final push and
+confirm `alembic heads` resolves to exactly **one** head. Parallel merges to main repeatedly create
+multiple heads — rebasing surfaces the drift here (and lets you add a merge-heads migration) instead of
+in red CI. If a second head appears, merge it (a `down_revision = (head_a, head_b)` merge migration) and
+re-run the check until `alembic heads` == 1.
+
 ### 3f. Push
 
-Only after 3e confirms 0 unresolved:
+Only after 3e confirms 0 unresolved (and 3e-bis for migration branches):
 
 ```bash
 git push

@@ -72,3 +72,22 @@ Field notes from real lead-integrated phase-dispatch runs. The Rules section in 
   worktrees; a mid-command `cd` into the wrong one makes a validation run silently test the *wrong* tree
   (it passes, but it proved nothing about the integration branch). Re-confirm the worktree root before
   trusting a green. A green from the wrong directory is worse than a red.
+- **A migration chunk's end-of-change QS MUST run a REAL-DB alembic roundtrip — the Lead owns it.** A
+  teammate in a throwaway worktree usually has **no database**, so it can only *defer* the
+  `alembic upgrade → downgrade → upgrade` roundtrip — that deferral is NOT verification. For any chunk
+  that adds or edits a migration, the Lead runs the real roundtrip against the dev DB at integration. A
+  real bug slipped past once because the teammate deferred it and the Lead trusted "all green": a
+  partial `seed_upsert(rows=[{"id":44,"is_active":False}], …)` — INSERT…ON CONFLICT DO UPDATE — fired its
+  INSERT fallback when id 44 was absent and violated NOT NULL. Only the Lead's actual roundtrip caught it.
+- **A chunk whose tests need a DB or the JS toolchain can't run them in a fresh worktree — the Lead's QS
+  owns the real test pass.** Throwaway teammate worktrees have no `node_modules` / poetry venv, so a
+  teammate deferring frontend jest or backend pytest is fine — but the Lead MUST then actually run them at
+  integration. Set that expectation in the brief. Symlink the main worktree's root `node_modules` into the
+  integration worktree (instant) instead of a ~1GB `yarn install`.
+- **Integration/merge commits need an allowed conventional-commit type.** The commitizen hook rejects
+  `merge:` (not an allowed type). Use e.g. `chore({TICKET}): integrate <phase> …` for the Lead's
+  `git merge` integration commits.
+- **A full regen of generated specs can clash with the formatter hook.** Before committing a regenerated
+  OpenAPI/shared-types spec, check which generated files are actually CI-gated, keep the spec diff minimal,
+  and note that a generator-vs-prettier format clash (e.g. lint-staged collapsing the generator's expanded
+  JSON) may require committing the generated spec with `--no-verify` to preserve the generator's output.

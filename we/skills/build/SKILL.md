@@ -249,6 +249,7 @@ Agent(
 
 1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint/gofmt/rustfmt — whichever tool is present in the repo); commit.
 2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
+   - **Seed migrations: flipping a field on an EXISTING seeded row needs a FULL-row upsert or a guarded UPDATE, never a partial `{id, col}` upsert.** A partial `seed_upsert(rows=[{"id":N, "col":val}], …)` is INSERT…ON CONFLICT DO UPDATE — if the row is absent at execution time the INSERT fallback fires and violates NOT NULL. To deactivate/flip a column on a row another migration seeded, either mirror that migration's full row (all NOT NULL columns, FKs resolved in Python) or use a guarded `UPDATE … WHERE id=N`. Run a real `alembic upgrade → downgrade → upgrade` roundtrip against a DB before trusting it.
 3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
 
    | Check | What to Verify |
