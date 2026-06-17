@@ -42,7 +42,7 @@ ability to iterate up to the cycle cap remains; it is opt-in by judgement, not t
 1. Collect iteratively (start with what's available, wait for the rest)
 2. Triage (BLOCKING/WARNING/INFO)
 3. Fix → Validate → Commit → Resolve Threads → Verify 0 Unresolved → Push
-4. Post-Push Check (max 3 cycles)
+4. Post-Push Check (max 2 cycles)
 5. Report
 ```
 
@@ -311,14 +311,14 @@ let the next CI run speak for itself — do not block in a multi-cycle wait.
 
 When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings appear:
 
-### Self-loop (max 3 total cycles)
+### Self-loop (max 2 total cycles)
 
 1. Wait for checks to settle (use `gh pr checks $PR` to monitor)
 2. Re-collect from all sources
 3. If new findings → fix and push again
-4. After 3 total cycles → STOP and ask user
+4. After 2 total cycles → STOP and ask user
 
-**Each cycle should fix MORE findings, not the same ones.** If the same finding appears 3 times, you have a structural problem — stop and escalate.
+**Each cycle should fix MORE findings, not the same ones.** If the same finding appears 2 times, you have a structural problem — stop and escalate.
 
 ---
 
@@ -346,5 +346,5 @@ When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings 
 - **FIX BLOCKING + WARNING** — not optional. Only exception: the reviewer is factually wrong.
 - **SUGGESTION/NITPICK** — do them; may be consciously skipped with a short explicit reason.
 - **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
-- **Max 3 cycles** — when you do loop: after third push still has findings → stop and ask user
+- **Max 2 cycles** — when you do loop: after second push still has findings → stop and ask user
 - **`--ci-only` flag** — skip reviews, only check CI status
