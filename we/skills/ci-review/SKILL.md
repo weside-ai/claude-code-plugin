@@ -99,6 +99,16 @@ if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
     --jq 'group_by(.user.login)[] | last
           | select(.user.login | endswith("[bot]"))
           | "=== \(.user.login) ===\n\(.body)"'
+
+  # 4) Claude Code Review summary comment — an ISSUE COMMENT, not a review thread,
+  #    so steps (2) and (3) above DO NOT catch it. weside's Claude review posts ONE
+  #    conversation comment per run as claude[bot]: "## Code Review" with per-finding
+  #    <!-- SEV:BLOCKING|WARNING|SUGGESTION --> markers and a final <!-- VERDICT:* -->
+  #    line. Take the NEWEST one; every SEV finding in it is a finding for the table.
+  #    Because it is a comment, it has NO thread to resolve (see 3d).
+  gh api repos/$REPO/issues/$PR/comments --paginate \
+    --jq '[.[] | select(.user.login|test("claude";"i")) | select(.body|test("## Code Review"))]
+          | sort_by(.created_at) | last | .body // "(no Claude review comment)"'
 else
   echo "INFO: gh unavailable or no PR found — skipping remote CI/review collection. Local quality gates are authoritative."
 fi
@@ -135,6 +145,11 @@ Only skip a CI failure if it's truly unfixable from this branch (e.g., infrastru
 - **Severity** = read from the thread/body **text** (markers like Critical/Major/Minor/
   Nitpick or 🔴/🟡/🟢 / `VERDICT:`/`SEV:`), per the Severity policy table above — NOT from
   the reviewer's name.
+- **Claude Code Review** (source 4) is a summary comment, not threads: split it into one
+  row per `<!-- SEV:* -->` finding (BLOCKING/WARNING/SUGGESTION → the policy table). Its
+  **Thread ID is "—"** (a comment can't be resolved) and it is **not** subject to the 3e
+  thread gate — it is confirmed by the re-review after push (3d note / Phase 4): the next
+  run posts a delta with ✅ Fixed and a `VERDICT:PASS`, which is what the CI gate checks.
 
 ---
 
@@ -240,6 +255,13 @@ git commit -m "fix: address CI and review findings
 reviewer.** Whenever `gh` is available and a PR exists, resolve every **bot-authored**
 unresolved thread you handled — fixed **or** consciously skipped-with-reason. Human-authored
 threads are left for the user (never auto-resolved).
+
+> **Claude Code Review (source 4) has no thread to resolve** — it's a summary comment, not
+> review threads. Don't try to `resolveReviewThread` it (there's nothing to resolve) and
+> don't treat its absence from the thread list as "missed". Its findings are confirmed by
+> the re-review: after you push the fixes, the Claude review re-runs and posts a delta with
+> `✅ Fixed` and `VERDICT:PASS`; the CI gate fails on `VERDICT:BLOCKING`/`VERDICT:WARNING`,
+> so a green gate after push is the proof. Greptile/CodeRabbit threads below are unchanged.
 
 ```bash
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
@@ -347,4 +369,7 @@ When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings 
 - **SUGGESTION/NITPICK** — do them; may be consciously skipped with a short explicit reason.
 - **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
 - **Max 2 cycles** — when you do loop: after second push still has findings → stop and ask user
+- **Claude Code Review is a comment, not threads** — collect it from issue comments
+  (source 4), split per `<!-- SEV:* -->`, fix BLOCKING/WARNING like any finding, but never
+  try to resolve a thread for it; it's confirmed green via the post-push re-review verdict.
 - **`--ci-only` flag** — skip reviews, only check CI status
