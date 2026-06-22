@@ -75,8 +75,8 @@ fi
 
 Collect from all sources that have completed. Don't wait for everything — start building the findings table with what's available. Skip GitHub steps when `gh` is unavailable:
 
-There is **ONE** collection path, regardless of which reviewer posted (Greptile, CodeRabbit,
-Claude, …). Do not special-case any reviewer by name.
+There is **ONE** collection path, regardless of which reviewer posted (whatever bots the repo's
+`review.available` lists, e.g. CodeRabbit, plus Claude). Do not special-case any reviewer by name.
 
 ```bash
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
@@ -137,10 +137,10 @@ Only skip a CI failure if it's truly unfixable from this branch (e.g., infrastru
 | # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |
 ```
 
-- **Source** = the reviewer/check that raised it (Greptile, CodeRabbit, Claude, CI) —
+- **Source** = the reviewer/check that raised it (e.g. CodeRabbit, Claude, CI) —
   derived from `author.login` / check name, never special-cased in logic.
 - **Bot?** = yes if the thread's first-comment `author.login` ends in `[bot]` or is in the
-  allowlist (`greptile`, `coderabbit`, `claude`). Only bot threads get auto-resolved (3d).
+  allowlist (`$REVIEW_ALLOWLIST` — union of `review.available`, default `greptile|coderabbit|claude`). Only bot threads get auto-resolved (3d).
   Human threads → mark "needs user confirm", never auto-close.
 - **Severity** = read from the thread/body **text** (markers like Critical/Major/Minor/
   Nitpick or 🔴/🟡/🟢 / `VERDICT:`/`SEV:`), per the Severity policy table above — NOT from
@@ -264,6 +264,11 @@ threads are left for the user (never auto-resolved).
 > so a green gate after push is the proof. Greptile/CodeRabbit threads below are unchanged.
 
 ```bash
+# Bot-name allowlist = union of the repo's configured reviewers; fall back to the literal
+# default when there is no .weside/config.json review block (back-compat). The [bot] suffix
+# below is the real workhorse; this list only catches bots that don't carry the suffix.
+REVIEW_ALLOWLIST=$(jq -r '(.review.available // ["greptile","coderabbit","claude"]) | join("|")' .weside/config.json 2>/dev/null || echo "greptile|coderabbit|claude")
+
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
   # All unresolved thread IDs whose first-comment author is a bot ([bot] suffix or allowlist).
   THREADS=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
@@ -273,7 +278,7 @@ if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
     --jq '.data.repository.pullRequest.reviewThreads.nodes[]
           | select(.isResolved==false)
           | select(.comments.nodes[0].author.login
-                   | (endswith("[bot]")) or test("greptile|coderabbit|claude";"i"))
+                   | (endswith("[bot]")) or test("'"$REVIEW_ALLOWLIST"'";"i"))
           | .id')
 
   for id in $THREADS; do
@@ -285,6 +290,8 @@ fi
 ### 3e. Verify zero unresolved bot threads (HARD GATE)
 
 ```bash
+REVIEW_ALLOWLIST=$(jq -r '(.review.available // ["greptile","coderabbit","claude"]) | join("|")' .weside/config.json 2>/dev/null || echo "greptile|coderabbit|claude")
+
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
   UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
     repository(owner:$owner,name:$repo){pullRequest(number:$pr){
@@ -293,7 +300,7 @@ if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
     --jq '[.data.repository.pullRequest.reviewThreads.nodes[]
            | select(.isResolved==false)
            | select(.comments.nodes[0].author.login
-                    | (endswith("[bot]")) or test("greptile|coderabbit|claude";"i"))] | length')
+                    | (endswith("[bot]")) or test("'"$REVIEW_ALLOWLIST"'";"i"))] | length')
 
   if [ "$UNRESOLVED" -gt 0 ]; then
     echo "⛔ BLOCKED: $UNRESOLVED unresolved bot review thread(s). Resolve them before pushing."
