@@ -122,7 +122,7 @@ Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal or
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
 - **Step 3 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
-- **Step 8 (CI fix)** — review findings (CodeRabbit on GitHub, or local quality gates elsewhere) are addressed here; if 3 cycles can't clear them, you're asked.
+- **Step 8 (CI fix)** — review findings (the repo's configured GitHub reviewers, e.g. CodeRabbit, or local quality gates elsewhere) are addressed here; if 3 cycles can't clear them, you're asked.
 
 Otherwise it runs.
 

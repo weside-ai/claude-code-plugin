@@ -100,6 +100,7 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 **What it produces:**
 - Ticket in your ticketing tool (minimal: user-story format)
 - `docs/plans/{TICKET}-story.md` (detailed: context, ACs, phases, design decisions, security review)
+- Optional `review_intensity` (light/standard/deep) in the plan frontmatter — controls how many of the repo's configured local reviewers `/we:build` runs. Bump to `deep` for high-risk stories, `light` for trivial ones; omit = standard.
 
 **Hand-off:** to `/we:build` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
 
@@ -140,16 +141,16 @@ Build orchestrator — the autonomous half of the pipeline. Once you trigger it,
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
 
-Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures, Claude Review, and CodeRabbit (when present on GitHub); triages them; fixes them in one batch; pushes once. On repos without CodeRabbit, local quality gates serve as the sole review signal.
+Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures plus whatever AI reviewers the repo configured in `review.available` (e.g. CodeRabbit) on GitHub; triages them; fixes them in one batch; pushes once. Reviewer-agnostic — the bot-thread allowlist is built from `review.available`. On repos without a GitHub AI reviewer, local quality gates serve as the sole review signal.
 
 **When to use standalone:**
 - After CI failed on a PR not driven by `/we:build`
-- After a CodeRabbit review on a manually-opened PR
+- After an AI-reviewer pass on a manually-opened PR
 - To iterate review fixes without re-running the full pipeline
 
 **What it produces:**
 - A single commit with all fixes (per cycle)
-- CodeRabbit threads resolved (if CodeRabbit is active on the repo)
+- All bot review threads resolved (whichever reviewers are active on the repo)
 - A push only after every blocker is addressed
 
 **Limit:** 3 cycles max. After the third, stops and asks.
@@ -203,7 +204,7 @@ Runs tests affected by the current changes. Auto-detects framework (pytest, jest
 
 ### `/we:pr`
 
-Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. On GitHub with CodeRabbit installed, it also triggers an automated review; on other hosts or without CodeRabbit, the local quality gates are treated as authoritative.
+Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. The repo's configured GitHub AI reviewers (`review.available`, e.g. CodeRabbit) review after the PR opens; on other hosts or without a GitHub reviewer, the local quality gates are treated as authoritative.
 
 ### `/we:docs`
 
@@ -373,7 +374,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 > *Project onboarding — detect stack + ticketing, write `.weside/config.json`, optionally compose crew.*
 
-Run once per project. Interactive (3 core questions, ~5 minutes).
+Run once per project. Interactive (4 core questions, ~5 minutes) — vision, ticketing, stack, and which code reviewers the repo uses (the ordered `review.available` list, free-text-extendable; the order is the intensity policy `/we:build` reads).
 
 **Idempotent:** re-running doesn't overwrite existing config; it reports current state and asks before changes.
 

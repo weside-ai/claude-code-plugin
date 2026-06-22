@@ -287,16 +287,31 @@ Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simpli
 
 ## Step 5: Quality Gates (PARALLEL)
 
-**Three gates run in parallel.** Launch them in a **single message** so they execute concurrently:
+**Gates run in parallel.** Launch them in a **single message** so they execute concurrently:
 
-Three subagents via `Agent(run_in_background=True)`:
-
-- **code-reviewer** — Code review + AC-alignment
 - **static-analyzer** — Lint, format, types
 - **test-runner** — Tests + coverage
+- **Local reviewers** — driven by config + the story's intensity (below)
 
-**AI code reviewers run on GitHub, not locally.** Whatever reviewer the repo uses
-(Greptile, CodeRabbit, …) plus Claude Review post resolvable threads + their own check
+**Which local reviewers run (config-driven):** read `review.available` (ordered list) from
+`.weside/config.json` and the story's `review_intensity` frontmatter (default `standard` if
+absent). Take the **locally-invokable** entries of `review.available` in order — `claude` (the
+`code-reviewer` agent) and `codex` (`/codex:review`) — and select the first N by intensity:
+`light`=1, `standard`=2, `deep`=all-local. CI-only ids (`coderabbit`/`greptile`/custom bots) are
+ignored here — they run on GitHub, not locally. (Note: with the default two local ids `claude`+`codex`,
+`standard` and `deep` coincide until a third local reviewer exists — that's expected.)
+
+- For each selected `claude` → launch the `code-reviewer` agent (AC-alignment + review).
+- For each selected `codex` → locate the codex companion script and run it via Bash (codex is `disable-model-invocation`, so call the script, don't `Skill()` it). The script ships in the codex plugin's cache, NOT under `${CLAUDE_PLUGIN_ROOT}` (that points at the `we` plugin while build runs). Resolve it by glob and take the newest:
+  ```bash
+  CODEX_REVIEW=$(ls -t ~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1)
+  if [ -n "$CODEX_REVIEW" ]; then node "$CODEX_REVIEW" review --wait; else echo "codex selected but plugin not installed — skipping"; fi
+  ```
+  **Skip silently with a one-line note** if `codex` is not in `review.available` OR the glob finds nothing (codex plugin not installed).
+- **No `review` block in config** → fall back to today's behaviour: run the `code-reviewer` agent only.
+
+**AI CI reviewers run on GitHub, not locally.** Whatever bots the repo's `review.available`
+lists as CI ids (e.g. CodeRabbit) plus Claude Review post resolvable threads + their own check
 gates after PR creation. The GitHub review has better context (PR diff, commit history,
 prior reviews) and is the authoritative gate. If no GitHub remote or no AI reviewer is
 present, skip Steps 8d–8e (thread resolution) and treat local quality gates as authoritative.
@@ -373,7 +388,7 @@ gh auth status 2>/dev/null && HAS_GH=1 || HAS_GH=0
 ```
 If `HAS_GH=0`: skip steps 1, 5, and 6 below. Write `ci_passed` after local quality gates pass and continue.
 
-1. **Collect** findings from CI plus all PR review sources — every AI reviewer (Greptile, CodeRabbit, …) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body (use `gh` CLI — skip if `HAS_GH=0`)
+1. **Collect** findings from CI plus all PR review sources — every AI reviewer the repo uses (the CI bots in `review.available`, e.g. CodeRabbit) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body (use `gh` CLI — skip if `HAS_GH=0`)
 2. **Triage** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason
 3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
 4. **Batch fix** all issues locally, ONE commit with all fixes

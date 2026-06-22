@@ -106,10 +106,10 @@ flowchart TB
 | **2. Develop** | Implement plan phase by phase | TDD: tests alongside code. Auto-fix runs after each phase. |
 | **3. AC verify** | Every acceptance criterion checked with concrete evidence | **Blocking.** No item passes without a citation (file:line, test name, commit). |
 | **4. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers |
-| **5. Quality gates** | Code review + static analysis + tests, all in parallel | Three subagents, single message dispatch — concurrent execution |
+| **5. Quality gates** | Local reviewers + static analysis + tests, all in parallel | Three subagents, single message dispatch. Which local reviewers run is config-driven: the story's `review_intensity` (light/standard/deep) selects the first-N of the repo's `review.available` local reviewers (`claude` code-reviewer, `codex`). |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
-| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. CodeRabbit runs on GitHub if installed; other hosts use local quality gates. |
-| **8. CI fix** | Inline loop — collect findings, fix all, push once | Max 3 cycles. CodeRabbit threads resolved when present; otherwise local gates are authoritative. |
+| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. The repo's configured CI reviewers (`review.available`, e.g. CodeRabbit) run on GitHub if installed; other hosts use local quality gates. |
+| **8. CI fix** | Inline loop — collect findings, fix all, push once | Max 3 cycles. Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
 | **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
 
 ### Robustness
@@ -141,7 +141,7 @@ You receive a PR with:
 
 - All acceptance criteria implemented
 - Tests passing
-- Code reviewed (by `code-reviewer` + CodeRabbit when on GitHub, local quality gates otherwise)
+- Code reviewed (by the repo's configured reviewers — `code-reviewer` + any local/CI reviewers in `review.available`; local quality gates are authoritative when no GitHub reviewer is present)
 - Docs proposed and applied
 - CI green
 - Ticket in *In Review*

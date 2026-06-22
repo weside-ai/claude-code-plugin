@@ -30,7 +30,7 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:story    → PO + Claude create Story + plan (INTERACTIVE; Solo)
 /we:build    → Claude runs full pipeline AUTONOMOUSLY:
-               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → AI reviewer(s) + Claude review on GitHub
+               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → configured AI reviewer(s) on GitHub
                → docs → PR → CI fix → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
