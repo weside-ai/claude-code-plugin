@@ -171,7 +171,7 @@ Detect available ticketing tool (in priority order):
 - **ALWAYS** rebase on main before push
 - **ALWAYS** save `pr_created` checkpoint after success
 - **ALWAYS** transition ticket → "In Review" in Step 8 (soft-fail only)
-- **If GitHub PR was created:** remind user: *"The repo's AI reviewer(s) (Greptile, CodeRabbit, …) and Claude review will review on GitHub. After CI runs, use `/we:ci-review` to fix and resolve threads — unresolved BLOCKING/WARNING (Critical/Major) threads block merge via the review gate(s)."*
+- **If GitHub PR was created:** remind user: *"The repo's configured AI reviewer(s) (whatever `review.available` lists, e.g. CodeRabbit) will review on GitHub. After CI runs, use `/we:ci-review` to fix and resolve threads — unresolved BLOCKING/WARNING (Critical/Major) threads block merge via the review gate(s)."*
 - **If no `gh` CLI:** remind user to open the PR manually; the branch is pushed and ready.
 - **NEVER** merge PR — that's the user's job
 - **NEVER** transition ticket to "Done" — that's the user's job
