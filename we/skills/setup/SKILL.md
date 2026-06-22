@@ -91,7 +91,7 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
 4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
-### Step 2: Ask 3 Questions
+### Step 2: Ask 4 Questions
 
 ```
 1. "Do you have a product vision? (Link, file, or brief description)"
@@ -104,7 +104,24 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
 
 3. "Stack detected: {detected}. Correct?"
    → Confirm or override
+
+4. "Which code reviewers does this repo use? (Auto-detected: {detected})"
+   → Detect candidates: codex plugin installed → suggest `codex`;
+     a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
+     `claude` (the local code-reviewer agent) is always available and listed first.
+   → Confirm the ORDER (it is the intensity policy — see below) or override.
+   → "Add another reviewer? (free-text id, e.g. a custom bot — leave empty to finish)"
+     → accept any id; unknown ids are treated as CI bots (allowlisted, not run locally).
+   → Default when nothing else is detected: ["claude"].
 ```
+
+**Reviewer-id semantics (single source of truth — other skills reference this):**
+
+- `claude` → the local `code-reviewer` agent. Baseline local review, always first. Locally invokable.
+- `codex` → local `/codex:review` via the codex plugin's `codex-companion.mjs`. Locally invokable (needs the codex plugin).
+- `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
+
+The list **order is the policy**: `/we:build` applies a story's `review_intensity` as a first-N rule over the *locally-invokable* entries (`light`=1, `standard`=2, `deep`=all-local). Put your preferred local reviewer first.
 
 ### Step 3: Save Configuration
 
@@ -114,11 +131,14 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
 {
   "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
   "stack": ["<detected stacks>"],
-  "tools": { "graphify": false, "turbovault": false, "superpowers": false }
+  "tools": { "graphify": false, "turbovault": false, "superpowers": false },
+  "review": { "available": ["claude"] }
 }
 ```
 
 The `tools` block carries the Step 1b detection results (idempotent: re-running setup re-detects and overwrites only this block).
+
+The `review.available` block is the **ordered** reviewer list from Step 2 Q4 (see reviewer-id semantics there). It persists at the core level so it works even without the Companion Framework. Consumed by `/we:build` + `/we:orchestrate` (which local reviewers to run at a story's intensity) and `/we:ci-review` (the bot-thread allowlist = union of this list). Absent block → skills fall back to today's behaviour (back-compat).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
