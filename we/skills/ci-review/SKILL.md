@@ -261,7 +261,7 @@ threads are left for the user (never auto-resolved).
 > don't treat its absence from the thread list as "missed". Its findings are confirmed by
 > the re-review: after you push the fixes, the Claude review re-runs and posts a delta with
 > `✅ Fixed` and `VERDICT:PASS`; the CI gate fails on `VERDICT:BLOCKING`/`VERDICT:WARNING`,
-> so a green gate after push is the proof. Greptile/CodeRabbit threads below are unchanged.
+> so a green gate after push is the proof. Other bots' resolvable threads (below) are unchanged.
 
 ```bash
 # Bot-name allowlist = union of the repo's configured reviewers; fall back to the literal
