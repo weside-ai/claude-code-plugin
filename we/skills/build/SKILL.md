@@ -298,10 +298,16 @@ Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simpli
 absent). Take the **locally-invokable** entries of `review.available` in order — `claude` (the
 `code-reviewer` agent) and `codex` (`/codex:review`) — and select the first N by intensity:
 `light`=1, `standard`=2, `deep`=all-local. CI-only ids (`coderabbit`/`greptile`/custom bots) are
-ignored here — they run on GitHub, not locally.
+ignored here — they run on GitHub, not locally. (Note: with the default two local ids `claude`+`codex`,
+`standard` and `deep` coincide until a third local reviewer exists — that's expected.)
 
 - For each selected `claude` → launch the `code-reviewer` agent (AC-alignment + review).
-- For each selected `codex` → run `node "${CODEX_PLUGIN_ROOT}/scripts/codex-companion.mjs" review --wait` via Bash (codex is `disable-model-invocation`, so call the script, don't `Skill()` it). **Skip silently with a one-line note** if `codex` is not in `review.available` OR the codex plugin is not installed (`CODEX_PLUGIN_ROOT` unset / script absent).
+- For each selected `codex` → locate the codex companion script and run it via Bash (codex is `disable-model-invocation`, so call the script, don't `Skill()` it). The script ships in the codex plugin's cache, NOT under `${CLAUDE_PLUGIN_ROOT}` (that points at the `we` plugin while build runs). Resolve it by glob and take the newest:
+  ```bash
+  CODEX_REVIEW=$(ls -t ~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1)
+  if [ -n "$CODEX_REVIEW" ]; then node "$CODEX_REVIEW" review --wait; else echo "codex selected but plugin not installed — skipping"; fi
+  ```
+  **Skip silently with a one-line note** if `codex` is not in `review.available` OR the glob finds nothing (codex plugin not installed).
 - **No `review` block in config** → fall back to today's behaviour: run the `code-reviewer` agent only.
 
 **AI CI reviewers run on GitHub, not locally.** Whatever bots the repo's `review.available`

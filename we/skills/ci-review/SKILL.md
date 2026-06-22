@@ -290,6 +290,7 @@ fi
 ### 3e. Verify zero unresolved bot threads (HARD GATE)
 
 ```bash
+# Same default as 3d — keep the two literals in sync (a thread slips the gate if they drift).
 REVIEW_ALLOWLIST=$(jq -r '(.review.available // ["greptile","coderabbit","claude"]) | join("|")' .weside/config.json 2>/dev/null || echo "greptile|coderabbit|claude")
 
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
