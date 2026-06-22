@@ -253,9 +253,9 @@ blocker), send EXACTLY ONE structured message:
 REPORT CI HONESTLY: before you report "done", run `gh pr checks {PR}` and include the real check
 state in your message. A PR with a failing check or unresolved Major/Critical review thread is
 **not** "done/all-green" — say "PR #N created, CI red: <checks>" so the lead reviews the truth, not
-an over-claim. A check still `pending`/running (claude-review lags the push by minutes) is ALSO not
+an over-claim. A check still `pending`/running (an AI review check, e.g. claude-review, lags the push by minutes) is ALSO not
 done — wait for it to finish rather than reporting the other checks as green; never report "done"
-while claude-review is pending or red. Do not assert "tests pass / review passed" from your local
+while that review check is pending or red. Do not assert "tests pass / review passed" from your local
 run alone; CI is the source of truth. Even if you stop early, send the message first. Then mark your
 task completed via TaskUpdate.
 ```
