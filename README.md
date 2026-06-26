@@ -222,8 +222,14 @@ Optional but enhance the pipeline:
 |---|---|---|
 | `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:story` Step 4 | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
+| Codex plugin (`codex` CLI) | **Optional, experimental** execution backend — lets `/we:orchestrate` dispatch Mode-B chunks to Codex (`gpt-5-codex`) instead of Claude Code Agent teammates | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
 
 `/we:setup` checks for these and tells you what's missing.
+
+> **Runtime backends.** The plugin drives **Claude Code** by default. **Codex** is an
+> *optional, experimental* execution backend for `/we:orchestrate` Mode-B chunks — absent the
+> Codex plugin, everything runs on Claude Code (graceful degradation). Full runtime-agnostic
+> integration (declared dependency, executor selection) is in progress.
 
 ---
 

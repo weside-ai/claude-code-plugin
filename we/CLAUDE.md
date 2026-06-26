@@ -20,6 +20,8 @@ Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is au
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
+**Runtime backends.** Execution runs on **Claude Code** by default (Agent teammates, the built-in tools). **Codex** (`gpt-5-codex`, via the official Codex plugin) is an *optional, experimental* execution backend — `/we:orchestrate` Mode-B can dispatch a focused chunk to Codex instead of an Agent teammate; the Lead still reviews + integrates. Codex is opt-in: absent the Codex plugin, everything runs on Claude Code. Full runtime-agnostic wiring (declared dependency + `/we:setup` capability check + executor selection) is in progress — until then, probe for the `codex` CLI before offering the backend.
+
 Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 
 ---

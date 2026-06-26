@@ -59,6 +59,7 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 | superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | TDD/debugging/brainstorming discipline skills used throughout `/we:build` |
 | graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
 | turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
+| Codex backend (optional) | `command -v codex` exits 0 (the official Codex plugin's CLI) | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | `/we:orchestrate` Mode-B optional executor (dispatch a chunk to `gpt-5-codex` instead of an Agent teammate). Absent → Mode-B runs on Claude Code Agent teammates (default) |
 
 **Guided install flow** — for each MISSING row, offer the fix interactively instead of only hinting. Full per-dependency commands and re-check instructions: [`${CLAUDE_PLUGIN_ROOT}/references/dependencies.md`](../../references/dependencies.md). Shape per item:
 
@@ -70,7 +71,7 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 **Persist the result** in `.weside/config.json` (Step 3 merges it):
 
 ```json
-"tools": { "graphify": true, "turbovault": true, "superpowers": false }
+"tools": { "graphify": true, "turbovault": true, "superpowers": false, "codex": false }
 ```
 
 Downstream skills read `tools.*` from config to decide whether to offer graph/vault features — they still verify empirically before each actual call (config can go stale) and only skip when the real call says "not found".
