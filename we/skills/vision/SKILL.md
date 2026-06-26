@@ -80,6 +80,7 @@ Use EnterPlanMode. Draft the updated PRD as a complete document, not a patch —
 
 ```markdown
 ---
+type: vision
 vision: <product-slug>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD

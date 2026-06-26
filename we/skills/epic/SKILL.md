@@ -274,6 +274,7 @@ Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/
 
 ```markdown
 ---
+type: epic-plan
 epic: <epic-slug>
 saga: <parent-saga-slug>
 ticket: <TICKETING-KEY-if-any>

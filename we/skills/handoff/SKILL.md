@@ -234,6 +234,7 @@ If the user picks one ("load the first one" / "load apo-refactor-week"), pivot t
 
 ```yaml
 ---
+type: handoff
 topic: <short slug — used in filename, e.g. "phase-7-handoff-skill">
 branch: <git branch when written>
 worktree: <path if non-main worktree, else "main">

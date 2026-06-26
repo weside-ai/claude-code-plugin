@@ -275,6 +275,7 @@ Format, markers, status buckets (saga uses four: Done / Active / Backlog / Block
 
 ```markdown
 ---
+type: saga-plan
 saga: <saga-slug>
 vision: <parent-vision-slug>  # optional; omit for orphan Sagas
 created: YYYY-MM-DD

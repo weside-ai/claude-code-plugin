@@ -251,6 +251,7 @@ With structured frontmatter:
 
 ```markdown
 ---
+type: retro
 pr: 1998
 branch: feat/apo-refactor-phase-4
 analysed_at: 2026-05-17T22:30:00Z

@@ -149,6 +149,7 @@ Distill into the plan:
 
 ```markdown
 ---
+type: story-plan
 story: {TICKET}
 epic: {EPIC-SLUG-OR-KEY}  # parent epic's slug or ticketing key — REQUIRED when the story belongs to an Epic, so /we:orchestrate can match it into the ready-set. Omit only for standalone stories with no Epic.
 created: YYYY-MM-DD
