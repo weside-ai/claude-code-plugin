@@ -73,3 +73,11 @@ that touches user scope, and never blocks the pipeline on a `n`.
 - **Detect:** `mcp__plugin_we_weside-mcp__get_companion_identity` available.
 - **Install:** requires a weside.ai account; the `we` plugin ships the MCP — check plugin config (`pluginConfigs["we@weside-ai"]`).
 - **Re-check:** call `get_companion_identity`.
+
+## Codex backend (optional)
+
+- **Provides:** an optional, second execution backend for `/we:orchestrate` Mode-B — the Lead can dispatch a focused chunk to Codex (`gpt-5-codex`) instead of a Claude Code Agent teammate, and still reviews + integrates the result. Also powers `/codex:task`. This is what makes the plugin **runtime-agnostic**: it drives Claude Code *or* Codex.
+- **Detect:** `command -v codex` exits 0 (the official Codex plugin's CLI).
+- **Install:** the official Codex plugin [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (third-party, OpenAI's). The `we` plugin declares it as an **optional/recommended** dependency only — it never vendors or hard-depends on it. Follow that repo's install instructions; a `codex` CLI on PATH is the empirical signal we probe for.
+- **Re-check:** `command -v codex` again.
+- **Degradation (the contract):** absent → **Mode-B runs on Claude Code Agent teammates, the default, with no loss of capability.** Codex is strictly opt-in. `/we:setup` Step 1b probes for it and persists `tools.codex`; `/we:orchestrate` only offers it when `tools.codex` is true and the user confirms per chunk. Dispatch mechanics (the single-detach rule): [`codex-dispatch.md`](codex-dispatch.md).
