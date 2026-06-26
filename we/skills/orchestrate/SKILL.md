@@ -442,6 +442,36 @@ For that case, run the **lead-integrated phase mode**:
 One ready Story that is really a phased change the Lead has decomposed → this lead-integrated mode
 (Mode B). When in doubt, ask the human which shape the work is.
 
+### Chunk executor: Agent teammate (default) or Codex (optional backend)
+
+A Mode-B chunk is *focused implementation in an isolated worktree, reported back for the Lead to
+review + integrate*. **Which runtime does that implementation is pluggable** — the Lead stays the
+integrator either way:
+
+- **Agent teammate (default, Claude Code):** `Agent(team_name=…, name=…)` with the chunk brief, as
+  described above. Always available, no extra dependency.
+- **Codex (`/codex:task`, optional):** dispatch the same chunk brief to Codex (`gpt-5-codex`) when the
+  official Codex plugin is installed. This is what makes orchestrate **runtime-agnostic** — the
+  `we` plugin can drive Claude Code *or* Codex as the executor. Codex is an **opt-in** backend, never
+  required: absent the Codex plugin, fall back to Agent teammates silently. (Surfacing the Codex
+  backend as a declared optional dependency + a `/we:setup` capability check is tracked separately —
+  until then, probe for the `codex` CLI / `codex-companion.mjs` before offering it.)
+
+**The one dispatch rule that bites (hard-won):** pick **exactly one** backgrounding mechanism per
+Codex chunk, never two. `node codex-companion.mjs task --write --background …` **already detaches**
+the job itself (and registers it for `/codex:status`); additionally wrapping that call in Bash
+`run_in_background: true` **double-detaches** — the job is orphaned, the worktree stays empty, and
+`/codex:status` cannot see it (confirmed failure 2026-06). So:
+
+- want `/codex:status` tracking → companion `--background`, Bash **foreground** (it returns at once).
+- want the harness completion-notification for a long chunk → companion **foreground** (no
+  `--background`), wrapped in Bash `run_in_background: true`.
+
+Pass the chunk brief with `--cwd <chunk worktree>`, and verify the worktree actually changed (commits
+or `git status`) before trusting a "done" — a lost dispatch reports success while writing nothing.
+Everything else (Lead reviews each diff, integrates onto one branch, runs QS once → one PR, human
+merges) is identical to the Agent-teammate path.
+
 ### Mode B field lessons (mandatory read before dispatching chunks)
 
 Read [`references/mode-b-lessons.md`](references/mode-b-lessons.md) **before the first chunk dispatch**
