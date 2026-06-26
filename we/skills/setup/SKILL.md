@@ -132,7 +132,7 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
 {
   "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
   "stack": ["<detected stacks>"],
-  "tools": { "graphify": false, "turbovault": false, "superpowers": false },
+  "tools": { "graphify": false, "turbovault": false, "superpowers": false, "codex": false },
   "review": { "available": ["claude"] }
 }
 ```

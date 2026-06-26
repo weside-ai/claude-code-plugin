@@ -450,27 +450,34 @@ integrator either way:
 
 - **Agent teammate (default, Claude Code):** `Agent(team_name=…, name=…)` with the chunk brief, as
   described above. Always available, no extra dependency.
-- **Codex (`/codex:task`, optional):** dispatch the same chunk brief to Codex (`gpt-5-codex`) when the
-  official Codex plugin is installed. This is what makes orchestrate **runtime-agnostic** — the
-  `we` plugin can drive Claude Code *or* Codex as the executor. Codex is an **opt-in** backend, never
-  required: absent the Codex plugin, fall back to Agent teammates silently. (Surfacing the Codex
-  backend as a declared optional dependency + a `/we:setup` capability check is tracked separately —
-  until then, probe for the `codex` CLI / `codex-companion.mjs` before offering it.)
+- **Codex (`gpt-5-codex`, optional opt-in backend):** dispatch the same chunk brief to Codex instead
+  of an Agent teammate. This is what makes orchestrate **runtime-agnostic** — the `we` plugin can
+  drive Claude Code *or* Codex as the executor. Codex is strictly **opt-in**, never required.
 
-**The one dispatch rule that bites (hard-won):** pick **exactly one** backgrounding mechanism per
-Codex chunk, never two. `node codex-companion.mjs task --write --background …` **already detaches**
-the job itself (and registers it for `/codex:status`); additionally wrapping that call in Bash
-`run_in_background: true` **double-detaches** — the job is orphaned, the worktree stays empty, and
-`/codex:status` cannot see it (confirmed failure 2026-06). So:
+**Selecting the executor (operative — read this, do not just dispatch on Claude Code):**
 
-- want `/codex:status` tracking → companion `--background`, Bash **foreground** (it returns at once).
-- want the harness completion-notification for a long chunk → companion **foreground** (no
-  `--background`), wrapped in Bash `run_in_background: true`.
-
-Pass the chunk brief with `--cwd <chunk worktree>`, and verify the worktree actually changed (commits
-or `git status`) before trusting a "done" — a lost dispatch reports success while writing nothing.
-Everything else (Lead reviews each diff, integrates onto one branch, runs QS once → one PR, human
-merges) is identical to the Agent-teammate path.
+1. **Read `tools.codex` from `.weside/config.json`** at boot (Step 1). `/we:setup` Step 1b persists it
+   from the `command -v codex` probe. **Absent or `false` → Codex is not offered; every chunk runs on a
+   Claude Code Agent teammate (the default), no degradation, no prompt.** That is the whole graceful-
+   degradation contract: a Claude-Code-only user never sees Codex.
+2. **`tools.codex` is `true` → re-verify empirically** (`command -v codex`) before the first offer, since
+   config can go stale; treat a failed probe as absent (fall back to Agent teammates silently).
+3. **Offer Codex at the rolling confirm (Step 3 / Step 7+), per chunk.** When Codex is available, the
+   per-dispatch confirm includes the executor choice, e.g.:
+   > "Dispatch chunk *<name>* — executor: **[1] Claude Code Agent teammate (default)** / **[2] Codex
+   > (`gpt-5-codex`)**? [1/2]"
+   **Default is Claude Code** — an empty/ambiguous answer picks the Agent teammate. Codex only runs on an
+   **explicit** per-chunk pick. Never auto-route to Codex; never make it sticky across chunks without
+   re-confirming.
+4. **Dispatch via the shared reference.** The single-detach dispatch rule (pick exactly one backgrounding
+   mechanism — companion `--background` + Bash foreground, OR companion foreground + Bash background, never
+   both), the runtime resolution, the `--cwd <chunk worktree>` requirement, and the chunk-brief template
+   all live in one place: [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md).
+   Read it before the first Codex dispatch.
+5. **Verify before trusting "done".** A lost Codex dispatch reports success while writing nothing — the Lead
+   confirms the chunk worktree actually changed (`git -C <worktree> status` / `git -C <worktree> log`) before
+   integrating. Everything downstream (Lead reviews each diff, integrates onto one branch, runs QS once →
+   one PR, human merges) is identical to the Agent-teammate path.
 
 ### Mode B field lessons (mandatory read before dispatching chunks)
 
@@ -533,6 +540,11 @@ required regardless of weside connection.
 - **Mode B: brief builders to surface forks before pinning, and to pin existing behaviour only** — a real
   design fork goes to the Lead *before* the characterization is written; pins capture what already exists
   (green on unmodified code), never a property the migration newly adds.
+- **Mode B: Claude Code is the default executor; Codex is opt-in per chunk** — only offer the Codex backend
+  when `tools.codex` is true (re-verify `command -v codex`) and dispatch to it on an **explicit** per-chunk
+  pick; an empty/ambiguous answer stays on the Agent teammate. Absent Codex, run on Claude Code with no
+  prompt and no degradation. Use exactly one backgrounding mechanism per Codex dispatch and verify the
+  worktree changed before trusting "done" — both rules live in `references/codex-dispatch.md`.
 - **`--refine-ahead` is a Step-7 overlay, not a third mode** — it composes with Mode A; the build
   lane stays ≤2 and disjoint-gated, the refine lane keeps ~1 story ahead (`refined-not-built < cap+1`,
   never over-produce). Default (flag off) = passive monitoring, unchanged.
