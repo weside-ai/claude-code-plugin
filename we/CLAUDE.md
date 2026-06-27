@@ -60,7 +60,9 @@ User         → reviews PR, merges, closes ticket
 | `/we:saga` | Solo Theme-altitude formulation — write/refine `docs/plans/<saga>/SAGA.md` |
 | `/we:epic` | Solo Initiative-altitude formulation — write/refine an Epic plan (`CONCEPT.md` or Jira Epic) |
 | `/we:story` | Solo Story-altitude formulation — write the build-ready plan for one feature slice (Context, ACs, User Journey, Design Decisions) |
-| `/we:build` | Build-altitude autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
+| `/we:build` | Solo full-pipeline: git → code → review → PR → CI. Fast path for a single Story that doesn't warrant orchestration overhead |
+| `/we:develop` | Dev-only worker slice — implement chunk, local gates, commit, push, stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone for manual dev work |
+| `/we:orchestrate` | Multi-chunk orchestration — Lead dispatches dev-only workers (cheap Claude / Codex / foreign engine), integrates branches, runs CI once. Default for multi-Story and phased work |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
 | `/we:coach` | APO Coach — ADVISOR (map repo state to altitude, propose next `/we:*` command with `[y/n]` gate) + Beginner mode; routes frictions to `/we:retro`, continuity to `/we:handoff` |
 | `/we:retro` | Systematic post-cycle retrospective — frictions from transcript + `gh api`, proposes rule/CLAUDE.md edits per-item-gated, logs to `docs/retros/`; `--scan N` for recurring patterns |

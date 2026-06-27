@@ -287,6 +287,8 @@ Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simpli
 
 ## Step 5: Quality Gates (PARALLEL)
 
+> `/we:build` is the **solo fast path** for a single Story (one Claude session, inline or parallel sub-agents). For multi-chunk work with foreign engines or Codex workers, use `/we:orchestrate` + `/we:develop` instead.
+
 **Gates run in parallel.** Launch them in a **single message** so they execute concurrently:
 
 - **static-analyzer** — Lint, format, types
@@ -309,6 +311,16 @@ ignored here — they run on GitHub, not locally. (Note: with the default two lo
   ```
   **Skip silently with a one-line note** if `codex` is not in `review.available` OR the glob finds nothing (codex plugin not installed).
 - **No `review` block in config** → fall back to today's behaviour: run the `code-reviewer` agent only.
+
+**Cross-review hook (`review.cross`):** after local quality gates return, read `review.cross`
+from `.weside/config.json` (default `true`). When `true`:
+- Claude wrote this code → run `/codex:adversarial-review` as an additional review pass
+  (only when `tools.codex: true`; skip with one-line note if absent)
+- If workers were dispatched via a foreign engine or Codex → run the `code-reviewer` agent
+
+For `/we:build` (solo path), the writer is always Claude, so the cross-review is
+`/codex:adversarial-review` when `tools.codex` is true. Run it concurrently with the
+other quality gates. When `review.cross` is false or Codex is absent, skip.
 
 **AI CI reviewers run on GitHub, not locally.** Whatever bots the repo's `review.available`
 lists as CI ids (e.g. CodeRabbit) plus Claude Review post resolvable threads + their own check
