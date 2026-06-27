@@ -185,6 +185,17 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
 
 4. **Generate `team_name`** — `orchestrate-<epic>-<HHMMSS>`, unique per session.
 
+5. **Create the integration branch** — do this NOW, before `TeamCreate` and before any worker
+   is dispatched. Workers will branch off it; the Lead will merge their branches back here; the
+   final PR runs against it. Creating it here ensures every worker has the same base.
+
+   ```bash
+   git checkout -b feat/<epic-or-story>-integration
+   git push -u origin feat/<epic-or-story>-integration
+   ```
+
+   If the branch already exists (resumed run), just check it out. Do **not** reset it.
+
 ### Step 5: Open the team
 
 ```python
@@ -224,17 +235,31 @@ You are worker-{TICKET}, a teammate in team {team_name}. The lead is "team-lead"
 REPO: your working repo is {repo_root}. START EVERY bash command with `cd {repo_root}` and
 confirm `git rev-parse --show-toplevel` is {repo_root} before any git operation.
 
+BASE BRANCH: branch your worktree off `{integration_branch}` (e.g. `feat/{epic}-integration`),
+NOT off main. /we:develop handles worktree creation — pass the base:
+  Skill(skill="develop")  with the ticket {TICKET}  (the skill reads the integration base
+  from its --base flag if given, or you can pass it in the context of this brief)
+
 ISOLATION: /we:develop creates its own worktree — do NOT call EnterWorktree before invoking
 the skill; the worktree is managed internally.
 
-Your job: run the DEV-ONLY pipeline for {TICKET} via the skill:
-  Skill(skill="develop")  with the ticket {TICKET}
+Your job: run the DEV-ONLY pipeline for {TICKET} via the skill.
 
-DEV-ONLY means: implement all phases → local lint/type/test gates → cross-review your diff →
-commit → push the branch → STOP.
+DEV-ONLY means: implement all phases → **fast/unit local gates only** → cross-review your
+diff → commit → push YOUR branch (e.g. `feat/{TICKET}-work`) → STOP.
 
-DO NOT open a PR. DO NOT run CI. DO NOT transition the ticket. DO NOT run /we:build.
-The Lead integrates your branch with others, runs one integration CI, and opens one PR.
+FAST GATES: run unit tests and fast smoke tests ONLY. Skip integration tests that need a
+running database, queue, or network service — those belong to the integration CI the Lead
+runs at the end. If unsure: if the test needs `docker-compose up` or an env variable like
+`DATABASE_URL`, it is an integration test — skip it with a note in your report.
+
+ABSOLUTE NO-OPS (any of these voids the single-CI contract):
+- DO NOT `gh pr create` — this triggers GitHub CI per worker; defeats the whole pattern
+- DO NOT run CI, do NOT wait for GitHub Actions (your `git push` may trigger `on: push`
+  rules — IGNORE them; they are not your responsibility)
+- DO NOT transition the ticket
+- DO NOT run /we:build
+The Lead merges all branches onto `{integration_branch}`, runs ONE CI cycle, and opens ONE PR.
 
 The Task* tools may be deferred — load them first via ToolSearch("select:TaskList,TaskUpdate")
 if you need them. Claim your task with TaskUpdate(owner="worker-{TICKET}").
@@ -373,34 +398,60 @@ checkpoints, and commits; brief is a direct template, never a `/we:story` invoca
 
 ### Step 8: Integrate finished branches + review + CI
 
-For each worker that reports done:
+**Two distinct phases — MERGE first, PR second. Never open a PR while workers are still running.**
 
-**1. Verify the worktree actually changed** before integrating — `git -C <worktree> status` / `git log`.
+#### Phase A: Merge (per worker, as each reports done)
+
+**A1. Verify the worktree actually changed** before integrating — `git -C <worktree> status` / `git log`.
 A worker reporting success with no commits signals a lost dispatch. Re-dispatch before integrating; never integrate an empty worktree.
 
-**2. Merge onto the integration branch.** The integration branch is `feat/<epic-or-story>-integration`,
-branched from the Story/Epic branch before the first dispatch. Merge each finished worker branch here,
-resolving conflicts with the plan's Constraints and Pins as the source of truth.
+**A2. Merge onto the integration branch.** The integration branch (`feat/<epic-or-story>-integration`)
+was created in Step 4 before any worker was dispatched. Merge each finished worker branch here as
+it arrives — do not wait for all workers to finish first:
 
-**3. Cross-review at integration (when `review.cross` is on).** After all workers are merged, run the
-other engine's review on the integration diff:
-+ Workers were Claude → `/codex:adversarial-review` (if `tools.codex: true`)
+```bash
+git checkout feat/<epic-or-story>-integration
+git merge feat/<TICKET>-work --no-ff -m "integrate: merge feat/<TICKET>-work"
+git push origin feat/<epic-or-story>-integration
+```
+
+Resolve conflicts using the plan's Constraints and Pins as the source of truth. Surface any
+non-trivial conflict to the user before merging.
+
+If a worker reported blocked, surface the blocker — do not silently merge empty or half-done work.
+
+#### Phase B: PR + CI (once — only after ALL workers are merged)
+
+Wait until every in-flight worker has either merged or been declared blocked. Then:
+
+**B1. Cross-review at integration (when `review.cross` is on):**
++ Workers were Claude → `/codex:adversarial-review` on the full integration diff (if `tools.codex: true`)
 + Workers were Codex or foreign → local `code-reviewer` agent
 
-**4. Run one CI cycle.** After integration looks clean, open **one PR** (integration branch → main) and
-run the CI fix loop via `/we:ci-review` once. This is the second human gate — surface the review to
-the user; the Lead does **not** merge.
+**B2. Open ONE PR** (`feat/<epic-or-story>-integration → main`). This is the moment GitHub CI
+fires for the first time this run. This is intentional — the whole point of the integration branch
+is that GitHub CI runs exactly once, on the combined diff, not once per worker.
+
+**B3. Run the CI fix loop** via `/we:ci-review` on the integration PR. Fix on the integration branch,
+never in worker branches (those are done). This is the second human gate — surface the PR to the
+user; the Lead does **not** merge.
 
 **Checkpoint:** the Lead writes `pr_created` and `ci_passed` (not the workers) — workers only write
 their local-gate state. Confirm via `story status {TICKET}`.
 
-**CI red:** run `/we:ci-review {PR}` on the integration PR; fix there, not in worker branches.
-
-If a worker reported blocked, surface the blocker — do not silently retry.
+**CI red:** run `/we:ci-review {PR}` on the integration PR; fix there.
 
 ### Step 9: Final roll-up + close the team
 
-Emit the final roll-up (shipped-to-review / blocked / held-by-cap). Then:
+Emit the final roll-up (shipped-to-review / blocked / held-by-cap).
+
+If held stories exist (e.g. `waiting on WA-1441`): **announce the next run explicitly.** The
+`pr_created` checkpoint on WA-1441 (written in Step 8 B2) immediately unlocks the held stories
+in the ready-set — re-running `/we:orchestrate <epic>` after the PR is opened (no need to wait
+for human merge) will pick them up. Tell the user this so the Epic progress stays visible:
+> "WA-1442 and WA-1445 are ready for the next run — `/we:orchestrate WA-1440` once the PR is open."
+
+Then:
 
 ```python
 TeamDelete()

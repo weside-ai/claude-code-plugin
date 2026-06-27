@@ -107,8 +107,15 @@ After all phases complete, run gates in parallel for the **touched stack(s)**:
 
 ```python
 Agent(subagent_type="we:static-analyzer", ...)  # lint + format + types
-Agent(subagent_type="we:test-runner", ...)       # affected tests
+Agent(subagent_type="we:test-runner", ...)       # fast/unit tests only (see below)
 ```
+
+**Fast-tests-only rule:** run unit tests and fast smoke tests. Skip any test that requires an
+external service (running database, message queue, HTTP endpoint, Docker Compose). The
+discriminator: if the test needs `DATABASE_URL`, `REDIS_URL`, `docker-compose up`, or similar —
+it is an integration test and belongs to the integration CI the Lead runs after merging all
+workers. Mark skipped integration tests in your Step 7 report so the Lead knows what CI will
+cover.
 
 Gate failures: fix inline, commit fix, re-run. Circuit breaker: 3 failures in the same gate → stop, report to the Lead.
 
