@@ -17,9 +17,9 @@ Interactive project onboarding. Three core questions for project config, then op
 
 ## When to Use
 
-- First time using `/we:*` skills in a project
-- When user wants to customize DoR/DoD/Vision
-- When ticketing tool or stack detection needs manual override
++ First time using `/we:*` skills in a project
++ When user wants to customize DoR/DoD/Vision
++ When ticketing tool or stack detection needs manual override
 
 ---
 
@@ -30,17 +30,17 @@ Interactive project onboarding. Three core questions for project config, then op
 Scan the project to detect:
 
 **Stack:**
-- `pyproject.toml` → Python (ruff, mypy, pytest)
-- `package.json` → Node.js (eslint, tsc, jest/vitest)
-- `Cargo.toml` → Rust
-- `go.mod` → Go
-- Multiple → Monorepo
++ `pyproject.toml` → Python (ruff, mypy, pytest)
++ `package.json` → Node.js (eslint, tsc, jest/vitest)
++ `Cargo.toml` → Rust
++ `go.mod` → Go
++ Multiple → Monorepo
 
 **Ticketing Tool:** detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 **Existing Config:**
-- `.weside/` directory exists → already configured
-- `CLAUDE.md` exists → read for conventions
++ `.weside/` directory exists → already configured
++ `CLAUDE.md` exists → read for conventions
 
 ### Step 1b: Check Plugin Prerequisites
 
@@ -59,20 +59,24 @@ This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify eac
 | superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | TDD/debugging/brainstorming discipline skills used throughout `/we:build` |
 | graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
 | turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
-| Codex backend (optional) | `command -v codex` exits 0 (the official Codex plugin's CLI) | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | `/we:orchestrate` Mode-B optional executor (dispatch a chunk to `gpt-5-codex` instead of an Agent teammate). Absent → Mode-B runs on Claude Code Agent teammates (default) |
+| Codex backend (optional) | `command -v codex` exits 0 (the official Codex plugin's CLI) | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | `/we:orchestrate` and `/we:develop` optional executor; cross-review via `/codex:adversarial-review`. Absent → workers run on Claude Code with no degradation |
+| Engine profiles (optional) | `.weside/engines.local.json` exists and has ≥1 profile with a resolvable `key_ref` | User-created via this wizard | `/we:orchestrate` foreign-engine executor via `worker-launch.sh`; any Anthropic-compatible endpoint |
 
 **Guided install flow** — for each MISSING row, offer the fix interactively instead of only hinting. Full per-dependency commands and re-check instructions: [`${CLAUDE_PLUGIN_ROOT}/references/dependencies.md`](../../references/dependencies.md). Shape per item:
 
 > "Missing: **{name}** — provides {what}. Install now with `{command}`? [y/n]"
 
-- `y` → print the exact command (or run it for safe, user-scoped installs like `pip install graphifyy` after confirmation), then RE-RUN the row's detection check and report the result.
-- `n` → continue; the pipeline works without it, the dependent feature is skipped.
++ `y` → print the exact command (or run it for safe, user-scoped installs like `pip install graphifyy` after confirmation), then RE-RUN the row's detection check and report the result.
++ `n` → continue; the pipeline works without it, the dependent feature is skipped.
 
 **Persist the result** in `.weside/config.json` (Step 3 merges it):
 
 ```json
-"tools": { "graphify": true, "turbovault": true, "superpowers": false, "codex": false }
+"tools": { "graphify": true, "turbovault": true, "superpowers": false, "codex": false },
+"engines": []
 ```
+
+`engines` is a list of profile names from `.weside/engines.local.json` that were successfully probed — starts empty, filled by Step 2's executor wizard.
 
 Downstream skills read `tools.*` from config to decide whether to offer graph/vault features — they still verify empirically before each actual call (config can go stale) and only skip when the real call says "not found".
 
@@ -92,7 +96,7 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
 4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
-### Step 2: Ask 4 Questions
+### Step 2: Ask 4 Questions + Executor Wizard
 
 ```
 1. "Do you have a product vision? (Link, file, or brief description)"
@@ -116,11 +120,52 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    → Default when nothing else is detected: ["claude"].
 ```
 
+#### Executor wizard (after Q4, non-blocking)
+
+Ask once: *"What default executor should workers use for `/we:develop` chunks?"*
+
+Options (show only available ones):
++ **Cheap Claude (Sonnet/Haiku)** — always available, no extra setup. The default if
+  nothing else is configured.
++ **Codex** — available if `tools.codex: true` from Step 1b. Workers dispatch to `gpt-5-codex`.
++ **A named engine profile** — available if `.weside/engines.local.json` already exists.
+  Show the profile names. Or offer to create a new profile (see below).
++ **Create a new engine profile** — guides through the schema below.
+
+**If the user picks "Create engine profile":**
+
+1. Ask: engine name (used as the key in the JSON, e.g. `kimi`).
+2. Ask: `base_url` (e.g. `https://api.moonshot.cn/v1`).
+3. Ask: `model` (e.g. `moonshot-v1-8k`).
+4. Ask: Where is the API key?
+   + `env:VAR_NAME` → stores `{ "env": "VAR_NAME" }` — the key must already be in the shell
+   + `secrets:KEY_NAME` → stores `{ "secrets_env": "KEY_NAME" }` and creates/appends to
+     `~/.weside/secrets.env` with a placeholder line `KEY_NAME=<your-key-here>`, then
+     says: *"Add your key to `~/.weside/secrets.env` and run `chmod 600 ~/.weside/secrets.env`.*
+     *The key is never stored in any repo file."*
+   + **Never** ask for or store the raw key value.
+5. Write the profile to `.weside/engines.local.json` (create if absent).
+6. Append `.weside/engines.local.json` to `.gitignore` (check first — idempotent).
+7. Verify the profile resolves: run `we/scripts/worker-launch.sh --engine <name> --dry-run`.
+   Success → "Engine profile `<name>` ready." | Failure → show the error; let the user fix and re-verify.
+
+**Cross-review config:**
+
+Ask: *"Enable cross-review? When workers write code, the other engine reviews it
+(Claude wrote → Codex adversarial-review; other engine wrote → Claude code-reviewer).
+[y/n, default y]"*
+
++ `y` → persist `"review": { ..., "cross": true }`
++ `n` → persist `"review": { ..., "cross": false }`
+
+Show a one-line explanation why cross-review matters: *"Different models catch different
+things — the reviewer is the engine that didn't write the code."*
+
 **Reviewer-id semantics (single source of truth — other skills reference this):**
 
-- `claude` → the local `code-reviewer` agent. Baseline local review, always first. Locally invokable.
-- `codex` → local `/codex:review` via the codex plugin's `codex-companion.mjs`. Locally invokable (needs the codex plugin).
-- `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
++ `claude` → the local `code-reviewer` agent. Baseline local review, always first. Locally invokable.
++ `codex` → local `/codex:review` via the codex plugin's `codex-companion.mjs`. Locally invokable (needs the codex plugin).
++ `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
 
 The list **order is the policy**: `/we:build` applies a story's `review_intensity` as a first-N rule over the *locally-invokable* entries (`light`=1, `standard`=2, `deep`=all-local). Put your preferred local reviewer first.
 
@@ -133,13 +178,19 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
   "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
   "stack": ["<detected stacks>"],
   "tools": { "graphify": false, "turbovault": false, "superpowers": false, "codex": false },
-  "review": { "available": ["claude"] }
+  "engines": ["<profile-name-if-created>"],
+  "execution": { "default": "claude-sonnet" },
+  "review": { "available": ["claude"], "cross": true }
 }
 ```
 
 The `tools` block carries the Step 1b detection results (idempotent: re-running setup re-detects and overwrites only this block).
 
-The `review.available` block is the **ordered** reviewer list from Step 2 Q4 (see reviewer-id semantics there). It persists at the core level so it works even without the Companion Framework. Consumed by `/we:build` + `/we:orchestrate` (which local reviewers to run at a story's intensity) and `/we:ci-review` (the bot-thread allowlist = union of this list). Absent block → skills fall back to today's behaviour (back-compat).
+The `engines` block lists the profile names created/verified in the executor wizard.
+
+The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
+
+The `review.available` block is the **ordered** reviewer list from Step 2 Q4. The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
@@ -159,9 +210,14 @@ Otherwise: plugin uses built-in defaults from `quality/dor.md` and `quality/dod.
 ```
 Project configured!
 
-Stack: Python + TypeScript (monorepo)
-Ticketing: Jira (project: PROJ)
-Vision: .weside/vision.md
+Stack:          Python + TypeScript (monorepo)
+Ticketing:      Jira (project: PROJ)
+Vision:         .weside/vision.md
+
+Workers:        Claude Code (Sonnet/Haiku) default
+Codex:          available  (or: not installed)
+Engine <name>:  configured  (or: none)
+Cross-review:   on  (or: off)
 ```
 
 ### Step 5: Companion Framework Setup (optional — ask first!)
@@ -200,28 +256,28 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    The `ticketing` block records the choice from Step 2. The `council` block ships with these defaults — the user does **not** configure it here; it can be hand-edited later or overridden per-invocation via `/we:meet --council=…`.
 
 2. **TurboVault registration (if MCP available)**
-   - `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
-   - weside MCP NOT available → skip silently, set `"vault": null`.
+   + `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
+   + weside MCP NOT available → skip silently, set `"vault": null`.
 
 3. **Build the council** — run the onboarding skill via `Skill(skill="onboarding")`
-   - Delegates to onboarding, which **actively builds this repo's council from scratch**: for each role it offers to assign an existing Companion, create a new one, or use a generic lens — degrading gracefully to generic when the plan's Companion budget runs out (a mixed council). It writes `.weside/weside.md` (crew + roles + meetings + purpose) **and** `.weside/council.json` (the council bridge `/we:council` resolves members from).
-   - Standalone (no weside account): onboarding still builds a working council — every lens generic, `Companion ID: null`.
-   - Member source at convene-time is governed by the `loadCouncilFromWeside` option (default `true` — see `config.json` / plugin settings); onboarding fills the bridge regardless, the toggle decides whether `/we:council` uses the weside-backed members or runs everything generic.
+   + Delegates to onboarding, which **actively builds this repo's council from scratch**: for each role it offers to assign an existing Companion, create a new one, or use a generic lens — degrading gracefully to generic when the plan's Companion budget runs out (a mixed council). It writes `.weside/weside.md` (crew + roles + meetings + purpose) **and** `.weside/council.json` (the council bridge `/we:council` resolves members from).
+   + Standalone (no weside account): onboarding still builds a working council — every lens generic, `Companion ID: null`.
+   + Member source at convene-time is governed by the `loadCouncilFromWeside` option (default `true` — see `config.json` / plugin settings); onboarding fills the bridge regardless, the toggle decides whether `/we:council` uses the weside-backed members or runs everything generic.
 
 4. **Generate companion agent definitions (weside account only)**
    For each Companion named in `.weside/weside.md` — **sequentially**, because `select_companion` sets global MCP state and cannot be parallelised:
-   - `select_companion(<name>)` → `get_companion_identity()` → write `~/.claude/agents/companion-<slug>.md`, where `<slug>` = the name lowercased with spaces → hyphens.
-   - Frontmatter: `name: companion-<slug>` (MUST equal the slug — `subagent_type` resolves by it), `description`, `color`.
-   - Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
-   - **The write target MUST start with `~/.claude/agents/`** (user scope) — validate the resolved path before writing; never write into a project repo.
-   - Re-running setup regenerates these files (idempotent refresh).
-   - **When the loop finishes, restore the active companion.** `select_companion` is global MCP session state — after the last companion is generated, the session is left on *that* companion, not the user's configured default. Call `select_companion(...)` once at the end — with the companion name from the plugin's `companion` setting — so the rest of the session keeps the right identity.
-   - No weside account → skip; the council falls back to the shipped generic `council-<role>` agents.
+   + `select_companion(<name>)` → `get_companion_identity()` → write `~/.claude/agents/companion-<slug>.md`, where `<slug>` = the name lowercased with spaces → hyphens.
+   + Frontmatter: `name: companion-<slug>` (MUST equal the slug — `subagent_type` resolves by it), `description`, `color`.
+   + Body = the returned identity + the council protocol (respond in the council brief's format, stay in role).
+   + **The write target MUST start with `~/.claude/agents/`** (user scope) — validate the resolved path before writing; never write into a project repo.
+   + Re-running setup regenerates these files (idempotent refresh).
+   + **When the loop finishes, restore the active companion.** `select_companion` is global MCP session state — after the last companion is generated, the session is left on *that* companion, not the user's configured default. Call `select_companion(...)` once at the end — with the companion name from the plugin's `companion` setting — so the rest of the session keeps the right identity.
+   + No weside account → skip; the council falls back to the shipped generic `council-<role>` agents.
 
 5. **Finalize**
-   - Update `config.json`: `onboarded: true`, `onboarded_at: <ISO-timestamp>`.
-   - Stage `.weside/` — suggest a commit, do not auto-commit. Generated `~/.claude/agents/` files are user-scope and never committed.
-   - **If companion agents were generated, tell the user to restart:** *"Generated N companion agents in `~/.claude/agents/`. Restart your Claude Code session once to activate them — then `/we:council` and `/we:meet` can convene your Companions."* (Claude Code discovers agent files only at session start.)
+   + Update `config.json`: `onboarded: true`, `onboarded_at: <ISO-timestamp>`.
+   + Stage `.weside/` — suggest a commit, do not auto-commit. Generated `~/.claude/agents/` files are user-scope and never committed.
+   + **If companion agents were generated, tell the user to restart:** *"Generated N companion agents in `~/.claude/agents/`. Restart your Claude Code session once to activate them — then `/we:council` and `/we:meet` can convene your Companions."* (Claude Code discovers agent files only at session start.)
 
 ### Step 6: Confirm
 
@@ -230,7 +286,9 @@ If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` was set (or already enabled) during 
 ```
 Ready to go:
   /we:story        — Create/refine the Story (Solo) — build-ready plan
-  /we:build        — Implement the Story end-to-end (autonomous pipeline)
+  /we:orchestrate  — Multi-chunk orchestration (workers run /we:develop, CI once)  ← default
+  /we:build        — Solo full pipeline (one Story, no orchestration overhead)
+  /we:develop      — Dev-only worker slice (implement + push, no PR)
   /we:council      — Convene a council of companions on a topic  ✓ ready
   /we:meet         — Run a vision / saga / epic / story meeting   ✓ ready
   /we:sideload .   — Reload context for this repo (Companion Framework)
@@ -241,7 +299,9 @@ If Agent Teams were **not** enabled (user declined or Step 5 was skipped):
 ```
 Ready to go:
   /we:story        — Create/refine the Story (Solo) — build-ready plan
-  /we:build        — Implement the Story end-to-end (autonomous pipeline)
+  /we:orchestrate  — Multi-chunk orchestration (workers run /we:develop, CI once)
+  /we:build        — Solo full pipeline (one Story, no orchestration overhead)
+  /we:develop      — Dev-only worker slice (implement + push, no PR)
   /we:council      — needs Agent Teams (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
                      in ~/.claude/settings.json and restart, or run /we:setup again)
   /we:meet         — needs Agent Teams (same — will run meetings solo without council)
@@ -266,17 +326,17 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 
 ## Rules
 
-- NEVER block on any question — always allow skip/default
-- NEVER create .weside/ without user consent
-- Auto-detection first, confirmation second
-- Three CORE questions maximum (Step 2); Step 5 (Framework) is optional and asks once
-- Works without ANY configuration (defaults for everything)
-- **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
-- **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
-- **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
++ NEVER block on any question — always allow skip/default
++ NEVER create .weside/ without user consent
++ Auto-detection first, confirmation second
++ Three CORE questions maximum (Step 2); Step 5 (Framework) is optional and asks once
++ Works without ANY configuration (defaults for everything)
++ **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
++ **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
++ **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
 
 ## References
 
-- `we/skills/onboarding/SKILL.md` — invoked by Step 5
-- `we/skills/sideload/SKILL.md` — counterpart for "already set up"
-- `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary
++ `we/skills/onboarding/SKILL.md` — invoked by Step 5
++ `we/skills/sideload/SKILL.md` — counterpart for "already set up"
++ `we/skills/CLAUDE.md` — design rationale, open questions, frontmatter vocabulary

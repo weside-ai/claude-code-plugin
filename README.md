@@ -226,12 +226,11 @@ Optional but enhance the pipeline:
 
 `/we:setup` checks for these and tells you what's missing.
 
-> **Runtime backends.** The plugin drives **Claude Code** by default (Agent teammates, built-in
-> tools). **Codex** is an **optional, opt-in** execution backend for `/we:orchestrate` Mode-B
-> chunks: `/we:setup` probes for the `codex` CLI and persists `tools.codex`, and the Lead offers
-> Codex per chunk only when it is present and you confirm. Absent the Codex plugin, everything runs
-> on Claude Code with no loss of capability (graceful degradation). The `we` plugin never vendors or
-> hard-depends on the Codex plugin.
+> **Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra
+> install. Two optional engines: **Codex** ([openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc))
+> and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`).
+> Engines cross-review each other's code (`review.cross: true` by default). `/we:setup` runs the
+> wizard. The `we` plugin never hard-depends on Codex or any foreign engine.
 
 ---
 

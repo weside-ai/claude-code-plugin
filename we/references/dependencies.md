@@ -76,8 +76,63 @@ that touches user scope, and never blocks the pipeline on a `n`.
 
 ## Codex backend (optional)
 
-- **Provides:** an optional, second execution backend for `/we:orchestrate` Mode-B — the Lead can dispatch a focused chunk to Codex (`gpt-5-codex`) instead of a Claude Code Agent teammate, and still reviews + integrates the result. Also powers `/codex:task`. This is what makes the plugin **runtime-agnostic**: it drives Claude Code *or* Codex.
+- **Provides:** an optional execution backend for `/we:orchestrate` and `/we:codex-task`. The Lead dispatches a chunk to Codex (`gpt-5-codex`) and reviews + integrates the result. Cross-review: Claude wrote → Codex reviews (`/codex:adversarial-review`); Codex wrote → Claude reviews.
 - **Detect:** `command -v codex` exits 0 (the official Codex plugin's CLI).
 - **Install:** the official Codex plugin [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (third-party, OpenAI's). The `we` plugin declares it as an **optional/recommended** dependency only — it never vendors or hard-depends on it. Follow that repo's install instructions; a `codex` CLI on PATH is the empirical signal we probe for.
 - **Re-check:** `command -v codex` again.
-- **Degradation (the contract):** absent → **Mode-B runs on Claude Code Agent teammates, the default, with no loss of capability.** Codex is strictly opt-in. `/we:setup` Step 1b probes for it and persists `tools.codex`; `/we:orchestrate` only offers it when `tools.codex` is true and the user confirms per chunk. Dispatch mechanics (the single-detach rule): [`codex-dispatch.md`](codex-dispatch.md).
+- **Degradation (the contract):** absent → **workers run on the configured Claude tier, the default, with no loss of capability.** Codex is strictly opt-in. `/we:setup` Step 1b probes for it and persists `tools.codex`. Dispatch mechanics (the single-detach rule): [`codex-dispatch.md`](codex-dispatch.md).
+
+## Foreign engine profiles (optional)
+
+Engine profiles route workers to Anthropic-compatible third-party APIs (e.g. Alibaba/Qwen, GLM-5/z.ai, Kimi/moonshot, MiniMax, Bedrock). All use the same three env-var pattern — `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` — so no router proxy (ccr, LiteLLM) is needed; the provider must speak the Anthropic Messages API format.
+
+### File: `.weside/engines.local.json`
+
+Per-repo, **gitignored** (setup wizard appends to `.gitignore` automatically). Never committed; never shared.
+
+```json
+{
+  "glm5": {
+    "base_url": "https://api.z.ai/api/anthropic",
+    "model": "glm-5",
+    "key_ref": { "env": "ZAI_TOKEN" }
+  },
+  "kimi": {
+    "base_url": "https://api.moonshot.cn/v1",
+    "model": "moonshot-v1-8k",
+    "key_ref": { "secrets_env": "KIMI_API_KEY" }
+  }
+}
+```
+
+### `key_ref` forms
+
+Raw API keys are **never stored in any repo file** — committed or gitignored. Two reference forms only:
+
+| Form | Where the key lives | Example |
+|---|---|---|
+| `{ "env": "VAR_NAME" }` | Already set in the shell environment | `{ "env": "ZAI_TOKEN" }` |
+| `{ "secrets_env": "KEY_NAME" }` | `~/.weside/secrets.env` (chmod 600, never committed) | `{ "secrets_env": "KIMI_API_KEY" }` |
+
+`worker-launch.sh` resolves the key at runtime and **never logs its value**.
+
+### `~/.weside/secrets.env` (global key store)
+
+Plain `KEY=value` format, one per line, `chmod 600`. Managed by the user; never touched by the plugin automatically.
+
+```bash
+KIMI_API_KEY=sk-…
+MINIMAX_KEY=…
+```
+
+- **Detect:** file exists at `~/.weside/secrets.env`.
+- **Setup wizard:** suggests creating the file and adding the key there; reminds the user to `chmod 600`.
+- **Launcher:** reads with `grep "^KEY=" ~/.weside/secrets.env | cut -d= -f2-` — no shell sourcing, no variable pollution.
+
+### Launcher
+
+`we/scripts/worker-launch.sh` implements the dispatch: reads the profile, resolves the key, execs `claude -p "<brief>"` with the env vars set. See [`worker-dispatch.md`](worker-dispatch.md) for the full invocation contract.
+
+- **Detect:** `command -v claude` exits 0 (always true if Claude Code is installed).
+- **No extra install** needed beyond the profile file and the key reference.
+- **`--dry-run`:** prints profile + engine selection with the key redacted; exits without executing.

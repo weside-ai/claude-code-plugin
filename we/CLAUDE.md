@@ -20,7 +20,7 @@ Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is au
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
-**Runtime backends.** Execution runs on **Claude Code** by default (Agent teammates, the built-in tools). **Codex** (`gpt-5-codex`, via the official Codex plugin [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) is an **optional, opt-in** execution backend — `/we:orchestrate` Mode-B can dispatch a focused chunk to Codex instead of an Agent teammate; the Lead still reviews + integrates. The wiring: `/we:setup` Step 1b probes `command -v codex` and persists `tools.codex`; `/we:orchestrate` offers Codex per chunk only when `tools.codex` is true and the user confirms (default Claude Code); the single-detach dispatch rule + chunk-brief template live once in [`references/codex-dispatch.md`](references/codex-dispatch.md), shared with `/codex:task`. Absent the Codex plugin, everything runs on Claude Code with no loss of capability. The plugin never vendors or hard-depends on the Codex plugin.
+**Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra install. Two optional backends: **Codex** (`gpt-5-codex`, via [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`). `/we:orchestrate` dispatches workers to whichever backend is configured; `/we:setup` runs the wizard. Cross-review: whichever engine wrote the code, the other engine reviews it (`review.cross: true` by default). Direct Codex dispatch: `/we:codex-task`. The plugin never hard-depends on Codex or any foreign engine.
 
 Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 
@@ -60,7 +60,9 @@ User         → reviews PR, merges, closes ticket
 | `/we:saga` | Solo Theme-altitude formulation — write/refine `docs/plans/<saga>/SAGA.md` |
 | `/we:epic` | Solo Initiative-altitude formulation — write/refine an Epic plan (`CONCEPT.md` or Jira Epic) |
 | `/we:story` | Solo Story-altitude formulation — write the build-ready plan for one feature slice (Context, ACs, User Journey, Design Decisions) |
-| `/we:build` | Build-altitude autonomous pipeline: git → code → review → PR → CI (develop: inline or parallel sub-agents when plan declares `parallel_groups`; ci-review inline) |
+| `/we:build` | Solo full-pipeline: git → code → review → PR → CI. Fast path for a single Story that doesn't warrant orchestration overhead |
+| `/we:develop` | Dev-only worker slice — implement chunk, local gates, commit, push, stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone for manual dev work |
+| `/we:orchestrate` | Multi-chunk orchestration — Lead dispatches dev-only workers (cheap Claude / Codex / foreign engine), integrates branches, runs CI once. Default for multi-Story and phased work |
 | `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
 | `/we:coach` | APO Coach — ADVISOR (map repo state to altitude, propose next `/we:*` command with `[y/n]` gate) + Beginner mode; routes frictions to `/we:retro`, continuity to `/we:handoff` |
 | `/we:retro` | Systematic post-cycle retrospective — frictions from transcript + `gh api`, proposes rule/CLAUDE.md edits per-item-gated, logs to `docs/retros/`; `--scan N` for recurring patterns |

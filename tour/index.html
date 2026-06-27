@@ -1491,7 +1491,7 @@
       </div>
     </div>
 
-    <p class="lede" style="margin-top: 1.5rem;">Runs on either runtime. <code>/we:orchestrate</code> drives Claude Code by default (Agent teammates). <strong>Codex</strong> (<code>gpt-5-codex</code>) is an optional, opt-in backend: when the official Codex plugin is installed, the Lead can dispatch a Mode-B chunk to Codex instead — and still reviews + integrates the result. Absent Codex, everything runs on Claude Code, no loss of capability. The plugin is runtime-agnostic; it never hard-depends on Codex.</p>
+    <p class="lede" style="margin-top: 1.5rem;"><strong style="color:var(--fg)">/we:build</strong> is the solo fast path shown above — one Story, one pipeline, one PR. For multi-chunk or phased work use <code>/we:orchestrate</code>: the Lead dispatches workers via <code>/we:develop</code> (implement → local gates → commit → push, no PR, no CI). Workers run on <strong>cheap Claude</strong> (Sonnet/Haiku) by default — no extra install. Two optional backends: <strong>Codex</strong> (<code>gpt-5-codex</code>, opt-in) and <strong>foreign engines</strong> (any Anthropic-compatible endpoint via <code>.weside/engines.local.json</code>). Workers push branches; the Lead merges them onto one integration branch and runs CI once. Cross-review is on by default: whichever engine wrote the code, the other reviews it. The plugin never hard-depends on Codex or any foreign engine.</p>
 
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
