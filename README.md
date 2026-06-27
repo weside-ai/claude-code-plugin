@@ -29,8 +29,9 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 
 **Build altitude — autonomous:**
 
-- **`/we:build`** — autonomous build pipeline: code → AC verify → quality gates → docs → PR → CI, with checkpoints + circuit breaker. Hands off PR to you.
-- **`/we:orchestrate`** *(spike)* — Epic-driven build orchestration: boots from state, computes the ready Stories, and dispatches one builder-teammate per Story (each running `/we:build`), capped at ≤2 concurrent. The Build-altitude sibling of `/we:council`.
+- **`/we:build`** — solo full pipeline: code → AC verify → quality gates → docs → PR → CI. Fast path for a single Story.
+- **`/we:develop`** — dev-only worker slice: implement chunk → fast local gates → commit → push → stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone.
+- **`/we:orchestrate`** — multi-chunk orchestration: boots from Epic state, dispatches `/we:develop` workers (cheap Claude by default, Codex or foreign engines opt-in), merges branches onto one integration branch, runs CI once.
 
 **Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
 
@@ -57,7 +58,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 23 skills are available.
+That's it. The plugin is enabled. All 25 skills are available.
 
 ---
 
@@ -127,7 +128,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 23 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 25 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
@@ -222,7 +223,7 @@ Optional but enhance the pipeline:
 |---|---|---|
 | `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:story` Step 4 | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
-| Codex plugin (`codex` CLI) | **Optional** execution backend — lets `/we:orchestrate` dispatch Mode-B chunks to Codex (`gpt-5-codex`) instead of Claude Code Agent teammates, and ships `/codex:task` | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
+| Codex plugin (`codex` CLI) | **Optional** execution backend — lets `/we:orchestrate` dispatch chunks to Codex (`gpt-5-codex`); direct dispatch via `/we:codex-task` | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
 
 `/we:setup` checks for these and tells you what's missing.
 
