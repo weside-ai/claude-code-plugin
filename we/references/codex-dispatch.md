@@ -1,6 +1,6 @@
 ---
 name: codex-dispatch-reference
-description: The single-detach Codex dispatch rule + chunk-brief template, in one place. Referenced by /codex:task and the /we:orchestrate Mode-B executor-selection section. Loaded on demand.
+description: The single-detach Codex dispatch rule + chunk-brief template, in one place. Referenced by /we:codex-task and /we:orchestrate. Loaded on demand.
 ---
 
 # Codex Dispatch — single-detach rule + chunk brief
@@ -10,7 +10,7 @@ official Codex plugin's `codex-companion.mjs task` runtime
 ([openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)). The `we`
 plugin never hard-depends on it — absent the `codex` CLI, everything runs on
 Claude Code Agent teammates. This reference is the **one** place the dispatch
-mechanics live; `/codex:task` and `/we:orchestrate` Mode-B both link here.
+mechanics live; `/we:codex-task` and `/we:orchestrate` both link here.
 
 ## The one rule that bites: pick exactly one backgrounding mechanism
 
