@@ -69,3 +69,19 @@ Report back: <what to surface — the diff summary + any fork decision>, do NOT 
 The Lead reviews each returned diff, integrates onto the one integration branch,
 runs QS once → one PR, human merges. Identical to the Agent-teammate path apart
 from who implements the chunk.
+
+## Generated-artifact constraints to spell out in the brief
+
+A Codex worker only edits what you tell it to. Two generated-artifact traps recur and need an
+explicit `Constraints:` line when the chunk touches them:
+
+- **OpenAPI/types:** after a change to a Pydantic schema referenced by a route (request/response
+  model), the worker MUST regenerate AND commit **both** specs (`poetry run python
+  scripts/generate-openapi.py` → `openapi.json` + the client spec) in addition to
+  `yarn ... generate:types`. The OpenAPI-Types CI check regenerates TS **from the committed spec**,
+  so committing only the `.ts` (or only the schema) leaves a stale spec and fails CI — and a full
+  local spec regen in a bare worktree can emit formatting noise, forcing a hand-edit. Tell the
+  worker to commit the spec, not just the types.
+- **Frontend gates can't run in a fresh worktree** (no `node_modules`, ~1 GB) — the worker
+  implements frontend changes but does NOT run `yarn`/`jest`/`tsc`; it reports the skipped frontend
+  validation and the Lead validates via CI. (Same applies to the Agent-teammate path.)

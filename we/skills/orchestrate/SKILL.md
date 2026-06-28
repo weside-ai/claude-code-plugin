@@ -259,6 +259,13 @@ ABSOLUTE NO-OPS (any of these voids the single-CI contract):
   rules — IGNORE them; they are not your responsibility)
 - DO NOT transition the ticket
 - DO NOT run /we:build
+- DO NOT run frontend gates (`yarn`/`npm install`, `jest`, `tsc`) in a fresh worktree — it has no
+  `node_modules` (~1GB) and building them is wasted setup. Implement the frontend changes, run
+  ONLY touched-stack unit tests that need no install, and REPORT the skipped frontend validation;
+  the Lead validates frontend via the integration CI.
+- After a change to a Pydantic schema referenced by a route, regenerate AND commit BOTH OpenAPI
+  specs (`generate-openapi.py` → `openapi.json` + client spec), not just `generate:types` — the
+  OpenAPI-Types CI check rebuilds TS from the committed spec, so a stale spec fails CI.
 The Lead merges all branches onto `{integration_branch}`, runs ONE CI cycle, and opens ONE PR.
 
 The Task* tools may be deferred — load them first via ToolSearch("select:TaskList,TaskUpdate")
@@ -423,6 +430,13 @@ If a worker reported blocked, surface the blocker — do not silently merge empt
 #### Phase B: PR + CI (once — only after ALL workers are merged)
 
 Wait until every in-flight worker has either merged or been declared blocked. Then:
+
+**B0. Sync the integration branch onto `main` if it has drifted.** A long run lets `main` advance
+after Step 4 cut the integration branch (other PRs merge). Before opening the PR, `git merge
+origin/main` into the integration branch (preserve history) so the PR diff is **only this work** and
+stale-base CI failures (e.g. an OpenAPI/types or lint check that main already moved) don't appear.
+The diff-vs-main looking unexpectedly large is the drift tell — merge main first, then re-read it.
+(Generalises 3e-bis, which covers only Alembic migration heads.)
 
 **B1. Cross-review at integration (when `review.cross` is on):**
 + Workers were Claude → `/codex:adversarial-review` on the full integration diff (if `tools.codex: true`)
