@@ -121,21 +121,19 @@ Glob(pattern="docs/architecture/**/*.md")
 Read the top 3-5 results to understand existing patterns, primitives, and ADRs
 that apply. Reference them in the plan's Technical Approach section.
 
-**Blast Radius (code knowledge graph, optional):** If the repo has a graphify
-graph (`Glob("**/graphify-out/graph.json")` non-empty), query it with the
-story's key identifiers to ground the plan's `Files:` lists and the
-`parallel_groups` decision:
+**Blast Radius (code knowledge graph):** Query graphify to ground the plan's
+`Files:` lists and the `parallel_groups` decision:
 
 ```bash
-# prefer the repo's wrapper if present (relevance-ranked); else the stock CLI
+python3 scripts/graphify/check.py --build-if-missing
 python3 scripts/graphify/query.py "<story key identifiers>" --top 10
-# fallback: graphify query "<story key identifiers>" --graph <path-to-graph.json>
 ```
 
 Use identifier-style terms (`ChannelAdapter`, `DispatchService`), not prose.
-The result names the entry points and dependents the story will touch — feed
-them into the per-phase `Files:` lists and check phase disjointness for
-`parallel_groups`. If no graph exists, skip silently — never block on it.
+`check.py --build-if-missing` builds the graph if absent (~30 s, silently
+no-ops when graphify is not installed). The query names entry points and
+dependents the story will touch — feed them into the per-phase `Files:` lists
+and check phase disjointness for `parallel_groups`.
 
 **Session Context → Plan:** Before writing the plan, review the conversation so far.
 Distill into the plan:
