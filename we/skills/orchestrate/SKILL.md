@@ -227,6 +227,15 @@ writes `story_workflow` rows into `orchestration.py` automatically — `git_prep
 `pr_created`/`ci_passed` on end (this is the single-writer that satisfies AC3). The Lead
 **reads** them via `story status` for the roll-up; it does not write build checkpoints itself.
 
+**Transition each dispatched Story → "In Progress" (Lead owns this — workers do NOT).** Workers run
+`/we:develop`, which explicitly does not touch ticket state ("the Lead owns ticket state"). So if
+the Lead doesn't move the ticket, nothing does — the regression that made tickets stop moving when
+workers switched from `/we:build` to `/we:develop`. For each Story you dispatch, transition its
+ticket to "In Progress" now. Detect the ticketing tool per
+`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`; **verify** the move and retry once; soft-fail loud
+(log a warning, continue) only if the workflow/permissions reject it. GitHub Issues / no ticketing
+tool → skip silently.
+
 **Worker-Brief** (self-contained — the worker runs dev-only `/we:develop`):
 
 ```
@@ -446,14 +455,27 @@ The diff-vs-main looking unexpectedly large is the drift tell — merge main fir
 fires for the first time this run. This is intentional — the whole point of the integration branch
 is that GitHub CI runs exactly once, on the combined diff, not once per worker.
 
-**B3. Run the CI fix loop** via `/we:ci-review` on the integration PR. Fix on the integration branch,
-never in worker branches (those are done). This is the second human gate — surface the PR to the
-user; the Lead does **not** merge.
+**B3. ONE ci-review pass, then wait.** Run `/we:ci-review` on the integration PR **once**:
+first **wait** until `gh pr checks {PR}` shows every check has reached a conclusion (no
+`pending`/`in_progress`) — collecting on a still-pending PR finds nothing and is the bug that made
+the run look like it "stops at the PR". Then collect → fix BLOCKING/WARNING → resolve bot threads →
+push → wait for the post-push CI to settle → report green/red and **stop**. Fix on the integration
+branch, never in worker branches (those are done). Do **not** loop the pass automatically; if CI is
+still red after the one pass, surface it and let the user decide. This is the second human gate —
+surface the PR to the user; the Lead does **not** merge.
+
+**B4. Transition each built Story → "In Review" (Lead owns this — workers do NOT).** After the
+ci-review pass, move every Story that landed in this run to "In Review" (Mode A = every dispatched
+Story; Mode B = the single Story). This is the other half of the ticket-movement regression: the
+PR exists but nothing moved the tickets out of "In Progress". Detect the ticketing tool per
+`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`; **verify** each move and retry once; soft-fail loud
+only on workflow/permission rejection. **Leave the tickets in "In Review"** — never move to "Done"
+(human's job after merge). GitHub Issues / no ticketing tool → skip silently.
 
 **Checkpoint:** the Lead writes `pr_created` and `ci_passed` (not the workers) — workers only write
 their local-gate state. Confirm via `story status {TICKET}`.
 
-**CI red:** run `/we:ci-review {PR}` on the integration PR; fix there.
+**CI red:** report it; the user can re-run `/we:ci-review {PR}` on the integration PR.
 
 ### Step 9: Final roll-up + close the team
 
@@ -627,6 +649,12 @@ required regardless of weside connection.
   teammates. Builders live in their own watchable sessions.
 + **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
   the Lead carries a voice.
++ **The Lead owns ticket state — workers never transition** — workers run `/we:develop`, which does
+  not touch the ticket. The Lead moves each Story → "In Progress" at dispatch (Step 6) and → "In Review"
+  after the integration PR + ci-review pass (Step 8 B4). Verify + retry once; soft-fail loud only on
+  workflow/permission rejection. **Leave Stories in "In Review"** — never "Done".
++ **One ci-review pass, then wait** — after the integration PR, wait for CI/reviews to land, run ONE
+  `/we:ci-review` pass, wait for post-push CI, report, stop. No automatic multi-cycle loop.
 + **Lead reviews, never merges** — Deliver (merge, close ticket, move to Done) is the human's job.
 + **Always `TeamDelete` on teardown** — even on failure paths.
 + **Fail loud on the env-flag, degrade gracefully on identity** — same contract as `/we:council`.

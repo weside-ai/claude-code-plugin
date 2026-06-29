@@ -86,8 +86,8 @@ Single source of truth — step, what it does, checkpoint written, who writes it
 | 5 | PARALLEL: `/we:review` + `/we:static` + `/we:test` | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
 | 6 | Documentation check (`doc-architect`) | `docs_updated` | docs (Step 6) |
 | 7 | `/we:pr` (verifies all 3 quality-gate checkpoints first) | `pr_created` | pr-creator |
-| 8 | Review-fix loop INLINE (max 3 cycles) | `ci_passed` | build (Step 8) |
-| 9 | Verify ticket → "In Review" | — | — |
+| 8 | Wait for CI/reviews → ONE ci-review pass INLINE → wait → report | `ci_passed` | build (Step 8) |
+| 9 | Verify ticket → "In Review" (and leave it there) | — | — |
 
 ---
 
@@ -390,31 +390,49 @@ Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
 
 Extract PR number. Write checkpoint `pr_created`.
 
-## Step 8: Review-Fix Loop (INLINE — do NOT dispatch Skill)
+## Step 8: ONE ci-review pass, then wait (INLINE — do NOT dispatch Skill)
 
-⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute CI-review steps inline:
+⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute the CI-review logic inline.
+
+**This step runs exactly ONE ci-review pass and then waits — it is not a multi-cycle loop.** The
+old failure mode: right after PR creation CI is still `pending` and the AI reviewers have not posted
+yet, so collecting immediately finds 0 findings and the pipeline declares "all green" and stops —
+the user sees the build "end at the PR" with CI never actually checked. The fix is the **wait**.
 
 **Precheck — GitHub availability:**
 ```bash
 gh auth status 2>/dev/null && HAS_GH=1 || HAS_GH=0
 ```
-If `HAS_GH=0`: skip steps 1, 5, and 6 below. Write `ci_passed` after local quality gates pass and continue.
+If `HAS_GH=0`: skip the GitHub-dependent steps below. Write `ci_passed` after local quality gates pass and continue to Step 9.
 
-1. **Collect** findings from CI plus all PR review sources — every AI reviewer the repo uses (the CI bots in `review.available`, e.g. CodeRabbit) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body (use `gh` CLI — skip if `HAS_GH=0`)
-2. **Triage** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason
-3. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9
-4. **Batch fix** all issues locally, ONE commit with all fixes
-5. **Resolve** every bot-authored thread via GraphQL (the once-forgotten, now-unconditional step), verify 0 unresolved bot threads; never auto-resolve human threads
-6. **Push** only when all bot threads resolved
-7. **Repeat** (max 3 cycles). After 3 → stop, ask user.
+When `HAS_GH=1`:
 
-After reviews green → write checkpoint `ci_passed`.
+1. **Wait for CI + reviews to land FIRST (do NOT collect on a pending PR).** Poll
+   `gh pr checks {PR}` until every check has reached a conclusion (no `pending`/`in_progress`
+   remains) — this is when reviewer bots have also posted. Only then collect. Without this wait the
+   collection is empty and the pass is meaningless.
+2. **Collect** findings from CI plus all PR review sources — every AI reviewer the repo uses (the CI bots in `review.available`, e.g. CodeRabbit) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body.
+3. **Triage** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason.
+4. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9.
+5. **Batch fix** all issues locally, ONE commit with all fixes.
+6. **Resolve** every bot-authored thread via GraphQL (the once-forgotten, now-unconditional step), verify 0 unresolved bot threads; never auto-resolve human threads.
+7. **Push** only when all bot threads resolved.
+8. **Wait for the post-push CI to settle**, then report the resulting CI state (green/red) and **STOP**.
 
-## Step 9: Verify Ticket Transition
+**One pass only — then wait.** Do NOT re-enter a fix loop. After this single pass, hand back to the
+user with the PR open and the ticket in "In Review" (Step 9). If the post-push CI is still red, report
+it and stop — the user decides whether to run `/we:ci-review {PR}` again. Re-running the whole pass
+automatically (the old "max 3 cycles") is removed.
 
-The transition to "In Review" is performed by the `pr-creator` agent in its Step 7 (see `agents/pr-creator.md`).
+After the pass → write checkpoint `ci_passed`.
 
-**Verify** the ticket actually moved. If the ticketing tool reports the ticket is still in "In Progress" (or equivalent), retry the transition once. Never move to "Done" — that's the user's job.
+## Step 9: Verify Ticket Transition (leave it in "In Review")
+
+The transition to "In Review" is performed by the `pr-creator` agent in its Step 7 (see `agents/pr-creator.md`). This step runs **after** the Step 8 ci-review pass, so it is the final word on ticket state.
+
+**Verify** the ticket actually moved to "In Review". If the ticketing tool reports the ticket is still in "In Progress" (or equivalent), retry the transition once. This is mandatory, not best-effort — the ticket MUST end the run in "In Review". Soft-fail (log a loud warning) only if the transition is genuinely rejected by the workflow/permissions after the retry.
+
+**Leave it there.** Do not move the ticket past "In Review" — never to "Done" (that's the user's job after merge). The Step 8 fix-commit must not bounce the ticket back to "In Progress"; if your ticketing workflow auto-reopens on push, transition it back to "In Review" here.
 
 ---
 
