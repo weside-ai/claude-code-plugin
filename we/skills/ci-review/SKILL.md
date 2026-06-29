@@ -114,9 +114,16 @@ else
 fi
 ```
 
-### 1b. If CI is still running
+### 1b. If CI is still running — start now, but hold the push
 
-If Backend/other checks are `pending` or `in_progress`, **don't wait** — start fixing findings from reviews that are already available. After fixing, check CI again before pushing.
+If Backend/other checks are `pending` or `in_progress`, **don't wait to START** — collect and fix
+findings from the reviews that are already available (Claude Review, CodeRabbit post within a minute
+or two; the backend CI can take much longer). Begin triaging and fixing those immediately.
+
+**But gate the PUSH on the long CI concluding.** Before you push (Phase 3f), wait until
+`gh pr checks $PR` shows no `pending`/`in_progress` left, then fold any CI failures into the SAME
+fix-commit. This ships review-fixes and CI-fixes in one push instead of two, and guarantees the long
+CI is actually accounted for. Start early, push late.
 
 ### 1c. CI failures: Fix them
 
@@ -322,9 +329,12 @@ multiple heads — rebasing surfaces the drift here (and lets you add a merge-he
 in red CI. If a second head appears, merge it (a `down_revision = (head_a, head_b)` merge migration) and
 re-run the check until `alembic heads` == 1.
 
-### 3f. Push
+### 3f. Push (hold until the long CI has concluded)
 
-Only after 3e confirms 0 unresolved (and 3e-bis for migration branches):
+Push only after: (a) the long CI has a conclusion — `gh pr checks $PR` shows no
+`pending`/`in_progress` (per 1b), with any CI failures folded into the fix-commit; (b) 3e confirms 0
+unresolved bot threads; and (c) 3e-bis for migration branches. Start early, push late — one push that
+carries both review-fixes and CI-fixes.
 
 ```bash
 git push
@@ -376,6 +386,7 @@ When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings 
 - **FIX BLOCKING + WARNING** — not optional. Only exception: the reviewer is factually wrong.
 - **SUGGESTION/NITPICK** — do them; may be consciously skipped with a short explicit reason.
 - **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
+- **Start early, push late** — begin collecting + fixing as soon as the fast reviewers (Claude Review, CodeRabbit) post; do NOT wait for the long backend CI to start. But hold the push until `gh pr checks` shows the long CI has concluded, folding any CI failures into the same one push.
 - **Max 2 cycles** — when you do loop: after second push still has findings → stop and ask user
 - **Claude Code Review is a comment, not threads** — collect it from issue comments
   (source 4), split per `<!-- SEV:* -->`, fix BLOCKING/WARNING like any finding, but never

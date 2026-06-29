@@ -455,14 +455,15 @@ The diff-vs-main looking unexpectedly large is the drift tell — merge main fir
 fires for the first time this run. This is intentional — the whole point of the integration branch
 is that GitHub CI runs exactly once, on the combined diff, not once per worker.
 
-**B3. ONE ci-review pass, then wait.** Run `/we:ci-review` on the integration PR **once**:
-first **wait** until `gh pr checks {PR}` shows every check has reached a conclusion (no
-`pending`/`in_progress`) — collecting on a still-pending PR finds nothing and is the bug that made
-the run look like it "stops at the PR". Then collect → fix BLOCKING/WARNING → resolve bot threads →
-push → wait for the post-push CI to settle → report green/red and **stop**. Fix on the integration
-branch, never in worker branches (those are done). Do **not** loop the pass automatically; if CI is
-still red after the one pass, surface it and let the user decide. This is the second human gate —
-surface the PR to the user; the Lead does **not** merge.
+**B3. ONE ci-review pass — start early, hold the push for CI.** Run `/we:ci-review` on the
+integration PR **once**. Start collecting + fixing as soon as the fast reviewers (Claude Review,
+CodeRabbit) have posted — do **not** wait for the long backend CI to begin. **Gate only the push on
+the slow CI:** before pushing, wait until `gh pr checks {PR}` shows no `pending`/`in_progress`, fold
+any CI failures into the same fix-commit, then push once (review-fixes + CI-fixes in one push).
+After the push, wait for the post-push CI to settle → report green/red and **stop**. Fix on the
+integration branch, never in worker branches (those are done). Do **not** loop the pass
+automatically; if CI is still red after the one pass, surface it and let the user decide. This is the
+second human gate — surface the PR to the user; the Lead does **not** merge.
 
 **B4. Transition each built Story → "In Review" (Lead owns this — workers do NOT).** After the
 ci-review pass, move every Story that landed in this run to "In Review" (Mode A = every dispatched

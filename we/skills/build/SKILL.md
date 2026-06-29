@@ -390,14 +390,21 @@ Agent(subagent_type="we:pr-creator", prompt="Create PR for {TICKET}")
 
 Extract PR number. Write checkpoint `pr_created`.
 
-## Step 8: ONE ci-review pass, then wait (INLINE — do NOT dispatch Skill)
+## Step 8: ONE ci-review pass — start early, hold the push for CI (INLINE — do NOT dispatch Skill)
 
 ⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute the CI-review logic inline.
 
-**This step runs exactly ONE ci-review pass and then waits — it is not a multi-cycle loop.** The
-old failure mode: right after PR creation CI is still `pending` and the AI reviewers have not posted
-yet, so collecting immediately finds 0 findings and the pipeline declares "all green" and stops —
-the user sees the build "end at the PR" with CI never actually checked. The fix is the **wait**.
+**This step runs exactly ONE ci-review pass and then stops — it is not a multi-cycle loop.** The
+shape preserves the early-start optimization (Phase 1b of the ci-review skill) AND guarantees the
+long CI is actually checked:
+
+- **Start as soon as the fast reviewers have posted** — do NOT wait for the long backend CI to begin
+  collecting. The AI reviewers (Claude Review, CodeRabbit) post within a minute or two; start
+  triaging and fixing their findings while the backend CI is still `in_progress`.
+- **Hold the push until the long CI has a conclusion.** This is the only thing gated on the slow CI:
+  before pushing, wait until `gh pr checks {PR}` shows no `pending`/`in_progress` left, fold any CI
+  failures into the SAME fix-commit, and push once. That way review-fixes and CI-fixes ship in one
+  push, not two — and the build never "ends at the PR" with CI unchecked.
 
 **Precheck — GitHub availability:**
 ```bash
@@ -407,19 +414,16 @@ If `HAS_GH=0`: skip the GitHub-dependent steps below. Write `ci_passed` after lo
 
 When `HAS_GH=1`:
 
-1. **Wait for CI + reviews to land FIRST (do NOT collect on a pending PR).** Poll
-   `gh pr checks {PR}` until every check has reached a conclusion (no `pending`/`in_progress`
-   remains) — this is when reviewer bots have also posted. Only then collect. Without this wait the
-   collection is empty and the pass is meaningless.
-2. **Collect** findings from CI plus all PR review sources — every AI reviewer the repo uses (the CI bots in `review.available`, e.g. CodeRabbit) and Claude Review — via one reviewer-agnostic path: all unresolved review threads + each bot's latest review body.
-3. **Triage** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason.
-4. **If 0 findings** → write checkpoint `ci_passed`, continue to Step 9.
-5. **Batch fix** all issues locally, ONE commit with all fixes.
+1. **Collect early** from the sources already available — all unresolved review threads + each bot's latest review body (every AI reviewer in `review.available`, e.g. CodeRabbit, plus Claude Review). Do NOT block on the long CI to start.
+2. **Triage + fix** per the severity policy: BLOCKING + WARNING = must fix (unless reviewer factually wrong), SUGGESTION/NITPICK = do or consciously skip with reason. Accumulate all fixes — do NOT commit/push between them.
+3. **Wait for the long CI to conclude** (`gh pr checks {PR}` until no `pending`/`in_progress`). Collect any CI failures and fold their fixes into the same set.
+4. **If 0 findings total** (reviews clean AND CI green) → write checkpoint `ci_passed`, continue to Step 9.
+5. **Commit** all fixes as ONE commit.
 6. **Resolve** every bot-authored thread via GraphQL (the once-forgotten, now-unconditional step), verify 0 unresolved bot threads; never auto-resolve human threads.
-7. **Push** only when all bot threads resolved.
+7. **Push** once — only now, after CI concluded and all bot threads resolved.
 8. **Wait for the post-push CI to settle**, then report the resulting CI state (green/red) and **STOP**.
 
-**One pass only — then wait.** Do NOT re-enter a fix loop. After this single pass, hand back to the
+**One pass only — then stop.** Do NOT re-enter a fix loop. After this single pass, hand back to the
 user with the PR open and the ticket in "In Review" (Step 9). If the post-push CI is still red, report
 it and stop — the user decides whether to run `/we:ci-review {PR}` again. Re-running the whole pass
 automatically (the old "max 3 cycles") is removed.
