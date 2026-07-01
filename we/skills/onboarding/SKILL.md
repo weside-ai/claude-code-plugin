@@ -101,7 +101,10 @@ For each role in the proposed roster, ask one question and offer three ways to f
 
 ### 7. Meetings held on this repo
 
-Default: `refinement` always. `initiative` if the repo is source-of-truth for a Saga. `vision` if leadership lives here. User can override.
+Default: `story` always (renamed from the pre-v2.28 `refinement`). `saga` if the repo is
+source-of-truth for a Saga (renamed from the pre-v2.28 `initiative`). `epic` if the repo also
+owns Epic-level story breakdown here — a genuinely new altitude, no pre-v2.28 equivalent.
+`vision` if leadership lives here. User can override.
 
 ### 8. Write `.weside/council.json` (the bridge) — always, fully
 
@@ -197,8 +200,8 @@ vault: <vault-name>
 
 ## Meetings held here
 
-- **initiative** — participants: <names> | moderator: <name> | stakeholder: <name>
-- **refinement** — participants: <names> | moderator: <name>
+- **saga** — participants: <names> | moderator: <name> | stakeholder: <name>
+- **story** — participants: <names> | moderator: <name>
 
 ## Cross-repo relations
 

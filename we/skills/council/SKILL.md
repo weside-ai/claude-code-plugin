@@ -38,6 +38,17 @@ In priority order:
 
 1. `--council=role,role` flag → use exactly those role slugs.
 2. `--meeting=<type>` flag → read `.weside/config.json` → `council.meetings.<type>`.
+
+   **Legacy-key fallback.** If that key is absent, the repo's `.weside/config.json` may predate
+   the 4-altitude schema (pre-v2.28, `aa651d1` — back when meetings were `vision`/`initiative`/
+   `refinement`, not today's `vision`/`saga`/`epic`/`story`). Check the legacy equivalent before
+   falling through to Step 3: `saga` → `council.meetings.initiative`, `story` →
+   `council.meetings.refinement`. `vision`'s key name is unchanged (no legacy check needed).
+   `epic` is a genuinely new altitude introduced in that same refactor — it has **no** legacy
+   equivalent; go straight to Step 3/4 and say so. If a legacy key resolved the roster, use it and
+   append one line to the council output: *"This repo's `.weside/config.json` still uses the
+   pre-v2.28 meeting key `<legacy-key>` — migrate to `<new-key>` via `/we:onboarding` (rebuilds
+   the whole council config) or by hand-editing the key name."*
 3. Otherwise → `.weside/config.json` → `council.default`.
 4. No `.weside/config.json` → the shipped default: `product_owner`, `architect`, `scrum_master`.
 
@@ -207,13 +218,11 @@ After Step 3.6, `mcp_resolved_names` is final.
 
 1. **Env-flag check.** Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is active (shell or `~/.claude/settings.json` `env` block). If missing, abort with the remediation hint from `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. Do **not** fall back to a non-team flow.
 
-2. **Generate `team_name`.** Build as `council-<slug>-<HHMMSS>` where `<slug>` is the topic lowercased with non-alphanumeric characters replaced by `-`; truncate the entire name to 32 chars if needed, e.g. `council-postgres-16-upgrade-103514`. Must be unique per session.
+2. **Roster sanity check.** With `orchestrator` already removed (see Step 3) the roster must contain at least one member. If empty, abort with: *"No council members resolved — check `.weside/config.json` or pass `--council=role1,role2`."*
 
-3. **Roster sanity check.** With `orchestrator` already removed (see Step 3) the roster must contain at least one member. If empty, abort with: *"No council members resolved — check `.weside/config.json` or pass `--council=role1,role2`."*
-
-4. **Fire prep kickoff (weside path only).** If `mcp_resolved_names` is non-empty, kick off
-   server-side prep turns now — before `TeamCreate` — so the 20-90s turns overlap with
-   team setup and member spawn:
+3. **Fire prep kickoff (weside path only).** If `mcp_resolved_names` is non-empty, kick off
+   server-side prep turns now — before Step 6's member spawn — so the 20-90s turns overlap with
+   member spawn:
 
    ```python
    mcp__plugin_we_weside-mcp__council_prep_kickoff(
@@ -226,16 +235,11 @@ After Step 3.6, `mcp_resolved_names` is final.
    This call returns immediately. **No-weside path:** skip this substep entirely (no error,
    no placeholder).
 
-### Step 5: Open the team
+### Step 5: Team is implicit — nothing to open
 
-```python
-TeamCreate(
-    team_name=<generated>,
-    description=f"Council on: {topic}",
-)
-```
-
-The lead session is automatically the team's lead. Members will be added by spawning agents with `team_name=<that name>` in Step 6. Only the lead can later call `TeamDelete`.
+The current harness gives every session one implicit team; there is no `TeamCreate` call and no
+`team_name` to generate. The lead is simply the session that ran `/we:council`. Members become
+addressable teammates purely by being spawned with a `name` in Step 6 — proceed there directly.
 
 ### Step 5.5: Await prep blocks (weside path only)
 
@@ -269,7 +273,6 @@ For each role in the (orchestrator-filtered) roster, issue an `Agent(...)` call.
 
 ```python
 Agent(
-    team_name=<team_name>,
     name=<role-slug-with-hyphens>,   # e.g. "product-owner", "architect"
     subagent_type=<resolved agent>,  # "council-<role>" or "companion-<slug>"
     model="sonnet",
@@ -351,14 +354,14 @@ The lead observes the team's chatter. Track three signals:
 | -------------------- | ----------------------------------------------------------- |
 | Per-member idle time | Idle-notification timestamp from Claude Code                |
 | Total team messages  | Counter incremented per `SendMessage` observed in the team  |
-| Wall-clock           | Started at `TeamCreate`                                     |
+| Wall-clock           | Started at Step 6's member spawn                            |
 | Substantive talk     | Number of distinct members who have sent ≥ 1 message        |
 
 Adjourn the deliberation as soon as **any** of the following triggers fires:
 
 1. **Quiescence (soft):** all members idle for ≥ 30 s AND at least two distinct members have spoken. (This avoids closing before anyone speaks.)
 2. **Message hard-cap:** total team messages ≥ 30.
-3. **Time hard-cap:** wall-clock ≥ 10 min since `TeamCreate`.
+3. **Time hard-cap:** wall-clock ≥ 10 min since Step 6's member spawn.
 
 When a trigger fires, move to Step 8. Log which trigger fired — useful in the final synthesis ("adjourned at message cap" vs "adjourned at quiescence").
 
@@ -426,9 +429,9 @@ if mcp_resolved_names:
 
 **No-weside path:** skip entirely. No error, no placeholder.
 
-### Step 10: Close the team
+### Step 10: Tear down the members
 
-First send a shutdown signal to every member so their sessions terminate cleanly before the team is deleted:
+There is no `TeamDelete` — teardown means asking each member to stop, then verifying:
 
 ```python
 # Send to each member (including those recorded as absent — idempotent)
@@ -440,13 +443,10 @@ for member_name in roster:
     )
 ```
 
-Then tear down the team:
-
-```python
-TeamDelete()
-```
-
-Members must have responded (or been recorded as absent) before this call. **`TeamDelete` ≠ full teardown** — also pkill the team's agent procs and kill leftover tmux panes; full order, commands, and retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
+Verify each member actually terminated. Any member that doesn't stop on its own within a short
+wait: `TaskStop(<member_name>)`. Then check for leftover tmux panes (`tmux list-panes -a`, skip
+the lead's own) and kill any that still belong to a member. Full order, commands, and retry
+policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
 
 ## Memory
 
@@ -471,9 +471,9 @@ flows from `get_council()` via the brief (Step 6).
 ## Standalone fallback
 
 No weside account / no `.weside/` → every one of the nine shipped roles resolves to its
-generic `council-<role>` agent. The council still convenes a real team — `TeamCreate` +
-named members + live `SendMessage` deliberation — only the voices are generic lenses instead
-of the user's Companions. The synthesis format is identical.
+generic `council-<role>` agent. The council still convenes a real team — named members spawned
+into the session's implicit team + live `SendMessage` deliberation — only the voices are generic
+lenses instead of the user's Companions. The synthesis format is identical.
 
 If `.weside/council.json` exists but weside MCP is absent, the bridge's optional `lens`
 field per member is injected into the generic brief as a role-angle hint:
@@ -489,11 +489,11 @@ of whether weside is connected. See the Prerequisites section above.
 
 ## Rules
 
-- **Spawn council members with `Agent(team_name=…, name=…)`, never `Skill`.** Members live in their own sessions, share the team channel, and address each other by `name`.
+- **Spawn council members with `Agent(name=…)`, never `Skill`.** Members live in their own sessions, join the session's implicit team automatically, and address each other by `name` via `SendMessage` — no `team_name` parameter exists.
 - **All member spawns go into one assistant message** — that is what makes them initialize concurrently and start hearing each other from message 1.
 - **Lead never speaks as a member during deliberation.** The lead observes, then runs the final-position round + synthesis. Members do not see lead's chatter unless lead explicitly sends them a `SendMessage`.
 - **Never invent a perspective.** A member that did not respond is reported as absent in the synthesis.
-- **Always close the team with `TeamDelete`** — even on failure paths. A leaked team blocks the next `/we:council` in the same session.
+- **Always tear the team down** (shutdown message → verify → `TaskStop` fallback → tmux pane check) — even on failure paths. A leaked member blocks the next `/we:council` in the same session.
 - **Degrade gracefully on identity, fail loud on env-flag.** Missing companions fall through to generic shells; a missing `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` aborts with a remediation hint, never silently switches to an old path.
 
 ## References

@@ -31,7 +31,7 @@ state-as-truth: never trust the refiner's "done", run the scan yourself.
 Write-only; a *direct template*, NOT a `/we:story` invocation — `/we:story` is interactive by construction and would stall a teammate at its ExitPlanMode approval gate:
 
 ```text
-You are refiner-{TICKET}, a teammate in team {team_name}. The lead is "team-lead".
+You are refiner-{TICKET}, a teammate spawned into this session's implicit team. The lead is "team-lead".
 
 Your ONLY job: write a build-ready story plan to docs/plans/{TICKET}-story.md, then report its path.
 You have NO user to ask — all the context you need is below. Do NOT use EnterPlanMode/ExitPlanMode.

@@ -15,7 +15,8 @@ stumble and optimise them. Repeatable via the built-in `/loop` skill
 3. Run the **real** Step 1–8 build logic so genuine skill bugs surface.
 4. Append the friction points (which step stumbled, the exact error) to a rehearsal log:
    `docs/retros/YYYY-MM-DD-orchestrate-rehearsal.md` (repo-relative, under the story repo root).
-5. `TeamDelete`, delete the scratch worktree/branch. Loop to repeat.
+5. Tear down the builder (shutdown message → verify → `TaskStop` fallback), delete the scratch
+   worktree/branch. Loop to repeat.
 
 This is the lab for the broader skill clean-up: each iteration → `plugin-dev:skill-reviewer` /
 `plugin-validator` against the skill that stumbled → targeted fix → re-loop.

@@ -27,8 +27,9 @@ The Lead (the expensive session model) plans, integrates, and reviews. N workers
 orchestration overhead.
 
 This is the **Build-altitude sibling of `/we:council`/`/we:meet`**: the same Agent-Teams
-machinery (`TeamCreate` → `Agent(team_name=…, name=…)` → `SendMessage` → `TeamDelete`), but the
-teammates are **dev workers** running `/we:develop`, not deliberators.
+machinery (spawn into the session's implicit team via `Agent(name=…)` → `SendMessage` →
+shutdown-message teardown), but the teammates are **dev workers** running `/we:develop`, not
+deliberators.
 
 **The stance (not just the mechanics).** The Lead is a *persistent partner*, not a throwaway
 dispatcher. It boots knowing where the work stands, **holds the overview so the human is not
@@ -183,11 +184,9 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
    get **no** identity (the weside backend is user-scoped — parallel `select_companion` races;
    see `/we:council` "Memory in v1"). No MCP → generic review lens. Degrade gracefully.
 
-4. **Generate `team_name`** — `orchestrate-<epic>-<HHMMSS>`, unique per session.
-
-5. **Create the integration branch** — do this NOW, before `TeamCreate` and before any worker
-   is dispatched. Workers will branch off it; the Lead will merge their branches back here; the
-   final PR runs against it. Creating it here ensures every worker has the same base.
+4. **Create the integration branch** — do this NOW, before any worker is dispatched. Workers
+   will branch off it; the Lead will merge their branches back here; the final PR runs against
+   it. Creating it here ensures every worker has the same base.
 
    ```bash
    git checkout -b feat/<epic-or-story>-integration
@@ -196,13 +195,12 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
 
    If the branch already exists (resumed run), just check it out. Do **not** reset it.
 
-### Step 5: Open the team
+### Step 5: Team is implicit — nothing to open
 
-```python
-TeamCreate(team_name=<generated>, description=f"Orchestrate epic: {epic}")
-```
-
-The Lead session is automatically the team lead. Only the Lead can later `TeamDelete`.
+The current harness gives every session one implicit team; there is no `TeamCreate` call and no
+`team_name` to generate. The Lead is simply the session that ran `/we:orchestrate`. Builders
+become addressable teammates purely by being spawned with a `name` in Step 6 — proceed there
+directly.
 
 ### Step 6: Dispatch builders (all spawns in one message) + record start
 
@@ -212,7 +210,6 @@ into a single assistant message** so they initialize concurrently.
 ```python
 TaskCreate(subject=f"Build {TICKET}", description=f"Run /we:build {TICKET} to a reviewable PR.")
 Agent(
-    team_name=<team_name>,
     name=f"builder-{TICKET}",
     subagent_type="general-purpose",
     model="sonnet",
@@ -239,7 +236,7 @@ tool → skip silently.
 **Worker-Brief** (self-contained — the worker runs dev-only `/we:develop`):
 
 ```
-You are worker-{TICKET}, a teammate in team {team_name}. The lead is "team-lead".
+You are worker-{TICKET}, a teammate spawned into this session's implicit team. The lead is "team-lead".
 
 REPO: your working repo is {repo_root}. START EVERY bash command with `cd {repo_root}` and
 confirm `git rev-parse --show-toplevel` is {repo_root} before any git operation.
@@ -488,17 +485,21 @@ in the ready-set — re-running `/we:orchestrate <epic>` after the PR is opened 
 for human merge) will pick them up. Tell the user this so the Epic progress stays visible:
 > "WA-1442 and WA-1445 are ready for the next run — `/we:orchestrate WA-1440` once the PR is open."
 
-Then:
+Then tear down the builders. There is no `TeamDelete` — teardown means asking each one to stop,
+then verifying:
 
 ```python
-TeamDelete()
+for member_name in dispatched_builders:
+    SendMessage(to=member_name, message="SESSION COMPLETE — you may stop.", summary="shutdown_request")
 ```
 
-Always close the team, even on failure paths — a leaked team blocks the next run in this
-session. If `TeamDelete` fails because a builder is still finishing, wait 30 s and retry twice,
-then warn and continue.
+Always tear down, even on failure paths — a leaked builder blocks the next run in this session.
+If a builder is still finishing, wait 30 s and retry the shutdown message twice, then fall back
+to `TaskStop(<member_name>)`.
 
-**`TeamDelete` ≠ full teardown.** Mandatory sequence: (1) shutdown message to every member → (2) `TeamDelete()` → (3) `pkill` the team's agent procs → (4) `tmux kill-pane` leftover idle panes. Exact commands + retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
+**Mandatory full sequence:** (1) shutdown message to every member → (2) verify termination →
+(3) `TaskStop(<member_name>)` fallback for stragglers → (4) `tmux kill-pane` leftover idle panes.
+Exact commands + retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
 
 ---
 
@@ -532,7 +533,7 @@ For that case, run the **lead-integrated phase mode**:
 + The Lead holds the **one** Story/Epic **and its phase decomposition** (the Lead already cut it into
   phases — that *is* the overview it holds).
 + Dispatch the phases as **lead-held work-chunks (tasks, not Stories)** via `TaskCreate` +
-  `Agent(team_name=…, name=…)`. Teammates do **focused implementation only** — **not** the full
+  `Agent(name=…)`. Teammates do **focused implementation only** — **not** the full
   `/we:build`, **not** a per-chunk PR. Their brief is scoped to exactly one chunk.
 + Each teammate works its chunk in its own worktree, runs its **targeted** tests, and reports to the
   Lead via `SendMessage`.
@@ -646,8 +647,9 @@ required regardless of weside connection.
   single writer/verifier (runs `story ready` + `story checkpoint refined` + commit); the refiner never
   runs git/orchestration. Use a *direct template* brief, never a `/we:story` invocation (it would stall
   at ExitPlanMode). Enable the P3 lane only after a `--rehearsal` go/no-go proves it; P2 is the fallback.
-+ **Spawn builders with `Agent(team_name=…, name=…)`, all in one message** — never `Skill` for
-  teammates. Builders live in their own watchable sessions.
++ **Spawn builders with `Agent(name=…)`, all in one message** — never `Skill` for
+  teammates; there is no `team_name` parameter, builders join the session's implicit team just
+  by being spawned. Builders live in their own watchable sessions.
 + **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
   the Lead carries a voice.
 + **The Lead owns ticket state — workers never transition** — workers run `/we:develop`, which does
@@ -657,7 +659,8 @@ required regardless of weside connection.
 + **One ci-review pass, then wait** — after the integration PR, wait for CI/reviews to land, run ONE
   `/we:ci-review` pass, wait for post-push CI, report, stop. No automatic multi-cycle loop.
 + **Lead reviews, never merges** — Deliver (merge, close ticket, move to Done) is the human's job.
-+ **Always `TeamDelete` on teardown** — even on failure paths.
++ **Always tear the team down** (shutdown message → verify → `TaskStop` fallback → tmux pane check)
+  — even on failure paths.
 + **Fail loud on the env-flag, degrade gracefully on identity** — same contract as `/we:council`.
 
 ## References

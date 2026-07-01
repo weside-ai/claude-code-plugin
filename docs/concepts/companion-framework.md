@@ -130,20 +130,19 @@ flowchart TD
     MCP -->|no, account-less| FatBridge{Bridge has<br/>identity_prompt?}
     FatBridge -->|yes, legacy| BridgeOnly[Shell: council-&lt;role&gt;<br/>+ identity from bridge]
     FatBridge -->|no| Generic[Shell: council-&lt;role&gt;<br/>generic persona only]
-    Combine --> Team[TeamCreate<br/>named team]
-    BridgeOnly --> Team
-    Generic --> Team
-    Team --> Agents[Agent per role<br/>joins named team]
-    Agents --> Live[Live SendMessage<br/>deliberation rounds]
+    Combine --> Spawn[Agent per role<br/>joins the session's implicit team]
+    BridgeOnly --> Spawn
+    Generic --> Spawn
+    Spawn --> Live[Live SendMessage<br/>deliberation rounds]
     Live --> Quiesce[Quiescence detection]
     Quiesce --> Final[Final-position round]
     Final --> Synth[Lead synthesises<br/>agreement / tension / recommendation]
-    Synth --> Cleanup[TeamDelete]
+    Synth --> Cleanup[Shutdown message per member<br/>verify, then TaskStop fallback]
 ```
 
 The plugin always tries the richest path first and falls through cleanly. **You don't lose the framework without an account** — you lose persistent identity.
 
-The council runs as a **live agent team** rather than parallel memos. `TeamCreate` opens a shared channel; each role joins as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before `TeamDelete` tears the team down. The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
+The council runs as a **live agent team** rather than parallel memos. Every session already has one implicit team — no `TeamCreate` call, no `team_name`; each role joins it just by being spawned as a named `Agent`; members exchange `SendMessage` turns in real deliberation; quiescence detection closes the debate; a final-position round locks each stance; and the lead (orchestrator) synthesises before tearing the team down (shutdown message to each member, verified, with a `TaskStop` fallback). The identity-resolution paths above (MCP / fat-bridge / generic) remain unchanged — they determine *who speaks*, not *how they deliberate*.
 
 ### The `loadCouncilFromWeside` toggle
 
