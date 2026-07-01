@@ -43,15 +43,43 @@ Third source, opt-in via `--scan N` (default 0): **`docs/retros/*` historical** 
 
 ## How This Skill Is Used
 
-**Always prompt-driven.** Some example invocations:
+**Prompt-driven by default; `--auto` short-circuits the per-item ask.** Some example invocations:
 
 - `/we:retro` — full pass on the current branch + last merged PR on it
 - `/we:retro --pr 1998` — specific PR (open or merged)
 - `/we:retro --scan 5` — full pass *and* read the last 5 entries in `docs/retros/` for patterns
 - `/we:retro --pr 1998 --scan 10` — combine
+- `/we:retro --auto` — apply every proposal immediately instead of gating each one on `[y/n]`,
+  except the cases that still need a human call (see "Auto Mode" below). Combine with `--pr`/`--scan` as usual.
 - `/we:coach` (in a session after a PR merge) → Coach offers: *"This PR took 4 CI cycles. `/we:retro` would catch why in ~3min. Run it? [y/n]"* → user types `y` → Coach hands off to this skill
 
-The skill never silent-fires. Every applied edit passes through a per-item `[y/n/edit-path/skip-for-later]` gate.
+### Auto Mode (`--auto`)
+
+Same pipeline (R1–R9), same rendered report (Step R5) printed **before** anything is applied — the
+user always sees the wins/pain/proposals list, they just aren't asked per item. `--auto` changes
+only Step R6's gate:
+
+- **Auto-applied without asking:** any proposal targeting the **user's own repo** that is neither
+  a plugin-repo edit nor a contract change (see below). These are the routine cases — a new
+  path-filtered rule, a CLAUDE.md one-liner, a doc-only note.
+- **Still asks, even under `--auto`** (this is "only when truly necessary"):
+  - **Plugin-repo proposals** — ships to *every* plugin user; always confirm explicitly, same as
+    non-auto mode.
+  - **Contract-changing proposals** — a proposal that changes a schema, an MCP tool signature, a
+    config-key name/shape, or any other public interface. High blast radius, expensive to get
+    wrong from a wrong guess — confirm once, then apply.
+  - **Genuinely ambiguous placement** — when Step R4's placement priority order doesn't clearly
+    resolve (two reasonable homes, no obvious "more specific" pick) — ask once, then proceed with
+    the answer for the rest of the run.
+- Everything else is applied immediately and logged with `auto_applied: true` instead of
+  "accepted by user" (Step R8's frontmatter/decisions section reflects this per item).
+- `--auto` never skips Step R7's PR-vs-direct-commit policy — non-direct-commit repos and the
+  plugin repo still go through a branch + PR; "auto" means auto-*decided*, not auto-*merged*.
+
+The skill never silent-fires: the Step R5 report always prints before any edit lands. Outside
+`--auto`, every applied edit also passes through a per-item `[y/n/edit-path/skip-for-later]` gate;
+under `--auto`, that gate is skipped for routine same-repo non-contract proposals and kept for the
+three exceptions above.
 
 ---
 
@@ -151,6 +179,13 @@ For each kept friction, draft 1-2 proposals. Each proposal carries:
 
 When multiple placements are reasonable, pick the most specific (path-filtered rule > always-loaded CLAUDE.md > generic doc). The user can re-target per item in the gate.
 
+**Contract changes ship their doc update in the same proposal.** If a proposal changes a
+contract — a schema, an MCP tool signature, a config-key name/shape, a public skill invocation
+surface — the diff preview includes the matching doc update (README, architecture doc,
+reference file) alongside the code/config change, in the same proposal. Never split a contract
+change and its doc update into separate proposals, and never leave the doc for "later." Tag such
+a proposal `[contract]` in the report so Step R6 knows to always confirm it, even under `--auto`.
+
 ### Step R5 — Render the report
 
 Print this shape:
@@ -228,6 +263,12 @@ For each proposal in order, present and wait. Accepted tokens:
 
 ⛔ Never apply silently. Every Edit/Write call follows an explicit `y` for that item.
 
+**Under `--auto`:** skip the wait and answer `y` automatically for every proposal, **except**
+plugin-repo proposals, `[contract]`-tagged proposals, and genuinely ambiguous placement — those
+three still stop and ask, per "Auto Mode" above. This is the "ask only when truly necessary" mode:
+routine same-repo, non-contract edits go straight through; anything with real blast radius still
+gets a human's eyes before it lands.
+
 ### Step R7 — Apply approved items
 
 For each `y`'d proposal:
@@ -258,8 +299,10 @@ analysed_at: 2026-05-17T22:30:00Z
 ci_cycles: 4
 session_id: <id>
 scan_window: 5
+auto_mode: false
 proposals_total: 3
 proposals_accepted: 2
+proposals_auto_applied: 0
 proposals_deferred: 1
 proposals_rejected: 0
 applied_files:
@@ -290,7 +333,10 @@ If a PR was opened, print its URL.
 
 ## What You DO NOT Do
 
-- **Don't apply silently.** Every Edit follows an explicit `y` for that item.
+- **Don't apply silently.** Every Edit follows an explicit `y` for that item — outside `--auto`.
+  Under `--auto`, routine same-repo non-contract proposals auto-apply, but the Step R5 report
+  still prints before anything is applied, and plugin-repo / `[contract]` / ambiguous-placement
+  proposals always confirm even in `--auto`.
 - **Don't quote personal content** from the transcript. Privacy guard, every step.
 - **Don't modify source code.** Retros change MDs only. Code-level lessons (e.g. "this function had a race condition") flow back through `/we:build` if needed — retro proposes the rule, not the code fix.
 - **Don't open the PR before applying the file changes.** Branch → apply → PR — in that order, so the PR body can reference the actual diff.
