@@ -15,7 +15,7 @@ You produce or sharpen one Vision — the Product Requirements Document that nam
 
 > **APO altitude:** Vision (Solo). Upstream: there is nothing upstream — Vision is the top. Downstream: `/we:meet vision` decomposes the PRD into Sagas; `/we:saga "<name>"` then formulates each Saga. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full four-altitude map.
 >
-> **For Saga decomposition** (turning the PRD into a set of multi-quarter bets), use `/we:meet vision`. Vision Solo never decomposes — it only sharpens the PRD itself.
+> **For Saga decomposition** (turning the PRD into a set of long-running bets), use `/we:meet vision`. Vision Solo never decomposes — it only sharpens the PRD itself.
 >
 > **Artifact is always Markdown.** Vision is the one altitude where the ticketing-agnostic convention is most load-bearing: a PRD always lives at `docs/plans/<vision>/PRD.md` and is **never** a Jira artifact. One PRD per product. Multi-year horizon.
 
@@ -179,14 +179,8 @@ This mirrors the 3-level Vision Alignment pattern in `/we:story`, adapted for th
 
 ## Rules
 
-- ALWAYS write the PRD as a Markdown file at `docs/plans/<vision>/PRD.md`
-- ALWAYS use EnterPlanMode for the draft, ExitPlanMode for approval
-- ALWAYS walk the four frame questions (audience, problem, change, non-bets)
-- ALWAYS hand off to `/we:meet vision` by instruction at the end
-- ALWAYS keep the PRD short — a multi-page PRD is a fuzzy PRD
-- ⛔ NEVER decompose the PRD into Sagas — that is `/we:meet vision`'s job
-- ⛔ NEVER create a Jira / Linear / GitHub Issue for a Vision — the PRD is always Markdown
-- ⛔ NEVER auto-invoke `/we:saga` or `/we:meet vision` — print the hand-off and stop
-- ⛔ NEVER let the conversation drift into feature lists — features live in Sagas and Epics
-- ⛔ NEVER write code, create branches, or run tests — Vision is pure clarity work
-- ⛔ After the PRD is saved: STOP IMMEDIATELY — do not continue under any circumstances
+The modes above are the spec — invariants:
+
+- The PRD is always Markdown at `docs/plans/<vision>/PRD.md` — never a Jira/Linear/GitHub artifact. Keep it short; a multi-page PRD is a fuzzy PRD.
+- EnterPlanMode for the draft, ExitPlanMode for approval; walk the four frame questions.
+- ⛔ NEVER decompose into Sagas, auto-invoke `/we:saga`/`/we:meet vision`, write code, or drift into feature lists — after the PRD is saved, print the hand-off and STOP IMMEDIATELY.

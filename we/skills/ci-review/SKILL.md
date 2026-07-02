@@ -27,6 +27,11 @@ Resolving is mandatory for **every bot-authored thread** you handled — fixed *
 consciously skipped. It is the central, non-skippable step (the old failure mode was
 forgetting it). Human-authored threads are never auto-resolved — surface them to the user.
 
+**Skip criteria (strict) — a finding may be skipped ONLY when:** the reviewer is **factually
+incorrect** (cite evidence); the suggestion would **break existing behavior**; or it's a
+**pre-existing pattern** that was 1:1 moved (not introduced by this PR) AND fixing it is a
+separate story's scope.
+
 **Default to a single pass.** Collect → fix all findings → push, then **stop** and report —
 one round is the normal case. Only re-enter the post-push loop (Phase 4) when there is a
 **concrete reason** to expect a second round: a fix you are genuinely unsure resolved the
@@ -164,20 +169,8 @@ Only skip a CI failure if it's truly unfixable from this branch (e.g., infrastru
 
 **0 findings → "All green, ready for merge" → STOP.**
 
-| Severity | Action |
-|----------|--------|
-| **BLOCKING** | MUST fix. No exceptions. |
-| **WARNING** | MUST fix. Only skip if the reviewer is factually wrong (explain why). |
-| **INFO** | Fix if quick (<2 min). Skip only if truly stupid or out-of-scope. |
-
-### Skip criteria (strict)
-
-A finding may be skipped ONLY when:
-- The reviewer is **factually incorrect** (cite evidence)
-- The suggestion would **break existing behavior**
-- It's a **pre-existing pattern** that was 1:1 moved (not introduced by this PR) AND fixing it is a separate story's scope
-
-"I don't think it's important" is NOT a valid skip reason.
+Otherwise triage every finding per the **Severity policy** table above (the single spec —
+BLOCKING/WARNING must fix, SUGGESTION may be consciously skipped with reason).
 
 ---
 
@@ -297,8 +290,7 @@ fi
 ### 3e. Verify zero unresolved bot threads (HARD GATE)
 
 ```bash
-# Same default as 3d — keep the two literals in sync (a thread slips the gate if they drift).
-REVIEW_ALLOWLIST=$(jq -r '(.review.available // ["greptile","coderabbit","claude"]) | join("|")' .weside/config.json 2>/dev/null || echo "greptile|coderabbit|claude")
+# Reuse $REVIEW_ALLOWLIST exactly as set in 3d — do NOT redefine it with a different default.
 
 if [ "$GH_AVAILABLE" = true ] && [ -n "$PR" ]; then
   UNRESOLVED=$(gh api graphql -f query='query($pr:Int!,$owner:String!,$repo:String!){
@@ -375,20 +367,13 @@ When you do loop, after pushing CI + reviews re-run (~3-5 min). If new findings 
 
 ## Rules
 
-- **NEVER** commit between fixes — all fixes in one commit per cycle
-- **NEVER** push before resolving ALL bot review threads (the once-forgotten step — it is now
-  unconditional, not gated on any specific reviewer)
-- **NEVER** push if any BLOCKING or WARNING finding is unaddressed — from CI, Claude, or any AI reviewer
-- **NEVER** skip BLOCKING/WARNING without factual justification (reviewer demonstrably wrong)
-- **NEVER** auto-resolve a human-authored thread — surface it to the user
-- **NEVER** ignore pre-existing CI failures that block the PR — fix them
-- **NEVER** ignore the review summary bodies — they carry "outside diff range" findings
-- **FIX BLOCKING + WARNING** — not optional. Only exception: the reviewer is factually wrong.
-- **SUGGESTION/NITPICK** — do them; may be consciously skipped with a short explicit reason.
-- **One pass by default** — collect → fix → push → report; re-enter Phase 4 only with a concrete reason (uncertain fix, flaky check, interdependent findings, high-stakes PR). The multi-cycle capability stays; it is opt-in by judgement.
-- **Start early, push late** — begin collecting + fixing as soon as the fast reviewers (Claude Review, CodeRabbit) post; do NOT wait for the long backend CI to start. But hold the push until `gh pr checks` shows the long CI has concluded, folding any CI failures into the same one push.
-- **Max 2 cycles** — when you do loop: after second push still has findings → stop and ask user
-- **Claude Code Review is a comment, not threads** — collect it from issue comments
-  (source 4), split per `<!-- SEV:* -->`, fix BLOCKING/WARNING like any finding, but never
-  try to resolve a thread for it; it's confirmed green via the post-push re-review verdict.
-- **`--ci-only` flag** — skip reviews, only check CI status
+The severity policy and Phases 1–5 above are the spec — reminders:
+
+- **Fix everything, push once, no leftovers** — accumulate all fixes into ONE commit; push only
+  after the long CI concluded AND 3e confirms 0 unresolved bot threads.
+- **Never auto-resolve a human-authored thread** — surface it to the user.
+- **Claude Code Review is a comment, not threads** — collect from issue comments (source 4),
+  split per `<!-- SEV:* -->`; nothing to resolve, confirmed by the post-push re-review verdict.
+- **One pass by default, max 2 cycles when looping** — re-enter Phase 4 only with a concrete
+  reason; after the second push still has findings → stop and ask the user.
+- **`--ci-only` flag** — skip reviews, only check CI status.

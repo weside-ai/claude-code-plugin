@@ -1,13 +1,11 @@
 ---
 name: develop
 description: >
-  Dev-only worker slice — implements the assigned chunk (Story or phase subset),
-  runs local quality gates (lint/type/test for the touched stack), commits, pushes
-  its branch, and STOPS. No PR, no CI loop, no ticket transition. The Lead
-  (/we:orchestrate) integrates and runs CI once. Cross-reviews its own diff when
-  review.cross is on. Returns a short structured report.
-  Use when the user says "/we:develop", "implement only", "dev worker", "no PR",
-  "just implement and push", or when /we:orchestrate dispatches a chunk.
+  Dev-only worker slice — implements the assigned chunk, runs local quality
+  gates, commits, pushes its branch, and STOPS (no PR, no CI loop, no ticket
+  transition; the Lead integrates and runs CI once). Use when the user says
+  "/we:develop", "implement only", "dev worker", "no PR", or when
+  /we:orchestrate dispatches a chunk.
 argument-hint: '[<ticket-key> | <plan-path>] [--phases <N,M>] [--engine <name>]'
 ---
 
@@ -40,13 +38,10 @@ Verify the plan has at least one `### Phase` header. If not, stop and tell the u
 
 ## Step 1: DoR-lite check
 
-Quick scan — three items only. If any fail, stop and say which:
-
-1. At least one GWT acceptance criterion (`Given` + `When` + `Then`)
-2. Context section present and non-empty (> 50 chars)
-3. At least one `### Phase \d+:` header
-
-This is lighter than `/we:build`'s full DoR gate — the goal is to catch a completely un-refined plan, not to be a final gate.
+Run the 3-item scan from `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` (GWT ACs · Context > 50
+chars · `### Phase` headers). If any item fails, stop and say which. This is lighter than
+`/we:build`'s full DoR gate — the goal is to catch a completely un-refined plan, not to be a
+final gate.
 
 ---
 
@@ -129,13 +124,11 @@ Read `review.cross` from `.weside/config.json`. Default: `true`.
 
 **Only when `review.cross` is true:**
 
-Determine who wrote this chunk (this session / this worker). Then run the **other** engine's review on the diff:
-
-| This worker | Cross-reviewer |
-|---|---|
-| Claude (any tier) | `/codex:adversarial-review` — only when `tools.codex: true`; if Codex absent, skip with one-line note |
-| Codex | local `code-reviewer` agent |
-| Foreign engine | local `code-reviewer` agent |
+Determine who wrote this chunk (this session / this worker), then run the **other** engine's review
+on the diff — the writer→reviewer matrix is in
+[`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) § Cross-review rule
+(Claude wrote → `/codex:adversarial-review` if `tools.codex: true`, else skip with a note;
+Codex/foreign wrote → local `we:code-reviewer` agent).
 
 Cross-review runs against **this worker's diff** (not the full branch). It is informational — the worker commits even with findings. Findings go into the Step 7 report so the Lead decides whether to fix before integration.
 

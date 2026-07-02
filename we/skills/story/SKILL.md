@@ -284,7 +284,7 @@ The recommendation is non-binding — always offer the other surface as the fall
 Trigger: `/we:story "Feature description"`
 
 1. Design session — ask clarifying questions
-2. Scope check: **many independent slices** (multi-sprint, separate user value) → hand off to `/we:epic`. A **single coherent change that's just phased** (refactor/migration/multi-layer fix) is NOT an epic — keep it one Story and let the phased plan + `/we:orchestrate` carry it (see Step 2 of MODE 1 and Execution Surface).
+2. Scope check: many independent slices → hand off to `/we:epic`; a single coherent phased change stays one Story (see MODE 1 Step 2 + Execution Surface).
 3. Create ticket via ticketing tool (minimal)
 4. Link to Epic (if applicable)
 5. Continue as MODE 1 (Steps 4-6)
@@ -340,22 +340,10 @@ Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/
 
 ## Rules
 
-- ALWAYS load DoR first
-- ALWAYS create MINIMAL ticket + DETAILED plan
-- ALWAYS use EnterPlanMode for plan creation
-- ALWAYS follow Step 6 post-approval checklist IN ORDER: Save plan → Update ticket → Commit → Checkpoint → Stop
-- ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
-- ALWAYS set the `epic:` frontmatter field to the parent Epic's slug-or-key when the story belongs to an Epic — `/we:orchestrate`'s ready-set matching filters stories by this field; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
-- The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
-- ALWAYS decompose the plan into real `### Phase` blocks with per-phase `**Files:**`, and fill `parallel_groups` when phases are disjoint + unordered — even for a small story. Phases are the structure `/we:orchestrate` (Mode B chunks) and `/we:build` (fan-out mode) both read.
-- ALWAYS recommend the execution surface in Step 6 — `/we:orchestrate {TICKET}` for anything phased / parallelisable / coherent-multi-layer / context-heavy (incl. a small monolith the caller wants reviewed neutrally); `/we:build` only for trivially straight-line single-phase work. Lead with the recommended one, offer the other as fallback. Non-binding — the user invokes it.
-- A single COHERENT change that is merely phased is NOT an epic — keep it one Story for `/we:orchestrate`. Escalate to `/we:epic` only for many INDEPENDENT slices. The urge to split into phases is the orchestrate signal, not the epic signal.
-- ALWAYS use Given/When/Then for ACs
-- ALWAYS include a User Journey in the plan — describe the user's path step by step, from entry point to outcome. A story is only DONE when it is experienceable end-to-end. Omit only for purely technical stories with no user interaction (e.g. refactoring, CI config).
-- ALWAYS write a Context section — narrative brief that captures WHY this story exists, what the user cares about, and non-obvious constraints from the design discussion. The implementing agent reads this FIRST.
-- ALWAYS fill Design Decisions — every alternative discussed during refine, with reasoning for the chosen approach. This prevents the implementing agent from revisiting already-rejected ideas.
-- ALWAYS ask when unclear
-- ⛔ NEVER start implementation — your job is ONLY Story + Plan
-- ⛔ NEVER auto-continue to /we:build — user decides when
-- ⛔ NEVER create branches, write code, or run tests after plan approval
-- ⛔ After Step 6 (step 5 — Output): STOP IMMEDIATELY — do not continue under any circumstances
+The sections above are the spec — these invariants are the easiest to miss:
+
+- Ticket stays MINIMAL; the plan carries ALL detail. Save it to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent.
+- ALWAYS set the `epic:` frontmatter field when the story belongs to an Epic — `/we:orchestrate`'s ready-set filters stories by it; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
+- The plan filename suffix is `-story.md` (legacy `-plan.md` still read by `/we:build` for back-compat).
+- A single COHERENT change that is merely phased is NOT an epic — the urge to split into phases is the orchestrate signal, not the epic signal (MODE 1 Step 2 + Execution Surface are the spec).
+- ⛔ NEVER implement, create branches, write code, or auto-continue to `/we:build`/`/we:orchestrate` — after Step 6, STOP IMMEDIATELY. Story + Plan is the whole job; the user invokes the next surface.

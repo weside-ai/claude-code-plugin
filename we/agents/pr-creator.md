@@ -155,12 +155,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint $TICKET 
 
 ## Ticketing Integration
 
-Detect available ticketing tool (in priority order):
-
-1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
-2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
-3. `gh` CLI → GitHub Issues (PR auto-links via `$TICKET` in body; no status transition possible)
-4. Nothing → skip transition silently
+Detection priority + transition-verify-retry procedure: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+(GitHub Issues: the PR auto-links via `$TICKET` in the body; no status transition possible.)
 
 ---
 

@@ -1,16 +1,11 @@
 ---
 name: orchestrate
 description: >
-  Multi-chunk orchestration — the Lead boots from state and dispatches dev-only
-  workers (cheap Claude tier / Codex / foreign engine) running /we:develop per
-  chunk, integrates their branches, and runs CI once. Either (epic target)
-  computes the ready set and dispatches one worker per Story, or (single-Story
-  target) runs that one Story's phases as lead-integrated work-chunks (Mode B).
-  Workers push branches; the Lead merges onto one integration branch and opens
-  one PR. Tracked in the orchestration DB. Use when the user says
-  "/we:orchestrate", "orchestrate the epic", "orchestrate this story", "dispatch
-  the ready stories", "run the phases". Read-only Epic status: /we:epic instead.
-  For a single Story without orchestration overhead: /we:build instead.
+  Multi-chunk orchestration — the Lead dispatches dev-only workers (cheap
+  Claude / Codex / foreign engine) per Story or per phase, integrates their
+  branches onto one integration branch, and runs CI once on a single PR.
+  Use when the user says "/we:orchestrate", "orchestrate the epic",
+  "orchestrate this story", "dispatch the ready stories", "run the phases".
 ---
 
 # /we:orchestrate
@@ -111,8 +106,8 @@ picture is always current — never rely on cached knowledge:
    is valid (a rehearsal or a freshly-cut epic).
 2. **Child Stories** — glob `docs/plans/*-story.md`, keep those whose frontmatter `epic:`
    matches `<epic>`. For each, read frontmatter (`story`, `status`) and scan the body for DoR
-   completeness (GWT ACs present, Context non-empty, `### Phase` headers — same gate `/we:build`
-   Step 1 uses).
+   completeness (the 3-item scan in `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` — same gate
+   `/we:build` Step 1 uses).
 3. **Ticketing mirror** — if a ticketing tool is available (weside MCP `JIRA_*` → Atlassian MCP
    → `gh`), fetch each Story's ticket status. No ticketing tool → use plan frontmatter `status`
    only (same fallback as `/we:epic`).
@@ -485,21 +480,10 @@ in the ready-set — re-running `/we:orchestrate <epic>` after the PR is opened 
 for human merge) will pick them up. Tell the user this so the Epic progress stays visible:
 > "WA-1442 and WA-1445 are ready for the next run — `/we:orchestrate WA-1440` once the PR is open."
 
-Then tear down the builders. There is no `TeamDelete` — teardown means asking each one to stop,
-then verifying:
-
-```python
-for member_name in dispatched_workers:
-    SendMessage(to=member_name, message="SESSION COMPLETE — you may stop.", summary="shutdown_request")
-```
-
-Always tear down, even on failure paths — a leaked builder blocks the next run in this session.
-If a builder is still finishing, wait 30 s and retry the shutdown message twice, then fall back
-to `TaskStop(<member_name>)`.
-
-**Mandatory full sequence:** (1) shutdown message to every member → (2) verify termination →
-(3) `TaskStop(<member_name>)` fallback for stragglers → (4) `tmux kill-pane` leftover idle panes.
-Exact commands + retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
+Then tear down the workers — run the **full teardown sequence** from
+`${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown (shutdown message to every
+member → verify termination → `TaskStop` fallback → tmux pane check). Always tear down, even on
+failure paths — a leaked worker blocks the next run in this session.
 
 ---
 
@@ -509,12 +493,10 @@ Exact commands + retry policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`
 you arrive here directly from Step 1's shortcut. It is **also** reachable from an epic run when one
 ready Story is really a phased coherent change (Step 3's mode choice). Either way the shape is the same.
 
-The Step 1–9 workflow dispatches **one builder per Story, each running the full `/we:build`**. That
-is right when the ready Stories are **independent, sprint-sized slices**. It is the **wrong shape for
-a single coherent change split into phases** — a large refactor, a migration — where N full builds
-would pay the entire QS cost (characterization + AC-gate + simplify + the parallel quality-gate
-subagents + docs + PR + CI) **N times over**. Cutting such a change into N Stories just to dispatch
-it multiplies overhead the work does not need; the human feels that overhead and is right to refuse it.
+The Step 1–9 workflow dispatches **one builder per Story** — right for independent, sprint-sized
+slices, wrong for **a single coherent change split into phases** (a refactor, a migration), where N
+full builds would pay the entire QS cost N times over. Keep such a change one Story; Mode B runs its
+phases as lead-integrated chunks.
 
 **The phase decomposition comes from the plan, not improvised.** `/we:story` already wrote the
 `### Phase` blocks (with per-phase `**Files:**`) and the `parallel_groups` frontmatter — read them as
@@ -523,12 +505,9 @@ the Lead dispatches together (still ≤2 concurrent); phases outside any group a
 parallelism discriminating check below before each wave — the plan's `parallel_groups` is a strong
 hint, not a licence to skip the disjointness check.
 
-Even a **small monolith** is a legitimate Mode-B single-Story target: the value is not only saved QS
-cost but that the **caller keeps their own context clean and reviews the result neutrally** — the
-teammate does the focused implementation, the Lead integrates and reviews. `/we:story` recommends this
-over `/we:build` whenever the work is more than trivially straight-line.
-
-For that case, run the **lead-integrated phase mode**:
+Even a **small monolith** is a legitimate Mode-B target: the caller keeps their own context clean
+and reviews the result neutrally. `/we:story` recommends this over `/we:build` whenever the work is
+more than trivially straight-line. The shape:
 
 + The Lead holds the **one** Story/Epic **and its phase decomposition** (the Lead already cut it into
   phases — that *is* the overview it holds).
@@ -591,77 +570,26 @@ required regardless of weside connection.
 
 ## Rules
 
-+ **Resolve the target first (Step 0)** — a single-Story key runs Mode B over that one plan's phases
-  (skip the ready-set entirely, no synthetic epic); an epic runs the full Step 1–9 ready-set workflow.
-+ **Boot from state on every invocation** — reconstruct where the Epic (or single Story) stands from
-  living files before anything else; never assume cached knowledge.
-+ **Dispatch only on an explicit confirm** — the ready set is shown first; the human gates it.
-+ **Default cap ≤2 concurrent workers** — default is 2; the Lead may raise it with an explicit
-  reason when work is demonstrably disjoint. When in doubt, keep the default.
-+ **The Lead is a persistent partner, not a throwaway dispatcher** — it holds the overview so the
-  human is not overwhelmed (see *The stance*). In Companion mode it *is* the Companion.
-+ **Pick the dispatch shape (Mode A vs Mode B)** — independent Stories → one worker per Story (Mode A);
-  one phased coherent change → lead-integrated phase dispatch, one worker per phase-chunk (Mode B).
-  In BOTH modes, workers run `/we:develop` (dev-only), not `/we:build`.
-+ **Workers run `/we:develop`, not `/we:build`** — dev-only: implement + local gates + commit + push
-  + stop. No per-worker PR, no per-worker CI. The Lead integrates branches and runs CI **once**.
-+ **Default executor is cheap Claude (Sonnet/Haiku)** — the Lead stays on the session model;
-  workers default to a cheaper tier. Offer Codex or a foreign engine per-chunk only when configured
-  and the user confirms. Never auto-route; never make the choice sticky without re-confirming.
-+ **Mode B: run the parallelism discriminating check before fanning out** — chunks parallelize only if
-  each touches solely its own files; shared scaffolding that several phases must fill is a serial
-  foundation chunk, not parallel work. A chunk that makes shared scaffolding real runs serial-first.
-+ **Mode B: worktree-per-teammate; the Lead never flips the main worktree** — teammates branch their
-  own worktree off the integration branch; the Lead integrates in a dedicated lead worktree; the main
-  worktree stays on the default branch for the whole run.
-+ **Mode B: green is the start of review, not the end** — evaluate a builder's surfaced fork-decision
-  against the acceptance criterion, not the test status; never accept an over-claimed characterization
-  net, and approve a behaviour-locus move only explicitly, in the commit.
-+ **Workers: default to the mid-tier model (Sonnet), escalate to the top tier only for a named-hard
-  chunk** — the Lead names the reason (delicate ordering, a hard integration seam, a freeze). Haiku for
-  mechanical phases; Sonnet default; Opus only when justified. Make escalation an explicit per-chunk choice.
-+ **Mode B: validate the integrated tree at full scope after each merge, and own the cross-cutting glue**
-  — a chunk's narrow green can hide a latent error in a sibling file; the Lead re-runs broad checks on the
-  merged branch and fixes out-of-scope breakage itself as a separate, labelled integration commit. Confirm
-  the worktree root before trusting any validation — a green from the wrong directory proves nothing.
-+ **Mode B: brief builders to surface forks before pinning, and to pin existing behaviour only** — a real
-  design fork goes to the Lead *before* the characterization is written; pins capture what already exists
-  (green on unmodified code), never a property the migration newly adds.
-+ **Three executor backends; default is cheap Claude** — offer Codex when `tools.codex: true` (re-verify
-  `command -v codex`); offer a foreign engine when a profile exists in `.weside/engines.local.json`. Both
-  are **opt-in per chunk** — explicit pick only, never auto-route. Codex: one backgrounding mechanism,
-  verify worktree changed (`references/codex-dispatch.md`). Foreign engine: `worker-launch.sh`, same
-  verify-before-integrating discipline.
-+ **`--refine-ahead` is a Step-7 overlay, not a third mode** — it composes with Mode A; the build
-  lane stays ≤2 and disjoint-gated, the refine lane keeps ~1 story ahead (`refined-not-built < cap+1`,
-  never over-produce). Default (flag off) = passive monitoring, unchanged.
-+ **`--refine-ahead`: serialize on doubt (the disjoint guard is a hint)** — only dispatch a ready
-  story alongside an in-flight build when their plan `**Files:**` are disjoint; missing lists, any
-  overlap, or a shared *seam* you can't see in the file lists → surface it in the rolling confirm and
-  default to hold. A refine succeeds only when the story leaves `refinable` (`_body_is_refined`
-  passes), never on "file written" alone.
-+ **`--refine-ahead`: never spin or hang** — terminate iff dispatchable-ready, refinable(+buffer), and
-  in-flight are ALL empty; report the held set (incl. any `depends_on` cycle) with reasons rather than
-  looping.
-+ **`--refine-ahead` P3 (refiner-teammate): ≤1 refiner, and the refiner only Writes** — the Lead is the
-  single writer/verifier (runs `story ready` + `story checkpoint refined` + commit); the refiner never
-  runs git/orchestration. Use a *direct template* brief, never a `/we:story` invocation (it would stall
-  at ExitPlanMode). Enable the P3 lane only after a `--rehearsal` go/no-go proves it; P2 is the fallback.
-+ **Spawn builders with `Agent(name=…)`, all in one message** — never `Skill` for
-  teammates; there is no `team_name` parameter, builders join the session's implicit team just
-  by being spawned. Builders live in their own watchable sessions.
-+ **Never inject Companion identity into builders** — user-scoped `select_companion` race; only
-  the Lead carries a voice.
-+ **The Lead owns ticket state — workers never transition** — workers run `/we:develop`, which does
-  not touch the ticket. The Lead moves each Story → "In Progress" at dispatch (Step 6) and → "In Review"
-  after the integration PR + ci-review pass (Step 8 B4). Verify + retry once; soft-fail loud only on
-  workflow/permission rejection. **Leave Stories in "In Review"** — never "Done".
-+ **One ci-review pass, then wait** — after the integration PR, wait for CI/reviews to land, run ONE
-  `/we:ci-review` pass, wait for post-push CI, report, stop. No automatic multi-cycle loop.
+The steps above are the spec — these are the invariants that are easiest to miss:
+
++ **Workers run `/we:develop`, not `/we:build`** — dev-only: implement + local gates + commit +
+  push + stop. No per-worker PR, no per-worker CI, no ticket transitions. The Lead integrates
+  branches and runs CI **once**.
++ **Spawn teammates with `Agent(name=…)`, all in one message — never `Skill()`** — there is no
+  `team_name` parameter; workers join the session's implicit team just by being spawned.
++ **Never inject Companion identity into workers** — user-scoped `select_companion` race; only
+  the Lead carries a voice. Fail loud on the env-flag, degrade gracefully on identity.
++ **The Lead owns ticket state** — "In Progress" at dispatch (Step 6), "In Review" after the
+  integration PR + ci-review pass (Step 8 B4), never "Done". Verify each move, retry once,
+  soft-fail loud only on workflow/permission rejection.
 + **Lead reviews, never merges** — Deliver (merge, close ticket, move to Done) is the human's job.
-+ **Always tear the team down** (shutdown message → verify → `TaskStop` fallback → tmux pane check)
-  — even on failure paths.
-+ **Fail loud on the env-flag, degrade gracefully on identity** — same contract as `/we:council`.
++ **Always tear the team down** (`references/agent-teams.md` § Full teardown) — even on failure
+  paths.
+
+Mode-B chunk discipline (parallelism check, worktree hygiene, brief forks, integrated-tree
+validation) lives in `references/mode-b-lessons.md` — the mandatory read before chunk dispatch.
+The `--refine-ahead` invariants (buffer throttle, disjoint guard, termination predicate, P3
+single-writer rule) are specified inline in Step 7+ and `references/refine-ahead-p3.md`.
 
 ## References
 

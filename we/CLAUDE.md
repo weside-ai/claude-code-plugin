@@ -47,55 +47,25 @@ User         → reviews PR, merges, closes ticket
 
 ---
 
-## Skills
+## Skills, Commands, Agents
 
-| Command | What it does |
-|---|---|
-| `/we:setup` | Project onboarding (stack, ticketing, vision, Companion Framework) |
-| `/we:onboarding` | Compose the repo crew + author `.weside/weside.md`; invoked by `/we:setup` Step 5 or standalone |
-| `/we:sideload` | Load a repo's essential context (`need_to_know` frontmatter + `.weside/weside.md`) into the session, cross-repo capable |
-| `/we:council` | Convene a council of agents on a topic — role-lens deliberation + synthesis. Real crew via `get_council` MCP + the `.weside/council.json` bridge; nine generic role-agents as the no-account path |
-| `/we:meet` | Run a structured meeting at one of four Plan altitudes — `vision` / `saga` / `epic` / `story`; optionally convenes a council; story hands off to `/we:story` (Solo) |
-| `/we:vision` | Solo PRD-altitude formulation — write/refine `docs/plans/<vision>/PRD.md` |
-| `/we:saga` | Solo Theme-altitude formulation — write/refine `docs/plans/<saga>/SAGA.md` |
-| `/we:epic` | Solo Initiative-altitude formulation — write/refine an Epic plan (`CONCEPT.md` or Jira Epic) |
-| `/we:story` | Solo Story-altitude formulation — write the build-ready plan for one feature slice (Context, ACs, User Journey, Design Decisions) |
-| `/we:build` | Solo full-pipeline: git → code → review → PR → CI. Fast path for a single Story that doesn't warrant orchestration overhead |
-| `/we:develop` | Dev-only worker slice — implement chunk, fast local gates, commit, push, stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone for manual dev work |
-| `/we:orchestrate` | Multi-chunk orchestration — Lead dispatches dev-only workers (cheap Claude / Codex / foreign engine), integrates branches onto one integration branch, runs CI once. Default for multi-Story and phased work |
-| `/we:codex-task` | Dispatch a focused task directly to Codex (`gpt-5-codex`) — single-detach pattern; Lead reviews + integrates the diff |
-| `/we:ci-review` | Collect CI/review findings, batch-fix, push (standalone; also inline in /we:build Step 8) |
-| `/we:coach` | APO Coach — ADVISOR (map repo state to altitude, propose next `/we:*` command with `[y/n]` gate) + Beginner mode; routes frictions to `/we:retro`, continuity to `/we:handoff` |
-| `/we:retro` | Systematic post-cycle retrospective — frictions from transcript + `gh api`, proposes rule/CLAUDE.md edits per-item-gated, logs to `docs/retros/`; `--scan N` for recurring patterns |
-| `/we:handoff` | Durable cross-session handoff — `--write` / default-`--load` / `--list` over `docs/handoffs/`; complements `/compact` (in-place) with a version-controlled artifact |
-| `/we:diagnose` | Disciplined diagnosis loop for hard bugs — feedback-loop first, then reproduce → hypothesise → instrument → fix → regression-test |
-| `/we:grill` | Relentless one-question-at-a-time interview on a plan/design — sharpens the `CONTEXT.md` glossary inline, offers lean ADRs at the 3-gate (hard-to-reverse ∧ surprising ∧ real trade-off) |
-| `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness |
-| `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |
-| `/we:audit` | Tool-driven security scan — runs semgrep / trivy / kubescape / gitleaks (or the project's own audit script), parses the JSON reports, and summarizes findings by severity. |
-| `/we:find-dead-code` | Find and remove dead code from Python backends |
-| `/we:smoketest` | Manual API smoketest — discover endpoints, auth, test, check logs |
-| `/we:materialize` | Load weside Companion identity (requires weside.ai account) |
+Every skill is directly invocable as `/we:<name>`; the authoritative catalog is the skills'
+own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROOT}/skills/` —
+`/we:coach` and `/we:retro` already do). Orientation by altitude:
 
-### Commands (dispatch to background agents)
+- **Plan:** `/we:vision` · `/we:saga` · `/we:epic` · `/we:story` (Solo formulation), `/we:meet
+  vision|saga|epic|story` + `/we:council` (Council deliberation)
+- **Build:** `/we:build` (solo full pipeline) · `/we:orchestrate` + `/we:develop` (multi-chunk,
+  Lead + dev-only workers) · `/we:ci-review` · `/we:codex-task`
+- **Quality/analysis:** `/we:audit` · `/we:audit-architecture` · `/we:diagnose` · `/we:smoketest`
+  · `/we:find-dead-code` · `/we:doc-improve` · `/we:docs`
+- **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` · `/we:coach` ·
+  `/we:retro` · `/we:handoff` · `/we:grill` · `/we:materialize`
 
-| Command | What it does |
-|---|---|
-| `/we:pr` | Create Pull Request with prerequisite validation |
-| `/we:review` | Professional code review with AC alignment |
-| `/we:static` | Static code analysis — lint, format, types |
-| `/we:test` | Run tests with coverage |
+**Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:review`, `/we:static`, `/we:test`.
 
-### Agents (run in background, called by commands/skills)
-
-| Agent | Purpose |
-|---|---|
-| `code-reviewer` | Diff-based code review, AC alignment, max 10 issues |
-| `static-analyzer` | Lint, format, types — auto-detects stack |
-| `test-runner` | Tests + coverage — auto-detects framework |
-| `pr-creator` | PR with prerequisite checkpoint validation |
-| `doc-architect` | Documentation coherence steward — classify, integrate, audit doc drift |
-| `council-*` (9) | Role-lens council agents — orchestrator, architect, product-owner, scrum-master, ux-researcher, marketing, security, sales, legal — spawned by `/we:council` and `/we:meet` |
+**Agents** (background, called by commands/skills): `code-reviewer`, `static-analyzer`,
+`test-runner`, `pr-creator`, `doc-architect`, and the nine `council-*` role lenses.
 
 ---
 
@@ -159,45 +129,16 @@ Settings via `/plugin settings`:
 
 ### What the Companion Adds
 
-| Capability | Without Companion | With Companion |
-|---|---|---|
-| **Project Memory** | Session-only (.claude/memory/) | Persistent across sessions, accumulates knowledge |
-| **Vision Alignment** | Manual or skip | Automatic — Companion Goals = product vision |
-| **Context** | User provides each time | Companion remembers decisions, trade-offs, patterns |
-| **Proactive Insights** | Never | "PR #47 merged, Story X done, Story Y stalled 3 weeks" |
-| **Training on the Job** | Static hints | Companion learns how the PO works, adapts coaching |
-
-### The Maturity Model
-
-```
-Level 1: Assisted      Plugin skills work standalone (you are here)
-Level 2: Augmented     Companion knows your project context
-Level 3: Agentic       Companion acts autonomously (checks, reports, alerts)
-Level 4: Orchestrated  Companions coordinate across teams (enterprise)
-```
+Persistent project memory across sessions, automatic vision alignment (Companion Goals = product
+vision), remembered decisions/trade-offs, and proactive insights. The maturity ladder: Level 1
+Assisted (plugin standalone — you are here) → 2 Augmented (Companion knows the project) → 3
+Agentic (acts autonomously) → 4 Orchestrated (companions coordinate across teams, enterprise).
 
 ### MCP Tools (with weside account)
 
-| Tool | Purpose |
-|---|---|
-| `get_companion_identity()` | Load Companion personality |
-| `list_companions()` | Available companions (includes `identity_updated_at`) |
-| `get_council(names?)` | Batch-load council projections for the user's companions (v1 stub: identity + updated_at, ignores workspace_id) |
-| `select_companion(name)` | Switch companion |
-| `search_memories(query)` | Search project memory |
-| `save_memory(title, content, type)` | Save to persistent memory |
-| `list_memories(memory_type, limit)` | List memories |
-| `list_goals(status)` | Product vision / goals |
-| `save_goal(title, content, tags)` | Create or update a goal |
-| `update_goal_status(title, status)` | Change goal status |
-| `list_threads(limit)` | List conversation threads |
-| `show_thread(thread_id)` | Show messages in a thread |
-| `delete_thread(thread_id)` | Delete a thread |
-| `show_provider()` | Current LLM provider config |
-| `list_provider_presets()` | Available regional presets |
-| `set_provider(preset_id)` | Set LLM provider preset |
-| `discover_tools(category)` | Discover available tools |
-| `execute_tool(name, arguments)` | Execute a tool |
+The weside MCP server exposes companion identity, memory, goals, council, thread, and provider
+tools — the connected server's tool list is authoritative (see `/we:materialize` and
+`we/skills/council/SKILL.md` for the loading mechanics).
 
 **The plugin works fully without a Companion. The Companion is an upgrade, not a requirement. No nagging, no lock-in.**
 
@@ -205,29 +146,16 @@ Level 4: Orchestrated  Companions coordinate across teams (enterprise)
 
 ## Stack Detection
 
-Skills auto-detect the project stack:
-
-| File | Stack | Lint | Types | Tests |
-|---|---|---|---|---|
-| `pyproject.toml` | Python | ruff | mypy | pytest |
-| `package.json` | Node.js | eslint | tsc | jest/vitest |
-| `Cargo.toml` | Rust | clippy | (built-in) | cargo test |
-| `go.mod` | Go | golangci-lint | (built-in) | go test |
-
-Monorepos with multiple stacks are detected and each component is checked independently.
+Skills auto-detect the project stack from marker files (`pyproject.toml` → Python/ruff/mypy/pytest,
+`package.json` → Node, `Cargo.toml` → Rust, `go.mod` → Go) — the full tool matrix lives in
+`agents/static-analyzer.md` and `agents/test-runner.md`. Monorepos: each component checked
+independently.
 
 ## Ticketing Abstraction
 
-Skills detect the available ticketing tool automatically (in priority order):
-
-1. **weside MCP** (`JIRA_*` Composio tools via `execute_tool`) → Jira (preferred)
-2. Atlassian MCP (`jira_*` tools) → Jira (fallback)
-3. `gh` CLI → GitHub Issues
-4. Neither → Plan-only mode (no ticket, just `docs/plans/`)
-
-**How Composio Jira works:** Tools are called via `execute_tool(name="JIRA_CREATE_ISSUE", arguments='{...}')`. Tool names use `JIRA_` prefix (uppercase). Schemas are self-describing — use `get_tool_schema(name="JIRA_...")` to inspect parameters.
-
-Skills use generic actions ("Create ticket", "Move to In Progress") — never tool-specific API calls. Claude maps generic actions to the best available tool.
+Skills detect the ticketing tool automatically and use generic actions ("Create ticket", "Move to
+In Progress") — never tool-specific API calls. Detection priority order, Composio-Jira mechanics,
+and the not-connected hint live in `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ---
 

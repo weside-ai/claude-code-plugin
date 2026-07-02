@@ -140,8 +140,9 @@ Privacy check: 0 personal-content references caught and skipped.
 
 - **In the user repo:** `mkdir -p docs/handoffs/` if missing, then `Write` the file.
 - **Commit policy** (mirrors `/we:retro`):
-  - Default (PR-required repos): Create branch `handoff/YYYY-MM-DD-<slug>`, apply Write, open PR with handoff content as the PR body. User merges via normal flow.
-  - Direct-commit repos (standing auth configured): Edit/Write on `main` directly. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
+  - Default (PR-required repos): create branch `handoff/YYYY-MM-DD-<slug>`, apply Write, then — if `gh auth status 2>/dev/null` succeeds — open a PR with the rendered handoff as the PR body; user merges via normal flow. If `gh` is unavailable/unauthenticated: commit to the branch and print *"No GitHub access — push `handoff/YYYY-MM-DD-<slug>` manually and open a PR when ready."*
+  - Direct-commit repos (standing main-auth explicitly configured in `.weside/config.json` or repo CLAUDE.md): Write on `main` directly. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
+  - The user can interrupt mid-apply ("skip the PR, just commit directly").
 - Confirm: `applied · <repo>/docs/handoffs/<file>.md (<line-count> lines)`.
 
 ### Step W6 — Closeout
@@ -270,29 +271,12 @@ Empty section convention: a single `—` rather than fabricated content.
 
 ---
 
-## Apply Mechanics
-
-When WRITE-mode applies:
-
-- **Default: PR workflow** in the user repo. Skill creates `handoff/YYYY-MM-DD-<slug>` branch, applies Write, then:
-  - If `gh auth status 2>/dev/null` succeeds: opens PR with the rendered handoff as PR body. User merges via normal flow.
-  - If `gh` is unavailable or unauthenticated: commits to the branch and prints: *"No GitHub access — push `handoff/YYYY-MM-DD-<slug>` manually and open a PR when ready."*
-- **Opt-in: direct commit** if repo is configured for standing main-auth (per-repo config — check `.weside/config.json` or repo CLAUDE.md for explicit standing-auth note).
-- **Plugin MD changes always go PR** — plugin is public.
-
-User can interrupt mid-apply ("skip the PR, just commit directly").
-
----
-
 ## What You DO NOT Do
 
-- **Don't WRITE silently.** Every write follows an explicit `y` for that draft.
-- **Don't quote personal content** from the transcript. Privacy guard, every step.
-- **Don't replace `/compact`.** Document the complementary relationship and let the user pick. They serve different problems.
-- **Don't auto-fire from a hook.** Even if SessionEnd hooks could trigger this skill (they can't, per CC architecture), the `[y/n]` discipline is non-negotiable. End-of-session WRITE is always Coach-suggested with a gate, never silent.
-- **Don't fabricate sections.** Empty section = `—`. Don't invent decisions, dead ends, or watch-outs that weren't actually in the session.
+(The write gate, privacy guard, and commit policy above are the spec — these are the extras:)
+
+- **Don't auto-fire from a hook.** End-of-session WRITE is always Coach-suggested with a `[y/n]` gate, never silent.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
-- **Don't push directly to protected repos.** Default PR workflow applies where standing auth is not explicitly configured; user can override per call but the default protects always-loaded rules and CLAUDE.md.
 
 ---
 

@@ -111,23 +111,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 
 Load story from ticketing tool. Verify DoR: User Story, Plan exists (`${REPO_ROOT}/docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
 
-**Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output. The gate checks the plugin DoR; if `<repo-root>/.weside/dor.md` exists (see Prerequisites above), its items apply too — the plan must satisfy plugin DoR ∪ repo DoR, not plugin DoR alone.
-
-Check all three:
-
-1. **ACs present and structured:** the plan contains at least one occurrence of `Given` AND `When` AND `Then` (GWT acceptance-criteria tokens). A plan with no GWT ACs hasn't been accepted as DoR-complete.
-2. **Context section non-empty:** the plan has a Context section with > 50 characters of actual content (not just a header).
-3. **Phase headers present:** at least one `### Phase \d+:` header exists (regex: `^### Phase [0-9]+:`).
-
-**On failure:** stop the pipeline immediately with a specific message:
-
-```
-Plan at `${REPO_ROOT}/docs/plans/{TICKET}-story.md` is incomplete: missing <ACs|Context|Phase headers>.
-Run `/we:story {TICKET}` to complete it before `/we:build`.
-See ${CLAUDE_PLUGIN_ROOT}/quality/dor.md for the full DoR checklist.
-```
-
-Name the specific missing item(s). Do NOT proceed with an incomplete plan.
+**Plan Completeness Gate:** After confirming the plan file exists, run the 3-item DoR scan from
+`${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` (GWT ACs · Context > 50 chars · `### Phase` headers).
+This is a hard gate — on failure, stop the pipeline immediately, name the missing item(s), and point
+to `/we:story {TICKET}` + `${CLAUDE_PLUGIN_ROOT}/quality/dor.md`. If `<repo-root>/.weside/dor.md`
+exists (see Prerequisites above), its items apply too — plugin DoR ∪ repo DoR, not plugin DoR alone.
 
 **CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
 
@@ -159,17 +147,9 @@ EnterWorktree(name="{type}/{TICKET}-short-description")
 
 This gives the story an isolated copy of the repo. The worktree is kept on completion (user decides cleanup). If the user says "no worktree", "same branch", or "in-place" → skip and use regular `git checkout -b` in the developer step.
 
-**Transition ticket → "In Progress" (MANDATORY):**
-
-Detect the ticketing tool per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. GitHub Issues: no status transition possible — skip silently. None: skip silently.
-
-For Jira (Atlassian MCP):
-1. Get available transitions: `jira_get_issue(issue_key=TICKET, expand="transitions")`
-2. Find the transition to "In Progress" (name varies: "In Progress", "Start Progress", "In Bearbeitung")
-3. Execute: `jira_transition_issue(issue_key=TICKET, transition_id=...)`
-4. **Verify** the ticket actually moved — re-fetch and check status. If it didn't move, retry once with a different transition name.
-
-If transition fails → log warning and continue. Do NOT block the pipeline.
+**Transition ticket → "In Progress" (MANDATORY):** follow the detection + transition-verify-retry
+procedure in `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. If the transition genuinely fails →
+log a warning and continue; do NOT block the pipeline.
 
 Write checkpoint `git_prepared`.
 
@@ -414,18 +394,10 @@ Extract PR number. Write checkpoint `pr_created`.
 
 ⛔ **Do NOT call `Skill(skill="ci-review")`!** Execute the CI-review logic inline.
 
-**This step runs exactly ONE ci-review pass and then stops — it is not a multi-cycle loop.** The
-shape preserves the early-start optimization (Phase 1b of the ci-review skill) AND guarantees the
-long CI is actually checked:
-
-- **Start as soon as the fast reviewers have posted** — do NOT wait for the long backend CI to begin
-  collecting. The AI reviewers (Claude Review plus any CI bots the repo lists in `review.available`)
-  post within a minute or two; start triaging and fixing their findings while the backend CI is
-  still `in_progress`.
-- **Hold the push until the long CI has a conclusion.** This is the only thing gated on the slow CI:
-  before pushing, wait until `gh pr checks {PR}` shows no `pending`/`in_progress` left, fold any CI
-  failures into the SAME fix-commit, and push once. That way review-fixes and CI-fixes ship in one
-  push, not two — and the build never "ends at the PR" with CI unchecked.
+**This step runs exactly ONE ci-review pass and then stops — it is not a multi-cycle loop.**
+Same shape as `/we:ci-review`'s "start early, push late" (its Phase 1b): begin collecting + fixing
+as soon as the fast reviewers post; gate only the push on the long CI concluding, so review-fixes
+and CI-fixes ship in one push. The numbered steps below are the whole procedure.
 
 **Precheck — GitHub availability:**
 ```bash
@@ -444,12 +416,8 @@ When `HAS_GH=1`:
 7. **Push** once — only now, after CI concluded and all bot threads resolved.
 8. **Wait for the post-push CI to settle**, then report the resulting CI state (green/red) and **STOP**.
 
-**One pass only — then stop.** Do NOT re-enter a fix loop. After this single pass, hand back to the
-user with the PR open and the ticket in "In Review" (Step 9). If the post-push CI is still red, report
-it and stop — the user decides whether to run `/we:ci-review {PR}` again. Re-running the whole pass
-automatically (the old "max 3 cycles") is removed.
-
-After the pass → write checkpoint `ci_passed`.
+**One pass only — then stop.** If the post-push CI is still red, report it and stop — the user
+decides whether to run `/we:ci-review {PR}` again. After the pass → write checkpoint `ci_passed`.
 
 ## Step 9: Verify Ticket Transition (leave it in "In Review")
 
@@ -470,19 +438,10 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 
 ## Rules
 
-- Always create todo-list before starting
-- Always check DoR and load plan first
-- Always use `EnterWorktree` for isolation (unless user opts out)
-- Always name branches with ticket key FIRST: `{type}/{TICKET}-short-description` (e.g., `feat/PROJ-123-add-login`, `fix/PROJ-456-null-pointer`). The ticket key must appear before the description so it can be extracted reliably via regex.
-- Always transition ticket to "In Progress" in Step 1 — verify it moved, retry once if not
-- Always save checkpoints after each phase
-- Always run quality gates before creating PR
-- Always verify ticket is in "In Review" after PR creation — retry once if not
-- Never skip test quality gate
-- Never create PR if tests fail
-- Never move ticket to "Done" — user's job
-- Never stop mid-pipeline unless circuit breaker opens
-- Never re-invoke `Skill(skill="build")` — if you're reading this, you ARE the build skill
-- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Use `Agent(subagent_type=...)` for parallel-safe phases in Step 2 (isolated context, short report back) or execute inline; Step 8 uses inline CI-review logic. Only `Skill()` dispatch is banned — `Agent()` is explicitly the correct tool for the fan-out mode.
-- Never commit code changes without corresponding test changes in the same commit
-- Never create a PR before ALL THREE quality gates pass (review + static + test)
+The pipeline table + steps are the spec — the invariants easiest to miss:
+
+- Branch names carry the ticket key FIRST: `{type}/{TICKET}-short-description` (e.g. `feat/PROJ-123-add-login`) — the key must be regex-extractable from the branch name.
+- Never call `Skill(skill="build"|"develop"|"ci-review")` — you ARE the pipeline; `Skill()` loads into the main context and inflates it. `Agent(subagent_type=...)` is the correct dispatch for fan-out phases; Step 8 executes its CI-review logic inline.
+- Never commit code changes without corresponding test changes in the same commit.
+- Never create a PR before ALL THREE quality-gate checkpoints exist (review + static + test); never move the ticket past "In Review" — "Done" is the user's job after merge.
+- Never stop mid-pipeline unless the circuit breaker opens (see "Execution Is Not Negotiable").
