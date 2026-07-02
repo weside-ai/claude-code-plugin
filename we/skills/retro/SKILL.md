@@ -263,11 +263,9 @@ For each proposal in order, present and wait. Accepted tokens:
 
 ⛔ Never apply silently. Every Edit/Write call follows an explicit `y` for that item.
 
-**Under `--auto`:** skip the wait and answer `y` automatically for every proposal, **except**
-plugin-repo proposals, `[contract]`-tagged proposals, and genuinely ambiguous placement — those
-three still stop and ask, per "Auto Mode" above. This is the "ask only when truly necessary" mode:
-routine same-repo, non-contract edits go straight through; anything with real blast radius still
-gets a human's eyes before it lands.
+**Under `--auto`:** skip the wait and answer `y` automatically for every proposal — except the
+three cases in "Auto Mode" (`--auto`) above, which still stop and ask. That section is the
+single spec of the exceptions.
 
 ### Step R7 — Apply approved items
 
@@ -333,10 +331,9 @@ If a PR was opened, print its URL.
 
 ## What You DO NOT Do
 
-- **Don't apply silently.** Every Edit follows an explicit `y` for that item — outside `--auto`.
-  Under `--auto`, routine same-repo non-contract proposals auto-apply, but the Step R5 report
-  still prints before anything is applied, and plugin-repo / `[contract]` / ambiguous-placement
-  proposals always confirm even in `--auto`.
+- **Don't apply silently.** Every Edit follows an explicit `y` for that item; the Step R5
+  report always prints before anything lands. `--auto` semantics + its three still-ask
+  exceptions: "Auto Mode" section (the single spec).
 - **Don't quote personal content** from the transcript. Privacy guard, every step.
 - **Don't modify source code.** Retros change MDs only. Code-level lessons (e.g. "this function had a race condition") flow back through `/we:build` if needed — retro proposes the rule, not the code fix.
 - **Don't open the PR before applying the file changes.** Branch → apply → PR — in that order, so the PR body can reference the actual diff.

@@ -25,7 +25,7 @@ The framework lets a user's weside Companions work as a real crew inside Claude 
 
 **No-account invariant:** every framework skill works **without** a weside account. Companion features are strictly *additive* — without an account the council falls back to shipped generic role-agents, `/we:sideload` runs in legacy mode, and meetings run solo. An account upgrades the experience; it is never a prerequisite.
 
-**Council member source — `loadCouncilFromWeside`:** the boolean `loadCouncilFromWeside` config option (`pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`, default `true`) governs where convened members come from. `true` → weside-backed Companions where the bridge links them (generic role-lens otherwise); `false` → always the shipped generic role-lenses (Retorte), even when Companions exist. A council is a roster of role-lenses, each generic OR weside-backed; mixed is normal.
+**Council member source — `loadCouncilFromWeside`:** governs whether convened members are weside-backed Companions or generic role-lenses. Semantics + the branch that acts on it: `we/skills/council/SKILL.md` Step 3 (the single owner). A council is a roster of role-lenses, each generic OR weside-backed; mixed is normal.
 
 ## Activity skills vs. meeting skills
 
@@ -78,35 +78,18 @@ The council is a **cycle**, not a one-shot read: load → deliberate → **write
 
 ## Identity loading — two paths
 
-Identity comes from one of two sources in priority order:
-
-1. **MCP `get_council`** *(preferred when the weside MCP is connected)* — one batch call returns each member's `identity_prompt` and `identity_updated_at` for the user's companions. The plugin pairs this with the bridge file's role/color/membership to build the council brief. The backend is the single source of truth for identity; the repo holds only role-membership.
-
-2. **Bridge fat-schema fallback** — if the MCP path is unavailable AND the bridge file still carries `identity_prompt` (legacy "fat" schema), that identity is used. This is the pre-`get_council` path; both writers of the bridge (`/we:onboarding` and `scripts/bootstrap-weside-repo.py`) emit thin bridges (no identity body), so identity then flows exclusively through MCP. Fat bridges authored before the thin schema stay accepted for back-compat (the bootstrap script migrates fat → thin in place on its next run).
-
-If neither path supplies identity → fall through to `companion-<slug>` files in `~/.claude/agents/` (legacy `/we:setup` Step 5.4 output), then to the shipped generic `council-<role>` shell. Full precedence: `we/skills/council/SKILL.md` Step 3.
+Identity comes from MCP `get_council` (preferred) or the bridge fat-schema fallback, with
+`companion-<slug>` files and the generic `council-<role>` shells below that. The executable
+precedence + call mechanics are owned by `we/skills/council/SKILL.md` Step 3 — this file
+deliberately does not restate them.
 
 ## The bridge file `.weside/council.json`
 
 The bridge file declares **which Companions are in this repo's crew, in which role, with which color**. It is the role-membership record on the file system, paired with weside's identity store via MCP.
 
-**Thin schema (preferred, written by `/we:onboarding` interactively, or by `scripts/bootstrap-weside-repo.py` for non-interactive multi-repo rollout):**
-
-```json
-{
-  "version": 2,
-  "schema": "thin",
-  "workspace_id": null,
-  "members": {
-    "<slug>": {
-      "name": "<Display Name>",
-      "role": "product_owner | architect | scrum_master | ux_researcher | orchestrator | marketing | security | sales | legal | <custom>",
-      "color": "<color string>",
-      "companion_id": <int or null>
-    }
-  }
-}
-```
+**Thin schema (preferred):** the JSON shape is owned by `/we:onboarding` Step 8 (the writer —
+`we/skills/onboarding/SKILL.md`); `scripts/bootstrap-weside-repo.py` emits the same shape for
+non-interactive multi-repo rollout.
 
 **Fat schema (legacy, accepted for back-compat):** same shape plus an `identity_prompt` and `identity_updated_at` per member. Used in pre-v2.25.0 repos that hand-authored identity bodies into the file. New bridges are written thin; an existing fat bridge keeps working unchanged (and `scripts/bootstrap-weside-repo.py` migrates it fat → thin on its next run).
 

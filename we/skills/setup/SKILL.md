@@ -30,11 +30,8 @@ Interactive project onboarding. Three core questions for project config, then op
 Scan the project to detect:
 
 **Stack:**
-+ `pyproject.toml` → Python (ruff, mypy, pytest)
-+ `package.json` → Node.js (eslint, tsc, jest/vitest)
-+ `Cargo.toml` → Rust
-+ `go.mod` → Go
-+ Multiple → Monorepo
++ `pyproject.toml` → Python · `package.json` → Node.js · `Cargo.toml` → Rust · `go.mod` → Go · multiple → Monorepo
++ (The per-stack tool matrix — linter/types/tests — is owned by `agents/static-analyzer.md` + `agents/test-runner.md`.)
 
 **Ticketing Tool:** detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
@@ -114,9 +111,10 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    → Detect candidates: codex plugin installed → suggest `codex`;
      a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
      `claude` (the local code-reviewer agent) is always available.
-   → **Codex detected → suggest the order `["codex", "claude"]`** (codex = the local
-     adversarial pass when Claude wrote the code; claude = the CI second opinion and the
-     local reviewer when codex didn't write / no CI). No codex → default `["claude"]`.
+   → **Codex detected → suggest `["codex", "claude"]`** (codex = the local adversarial
+     pass when Claude wrote the code; claude = the CI second opinion). No codex →
+     default `["claude"]`. The list seeds the CI-bot allowlist; it does NOT rank local
+     reviewers (see Reviewer-id semantics below).
    → Confirm or override.
    → "Add another reviewer? (free-text id, e.g. a custom bot — leave empty to finish)"
      → accept any id; unknown ids are treated as CI bots (allowlisted, not run locally).
@@ -170,7 +168,7 @@ things — the reviewer is the engine that didn't write the code."*
 + `codex` → local `/codex:adversarial-review` via the codex plugin's `codex-companion.mjs`. The local adversarial pass when Claude wrote the code. Locally invokable (needs the codex plugin).
 + `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
 
-**Exactly ONE local reviewer runs, chosen by who wrote the code** — not by list order and not by a count. The reviewer is the engine that did NOT write the code: Claude wrote + `tools.codex` + `review.cross` → `/codex:adversarial-review` (and the `code-reviewer` agent does NOT also run); codex/foreign wrote, or no codex → `code-reviewer`. So which local reviewer runs is decided by `tools.codex`/`review.cross`, *not* by whether `claude` or `codex` sits first in `review.available` — a repo with `tools.codex:true` gets the codex adversarial pass even if `review.available` lists `["claude"]`. The `review.available` list's job is to seed the CI-bot allowlist `/we:ci-review` collects from (Claude Review + any listed bots); its order is cosmetic for local review.
+**Exactly ONE local reviewer runs, chosen by who wrote the code** — not by list order and not by a count. The reviewer is the engine that did NOT write the code: Claude wrote + `tools.codex` + `review.cross` → `/codex:adversarial-review` (and the `code-reviewer` agent does NOT also run); codex/foreign wrote, or no codex → `code-reviewer`. `review.available`'s only job is to seed the CI-bot allowlist `/we:ci-review` collects from; its order is cosmetic for local review.
 
 ### Step 3: Save Configuration
 
@@ -193,7 +191,7 @@ The `engines` block lists the profile names created/verified in the executor wiz
 
 The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
 
-The `review.available` block is the **ordered** reviewer list from Step 2 Q4. The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
+The `review.available` block is the reviewer list from Step 2 Q4 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
@@ -248,7 +246,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
    Live teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Read `~/.claude/settings.json`: flag already `"1"` → move on. Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after.)"* — on yes, merge the key into the `env` block (create if missing), write back, tell the user to restart; on no, warn that council/meet will abort with a remediation hint, then continue. This is the only step that touches user-scope settings.
 
-1. **Ensure `.weside/config.json`** — create or extend. Schema:
+1. **Ensure `.weside/config.json`** — EXTEND the file Step 3 wrote (never re-emit its keys); add:
 
    ```json
    {
@@ -256,7 +254,6 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
      "onboarded": false,
      "created_at": "<ISO-timestamp>",
      "framework_version": 1,
-     "ticketing": { "tool": "<jira|github-issues|none>", "project_key": "<KEY-or-null>" },
      "council": {
        "default": ["product_owner", "architect", "scrum_master"],
        "meetings": {
@@ -269,7 +266,9 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    }
    ```
 
-   The `ticketing` block records the choice from Step 2. The `council` block ships with these defaults — the user does **not** configure it here; it can be hand-edited later or overridden per-invocation via `/we:meet --council=…`.
+   The `council.meetings` block is the **single owner of the shipped per-meeting rosters**
+   (`/we:meet` and `/we:council` read it). The user does not configure it here; hand-edit later
+   or override per-invocation via `/we:meet --council=…`.
 
 2. **TurboVault registration (if MCP available)**
    + `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
@@ -278,7 +277,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 3. **Build the council** — run the onboarding skill via `Skill(skill="onboarding")`
    + Delegates to onboarding, which **actively builds this repo's council from scratch**: for each role it offers to assign an existing Companion, create a new one, or use a generic lens — degrading gracefully to generic when the plan's Companion budget runs out (a mixed council). It writes `.weside/weside.md` (crew + roles + meetings + purpose) **and** `.weside/council.json` (the council bridge `/we:council` resolves members from).
    + Standalone (no weside account): onboarding still builds a working council — every lens generic, `Companion ID: null`.
-   + Member source at convene-time is governed by the `loadCouncilFromWeside` option (default `true` — see `config.json` / plugin settings); onboarding fills the bridge regardless, the toggle decides whether `/we:council` uses the weside-backed members or runs everything generic.
+   + Member source at convene-time is governed by `loadCouncilFromWeside` (semantics: `we/skills/council/SKILL.md` Step 3, the single owner); onboarding fills the bridge regardless.
 
 4. **Generate companion agent definitions (weside account only)**
    For each Companion named in `.weside/weside.md` — **sequentially**, because `select_companion` sets global MCP state and cannot be parallelised:
@@ -297,8 +296,6 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
 ### Step 6: Confirm
 
-If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` was set (or already enabled) during Step 5.0:
-
 ```
 Ready to go:
   /we:story        — Create/refine the Story (Solo) — build-ready plan
@@ -310,18 +307,13 @@ Ready to go:
   /we:sideload .   — Reload context for this repo (Companion Framework)
 ```
 
-If Agent Teams were **not** enabled (user declined or Step 5 was skipped):
+If Agent Teams were **not** enabled (user declined or Step 5 was skipped), replace the two
+council/meet lines with:
 
 ```
-Ready to go:
-  /we:story        — Create/refine the Story (Solo) — build-ready plan
-  /we:orchestrate  — Multi-chunk orchestration (workers run /we:develop, CI once)
-  /we:build        — Solo full pipeline (one Story, no orchestration overhead)
-  /we:develop      — Dev-only worker slice (implement + push, no PR)
   /we:council      — needs Agent Teams (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
                      in ~/.claude/settings.json and restart, or run /we:setup again)
   /we:meet         — needs Agent Teams (same — will run meetings solo without council)
-  /we:sideload .   — Reload context for this repo (Companion Framework)
 ```
 
 ---

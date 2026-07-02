@@ -168,7 +168,7 @@ When **creating** a new Companion (b), seed its `system_prompt` with the role-le
 
 Constraints: `system_prompt` must be ≥ 10 chars (it always is here) so the backend keeps it as a user identity instead of substituting its generic onboarding template. `name` must match `^[a-zA-Z0-9]+$` (no spaces/punctuation) — suggest a clean slug if the user's name has spaces.
 
-**Assigning an existing Companion (a) does NOT use this seed** — it only links the `companion_id`; the lens reaches the member through the council brief. Permanent lens-baking into an existing Companion is a CLI/app curation step (full raw body), not part of this skill.
+**Assigning an existing Companion (a) does NOT use this seed** — assign links, never edits (the full warning incl. the composed-prompt corruption risk is in Step 4a, the single owner).
 
 ## `weside.md` Schema (minimum)
 
@@ -214,16 +214,12 @@ vault: <vault-name>
 
 ## Rules
 
-- **From scratch always works.** No Companions, no account → every lens is generic and the council is fully functional. An account upgrades it; it is never a prerequisite.
-- **Build a mixed council, don't crash.** The `create_companion` plan limit is *expected*, not an error — degrade remaining roles to generic lenses and surface the upgrade CTA once. Never leave the user with a half-built council.
-- **Write the bridge fully.** `.weside/council.json` gets the thin envelope **and** a `members` entry for every filled role — assigned, created, **and** generic. Not just the create case. Gitignore it.
-- **Create, don't invent.** Every `companion_id` written must come from an actual `create_companion`/`list_companions`/`get_council` response. Never fabricate an ID. If MCP is absent, every lens is generic (`companion_id: null`).
+The workflow above is the spec — the invariants easiest to miss:
+
+- **Create, don't invent.** Every `companion_id` written must come from an actual `create_companion`/`list_companions`/`get_council` response. Never fabricate an ID.
+- **Assign links, never edits** (Step 4a is the owner — the MCP read paths return the composed prompt, not the raw identity layer; a read-append would corrupt it).
 - **One-question-at-a-time.** Each role is a separate prompt with its three ways. Never overwhelm.
-- **Empty is OK.** A role can be unassigned (skip). `weside.md` lists it with `Companion ID: null` and it gets no bridge entry.
-- **Assign links, never edits.** Option (a) only writes the `companion_id` into the bridge — it does **not** edit the Companion's identity. The lens comes from the council brief at convene time. (The MCP read paths return the composed prompt, not the raw identity layer, so a read-append over MCP would corrupt the layer. Permanent lens-baking is a CLI/app curation step on the full raw body.)
-- **System prompts live in weside, not here.** `weside.md` + `council.json` reference companions by name/ID + role; identity, memory, body, style live in weside (`get_council` / `get_companion_identity`). That separation is the whole point.
-- **Clean split.** Crew membership → `council.json`. Crew + purpose + meetings → `weside.md`. Technical flags → `config.json`. Never mix.
-- **Editable.** Re-running offers "extend" vs "replace" — never silently overwrite an existing council.
+- **System prompts live in weside, not here.** `weside.md` + `council.json` reference companions by name/ID + role; identity, memory, body, style live in weside. That separation is the whole point.
 
 ## References
 

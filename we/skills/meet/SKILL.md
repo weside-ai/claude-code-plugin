@@ -43,22 +43,20 @@ If no meeting type is given, list the four and ask which one.
    - `--council` → convene it. `--no-council` → run solo.
    - Neither flag → **offer it**: *"Convene the council for this {type} meeting? [y/n]"*. No "complexity" guessing — always a plain offer.
    - **Env-flag preflight (before offering council):** check `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Missing → **skip the council offer**, run the meeting solo, and name the loss explicitly with the remediation hint. Present → proceed with the offer.
-   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (or the shipped default — see table below). Older repos may still carry pre-v2.28 meeting keys (`initiative`/`refinement` instead of today's `saga`/`story`) — `/we:council` Step 2 falls back to those automatically and tells the user to migrate; `epic` is a new altitude with no legacy key. Feed the synthesis into the meeting workflow.
+   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (see "Council rosters" below). Feed the synthesis into the meeting workflow.
 3. **Run the meeting workflow** for the type (see the four sections below).
 4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is the flat `docs/plans/` directory (e.g. `docs/plans/<saga>-saga.md`, `docs/plans/<saga>-<epic>-epic.md`) for Saga-and-below, `docs/plans/<vision>/PRD.md` for the Vision.
 
-## Default council rosters (shipped)
+## Council rosters
 
-| Meeting | Default voices                                                    |
-| ------- | ----------------------------------------------------------------- |
-| vision  | product_owner, architect, ux_researcher, marketing, orchestrator  |
-| saga    | product_owner, architect, marketing (or ux_researcher), orchestrator |
-| epic    | product_owner, architect, orchestrator                            |
-| story   | product_owner, architect                                          |
+The per-meeting rosters come from `.weside/config.json` key `council.meetings.<type>`; the
+shipped defaults are the ones `/we:setup` Step 5.1 writes into that block (the single owner of
+the default values). Override per call with `--council=role,role,…`. Role resolution — including
+the legacy-key fallback (`saga`←`initiative`, `story`←`refinement`, pre-v2.28 configs) and the
+no-config fallback roster — is owned by `we/skills/council/SKILL.md` Step 2.
 
-Override per repo in `.weside/config.json` key `council.meetings.<type>`, or per call with `--council=role,role,…`. See `we/skills/council/SKILL.md` for the role resolution path — including the legacy-key fallback (`saga`←`initiative`, `story`←`refinement`) for `.weside/config.json` files written before v2.28. If your config still uses the old keys, migrate by re-running `/we:onboarding` or hand-editing the key names.
-
-**Member source is inherited.** A meeting convenes `/we:council`, so the `loadCouncilFromWeside` option (`pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`, default `true`) applies here too: `true` → meeting voices are your weside Companions where the bridge links them; `false` → every voice is the generic role-lens (Retorte). No separate meeting-level switch.
+**Member source is inherited.** A meeting convenes `/we:council`, so `loadCouncilFromWeside`
+applies here too (semantics: council Step 3, the single owner). No separate meeting-level switch.
 
 ## Meeting: vision
 

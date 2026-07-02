@@ -155,8 +155,8 @@ the Step 3.6 fallback to wake any sleepers via `wake_companion`.
 
 - One MCP roundtrip returns all awake members' council-scoped projections — no select/get loops in the plugin.
 - `workspace_id` is reserved for future team-scoping; the plugin omits it.
-- The server applies `delivery_target="council"` automatically — the returned `identity_prompt`
-  is already stripped of compass, snapshot, goals, and volatile context.
+- The server applies `delivery_target="council"` automatically (privacy projection — see the
+  boundary note in Step 3 above).
 - Identity bodies are not cached on disk — every `/we:council` fetches fresh.
 - Initialize `mcp_resolved_names` = set of keys from `members` (awake + auto-woken). Any
   still-`asleep` (wake failed / old backend), `unavailable`, or `not_found` names are handled in
@@ -431,10 +431,9 @@ if mcp_resolved_names:
 
 ### Step 10: Tear down the members
 
-There is no `TeamDelete` — teardown means asking each member to stop, then verifying:
+Send the shutdown message to each member (including those recorded as absent — idempotent):
 
 ```python
-# Send to each member (including those recorded as absent — idempotent)
 for member_name in roster:
     SendMessage(
         to=member_name,
@@ -443,10 +442,8 @@ for member_name in roster:
     )
 ```
 
-Verify each member actually terminated. Any member that doesn't stop on its own within a short
-wait: `TaskStop(<member_name>)`. Then check for leftover tmux panes (`tmux list-panes -a`, skip
-the lead's own) and kill any that still belong to a member. Full order, commands, and retry
-policy: `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown.
+Then follow `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown for the rest of
+the mandatory sequence (verify termination → `TaskStop` fallback → tmux pane check).
 
 ## Memory
 
