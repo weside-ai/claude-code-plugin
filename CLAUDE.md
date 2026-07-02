@@ -14,7 +14,7 @@ claude-code-plugin/
 │   └── marketplace.json     # Publisher: weside-ai
 ├── we/                      # Plugin root
 │   ├── .claude-plugin/
-│   │   └── plugin.json      # name: "we", version: "2.24.1"
+│   │   └── plugin.json      # name: "we" + the version /plugin update compares
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/             # Slash commands for agent-dispatched tools (4)
@@ -124,11 +124,12 @@ Use `/plugin-dev:skill-development` for guidance on skill structure.
 ### Command Development
 
 Commands in `we/commands/{name}.md` are only needed for **agent-dispatched** tools
-(docs, pr, review, static, test). Skills are directly invocable via `/we:skill-name`
+(pr, review, static, test). Skills are directly invocable via `/we:skill-name`
 and do NOT need a matching command.
 
-**IMPORTANT:** Never create a command with the same name as a skill — this causes
-a dispatch loop where the command calls `Skill()` which re-triggers the command.
+**IMPORTANT:** Never create a command with the same name as a skill (dispatch loop);
+`scripts/validate-consistency.py` rejects it in CI. Full authoring rules:
+`.claude/rules/plugin-authoring.md`.
 
 Commands dispatch to agents (not skills):
 
@@ -174,6 +175,10 @@ For structural validation before pushing: `/plugin-dev:plugin-validator`
 
 ## Conventions
 
+Authoring discipline (single-owner rule, vocabulary registry, description budget, pre-push
+checks) lives in `.claude/rules/plugin-authoring.md` — loaded automatically when working in
+this repo. The conventions below are the product-level ones.
+
 ### Standalone First
 
 Every skill must work WITHOUT weside account. Companion features are additive:
@@ -215,7 +220,8 @@ Skills and agents must NOT contain:
 
 ### Checkpoint Consistency
 
-All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.py`. When adding a new phase, update the orchestration script and the phases list in `skills/story/SKILL.md`.
+All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.py` —
+`scripts/validate-consistency.py` enforces the Python↔Markdown mirror in CI.
 
 ---
 
@@ -233,6 +239,9 @@ All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.p
 
 # Full skill list
 ls we/skills/*/SKILL.md
+
+# Cross-file consistency (phase names, name collisions, dead references, userConfig readers)
+python3 scripts/validate-consistency.py
 
 # Check for leaked internal references (ticket numbers, app paths, personal names)
 grep -ri "apps/backend\|apps/mobile\|/home/" we/skills/ we/agents/ we/quality/
