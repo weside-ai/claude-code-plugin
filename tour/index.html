@@ -1384,6 +1384,37 @@
   #sprintloop svg.walking .fl-hot .flow { stroke-dasharray: 7 6; }
   /* Backlog "ready" cards get a soft breathing highlight at idle */
   #sprintloop svg:not(.walking) .story-card.ready { animation: fl-ring-pulse 3.6s ease-in-out infinite; }
+
+  /* IDLE two-phase cycle (JS toggles .spark-phase every 10s):
+     phase A = dashed flows breathe (default rules above);
+     phase B = a gold spark runs the solid chain top→bottom, dashed rest. */
+  #sprintloop .fl-spark {
+    fill: none;
+    stroke: #fff4cc;
+    stroke-width: 4.5;
+    stroke-linecap: round;
+    stroke-dasharray: 15 100;
+    stroke-dashoffset: 15;
+    opacity: 0;
+    filter: drop-shadow(0 0 4px var(--gold-glow)) drop-shadow(0 0 11px var(--gold));
+    pointer-events: none;
+  }
+  @keyframes fl-spark-run {
+    0%   { stroke-dashoffset: 15;   opacity: 0; }
+    12%  { opacity: 1; }
+    88%  { opacity: 1; }
+    100% { stroke-dashoffset: -100; opacity: 0; }
+  }
+  #sprintloop svg:not(.walking).spark-phase .flow-feedback,
+  #sprintloop svg:not(.walking).spark-phase .flow-refine { animation: none; opacity: 0.35; }
+  #sprintloop svg:not(.walking).spark-phase .loop-ring { animation: fl-ring-pulse 3.2s ease-in-out infinite; }
+  #sprintloop svg:not(.walking).spark-phase .fl-spark {
+    animation: fl-spark-run 1.7s ease-in-out both;
+    animation-delay: calc(var(--i, 0) * 1.15s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #sprintloop svg:not(.walking).spark-phase .fl-spark { animation: none; opacity: 0; }
+  }
   #sprintloop .story-card { fill: var(--bg-elev); stroke: var(--line-bright); stroke-width: 1; }
   #sprintloop .story-card.ready { stroke: var(--blair); }
   #sprintloop svg .chip-po   { fill: rgba(212,175,55,0.16); stroke: rgba(212,175,55,0.45); }
@@ -1838,6 +1869,16 @@
       <g id="fl-e-fb2" data-fl>
         <path class="flow-feedback" d="M 1360 667 C 1405 560, 1405 340, 1365 240"/>
         <text class="t-edge" transform="rotate(90 1424 440)" x="1424" y="440" text-anchor="middle" fill="#c4a8ff">insights rise back up</text>
+      </g>
+      <!-- spark overlay: a gold glow runs the solid chain top→bottom in idle phase B -->
+      <g id="fl-sparks" aria-hidden="true">
+        <path class="fl-spark" style="--i:0" pathLength="100" d="M 450 116 H 540"/>
+        <path class="fl-spark" style="--i:1" pathLength="100" d="M 665 172 V 265"/>
+        <path class="fl-spark" style="--i:2" pathLength="100" d="M 560 378 C 480 422, 380 442, 330 470"/>
+        <path class="fl-spark" style="--i:3" pathLength="100" d="M 395 560 H 470"/>
+        <path class="fl-spark" style="--i:4" pathLength="100" d="M 680 562 H 762"/>
+        <path class="fl-spark" style="--i:5" pathLength="100" d="M 1033 590 C 1070 575, 1090 565, 1125 555"/>
+        <path class="fl-spark" style="--i:6" pathLength="100" d="M 1245 622 V 662"/>
       </g>
     </svg>
     </div>
@@ -2746,6 +2787,7 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     svg.classList.add("walking");
+    svg.classList.remove("spark-phase");
     steps[i].els.forEach(id => {
       const n = document.getElementById(id);
       if (n) n.classList.add("fl-hot");
@@ -2785,6 +2827,13 @@ document.addEventListener("keydown", (e) => {
       fsBtn.textContent = document.fullscreenElement === board ? "⛶ Exit" : "⛶ Fullscreen";
     });
   }
+
+  // Idle two-phase cycle: 10s dashed flows, then 10s solid-chain spark.
+  const PHASE_MS = 10000;
+  setInterval(() => {
+    if (svg.classList.contains("walking")) return;   // walkthrough owns the stage
+    svg.classList.toggle("spark-phase");
+  }, PHASE_MS);
 })();
 </script>
 </body>
