@@ -1050,9 +1050,9 @@
   #cta .install-block .prompt-sign { color: var(--fg-dim); }
   #cta .steps {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.3rem;
-    max-width: 1100px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.1rem;
+    max-width: 1240px;
     width: 100%;
     margin-bottom: 2rem;
   }
@@ -1136,17 +1136,253 @@
     .retro-demo { grid-template-columns: 1fr; }
     #cta .steps { grid-template-columns: 1fr; }
   }
+
+  /* ─── Station: Team standard ─── */
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 2rem 0 1.4rem;
+  }
+  .team-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.2rem 1.1rem 1rem;
+    position: relative;
+    transition: transform 0.25s ease, border-color 0.25s ease;
+  }
+  .team-card:hover { transform: translateY(-4px); border-color: var(--line-bright); }
+  .team-role-chip {
+    display: inline-block;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    margin-bottom: 0.7rem;
+  }
+  .chip-po   { background: rgba(212,175,55,0.14);  color: var(--gold-glow); border: 1px solid rgba(212,175,55,0.4); }
+  .chip-dev  { background: rgba(106,180,255,0.12); color: var(--dakota);    border: 1px solid rgba(106,180,255,0.35); }
+  .chip-tl   { background: rgba(108,223,133,0.12); color: var(--blair);     border: 1px solid rgba(108,223,133,0.35); }
+  .chip-team { background: rgba(196,168,255,0.12); color: var(--aria);      border: 1px solid rgba(196,168,255,0.35); }
+  .team-card h4 { font-size: 0.98rem; margin-bottom: 0.35rem; }
+  .team-card p { font-size: 0.82rem; color: var(--fg-muted); line-height: 1.5; }
+  .team-card .team-skills { margin-top: 0.65rem; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .team-card .team-skills code {
+    font-size: 0.7rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.1rem 0.4rem;
+    color: var(--fg);
+    white-space: nowrap;
+  }
+  .team-shared {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 0.4rem;
+  }
+  .shared-card {
+    background: linear-gradient(180deg, rgba(212,175,55,0.07), transparent 70%), var(--bg-elev);
+    border: 1px solid rgba(212,175,55,0.25);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+  }
+  .shared-card .sc-head {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.75rem;
+    color: var(--gold-glow);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.4rem;
+  }
+  .shared-card p { font-size: 0.82rem; color: var(--fg-muted); line-height: 1.5; }
+  .team-install-line {
+    margin-top: 1.6rem;
+    text-align: center;
+    font-size: 0.92rem;
+    color: var(--fg-muted);
+  }
+  .team-install-line code {
+    background: var(--bg-card);
+    border: 1px solid var(--line-bright);
+    border-radius: 8px;
+    padding: 0.25rem 0.6rem;
+    color: var(--gold-glow);
+  }
+
+  /* ─── Station: Sprint loop ─── */
+  .sprint-loop {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.7rem;
+    margin: 2.2rem 0 0.6rem;
+    align-items: stretch;
+  }
+  .sprint-stage {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1rem 0.85rem 0.9rem;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+  }
+  .sprint-stage:hover { border-color: var(--line-bright); transform: translateY(-3px); }
+  .sprint-stage::after {
+    content: "→";
+    position: absolute;
+    right: -0.72rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--fg-dim);
+    font-size: 0.95rem;
+    z-index: 2;
+  }
+  .sprint-stage:last-child::after { content: "↺"; color: var(--gold); }
+  .sprint-when {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 0.35rem;
+  }
+  .sprint-stage h4 { font-size: 0.9rem; margin-bottom: 0.45rem; }
+  .sprint-stage .sprint-skills {
+    display: flex; flex-direction: column; gap: 0.28rem;
+    margin-bottom: 0.6rem;
+  }
+  .sprint-stage .sprint-skills code {
+    font-size: 0.68rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.12rem 0.4rem;
+    color: var(--fg);
+    width: fit-content;
+  }
+  .sprint-roles { margin-top: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .sprint-roles span {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+  }
+  .sr-po   { background: rgba(212,175,55,0.14);  color: var(--gold-glow); }
+  .sr-dev  { background: rgba(106,180,255,0.14); color: var(--dakota); }
+  .sr-tl   { background: rgba(108,223,133,0.14); color: var(--blair); }
+  .sr-team { background: rgba(196,168,255,0.14); color: var(--aria); }
+  .sr-you  { background: rgba(240,240,246,0.12); color: var(--quinn); }
+  .sprint-legend {
+    display: flex; gap: 1.1rem; justify-content: center; flex-wrap: wrap;
+    margin-top: 1.1rem;
+    font-size: 0.72rem; color: var(--fg-muted);
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .sprint-legend span::before { content: "●"; margin-right: 0.35rem; }
+  .sprint-legend .lg-po::before   { color: var(--gold-glow); }
+  .sprint-legend .lg-dev::before  { color: var(--dakota); }
+  .sprint-legend .lg-tl::before   { color: var(--blair); }
+  .sprint-legend .lg-team::before { color: var(--aria); }
+  .sprint-note {
+    margin-top: 1.4rem;
+    max-width: 62ch;
+    margin-left: auto; margin-right: auto;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+  }
+
+  /* ─── Station: Maturity ladder ─── */
+  .maturity-ladder {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 2.2rem 0 1rem;
+    align-items: end;
+  }
+  .mat-step {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px 12px 0 0;
+    border-bottom: 3px solid var(--line-bright);
+    padding: 1.15rem 1.05rem 1rem;
+    position: relative;
+    transition: transform 0.25s ease, border-color 0.25s ease;
+  }
+  .mat-step:hover { transform: translateY(-4px); }
+  .mat-step:nth-child(1) { min-height: 15rem; }
+  .mat-step:nth-child(2) { min-height: 17.5rem; }
+  .mat-step:nth-child(3) { min-height: 20rem; }
+  .mat-step:nth-child(4) { min-height: 22.5rem; }
+  .mat-step.mat-here {
+    border-color: rgba(212,175,55,0.5);
+    border-bottom-color: var(--gold);
+    background: linear-gradient(180deg, rgba(212,175,55,0.08), transparent 60%), var(--bg-card);
+  }
+  .mat-lvl {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+    color: var(--fg-dim);
+    margin-bottom: 0.3rem;
+  }
+  .mat-step.mat-here .mat-lvl { color: var(--gold-glow); }
+  .mat-step h4 { font-size: 1.02rem; margin-bottom: 0.4rem; }
+  .mat-step p { font-size: 0.8rem; color: var(--fg-muted); line-height: 1.5; }
+  .mat-step .mat-what {
+    margin-top: 0.6rem;
+    font-size: 0.74rem;
+    color: var(--fg-dim);
+    font-family: ui-monospace, Menlo, monospace;
+    line-height: 1.6;
+  }
+  .mat-here-badge {
+    position: absolute;
+    top: -0.85rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--gold);
+    color: #14140a;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .mat-upgrade-note {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+    max-width: 66ch;
+    margin: 1.2rem auto 0;
+  }
+
+  @media (max-width: 900px) {
+    .team-grid, .sprint-loop, .maturity-ladder, .team-shared { grid-template-columns: 1fr 1fr; }
+    .sprint-stage::after { display: none; }
+    .mat-step { min-height: unset !important; border-radius: 12px; }
+  }
+
 </style>
 </head>
 <body>
 
 <div class="station-counter">
-  <span class="now" id="counter-now">01</span> · 12
+  <span class="now" id="counter-now">01</span> · 15
 </div>
 
 <nav class="dots" id="dotnav">
   <a data-target="hero" data-label="Welcome"></a>
   <a data-target="overview" data-label="Big picture"></a>
+  <a data-target="team" data-label="Team · one standard"></a>
+  <a data-target="sprintloop" data-label="Sprint loop"></a>
   <a data-target="crew" data-label="Crew · Council"></a>
   <a data-target="vision" data-label="Vision · PRD"></a>
   <a data-target="saga" data-label="Saga · Theme"></a>
@@ -1156,6 +1392,7 @@
   <a data-target="coach" data-label="Coach · /we:coach"></a>
   <a data-target="retro" data-label="Retro · KVP loop"></a>
   <a data-target="deliver" data-label="Deliver · you"></a>
+  <a data-target="maturity" data-label="Maturity · L1→L4"></a>
   <a data-target="cta" data-label="Try it"></a>
 </nav>
 
@@ -1165,7 +1402,7 @@
   <section id="hero">
     <p class="pre">we plugin · Interactive Tour</p>
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
-    <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in.</p>
+    <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — one standard for the whole team, and the optional <strong style="color:var(--fg)">weside</strong> Companions beaming in.</p>
     <div class="meta-row">
       <span>27 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
@@ -1260,9 +1497,119 @@
     <a class="doc-link" href="../docs/workflow.md">Read the full workflow doc →</a>
   </section>
 
+
+  <!-- ============ TEAM · ONE STANDARD ============ -->
+  <section id="team">
+    <div class="kicker">Station 03 · The team — one plugin, one standard</div>
+    <h2 class="section-title">Install once per person. Standardize the whole team.</h2>
+    <p class="lede">The plugin ships through the Claude Code marketplace — every developer, every product owner, every tech lead installs the <em>same</em> toolkit with one command. The repo carries the shared config in <code>.weside/</code>, version-controlled like code. Result: one vocabulary, one plan format, one quality bar — regardless of who (or which Companion) is typing.</p>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <span class="team-role-chip chip-po">PRODUCT OWNER</span>
+        <h4>Shapes the what</h4>
+        <p>Works the Plan altitudes — PRD to build-ready Story — with Council pressure when a call is contentious.</p>
+        <div class="team-skills"><code>/we:vision</code><code>/we:saga</code><code>/we:epic</code><code>/we:story</code><code>/we:meet *</code></div>
+      </div>
+      <div class="team-card">
+        <span class="team-role-chip chip-dev">DEVELOPER</span>
+        <h4>Ships the how</h4>
+        <p>Picks up a refined Story and runs the autonomous pipeline — or a dev-only worker slice inside an orchestrated run.</p>
+        <div class="team-skills"><code>/we:build</code><code>/we:develop</code><code>/we:ci-review</code><code>/we:diagnose</code></div>
+      </div>
+      <div class="team-card">
+        <span class="team-role-chip chip-tl">TECH LEAD</span>
+        <h4>Holds the whole</h4>
+        <p>Orchestrates multi-Story work, reviews the integrated diff, keeps the architecture honest with periodic audits.</p>
+        <div class="team-skills"><code>/we:orchestrate</code><code>/we:map</code><code>/we:audit-architecture</code><code>/we:review</code></div>
+      </div>
+      <div class="team-card">
+        <span class="team-role-chip chip-team">EVERYONE</span>
+        <h4>Same rituals</h4>
+        <p>Orientation, retros, and cross-session continuity work identically for every seat — and every session.</p>
+        <div class="team-skills"><code>/we:coach</code><code>/we:retro</code><code>/we:handoff</code><code>/we:sideload</code></div>
+      </div>
+    </div>
+
+    <div class="team-shared">
+      <div class="shared-card">
+        <div class="sc-head">.weside/ — versioned standard</div>
+        <p>Ticketing choice, stack, quality gates (DoR/DoD additions), council rosters, crew. Committed to the repo — a new teammate inherits the standard with <code>git clone</code>.</p>
+      </div>
+      <div class="shared-card">
+        <div class="sc-head">docs/plans/ — shared truth</div>
+        <p>Every plan at every altitude is a Markdown file the whole team can read, diff, and review. Ticketing tools mirror it; they never own it.</p>
+      </div>
+      <div class="shared-card">
+        <div class="sc-head">Same gates for every PR</div>
+        <p>AC evidence, writer-aware review, static + tests, doc diffs — the pipeline enforces the same bar whether a junior, a senior, or an AI worker wrote the code.</p>
+      </div>
+    </div>
+
+    <div class="team-install-line">
+      Onboarding a new teammate: <code>/plugin install we@weside-ai</code> → <code>/we:sideload .</code> — minutes, not weeks.
+    </div>
+  </section>
+
+  <!-- ============ SPRINT LOOP ============ -->
+  <section id="sprintloop">
+    <div class="kicker">Station 04 · A sprint with the plugin</div>
+    <h2 class="section-title">Your Scrum loop — with a skill at every station.</h2>
+    <p class="lede">You don't change your process. The plugin slots into the loop you already run — every ceremony gets its skill, every role keeps its job. What changes: refinement produces build-ready plans, the build enforces the definition of done, and the retro actually changes the harness.</p>
+
+    <div class="sprint-loop">
+      <div class="sprint-stage">
+        <div class="sprint-when">Refinement</div>
+        <h4>Story becomes build-ready</h4>
+        <div class="sprint-skills"><code>/we:story</code><code>/we:meet story</code></div>
+        <div class="sprint-roles"><span class="sr-po">PO</span><span class="sr-dev">DEV</span></div>
+      </div>
+      <div class="sprint-stage">
+        <div class="sprint-when">Planning</div>
+        <h4>Pick from a live Epic</h4>
+        <div class="sprint-skills"><code>/we:epic</code><code>/we:map</code></div>
+        <div class="sprint-roles"><span class="sr-po">PO</span><span class="sr-tl">TL</span></div>
+      </div>
+      <div class="sprint-stage">
+        <div class="sprint-when">Daily</div>
+        <h4>&bdquo;Where am I?&ldquo;</h4>
+        <div class="sprint-skills"><code>/we:coach</code><code>/we:handoff</code></div>
+        <div class="sprint-roles"><span class="sr-team">ALL</span></div>
+      </div>
+      <div class="sprint-stage">
+        <div class="sprint-when">Sprint work</div>
+        <h4>Ship the Stories</h4>
+        <div class="sprint-skills"><code>/we:build</code><code>/we:orchestrate</code><code>/we:develop</code></div>
+        <div class="sprint-roles"><span class="sr-dev">DEV</span><span class="sr-tl">TL</span></div>
+      </div>
+      <div class="sprint-stage">
+        <div class="sprint-when">Review</div>
+        <h4>Judge · merge · close</h4>
+        <div class="sprint-skills"><code>— human only —</code></div>
+        <div class="sprint-roles"><span class="sr-you">YOU</span></div>
+      </div>
+      <div class="sprint-stage">
+        <div class="sprint-when">Retrospective</div>
+        <h4>Harness gets tighter</h4>
+        <div class="sprint-skills"><code>/we:retro</code></div>
+        <div class="sprint-roles"><span class="sr-team">ALL</span></div>
+      </div>
+    </div>
+
+    <div class="sprint-legend">
+      <span class="lg-po">Product Owner</span>
+      <span class="lg-dev">Developer</span>
+      <span class="lg-tl">Tech Lead</span>
+      <span class="lg-team">Whole team</span>
+    </div>
+
+    <div class="sprint-note">
+      Upstream of the sprint, the same pattern continues: quarterly direction → <code>/we:meet saga</code>, product framing → <code>/we:meet vision</code>. One method from PRD to merged PR — the stations below walk each altitude.
+    </div>
+  </section>
   <!-- ============ 3. CREW & COUNCIL — your lenses, real or generic ============ -->
   <section id="crew">
-    <div class="kicker">Station 03 · Crew & Council</div>
+    <div class="kicker">Station 05 · Crew & Council</div>
     <h2 class="section-title">Crew &amp; Council — your lenses, real or generic.</h2>
     <p class="lede">Every Council and Meeting convenes a <strong style="color:var(--fg)">roster of role-lenses</strong> — Architect, Product Owner, Security, UX, and more. <code>/we:onboarding</code> builds that council from scratch, even with zero Companions and no account. For each role you pick one of three: assign an existing Companion, seed a fresh one with the role-lens, or take the shipped generic lens (a „Retorte"). A council where some lenses are real Companions and others are generic is the normal case — mixed by design.</p>
 
@@ -1275,7 +1622,7 @@
 
   <!-- ============ 4. VISION — /we:vision + /we:meet vision ============ -->
   <section id="vision">
-    <div class="kicker">Station 04 · Vision · PRD altitude</div>
+    <div class="kicker">Station 06 · Vision · PRD altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:vision</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet vision</code> — why does this product exist?</h2>
     <p class="lede">The Vision altitude is where you say what this product is, who it's for, and which bets you will <em>not</em> make. Solo (<code>/we:vision</code>) sharpens the PRD; Meet (<code>/we:meet vision</code>) convenes a Council to validate the PRD and decompose it into Sagas. The output isn't code — it's <em>clarity</em>, captured as <code>docs/plans/&lt;vision&gt;/PRD.md</code>.</p>
 
@@ -1317,7 +1664,7 @@
 
   <!-- ============ 4. SAGA — /we:saga + /we:meet saga ============ -->
   <section id="saga">
-    <div class="kicker">Station 05 · Saga · Theme altitude</div>
+    <div class="kicker">Station 07 · Saga · Theme altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:saga</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet saga</code> — the year-shaping bet.</h2>
     <p class="lede">A Saga is a multi-bet theme inside the Vision — something big enough to need decomposition, small enough to name the win. „Make the platform multi-tenant." „Launch the marketplace." Solo (<code>/we:saga</code>) runs Status by default (mirror child Epics from ticketing, snapshot + drift + risk-driven next move) and tightens wording on explicit refine intent; Meet (<code>/we:meet saga</code>) validates the bet against the PRD and decomposes it into Epics.</p>
 
@@ -1358,7 +1705,7 @@
 
   <!-- ============ 5. EPIC — /we:epic + /we:meet epic ============ -->
   <section id="epic">
-    <div class="kicker">Station 06 · Epic · Initiative altitude</div>
+    <div class="kicker">Station 08 · Epic · Initiative altitude</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:epic</code> + <code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:meet epic</code> — what we ship next.</h2>
     <p class="lede">A Saga has been chosen and now needs <strong style="color:var(--fg)">decomposition</strong> into Epics — bounded initiatives with named Stories. „Ledger Foundation." „Stripe Connect Onboarding." „Voice Pipeline Migration." Solo (<code>/we:epic</code>) runs Status by default (mirror child Stories from ticketing, flag refined-vs-not-refined, drift + next-move) and shifts to Refine on explicit intent; Meet (<code>/we:meet epic</code>) decomposes the Epic into Stories with acceptance shape.</p>
 
@@ -1399,7 +1746,7 @@
 
   <!-- ============ 6. STORY — two paths + council live demo ============ -->
   <section id="story">
-    <div class="kicker">Station 07 · Story · Feature-slice altitude</div>
+    <div class="kicker">Station 09 · Story · Feature-slice altitude</div>
     <h2 class="section-title">Story altitude — two paths to the same plan.</h2>
     <p class="lede">When a Story needs scoping before development, you have two paths. The Solo path is fast and works for routine Stories. The Council path adds <strong style="color:var(--fg)">tension</strong> before the plan crystallizes — for the harder calls.</p>
 
@@ -1452,7 +1799,7 @@
 
   <!-- ============ 7. BUILD — /we:build 9-step + discipline ============ -->
   <section id="build">
-    <div class="kicker">Station 08 · Build · the autonomous pipeline</div>
+    <div class="kicker">Station 10 · Build · the autonomous pipeline</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:build</code> — hand it a ticket, watch it ship.</h2>
     <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase.</p>
 
@@ -1498,9 +1845,9 @@
 
   <!-- ============ 8. COACH — /we:coach (APO advisor) ============ -->
   <section id="coach">
-    <div class="kicker">Station 09 · Coach · the APO advisor</div>
+    <div class="kicker">Station 11 · Coach · the APO advisor</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — where am I, what's next?</h2>
-    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 10 — <code>/we:retro</code> owns that loop.</p>
+    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 12 — <code>/we:retro</code> owns that loop.</p>
 
     <div class="sm-flow">
       <div class="sm-step">
@@ -1527,7 +1874,7 @@
 
   <!-- ============ 9. RETRO — /we:retro (KVP loop) ============ -->
   <section id="retro">
-    <div class="kicker">Station 10 · Retro · the harness improves itself</div>
+    <div class="kicker">Station 12 · Retro · the harness improves itself</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:retro</code> — every error happens exactly once.</h2>
     <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the shipped PR — session transcript + <code>gh api</code> (CI, review-bot threads, push-fix cycles) — and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter every cycle.</p>
 
@@ -1535,11 +1882,11 @@
       <div class="retro-col retro-pain">
         <div class="retro-col-label">PAIN — what cost time this cycle</div>
         <div class="retro-card">
-          <div class="retro-card-head">PR #1998 · 4 CI cycles · ~12 min</div>
+          <div class="retro-card-head">PR #214 · 3 CI cycles · ~25 min</div>
           <div class="retro-card-body">
-            <div class="retro-evidence">evidence: <code>gh pr checks 1998</code>, commits <code>f7d985a..0575bcc</code></div>
-            <div class="retro-root">root: <code>Press „Convene"</code> — mismatched ASCII / German quote, present since v2.27.1</div>
-            <div class="retro-root">root²: <code>node --check</code> ran only on the new IIFE, not the whole script</div>
+            <div class="retro-evidence">evidence: <code>gh pr checks 214</code>, commits <code>a41f2c9..8e03b71</code></div>
+            <div class="retro-root">root: two Alembic migration heads after a parallel merge to main</div>
+            <div class="retro-root">root²: no local <code>upgrade → downgrade → upgrade</code> roundtrip before push</div>
           </div>
         </div>
       </div>
@@ -1548,17 +1895,17 @@
         <div class="retro-col-label">PROPOSAL · default placement: user repo</div>
         <div class="retro-card">
           <div class="retro-card-head"><span class="retro-tag-p1">P1</span> · 5min · NEW</div>
-          <div class="retro-card-target"><code>.claude/rules/quality/html-script-validation.md</code></div>
+          <div class="retro-card-target"><code>.claude/rules/quality/migration-heads.md</code></div>
           <div class="retro-card-body">
             <div class="retro-diff">
               <div>+ ---</div>
               <div>+ paths:</div>
-              <div>+&nbsp;&nbsp;- "**/*.html"</div>
+              <div>+&nbsp;&nbsp;- "**/migrations/**"</div>
               <div>+ ---</div>
-              <div>+ # HTML &lt;script&gt; validation</div>
-              <div>+ When editing inline JS, extract the full &lt;script&gt;</div>
-              <div>+ and run <code>node --check</code> before pushing. A latent</div>
-              <div>+ SyntaxError elsewhere will mask your edit's intent.</div>
+              <div>+ # Migration branches: check heads before push</div>
+              <div>+ Rebase onto main and confirm <code>alembic heads</code></div>
+              <div>+ resolves to exactly ONE head. Run a real</div>
+              <div>+ upgrade → downgrade → upgrade roundtrip locally.</div>
             </div>
           </div>
           <div class="retro-gate">
@@ -1586,7 +1933,7 @@
 
   <!-- ============ 10. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 11 · Deliver — you</div>
+    <div class="kicker">Station 13 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
     <p class="lede">By the time <code>/we:build</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
@@ -1620,9 +1967,49 @@
     </div>
   </section>
 
+  <!-- ============ MATURITY ============ -->
+  <section id="maturity">
+    <div class="kicker">Station 14 · Where this goes</div>
+    <h2 class="section-title">Four maturity levels. Start free, grow when it pinches.</h2>
+    <p class="lede">Agentic Product Ownership meets you where you are. The plugin alone carries a team to Level&nbsp;2; the weside platform lifts the same skills — same names, same pipeline — to proactive and organisational maturity. No level is forced; you upgrade when the level below stops fitting.</p>
+
+    <div class="maturity-ladder">
+      <div class="mat-step">
+        <div class="mat-lvl">L1 · ASSISTED</div>
+        <h4>AI as a tool</h4>
+        <p>Generic assistants, no shared context. Every session starts at zero; decisions get re-litigated.</p>
+        <div class="mat-what">where most teams are today</div>
+      </div>
+      <div class="mat-step mat-here">
+        <div class="mat-here-badge">THE PLUGIN — FREE</div>
+        <div class="mat-lvl">L2 · AUGMENTED</div>
+        <h4>One standard, shared context</h4>
+        <p>The full APO pipeline in every seat. Plans, gates, and rosters versioned in the repo. Councils with role-lenses.</p>
+        <div class="mat-what">27 skills · works standalone · MIT</div>
+      </div>
+      <div class="mat-step">
+        <div class="mat-lvl">L3 · AGENTIC</div>
+        <h4>Companions act proactively</h4>
+        <p>A Companion with memory watches the room: flags drift against the Vision, surfaces stalled Stories, schedules its own follow-ups.</p>
+        <div class="mat-what">+ weside.ai account</div>
+      </div>
+      <div class="mat-step">
+        <div class="mat-lvl">L4 · ORCHESTRATED</div>
+        <h4>Companions across teams</h4>
+        <p>Team-scoped memory, Council write-back, cross-repo awareness. One PO + Companion = two POs — at organisational scale.</p>
+        <div class="mat-what">enterprise · weside.ai/enterprise</div>
+      </div>
+    </div>
+
+    <div class="mat-upgrade-note">
+      The skill names never change across levels — <code>/we:story</code> at L1 and <code>/we:story</code> at L4 are the same command. What grows is how much the system remembers, notices, and coordinates around it.
+    </div>
+  </section>
+
+
   <!-- ============ 10. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 12 · Try it</div>
+    <div class="kicker">Station 15 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -1648,6 +2035,13 @@
         <p>Start with one Story. Ship one PR. Build the muscle. Graduate to councils, upper altitudes, and meetings when contention is real.</p>
         <code>/we:story "your next idea"</code>
         <code style="margin-top:0.3rem;">/we:build PROJ-1</code>
+      </div>
+      <div class="step-card">
+        <div class="n">04</div>
+        <h4>Roll it out to the team</h4>
+        <p>Everyone installs from the marketplace; <code>/we:setup</code> commits the shared standard to <code>.weside/</code>. New teammates inherit it with the clone.</p>
+        <code>/we:setup</code>
+        <code style="margin-top:0.3rem;">git add .weside/ &amp;&amp; git commit</code>
       </div>
     </div>
 
@@ -1866,13 +2260,20 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation
 //
-const sections = ["hero", "overview", "crew", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "cta"];
+const sections = ["hero", "overview", "team", "sprintloop", "crew", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "maturity", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");
 
 function activeIndex() {
-  return Math.round(main.scrollTop / window.innerHeight);
+  // Offset-based: robust against sections taller than one viewport.
+  const probe = main.scrollTop + window.innerHeight * 0.5;
+  let idx = 0;
+  for (let j = 0; j < sections.length; j++) {
+    const el = document.getElementById(sections[j]);
+    if (el && el.offsetTop <= probe) idx = j;
+  }
+  return idx;
 }
 function syncUi() {
   const i = activeIndex();
@@ -1907,7 +2308,7 @@ document.addEventListener("keydown", (e) => {
   } else if (/^[1-9]$/.test(e.key)) {
     document.getElementById(sections[parseInt(e.key, 10) - 1]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key === "0") {
-    document.getElementById(sections[10]).scrollIntoView({ behavior: "smooth" });
+    document.getElementById(sections[sections.length - 1]).scrollIntoView({ behavior: "smooth" });
   } else if (e.key.toLowerCase() === "f") {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
