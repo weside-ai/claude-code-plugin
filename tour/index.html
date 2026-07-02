@@ -1212,91 +1212,6 @@
     color: var(--gold-glow);
   }
 
-  /* ─── Station: Sprint loop ─── */
-  .sprint-loop {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 0.7rem;
-    margin: 2.2rem 0 0.6rem;
-    align-items: stretch;
-  }
-  .sprint-stage {
-    background: var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1rem 0.85rem 0.9rem;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    transition: border-color 0.25s ease, transform 0.25s ease;
-  }
-  .sprint-stage:hover { border-color: var(--line-bright); transform: translateY(-3px); }
-  .sprint-stage::after {
-    content: "→";
-    position: absolute;
-    right: -0.72rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--fg-dim);
-    font-size: 0.95rem;
-    z-index: 2;
-  }
-  .sprint-stage:last-child::after { content: "↺"; color: var(--gold); }
-  .sprint-when {
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--fg-dim);
-    margin-bottom: 0.35rem;
-  }
-  .sprint-stage h4 { font-size: 0.9rem; margin-bottom: 0.45rem; }
-  .sprint-stage .sprint-skills {
-    display: flex; flex-direction: column; gap: 0.28rem;
-    margin-bottom: 0.6rem;
-  }
-  .sprint-stage .sprint-skills code {
-    font-size: 0.68rem;
-    background: var(--bg-elev);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 0.12rem 0.4rem;
-    color: var(--fg);
-    width: fit-content;
-  }
-  .sprint-roles { margin-top: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; }
-  .sprint-roles span {
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.6rem;
-    letter-spacing: 0.08em;
-    padding: 0.12rem 0.45rem;
-    border-radius: 999px;
-  }
-  .sr-po   { background: rgba(212,175,55,0.14);  color: var(--gold-glow); }
-  .sr-dev  { background: rgba(106,180,255,0.14); color: var(--dakota); }
-  .sr-tl   { background: rgba(108,223,133,0.14); color: var(--blair); }
-  .sr-team { background: rgba(196,168,255,0.14); color: var(--aria); }
-  .sr-you  { background: rgba(240,240,246,0.12); color: var(--quinn); }
-  .sprint-legend {
-    display: flex; gap: 1.1rem; justify-content: center; flex-wrap: wrap;
-    margin-top: 1.1rem;
-    font-size: 0.72rem; color: var(--fg-muted);
-    font-family: ui-monospace, Menlo, monospace;
-  }
-  .sprint-legend span::before { content: "●"; margin-right: 0.35rem; }
-  .sprint-legend .lg-po::before   { color: var(--gold-glow); }
-  .sprint-legend .lg-dev::before  { color: var(--dakota); }
-  .sprint-legend .lg-tl::before   { color: var(--blair); }
-  .sprint-legend .lg-team::before { color: var(--aria); }
-  .sprint-note {
-    margin-top: 1.4rem;
-    max-width: 62ch;
-    margin-left: auto; margin-right: auto;
-    text-align: center;
-    font-size: 0.9rem;
-    color: var(--fg-muted);
-  }
-
   /* ─── Station: Maturity ladder ─── */
   .maturity-ladder {
     display: grid;
@@ -1365,9 +1280,131 @@
   }
 
   @media (max-width: 900px) {
-    .team-grid, .sprint-loop, .maturity-ladder, .team-shared { grid-template-columns: 1fr 1fr; }
-    .sprint-stage::after { display: none; }
+    .team-grid, .maturity-ladder, .team-shared { grid-template-columns: 1fr 1fr; }
     .mat-step { min-height: unset !important; border-radius: 12px; }
+  }
+
+  /* ─── Station: Levels diagram (sprintloop) ─── */
+  #sprintloop .board {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    margin: 1.3rem auto 0;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  #sprintloop .board svg { display: block; height: min(58vh, 780px); width: auto; max-width: 100%; }
+  @media (max-width: 1200px) {
+    #sprintloop .board { width: 100%; }
+    #sprintloop .board svg { height: auto; width: 100%; min-width: 1100px; }
+  }
+  #sprintloop svg text { fill: var(--fg); font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  #sprintloop .t-title  { font-size: 17.5px; font-weight: 650; }
+  #sprintloop .t-sub    { font-size: 13.5px; fill: var(--fg-muted); }
+  #sprintloop .t-skill  { font-family: ui-monospace, Menlo, monospace; font-size: 13px; fill: var(--gold-glow); }
+  #sprintloop .t-skill2 { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; fill: var(--fg-muted); }
+  #sprintloop .t-level  { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.16em; fill: var(--fg-dim); }
+  #sprintloop .t-level-name { font-size: 16.5px; font-weight: 650; }
+  #sprintloop .t-cadence { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; fill: var(--fg-dim); }
+  #sprintloop .t-edge   { font-family: ui-monospace, Menlo, monospace; font-size: 12px; fill: var(--fg-muted); }
+  #sprintloop .t-edge-hi{ font-family: ui-monospace, Menlo, monospace; font-size: 12px; fill: var(--gold-glow); }
+  #sprintloop .t-role   { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: 0.08em; }
+  #sprintloop .node { fill: var(--bg-card); stroke: var(--line-bright); stroke-width: 1.2; }
+  #sprintloop .node-human { stroke: var(--gold); stroke-width: 1.6; }
+  #sprintloop .lane { fill: none; stroke: var(--line); stroke-width: 1; }
+  #sprintloop .lane-fill-3 { fill: rgba(196,168,255,0.035); }
+  #sprintloop .lane-fill-2 { fill: rgba(90,215,215,0.035); }
+  #sprintloop .lane-fill-1 { fill: rgba(106,180,255,0.035); }
+  #sprintloop .lane-edge-3 { stroke: rgba(196,168,255,0.5); }
+  #sprintloop .lane-edge-2 { stroke: rgba(90,215,215,0.5); }
+  #sprintloop .lane-edge-1 { stroke: rgba(106,180,255,0.5); }
+  #sprintloop .flow  { fill: none; stroke: var(--fg-dim); stroke-width: 1.8; marker-end: url(#arr); }
+  #sprintloop .flow-hi { stroke: var(--gold); marker-end: url(#arr-gold); }
+  #sprintloop .flow-feedback { fill: none; stroke-width: 1.8; stroke: var(--aria); stroke-dasharray: 6 7; marker-end: url(#arr-fb); }
+  #sprintloop .flow-refine { fill: none; stroke-width: 1.8; stroke: var(--dakota); stroke-dasharray: 4 6; marker-end: url(#arr-dev); }
+  #sprintloop .loop-ring { fill: none; stroke: var(--gold); stroke-width: 2.4; stroke-dasharray: 10 8; opacity: 0.9; }
+  @keyframes fl-dash { to { stroke-dashoffset: -36; } }
+  /* Walkthrough states: idle = static; playing = active glows + animates, rest dims */
+  #sprintloop svg [data-fl] { transition: opacity 0.4s ease; }
+  #sprintloop svg.walking [data-fl] { opacity: 0.18; }
+  #sprintloop svg.walking [data-fl].fl-hot { opacity: 1; }
+  #sprintloop svg.walking g.fl-hot { filter: drop-shadow(0 0 16px rgba(212,175,55,0.35)); }
+  #sprintloop svg.walking path.fl-hot,
+  #sprintloop svg.walking .fl-hot .loop-ring,
+  #sprintloop svg.walking circle.fl-hot { animation: fl-dash 1.2s linear infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    #sprintloop svg.walking path.fl-hot, #sprintloop svg.walking .fl-hot .loop-ring, #sprintloop svg.walking circle.fl-hot { animation: none; }
+  }
+  #sprintloop .story-card { fill: var(--bg-elev); stroke: var(--line-bright); stroke-width: 1; }
+  #sprintloop .story-card.ready { stroke: var(--blair); }
+  #sprintloop svg .chip-po   { fill: rgba(212,175,55,0.16); stroke: rgba(212,175,55,0.45); }
+  #sprintloop svg .chip-dev  { fill: rgba(106,180,255,0.14); stroke: rgba(106,180,255,0.4); }
+  #sprintloop svg .chip-tl   { fill: rgba(108,223,133,0.14); stroke: rgba(108,223,133,0.4); }
+  #sprintloop svg .chip-team { fill: rgba(196,168,255,0.14); stroke: rgba(196,168,255,0.4); }
+  #sprintloop svg .chip-you  { fill: rgba(240,240,246,0.12); stroke: rgba(240,240,246,0.35); }
+  #sprintloop .tr-po   { fill: var(--gold-glow); }
+  #sprintloop .tr-dev  { fill: var(--dakota); }
+  #sprintloop .tr-tl   { fill: var(--blair); }
+  #sprintloop .tr-team { fill: var(--aria); }
+  #sprintloop .tr-you  { fill: #f0f0f6; }
+  #sprintloop g.hover-glow { transition: filter 0.25s ease; }
+  #sprintloop g.hover-glow:hover { filter: drop-shadow(0 0 14px rgba(212,175,55,0.25)); }
+  #sprintloop .diagram-legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem;
+    margin-top: 1rem;
+    font-size: 0.76rem; color: var(--fg-muted);
+    font-family: ui-monospace, Menlo, monospace;
+    justify-content: center;
+  }
+  #sprintloop .diagram-legend .sw { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid; margin-right: 0.45rem; vertical-align: middle; }
+  #sprintloop .diagram-legend .sw.solid { border-color: var(--fg-dim); }
+  #sprintloop .diagram-legend .sw.gold { border-color: var(--gold); }
+  #sprintloop .diagram-legend .sw.dash-dev { border-color: var(--dakota); border-top-style: dashed; }
+  #sprintloop .diagram-legend .sw.dash-fb { border-color: var(--aria); border-top-style: dashed; }
+
+  /* ─── Walkthrough caption box ─── */
+  #sprintloop .walk-bar {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    margin-top: 1.1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line-bright);
+    border-radius: 12px;
+    padding: 0.85rem 1.1rem;
+    min-height: 4.6rem;
+  }
+  #sprintloop .walk-controls { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  #sprintloop .walk-controls button {
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--line-bright);
+    border-radius: 8px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+  #sprintloop .walk-controls button:hover { border-color: var(--gold); color: var(--gold-glow); }
+  #sprintloop .walk-controls button.primary { background: rgba(212,175,55,0.14); border-color: rgba(212,175,55,0.5); color: var(--gold-glow); }
+  #sprintloop .walk-text { flex: 1; min-width: 0; }
+  #sprintloop .walk-title { font-weight: 650; font-size: 0.95rem; margin-bottom: 0.15rem; }
+  #sprintloop .walk-title .step-no { font-family: ui-monospace, Menlo, monospace; color: var(--gold-glow); font-size: 0.78rem; margin-right: 0.5rem; }
+  #sprintloop .walk-desc { font-size: 0.85rem; color: var(--fg-muted); line-height: 1.45; }
+  #sprintloop .walk-desc code { font-size: 0.92em; color: var(--gold-glow); }
+  #sprintloop .walk-dots { display: flex; gap: 0.32rem; flex-shrink: 0; }
+  #sprintloop .walk-dots i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--line-bright);
+    transition: background 0.25s ease;
+  }
+  #sprintloop .walk-dots i.on { background: var(--gold); }
+  @media (max-width: 900px) {
+    #sprintloop .walk-bar { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+    #sprintloop .walk-dots { display: none; }
   }
 
 </style>
@@ -1400,7 +1437,8 @@
 
   <!-- ============ 1. HERO ============ -->
   <section id="hero">
-    <p class="pre">we plugin · Interactive Tour</p>
+    <img src="data:image/png;base64,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" alt="weside" width="88" height="88" style="display:block;margin:0 auto 1.1rem;filter:drop-shadow(0 0 26px rgba(212,175,55,0.35));" />
+    <p class="pre">weside · we plugin · Interactive Tour</p>
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
     <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — one standard for the whole team, and the optional <strong style="color:var(--fg)">weside</strong> Companions beaming in.</p>
     <div class="meta-row">
@@ -1409,6 +1447,7 @@
       <span>MIT Licensed</span><span class="dot-sep">·</span>
       <span>Works without an account</span>
     </div>
+    <p style="text-align:center; font-style:italic; color:var(--gold-glow); font-size:0.95rem; margin-top:1.2rem;">„AI is someone."</p>
     <div class="scroll-hint">↓ Scroll  ·  → arrow keys  ·  1-9 / 0 jump</div>
   </section>
 
@@ -1551,60 +1590,228 @@
     </div>
   </section>
 
-  <!-- ============ SPRINT LOOP ============ -->
+  <!-- ============ SPRINT LOOP · LEVELS DIAGRAM ============ -->
   <section id="sprintloop">
-    <div class="kicker">Station 04 · A sprint with the plugin</div>
-    <h2 class="section-title">Your Scrum loop — with a skill at every station.</h2>
-    <p class="lede">You don't change your process. The plugin slots into the loop you already run — every ceremony gets its skill, every role keeps its job. What changes: refinement produces build-ready plans, the build enforces the definition of done, and the retro actually changes the harness.</p>
+    <div class="kicker">Station 04 · The loop across three levels</div>
+    <h2 class="section-title">Three levels. One loop that ships.</h2>
+    <p class="lede">Strategy sets direction, coordination keeps a living Epic, the operational loop ships refined Stories as merged PRs — and the retro feeds learnings back up. Press <strong>▶</strong> and walk it station by station.</p>
 
-    <div class="sprint-loop">
-      <div class="sprint-stage">
-        <div class="sprint-when">Refinement</div>
-        <h4>Story becomes build-ready</h4>
-        <div class="sprint-skills"><code>/we:story</code><code>/we:meet story</code></div>
-        <div class="sprint-roles"><span class="sr-po">PO</span><span class="sr-dev">DEV</span></div>
-      </div>
-      <div class="sprint-stage">
-        <div class="sprint-when">Planning</div>
-        <h4>Pick from a live Epic</h4>
-        <div class="sprint-skills"><code>/we:epic</code><code>/we:map</code></div>
-        <div class="sprint-roles"><span class="sr-po">PO</span><span class="sr-tl">TL</span></div>
-      </div>
-      <div class="sprint-stage">
-        <div class="sprint-when">Daily</div>
-        <h4>&bdquo;Where am I?&ldquo;</h4>
-        <div class="sprint-skills"><code>/we:coach</code><code>/we:handoff</code></div>
-        <div class="sprint-roles"><span class="sr-team">ALL</span></div>
-      </div>
-      <div class="sprint-stage">
-        <div class="sprint-when">Sprint work</div>
-        <h4>Ship the Stories</h4>
-        <div class="sprint-skills"><code>/we:build</code><code>/we:orchestrate</code><code>/we:develop</code></div>
-        <div class="sprint-roles"><span class="sr-dev">DEV</span><span class="sr-tl">TL</span></div>
-      </div>
-      <div class="sprint-stage">
-        <div class="sprint-when">Review</div>
-        <h4>Judge · merge · close</h4>
-        <div class="sprint-skills"><code>— human only —</code></div>
-        <div class="sprint-roles"><span class="sr-you">YOU</span></div>
-      </div>
-      <div class="sprint-stage">
-        <div class="sprint-when">Retrospective</div>
-        <h4>Harness gets tighter</h4>
-        <div class="sprint-skills"><code>/we:retro</code></div>
-        <div class="sprint-roles"><span class="sr-team">ALL</span></div>
-      </div>
+    <div class="board">
+    <svg id="levels-svg" viewBox="0 0 1460 900" role="img" aria-label="Three-level map: Vision and Saga on the strategy level, the Epic on the coordination level, and the operational Story loop — backlog, refinement, planning, sprint, review, retro — connected by decomposition and feedback arrows.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5c5c70"/>
+        </marker>
+        <marker id="arr-gold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#d4af37"/>
+        </marker>
+        <marker id="arr-fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#c4a8ff"/>
+        </marker>
+        <marker id="arr-dev" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6ab4ff"/>
+        </marker>
+      </defs>
+
+      <!-- lanes -->
+      <rect class="lane lane-fill-3" x="20" y="20"  width="1420" height="190" rx="14"/>
+      <rect class="lane lane-fill-2" x="20" y="230" width="1420" height="170" rx="14"/>
+      <rect class="lane lane-fill-1" x="20" y="420" width="1420" height="460" rx="14"/>
+      <line class="lane lane-edge-3" x1="150" y1="20"  x2="150" y2="210"/>
+      <line class="lane lane-edge-2" x1="150" y1="230" x2="150" y2="400"/>
+      <line class="lane lane-edge-1" x1="150" y1="420" x2="150" y2="880"/>
+
+      <text class="t-level" x="40" y="58">LEVEL 3</text>
+      <text class="t-level-name" x="40" y="84" fill="#c4a8ff">Strategy</text>
+      <text class="t-sub" x="40" y="106">Vision &amp; Saga</text>
+      <text class="t-cadence" x="40" y="172">cadence:</text>
+      <text class="t-cadence" x="40" y="187">when direction</text>
+      <text class="t-cadence" x="40" y="202">shifts</text>
+
+      <text class="t-level" x="40" y="268">LEVEL 2</text>
+      <text class="t-level-name" x="40" y="294" fill="#5ad7d7">Coordination</text>
+      <text class="t-sub" x="40" y="316">the living Epic</text>
+      <text class="t-cadence" x="40" y="370">cadence:</text>
+      <text class="t-cadence" x="40" y="385">weekly-ish</text>
+
+      <text class="t-level" x="40" y="458">LEVEL 1</text>
+      <text class="t-level-name" x="40" y="484" fill="#6ab4ff">Operation</text>
+      <text class="t-sub" x="40" y="506">Story → PR</text>
+      <text class="t-cadence" x="40" y="840">cadence:</text>
+      <text class="t-cadence" x="40" y="855">the sprint</text>
+
+      <!-- LEVEL 3 -->
+      <g id="fl-vision" data-fl class="hover-glow">
+        <rect class="node" x="210" y="60" width="240" height="112" rx="12"/>
+        <text class="t-title" x="230" y="92">Vision</text>
+        <text class="t-sub" x="230" y="113">why the product exists · PRD</text>
+        <text class="t-skill" x="230" y="139">/we:vision</text>
+        <text class="t-skill2" x="230" y="158">/we:meet vision → sagas</text>
+      </g>
+
+      <path id="fl-e-vs" data-fl class="flow" d="M 450 116 H 540"/>
+
+      <g id="fl-saga" data-fl class="hover-glow">
+        <rect class="node" x="545" y="60" width="240" height="112" rx="12"/>
+        <text class="t-title" x="565" y="92">Saga</text>
+        <text class="t-sub" x="565" y="113">the bet we point energy at</text>
+        <text class="t-skill" x="565" y="139">/we:saga</text>
+        <text class="t-skill2" x="565" y="158">/we:meet saga → epics</text>
+      </g>
+
+      <g id="fl-map" data-fl class="hover-glow">
+        <rect class="node" x="1160" y="60" width="250" height="112" rx="12"/>
+        <text class="t-title" x="1180" y="92">The whole tree</text>
+        <text class="t-sub" x="1180" y="113">sagas › epics › stories, one view</text>
+        <text class="t-skill" x="1180" y="139">/we:map</text>
+        <text class="t-skill2" x="1180" y="158">read-only dashboard</text>
+      </g>
+
+      <g id="fl-e-se" data-fl>
+        <path class="flow" d="M 665 172 V 265"/>
+        <text class="t-edge" x="681" y="222">decompose</text>
+      </g>
+
+      <!-- LEVEL 2 -->
+      <g id="fl-epic" data-fl class="hover-glow">
+        <rect class="node" x="545" y="270" width="290" height="108" rx="12"/>
+        <text class="t-title" x="565" y="302">Epic — live status</text>
+        <text class="t-sub" x="565" y="323">child-story mirror · drift · next move</text>
+        <text class="t-skill" x="565" y="349">/we:epic</text>
+        <text class="t-skill2" x="565" y="367">/we:meet epic → stories</text>
+      </g>
+
+      <g id="fl-e-eb" data-fl>
+        <path class="flow" d="M 560 378 C 480 422, 380 442, 330 470"/>
+        <text class="t-edge" x="380" y="430">stories with acceptance shape</text>
+      </g>
+
+      <g id="fl-e-status" data-fl>
+        <path class="flow-feedback" d="M 1140 500 C 1080 440, 980 400, 840 348"/>
+        <text class="t-edge" x="950" y="404" fill="#c4a8ff">status flows back to the mirror</text>
+      </g>
+
+      <!-- LEVEL 1 -->
+      <g id="fl-backlog" data-fl class="hover-glow">
+        <rect class="node" x="200" y="470" width="195" height="232" rx="12"/>
+        <text class="t-title" x="222" y="502">Backlog</text>
+        <text class="t-sub" x="222" y="523">docs/plans/*-story.md</text>
+        <rect class="story-card ready" x="222" y="541" width="150" height="35" rx="6"/>
+        <text class="t-skill2" x="234" y="564" fill="#6cdf85">WA-101 · plan ✓</text>
+        <rect class="story-card ready" x="222" y="584" width="150" height="35" rx="6"/>
+        <text class="t-skill2" x="234" y="607" fill="#6cdf85">WA-102 · plan ✓</text>
+        <rect class="story-card" x="222" y="627" width="150" height="35" rx="6"/>
+        <text class="t-skill2" x="234" y="650">WA-103 · raw</text>
+        <rect class="story-card" x="222" y="670" width="150" height="26" rx="6"/>
+        <text class="t-skill2" x="234" y="688">WA-104 · idea</text>
+      </g>
+
+      <g id="fl-refine" data-fl class="hover-glow">
+        <rect class="node" x="200" y="740" width="335" height="112" rx="12"/>
+        <text class="t-title" x="222" y="773">Refinement — continuous</text>
+        <text class="t-sub" x="222" y="794">raw idea → build-ready plan (DoR)</text>
+        <text class="t-skill" x="222" y="820">/we:story · /we:meet story</text>
+        <rect class="chip chip-po" x="222" y="830" width="36" height="18" rx="9"/>
+        <text class="t-role tr-po" x="232" y="843">PO</text>
+        <rect class="chip chip-dev" x="264" y="830" width="44" height="18" rx="9"/>
+        <text class="t-role tr-dev" x="273" y="843">DEV</text>
+      </g>
+      <g id="fl-e-refine" data-fl>
+        <path class="flow-refine" d="M 300 702 C 290 716, 285 726, 282 738"/>
+        <path class="flow-refine" d="M 330 738 C 335 726, 338 716, 342 704"/>
+        <text class="t-edge" x="352" y="726" fill="#6ab4ff">refine ⟳</text>
+      </g>
+
+      <path id="fl-e-bp" data-fl class="flow" d="M 395 560 H 470"/>
+
+      <g id="fl-planning" data-fl class="hover-glow">
+        <rect class="node" x="475" y="508" width="205" height="108" rx="12"/>
+        <text class="t-title" x="495" y="541">Planning</text>
+        <text class="t-sub" x="495" y="562">pick the ready set</text>
+        <text class="t-skill" x="495" y="588">/we:epic · /we:map</text>
+        <rect class="chip chip-po" x="495" y="598" width="36" height="18" rx="9"/>
+        <text class="t-role tr-po" x="505" y="611">PO</text>
+        <rect class="chip chip-tl" x="537" y="598" width="36" height="18" rx="9"/>
+        <text class="t-role tr-tl" x="546" y="611">TL</text>
+      </g>
+
+      <g id="fl-e-ps" data-fl>
+        <path class="flow" d="M 680 562 H 762"/>
+        <text class="t-edge-hi" x="688" y="550">dispatch</text>
+      </g>
+
+      <g id="fl-sprint" data-fl class="hover-glow">
+        <circle class="loop-ring" cx="905" cy="620" r="128"/>
+        <text class="t-level" x="905" y="510" text-anchor="middle">THE SPRINT</text>
+        <text class="t-title" x="905" y="574" text-anchor="middle">Build</text>
+        <text class="t-skill" x="905" y="596" text-anchor="middle">/we:build</text>
+        <text class="t-skill2" x="905" y="614" text-anchor="middle">/we:orchestrate + /we:develop</text>
+        <text class="t-title" x="905" y="652" text-anchor="middle" style="font-size:14.5px; fill: var(--fg-muted);">Daily · „where am I?"</text>
+        <text class="t-skill" x="905" y="672" text-anchor="middle">/we:coach · /we:handoff</text>
+        <text class="t-sub" x="905" y="708" text-anchor="middle">AC-gate · review · static · tests</text>
+        <text class="t-sub" x="905" y="726" text-anchor="middle">per Story: PR ready</text>
+        <rect class="chip chip-dev" x="851" y="762" width="44" height="18" rx="9"/>
+        <text class="t-role tr-dev" x="860" y="775">DEV</text>
+        <rect class="chip chip-tl" x="901" y="762" width="36" height="18" rx="9"/>
+        <text class="t-role tr-tl" x="910" y="775">TL</text>
+        <rect class="chip chip-team" x="943" y="762" width="42" height="18" rx="9"/>
+        <text class="t-role tr-team" x="951" y="775">ALL</text>
+      </g>
+
+      <g id="fl-e-sr" data-fl>
+        <path class="flow flow-hi" d="M 1033 590 C 1070 575, 1090 565, 1125 555"/>
+        <text class="t-edge-hi" x="1044" y="558">PR ready</text>
+      </g>
+
+      <g id="fl-review" data-fl class="hover-glow">
+        <rect class="node node-human" x="1130" y="498" width="230" height="124" rx="12"/>
+        <text class="t-title" x="1150" y="531" fill="#ffd966">Review — you</text>
+        <text class="t-sub" x="1150" y="552">judge · merge · close ticket</text>
+        <text class="t-skill2" x="1150" y="578">— human only, by design —</text>
+        <rect class="chip chip-you" x="1150" y="590" width="42" height="18" rx="9"/>
+        <text class="t-role tr-you" x="1159" y="603">YOU</text>
+      </g>
+
+      <path id="fl-e-rr" data-fl class="flow" d="M 1245 622 V 662"/>
+
+      <g id="fl-retro" data-fl class="hover-glow">
+        <rect class="node" x="1130" y="667" width="230" height="112" rx="12"/>
+        <text class="t-title" x="1150" y="700">Retro</text>
+        <text class="t-sub" x="1150" y="721">every error happens once</text>
+        <text class="t-skill" x="1150" y="747">/we:retro</text>
+        <rect class="chip chip-team" x="1150" y="757" width="42" height="18" rx="9"/>
+        <text class="t-role tr-team" x="1158" y="770">ALL</text>
+      </g>
+
+      <g id="fl-e-fb1" data-fl>
+        <path class="flow-feedback" d="M 1130 745 C 920 830, 700 845, 545 800"/>
+        <text class="t-edge" x="640" y="852" fill="#c4a8ff">learnings → .claude/rules/ · the next sprint starts tighter</text>
+      </g>
+      <g id="fl-e-fb2" data-fl>
+        <path class="flow-feedback" d="M 1360 667 C 1405 560, 1405 340, 1365 240"/>
+        <text class="t-edge" transform="rotate(90 1424 440)" x="1424" y="440" text-anchor="middle" fill="#c4a8ff">insights climb the levels</text>
+      </g>
+    </svg>
     </div>
 
-    <div class="sprint-legend">
-      <span class="lg-po">Product Owner</span>
-      <span class="lg-dev">Developer</span>
-      <span class="lg-tl">Tech Lead</span>
-      <span class="lg-team">Whole team</span>
+    <div class="walk-bar">
+      <div class="walk-controls">
+        <button id="walk-play" class="primary" aria-label="Play walkthrough">▶ Walk it</button>
+        <button id="walk-prev" aria-label="Previous step">‹</button>
+        <button id="walk-next" aria-label="Next step">›</button>
+      </div>
+      <div class="walk-text">
+        <div class="walk-title" id="walk-title">From Vision to a merged PR — and back.</div>
+        <div class="walk-desc" id="walk-desc">Press <strong>▶</strong> to walk the loop station by station — or hover any box. Gold text is the <code>/we:*</code> skill at that station.</div>
+      </div>
+      <div class="walk-dots" id="walk-dots"></div>
     </div>
 
-    <div class="sprint-note">
-      Upstream of the sprint, the same pattern continues: quarterly direction → <code>/we:meet saga</code>, product framing → <code>/we:meet vision</code>. One method from PRD to merged PR — the stations below walk each altitude.
+    <div class="diagram-legend">
+      <span><span class="sw solid"></span>hand-off (once per item)</span>
+      <span><span class="sw gold"></span>the sprint loop · PR hand-off</span>
+      <span><span class="sw dash-dev"></span>continuous refinement</span>
+      <span><span class="sw dash-fb"></span>feedback &amp; learnings</span>
     </div>
   </section>
   <!-- ============ 3. CREW & COUNCIL — your lenses, real or generic ============ -->
@@ -2437,6 +2644,87 @@ document.addEventListener("keydown", (e) => {
       handleSectionChange();
     }
   });
+})();
+
+/* ── Levels walkthrough (station 04) ── */
+(() => {
+  const svg = document.getElementById("levels-svg");
+  if (!svg) return;
+  const steps = [
+    { els: ["fl-vision"], title: "Vision — why this product exists",
+      desc: "The PRD names the audience, the problem, and the non-bets. <code>/we:vision</code> keeps it sharp; <code>/we:meet vision</code> convenes a council to cut it into Sagas." },
+    { els: ["fl-e-vs", "fl-saga"], title: "Saga — the bet you point energy at",
+      desc: "A theme with a nameable win. <code>/we:saga</code> tracks it (status, drift, next move); <code>/we:meet saga</code> decomposes it into Epics." },
+    { els: ["fl-e-se", "fl-epic", "fl-map"], title: "Epic — the living coordination point",
+      desc: "<code>/we:epic</code> mirrors the child Stories from your ticketing tool: what shipped, what drifted, what's next. <code>/we:map</code> shows the whole tree." },
+    { els: ["fl-e-eb", "fl-backlog"], title: "Stories land in the backlog",
+      desc: "Decomposition drops Story shapes into <code>docs/plans/</code> — Markdown, versioned, reviewable by the whole team. Green cards already carry a build-ready plan." },
+    { els: ["fl-refine", "fl-e-refine"], title: "Refinement — continuous, not a meeting slot",
+      desc: "<code>/we:story</code> turns a raw idea into a build-ready plan that passes the Definition of Ready; <code>/we:meet story</code> adds council tension for contentious calls." },
+    { els: ["fl-e-bp", "fl-planning"], title: "Planning — pick the ready set",
+      desc: "PO and Tech Lead pick from Stories that are actually ready — plan ✓, dependencies met. <code>/we:epic</code> status and <code>/we:map</code> make that visible." },
+    { els: ["fl-e-ps", "fl-sprint"], title: "The sprint — autonomous, gated",
+      desc: "<code>/we:build</code> ships one Story end-to-end; <code>/we:orchestrate</code> + <code>/we:develop</code> fan out several. Every PR passes the same gates: AC evidence, review, static, tests." },
+    { els: ["fl-e-sr", "fl-review"], title: "Review — human only, by design",
+      desc: "You judge the diff, you merge, you close the ticket. Claude never crosses this line — autonomy ends where consequence begins." },
+    { els: ["fl-e-rr", "fl-retro"], title: "Retro — every error happens once",
+      desc: "<code>/we:retro</code> mines the shipped cycle — transcript, CI, review threads — for the frictions that cost time." },
+    { els: ["fl-e-fb1", "fl-e-fb2", "fl-e-status"], title: "…and the loop tightens",
+      desc: "Learnings land in <code>.claude/rules/</code>, status flows back into the Epic mirror, insights climb the levels. That feedback is what makes it a system, not a waterfall." },
+  ];
+  const titleEl = document.getElementById("walk-title");
+  const descEl = document.getElementById("walk-desc");
+  const dotsEl = document.getElementById("walk-dots");
+  const btnPlay = document.getElementById("walk-play");
+  const btnPrev = document.getElementById("walk-prev");
+  const btnNext = document.getElementById("walk-next");
+  const idleTitle = titleEl.textContent;
+  const idleDesc = descEl.innerHTML;
+
+  steps.forEach(() => dotsEl.appendChild(document.createElement("i")));
+  const dots = [...dotsEl.children];
+
+  let cur = -1, timer = null;
+  const STEP_MS = 4600;
+
+  function renderStep(i) {
+    cur = i;
+    svg.querySelectorAll(".fl-hot").forEach(n => n.classList.remove("fl-hot"));
+    dots.forEach((d, j) => d.classList.toggle("on", j === i));
+    if (i < 0) {
+      svg.classList.remove("walking");
+      titleEl.textContent = idleTitle;
+      descEl.innerHTML = idleDesc;
+      return;
+    }
+    svg.classList.add("walking");
+    steps[i].els.forEach(id => {
+      const n = document.getElementById(id);
+      if (n) n.classList.add("fl-hot");
+    });
+    titleEl.innerHTML = '<span class="step-no">' + String(i + 1).padStart(2, "0") + "/" + steps.length + "</span>" + steps[i].title;
+    descEl.innerHTML = steps[i].desc;
+  }
+  function stopWalk(reset) {
+    if (timer) { clearInterval(timer); timer = null; }
+    btnPlay.textContent = "▶ Walk it";
+    if (reset) renderStep(-1);
+  }
+  function advance() {
+    if (cur >= steps.length - 1) { stopWalk(true); return; }
+    renderStep(cur + 1);
+  }
+  btnPlay.addEventListener("click", () => {
+    if (timer) { stopWalk(false); return; }
+    if (cur >= steps.length - 1 || cur < 0) renderStep(0); else advance();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduced) {
+      timer = setInterval(advance, STEP_MS);
+      btnPlay.textContent = "⏸";
+    }
+  });
+  btnNext.addEventListener("click", () => { stopWalk(false); advance(); });
+  btnPrev.addEventListener("click", () => { stopWalk(false); renderStep(cur <= 0 ? -1 : cur - 1); });
 })();
 </script>
 </body>
