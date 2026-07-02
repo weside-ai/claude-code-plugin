@@ -182,9 +182,9 @@ mode argument. Pattern-match these shapes:
 
 ---
 
-## Proactive Invocation from `/we:story`
+## Proactive Invocation from `/we:build`
 
-`/we:story` calls this agent between the `simplified` and `pr_created`
+`/we:build` calls this agent between the `simplified` and `pr_created`
 checkpoints with the following prompt shape:
 
 > "Story {TICKET} is implemented. Here is the git diff between the branch

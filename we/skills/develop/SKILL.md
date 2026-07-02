@@ -57,10 +57,10 @@ This is lighter than `/we:build`'s full DoR gate — the goal is to catch a comp
 **Otherwise:** create one:
 
 ```
-EnterWorktree(name="{type}/{KEY}-develop")
+EnterWorktree(name="feat/{KEY}-work")
 ```
 
-Branch naming: `{type}/{KEY}-<short-description>` (e.g. `feat/PROJ-31-engine-profiles`).
+Branch naming: `feat/{KEY}-work` — this exact shape, because the Lead's integration step merges `feat/{TICKET}-work` branches. If the Lead's brief names a different branch, that takes precedence.
 
 Do **not** transition the ticket — the Lead owns ticket state.
 

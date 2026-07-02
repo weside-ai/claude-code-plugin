@@ -60,7 +60,7 @@ the project's `.doc-architect.yml` says.
 
    ```python
    Agent(
-       subagent_type="doc-architect",
+       subagent_type="we:doc-architect",
        description="Doc architect: <short summary>",
        prompt="<user's full prompt verbatim>",
        run_in_background=False,

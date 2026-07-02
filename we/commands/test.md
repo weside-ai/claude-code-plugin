@@ -1,5 +1,5 @@
 ---
-description: Run tests with coverage
+description: Run tests affected by current changes
 ---
 
 # Test Runner
@@ -9,5 +9,5 @@ description: Run tests with coverage
 Launch the test-runner agent:
 
 ```python
-Agent(subagent_type="we:test-runner", prompt="Run tests with coverage for the current changes. $ARGUMENTS")
+Agent(subagent_type="we:test-runner", prompt="Run the tests affected by the current changes. $ARGUMENTS")
 ```

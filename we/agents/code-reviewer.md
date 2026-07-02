@@ -40,7 +40,7 @@ TICKET=$(echo "$BRANCH" | grep -oP '[A-Z]+-\d+' | head -1)
 ```
 
 If ticket key found → load story from ticketing tool for AC check.
-Check for implementation plan at `docs/plans/${TICKET}-plan.md`.
+Check for the plan at `docs/plans/${TICKET}-story.md` (legacy fallback: `${TICKET}-plan.md`).
 
 ### Step 2: Get the Diff
 

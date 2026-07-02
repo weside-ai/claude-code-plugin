@@ -15,9 +15,12 @@ color: blue
 ## Step 1: Determine Scope
 
 ```bash
-# Files changed vs main (preferred — same baseline as the PR)
-CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null)
-# Fallback: last commit (when origin/main isn't fetched / detached)
+# Derive the merge base — don't hardcode 'main'
+BASE=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null) \
+  || BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') \
+  || BASE="main"
+CHANGED=$(git diff --name-only "origin/${BASE}...HEAD" 2>/dev/null)
+# Fallback: last commit (when the base isn't fetched / detached)
 [ -z "$CHANGED" ] && CHANGED=$(git diff --name-only HEAD~1)
 echo "$CHANGED"
 ```

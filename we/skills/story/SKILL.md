@@ -195,9 +195,9 @@ points — narrative voice.]
 ### Phase 2: [Name]
 ...
 
-> **Always decompose into real phases — even for a small story.** A phase is a self-contained, independently-committable chunk with its own `**Files:**` list. Cutting the work into phases is what lets `/we:orchestrate` (Mode B) dispatch focused chunks and lets `/we:build` (Mode B) fan out — and it sharpens the plan regardless of which surface runs it. Don't collapse a multi-step change into one mega-phase to "keep it simple"; the phases ARE the structure both downstream skills read.
+> **Always decompose into real phases — even for a small story.** A phase is a self-contained, independently-committable chunk with its own `**Files:**` list. Cutting the work into phases is what lets `/we:orchestrate` (Mode B) dispatch focused chunks and lets `/we:build` (fan-out mode) fan out — and it sharpens the plan regardless of which surface runs it. Don't collapse a multi-step change into one mega-phase to "keep it simple"; the phases ARE the structure both downstream skills read.
 >
-> **Independence check (fill `parallel_groups`):** When phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. List those phase numbers in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). This explicit declaration is the parallel-wave map both `/we:orchestrate` (Mode B chunk waves) and `/we:build` (Mode B sub-agent fan-out) read; prose like "these can run in parallel" is invisible to them. The per-phase `**Files:**` lists also feed orchestrate's disjoint guard — fill them concretely (use the graphify Blast-Radius query above), not vaguely.
+> **Independence check (fill `parallel_groups`):** When phases touch **disjoint files** and have **no ordering dependency** (phase N's output does not feed phase N+1), they can run concurrently. List those phase numbers in the `parallel_groups` frontmatter — e.g. `parallel_groups: [[2,3]]`. When in doubt, keep phases sequential (empty list). This explicit declaration is the parallel-wave map both `/we:orchestrate` (Mode B chunk waves) and `/we:build` (fan-out mode) read; prose like "these can run in parallel" is invisible to them. The per-phase `**Files:**` lists also feed orchestrate's disjoint guard — fill them concretely (use the graphify Blast-Radius query above), not vaguely.
 
 ## Design Decisions
 
@@ -267,7 +267,7 @@ Both run the same plan; they differ in *who holds the work* and *how much overhe
 | **Best for** | Trivially straight-line work — one phase, small diff, no real decomposition | Anything you'd want to **split into phases**; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
 | **Caller's context** | Fills with the whole implementation | Stays clean — the caller reviews reports + the final PR, not every diff |
 | **Review stance** | Caller is also the implementer | Caller reviews the result **neutrally** (didn't write it) |
-| **Parallelism** | Mode B sub-agent fan-out per `parallel_groups` | Chunk waves per `parallel_groups`, ≤2 concurrent |
+| **Parallelism** | Sub-agent fan-out per `parallel_groups` | Chunk waves per `parallel_groups`, ≤2 concurrent |
 
 **The heuristic (lead with orchestrate unless it's trivial):**
 
@@ -347,7 +347,7 @@ Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/
 - ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
 - ALWAYS set the `epic:` frontmatter field to the parent Epic's slug-or-key when the story belongs to an Epic — `/we:orchestrate`'s ready-set matching filters stories by this field; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
 - The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
-- ALWAYS decompose the plan into real `### Phase` blocks with per-phase `**Files:**`, and fill `parallel_groups` when phases are disjoint + unordered — even for a small story. Phases are the structure `/we:orchestrate` (Mode B chunks) and `/we:build` (Mode B fan-out) both read.
+- ALWAYS decompose the plan into real `### Phase` blocks with per-phase `**Files:**`, and fill `parallel_groups` when phases are disjoint + unordered — even for a small story. Phases are the structure `/we:orchestrate` (Mode B chunks) and `/we:build` (fan-out mode) both read.
 - ALWAYS recommend the execution surface in Step 6 — `/we:orchestrate {TICKET}` for anything phased / parallelisable / coherent-multi-layer / context-heavy (incl. a small monolith the caller wants reviewed neutrally); `/we:build` only for trivially straight-line single-phase work. Lead with the recommended one, offer the other as fallback. Non-binding — the user invokes it.
 - A single COHERENT change that is merely phased is NOT an epic — keep it one Story for `/we:orchestrate`. Escalate to `/we:epic` only for many INDEPENDENT slices. The urge to split into phases is the orchestrate signal, not the epic signal.
 - ALWAYS use Given/When/Then for ACs

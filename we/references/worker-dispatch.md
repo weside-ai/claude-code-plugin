@@ -16,13 +16,17 @@ For Codex-specific dispatch mechanics (the single-detach rule), see
 
 | Backend | How dispatched | When to use |
 |---|---|---|
-| **Cheap Claude** (Sonnet / Haiku) | `Agent(model: "haiku", prompt: "…")` inline | Default — always available, no extra config |
+| **Cheap Claude** (Sonnet / Haiku) | `Agent(model: "sonnet", prompt: "…")` inline | Default — always available, no extra config |
 | **Codex** | `codex-companion.mjs task --write --cwd <worktree> "…"` | When `tools.codex` is `true` and user confirms; see [`codex-dispatch.md`](codex-dispatch.md) |
 | **Foreign engine** | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` | When `.weside/engines.local.json` has a profile for that engine; requires Anthropic-compatible endpoint |
 
 The **default executor** is persisted in `.weside/config.json` as `execution.default`
-(`claude-haiku` / `codex` / `<engine-name>`). `/we:setup` wizard writes this.
-`/we:orchestrate` reads it; the user can override per-chunk at execution time.
+(`claude-sonnet` / `claude-haiku` / `codex` / `<engine-name>`). `/we:setup` wizard writes this
+(default: `claude-sonnet`). `/we:orchestrate` reads it; the user can override per-chunk at
+execution time.
+
+**Model-tier rule (single owner):** default `sonnet`; `haiku` only for mechanical/boilerplate
+chunks; `opus` only when the Lead explicitly requests it for a hard chunk.
 
 ---
 

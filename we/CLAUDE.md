@@ -32,8 +32,8 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:story    → PO + Claude create Story + plan (INTERACTIVE; Solo)
 /we:build    → Claude runs full pipeline AUTONOMOUSLY:
-               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel) → PR → configured AI reviewer(s) on GitHub
-               → docs → PR → CI fix → ticket "In Review"
+               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel)
+               → docs → PR → CI fix (incl. configured AI reviewers on GitHub) → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
 
@@ -70,7 +70,7 @@ User         → reviews PR, merges, closes ticket
 | `/we:handoff` | Durable cross-session handoff — `--write` / default-`--load` / `--list` over `docs/handoffs/`; complements `/compact` (in-place) with a version-controlled artifact |
 | `/we:diagnose` | Disciplined diagnosis loop for hard bugs — feedback-loop first, then reproduce → hypothesise → instrument → fix → regression-test |
 | `/we:grill` | Relentless one-question-at-a-time interview on a plan/design — sharpens the `CONTEXT.md` glossary inline, offers lean ADRs at the 3-gate (hard-to-reverse ∧ surprising ∧ real trade-off) |
-| `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness. Case-study: [`skills/doc-improve/USAGE.md`](skills/doc-improve/USAGE.md) |
+| `/we:doc-improve` | Substantive review of one or more doc files (claims vs. code, redundancy, staleness) — for rules also: token budget, path-pattern correctness |
 | `/we:audit-architecture` | Backend architecture × quality × security audit — Healthcheck (doc-drift, bypass-register-drift, missing-primitive-scan) + per-subsystem deep audit with Mermaid diagrams. Scope-able by subsystem id. Project config in `docs/.audit-architecture.yml`. |
 | `/we:audit` | Tool-driven security scan — runs semgrep / trivy / kubescape / gitleaks (or the project's own audit script), parses the JSON reports, and summarizes findings by severity. |
 | `/we:find-dead-code` | Find and remove dead code from Python backends |
@@ -81,7 +81,6 @@ User         → reviews PR, merges, closes ticket
 
 | Command | What it does |
 |---|---|
-| `/we:docs` | Auto-detect and update changed documentation |
 | `/we:pr` | Create Pull Request with prerequisite validation |
 | `/we:review` | Professional code review with AC alignment |
 | `/we:static` | Static code analysis — lint, format, types |
@@ -148,8 +147,6 @@ Or individual quality gates:
 ## Configuration
 
 Settings via `/plugin settings`:
-- **ticketingTool** — auto / jira / github-issues / none
-- **projectKey** — Jira project key or GitHub repo
 - **companion** — weside Companion name (optional, requires account)
 - **autoMaterialize** — Auto-load Companion at session start (default: off)
 - **loadCouncilFromWeside** — boolean, default `true`. Use weside-backed Companions as council members where the bridge links them; `false` = always use the generic role-lenses (Retorte), even if Companions exist.

@@ -17,8 +17,8 @@ claude-code-plugin/
 │   │   └── plugin.json      # name: "we", version: "2.24.1"
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
-│   ├── commands/             # Slash commands for agent-dispatched tools (5)
-│   ├── skills/              # 25 skills (directly invocable via /we:*)
+│   ├── commands/             # Slash commands for agent-dispatched tools (4)
+│   ├── skills/              # 27 skills (directly invocable via /we:*)
 │   ├── agents/              # 14 agents (5 pipeline + doc-architect + 8 council)
 │   ├── quality/             # DoR, DoD (quality gate definitions)
 │   ├── references/          # Shared on-demand reference docs (privacy guard, ticketing, agent-teams, …)
@@ -102,7 +102,7 @@ Plugin (Claude Code) → MCP OAuth → weside Backend API → Companion Memory/G
 - **With MCP:** Skills can load companion identity, search memories, check goals.
 - **MCP tools:** Defined in `we/.mcp.json`, implemented by the weside backend service.
 
-**Config (`userConfig` in `we/.claude-plugin/plugin.json`):** `companion`, `autoMaterialize`, `ticketingTool`, `projectKey`, `autoStoreConversations`, and `loadCouncilFromWeside` (boolean, default `true` — use weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses). Read at `pluginConfigs["we@weside-ai"].options.<key>`.
+**Config (`userConfig` in `we/.claude-plugin/plugin.json`):** `companion`, `autoMaterialize`, `autoStoreConversations`, and `loadCouncilFromWeside` (boolean, default `true` — use weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses). Read at `pluginConfigs["we@weside-ai"].options.<key>`.
 
 When changing MCP tool signatures, both sides need updating:
 - The weside backend — MCP tool implementation.

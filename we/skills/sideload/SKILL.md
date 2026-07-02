@@ -71,7 +71,7 @@ work there, not just orient itself.
      Shape: <N docs, M rules>
      Rules loaded: <K> (all, eager)
      Crew: <names and roles>
-   Ask for specific docs via `/we:search` or just ask naturally.
+   Ask for specific docs naturally — they'll be read on demand.
    ```
 
 ## Fallback (legacy repo without setup yet)

@@ -64,7 +64,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit check {TICKET} {p
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit fail {TICKET} {phase} --error "msg"
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py circuit success {TICKET} {phase}
 
-# CI-fix loop (max 3 cycles)
+# CI-fix tracking (policy: ONE pass, see Step 8; the CLI's 3-attempt cap is only the DB backstop)
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix start {TICKET} {pr_number}
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix attempt {TICKET} {fix_type}
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py cifix success {TICKET}
@@ -181,7 +181,7 @@ Check circuit breaker. Then choose mode based on the plan's `parallel_groups` fr
 
 ---
 
-### Mode A — Sequential inline (default)
+### Inline mode — sequential (default)
 
 **When:** `parallel_groups` is absent or empty (`[]`) in the plan, or the story has only one phase.
 
@@ -189,7 +189,7 @@ Execute all phases inline in the orchestrator thread, one after another. This is
 
 ---
 
-### Mode B — Parallel subagent dispatch
+### Fan-out mode — parallel subagent dispatch
 
 **When:** `parallel_groups` is a non-empty list in the plan frontmatter.
 
@@ -244,7 +244,7 @@ Agent(
 
 **Setup (once, before any phase):**
 
-1. **Load plan** from `${REPO_ROOT}/docs/plans/{TICKET}-story.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm Mode A or B.
+1. **Load plan** from `${REPO_ROOT}/docs/plans/{TICKET}-story.md`. Read it COMPLETELY. Re-read `parallel_groups` to confirm inline or fan-out mode.
 2. **Formulate goal**: "The user should be able to X so that Y."
 
 **For each phase** (after it completes — inline or agent returns):
@@ -264,7 +264,7 @@ Agent(
    | Secrets | No hardcoded credentials, tokens, or API keys |
    | Rate limiting | Expensive endpoints have rate limits |
 
-4. **Run local tests** — in Mode A: after each phase. In Mode B: after each inline phase completes, and once after each parallel group integrates (not per sub-agent).
+4. **Run local tests** — inline mode: after each phase. Fan-out mode: after each inline phase completes, and once after each parallel group integrates (not per sub-agent).
 5. **Write checkpoint** `implementation_complete` — once, after ALL phases complete (both inline and parallel groups)
 
 **3 Guiding Questions (check after each phase):**
@@ -322,7 +322,7 @@ Claude, so read `tools.codex` and `review.cross` (default `true`) from `.weside/
   so call the script directly (it ships in the codex plugin's cache, NOT under
   `${CLAUDE_PLUGIN_ROOT}`). Resolve by glob, take the newest, run the **adversarial** subcommand:
   ```bash
-  CODEX_REVIEW=$(ls -t ~/.claude/plugins/cache/*/codex/*/scripts/codex-companion.mjs 2>/dev/null | head -1)
+  CODEX_REVIEW=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null | sort -V | tail -1)
   if [ -n "$CODEX_REVIEW" ]; then node "$CODEX_REVIEW" adversarial-review --wait; else echo "codex configured but plugin not installed — falling back to code-reviewer"; fi
   ```
   When codex is the sole reviewer, `code-reviewer` does not run, so **build itself writes the
@@ -483,6 +483,6 @@ The transition to "In Review" is performed by the `pr-creator` agent in its Step
 - Never move ticket to "Done" — user's job
 - Never stop mid-pipeline unless circuit breaker opens
 - Never re-invoke `Skill(skill="build")` — if you're reading this, you ARE the build skill
-- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Use `Agent(subagent_type=...)` for parallel-safe phases in Step 2 (isolated context, short report back) or execute inline; Step 8 uses inline CI-review logic. Only `Skill()` dispatch is banned — `Agent()` is explicitly the correct tool for Mode B.
+- Never call `Skill(skill="develop")` or `Skill(skill="ci-review")` — `Skill()` loads into the main context and inflates it. Use `Agent(subagent_type=...)` for parallel-safe phases in Step 2 (isolated context, short report back) or execute inline; Step 8 uses inline CI-review logic. Only `Skill()` dispatch is banned — `Agent()` is explicitly the correct tool for the fan-out mode.
 - Never commit code changes without corresponding test changes in the same commit
 - Never create a PR before ALL THREE quality gates pass (review + static + test)

@@ -317,7 +317,7 @@ If your proposed clarification (ADVISOR or BEGINNER mode) touches `docs/**`, say
 
 ```python
 Agent(
-    subagent_type="doc-architect",
+    subagent_type="we:doc-architect",
     description="Doc update from /we:coach",
     prompt="<what changed in process, what docs need to reflect this>",
     run_in_background=False,

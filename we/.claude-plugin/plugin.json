@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "version": "2.65.0",
+  "version": "2.66.0",
   "description": "Agentic Product Ownership toolkit for Claude Code — four Plan altitudes (Vision/Saga/Epic/Story) with Solo + Council deliberation, autonomous Build pipeline, runtime-agnostic worker dispatch (/we:develop + /we:orchestrate), CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
@@ -34,18 +34,6 @@
       "title": "Auto-load Companion",
       "description": "Automatically load your Companion at session start (requires weside.ai account)",
       "default": false
-    },
-    "ticketingTool": {
-      "type": "string",
-      "title": "Ticketing Tool",
-      "description": "Which ticketing tool to use: auto, jira, github-issues, or none. 'auto' detects from available MCP servers and CLI tools.",
-      "default": "auto"
-    },
-    "projectKey": {
-      "type": "string",
-      "title": "Project Key",
-      "description": "Jira project key or GitHub repo for issue tracking (e.g. 'PROJ', 'myorg/myrepo'). Auto-detected if not set.",
-      "required": false
     },
     "autoStoreConversations": {
       "type": "boolean",

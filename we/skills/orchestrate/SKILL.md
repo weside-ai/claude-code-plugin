@@ -210,7 +210,7 @@ into a single assistant message** so they initialize concurrently.
 ```python
 TaskCreate(subject=f"Build {TICKET}", description=f"Run /we:build {TICKET} to a reviewable PR.")
 Agent(
-    name=f"builder-{TICKET}",
+    name=f"worker-{TICKET}",
     subagent_type="general-purpose",
     model="sonnet",
     description=f"Build {TICKET}",
@@ -489,7 +489,7 @@ Then tear down the builders. There is no `TeamDelete` — teardown means asking 
 then verifying:
 
 ```python
-for member_name in dispatched_builders:
+for member_name in dispatched_workers:
     SendMessage(to=member_name, message="SESSION COMPLETE — you may stop.", summary="shutdown_request")
 ```
 
