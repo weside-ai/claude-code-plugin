@@ -90,7 +90,7 @@ flowchart TB
     Gates --> Test["/we:test"]
     Review & Static & Test --> Docs[Step 6: /we:docs<br/>doc-architect proposes diffs]
     Docs --> PR[Step 7: /we:pr<br/>verifies all gates pass]
-    PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>max 3 cycles]
+    PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>one pass, max 2 cycles]
     CI --> Verify[Step 9: ticket → In Review]
     Verify --> Hand[Hand off to user]
 
@@ -109,7 +109,7 @@ flowchart TB
 | **5. Quality gates** | One local reviewer + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one local reviewer runs, chosen by who wrote the code:** Claude wrote + codex available + `review.cross` → `/codex:adversarial-review` (the `code-reviewer` agent does not also run); otherwise the `code-reviewer` agent. AC/DoD were already gated in Step 3. |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
 | **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. Any CI reviewers the repo lists in `review.available` run on GitHub if installed; other hosts use local quality gates. |
-| **8. CI fix** | Inline loop — collect findings, fix all, push once | Max 3 cycles. Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
+| **8. CI fix** | Inline — collect findings, fix all, push once | One pass by default (max 2 cycles when looping). Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
 | **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
 
 ### Robustness

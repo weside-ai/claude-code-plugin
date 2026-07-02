@@ -16,7 +16,7 @@
 
 ## What you get
 
-Twenty-five `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
+Twenty-seven `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
 **Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
 
@@ -58,7 +58,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 25 skills are available.
+That's it. The plugin is enabled. All 27 skills are available.
 
 ---
 
@@ -128,7 +128,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 25 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 27 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
@@ -169,7 +169,7 @@ You upgrade when you feel the gap, not before. [Full upgrade paths →](docs/upg
 | [Skill Reference](docs/skills.md) | Looking up what a skill does |
 | [Companion Framework](docs/concepts/companion-framework.md) | Understanding `.weside/`, councils, the bridge |
 | [Roles](docs/concepts/roles.md) | Picking the right roster for a council |
-| [Meetings](docs/concepts/meetings.md) | Choosing between vision/initiative/refinement |
+| [Meetings](docs/concepts/meetings.md) | Choosing between vision/saga/epic/story meetings |
 | [Memory](docs/concepts/memory.md) | What memory adds (without and with weside) |
 | [MCP Layer](docs/mcp.md) | Integrating with weside, debugging tool calls |
 | [Upgrade Paths](docs/upgrade-paths.md) | Evaluating maturity, planning next steps |
@@ -185,11 +185,12 @@ After install, configure via `/plugin settings we@weside-ai`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `ticketingTool` | `auto` | `auto` / `jira` / `github-issues` / `none` |
-| `projectKey` | (empty) | Jira project key (e.g. `PROJ`) or GitHub repo (e.g. `myorg/myrepo`) |
 | `companion` | (empty) | weside Companion name (optional) |
 | `autoMaterialize` | `false` | Auto-load Companion at session start |
 | `autoStoreConversations` | `false` | Store meaningful turns as Companion memories |
+| `loadCouncilFromWeside` | `true` | Convene weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses |
+
+Ticketing is **not** a plugin setting — `/we:setup` detects your tool and records the choice (tool + project key) in `.weside/config.json` per repo.
 
 ---
 
@@ -221,7 +222,7 @@ Optional but enhance the pipeline:
 
 | Plugin | What it provides | Install |
 |---|---|---|
-| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:story` Step 4 | `/install code-simplifier@claude-plugins-official` |
+| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:build` Step 4 | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
 | Codex plugin (`codex` CLI) | **Optional** execution backend — lets `/we:orchestrate` dispatch chunks to Codex (`gpt-5-codex`); direct dispatch via `/we:codex-task` | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
 

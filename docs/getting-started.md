@@ -122,7 +122,7 @@ Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal or
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
 - **Step 3 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
-- **Step 8 (CI fix)** — review findings (Claude Review plus any CI bots the repo configured in `review.available`, or local quality gates elsewhere) are addressed here; if 3 cycles can't clear them, you're asked.
+- **Step 8 (CI fix)** — review findings (Claude Review plus any CI bots the repo configured in `review.available`, or local quality gates elsewhere) are addressed here in one pass; if a second pass still can't clear them (cap 2 cycles), you're asked.
 
 Otherwise it runs.
 
@@ -170,7 +170,7 @@ Pick one based on where you want to go next:
 
 ## Common first-time issues
 
-- **`/we:story` produces a plan but the ticket wasn't created** → check `/plugin settings` for `ticketingTool` and `projectKey`. Or no ticketing tool detected — that's "Plan-only mode", which is fine.
+- **`/we:story` produces a plan but the ticket wasn't created** → re-run `/we:setup` to (re)detect your ticketing tool; it records the tool + project key in `.weside/config.json`. Or no ticketing tool detected — that's "Plan-only mode", which is fine.
 - **`/we:build` errors at Step 1 with "DoR failed"** → the plan is missing required sections. Open it, see what's flagged, re-run `/we:story` to fill the gap.
 - **`/we:build` interrupted mid-pipeline** → run `/we:build {TICKET}` again. It picks up from the last checkpoint.
 - **CI keeps failing** → see the [ci-review skill reference](skills.md#weci-review) and [troubleshooting.md](troubleshooting.md).

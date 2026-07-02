@@ -49,13 +49,7 @@ Or skip them — the pipeline works without them, just with smaller quality step
 
 **Cause:** ticketing tool not configured or not detected.
 
-**Fix:** check plugin settings:
-
-```
-/plugin settings we@weside-ai
-```
-
-Set `ticketingTool` to `jira` or `github-issues`, and `projectKey` to your project (e.g. `PROJ` for Jira, `myorg/myrepo` for GitHub Issues). Or leave it as `none` — "Plan-only mode" is fine; the plan lives in `docs/plans/` and that's the source of truth.
+**Fix:** re-run `/we:setup`. It detects your ticketing tool and records the choice — tool + project key — in `.weside/config.json` for this repo. (Ticketing is a per-repo config, not a plugin setting.) If no tool is detected, that's "Plan-only mode" — fine; the plan lives in `docs/plans/` and that's the source of truth.
 
 ---
 
@@ -114,9 +108,9 @@ The verification is blocking on purpose. Don't bypass it.
 
 ---
 
-### CI keeps failing after 3 cycles
+### CI keeps failing after the ci-review pass
 
-**Symptom:** `/we:build` Step 8 ran 3 ci-review cycles and CI is still red.
+**Symptom:** `/we:build` Step 8 ran its ci-review pass (one by default, at most 2 cycles) and CI is still red.
 
 **Cause:** something fundamentally hard or unfixable from this branch — infrastructure issue, flaky test that won't stabilize, dependency conflict.
 

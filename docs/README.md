@@ -61,7 +61,7 @@ Welcome. Pick your entry point.
 
 ## Without a weside account
 
-Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 23 skills standalone. `/we:onboarding` builds the full council from scratch even with no account — every role fills with a generic role-lens. (With an account, each role-lens is generic *or* weside-backed; a mixed council is normal.) Meetings at four Plan altitudes (Vision/Saga/Epic/Story). The pipeline ships stories end-to-end.
+Everything in this docs/ tree works **without** a weside.ai account. The plugin runs all 27 skills standalone. `/we:onboarding` builds the full council from scratch even with no account — every role fills with a generic role-lens. (With an account, each role-lens is generic *or* weside-backed; a mixed council is normal.) Meetings at four Plan altitudes (Vision/Saga/Epic/Story). The pipeline ships stories end-to-end.
 
 Where weside adds something, the relevant doc explicitly calls out *what's available standalone* and *what unlocks with an account*. No surprises; no lock-in.
 

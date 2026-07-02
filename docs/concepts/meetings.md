@@ -21,7 +21,7 @@ flowchart TB
 
 Each meeting answers a different question and decomposes its altitude's item into the next altitude's items.
 
-Below Story sits **Build**, where deliberation gives way to dispatch. `/we:orchestrate` is the Build-altitude sibling of the council: instead of convening role-lenses to deliberate, it dispatches one builder-teammate per ready Story (each running the full `/we:build`) and rolls up their PRs — currently an experimental spike capped at ≤2 concurrent builders.
+Below Story sits **Build**, where deliberation gives way to dispatch. `/we:orchestrate` is the Build-altitude sibling of the council: instead of convening role-lenses to deliberate, it dispatches **dev-only `/we:develop` workers** (one per ready Story, or one per phase of a single Story), then the Lead merges their branches onto one integration branch, opens **one PR**, and runs **CI once**.
 
 | Meeting | Question | Output | Default roster |
 |---|---|---|---|
@@ -36,14 +36,15 @@ Rosters are defaults; each repo can override them in `.weside/config.json.counci
 
 ### How plan artifacts are named, stored, and mapped to ticketing
 
-The plan tree is **flat** under `docs/plans/` — no nested directories, no separate
-index file. The **filename suffix** is the altitude marker; the **saga-slug prefix**
-is the grouping. The slug (e.g. `presence`) is the human-memorable key — you never
-have to remember a ticket number to find a Saga.
+The plan tree under `docs/plans/` is **flat for Saga-and-below** — no separate index
+file. The **filename suffix** is the altitude marker; the **saga-slug prefix** is the
+grouping. The slug (e.g. `presence`) is the human-memorable key — you never have to
+remember a ticket number to find a Saga. The one exception is the **Vision**, which owns
+a nested `docs/plans/<vision>/` directory (the PRD plus optional `research/`).
 
 | Altitude | Filename | In ticketing? |
 |---|---|---|
-| Vision | `docs/plans/<vision>-prd.md` | No (Markdown-only) |
+| Vision | `docs/plans/<vision>/PRD.md` | No (Markdown-only) |
 | Saga | `docs/plans/<saga>-saga.md` | **No** — Sagas never get a ticket |
 | Epic | `docs/plans/<saga>-<epic>-epic.md` | Optional ticketing Epic, titled `[<saga>] <Epic Title>` |
 | Story | `docs/plans/<TICKET>-story.md` | Required ticket; parent = the Epic |
@@ -72,7 +73,7 @@ You convene a vision meeting when **the product's reason for existing needs alig
 
 The default roster pulls in voices that see different futures: PO (user value over time), architect (technical horizon), UX researcher (lived experience), marketing (how this lands externally), orchestrator (synthesis). For business-heavy visions, add `sales` and `legal`.
 
-The output is the **set of Sagas** the Vision implies, plus a tighter PRD. The meeting doesn't ship code; it ships *clarity at the highest altitude*. Typical artifacts: `docs/plans/<vision>-prd.md` (updated) and `docs/plans/<vision>-vision-meeting-<YYYY-MM-DD>.md` (the meeting summary with Saga candidates).
+The output is the **set of Sagas** the Vision implies, plus a tighter PRD. The meeting doesn't ship code; it ships *clarity at the highest altitude*. Typical artifacts: `docs/plans/<vision>/PRD.md` (updated) and `docs/plans/<vision>-vision-meeting-<YYYY-MM-DD>.md` (the meeting summary with Saga candidates).
 
 Use when:
 - A new product (or sub-product) is being framed from scratch

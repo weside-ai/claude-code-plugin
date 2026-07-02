@@ -21,7 +21,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 ## Level 1 — Assisted
 
-**What you have:** the plugin alone. All 23 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with generic role-lenses (`/we:onboarding` builds the full council from scratch — every role fills with a shipped `council-<role>` agent, no account required). Meetings at four altitudes.
+**What you have:** the plugin alone. All 27 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with generic role-lenses (`/we:onboarding` builds the full council from scratch — every role fills with a shipped `council-<role>` agent, no account required). Meetings at four altitudes.
 
 **What you ship:** stories with plans, code with tests, PRs with reviews, deliberations with synthesis. End-to-end. No external dependency beyond Claude Code itself.
 

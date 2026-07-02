@@ -143,7 +143,7 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 
 | Directory | Skills | What lives there |
 |---|---|---|
-| `docs/plans/<slug>-{prd,saga,epic,story}.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` `/we:coach` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* |
+| `docs/plans/<vision>/PRD.md` + `docs/plans/<slug>-{saga,epic,story}.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` `/we:coach` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* (Vision nests in a `<vision>/` dir; Saga-and-below are flat) |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *what we learned, how the harness should change* |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *where we are now, what the next session should pick up* |
 

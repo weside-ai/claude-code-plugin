@@ -136,6 +136,28 @@ Build orchestrator — the autonomous half of the pipeline. Once you trigger it,
 
 ---
 
+### `/we:develop`
+
+> *Dev-only worker slice — implement, gate, commit, push, stop.*
+
+Implements one chunk (a Story, or a `--phases N,M` subset), runs fast local gates (lint/type/affected tests for the touched stack), commits, pushes its branch, and **stops** — no PR, no CI loop, no ticket transition. It's the worker `/we:orchestrate` dispatches, and it works standalone for manual dev work when you want the implementation without the full solo pipeline. Cross-reviews its own diff when `review.cross` is on. Branch shape: `feat/{TICKET}-work`.
+
+**When to use:**
+- Dispatched by `/we:orchestrate` per chunk (the common case)
+- Standalone when you want "just implement and push" without a PR or CI
+
+**Won't do:** open a PR, run CI, transition the ticket — the Lead (`/we:orchestrate`) integrates and runs CI once.
+
+---
+
+### `/we:codex-task`
+
+> *Send a focused task straight to Codex (`gpt-5-codex`).*
+
+Dispatches a single self-contained task to the official Codex plugin runtime (foreground by default; `--background` detaches it). The Lead reviews and integrates the returned diff. Requires the `openai/codex-plugin-cc` plugin; absent it, the plugin is unaffected and workers run on Claude.
+
+---
+
 ### `/we:ci-review`
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
@@ -152,36 +174,42 @@ Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings fro
 - All bot review threads resolved (whichever reviewers are active on the repo)
 - A push only after every blocker is addressed
 
-**Limit:** 3 cycles max. After the third, stops and asks.
+**Limit:** one pass by default; when it does loop, max 2 cycles — after the second, stops and asks.
 
 ---
 
 ### `/we:orchestrate`
 
-> *Spike — Epic-driven build orchestration; the Build-altitude sibling of `/we:council`.*
+> *Multi-chunk build orchestration; the Build-altitude sibling of `/we:council`.*
 
-Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — computes the ready set of buildable Stories, and on an explicit confirm dispatches one builder-teammate per ready Story (live Agent Team, same machinery as `/we:council`). Each builder runs the full unmodified `/we:build`; the Lead tracks them in the shared task-list + orchestration DB, reviews each finished PR, and never merges. weside MCP optional — the Lead reviews as your Companion when connected, with a generic role lens otherwise.
+Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — and on an explicit confirm dispatches **dev-only `/we:develop` workers** (live Agent Team, same machinery as `/we:council`). Workers implement, run fast local gates, commit, and push their branch — no PR, no CI. The **Lead** merges every worker branch onto **one integration branch**, opens **one PR**, and runs **CI once** on the combined diff. It tracks workers in the shared task-list + orchestration DB, reviews the integrated diff, and never merges. Workers run on cheap-tier Claude (Sonnet/Haiku) by default; Codex or a foreign engine are opt-in per chunk. weside MCP optional — the Lead reviews as your Companion when connected, generic role lens otherwise.
 
-> **Spike status.** Hard cap of **≤2 concurrent builders**; the full orchestrator (parallel dispatch beyond 2, cross-Story circuit breakers, resume) is gated on this spike's go/no-go.
+**Two dispatch shapes:**
+
+- **Mode A (epic target)** — computes the ready set of buildable Stories and dispatches one worker per ready Story.
+- **Mode B (single-Story target)** — runs that one Story's `### Phase` blocks as lead-integrated work-chunks (one worker per phase / parallel wave).
 
 **Usage:**
 
 ```
-/we:orchestrate <epic>              # boot + status + ready-set; dispatch only on confirm
+/we:orchestrate <epic>              # epic target: boot + ready-set; dispatch on confirm (Mode A)
+/we:orchestrate <story-key>         # single-Story target: run its phases as work-chunks (Mode B)
+/we:orchestrate <epic> --refine-ahead  # build ready stories AND refine the next during build idle
 /we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                     # boot from the most recently active epic, then status
 ```
 
 **When to use:**
-- An Epic has several refined Stories ready to build and you want them dispatched in parallel
+- An Epic has several refined Stories ready to build and you want them dispatched together
+- One coherent change is split into phases and you'd rather keep your own context clean
 - You want one persistent Lead that knows where the Epic stands instead of couriering between sessions
 - `--rehearsal` — shake out skill friction against a fixture before a real run
 
 **What it produces:**
-- Up to 2 builder sessions, each running `/we:build` to a reviewable PR
-- A live roll-up (in-flight / PR-ready / blocked / held-by-cap) + a Lead review per PR
+- Worker branches merged onto one integration branch → **one PR**, CI run **once**
+- A live roll-up (in-flight / PR-ready / blocked) + a Lead review of the integrated diff
 
-**Differs from `/we:epic`:** `/we:epic` gives a read-only Status snapshot; `/we:orchestrate` is the dispatch sibling that actually spawns builders. **Won't do:** merge a PR, close a ticket, or exceed the ≤2 cap.
+**Differs from `/we:epic`:** `/we:epic` gives a read-only Status snapshot; `/we:orchestrate` is the dispatch sibling that actually spawns workers. **Differs from `/we:build`:** build is the solo single-Story pipeline; orchestrate coordinates multiple workers into one integration PR. **Won't do:** merge a PR or close a ticket.
 
 ---
 
@@ -449,8 +477,6 @@ Checks claims vs. implementation, finds drift, identifies redundancy with siblin
 - After a refactor that may have made docs stale
 - When you suspect a rule isn't triggering the way it should
 - Periodic doc sweeps
-
-**See:** [we/skills/doc-improve/USAGE.md](../we/skills/doc-improve/USAGE.md) — real-world use cases + a 28-file sweep case study.
 
 ---
 

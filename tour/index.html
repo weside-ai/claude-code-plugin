@@ -1167,7 +1167,7 @@
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
     <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — and how the optional <strong style="color:var(--fg)">weside</strong> Companions beam in.</p>
     <div class="meta-row">
-      <span>25 skills</span><span class="dot-sep">·</span>
+      <span>27 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
       <span>MIT Licensed</span><span class="dot-sep">·</span>
       <span>Works without an account</span>
@@ -1329,7 +1329,7 @@
           <dt>Meet</dt><dd><code>/we:meet saga</code> — Council → Epics</dd>
           <dt>Altitude</dt><dd>Theme — multi-bet, no calendar cap</dd>
           <dt>Artefact</dt><dd>SAGA.md · Epic backlog · rough sequencing</dd>
-          <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;saga&gt;/SAGA.md</code></dd>
+          <dt>Persist</dt><dd>always Markdown: <code>docs/plans/&lt;saga&gt;-saga.md</code></dd>
         </dl>
       </div>
       <div class="meeting-roster">
@@ -1464,7 +1464,7 @@
       <div class="story-step parallel"><div class="num">05</div><span class="tag">Parallel</span><h4>Quality gates</h4><p>One writer-aware reviewer + static + tests, in a single message — concurrent.</p></div>
       <div class="story-step"><div class="num">06</div><h4>Docs</h4><p>doc-architect proposes diffs. Never writes autonomously.</p></div>
       <div class="story-step"><div class="num">07</div><h4>PR</h4><p>Verifies all three quality gates first. Won't create a PR with failing gates.</p></div>
-      <div class="story-step parallel"><div class="num">08</div><span class="tag">Loop</span><h4>CI fix</h4><p>Collect ALL findings, fix in ONE commit, push ONCE. Max 3 cycles.</p></div>
+      <div class="story-step parallel"><div class="num">08</div><span class="tag">Loop</span><h4>CI fix</h4><p>Collect ALL findings, fix in ONE commit, push ONCE. One pass by default (max 2 cycles when looping).</p></div>
       <div class="story-step"><div class="num">09</div><h4>Hand off</h4><p>Ticket → In Review. Never „Done" — that move stays with you.</p></div>
     </div>
 
@@ -1481,8 +1481,8 @@
       </div>
       <div class="disc-mini-card blue">
         <div class="dmt">CI Loop · Bounded</div>
-        <div class="dmh">Batch-fix, max 3 cycles</div>
-        <div class="dmd">Findings collected, fixed in one commit, pushed once. After 3 cycles: stop &amp; ask.</div>
+        <div class="dmh">Batch-fix, one pass</div>
+        <div class="dmd">Findings collected, fixed in one commit, pushed once. One pass by default; if it loops, stop &amp; ask after 2 cycles.</div>
       </div>
       <div class="disc-mini-card purple">
         <div class="dmt">Resume · Safe</div>
