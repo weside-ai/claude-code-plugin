@@ -106,7 +106,7 @@ Before producing any output, gather the landscape fresh.
    - `${CLAUDE_PLUGIN_ROOT}/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
    - Don't load full contents — that's thousands of tokens.
 
-4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest `/we:coach` loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies.
+4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest `/we:coach` loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies. **If the manifest is absent in this repo** (most repos), note it once and ground from the plugin skill/agent descriptions instead — do not degrade silently.
 
 5. **Historical retros (if `--scan N`)**:
    - `ls docs/retros/ 2>/dev/null | sort -r | head -N` — last N retros

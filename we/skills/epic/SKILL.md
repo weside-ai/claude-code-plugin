@@ -8,7 +8,6 @@ description: >
   "refine epic", "new epic". Decompose into Stories via /we:meet epic.
 ---
 
-
 # Epic (Solo) — Product Owner at the Initiative altitude
 
 You hold the Epic at the Initiative altitude — a bounded deliverable that serves a Saga and ships a chunk of working product. This skill is the Solo half; the Council half is `/we:meet epic`. The two interleave: a Council to decompose or to re-cut, then Solo to sharpen the Epic doc itself.
@@ -21,204 +20,81 @@ You hold the Epic at the Initiative altitude — a bounded deliverable that serv
 
 ---
 
+## Shared skeleton
+
+**Read `${CLAUDE_PLUGIN_ROOT}/references/po-altitude.md` at boot** — it defines the Smart-Mode
+resolution (target + intent), Modes A–D (Status / Refine / Create / Mirror-refresh), the
+Jira-grouping convention, the Companion-voice rule, and the shared rules. This file binds the
+parameters and carries only what is Epic-specific.
+
+**Parameter binding:**
+
+| Parameter | Epic value |
+|---|---|
+| The doc | `docs/plans/<saga>-<epic>-epic.md` (CONCEPT) |
+| Parent doc | the Saga (`docs/plans/<saga>-saga.md`) — without it, flag the Epic as Saga-less |
+| Children | child **Stories** from the ticketing tool (via "Epic Link" / "Parent") |
+| No-ticketing fallback | scan `docs/plans/{KEY}-story.md` frontmatter (Context references this Epic) |
+| Active statuses (target resolution) | `draft \| in-progress \| selected` |
+| Meet command | `/we:meet epic` |
+| Downstream | `/we:story <KEY>` per Story |
+
+---
+
 ## Prerequisites
 
 - `.weside/` configured (run `/we:setup` once per project if missing — does not block this skill).
-- A ticketing tool is detected (priority: weside MCP → Atlassian MCP → `gh` CLI). The Epic doc lives on disk; child Stories typically live in the ticketing tool, and the Mirror block reads them. If none is detected, the skill falls back to scanning `docs/plans/{TICKET}-story.md` for child status and tells the user.
-- Parent Saga (`docs/plans/<saga>-saga.md`) is loaded if it exists. An Epic inherits its reason-to-exist from the Saga; without it, the Epic is flagged as Saga-less in the doc.
+- Ticketing tool detected per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`; none → filesystem fallback above, tell the user.
+- Parent Saga loaded if it exists.
 
 ---
 
-## Smart-Mode resolution — pick a mode without asking the user for parameters
+## Epic-specific pieces
 
-The skill decides what to do from the argument + the repo state. The user does not memorise flags.
+### Status (Mode A) extras
 
-### Step 1 — resolve the target Epic
+- Per child Story, also capture whether a refined plan exists at `docs/plans/{KEY}-story.md`
+  (legacy fallback `{KEY}-plan.md`) and render a **Refined** bucket (plan ready, not started)
+  plus a drift line `⚠ <N> sub-stories marked Active in ticketing without a refined plan`.
+- **Size check (Saga-in-disguise)** — render only when it fires: child Stories > ~10 AND active
+  for months with no single landing →
 
-Try in order, stop on first hit:
-
-1. **Explicit argument** — a ticketing key (e.g. `PROJ-42`), a path, or an epic slug. Use it.
-2. **Current branch name** contains a ticket key that maps to an Epic, or an Epic slug. Use it.
-3. **PWD is inside** `docs/plans/` and a `<saga>-<epic>-epic.md` is referenced. Use that Epic.
-4. **Most recent `status: draft|in-progress|selected`** `<saga>-<epic>-epic.md` in `docs/plans/`. Use it.
-5. **Nothing matched.** List the Epics under `docs/plans/` with their status and ask: *"Which Epic? [1/2/3/…]"*. One question, not four.
-
-### Step 2 — resolve the intent
-
-Read the argument and the user's prompt around it for intent words:
-
-| Signal | Mode |
-|---|---|
-| nothing, or just a target | **Status** (default) |
-| "refine" / "update" / "sharpen" / "tighten" / "nochmal" | **Refine** |
-| "new" / "neu" / "start" + a slug or name that does not exist yet | **Create** |
-| "refresh" / "sync" / "mirror" | **Mirror-refresh** |
-| ambiguous between two of the above | ask one question |
-
-Status is the default for a reason — it is the most common ask ("where are we?"), it is read-only, and it surfaces drift (Stories in the ticketing tool not yet in the plan, refined Stories that have not entered Build, blocker patterns) that the user often did not know to ask about. Refine is the heavier path; the user opts into it explicitly or accepts the Status-mode footer offer.
-
----
-
-## MODE A — Status (default, read-only)
-
-The 90%-case. The user wants to know where the Epic stands, what is in flight, what is drifting, and what to do next.
-
-### Step A1 — load
-
-- Read `docs/plans/<saga>-<epic>-epic.md` completely.
-- Read the parent Saga (`SAGA.md`) if present.
-- Fetch the child Stories from the ticketing tool, filtered to this Epic's child set (typically via "Epic Link" / "Parent" — the skill knows the conventions of the configured tool). Capture for each: key, title, status, last activity timestamp, blocker notes if any, and whether a refined plan exists at `docs/plans/{KEY}-story.md` (prefer `{KEY}-story.md`; fall back to legacy `{KEY}-plan.md` if the new-suffix file is absent).
-- If no ticketing tool: scan `docs/plans/*-story.md` whose Context section references this Epic, and use their frontmatter for status.
-
-### Step A2 — render the snapshot
-
-Output template (adapt to the Companion's voice if one is materialised — strict structure in the middle, warmth in the wrapper):
-
-```text
-Epic: <Epic Name> (<status>, started <YYYY-MM-DD>)
-docs/plans/<saga>-<epic>-epic.md
-
-Sub-Stories (<N> total):
-  Done (<n>):       <KEY> <Title>, <KEY> <Title>, …
-  Active (<n>):     <KEY> <Title> (in Build), <KEY> <Title> (in Review)
-  Refined (<n>):    <KEY> <Title> (plan ready, not started), …
-  Backlog (<n>):    <KEY> <Title> (no plan yet), …
-  Blocked (<n>):    <KEY> <Title> — <blocker>
-
-Drift since last Mirror refresh (<YYYY-MM-DD>):
-  + <N> sub-stor{y|ies} in ticketing not in CONCEPT.md mirror
-  - <N> mirror entries that no longer exist in ticketing
-  ! <N> stale-status entries (mirror says X, ticketing says Y)
-  ⚠ <N> sub-stor{y|ies} marked Active in ticketing without a refined plan at docs/plans/<KEY>-story.md
-  • <free-form drift notes — e.g. a phase in §Sequencing referenced as next is already Done, or a Story in the plan list has no corresponding ticket>
-
-Size check (Saga-in-disguise — render only when it fires):
+  ```text
   ⚠ <N> child Stories (> ~10) and active for <months> with no single landing —
-    this Epic is reading like a Saga. Consider `/we:saga promote <KEY>` to re-cut it
-    into Epics. (The same signal the Refine frame checks — surfaced here because the
-    90%-path is Status, and nobody re-runs Refine on a healthy-looking Epic.)
+    this Epic is reading like a Saga. Consider `/we:saga promote <KEY>` to re-cut it.
+  ```
 
-Risk-driven next move:
-  <one Story, one sentence why>. <one sentence what unblocks downstream / what de-risks the slice early>.
+  It lives in Status (not only Refine) because Status is the 90%-path — nobody re-runs Refine
+  on a healthy-looking Epic. Soft nudge, never a hard block.
+- Footer extras: `[s]` hand off to `/we:story <KEY>` (the recommended next Story — print the
+  command, never invoke inline); `[p]` promote to a Saga via `/we:saga promote <KEY>` (only
+  offered when the Size check fired; print, never invoke).
 
-What now?
-  [r] refresh the Mirror block + updates-log (lightweight, no plan-mode)
-  [f] full Refine of CONCEPT.md (plan-mode, prose changes welcome)
-  [m] convene `/we:meet epic` to re-decompose (heavy — only if Story set drifted structurally)
-  [s] hand off to `/we:story <KEY>` to refine the recommended next Story
-  [p] promote to a Saga (only offered when the Size check fired) — `/we:saga promote <KEY>`
-  [q] done
-```
-
-The **Size check** is F6: the "Saga in disguise" soft-warning used to fire only in
-Refine, which nobody re-runs on a healthy Epic — so an Epic could quietly grow to 40+
-children without the warning ever surfacing. Status is the 90%-path,
-so the check lives here too. Fire it when child Stories exceed ~10 **and** the Epic has
-been active for months with no clean landing. Do not hard-block; it is a soft nudge.
-
-### Step A3 — act on the choice
-
-- `r` → run **Mode D (Mirror-refresh)** inline.
-- `f` → hand off to **Mode B (Refine)**.
-- `m` → print *"To re-decompose this Epic into Stories, run `/we:meet epic`. I'll be here when you want to lock the CONCEPT afterwards."* and stop.
-- `s` → print *"To write the build-ready plan for `<KEY>`, run `/we:story <KEY>`."* and stop. Do not invoke `/we:story` inline — it is heavy and interactive.
-- `p` → (only when the Size check fired) print *"To promote this Epic into a Saga, run `/we:saga promote <KEY>`. It will propose the Epic cut and a re-parenting plan."* and stop. Do not invoke `/we:saga` inline.
-- `q` → stop.
-
-Status never writes to the `CONCEPT.md` itself.
-
----
-
-## MODE B — Refine (explicit)
-
-Triggered by intent words or by accepting `[f]` from a Status snapshot.
-
-### Step B1 — load + check the frame
-
-Same load step as A1. Read the parent SAGA. If `CONTEXT.md` exists at the repo root, use its canonical vocabulary throughout the Epic doc. Check the Epic against the frame:
-
-- **Why this slice now?** What part of the Saga does this Epic deliver, and why is it next?
-- **Target architecture seam.** The shape the implementation will take — the new primitive, the migration shape — not the implementation itself.
-- **Dependencies.** Other Epics, infra, external services, open decisions.
-- **Risk-driven sequencing.** What de-risks the slice early? What can be cut if the slice runs long?
-- **Success metric.** What shipped, what a user can do that they couldn't before, what telemetry confirms "this worked".
-- **Has scope drifted?** Are there Stories in the mirror that don't fit the Epic's frame? Are there Stories implied by the Saga that this Epic should pick up?
-- **Permanent-category check.** Does this Epic read like an area of work ("Mobile", "Backend") rather than a finishable initiative? If yes, soft-warn.
-- **Saga-in-disguise check.** Does the child-Story set keep growing without any landing? If yes, soft-warn.
-
-Propose tightening with reasoning. Ask focused questions when an answer is unclear — do not present option menus. The user pushes back when wrong.
-
-### Step B2 — draft (EnterPlanMode)
-
-Research the codebase where needed — load relevant `docs/architecture/` files if present, search for prior ADRs, read the parent SAGA. If a vault/MCP search is available, query for relevant architecture context for the Epic's topic and reference the top hits in the *Target architecture* section.
-
-Then enter plan mode and draft the sharpened `CONCEPT.md` using the template below. The Mirror block is auto-regenerated in the same step (fresh ticketing fetch), so a Refine always lands with a fresh mirror.
-
-**Always read referenced files completely** — no offset/limit. An Epic is a design-thinking artifact; incorrect assumptions at this altitude propagate into every Story below.
-
-### Step B3 — approval (ExitPlanMode)
-
-User reviews. On feedback → adjust. On approval → write.
-
-### Step B4 — persist and stop
-
-1. Write `docs/plans/<saga>-<epic>-epic.md` **directly to main** — no feature branch. CONCEPT.md is a planning artifact (like SAGA.md), not implementation code.
-2. If a ticketing-tool Epic exists for this slug, update its description with a pointer to the `CONCEPT.md` path. Do not duplicate content into the ticket — the Markdown is the source of truth.
-3. Output: see **Hand-off** section — the message depends on whether stories are already in the Mirror table.
-
-⛔ STOP. No decomposition. No `/we:story`. No `/we:meet epic`.
-
----
-
-## MODE C — Create (new Epic)
-
-Triggered when the resolved slug does not yet exist on disk.
-
-1. Locate the parent Saga. Read `docs/plans/<saga>-saga.md`. If no Saga exists, ask: *"No Saga document found. Run `/we:saga \"<saga-name>\"` first, or proceed Saga-less and flag it in the Epic? Default suggestion: run the Saga first."* Wait for the user's call.
-2. Walk the frame questions (see Step B1) in conversation. Do not draft until the why-now, the target architecture seam, the success metric, and the rough Story set are all named or explicitly deferred. If stories were already sketched in the conversation, create them as ticketing shells now so they appear in the Mirror table — this lets the hand-off skip `/we:meet epic`.
-3. Decide Markdown-only vs. with-ticket. If a ticketing tool is detected and the user has not said otherwise, default to creating the ticketing-tool Epic alongside the Markdown plan; Markdown-only is a fine first cut.
-4. EnterPlanMode — draft using the template below. The Mirror block is empty on a brand-new Epic if no child Stories were created yet.
-5. ExitPlanMode — approval.
-6. Persist: write `CONCEPT.md` **directly to main** (no feature branch — it's a planning artifact), optionally create the ticket, then stop. Same stop rule as Mode B.
-
-If during the conversation the scope balloons — many parallel themes, no nameable end, dependencies stretching across multiple areas — stop and tell the user: *"This is starting to read like a Saga, not an Epic. Want to step up to `/we:saga`, or trim the scope back to one finishable initiative?"* If the scope shrinks to a single change — one user-visible behaviour, one obvious AC set — tell the user: *"This is Story-sized. Want to drop down to `/we:story` instead?"* Both are soft warnings.
-
----
-
-## MODE D — Mirror-refresh (lightweight)
-
-Triggered from Status `[r]`, or by explicit "refresh" / "sync" / "mirror" intent words.
-
-This mode writes only the mirror block (between `<!-- mirror:start -->` and `<!-- mirror:end -->`), the `updated:` frontmatter date, and an entry in the Updates Log. It does NOT enter plan-mode and does NOT touch any prose section the user wrote.
-
-1. Fetch child Stories from ticketing (same as Status Step A1).
-2. Render the new mirror block (see *Mirror block format* below).
-3. Replace the existing block between the markers in-place. If markers are missing, insert the block under `## Stories` (create the heading if missing).
-4. Update the `updated:` frontmatter field to today.
-5. Append a single-line entry to the Updates Log: `- YYYY-MM-DD — mirror refresh (<N> child stories; +<a> added, −<b> removed, !<c> status-changed)`.
-6. Output: *"Mirror refreshed in `docs/plans/<saga>-<epic>-epic.md`. <N> child stories, drift cleared. /we:epic DONE."*
-
-⛔ STOP. No Refine continuation, no Council hand-off.
-
----
-
-## The Epic frame (reference)
-
-A good Epic answers:
+### The Epic frame (Refine Step B1 / Create walk)
 
 - **Why this slice now?** What part of the Saga does this Epic deliver, and why is it next?
 - **What user journeys are touched?** Which users feel the change when this Epic ships?
-- **What is the target architecture seam?** The new primitive, the migration shape — not the implementation, the SHAPE.
-- **What does it depend on?** Other Epics, infra, external services, open decisions.
-- **How does it sequence?** Risk-driven order. What de-risks the slice early? What can be cut if it runs long?
-- **What are the rough Stories?** A first-cut breakdown — Story names with acceptance shape. Detail comes from `/we:meet epic` later.
-- **When is it DONE?** The success metric.
+- **Target architecture seam.** The new primitive, the migration shape — not the implementation, the SHAPE.
+- **Dependencies.** Other Epics, infra, external services, open decisions.
+- **Risk-driven sequencing.** What de-risks the slice early? What can be cut if the slice runs long?
+- **What are the rough Stories?** First-cut breakdown — names with acceptance shape; detail comes from `/we:meet epic`.
+- **When is it DONE?** The success metric — what shipped, what a user can newly do, what telemetry confirms it.
+- **Scope-drift + boundary checks** — see the table below.
 
-The frame is the same as the legacy "quarter-sized" framing — the difference is that the skill no longer asserts "if this won't fit in a quarter, split it." Sizing-by-time-window is unreliable when the implementer's speed is the unknown. Size by *bet shape* — does it have an end, does it ship a coherent user-visible change — not by stopwatch.
+Sizing is by *bet shape* (does it have an end, does it ship a coherent user-visible change),
+not by time window — the legacy "quarter-sized" assertion is deliberately gone.
 
----
+### Create (Mode C) extras
 
-## Epic boundaries (soft warnings, not hard blocks)
+- If no Saga exists, ask: *"No Saga document found. Run `/we:saga \"<saga-name>\"` first, or
+  proceed Saga-less and flag it in the Epic?"* Default suggestion: run the Saga first. Wait.
+- If stories were already sketched in the conversation, create them as ticketing shells now so
+  they appear in the Mirror table — this lets the hand-off skip `/we:meet epic`.
+- Default to creating the ticketing-tool Epic alongside the Markdown when a tool is detected;
+  Markdown-only is a fine first cut. When creating the ticket: carry the Epic name, the
+  one-paragraph Vision section, and a pointer to the CONCEPT path — never the full template.
+
+### Epic boundaries (soft warnings, not hard blocks)
 
 | Signal | Soft warning |
 |---|---|
@@ -229,44 +105,18 @@ The frame is the same as the legacy "quarter-sized" framing — the difference i
 
 The user decides. The skill does not block.
 
----
+### Epic status (lifecycle)
 
-## Children Mirror — block format
+`status:` frontmatter of the Epic itself: **In Progress** (actively shipping) · **Selected**
+(refined, next up) · **Backlog** (formulated, paused) · **Done** (all Stories shipped, no
+further scope). Stories emerge during work — an Epic that gains a Story is doing its job; an
+Epic that *doubles* mid-flight is a scope failure — soft-warn, suggest a re-cut or split.
 
-Format, markers, status buckets, and refresh rules: `${CLAUDE_PLUGIN_ROOT}/references/mirror-block.md`. The epic table carries the **Plan** column (`✓` if `docs/plans/<KEY>-story.md` exists — the refined-vs-not signal).
+### Mirror block
 
----
-
-## Epic status (lifecycle)
-
-The Epic itself (not its Stories) tracks lifecycle in its `status:` frontmatter:
-
-- **In Progress** — actively shipping Stories under this Epic.
-- **Selected** — refined, next up. The first Story is ready to enter Build.
-- **Backlog** — formulated but paused. Comes back when capacity opens.
-- **Done** — all Stories shipped AND no further scope is being added.
-
-Stories emerge during work — this is normal. An Epic that gains a Story is not a scope failure; it is the Epic doing its job. An Epic that *doubles* mid-flight is a scope failure — soft-warn, suggest a re-cut or a split.
-
----
-
-## Ticketing integration
-
-The Epic doc itself is always Markdown. Optionally, a ticketing-tool Epic of the same name exists as an index — useful for sprint planning tools that read from the ticket tree.
-
-**Jira-grouping convention — `[<saga-slug>] <Epic Title>`.** Ticketing tools have no
-Saga level (Jira knows only Epic→Story). So when this Epic belongs to a Saga, prefix
-the ticketing Epic's **title** with the saga-slug in brackets — e.g.
-`[presence] Teams Enterprise Surface`. This is what makes saga membership visible in
-the flat Epic list: `summary ~ "[presence]"` (JQL) or a text filter lists exactly that
-Saga's Epics. The bracket-prefix is the *only* place the Saga appears in ticketing —
-the Saga itself never gets its own ticket (it is Markdown-only at `docs/plans/<saga>-saga.md`).
-The Epic's own slug + parent saga live in its frontmatter (`epic:`, `saga:`); the
-filename `docs/plans/<saga>-<epic>-epic.md` carries the grouping on disk.
-
-Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (GitHub-Issues mode uses a label or Milestone; none → Markdown-only filesystem scan).
-
-**When creating a ticket:** carry the Epic name, the one-paragraph Vision section, and a pointer to the `CONCEPT.md` path. Do not duplicate the full template into the ticket — the Markdown is the source of truth.
+Format, markers, buckets, refresh rules: `${CLAUDE_PLUGIN_ROOT}/references/mirror-block.md`.
+The epic table carries the **Plan** column (`✓` if `docs/plans/<KEY>-story.md` exists — the
+refined-vs-not signal).
 
 ---
 
@@ -352,52 +202,23 @@ couldn't before, what telemetry confirms "this worked". One paragraph.]
 
 After Refine or Create, the path depends on whether the Stories table already has entries:
 
-**Stories already in the Mirror table** (sketched during Create, or child tickets exist):
-→ Go directly to **`/we:story <KEY>`** per Story to write the build-ready plan.
-  Skip `/we:meet epic` unless the decomposition feels contentious or the sequencing is unclear.
+- **Stories already in the Mirror table** → go directly to **`/we:story <KEY>`** per Story.
+  Skip `/we:meet epic` unless the decomposition feels contentious or sequencing is unclear.
+- **Stories table is empty** → either run **`/we:meet epic`** (the Council validates the slice
+  and decomposes into Story shapes — worth it when the Epic is new, contentious, or seams
+  compete), or sketch stories yourself, Refine again, then go straight to `/we:story`.
 
-**Stories table is empty** (brand-new Epic, no stories yet):
-→ Either run **`/we:meet epic`** — the Council validates the slice and decomposes it into
-  Stories with rough AC and sequencing (worth it when the Epic is new, the scope is
-  contentious, or architecture seams compete); or sketch stories yourself and run another
-  Refine pass, then go straight to `/we:story`.
-
-**`/we:meet epic` is not a mandatory step.** It adds value for contentious decomposition;
-it is overhead for a well-formulated Epic with clear stories. The Council produces story
-*shapes* (names, rough AC, sequencing) — you still need `/we:story <KEY>` per Story
-afterwards to write the build-ready implementation plan.
-
-Epic Solo never decomposes inline. Stories produced by the hand-off path (with or without
-a Council meeting) each need their own `/we:story` run.
-
-After Status:
-
-- The footer offers `[r]` Mirror-refresh, `[f]` full Refine, `[m]` `/we:meet epic`, `[s]` `/we:story <KEY>` (the recommended next Story), `[q]` done. The user picks; the skill never silent-continues.
+`/we:meet epic` is not mandatory — it adds value for contentious decomposition, it is overhead
+for a well-formulated Epic. Either way, each Story still needs its own `/we:story <KEY>` run;
+Epic Solo never decomposes inline.
 
 ---
 
-## Companion voice
+## Epic-specific rules
 
-Wrap outputs in the Companion's voice when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
+(Shared rules live in `po-altitude.md` — these are additional:)
 
----
-
-## Rules
-
-- ALWAYS resolve the target Epic and the mode from argument + repo state before asking the user anything
-- ALWAYS run Status as the default when no intent is signalled — read-only is the safe default
-- ALWAYS regenerate the Mirror block when Refine runs (Refine implies fresh ticketing data)
-- ALWAYS use EnterPlanMode + ExitPlanMode for Refine and Create
-- ALWAYS save Refine / Create output to `docs/plans/<saga>-<epic>-epic.md` — never anywhere else
-- ALWAYS commit CONCEPT.md directly to main — it is a planning artifact, not implementation code
-- ⛔ NEVER create a feature branch for CONCEPT.md — feature branches are for /we:story + /we:build
-- ALWAYS write a Vision section as a narrative during Refine — the decomposition meeting reads it FIRST
-- ALWAYS name explicit OUT-of-scope items during Refine — they are the easiest cut if the slice runs long
-- ALWAYS write in English — same convention as the rest of the plan tree
-- ⛔ NEVER decompose the Epic into Stories inline — that is `/we:meet epic`
-- ⛔ NEVER write a full `/we:story` plan inside an Epic session — Stories are downstream, hand off
-- ⛔ NEVER touch user-owned prose during Mirror-refresh — only the marker-enclosed block, `updated:`, and the Updates Log
-- ⛔ NEVER auto-continue from Status to Refine to Decompose — each transition needs an explicit user choice
-- ⛔ NEVER block on a sizing rule (quarters, story-counts, age) — soft-warn the user, let them decide
-- ⛔ NEVER treat a permanent area of work ("Mobile", "Backend") as an Epic — soft-warn and suggest reframing
-- ⛔ After persisting a write: STOP IMMEDIATELY — no further skill calls
+- ALWAYS write a narrative Vision section during Refine — the decomposition meeting reads it FIRST.
+- ALWAYS name explicit OUT-of-scope items — the easiest cut if the slice runs long.
+- ⛔ NEVER write a full `/we:story` plan inside an Epic session — Stories are downstream, hand off.
+- ⛔ NEVER treat a permanent area of work as an Epic — soft-warn and suggest reframing.

@@ -22,11 +22,7 @@ description: >
 >
 > Both modes share the same Boot Protocol. The intent-detection rule decides which one to enter — see [Mode Selection](#mode-selection) below.
 >
-> **For process frictions and retrospectives,** use the sibling skill `/we:retro` — it does comprehensive scanning of the PR + CI cycle and proposes concrete rule-file changes. Coach is the *where-am-I/what-next* advisor; `/we:retro` is the dedicated improvement engine.
->
-> **Sibling skill: `/we:retro`.** When the user wants a *systematic full pass* over the recent PR + CI cycle (not just one reported pain point), hand off to `/we:retro`. Coach also offers `/we:retro` proactively when it detects retro-worthy signals during boot (PR just merged, CI cycles ≥ 3, end-of-session). See [Suggesting sibling skills](#suggesting-sibling-skills) below.
->
-> **Sibling skill: `/we:handoff`.** When the user wants durable cross-session continuity (write the current state to disk, resume in a new session after `/clear` or tomorrow), hand off to `/we:handoff`. Coach surfaces an active handoff at boot (Step 10) and offers `/we:handoff --write` at end-of-session signals. See [Suggesting sibling skills](#suggesting-sibling-skills) below.
+> **Sibling skills:** `/we:retro` (systematic pass over the PR + CI cycle — the improvement engine; Coach is the where-am-I advisor) and `/we:handoff` (durable cross-session continuity). When to notice, offer, and hand off: [Suggesting sibling skills](#suggesting-sibling-skills) below — that section is the spec.
 >
 > **Disambiguation.** The Coach (this skill) is a cross-altitude one-on-one advisor. The Scrum Master *lens* (`council-scrum-master`) is a different construct: one chair at a Council, scoped to flow inside a single deliberation. Both exist; both are useful. They operate at different layers — Coach is advisory *across* altitudes; the SM lens is one perspective *inside* a Council. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude and council overview.
 >
@@ -112,7 +108,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    "named companion + caught up"-entry for any session, not just the
    ones started under the auto-materialize hook.
 
-8. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index of the APO method, and load the compact sections it points to (the altitude table in `meetings.md`, the pipeline in `workflow.md`, the skill catalog in `skills.md`). This is what lets the Coach explain the plugin + the APO method accurately and currently **without the user explaining anything**. Load the indexed *sections*, not full skill bodies. `/we:retro` loads the same manifest — the two stay grounded identically.
+8. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index of the APO method, and load the compact sections it points to (the altitude table in `meetings.md`, the pipeline in `workflow.md`, the skill catalog in `skills.md`). This is what lets the Coach explain the plugin + the APO method accurately and currently **without the user explaining anything**. Load the indexed *sections*, not full skill bodies. `/we:retro` loads the same manifest — the two stay grounded identically. **If the manifest is absent in this repo** (most repos), note it once and ground from the plugin's own skill/agent landscape (Steps 4–6) instead — do not degrade silently.
 
 9. **Repo state** — for ADVISOR mode primarily, but useful for RETRO too:
    - `find docs/plans -type f -name '*.md' | head -20` — see which Plan artefacts exist
@@ -252,9 +248,7 @@ SCOPE IS CLEAR. Run this next:
 I'll be back when you want the next move after the Council synthesises.
 ```
 
-The heavy skills are: `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:meet *`, `/we:build`, `/we:setup`, `/we:onboarding`, `/we:sideload`, `/we:doc-improve`, `/we:audit*`, `/we:smoketest`, `/we:find-dead-code`, `/we:pr`, `/we:ci-review`, `/we:review`, `/we:static`, `/we:test`, `/we:docs`, `/we:materialize`.
-
-So in practice: print the hand-off for nearly every skill; inline-launch only `/we:council`.
+In practice: **every skill except `/we:council` is heavy** — print the hand-off; inline-launch only `/we:council`.
 
 ### Step A5: Loop or close
 
