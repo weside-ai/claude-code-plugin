@@ -82,10 +82,10 @@ You hand the ticket key to `/we:build`. It runs the entire build pipeline autono
 flowchart TB
     Start["/we:build TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
     DoR --> Dev[Step 2: Develop<br/>phase by phase from plan]
-    Dev --> AC[Step 3: AC verification<br/>BLOCKING checkpoint]
+    Dev --> AC[Step 3: AC + DoD verification<br/>BLOCKING checkpoint]
     AC --> Simp[Step 4: Simplify<br/>code quality pass]
     Simp --> Gates[Step 5: Quality gates<br/>PARALLEL]
-    Gates --> Review["/we:review"]
+    Gates --> Review["writer-aware reviewer<br/>codex adversarial or code-reviewer"]
     Gates --> Static["/we:static"]
     Gates --> Test["/we:test"]
     Review & Static & Test --> Docs[Step 6: /we:docs<br/>doc-architect proposes diffs]
@@ -104,11 +104,11 @@ flowchart TB
 |---|---|---|
 | **1. Git prep** | Worktree, branch, ticket → In Progress | Worktree isolates the work; if you opt out (`no worktree`), uses a regular branch |
 | **2. Develop** | Implement plan phase by phase | TDD: tests alongside code. Auto-fix runs after each phase. |
-| **3. AC verify** | Every acceptance criterion checked with concrete evidence | **Blocking.** No item passes without a citation (file:line, test name, commit). |
+| **3. AC + DoD verify** | Every acceptance criterion checked with concrete evidence, plus the DoD Quick Check against the diff | **Blocking.** No AC passes without a citation (file:line, test name, commit); any DoD failure blocks too. Model-agnostic — the build session runs it, independent of which reviewer runs in Step 5. |
 | **4. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers |
-| **5. Quality gates** | Local reviewers + static analysis + tests, all in parallel | Three subagents, single message dispatch. Which local reviewers run is config-driven: the story's `review_intensity` (light/standard/deep) selects the first-N of the repo's `review.available` local reviewers (`claude` code-reviewer, `codex`). |
+| **5. Quality gates** | One local reviewer + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one local reviewer runs, chosen by who wrote the code:** Claude wrote + codex available + `review.cross` → `/codex:adversarial-review` (the `code-reviewer` agent does not also run); otherwise the `code-reviewer` agent. AC/DoD were already gated in Step 3. |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
-| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. The repo's configured CI reviewers (`review.available`, e.g. CodeRabbit) run on GitHub if installed; other hosts use local quality gates. |
+| **7. PR** | `/we:pr` verifies all 3 quality-gate checkpoints first | Will not create a PR with failing gates. Any CI reviewers the repo lists in `review.available` run on GitHub if installed; other hosts use local quality gates. |
 | **8. CI fix** | Inline loop — collect findings, fix all, push once | Max 3 cycles. Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
 | **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
 
@@ -127,7 +127,7 @@ flowchart TB
 
 Legitimate interruptions stay:
 - Circuit breaker (3 failures in same phase)
-- AC verification gate (blocking by design)
+- AC + DoD verification gate (blocking by design)
 - Plan ambiguity that blocks implementation (concrete, named gap)
 - Destructive action requiring confirmation (force-push, dropping data, etc.)
 
@@ -141,7 +141,7 @@ You receive a PR with:
 
 - All acceptance criteria implemented
 - Tests passing
-- Code reviewed (by the repo's configured reviewers — `code-reviewer` + any local/CI reviewers in `review.available`; local quality gates are authoritative when no GitHub reviewer is present)
+- Code reviewed (one local reviewer chosen by writer — `/codex:adversarial-review` when Claude wrote and codex is configured, else the `code-reviewer` agent — plus Claude Review on GitHub CI; local gates are authoritative when no GitHub reviewer is present)
 - Docs proposed and applied
 - CI green
 - Ticket in *In Review*
@@ -152,7 +152,7 @@ You review the PR (your eyes, your call), merge it, close the ticket. Done. Ther
 
 ## Phase 4: Retro with `/we:retro`
 
-The cycle doesn't end at Deliver — it closes. Every PR teaches something: a CI check that flipped red, a CodeRabbit thread that blocked merge, a workflow gap that cost two extra cycles, a manual correction the agent should have known to skip. `/we:retro` is where those lessons stop being one-off Slack threads and start being durable rules.
+The cycle doesn't end at Deliver — it closes. Every PR teaches something: a CI check that flipped red, a review-bot thread that blocked merge, a workflow gap that cost two extra cycles, a manual correction the agent should have known to skip. `/we:retro` is where those lessons stop being one-off Slack threads and start being durable rules.
 
 ```mermaid
 flowchart LR
@@ -174,8 +174,8 @@ flowchart LR
 | Step | What |
 |---|---|
 | **Source scope** | Default: current branch + last merged PR. `--pr N` for a specific PR. `--scan N` to also read the last N retros in `docs/retros/` for recurring patterns. |
-| **Data fetch** | Session transcript (what the agent did) + external CI/review data via `gh api` on GitHub (CI checks, CodeRabbit threads, push-fix-push cycles) — or the session transcript alone when `gh` is unavailable. |
-| **Triage** | Each friction classified by surface: CI/static, CI/tests, CI/build, Review/CodeRabbit, Review/human, Workflow/cycle-count, Agent/manual-correction, Agent/iteration-loop, Tooling/friction. |
+| **Data fetch** | Session transcript (what the agent did) + external CI/review data via `gh api` on GitHub (CI checks, review-bot threads, push-fix-push cycles) — or the session transcript alone when `gh` is unavailable. |
+| **Triage** | Each friction classified by surface: CI/static, CI/tests, CI/build, Review/bot, Review/human, Workflow/cycle-count, Agent/manual-correction, Agent/iteration-loop, Tooling/friction. |
 | **Propose** | Each friction → 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/` over `CLAUDE.md` over `docs/`; plugin MDs rare and explicitly flagged), effort tag, diff preview. |
 | **Per-item gate** | `[y / n / edit-path / skip-for-later]` for each proposal. Never silent. |
 | **Apply** | Approved items → Edit/Write. Default PR-workflow in user repo; direct-commit if repo configured that way. |

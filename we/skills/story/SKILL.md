@@ -155,7 +155,6 @@ epic: {EPIC-SLUG-OR-KEY}  # parent epic's slug or ticketing key — REQUIRED whe
 created: YYYY-MM-DD
 status: draft
 parallel_groups: []  # optional: [[N, M, ...], ...] — phase numbers that can run concurrently (disjoint files + no ordering dependency). See independence-check note in Implementation Phases before filling.
-review_intensity: standard  # optional: light | standard | deep — how many of the repo's configured local reviewers /we:build runs (first-N over .weside/config.json `review.available`: light=1, standard=2, deep=all). Omit = standard.
 ---
 
 # Plan: [Story Title]
@@ -346,7 +345,6 @@ Detection priority + Jira-not-connected hint: `${CLAUDE_PLUGIN_ROOT}/references/
 - ALWAYS use EnterPlanMode for plan creation
 - ALWAYS follow Step 6 post-approval checklist IN ORDER: Save plan → Update ticket → Commit → Checkpoint → Stop
 - ALWAYS save plan to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent
-- OPTIONALLY set `review_intensity` (light | standard | deep) in the plan frontmatter — controls how many of the repo's configured local reviewers `/we:build` runs (first-N over `.weside/config.json` `review.available`). Omit = standard. Bump to `deep` for high-risk stories (security, data-loss, money paths); drop to `light` for trivial ones.
 - ALWAYS set the `epic:` frontmatter field to the parent Epic's slug-or-key when the story belongs to an Epic — `/we:orchestrate`'s ready-set matching filters stories by this field; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
 - The story plan filename suffix is `-story.md` (legacy `-plan.md` still read by /we:build for back-compat).
 - ALWAYS decompose the plan into real `### Phase` blocks with per-phase `**Files:**`, and fill `parallel_groups` when phases are disjoint + unordered — even for a small story. Phases are the structure `/we:orchestrate` (Mode B chunks) and `/we:build` (Mode B fan-out) both read.

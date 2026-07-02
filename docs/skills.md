@@ -100,7 +100,6 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 **What it produces:**
 - Ticket in your ticketing tool (minimal: user-story format)
 - `docs/plans/{TICKET}-story.md` (detailed: context, ACs, phases, design decisions, security review)
-- Optional `review_intensity` (light/standard/deep) in the plan frontmatter — controls how many of the repo's configured local reviewers `/we:build` runs. Bump to `deep` for high-risk stories, `light` for trivial ones; omit = standard.
 
 **Hand-off:** to `/we:build` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
 
@@ -141,7 +140,7 @@ Build orchestrator — the autonomous half of the pipeline. Once you trigger it,
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
 
-Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures plus whatever AI reviewers the repo configured in `review.available` (e.g. CodeRabbit) on GitHub; triages them; fixes them in one batch; pushes once. Reviewer-agnostic — the bot-thread allowlist is built from `review.available`. On repos without a GitHub AI reviewer, local quality gates serve as the sole review signal.
+Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures plus whatever AI reviewers the repo configured in `review.available` on GitHub; triages them; fixes them in one batch; pushes once. Reviewer-agnostic — the bot-thread allowlist is built from `review.available`. On repos without a GitHub AI reviewer, local quality gates serve as the sole review signal.
 
 **When to use standalone:**
 - After CI failed on a PR not driven by `/we:build`
@@ -192,7 +191,7 @@ These also run standalone for one-off checks.
 
 ### `/we:review`
 
-Diff-based code review. Checks AC alignment, max 10 issues. Dispatched as a background agent (`code-reviewer`) by `/we:build` Step 5; runs alongside `/we:static` and `/we:test`.
+Diff-based code review, max 10 issues. Dispatched as a background agent (`code-reviewer`) alongside `/we:static` and `/we:test`. In `/we:build` Step 5 it runs only when Claude did not hand the review to `/codex:adversarial-review` (writer-aware single-reviewer rule), and AC + DoD were already gated in Step 3 — so inside the pipeline it reviews for bugs/security/design. Run directly via `/we:review` (no gate ahead of it), it does the full review including AC alignment and the DoD Quick Check.
 
 ### `/we:static`
 
@@ -204,7 +203,7 @@ Runs tests affected by the current changes. Auto-detects framework (pytest, jest
 
 ### `/we:pr`
 
-Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. The repo's configured GitHub AI reviewers (`review.available`, e.g. CodeRabbit) review after the PR opens; on other hosts or without a GitHub reviewer, the local quality gates are treated as authoritative.
+Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. The repo's configured GitHub AI reviewers (`review.available`) review after the PR opens; on other hosts or without a GitHub reviewer, the local quality gates are treated as authoritative.
 
 ### `/we:docs`
 
@@ -316,7 +315,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 > *Systematic continuous-improvement pass on the just-shipped cycle. Every error happens exactly once.*
 
-`/we:retro` is the dedicated retrospective skill. It reads two complementary sources — the **session transcript** (what the agent *did*) and the **GitHub PR + CI history** via `gh api` (what failed *externally* — checks, CodeRabbit threads, push-fix-push cycles) — and surfaces engineering frictions that cost time during the cycle. For each friction it drafts 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/<topic>.md`, then `CLAUDE.md`, then `docs/`; plugin MDs rare and explicitly flagged), an effort tag, and a diff preview. You approve per item via `[y / n / edit-path / skip-for-later]`. Approved items get applied via Edit/Write — default PR-workflow in the user repo, direct-commit when the repo is configured for it. A retro log (`docs/retros/YYYY-MM-DD-<topic>.md`) is always written, regardless of how many proposals applied — that's the corpus the optional `--scan N` flag reads later to surface recurring patterns across past retros.
+`/we:retro` is the dedicated retrospective skill. It reads two complementary sources — the **session transcript** (what the agent *did*) and the **GitHub PR + CI history** via `gh api` (what failed *externally* — checks, review-bot threads, push-fix-push cycles) — and surfaces engineering frictions that cost time during the cycle. For each friction it drafts 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/<topic>.md`, then `CLAUDE.md`, then `docs/`; plugin MDs rare and explicitly flagged), an effort tag, and a diff preview. You approve per item via `[y / n / edit-path / skip-for-later]`. Approved items get applied via Edit/Write — default PR-workflow in the user repo, direct-commit when the repo is configured for it. A retro log (`docs/retros/YYYY-MM-DD-<topic>.md`) is always written, regardless of how many proposals applied — that's the corpus the optional `--scan N` flag reads later to surface recurring patterns across past retros.
 
 **Privacy guard (mandatory):** if session content reads as personal, skip it — analyse only engineering surfaces (tool calls, file diffs, CI logs, PR comments). Companion-mode conversations, `save_memory` payloads, and `save_compass` writes are categorically out-of-scope.
 
@@ -374,7 +373,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 > *Project onboarding — detect stack + ticketing, write `.weside/config.json`, optionally compose crew.*
 
-Run once per project. Interactive (4 core questions, ~5 minutes) — vision, ticketing, stack, and which code reviewers the repo uses (the ordered `review.available` list, free-text-extendable; the order is the intensity policy `/we:build` reads).
+Run once per project. Interactive (4 core questions, ~5 minutes) — vision, ticketing, stack, and which code reviewers the repo uses (the ordered `review.available` list, free-text-extendable; put your preferred local reviewer first, and the order also seeds the CI-bot allowlist `/we:ci-review` reads).
 
 **Idempotent:** re-running doesn't overwrite existing config; it reports current state and asks before changes.
 

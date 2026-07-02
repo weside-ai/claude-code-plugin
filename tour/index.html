@@ -1459,9 +1459,9 @@
     <div class="story-flow">
       <div class="story-step"><div class="num">01</div><h4>Git prep</h4><p>Worktree, branch, ticket → In Progress.</p></div>
       <div class="story-step"><div class="num">02</div><h4>Develop</h4><p>Implement plan phase by phase. TDD where it fits. Auto-fix after each phase.</p></div>
-      <div class="story-step gate"><div class="num">03</div><span class="tag">Blocking</span><h4>AC verify</h4><p>Every AC checked with concrete evidence. No item passes without a file:line citation.</p></div>
+      <div class="story-step gate"><div class="num">03</div><span class="tag">Blocking</span><h4>AC + DoD verify</h4><p>Every AC checked with concrete evidence — no item passes without a file:line citation — plus the DoD checked against the diff.</p></div>
       <div class="story-step"><div class="num">04</div><h4>Simplify</h4><p>Remove dead code, simplify expressions, reuse helpers.</p></div>
-      <div class="story-step parallel"><div class="num">05</div><span class="tag">Parallel</span><h4>Quality gates</h4><p>Code review + static + tests. Three subagents in a single message — concurrent.</p></div>
+      <div class="story-step parallel"><div class="num">05</div><span class="tag">Parallel</span><h4>Quality gates</h4><p>One writer-aware reviewer + static + tests, in a single message — concurrent.</p></div>
       <div class="story-step"><div class="num">06</div><h4>Docs</h4><p>doc-architect proposes diffs. Never writes autonomously.</p></div>
       <div class="story-step"><div class="num">07</div><h4>PR</h4><p>Verifies all three quality gates first. Won't create a PR with failing gates.</p></div>
       <div class="story-step parallel"><div class="num">08</div><span class="tag">Loop</span><h4>CI fix</h4><p>Collect ALL findings, fix in ONE commit, push ONCE. Max 3 cycles.</p></div>
@@ -1470,14 +1470,14 @@
 
     <div class="discipline-mini">
       <div class="disc-mini-card danger">
-        <div class="dmt">AC Verify · Blocking</div>
+        <div class="dmt">AC + DoD · Blocking</div>
         <div class="dmh">No claim without citation</div>
-        <div class="dmd">Step 3 will not pass an AC without file:line evidence. Halts and asks if it can't.</div>
+        <div class="dmd">Step 3 won't pass an AC without file:line evidence, and checks the DoD against the diff. Halts and asks if it can't.</div>
       </div>
       <div class="disc-mini-card green">
         <div class="dmt">Gates · Parallel</div>
-        <div class="dmh">Three reviewers, one wait</div>
-        <div class="dmd">Step 5 dispatches review + static + tests in a single message. Concurrent fan-out.</div>
+        <div class="dmh">One reviewer, one wait</div>
+        <div class="dmd">Step 5 dispatches review + static + tests in a single message. One writer-aware reviewer — the model that didn't write the code.</div>
       </div>
       <div class="disc-mini-card blue">
         <div class="dmt">CI Loop · Bounded</div>
@@ -1491,7 +1491,7 @@
       </div>
     </div>
 
-    <p class="lede" style="margin-top: 1.5rem;"><strong style="color:var(--fg)">/we:build</strong> is the solo fast path shown above — one Story, one pipeline, one PR. For multi-chunk or phased work use <code>/we:orchestrate</code>: the Lead dispatches workers via <code>/we:develop</code> (implement → local gates → commit → push, no PR, no CI). Workers run on <strong>cheap Claude</strong> (Sonnet/Haiku) by default — no extra install. Two optional backends: <strong>Codex</strong> (<code>gpt-5-codex</code>, opt-in) and <strong>foreign engines</strong> (any Anthropic-compatible endpoint via <code>.weside/engines.local.json</code>). Workers push branches; the Lead merges them onto one integration branch and runs CI once. Cross-review is on by default: whichever engine wrote the code, the other reviews it. The plugin never hard-depends on Codex or any foreign engine.</p>
+    <p class="lede" style="margin-top: 1.5rem;"><strong style="color:var(--fg)">/we:build</strong> is the solo fast path shown above — one Story, one pipeline, one PR. For multi-chunk or phased work use <code>/we:orchestrate</code>: the Lead dispatches workers via <code>/we:develop</code> (implement → local gates → commit → push, no PR, no CI). Workers run on <strong>cheap Claude</strong> (Sonnet/Haiku) by default — no extra install. Two optional backends: <strong>Codex</strong> (<code>gpt-5-codex</code>, opt-in) and <strong>foreign engines</strong> (any Anthropic-compatible endpoint via <code>.weside/engines.local.json</code>). Workers push branches; the Lead merges them onto one integration branch and runs CI once. Cross-review is on by default: whichever engine wrote the code, the other reviews it — Claude wrote → <code>/codex:adversarial-review</code>; Codex or a foreign engine wrote → the Claude <code>code-reviewer</code>. The plugin never hard-depends on Codex or any foreign engine.</p>
 
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
@@ -1529,7 +1529,7 @@
   <section id="retro">
     <div class="kicker">Station 10 · Retro · the harness improves itself</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:retro</code> — every error happens exactly once.</h2>
-    <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the shipped PR — session transcript + <code>gh api</code> (CI, CodeRabbit, push-fix cycles) — and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter every cycle.</p>
+    <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the shipped PR — session transcript + <code>gh api</code> (CI, review-bot threads, push-fix cycles) — and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter every cycle.</p>
 
     <div class="retro-demo">
       <div class="retro-col retro-pain">
@@ -1596,9 +1596,9 @@
         <ul>
           <li>All acceptance criteria implemented and evidenced</li>
           <li>Tests passing (unit + relevant integration)</li>
-          <li>Code reviewed (code-reviewer agent + CodeRabbit on GitHub)</li>
+          <li>Code reviewed (Codex adversarial-review locally + Claude Review on GitHub)</li>
           <li>Doc diffs proposed and applied</li>
-          <li>CI green (with CodeRabbit threads resolved)</li>
+          <li>CI green (all review threads resolved)</li>
           <li>Ticket sitting in „In Review"</li>
         </ul>
       </div>

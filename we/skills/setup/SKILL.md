@@ -113,8 +113,11 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
 4. "Which code reviewers does this repo use? (Auto-detected: {detected})"
    → Detect candidates: codex plugin installed → suggest `codex`;
      a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
-     `claude` (the local code-reviewer agent) is always available and listed first.
-   → Confirm the ORDER (it is the intensity policy — see below) or override.
+     `claude` (the local code-reviewer agent) is always available.
+   → **Codex detected → suggest the order `["codex", "claude"]`** (codex = the local
+     adversarial pass when Claude wrote the code; claude = the CI second opinion and the
+     local reviewer when codex didn't write / no CI). No codex → default `["claude"]`.
+   → Confirm or override.
    → "Add another reviewer? (free-text id, e.g. a custom bot — leave empty to finish)"
      → accept any id; unknown ids are treated as CI bots (allowlisted, not run locally).
    → Default when nothing else is detected: ["claude"].
@@ -163,11 +166,11 @@ things — the reviewer is the engine that didn't write the code."*
 
 **Reviewer-id semantics (single source of truth — other skills reference this):**
 
-+ `claude` → the local `code-reviewer` agent. Baseline local review, always first. Locally invokable.
-+ `codex` → local `/codex:review` via the codex plugin's `codex-companion.mjs`. Locally invokable (needs the codex plugin).
++ `claude` → the local `code-reviewer` agent. Runs as the local reviewer when no codex is present, when codex/a foreign engine wrote the code, and is the Claude second opinion on GitHub CI. Locally invokable.
++ `codex` → local `/codex:adversarial-review` via the codex plugin's `codex-companion.mjs`. The local adversarial pass when Claude wrote the code. Locally invokable (needs the codex plugin).
 + `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
 
-The list **order is the policy**: `/we:build` applies a story's `review_intensity` as a first-N rule over the *locally-invokable* entries (`light`=1, `standard`=2, `deep`=all-local). Put your preferred local reviewer first.
+**Exactly ONE local reviewer runs, chosen by who wrote the code** — not by list order and not by a count. The reviewer is the engine that did NOT write the code: Claude wrote + `tools.codex` + `review.cross` → `/codex:adversarial-review` (and the `code-reviewer` agent does NOT also run); codex/foreign wrote, or no codex → `code-reviewer`. So which local reviewer runs is decided by `tools.codex`/`review.cross`, *not* by whether `claude` or `codex` sits first in `review.available` — a repo with `tools.codex:true` gets the codex adversarial pass even if `review.available` lists `["claude"]`. The `review.available` list's job is to seed the CI-bot allowlist `/we:ci-review` collects from (Claude Review + any listed bots); its order is cosmetic for local review.
 
 ### Step 3: Save Configuration
 

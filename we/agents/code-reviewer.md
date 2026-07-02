@@ -22,6 +22,16 @@ color: purple
 
 ## Instructions
 
+### Step 0: Pipeline vs. standalone — DoD/AC gate
+
+If the invoking prompt contains the token `DOD_AND_AC_ALREADY_VERIFIED`, you are running inside
+`/we:build`'s pipeline, where Step 3 already verified acceptance criteria AND the DoD against the
+diff. In that case **skip the AC-Alignment table (Step 5) and the DoD Quick Check** entirely and
+review purely for bugs, security, design, and reachability — do not duplicate the gate's work.
+
+Without that token (e.g. a direct `/we:review` invocation), there is no gate ahead of you: run
+the **full** review including AC-Alignment and the DoD Quick Check as described below.
+
 ### Step 1: Get Context
 
 ```bash
