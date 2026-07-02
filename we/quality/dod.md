@@ -2,6 +2,8 @@
 
 **A story is DONE when all criteria below are met.**
 
+A repo can extend this checklist with its own criteria in `.weside/dod.md` (created by `/we:setup`); the `code-reviewer` agent reads it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
+
 ---
 
 ## Checklist

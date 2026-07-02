@@ -194,16 +194,29 @@ The `review.available` block is the **ordered** reviewer list from Step 2 Q4. Th
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
-If the user provided a vision or wants custom DoR/DoD:
+If the user provided a vision, save it to `.weside/vision.md`.
+
+**Repo-specific DoR/DoD additions:** Ask: *"Add repo-specific Definition-of-Ready / Definition-of-Done checks on top of the plugin defaults? (e.g. a security charter, a compliance rule) [y/n]"*
+
++ `n` → skip. The plugin uses only the built-in defaults from `quality/dor.md` and `quality/dod.md`.
++ `y` → ask which of DoR / DoD / both, then create `.weside/dor.md` and/or `.weside/dod.md` from this template:
+
+  ```markdown
+  <!-- Additive override — appended to the plugin DoR/DoD, not a replacement. -->
+
+  - [ ] Example: <your repo-specific check here>
+  ```
+
+  If the user already has a concrete check in mind, seed the file with that item instead of the placeholder.
+
+These files are **additive**, never a replacement: `/we:story` and `/we:build` read `.weside/dor.md` alongside the plugin DoR, and the `code-reviewer` agent reads `.weside/dod.md` alongside the plugin DoD — both sets of items apply.
 
 ```
 .weside/
 ├── vision.md    # Product vision (optional)
-├── dor.md       # Custom DoR overrides (optional)
-└── dod.md       # Custom DoD overrides (optional)
+├── dor.md       # Additive DoR overrides (optional)
+└── dod.md       # Additive DoD overrides (optional)
 ```
-
-Otherwise: plugin uses built-in defaults from `quality/dor.md` and `quality/dod.md`.
 
 ### Step 4: Confirm core config
 

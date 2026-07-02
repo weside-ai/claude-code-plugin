@@ -2,6 +2,8 @@
 
 **A story is READY for development when all criteria below are met.**
 
+A repo can extend this checklist with its own criteria in `.weside/dor.md` (created by `/we:setup`); `/we:story` and `/we:build` read it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
+
 ---
 
 ## Checklist

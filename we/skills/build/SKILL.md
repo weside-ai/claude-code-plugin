@@ -47,6 +47,8 @@ Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
 Read("${CLAUDE_PLUGIN_ROOT}/quality/dod.md")
 ```
 
+**Repo-local DoR/DoD additions (additive, optional):** resolve the repo root (`git rev-parse --show-toplevel`) and check for `<repo-root>/.weside/dor.md` and `<repo-root>/.weside/dod.md`. Read whichever exist and treat their items as ADDITIVE to the plugin defaults above — both the plugin checklist and the repo checklist apply, the repo files never replace the plugin defaults. Missing file(s) → silently proceed with the plugin defaults only.
+
 ---
 
 ## Orchestration CLI
@@ -109,7 +111,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 
 Load story from ticketing tool. Verify DoR: User Story, Plan exists (`${REPO_ROOT}/docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
 
-**Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output.
+**Plan Completeness Gate (3-item scan):** After confirming the plan file exists, scan it for completeness before loading architecture context or creating the worktree. This is a hard gate — an incomplete plan means the story was never properly refined and `/we:build` cannot produce correct output. The gate checks the plugin DoR; if `<repo-root>/.weside/dor.md` exists (see Prerequisites above), its items apply too — the plan must satisfy plugin DoR ∪ repo DoR, not plugin DoR alone.
 
 Check all three:
 

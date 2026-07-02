@@ -25,6 +25,8 @@ You produce or sharpen one Story — a sprint-sized feature slice with a build-r
 Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
 ```
 
+**Repo-local DoR additions (additive, optional):** resolve the repo root (`git rev-parse --show-toplevel`) and check for `<repo-root>/.weside/dor.md`. If it exists, read it too and treat its items as ADDITIVE to the plugin DoR above — both sets of criteria apply, the repo file never replaces the plugin defaults. If the file doesn't exist, silently proceed with the plugin defaults only.
+
 **Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first to verify prerequisites (`gh` CLI, Jira access, recommended plugins). Do NOT block — `/we:story` can proceed in degraded modes (no ticketing → Plan-only).
 
 ---
