@@ -10,92 +10,22 @@ The skill reads `docs/.audit-architecture.yml` from the **repo root** at the sta
 
 **Backward compatibility:** v2 configs (just `findings_dir`, `diagrams_dir`, `healthcheck`, `subsystems`) work unchanged on v3. All v3-additions are optional; the skill default-loads sensible defaults when sections are missing.
 
-## Full v3 Schema
+## Schema at a Glance
+
+Top-level keys of `docs/.audit-architecture.yml` — each is specified in its own section below
+(the sections are the owners; this list is just the map):
 
 ```yaml
-# REQUIRED (also in v2)
-findings_dir: docs/audits/
-diagrams_dir: docs/architecture/diagrams/
-
-# Phase 0 healthcheck (also in v2)
-healthcheck:
-  doc_drift:
-    enabled: true
-    target_glob: "docs/architecture/primitives/*.md"
-  bypass_register_drift:
-    enabled: true
-    register_path: "docs/architecture/BYPASS-REGISTER.md"
-    generator_script: "scripts/generate-bypass-register.sh"
-  missing_primitive_scan:
-    enabled: true
-    pr_count: 100
-    repo_paths:
-      - apps/backend/app/
-    keyword_patterns:
-      - "introduce"
-      - "centralize"
-      - "factory"
-
-# NEW v3: backend-root for hotspot scan (default: apps/backend/app)
-backend_root: apps/backend/app
-
-# NEW v3: lens activation (all optional, skill default-loads)
-default_lenses:
-  - encapsulation
-  - layering
-  - primitive-compliance
-  - security
-  - observability
-  - error-handling
-  - tests
-cross_cutting:
-  - encapsulation-boundaries
-  - architectural-significance
-  - doc-vs-reality-drift
-optional_lenses:
-  - personality-cohesion
-  - privacy
-
-# NEW v3: Phase 1 hotspot config (used by audit-hotspots.py)
-hotspots:
-  top_n: 15                          # default 15
-  since: "6 months ago"              # git log --since=
-  expected_hubs:                     # documented hubs (no surprise)
-    - apps/backend/app/main.py
-    - apps/backend/app/companion/core/being.py
-  encapsulation_homes:               # vendor home-paths for leak detection
-    langchain:
-      - apps/backend/app/companion/core/
-      - apps/backend/app/config/llm.py
-    langgraph:
-      - apps/backend/app/companion/core/
-  private_module_root: apps/backend/app/companion/core
-  primitive_detectors_extra: []      # project-specific override of catalog
-
-# NEW v3: optional Personality-Cohesion config (Companion-projects)
-personality_cohesion:
-  identity_construction_paths:
-    - apps/backend/app/companion/core/consciousness.py
-    - apps/backend/app/companion/core/_context_composer.py
-  five_components_map:
-    CONSCIOUSNESS: [apps/backend/app/companion/core/]
-    SENSES:        [apps/backend/app/senses/]
-    BODY:          [apps/backend/app/companion/channels/, apps/backend/app/tools/]
-    MEMORY:        [apps/backend/app/companion/core/memory.py, apps/backend/app/crud/memory.py]
-    EXPERIENCE:    [apps/backend/app/services/evolution/]
-  forbidden_outside_consciousness:
-    - "system_prompt ="
-    - "personality ="
-
-# Subsystems (extended v2 schema; new optional fields)
-subsystems:
-  - id: <kebab-case-id>
-    name: "<Human Name>"
-    mode: deep-audit | docs_only
-    architecture_docs: [...]
-    primitives: [...]
-    paths: [...]
-    extra_lens: [...]                # NEW v3: list of lens names (was string in v2)
+findings_dir: docs/audits/                    # REQUIRED (v2)
+diagrams_dir: docs/architecture/diagrams/     # REQUIRED (v2)
+healthcheck: {...}                            # Phase 0 — § Healthcheck Schema
+backend_root: apps/backend/app                # NEW v3 — hotspot scan root (default shown)
+default_lenses: [...]                         # NEW v3 — § Lens-Activation Schema
+cross_cutting: [...]                          #          "
+optional_lenses: [...]                        #          "
+hotspots: {...}                               # NEW v3 — § Hotspot Schema
+personality_cohesion: {...}                   # NEW v3 opt-in — § Personality-Cohesion Schema
+subsystems: [...]                             # v2, extended — § Subsystem Schema
 ```
 
 ## Healthcheck Schema (unchanged from v2)
@@ -156,8 +86,8 @@ hotspots:
       - <home-path-1>
       - <home-path-2>
   private_module_root: <relative path>          # used for `_*` private reach-in detection
-  primitive_detectors_extra:                    # project-specific override of plugin's primitives.default.yml
-    - name: <primitive-name>
+  primitive_detectors:                          # project-specific override of plugin's primitives.default.yml
+    - name: <primitive-name>                    # (this exact key — audit-hotspots.py reads `primitive_detectors`)
       patterns:
         - <regex>
 ```
@@ -166,23 +96,11 @@ If `hotspots:` is omitted entirely, Phase 1 still runs with skill defaults (top_
 
 ## Personality-Cohesion Schema (NEW v3, opt-in)
 
-Required ONLY if `personality-cohesion` is in `optional_lenses` AND activated (via `--lens=` or `extra_lens:`).
-
-```yaml
-personality_cohesion:
-  identity_construction_paths:                  # required: where identity MAY be constructed
-    - <path>
-  five_components_map:                          # required: each component's canonical home(s)
-    CONSCIOUSNESS: [<path>, ...]
-    SENSES:        [<path>, ...]
-    BODY:          [<path>, ...]
-    MEMORY:        [<path>, ...]
-    EXPERIENCE:    [<path>, ...]
-  forbidden_outside_consciousness:              # required: patterns that may NOT appear outside identity_construction_paths
-    - <pattern>
-```
-
-If the lens is activated but the config block is missing, the skill errors out with a helpful message — there is no useful default for what "personality" means in any given project.
+Required ONLY if `personality-cohesion` is in `optional_lenses` AND activated (via `--lens=` or
+`extra_lens:`). The full commented block (`identity_construction_paths`, `five_components_map`,
+`forbidden_outside_consciousness`) is owned by `references/personality-cohesion.md` § Project
+Configuration. If the lens is activated but the block is missing, the skill errors out — there
+is no useful default for what "personality" means in any given project.
 
 ## Subsystem Schema (extended v3)
 

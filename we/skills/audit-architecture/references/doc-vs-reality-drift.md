@@ -72,25 +72,9 @@ Output for each invariant:
 
 ### Step 4 — Render Drift Matrix
 
-```mermaid
-flowchart TB
-    subgraph T["observability-triad"]
-        T1["I1 ✓ no print() in production"]:::clean
-        T2["I2 ✗ 8 f-string logger calls"]:::critical
-        T3["I3 ✗ no trace_id middleware"]:::critical
-        T4["I4 ⚠ partial: secret-redaction only"]:::major
-        T5["I5 ✓ InstrumentedChatModel chokepoint"]:::clean
-        T6["I6 ✓ all cost paths metered"]:::clean
-        T7["I7 ✓ Sentry FastApiIntegration"]:::clean
-        T8["I8 ✗ user_id labels on counters"]:::critical
-    end
-
-    classDef clean fill:#ccffcc,stroke:#00aa00
-    classDef major fill:#ffe0b3,stroke:#ff9900
-    classDef critical fill:#ffcccc,stroke:#cc0000
-```
-
-(Severity classes: see `visualization.md`.)
+Render `drift-matrix.mmd` per the template in `visualization.md` § Type 4 — Drift Matrix
+(one subgraph per primitive doc, one node per invariant with verdict `✓/⚠/✗/?` + summary,
+severity classes from the registry there).
 
 ### Step 5 — File Findings for Drifts
 

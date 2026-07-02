@@ -7,10 +7,6 @@ description: Multi-phase backend architecture audit — Healthcheck → Hotspot-
 
 Multi-phase audit that surfaces architectural problem zones across **subsystem boundaries** (Phase 1 hotspot map), **conceptual cohesion** (Phase 3 lenses), and **doc-vs-reality drift** (Phase 3) — not just per-subsystem checklist runs. Each phase is independently runnable; the skill is a hammer that can also be a tweezers.
 
-**For the canonical architecture spec, read [`SPEC-v3.md`](SPEC-v3.md).**
-
----
-
 ## CLI Surface
 
 ```
@@ -47,12 +43,7 @@ Before any phase, load the project config and the lens library:
 
 ## Phase 0 — Healthcheck
 
-Read [`references/healthcheck.md`](references/healthcheck.md). Three checks (each toggleable via YAML's `healthcheck.<check>.enabled`):
-
-1. **Doc-Drift** — invoke `/we:doc-improve` over the configured `target_glob`.
-2. **Bypass-Register-Drift** — re-run the generator script, diff against committed register.
-3. **Missing-Primitive-Scan** — call `scripts/scan-recent-primitives.sh` with the project's config.
-4. **Graph-Drift (optional, output-only)** — if the project has a graphify graph (`**/graphify-out/graph.json`) AND a drift script (`scripts/graphify-drift.sh`), run it across the two most recent snapshots and include the node-churn + cohesion-trend output as an informational subsection. Never gates — skip silently when graph or script is absent.
+Read [`references/healthcheck.md`](references/healthcheck.md) — it owns the mechanics. Three checks (each toggleable via YAML's `healthcheck.<check>.enabled`): **Doc-Drift** (via `/we:doc-improve`), **Bypass-Register-Drift** (generator diff), **Missing-Primitive-Scan** (helper script) — plus the optional, output-only **Graph-Drift** check (healthcheck.md § Check 4; never gates, skips silently when absent).
 
 Output: section under `## Healthcheck` in `<findings_dir>/<date>-<scope>/master.md`.
 
@@ -128,6 +119,7 @@ Read each activated lens's reference doc:
 **Opt-in (only if in `optional_lenses` AND activated via `--lens=` or per-subsystem `extra_lens:`):**
 
 - [`references/personality-cohesion.md`](references/personality-cohesion.md) — Companion-as-Person verification
+- [`references/module-depth.md`](references/module-depth.md) — deep-vs-shallow module interfaces
 - Privacy lens: see `references/audit-checklist.md` § Privacy-Lens
 
 For each activated lens, follow its method section. Each lens produces 0..N findings using the template in `references/findings-template.md` § Per-Finding Template.
@@ -218,7 +210,7 @@ Plus the backward-compat redirect at `<findings_dir>/<date>-<scope>.md`.
 
 ## References
 
-- [`SPEC-v3.md`](SPEC-v3.md) — canonical architecture spec
+- [`SPEC-v3.md`](SPEC-v3.md) — design rationale for maintainers (goals, why-v3, future work) — not needed at runtime
 - [`references/subsystems.md`](references/subsystems.md) — YAML schema
 - [`references/lens-library.md`](references/lens-library.md) — lens registry + activation rules
 - [`references/healthcheck.md`](references/healthcheck.md) — Phase 0

@@ -5,7 +5,7 @@ description: Phase 0 healthcheck mechanics — doc-drift over primitive detail d
 
 # Phase 0: Healthcheck
 
-Three checks, all deterministic, all reuse existing project tooling.
+Three checks, all deterministic, all reuse existing project tooling — plus one optional, output-only fourth (Graph-Drift, below).
 
 ## Check 1: Doc-Drift in Primitive Detail Docs
 
@@ -100,6 +100,13 @@ for the implementation.
 Findings: any ⚠ row OR keyword hit becomes a MAJOR Promotion-Finding
 ("evaluate against promotion criteria from `.doc-architect.yml`:
 min_usages=3, requires_invariants, requires_bypass_cost").
+
+## Check 4 (optional, output-only): Graph-Drift
+
+**Mechanic:** only if the project has a graphify graph (`**/graphify-out/graph.json`) AND a
+drift script (`scripts/graphify-drift.sh`): run the script across the two most recent
+snapshots and include the node-churn + cohesion-trend output as an informational subsection.
+**Never gates** — skip silently when the graph or the script is absent.
 
 ## Aggregating into Findings-MD (v3)
 

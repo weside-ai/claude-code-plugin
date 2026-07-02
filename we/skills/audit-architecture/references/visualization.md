@@ -70,7 +70,7 @@ flowchart TB
     classDef chokepoint fill:#cce5ff,stroke:#0066cc
 ```
 
-**Convention:** apply only the severity class for the **maximum severity finding on that node**. Nodes without findings get default styling.
+**Convention:** severity-class application follows § Convention: Severity Decision below.
 
 ### Type 2 — Severity Pie Chart (Phase 4 master.md)
 
@@ -200,16 +200,7 @@ flowchart TB
 
 ## Master.md Layout (Phase 4)
 
-The master findings MD opens with:
-
-1. Frontmatter
-2. Title + Date + Scope
-3. Executive Summary (severity counts table)
-4. **Severity-Pie inline** (Type 2)
-5. **Hotspot-Quadrant inline** (Type 3, if Phase 1 ran)
-6. **Drift-Matrix inline** (Type 4, if Phase 3 doc-vs-reality ran)
-7. Reading-order recommendation
-8. Findings index (sortable by severity → lens → file)
-9. Sub-file links
-
-Visual scan of the 3 inline charts gives the reader an immediate intensity sense before they dive into details.
+The master.md skeleton (frontmatter, Executive Summary, the three inline intensity views,
+reading order, findings index, sub-file links) is owned by `findings-template.md` § master.md
+Skeleton. Visual principle: the reader gets an immediate intensity sense from the three inline
+charts before diving into details.
