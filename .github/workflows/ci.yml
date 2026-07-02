@@ -41,6 +41,9 @@ jobs:
       - name: Validate plugin structure
         run: bash scripts/validate-plugin-structure.sh
 
+      - name: Validate cross-file consistency
+        run: python3 scripts/validate-consistency.py
+
   tests:
     name: Orchestration Tests
     runs-on: ubuntu-latest
