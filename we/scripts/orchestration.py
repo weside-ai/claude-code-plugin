@@ -85,11 +85,11 @@ STORY_PHASES = [
     "refined",  # /we:story — Story + Plan created
     "git_prepared",  # /we:build — Branch created, story loaded
     "implementation_complete",  # /we:build — Code + tests committed
-    "ac_verified",  # /we:build — All ACs verified with evidence
-    "simplified",  # /we:build — Code simplified
+    "simplified",  # /we:build — Code simplified (Step 3, BEFORE AC verification)
+    "ac_verified",  # /we:build — All ACs verified with evidence (Step 4, on final code)
     "review_passed",  # /we:build — Code review passed (Step 5)
     "static_analysis_passed",  # /we:build — Lint/format/types passed (Step 5)
-    "test_passed",  # /we:build — Tests + coverage passed (Step 5)
+    "test_passed",  # /we:build — Tests + coverage passed (Step 5, tests run exactly once here)
     "docs_updated",  # /we:build — Documentation updated (Step 6, AFTER quality gates)
     "pr_created",  # /we:build — PR created
     "ci_passed",  # /we:build — CI/Reviews green

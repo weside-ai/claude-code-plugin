@@ -47,7 +47,7 @@ class CheckpointResumeTest(unittest.TestCase):
         result = story_resume("WA-1")
         self.assertTrue(result["success"])
         self.assertEqual(result["checkpoint"]["phase"], "implementation_complete")
-        self.assertEqual(result["next_phase"], "ac_verified")
+        self.assertEqual(result["next_phase"], "simplified")
 
     def test_resume_picks_furthest_phase_not_latest_write(self):
         # ac_verified is further along than git_prepared; later write is the
@@ -56,7 +56,7 @@ class CheckpointResumeTest(unittest.TestCase):
         story_checkpoint("WA-1", "git_prepared")
         result = story_resume("WA-1")
         self.assertEqual(result["checkpoint"]["phase"], "ac_verified")
-        self.assertEqual(result["next_phase"], "simplified")
+        self.assertEqual(result["next_phase"], "review_passed")
 
     def test_resume_ignores_stale_stored_phase_index(self):
         # Simulate a row written before a STORY_PHASES reorder: correct phase

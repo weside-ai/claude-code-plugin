@@ -32,7 +32,7 @@ By the time `/we:build` runs, the plan already exists (`/we:story` produced it �
 **Legitimate reasons to interrupt the user (these stay — judgment is not abolished):**
 
 1. **Circuit Breaker** — 3 failures in the same phase. Present options.
-2. **AC + DoD Verification Gate** (Step 3) — blocking checkpoint by design.
+2. **AC + DoD Verification Gate** (Step 4) — blocking checkpoint by design.
 3. **Plan ambiguity that blocks implementation** — a concrete, named gap in the plan that cannot be resolved by reading the code. State the gap, ask the specific question, continue.
 4. **Destructive or out-of-scope action** — anything the system prompt's "executing actions with care" rules require confirmation for (force-push, dropping data, deleting branches, etc.).
 
@@ -83,9 +83,9 @@ Single source of truth — step, what it does, checkpoint written, who writes it
 | 0 | Check for resume | — | — |
 | 1 | DoR + load story + plan + worktree + ticket → "In Progress" | `git_prepared` | build (Step 1) |
 | 2 | Develop (inline or parallel-subagent dispatch) | `implementation_complete` | build (Step 2) |
-| 3 | AC + DoD verification gate (BLOCKING) | `ac_verified` | build (Step 3) |
-| 4 | Simplify | `simplified` | build (Step 4) |
-| 5 | PARALLEL: one writer-aware reviewer + `/we:static` + `/we:test` | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
+| 3 | Simplify | `simplified` | build (Step 3) |
+| 4 | AC + DoD verification gate (BLOCKING) | `ac_verified` | build (Step 4) |
+| 5 | PARALLEL: one writer-aware reviewer + `/we:static` + `/we:test` (tests run exactly once, here) | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
 | 6 | Documentation check (`doc-architect`) | `docs_updated` | docs (Step 6) |
 | 7 | `/we:pr` (verifies all 3 quality-gate checkpoints first) | `pr_created` | pr-creator |
 | 8 | Wait for CI/reviews → ONE ci-review pass INLINE → wait → report | `ci_passed` | build (Step 8) |
@@ -255,11 +255,28 @@ Agent(
 
 **Continue immediately to Step 3.**
 
-## Step 3: AC + DoD Verification Gate (BLOCKING)
+## Step 3: Simplify
+
+Check `implementation_complete` exists. Invoke the `simplify` skill via `Skill(skill="simplify")`. Availability is verified once during `/we:setup` (Step 1b — prerequisite check); do NOT re-derive availability from plugin paths or memory here. The only legitimate skip is when the Skill tool actually returns a "skill not found" error — in that case warn `"simplify skill not available — run /we:setup to verify prerequisites"` and continue. If changes made → commit. Write checkpoint `simplified`.
+
+Simplify runs BEFORE the AC + DoD gate on purpose: it can still change code (reuse, dead-code
+removal, altitude cleanup). Verifying ACs against code that's about to be rewritten wastes the
+verification the moment Simplify touches a file — verify once, against the code that will
+actually ship.
+
+## Step 4: AC + DoD Verification Gate (BLOCKING)
 
 Fresh-load plan and story. Verify EVERY AC with concrete evidence (file path, test name, commit).
 
 Check end-to-end: Is the feature reachable? Does the complete user flow work?
+
+**An AC worded as "the full test suite is green" is NOT an instruction to run the entire local
+suite here.** Verify it with cheap, targeted evidence instead — affected-tests-only locally
+(per `testing-backend.md`'s default) plus a reference-grep for orphaned symbols/imports. Tests run
+in full exactly **once** in this whole pipeline — Step 5's `test-runner`, right after this gate —
+and CI is the second, independent confirmation. Running the full suite here in Step 4 would
+duplicate Step 5's job for no extra signal, and on a large repo can exhaust local resources
+(observed: Postgres `out of shared memory` from a single giant local run).
 
 **DoD Quick Check against the diff.** The build session (Claude) runs this itself — it is model-agnostic and does NOT depend on which code reviewer runs in Step 5. The DoD is already loaded in Prerequisites (`${CLAUDE_PLUGIN_ROOT}/quality/dod.md` + repo-local `.weside/dod.md` if present). Check the diff against each criterion and emit the DoD table:
 
@@ -277,10 +294,6 @@ Check end-to-end: Is the feature reachable? Does the complete user flow work?
 Any DoD `Fail` is blocking, same as a failed AC.
 
 Only write checkpoint `ac_verified` when ALL AC **and** DoD items pass. If items fail → go back to Step 2 and fix.
-
-## Step 4: Simplify
-
-Check `ac_verified` exists. Invoke the `simplify` skill via `Skill(skill="simplify")`. Availability is verified once during `/we:setup` (Step 1b — prerequisite check); do NOT re-derive availability from plugin paths or memory here. The only legitimate skip is when the Skill tool actually returns a "skill not found" error — in that case warn `"simplify skill not available — run /we:setup to verify prerequisites"` and continue. If changes made → commit. Write checkpoint `simplified`.
 
 ## Step 5: Quality Gates (PARALLEL)
 
@@ -313,7 +326,7 @@ Claude, so read `tools.codex` and `review.cross` (default `true`) from `.weside/
 
 - **Otherwise** (`tools.codex: false`, `review.cross: false`, or the codex script doesn't resolve)
   → launch the `code-reviewer` agent. It runs its full review (bugs + AC-alignment + DoD).
-  Since Step 3 already verified AC + DoD, pass the token `DOD_AND_AC_ALREADY_VERIFIED` in the
+  Since Step 4 already verified AC + DoD, pass the token `DOD_AND_AC_ALREADY_VERIFIED` in the
   prompt so the agent skips the DoD Quick Check + AC-alignment table and focuses on
   bugs/security/design/reachability — no duplication of the gate's work.
 
