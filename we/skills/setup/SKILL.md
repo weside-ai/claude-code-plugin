@@ -1,11 +1,11 @@
 ---
 name: setup
 description: >
-  Project onboarding — detects stack, ticketing tool, creates project vision/DoR/DoD,
-  initializes the Companion Framework (`.weside/`, vault registration, crew onboarding
-  via /we:onboarding). Interactive, minimal (3 core questions + optional crew setup).
-  Use when user says "/we:setup", "configure project", "set up workflow", "initialize repo",
-  "install crew", "first time".
+  Project onboarding — detects stack, ticketing tool, test discipline, creates project
+  vision/DoR/DoD, initializes the Companion Framework (`.weside/`, vault registration,
+  crew onboarding via /we:onboarding). Interactive, minimal (4 core questions + optional
+  crew setup). Use when user says "/we:setup", "configure project", "set up workflow",
+  "initialize repo", "install crew", "first time".
 ---
 
 
@@ -41,47 +41,11 @@ Scan the project to detect:
 
 ### Step 1b: Check Plugin Prerequisites
 
-This is the **canonical prerequisite gate** for the `/we:*` pipeline. Verify each prerequisite empirically — never derive availability from plugin filesystem paths alone, since plugins can ship agents, skills, or commands under different names than expected.
-
-**Detection rule:** for each row, run the listed *Detection check*. The check is the source of truth. If it succeeds → prerequisite is met. If it errors with "not found" → mark as missing and inform the user (do NOT block).
-
-| Prerequisite | Detection check | Provided by | Used by |
-|---|---|---|---|
-| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:build` PR creation, CI status, review-thread resolution |
-| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:build` ticket fetch and transitions |
-| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:build` Step 4: Simplify |
-| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:build` Step 2 security checks |
-| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
-| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:build` |
-| superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | TDD/debugging/brainstorming discipline skills used throughout `/we:build` |
-| graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, code-graph nav rule |
-| turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
-| Codex backend (optional) | `command -v codex` exits 0 (the official Codex plugin's CLI) | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | `/we:orchestrate` and `/we:develop` optional executor; cross-review via `/codex:adversarial-review`. Absent → workers run on Claude Code with no degradation |
-| Engine profiles (optional) | `.weside/engines.local.json` exists and has ≥1 profile with a resolvable `key_ref` | User-created via this wizard | `/we:orchestrate` foreign-engine executor via `worker-launch.sh`; any Anthropic-compatible endpoint |
-
-**Guided install flow** — for each MISSING row, offer the fix interactively instead of only hinting. Full per-dependency commands and re-check instructions: [`${CLAUDE_PLUGIN_ROOT}/references/dependencies.md`](../../references/dependencies.md). Shape per item:
-
-> "Missing: **{name}** — provides {what}. Install now with `{command}`? [y/n]"
-
-+ `y` → print the exact command (or run it for safe, user-scoped installs like `pip install graphifyy` after confirmation), then RE-RUN the row's detection check and report the result.
-+ `n` → continue; the pipeline works without it, the dependent feature is skipped.
-
-**Persist the result** in `.weside/config.json` (Step 3 merges it):
-
-```json
-"tools": { "graphify": true, "turbovault": true, "superpowers": false, "codex": false },
-"engines": []
-```
-
-`engines` is a list of profile names from `.weside/engines.local.json` that were successfully probed — starts empty, filled by Step 2's executor wizard.
-
-Downstream skills read `tools.*` from config to decide whether to offer graph/vault features — they still verify empirically before each actual call (config can go stale) and only skip when the real call says "not found".
-
-**TurboVault DEGRADED is the silent-killer case — call it out loudly.** A registered-but-dead MCP passes a name-only check and then every doc search silently falls back to grep for weeks. If the liveness probe fails, persist `"turbovault": false` AND warn explicitly:
-
-> "⚠️ TurboVault MCP is registered but NOT responding — `list_vaults` failed. Doc search (`/we:docs`, `/search`, `/we:story`) is running on grep fallback, which is much weaker. Restart the session or check the MCP config (`~/.claude.json` / `~/.claude/settings.json`)."
-
-**Do NOT block.** This is informational — the pipeline works without these plugins. Downstream skills (e.g. `/we:build` Step 4) MUST trust this gate: they invoke the prerequisite directly and only skip when the actual tool call returns "not found", never on assumption.
+This is the **canonical prerequisite gate** for the `/we:*` pipeline. The prerequisite
+matrix, detection rule, guided install flow, and the TurboVault-DEGRADED warning are owned
+by [`${CLAUDE_PLUGIN_ROOT}/references/setup-prereqs.md`](../../references/setup-prereqs.md) —
+load it and execute it row by row. Do NOT block on any missing row; persist the detection
+results in the `tools`/`engines` blocks that Step 3 merges.
 
 ### Step 1c: Activate Pre-Commit Hooks
 
@@ -93,7 +57,12 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
 4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
-### Step 2: Ask 4 Questions + Executor Wizard
+### Step 2: Ask 5 Questions + Executor Wizard
+
+Present the questions **one at a time** — ask, wait for the answer, then move on. Never dump
+them as a battery. Each question that involves a concept the user may not know gets one
+plain-language sentence of context first (what it is, why the pipeline needs it, what
+changes with their choice).
 
 ```
 1. "Do you have a product vision? (Link, file, or brief description)"
@@ -107,7 +76,16 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
 3. "Stack detected: {detected}. Correct?"
    → Confirm or override
 
-4. "Which code reviewers does this repo use? (Auto-detected: {detected})"
+4. "How should the pipeline handle tests?"
+   → Explainer first: "When Claude implements a chunk, it can write the failing test
+     before the code (TDD), write tests after the code as part of done, or write no
+     tests at all. This is about WHEN tests are written — what a good test is stays
+     the same either way."
+   → Options: tdd / tests-after (default) / off
+     — level semantics owned by references/test-discipline.md
+   → Saved as `test_discipline`; read by /we:develop, /we:build, and worker briefs.
+
+5. "Which code reviewers does this repo use? (Auto-detected: {detected})"
    → Detect candidates: codex plugin installed → suggest `codex`;
      a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
      `claude` (the local code-reviewer agent) is always available.
@@ -121,7 +99,7 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    → Default when nothing else is detected: ["claude"].
 ```
 
-#### Executor wizard (after Q4, non-blocking)
+#### Executor wizard (after Q5, non-blocking)
 
 Ask once: *"What default executor should workers use for `/we:develop` chunks?"*
 
@@ -181,7 +159,8 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
   "tools": { "graphify": false, "turbovault": false, "superpowers": false, "codex": false },
   "engines": ["<profile-name-if-created>"],
   "execution": { "default": "claude-sonnet" },
-  "review": { "available": ["claude"], "cross": true }
+  "review": { "available": ["claude"], "cross": true },
+  "test_discipline": "tests-after"
 }
 ```
 
@@ -191,7 +170,12 @@ The `engines` block lists the profile names created/verified in the executor wiz
 
 The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
 
-The `review.available` block is the reviewer list from Step 2 Q4 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
+The `review.available` block is the reviewer list from Step 2 Q5 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
+
+The `test_discipline` field is the answer to Step 2 Q4: `"tdd"` / `"tests-after"` / `"off"`.
+Level semantics are owned by `references/test-discipline.md`; consumed by `/we:develop`,
+`/we:build`, and inlined into worker briefs by `/we:orchestrate`. Absent field →
+`tests-after` (back-compat).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 
@@ -326,6 +310,7 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 |---|---|
 | "Do you have a vision?" | Vision helps prioritize — without it, every feature seems equally important |
 | "Which ticketing tool?" | Structured backlogs prevent context loss and enable traceability |
+| "How should the pipeline handle tests?" | Test-first vs. test-after is a team decision, not dogma — but good tests are non-negotiable either way |
 | "Custom DoR/DoD?" | Quality gates prevent rework — catching issues early is 10x cheaper |
 
 **Never block.** Every question has a "skip" path. The user can always run `/we:setup` again later.
@@ -337,7 +322,7 @@ Setup is the first touchpoint. Use it to gently explain WHY things matter:
 + NEVER block on any question — always allow skip/default
 + NEVER create .weside/ without user consent
 + Auto-detection first, confirmation second
-+ Three CORE questions maximum (Step 2); Step 5 (Framework) is optional and asks once
++ Four CORE questions maximum (Step 2, one at a time); Step 5 (Framework) is optional and asks once
 + Works without ANY configuration (defaults for everything)
 + **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
 + **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
