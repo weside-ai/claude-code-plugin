@@ -192,6 +192,15 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 
 **Don't be mechanical.** The table is a starting point. If the user's intent contradicts the natural next move (e.g. they have a Saga but want to revisit the Vision), follow their intent. The Coach serves the user's goal, not the diagram.
 
+**Flow map — the recurring forks, with the reason to pick each side.** Use these when the user hovers between two commands; name the discriminator, not just the options:
+
+- **`/we:build` vs `/we:orchestrate`** — one coherent Story → `build` (solo pipeline, one PR). Several independent chunks, or one Story with parallelisable phases → `orchestrate` (Lead + workers, still one PR). The discriminator is *independent work streams*, not size.
+- **`/we:grill` vs `/we:meet`** — the plan needs *depth* (one perspective, every branch of the decision tree resolved) → `grill`. The plan needs *breadth* (multiple role perspectives, alignment) → `meet`. Grill sharpens, meet aligns.
+- **`/we:prototype` before `/we:story`** — when a design question is still open ("does this state model work?", "what should this look like"), a throwaway prototype answers it cheaper than a planning round; the Story then gets cut around a validated decision.
+- **`/we:triage`** — the intake fork: external signals (bug reports, feature requests, feedback) enter through triage and come out as `ready-for-agent` tickets that `/we:story` or `/we:build` pick up. Don't hand-carry raw reports into `story`.
+- **`/we:handoff` vs `/compact`** — ending the session or switching machines → `handoff` (durable file, fresh session). Mid-session, same thread, just tokens tight → `/compact` (in-place compression).
+- **`/we:diagnose` vs just fixing** — obvious cause, small blast radius → fix it. Symptom without a mechanism, or a performance regression → `diagnose` (loop first, hypotheses second).
+
 **Plan-status rendering (automatic when an open Saga or Epic is detected):**
 
 After locating the current altitude, check whether there is an active Plan-altitude artefact in the repo:

@@ -4,7 +4,7 @@ description: >
   Vision (Solo) — PO skill at the PRD altitude. Creates or refines the
   Product Requirements Document (audience, problem, intended change,
   non-bets) at docs/plans/<vision>/PRD.md. Use when the user says
-  "/we:vision", "PRD", "product vision", "write a vision", "refine vision".
+  "/we:vision", "PRD", "write a vision", "refine vision".
   Decompose into Sagas via /we:meet vision.
 ---
 
@@ -55,7 +55,7 @@ A Vision shifts when the market shifts or accumulated learning forces a fundamen
 
 ---
 
-## MODE 1: Refine Existing Vision
+## Refine Mode: Refine Existing Vision
 
 Trigger: `/we:vision` with a PRD already present at `docs/plans/<vision>/PRD.md`.
 
@@ -127,29 +127,29 @@ User reviews. On feedback → revise. On approval → continue.
 
 ---
 
-## MODE 2: Create New Vision
+## Create Mode: Create New Vision
 
 Trigger: `/we:vision "<product-name>"` with no existing PRD.
 
 1. Ask the four frame questions in order, one at a time. Get a sharp answer for each before moving on.
-2. Ask for the explicit non-bets — this is the hardest question and the one most often skipped.
+2. Ask for the explicit non-bets — this is the hardest question and the one most often skipped. If `docs/plans/out-of-scope/` exists (written by `/we:triage` on rejected enhancements), read it first: those concepts are already-decided non-bets — surface them instead of re-litigating.
 3. Surface the bets and assumptions the answers rest on.
 4. Draft the PRD using the template above (EnterPlanMode).
 5. User approval (ExitPlanMode).
-6. Save to `docs/plans/<vision>/PRD.md` and hand off (same as MODE 1 step 5).
+6. Save to `docs/plans/<vision>/PRD.md` and hand off (same as Refine Mode step 5).
 
 If the user starts naming features, gently pull them back to the four frame questions — features belong in Sagas and Epics, not the PRD.
 
 ---
 
-## MODE 3: Interactive Vision Session
+## Discovery Mode: Interactive Vision Session
 
 Trigger: `/we:vision` with no argument and no existing PRD context obvious.
 
 1. Ask: *"Do you want to refine the existing PRD, create a new one, or just talk through the vision?"*
 2. Branch on the answer:
-   - **Refine** → load existing PRD (MODE 1).
-   - **Create** → start from scratch (MODE 2).
+   - **Refine** → load existing PRD (Refine Mode).
+   - **Create** → start from scratch (Create Mode).
    - **Talk through** → open conversation. Do not write a file. At the end, ask: *"Want me to draft this as a PRD now (`/we:vision <name>`), or hold it as a working idea?"*
 
 ---

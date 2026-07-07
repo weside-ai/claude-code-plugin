@@ -66,7 +66,14 @@ ls -t .reviews/ 2>/dev/null | grep "$BRANCH" | head -5
 
 If previous review exists → delta review (Fixed / Still Open / New Issues).
 
-### Step 4: Review the Changes
+### Step 4: Review the Changes — two independent axes
+
+Review along two axes and report them **separately, never reranked against each other**:
+
+- **Spec axis** — does the diff do what the Story/ACs/plan asked? Missing behavior, wrong behavior, unreachable feature.
+- **Standards axis** — does the code follow this repo's conventions and the DoD? Architecture patterns, security patterns, test quality (anti-patterns per `${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`), scalability rules.
+
+Why two axes: code can pass one and fail the other — a perfectly conventional diff that builds the wrong thing, or a spec-perfect diff full of convention violations. Merging them lets one axis mask the other.
 
 For each issue: **file:line + severity + issue + fix suggestion**.
 **Max 10 issues.** Focus on high-impact problems.
@@ -127,7 +134,15 @@ Write to `.reviews/$FILENAME`.
 | No open TODO/FIXME | Pass/Fail | |
 | *(one row per `.weside/dod.md` item, if present)* | Pass/Fail/N/A | |
 
-## Issues
+## Issues — Spec axis (does it do what was asked?)
+
+### BLOCKING
+- **file:line** — Issue / Fix
+
+### WARNING
+- **file:line** — Issue / Fix
+
+## Issues — Standards axis (does it follow how we build?)
 
 ### BLOCKING
 - **file:line** — Issue / Fix
@@ -146,5 +161,6 @@ Write to `.reviews/$FILENAME`.
 - Review the **diff**, not entire files
 - **Max 10 issues**
 - Every issue needs **file:line + fix suggestion**
+- Spec and Standards findings stay under their own axis — a severe Standards issue never displaces a Spec issue, and vice versa
 - Skip style issues that linters catch
 - **ALWAYS save to file** before outputting verdict

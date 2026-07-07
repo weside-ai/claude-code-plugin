@@ -99,7 +99,8 @@ Epic→Story). Promote bridges that gap.
 - Cluster the child Stories into **3–6 candidate Epics** by theme/seam. Give each a short
   **epic-slug** and a one-line rationale. Name a saga-slug for the whole.
 - Show the maturity gradient (which candidate Epics are Done / Active / Not-started) — a clean
-  gradient is a good sign the cut follows real seams.
+  gradient is a good sign the cut follows real seams; a lumpy one (everything Not-started, or
+  everything Done) suggests the cut is arbitrary rather than seam-based.
 - Flag **orphans**: child Stories that fit no candidate Epic (they may belong to a *different*
   Saga, or get dropped). Never silently absorb them.
 - The user corrects the cut. Iterate. Do not draft until saga-slug + epic set + orphan

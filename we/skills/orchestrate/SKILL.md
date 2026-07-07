@@ -249,16 +249,23 @@ Your job: run the DEV-ONLY pipeline for {TICKET} via the skill.
 DEV-ONLY means: implement all phases → **fast/unit local gates only** → cross-review your
 diff → commit → push YOUR branch (e.g. `feat/{TICKET}-work`) → STOP.
 
+TESTS: {test_discipline_instruction — the Lead reads `test_discipline` from
+.weside/config.json and spells the level out here, e.g. "tests-after: write tests in the
+same change, after the code". Always append: no implementation-coupled tests, no
+tautological assertions, mock at system boundaries only.}
+
 FAST GATES: run unit tests and fast smoke tests ONLY. Skip integration tests that need a
 running database, queue, or network service — those belong to the integration CI the Lead
 runs at the end. If unsure: if the test needs `docker-compose up` or an env variable like
 `DATABASE_URL`, it is an integration test — skip it with a note in your report.
 
 ABSOLUTE NO-OPS (any of these voids the single-CI contract):
-- DO NOT `gh pr create` — this triggers GitHub CI per worker; defeats the whole pattern
+- DO NOT `gh pr create` — this triggers GitHub CI per worker, defeating the whole pattern; the
+  Lead opens the one integration PR after every worker lands (Step 8)
 - DO NOT run CI, do NOT wait for GitHub Actions (your `git push` may trigger `on: push`
   rules — IGNORE them; they are not your responsibility)
-- DO NOT transition the ticket
+- DO NOT transition the ticket — the Lead owns ticket state and transitions it (Step 6 at
+  dispatch, Step 8 B4 after integration)
 - DO NOT run /we:build
 - DO NOT run frontend gates (`yarn`/`npm install`, `jest`, `tsc`) in a fresh worktree — it has no
   `node_modules` (~1GB) and building them is wasted setup. Implement the frontend changes, run
@@ -281,6 +288,11 @@ SendMessage tool. When the dev work is done (or a blocker stops you), send EXACT
 NEVER report done without a pushed branch. Even if you stop early, send the message first, then
 mark your task completed via TaskUpdate.
 ```
+
+The Worker-Brief deliberately carries rules inline that references also own (fast-gates
+rule, test discipline, reporting contract) — workers run without plugin context and cannot
+follow references. This is the one legitimate duplication (`plugin-authoring.md` § Single
+owner); when a rule changes, update the owner AND this brief.
 
 **Executor selection — three backends (select per chunk at the rolling confirm):**
 

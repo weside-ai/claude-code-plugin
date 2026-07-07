@@ -334,7 +334,7 @@ If a PR was opened, print its URL.
 - **Don't apply silently.** Every Edit follows an explicit `y` for that item; the Step R5
   report always prints before anything lands. `--auto` semantics + its three still-ask
   exceptions: "Auto Mode" section (the single spec).
-- **Don't quote personal content** from the transcript. Privacy guard, every step.
+- **Don't quote personal content** from the transcript — engineering surfaces only. Privacy guard, every step.
 - **Don't modify source code.** Retros change MDs only. Code-level lessons (e.g. "this function had a race condition") flow back through `/we:build` if needed — retro proposes the rule, not the code fix.
 - **Don't open the PR before applying the file changes.** Branch → apply → PR — in that order, so the PR body can reference the actual diff.
 - **Don't auto-create tickets.** Skill can scaffold a Jira/GitHub issue stub only on explicit user request (`--ticket` flag, off by default).

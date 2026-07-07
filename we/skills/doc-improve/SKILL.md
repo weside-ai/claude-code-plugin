@@ -269,7 +269,10 @@ batch reviews scannable.
 + <minimal added lines>
 \`\`\`
 
-(Repeat for each finding. Severity tiers: **BLOCKER** · **MAJOR** · **MINOR** · **NIT**.)
+(Repeat for each finding. Severity tiers: **BLOCKER** · **MAJOR** · **MINOR** · **NIT**.
+This scale applies to doc findings; code/CI findings (`/we:ci-review`, `quality/dod.md`)
+deliberately use their own BLOCKING/WARNING/SUGGESTION scale — the two are not
+interchangeable.)
 
 ### What stays
 
@@ -333,6 +336,14 @@ Silent skipping is the failure mode that kills review quality. If you can't
 explain *what evidence* led you to "no Pillar 3 finding", you didn't run
 Pillar 3. Re-run it. The skill is not done until every applicable pillar
 either fires a finding or emits a clean line.
+
+Before composing the report, confirm:
+
+- [ ] Pillar 1 — finding emitted, or an explicit "checked, clean" note
+- [ ] Pillar 2 — finding emitted, or an explicit "checked, clean" note
+- [ ] Pillar 3 — finding emitted, or an explicit "checked, clean" note
+- [ ] Pillar 4 — finding emitted, or an explicit "checked, clean" note
+- [ ] Pillar 5 (type-specific, if applicable) — finding emitted, or an explicit "checked, clean" note
 
 For rules, this is mandatory in the verdict block: "Pillar 5d
 (always-loaded fit)" must explicitly say `clean` or `mismatch`. See

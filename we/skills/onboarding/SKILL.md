@@ -4,8 +4,8 @@ description: >
   Interactive crew composition — builds the repo's council from scratch
   (assign existing Companions, create new ones, or generic role-lenses) and
   writes .weside/weside.md + council.json + config.json. Invoked by /we:setup
-  Step 5 or standalone. Triggers: onboarding, crew setup, build a council,
-  compose team, who works here.
+  Step 5 or standalone. Use when the user says "onboarding", "crew setup",
+  "build a council", "compose team", "who works here".
 ---
 
 
@@ -26,7 +26,7 @@ A **council** convenes one agent per role to think a topic through from several 
 - **Generic lens (Retorte)** — the shipped `council-<role>` agent. Free, works with no account, no limit. A solid role-angle, but no identity or memory.
 - **weside-backed lens** — one of the user's weside Companions, carrying real identity + memory + voice. Costs a Companion slot (`plan.max_companions`).
 
-A good council is **mixed**: the roles the user cares most about backed by real Companions, the rest generic. This skill builds exactly that, degrading gracefully when the plan's Companion budget runs out.
+A good council is **mixed**: the roles the user cares most about backed by real Companions, the rest generic — not all-generic (wastes an account that's already paid for) and not all-Companion (burns the budget on roles nobody needed a real voice for). This skill builds exactly that, degrading gracefully when the plan's Companion budget runs out.
 
 ## Three files — why split
 

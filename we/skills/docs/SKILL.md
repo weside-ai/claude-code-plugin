@@ -124,7 +124,7 @@ aggregates and prioritises across files; the per-file work is `doc-improve`'s.
 ## Rules
 
 - Always invoke `doc-architect` agent — never inline the logic here
-- Never suggest writes outside the agent's writable_paths allowlist
+- Never suggest writes outside the agent's writable_paths allowlist — keep every proposal inside it
 - Always show the agent's diff before applying via Edit
 - When called proactively from `/we:build`, keep output concise (just the
   proposal list, no narrative)
