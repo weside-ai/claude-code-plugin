@@ -1527,7 +1527,7 @@
     <h1>A walk through <span class="accent">Agentic Product Ownership</span> for Claude Code.</h1>
     <p class="sub">From <strong style="color:var(--fg)">Vision</strong> through <strong style="color:var(--fg)">Story</strong> to a merged PR — one standard for the whole team, and the optional <strong style="color:var(--fg)">weside</strong> Companions beaming in.</p>
     <div class="meta-row">
-      <span>27 skills</span><span class="dot-sep">·</span>
+      <span>29 skills</span><span class="dot-sep">·</span>
       <span>Open Protocol (MCP)</span><span class="dot-sep">·</span>
       <span>MIT Licensed</span><span class="dot-sep">·</span>
       <span>Works without an account</span>
@@ -1790,7 +1790,7 @@
         <rect class="story-card" x="222" y="627" width="150" height="35" rx="6"/>
         <text class="t-skill2" x="234" y="650">WA-103 · raw</text>
         <rect class="story-card" x="222" y="670" width="150" height="26" rx="6"/>
-        <text class="t-skill2" x="234" y="688">WA-104 · idea</text>
+        <text class="t-skill2" x="234" y="688">intake: /we:triage</text>
       </g>
 
       <g id="fl-refine" data-fl class="hover-glow">
@@ -1802,6 +1802,7 @@
         <text class="t-role tr-po" x="232" y="843">PO</text>
         <rect class="chip chip-dev" x="264" y="830" width="44" height="18" rx="9"/>
         <text class="t-role tr-dev" x="273" y="843">DEV</text>
+        <text class="t-skill" x="322" y="843">+ /we:prototype</text>
       </g>
       <g id="fl-e-refine" data-fl>
         <path class="flow-refine" d="M 300 702 C 290 716, 285 726, 282 738"/>
@@ -2297,7 +2298,7 @@
         <div class="mat-lvl">L2 · AUGMENTED</div>
         <h4>One standard, shared context</h4>
         <p>The full APO pipeline in every seat. Plans, gates, and rosters versioned in the repo. Councils with role-lenses.</p>
-        <div class="mat-what">27 skills · works standalone · MIT</div>
+        <div class="mat-what">29 skills · works standalone · MIT</div>
       </div>
       <div class="mat-step">
         <div class="mat-lvl">L3 · AGENTIC</div>
@@ -2362,6 +2363,8 @@
       <code>/we:vision</code>
       <code>/we:saga</code>
       <code>/we:epic</code>
+      <code>/we:triage</code>
+      <code>/we:prototype</code>
       <code>/we:coach</code>
       <code>/we:council</code>
       <code>/we:retro</code>
@@ -2763,9 +2766,9 @@ document.addEventListener("keydown", (e) => {
     { els: ["fl-e-se", "fl-epic", "fl-map"], title: "Epic — the living coordination point",
       desc: "One bounded deliverable. <code>/we:epic</code> pulls its Stories from your ticketing tool and shows what shipped, what drifted, and what's next. <code>/we:map</code> shows the whole plan tree at a glance." },
     { els: ["fl-e-eb", "fl-backlog"], title: "Stories land in the backlog",
-      desc: "Breaking down an Epic drops rough Stories into <code>docs/plans/</code> — plain Markdown, versioned in git, readable by the whole team. Green cards already have a build-ready plan; grey ones are still just ideas." },
+      desc: "Breaking down an Epic drops rough Stories into <code>docs/plans/</code> — plain Markdown, versioned in git, readable by the whole team. Green cards already have a build-ready plan; grey ones are still raw. External signals — bug reports, feature requests, user feedback — enter through <code>/we:triage</code>, which turns them into agent-ready tickets." },
     { els: ["fl-refine", "fl-e-refine"], title: "Refinement — continuous, not a meeting slot",
-      desc: "<code>/we:story</code> turns a raw idea into a plan solid enough to build from — clear acceptance criteria, phases, tests. <code>/we:meet story</code> adds a second, independent perspective when the call is hard. This runs all sprint long, not in one slot." },
+      desc: "<code>/we:story</code> turns a raw idea into a plan solid enough to build from — clear acceptance criteria, phases, tests. <code>/we:meet story</code> adds a second, independent perspective when the call is hard. And when a design question is still open, <code>/we:prototype</code> answers it with throwaway code before anything gets planned. This runs all sprint long, not in one slot." },
     { els: ["fl-e-bp", "fl-planning"], title: "Planning — pick the ready set",
       desc: "The PO and Tech Lead pull from Stories that are genuinely ready — a plan exists and nothing blocks them. <code>/we:epic</code> status and <code>/we:map</code> make the ready set obvious." },
     { els: ["fl-e-ps", "fl-sprint"], title: "The sprint — autonomous, gated",

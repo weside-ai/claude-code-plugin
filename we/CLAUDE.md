@@ -53,8 +53,10 @@ Every skill is directly invocable as `/we:<name>`; the authoritative catalog is 
 own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROOT}/skills/` —
 `/we:coach` and `/we:retro` already do). Orientation by altitude:
 
+- **Intake:** `/we:triage` (external signals → triaged, agent-ready tickets)
 - **Plan:** `/we:vision` · `/we:saga` · `/we:epic` · `/we:story` (Solo formulation), `/we:meet
-  vision|saga|epic|story` + `/we:council` (Council deliberation)
+  vision|saga|epic|story` + `/we:council` (Council deliberation), `/we:prototype` (answer a
+  design question before it gets planned)
 - **Build:** `/we:build` (solo full pipeline) · `/we:orchestrate` + `/we:develop` (multi-chunk,
   Lead + dev-only workers) · `/we:ci-review` · `/we:codex-task`
 - **Quality/analysis:** `/we:audit` · `/we:audit-architecture` · `/we:diagnose` · `/we:smoketest`
@@ -80,6 +82,7 @@ The plugin writes to three durable directories in the **user repo** — version-
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *Identity / Current State / Decisions / Tried-and-rejected / Open questions / Files touched / Next steps / Watch-outs / References*. The "where we are right now" + "what the next session should pick up". |
 | `CONTEXT.md` (repo root) | `/we:grill` (writer); read by `/we:story`, `/we:build`, `/we:epic`, `/we:saga`, `/we:diagnose`, doc-architect | The project glossary — canonical domain terms with avoid-lists. Pure glossary, no implementation details. The "what we call things". |
 | `docs/adr/NNNN-*.md` | `/we:grill` (offers at the 3-gate); read by `/we:diagnose`, `/we:audit-architecture` | Lean ADRs — a paragraph per hard-to-reverse, surprising, real-trade-off decision. The "why we did it this way". |
+| `docs/plans/out-of-scope/<concept>.md` | `/we:triage` (writer, on rejected enhancements); read by `/we:triage` (dedup) and `/we:vision` (Non-Bets) | The rejection memory — one file per rejected concept with the durable reason and every ticket that asked. The "what we deliberately won't build". |
 
 Skills read existing files in these directories at boot (e.g. `/we:coach` Boot Protocol Step 10 reads both `docs/plans/*/CONCEPT.md` and `docs/handoffs/*.md`) and write new ones per the per-skill conventions documented in each `SKILL.md`. The three categories are the **plugin's durable surface in the user repo** — anything that should outlive a single session belongs here, not in CC's opaque session jsonl or in ephemeral memory.
 

@@ -16,7 +16,7 @@
 
 ## What you get
 
-Twenty-seven `/we:*` skills covering the full **Agentic Product Ownership** chain — four planning altitudes through Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
+Twenty-nine `/we:*` skills covering the full **Agentic Product Ownership** chain — intake through four planning altitudes, Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
 
 **Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
 
@@ -42,6 +42,8 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 - **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, one-line Plan-status snapshots (full detail delegated to `/we:saga` / `/we:epic`)
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
+- **`/we:triage`** — backlog intake: moves incoming tickets through a five-state triage machine (needs-triage → ready-for-agent/-human/wontfix), verifies claims, writes agent-ready briefs; rejected ideas land in a durable out-of-scope memory
+- **`/we:prototype`** — throwaway code that answers exactly one design question before it gets planned: a logic/state question (terminal shell over a pure module) or a UI question (3 radically different variants behind `?variant=`)
 - **`/we:grill`** — relentless one-question-at-a-time interview on a plan or design; sharpens the project glossary (`CONTEXT.md`) inline and offers lean ADRs when a decision is hard to reverse, surprising, and a real trade-off
 - **`/we:diagnose`** — disciplined diagnosis loop for hard bugs: build a fast deterministic feedback loop first, then reproduce → hypothesise → instrument → fix → regression-test
 - **`/we:doc-improve`**, **`/we:audit`** — review + audit
@@ -58,7 +60,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 27 skills are available.
+That's it. The plugin is enabled. All 29 skills are available.
 
 ---
 
@@ -128,7 +130,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 27 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 29 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
@@ -190,7 +192,7 @@ After install, configure via `/plugin settings we@weside-ai`:
 | `autoStoreConversations` | `false` | Store meaningful turns as Companion memories |
 | `loadCouncilFromWeside` | `true` | Convene weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses |
 
-Ticketing is **not** a plugin setting — `/we:setup` detects your tool and records the choice (tool + project key) in `.weside/config.json` per repo.
+Ticketing and test discipline are **not** plugin settings — `/we:setup` records both per repo in `.weside/config.json`: the ticketing tool (+ project key) and `test_discipline` (`tdd` / `tests-after` / `off`, default `tests-after` — whether the pipeline writes failing tests first, tests after the code, or none unless the plan asks).
 
 ---
 
