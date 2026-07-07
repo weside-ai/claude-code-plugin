@@ -38,7 +38,10 @@ ticket work. That is the Lead's responsibility after integrating.
 **What every worker does (regardless of backend):**
 
 1. **Locate plan** — read `docs/plans/<story>/` (or chunk brief if dispatched headlessly)
-2. **Implement** — the assigned phases/files, respecting the plan's Constraints and Pins
+2. **Implement** — the assigned phases/files, respecting the plan's Constraints and Pins,
+   and the test discipline the brief states (the Lead reads `test_discipline` from
+   `.weside/config.json` and spells the level out in every brief — workers can't load
+   references; level semantics: `test-discipline.md`)
 3. **Local gates** — lint, type-check, affected tests; fix gate failures before committing
 4. **Cross-review own diff** (when `review.cross: true`) — see below
 5. **Commit** — atomic commit with a clear message referencing the Story/chunk
@@ -99,6 +102,10 @@ Chunk: <phase number(s) / coherent slice> — what "done" means
 Files: <the files this chunk owns; do NOT touch anything outside>
 Constraints: <conventions, primitives to compose, anti-patterns to avoid>
 Pins: <existing behaviour to preserve exactly>
+Tests: <the test_discipline level, spelled out — e.g. "write the failing test before the
+  code at each seam" (tdd) / "write tests after the code, same change" (tests-after) /
+  "no new tests unless stated in Chunk" (off). Always add: no implementation-coupled
+  tests, no tautological assertions, mock at system boundaries only.>
 Local gates: run lint + type-check + affected tests; fix failures before committing
 Done = <concrete checkable outcome — tests green / file:line exists / command exits 0>
 Report: diff summary + any fork decisions + gate results; do NOT open a PR.

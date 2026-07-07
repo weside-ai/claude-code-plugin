@@ -395,6 +395,23 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 
 ---
 
+### `/we:triage`
+
+> *Backlog intake — external signals become plan-chain work.*
+
+Moves incoming tickets through a five-state triage machine: `needs-triage` → `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`, plus a `bug`/`enhancement` category. Verifies the claim before recommending (reproduce the bug, run the PR's tests), grills fuzzy requests into shape via `/we:grill`, and writes agent-ready briefs (`references/ticket-briefs.md` — behavioural contracts, no file paths). Rejected enhancements land in `docs/plans/out-of-scope/` — one file per concept, so the same request never gets re-litigated.
+
+**When to use:**
+- "What needs my attention?" — see the unlabeled / in-triage / reporter-replied buckets
+- A bug report or feature request arrives and needs a verdict
+- "Move TICKET-42 to ready-for-agent" — quick state override
+
+**Won't do:**
+- Post any tracker comment without the AI disclaimer line
+- Record already-implemented features in the out-of-scope memory — pointing to where the feature lives is the answer; only real rejections are remembered
+
+---
+
 ## Framework setup skills
 
 ### `/we:setup`
@@ -462,6 +479,23 @@ Phase 1 is the skill: build a fast, deterministic, agent-runnable feedback loop 
 - A bug survives the first obvious fix attempt
 - Non-deterministic / flaky failures
 - Performance regressions (measure first, fix second)
+
+---
+
+### `/we:prototype`
+
+> *Throwaway code that answers exactly one design question.*
+
+Two branches by question type. **Logic** ("does this state model feel right?"): a pure reducer / state machine / function set behind a thin interactive terminal shell — the shell is throwaway, the validated logic module can be lifted into the real code. **UI** ("what should this look like?"): three radically different variants on an existing route behind `?variant=`, cycled from a floating bar. Either way: no tests, no persistence, one command to run — and the *answer* is the only durable output, captured in the Story plan, an ADR, or a `NOTES.md`.
+
+**When to use:**
+- A design question blocks a Story cut — answer it first, then run `/we:story` around the validated decision
+- The user wants to feel a state model instead of reasoning about it on paper
+- A page needs structural design options, not colour tweaks
+
+**Won't do:**
+- Add tests — a prototype that needs tests is no longer a prototype
+- Ship prototype code to production — the winner gets rewritten properly when folded in
 
 ---
 

@@ -22,6 +22,9 @@ Iteratively collects findings from CI + reviews, fixes ALL of them, and pushes o
 | **WARNING** | Claude WARNING · any reviewer Minor | **MUST fix.** Same single exception. |
 | **SUGGESTION / NITPICK / INFO** | Suggestion · Nitpick · Style | **Should** do it; **may** be consciously skipped — with a short explicit reason in the report. |
 
+This scale applies to code/CI findings; doc reviews (`/we:doc-improve`) deliberately use their
+own BLOCKER/MAJOR/MINOR/NIT scale — the two are not interchangeable.
+
 "I don't think it's important" is NOT a valid skip reason for BLOCKING/WARNING.
 Resolving is mandatory for **every bot-authored thread** you handled — fixed **or**
 consciously skipped. It is the central, non-skippable step (the old failure mode was

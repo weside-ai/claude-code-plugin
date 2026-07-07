@@ -76,7 +76,11 @@ Agent(
     prompt=<self-contained brief: plan path, phase number, Goal + Files + Approach verbatim,
              repo root, branch name, conventions file.
              Instruction: implement, commit `{KEY}: phase {N} — {description}`, push.
-             Instruction: follow TDD — test first, then implementation.
+             Instruction: test discipline is `{test_discipline}` — tdd: failing test
+             before code at each seam; tests-after: tests in the same change, after the
+             code; off: no new tests unless the plan asks. Good-test rules apply at every
+             level (inline the anti-pattern list from references/test-discipline.md —
+             the sub-agent cannot load references).
              Return a ≤150-token report: what changed, any deferrals, blockers.
              Do NOT open a PR or run CI.>,
 )
@@ -86,7 +90,7 @@ Agent(
 
 **Per-phase checklist (both modes):**
 
-1. Follow project conventions; TDD (test first, then implementation)
+1. Follow project conventions; apply the configured test discipline (`test_discipline` from `.weside/config.json`, default `tests-after` — level semantics + good-test rules: `${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`)
 2. Wiring check — if the phase introduces new data fields, verify they flow end-to-end
 3. Security check — if touching auth/external APIs/user data: auth on new endpoints, no hardcoded secrets, parameterized queries
 4. Run auto-fix for the detected stack: `ruff check --fix` / `eslint --fix` / `gofmt` / `rustfmt`
@@ -111,6 +115,11 @@ discriminator: if the test needs `DATABASE_URL`, `REDIS_URL`, `docker-compose up
 it is an integration test and belongs to the integration CI the Lead runs after merging all
 workers. Mark skipped integration tests in your Step 7 report so the Lead knows what CI will
 cover.
+
+Test quality is gated regardless of when tests were written — the anti-patterns in
+[`${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`](../../references/test-discipline.md)
+(implementation-coupled, tautological, horizontal slicing) fail review even under
+`test_discipline: off`.
 
 Gate failures: fix inline, commit fix, re-run. Circuit breaker: 3 failures in the same gate → stop, report to the Lead.
 

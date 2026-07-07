@@ -166,7 +166,7 @@ Write a backward-compat redirect at `<findings_dir>/<date>-<scope>.md` (top-leve
 - **Don't invent subsystems** not in the YAML. The YAML is the source of truth for scope.
 - **Don't run a lens** that doesn't have a corresponding `references/<lens-name>.md`. If the YAML lists an unknown lens name, error out with the available-lens list.
 - **Don't compute Phase 1 with a primitive catalog you don't have.** If `scripts/primitives.default.yml` is missing AND the project doesn't define `primitive_detectors:`, error out (the score would be density-only, not informative).
-- **Don't skip the diff-against-previous check** when a previous diagram exists — structural drift is one of the highest-signal findings.
+- **Don't skip the diff-against-previous check** when a previous diagram exists — run it every time; structural drift is one of the highest-signal findings.
 
 ---
 

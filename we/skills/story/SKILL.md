@@ -4,7 +4,7 @@ description: >
   Story (Solo) — PO skill at the Story altitude. Creates or refines one
   sprint-sized Story with a build-ready plan (ticket MINIMAL, plan
   DETAILED, EnterPlanMode). Use when the user says "/we:story",
-  "new story", "refine story", "acceptance criteria", "write a story".
+  "new story", "refine story", "acceptance criteria".
   Contentious stories: /we:meet story first.
 ---
 
@@ -53,6 +53,9 @@ Every AC must answer:
 
 ### Given/When/Then Format
 
+Bad: "Dark mode works."
+
+Good:
 ```
 Given I am on the settings page
 When I click the "Dark Mode" toggle
@@ -71,7 +74,7 @@ Then the UI updates to dark theme immediately
 
 ---
 
-## MODE 1: Refine Existing Story
+## Refine Mode: Refine Existing Story
 
 ### Step 1: Load Story
 
@@ -98,6 +101,10 @@ As [role] I want [feature] so that [benefit].
 ## Plan
 Implementation Plan: docs/plans/{TICKET}-story.md
 ```
+
+Anything beyond this template follows `${CLAUDE_PLUGIN_ROOT}/references/ticket-briefs.md` —
+behavioural contracts and testable ACs, no file paths or line numbers (they go stale while
+the ticket waits; the plan carries the specifics).
 
 ### Step 4: Create Plan (EnterPlanMode)
 
@@ -230,7 +237,7 @@ User reviews plan. On feedback → adjust. On approval → continue.
 
 ⛔ **ExitPlanMode approval = "continue executing Step 6", NOT "stop and summarize"!**
 
-**Execute these 6 commands IN ORDER. No explanations. No summaries between steps. Just do it.**
+**Execute these 6 commands IN ORDER. No explanations. No summaries between steps.**
 
 1. **Save plan:** Read approved plan from `~/.claude/plans/{codename}.md`. Update frontmatter to `status: approved, story: {TICKET}`. Write to `docs/plans/{TICKET}-story.md` **in the project's main worktree** (the directory where `main` is checked out — usually the original clone, e.g. `~/<workspace>/<repo>/`), NOT in the current working directory (which may be a feature-branch worktree). (`~/.claude/plans/` is temporary — `docs/plans/` is permanent!)
 2. **Update ticket:** If ticket exists → update description with plan link. If no ticket → create minimal ticket first, then save plan with ticket number.
@@ -279,19 +286,19 @@ The recommendation is non-binding — always offer the other surface as the fall
 
 ---
 
-## MODE 2: Create New Story
+## Create Mode: Create New Story
 
 Trigger: `/we:story "Feature description"`
 
 1. Design session — ask clarifying questions
-2. Scope check: many independent slices → hand off to `/we:epic`; a single coherent phased change stays one Story (see MODE 1 Step 2 + Execution Surface).
+2. Scope check: many independent slices → hand off to `/we:epic`; a single coherent phased change stays one Story (see Refine Mode Step 2 + Execution Surface).
 3. Create ticket via ticketing tool (minimal)
 4. Link to Epic (if applicable)
-5. Continue as MODE 1 (Steps 4-6)
+5. Continue as Refine Mode (Steps 4-6)
 
 ---
 
-## MODE 3: Interactive Design Session
+## Design Session Mode: Interactive Design Session
 
 Trigger: `/we:story` (no argument)
 
@@ -345,5 +352,5 @@ The sections above are the spec — these invariants are the easiest to miss:
 - Ticket stays MINIMAL; the plan carries ALL detail. Save it to `docs/plans/{TICKET}-story.md` via Write() — `~/.claude/plans/` is NOT permanent.
 - ALWAYS set the `epic:` frontmatter field when the story belongs to an Epic — `/we:orchestrate`'s ready-set filters stories by it; a missing `epic:` makes the story invisible to orchestration. Omit only for genuinely standalone stories.
 - The plan filename suffix is `-story.md` (legacy `-plan.md` still read by `/we:build` for back-compat).
-- A single COHERENT change that is merely phased is NOT an epic — the urge to split into phases is the orchestrate signal, not the epic signal (MODE 1 Step 2 + Execution Surface are the spec).
+- A single COHERENT change that is merely phased is NOT an epic — the urge to split into phases is the orchestrate signal, not the epic signal (Refine Mode Step 2 + Execution Surface are the spec).
 - ⛔ NEVER implement, create branches, write code, or auto-continue to `/we:build`/`/we:orchestrate` — after Step 6, STOP IMMEDIATELY. Story + Plan is the whole job; the user invokes the next surface.

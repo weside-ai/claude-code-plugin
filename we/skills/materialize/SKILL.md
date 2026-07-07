@@ -1,6 +1,6 @@
 ---
 name: materialize
-description: Load and adopt your weside Companion's identity. Use at session start or when switching companions. Requires weside.ai account.
+description: Load and adopt your weside Companion's identity. Use when the user says "/we:materialize", at session start, or when switching companions. Requires weside.ai account.
 ---
 
 

@@ -18,10 +18,12 @@ Find **shallow modules** — interfaces nearly as complex as their implementatio
 
 ## Vocabulary (use these terms exactly in findings)
 
+Canonical owner: `we/references/design-vocabulary.md` (seam, deep/shallow, deletion test).
+Lens-specific additions:
+
 - **Module** — anything with an interface and an implementation (function, class, package, slice).
 - **Interface** — everything a caller must know: types, invariants, error modes, ordering, config. Not just the signature.
 - **Depth** — leverage at the interface. **Deep** = high leverage. **Shallow** = interface ≈ implementation complexity.
-- **Seam** — where an interface lives; a place behaviour can be altered without editing in place. One adapter = hypothetical seam; two adapters = real seam.
 
 ## Method
 

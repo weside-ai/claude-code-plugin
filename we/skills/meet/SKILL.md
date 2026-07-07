@@ -90,7 +90,7 @@ applies here too (semantics: council Step 3, the single owner). No separate meet
 
 1. Load the Epic — `docs/plans/<saga>-<epic>-epic.md`, or a ticketing-tool Epic, or the working topic.
 2. (Council) — convene if chosen; pressure the slice ("is this the smallest version that delivers the win?", "what's the risk-driven sequence?", "where do we cut if the work runs long?").
-3. Decompose the Epic into **Stories** — sprint-sized feature slices with acceptance shape.
+3. Decompose the Epic into **Stories** — each a **tracer bullet** (see `${CLAUDE_PLUGIN_ROOT}/references/design-vocabulary.md`): a sprint-sized slice that runs end-to-end through every layer, never a layer-per-Story cut. Before locking the cut, run the prefactoring check: is there a small enabling change that would make several Stories easy? ("Make the change easy, then make the easy change") — if so, it becomes the first Story.
 4. Sequence the Stories; identify which one to refine first; flag any that need a Council pass via `/we:meet story`.
 5. Artifact: an epic-meeting summary — the Story list with acceptance shape, sequencing, dependencies. Offer to persist as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` or fold the Story breakdown into the Epic doc via `/we:epic`.
 

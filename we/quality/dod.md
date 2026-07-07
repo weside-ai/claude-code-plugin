@@ -31,6 +31,7 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 - [ ] Test types from plan implemented (Unit/Integration/E2E)
 - [ ] Coverage meets project thresholds (verified by CI on push — not a local gate)
 - [ ] **Affected tests pass locally** — tests covering the diff (mapped paths for pytest, `--findRelatedTests` for Jest); the full suite runs in CI. Fall back to the full local suite when the diff touches `conftest.py`, jest config, fixtures, or >50 files.
+- [ ] **Test quality per `references/test-discipline.md`** — no implementation-coupled tests, no tautological assertions, mocks at system boundaries only. Applies at every `test_discipline` level (the level only decides *when* tests are written).
 
 ### Post-Implementation Semantic Checks
 

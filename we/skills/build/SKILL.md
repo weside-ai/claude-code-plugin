@@ -211,7 +211,7 @@ Agent(
 3. The ticket key, feature branch name, and absolute repo path
 4. The project conventions file (`CLAUDE.md` path)
 5. **Instruction:** implement the phase, commit with message `{TICKET}: phase {N} — {description}`, push to the feature branch
-6. **Instruction:** follow TDD convention — write failing tests first, then implementation. Run the repo's linter/formatter (e.g. `ruff`, `eslint`, `gofmt`, `rustfmt` — whichever is present) auto-fix before committing.
+6. **Instruction:** apply the configured test discipline (`test_discipline` from `.weside/config.json`; default `tests-after`). Spell the level out in the brief — tdd: failing test before code at each seam; tests-after: tests in the same change, after the code; off: no new tests unless the plan asks — and inline the good-test anti-patterns from `references/test-discipline.md` (the sub-agent cannot load references). Run the repo's linter/formatter (e.g. `ruff`, `eslint`, `gofmt`, `rustfmt` — whichever is present) auto-fix before committing.
 7. **Instruction:** return a short report (≤200 tokens): what was done, what was deferred, any `file:line` that is unresolved
 
 **The orchestrator retains all pipeline ownership.** Sub-agents implement + commit only. They do NOT open PRs, transition Jira, write checkpoints, make decisions outside their phase scope, or run quality gates.
@@ -229,7 +229,7 @@ Agent(
 
 **For each phase** (after it completes — inline or agent returns):
 
-1. Follow project conventions; write tests alongside code (TDD: test first, then implementation); run auto-fix (ruff/eslint/gofmt/rustfmt — whichever tool is present in the repo); commit.
+1. Follow project conventions; write tests per the configured test discipline (`test_discipline` from `.weside/config.json`, default `tests-after` — level semantics + good-test rules: `${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`); run auto-fix (ruff/eslint/gofmt/rustfmt — whichever tool is present in the repo); commit.
 2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
    - **Seed migrations: flipping a field on an EXISTING seeded row needs a FULL-row upsert or a guarded UPDATE, never a partial `{id, col}` upsert.** A partial `seed_upsert(rows=[{"id":N, "col":val}], …)` is INSERT…ON CONFLICT DO UPDATE — if the row is absent at execution time the INSERT fallback fires and violates NOT NULL. To deactivate/flip a column on a row another migration seeded, either mirror that migration's full row (all NOT NULL columns, FKs resolved in Python) or use a guarded `UPDATE … WHERE id=N`. Run a real `alembic upgrade → downgrade → upgrade` roundtrip against a DB before trusting it.
 3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
