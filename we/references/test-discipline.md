@@ -4,8 +4,10 @@ What a test worth keeping looks like, where tests go, and what the project's con
 test discipline level means. Terms (`seam`, `tracer bullet`) per
 `references/design-vocabulary.md`.
 
-Consumers: `/we:develop`, `/we:build`, the `test-runner` and `code-reviewer` agents,
-worker briefs (which inline the level — workers can't load references).
+Consumers: `/we:develop`, `/we:build`, the `test-runner` agent, worker briefs (which inline
+the level — workers can't load references), and the bug-hunt engine at integration (Codex
+adversarial-review or Claude's native `/code-review` — the anti-patterns below are exactly the
+kind of thing a bug-hunt should catch; `we:ac-reviewer` checks AC/DoD, not test quality).
 
 ## The `test_discipline` levels (single owner)
 

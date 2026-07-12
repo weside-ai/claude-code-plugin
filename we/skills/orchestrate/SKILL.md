@@ -246,7 +246,7 @@ the skill; the worktree is managed internally.
 
 Your job: run the DEV-ONLY pipeline for {TICKET} via the skill.
 
-DEV-ONLY means: implement all phases → **fast/unit local gates only** → cross-review your
+DEV-ONLY means: implement all phases → **fast/unit local gates only** → AC-check your
 diff → commit → push YOUR branch (e.g. `feat/{TICKET}-work`) → STOP.
 
 TESTS: {test_discipline_instruction — the Lead reads `test_discipline` from
@@ -283,7 +283,7 @@ REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead — y
 SendMessage tool. When the dev work is done (or a blocker stops you), send EXACTLY ONE message:
   SendMessage(to="team-lead", summary="worker-{TICKET} done|blocked",
               message="<branch: {branch-name} | commits: N | gates: lint ✓ types ✓ tests ✓ |
-                        cross-review: clean|N findings (summary) |
+                        AC-check: clean|N findings (summary) |
                         blockers: none|{reason}>")
 NEVER report done without a pushed branch. Even if you stop early, send the message first, then
 mark your task completed via TaskUpdate.
@@ -451,9 +451,18 @@ stale-base CI failures (e.g. an OpenAPI/types or lint check that main already mo
 The diff-vs-main looking unexpectedly large is the drift tell — merge main first, then re-read it.
 (Generalises 3e-bis, which covers only Alembic migration heads.)
 
-**B1. Cross-review at integration (when `review.cross` is on):**
-+ Workers were Claude → `/codex:adversarial-review` on the full integration diff (if `tools.codex: true`)
-+ Workers were Codex or foreign → local `code-reviewer` agent
+**B1a. AC-review at integration (always, gating).** Run `we:ac-reviewer` once against the full
+integration diff — every dispatched Story's acceptance criteria plus the DoD (see
+[`worker-dispatch.md`](../../references/worker-dispatch.md) § AC-review rule). This is the one
+place in `/we:orchestrate` that gates AC/DoD; the Lead writes `ac_verified` on PASS. BLOCKING →
+fix before B2.
+
+**B1b. Bug-hunt at integration (once, when `review.cross` is on).** The writer-aware matrix from
+[`worker-dispatch.md`](../../references/worker-dispatch.md) § Bug-hunt dispatch, run once against
+the full integration diff:
++ Every merged chunk was written by Claude, and `tools.codex: true` → `/codex:adversarial-review`
++ Otherwise (any chunk was Codex, a foreign engine, or Claude without Codex configured) → Claude's
+  native `/code-review`
 
 **B2. Open ONE PR** (`feat/<epic-or-story>-integration → main`). This is the moment GitHub CI
 fires for the first time this run. This is intentional — the whole point of the integration branch
@@ -477,8 +486,8 @@ PR exists but nothing moved the tickets out of "In Progress". Detect the ticketi
 only on workflow/permission rejection. **Leave the tickets in "In Review"** — never move to "Done"
 (human's job after merge). GitHub Issues / no ticketing tool → skip silently.
 
-**Checkpoint:** the Lead writes `pr_created` and `ci_passed` (not the workers) — workers only write
-their local-gate state. Confirm via `story status {TICKET}`.
+**Checkpoint:** the Lead writes `ac_verified` (B1a), `pr_created`, and `ci_passed` (not the
+workers) — workers only write their local-gate state. Confirm via `story status {TICKET}`.
 
 **CI red:** report it; the user can re-run `/we:ci-review {PR}` on the integration PR.
 
@@ -530,8 +539,9 @@ more than trivially straight-line. The shape:
   Lead via `SendMessage`.
 + The Lead **reviews each diff and integrates it onto one integration branch** — holding the thread,
   reading reports (not full transcripts) to keep its own context clean.
-+ The heavy QS runs **once, at the end, by the Lead**: full suite + arch gates + `/we:review` +
-  `/we:docs` + bypass register, then **one PR** for the whole change.
++ The heavy QS runs **once, at the end, by the Lead**: full suite + arch gates + AC-review
+  (`we:ac-reviewer`, gating) + bug-hunt (writer-aware — Codex adversarial or native `/code-review`,
+  see Step 8 B1a/B1b) + `/we:docs` + bypass register, then **one PR** for the whole change.
 + **Characterization-as-contract.** The first chunk writes a characterization net that pins current
   behaviour (green on unmodified code); every later chunk must keep those assertions **unchanged** —
   editing one is a deliberate, reviewed behaviour change, never a silent diff. The integration QS
@@ -605,7 +615,7 @@ single-writer rule) are specified inline in Step 7+ and `references/refine-ahead
 
 ## References
 
-+ `references/worker-dispatch.md` — worker contract, three backends, cross-review rule, integration-branch/single-CI
++ `references/worker-dispatch.md` — worker contract, three backends, AC-review rule, bug-hunt dispatch, integration-branch/single-CI
 + `references/codex-dispatch.md` — Codex single-detach rule + chunk-brief template
 + `we/scripts/worker-launch.sh` — foreign-engine launcher (reads `.weside/engines.local.json`)
 + `references/mode-b-lessons.md` — hard-won Mode B field lessons (mandatory read before chunk dispatch)

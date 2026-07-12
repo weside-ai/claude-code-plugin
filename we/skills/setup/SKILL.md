@@ -85,14 +85,16 @@ changes with their choice).
      — level semantics owned by references/test-discipline.md
    → Saved as `test_discipline`; read by /we:develop, /we:build, and worker briefs.
 
-5. "Which code reviewers does this repo use? (Auto-detected: {detected})"
+5. "Which bug-hunt engines does this repo use? (Auto-detected: {detected})"
    → Detect candidates: codex plugin installed → suggest `codex`;
      a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
-     `claude` (the local code-reviewer agent) is always available.
+     `claude` (Claude's native `/code-review` skill) is always available. This is bug-hunting
+     only — AC/DoD checking (`we:ac-reviewer`) is separate and always runs, regardless of this
+     list.
    → **Codex detected → suggest `["codex", "claude"]`** (codex = the local adversarial
      pass when Claude wrote the code; claude = the CI second opinion). No codex →
      default `["claude"]`. The list seeds the CI-bot allowlist; it does NOT rank local
-     reviewers (see Reviewer-id semantics below).
+     bug-hunt engines (see Reviewer-id semantics below).
    → Confirm or override.
    → "Add another reviewer? (free-text id, e.g. a custom bot — leave empty to finish)"
      → accept any id; unknown ids are treated as CI bots (allowlisted, not run locally).
@@ -130,23 +132,35 @@ Options (show only available ones):
 
 **Cross-review config:**
 
-Ask: *"Enable cross-review? When workers write code, the other engine reviews it
-(Claude wrote → Codex adversarial-review; other engine wrote → Claude code-reviewer).
-[y/n, default y]"*
+Ask: *"Enable per-chunk AC-checking and bug-hunt cross-review? When workers write code, the
+other engine hunts bugs in it once at integration (Claude wrote → Codex adversarial-review;
+otherwise → Claude's native /code-review); separately, every chunk gets an informational AC-check
+against its Story's criteria. [y/n, default y]"*
 
 + `y` → persist `"review": { ..., "cross": true }`
-+ `n` → persist `"review": { ..., "cross": false }`
++ `n` → persist `"review": { ..., "cross": false }` (the per-chunk AC-check and bug-hunt
+  cross-review are skipped; the integration-time AC-review gate still runs — see
+  `worker-dispatch.md` § AC-review rule)
 
-Show a one-line explanation why cross-review matters: *"Different models catch different
-things — the reviewer is the engine that didn't write the code."*
+Show a one-line explanation why this matters: *"Different models catch different bugs — the
+bug-hunter is the engine that didn't write the code. AC-checking is separate and cheap enough to
+run on every chunk."*
 
 **Reviewer-id semantics (single source of truth — other skills reference this):**
 
-+ `claude` → the local `code-reviewer` agent. Runs as the local reviewer when no codex is present, when codex/a foreign engine wrote the code, and is the Claude second opinion on GitHub CI. Locally invokable.
-+ `codex` → local `/codex:adversarial-review` via the codex plugin's `codex-companion.mjs`. The local adversarial pass when Claude wrote the code. Locally invokable (needs the codex plugin).
++ `claude` → Claude's native `/code-review` skill. Runs as the local bug-hunt engine when no codex
+  is present, when codex/a foreign engine wrote the code, and is the Claude second opinion on
+  GitHub CI. Locally invokable.
++ `codex` → local `/codex:adversarial-review` via the codex plugin's `codex-companion.mjs`. The
+  local adversarial pass when Claude wrote the code. Locally invokable (needs the codex plugin).
 + `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
 
-**Exactly ONE local reviewer runs, chosen by who wrote the code** — not by list order and not by a count. The reviewer is the engine that did NOT write the code: Claude wrote + `tools.codex` + `review.cross` → `/codex:adversarial-review` (and the `code-reviewer` agent does NOT also run); codex/foreign wrote, or no codex → `code-reviewer`. `review.available`'s only job is to seed the CI-bot allowlist `/we:ci-review` collects from; its order is cosmetic for local review.
+**Exactly ONE bug-hunt engine runs, chosen by who wrote the code** — not by list order and not by
+a count. The engine is the one that did NOT write the code: Claude wrote + `tools.codex` +
+`review.cross` → `/codex:adversarial-review`; codex/foreign wrote, or no codex → Claude's native
+`/code-review`. `review.available`'s only job is to seed the CI-bot allowlist `/we:ci-review`
+collects from; its order is cosmetic for local review. `we:ac-reviewer` is separate from this
+list entirely — it always runs, regardless of `review.available` or `review.cross`.
 
 ### Step 3: Save Configuration
 
@@ -194,7 +208,7 @@ If the user provided a vision, save it to `.weside/vision.md`.
 
   If the user already has a concrete check in mind, seed the file with that item instead of the placeholder.
 
-These files are **additive**, never a replacement: `/we:story` and `/we:build` read `.weside/dor.md` alongside the plugin DoR, and the `code-reviewer` agent reads `.weside/dod.md` alongside the plugin DoD — both sets of items apply.
+These files are **additive**, never a replacement: `/we:story` and `/we:build` read `.weside/dor.md` alongside the plugin DoR, and the `we:ac-reviewer` agent reads `.weside/dod.md` alongside the plugin DoD — both sets of items apply.
 
 ```
 .weside/
@@ -215,7 +229,7 @@ Vision:         .weside/vision.md
 Workers:        Claude Code (Sonnet/Haiku) default
 Codex:          available  (or: not installed)
 Engine <name>:  configured  (or: none)
-Cross-review:   on  (or: off)
+Cross-review:   on  (or: off)  — per-chunk AC-check + bug-hunt cross-review
 ```
 
 ### Step 5: Companion Framework Setup (optional — ask first!)

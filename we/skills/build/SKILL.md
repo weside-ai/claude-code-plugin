@@ -87,7 +87,7 @@ Single source of truth — step, what it does, checkpoint written, who writes it
 | 4 | AC + DoD verification gate (BLOCKING) | `ac_verified` | build (Step 4) |
 | 5 | PARALLEL: one writer-aware reviewer + `/we:static` + `/we:test` (tests run exactly once, here) | `review_passed`, `static_analysis_passed`, `test_passed` | reviewer, static-analyzer, test-runner |
 | 6 | Documentation check (`doc-architect`) | `docs_updated` | docs (Step 6) |
-| 7 | `/we:pr` (verifies all 3 quality-gate checkpoints first) | `pr_created` | pr-creator |
+| 7 | `/we:pr` (verifies all 4 quality-gate checkpoints first) | `pr_created` | pr-creator |
 | 8 | Wait for CI/reviews → ONE ci-review pass INLINE → wait → report | `ci_passed` | build (Step 8) |
 | 9 | Verify ticket → "In Review" (and leave it there) | — | — |
 
@@ -303,46 +303,46 @@ Only write checkpoint `ac_verified` when ALL AC **and** DoD items pass. If items
 
 - **static-analyzer** — Lint, format, types
 - **test-runner** — Tests + coverage
-- **One local reviewer** — chosen by who wrote the code (below)
+- **One bug-hunt engine** — chosen by who wrote the code (below)
 
-**Which local reviewer runs — exactly ONE, chosen by the writer (not a count).** The reviewer
-is the model that did NOT write the code. On the solo `/we:build` path the writer is always
-Claude, so read `tools.codex` and `review.cross` (default `true`) from `.weside/config.json`:
+AC-alignment and DoD are already gated by Step 4, above — no `we:ac-reviewer` call belongs in
+this step; that would re-check what Step 4 just verified. This step's one reviewer hunts bugs
+only.
 
-- **Claude wrote + `tools.codex: true` + `review.cross: true` + the codex script resolves** →
-  the reviewer is `/codex:adversarial-review`. **Do NOT also launch the `code-reviewer` agent** —
-  running both is the double work this consolidation removes. Codex is `disable-model-invocation`,
-  so call the script directly (it ships in the codex plugin's cache, NOT under
-  `${CLAUDE_PLUGIN_ROOT}`). Resolve by glob, take the newest, run the **adversarial** subcommand:
+**Which bug-hunt engine runs — exactly ONE, chosen by the writer (not a count).** The engine is
+the one that did NOT write the code. On the solo `/we:build` path the writer is always Claude, so
+read `tools.codex` from `.weside/config.json` (full matrix:
+[`worker-dispatch.md`](../../references/worker-dispatch.md) § Bug-hunt dispatch):
+
+- **`tools.codex: true` + the codex script resolves** → `/codex:adversarial-review`. Codex is
+  `disable-model-invocation`, so call the script directly (it ships in the codex plugin's cache,
+  NOT under `${CLAUDE_PLUGIN_ROOT}`). Resolve by glob, take the newest, run the **adversarial**
+  subcommand:
   ```bash
   CODEX_REVIEW=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null | sort -V | tail -1)
-  if [ -n "$CODEX_REVIEW" ]; then node "$CODEX_REVIEW" adversarial-review --wait; else echo "codex configured but plugin not installed — falling back to code-reviewer"; fi
+  if [ -n "$CODEX_REVIEW" ]; then node "$CODEX_REVIEW" adversarial-review --wait; else echo "codex configured but plugin not installed — falling back to native /code-review"; fi
   ```
-  When codex is the sole reviewer, `code-reviewer` does not run, so **build itself writes the
-  `review_passed` checkpoint** from the adversarial verdict. Codex returns JSON, not the
-  `<!-- VERDICT:* -->` marker the `code-reviewer` agent emits: map `approve` (no material findings)
-  → write `review_passed`; `needs-attention` → fix the findings and re-run before writing it.
-  Without this, the blocking `review_passed` gate in `pr-creator` never gets set.
+  Codex returns JSON, not a marker: map `approve` (no material findings) → write `review_passed`;
+  `needs-attention` → fix the findings and re-run before writing it. Without this, the blocking
+  `review_passed` gate in `pr-creator` never gets set.
 
-- **Otherwise** (`tools.codex: false`, `review.cross: false`, or the codex script doesn't resolve)
-  → launch the `code-reviewer` agent. It runs its full review (bugs + AC-alignment + DoD).
-  Since Step 4 already verified AC + DoD, pass the token `DOD_AND_AC_ALREADY_VERIFIED` in the
-  prompt so the agent skips the DoD Quick Check + AC-alignment table and focuses on
-  bugs/security/design/reachability — no duplication of the gate's work.
+- **Otherwise** (`tools.codex: false` or the codex script doesn't resolve) → run Claude's native
+  `/code-review` skill (`Skill(skill="code-review")`) against the same diff. Findings → fix
+  inline, re-run; clean → write `review_passed` directly.
 
 (The rare case where Codex or a foreign engine wrote the code is an `/we:orchestrate` concern,
-not `/we:build`; there the writer-aware rule picks `code-reviewer` — see `develop`/`orchestrate`.)
+not `/we:build`; there the same matrix applies — see `develop`/`orchestrate`.)
 
 **AI CI reviewers run on GitHub, not locally.** Whatever AI reviewers the repo runs on GitHub
 (Claude Review plus any CI bots the repo lists in `review.available`) post resolvable threads +
 their own check gates after PR creation. The GitHub review has better context (PR diff, commit
 history, prior reviews) and is the authoritative gate — and it is the Claude second opinion in
 the codex-local case. If no GitHub remote or no AI reviewer is present, skip Steps 8d–8e (thread
-resolution) and treat the AC+DoD gate + the one local reviewer as authoritative — no extra
+resolution) and treat the AC+DoD gate + the one bug-hunt engine as authoritative — no extra
 reviewer is added to compensate.
 
 **Wait for ALL THREE.** Then verify checkpoints:
-- `review_passed` (the one local reviewer clean — `code-reviewer` verdict, or the codex adversarial verdict written by build)
+- `review_passed` (the bug-hunt engine clean — codex adversarial verdict or native `/code-review` verdict, written by build)
 - `static_analysis_passed` (static-analyzer clean)
 - `test_passed` (tests green; coverage met if a coverage tool is configured — unmeasured if absent)
 

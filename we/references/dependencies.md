@@ -76,7 +76,7 @@ that touches user scope, and never blocks the pipeline on a `n`.
 
 ## Codex backend (optional)
 
-- **Provides:** an optional execution backend for `/we:orchestrate` and `/we:codex-task`. The Lead dispatches a chunk to Codex (`gpt-5-codex`) and reviews + integrates the result. Cross-review: Claude wrote → Codex reviews (`/codex:adversarial-review`); Codex wrote → Claude reviews.
+- **Provides:** an optional execution backend for `/we:orchestrate` and `/we:codex-task`. The Lead dispatches a chunk to Codex (`gpt-5-codex`) and reviews + integrates the result. Bug-hunt: Claude wrote → Codex reviews (`/codex:adversarial-review`); Codex wrote → Claude's native `/code-review` reviews. AC/DoD checking (`we:ac-reviewer`) runs separately either way.
 - **Detect:** `command -v codex` exits 0 (the official Codex plugin's CLI).
 - **Install:** the official Codex plugin [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (third-party, OpenAI's). The `we` plugin declares it as an **optional/recommended** dependency only — it never vendors or hard-depends on it. Follow that repo's install instructions; a `codex` CLI on PATH is the empirical signal we probe for.
 - **Re-check:** `command -v codex` again.

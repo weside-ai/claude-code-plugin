@@ -20,7 +20,7 @@ Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is au
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
-**Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra install. Two optional backends: **Codex** (`gpt-5-codex`, via [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`). `/we:orchestrate` dispatches workers to whichever backend is configured; `/we:setup` runs the wizard. Cross-review: whichever engine wrote the code, the other engine reviews it (`review.cross: true` by default). Direct Codex dispatch: `/we:codex-task`. The plugin never hard-depends on Codex or any foreign engine.
+**Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra install. Two optional backends: **Codex** (`gpt-5-codex`, via [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`). `/we:orchestrate` dispatches workers to whichever backend is configured; `/we:setup` runs the wizard. Two separate checks: `we:ac-reviewer` verifies AC/DoD (cheap, runs per chunk and at integration); the bug-hunt runs once, at integration, on whichever engine did NOT write the code (`review.cross: true` by default) — see `references/worker-dispatch.md`. Direct Codex dispatch: `/we:codex-task`. The plugin never hard-depends on Codex or any foreign engine.
 
 Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 
@@ -64,10 +64,12 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 - **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` · `/we:coach` ·
   `/we:retro` · `/we:handoff` · `/we:grill` · `/we:materialize`
 
-**Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:review`, `/we:static`, `/we:test`.
+**Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:ac-review`, `/we:static`, `/we:test`.
 
-**Agents** (background, called by commands/skills): `code-reviewer`, `static-analyzer`,
-`test-runner`, `pr-creator`, `doc-architect`, and the nine `council-*` role lenses.
+**Agents** (background, called by commands/skills): `ac-reviewer`, `static-analyzer`,
+`test-runner`, `pr-creator`, `doc-architect`, and the nine `council-*` role lenses. Bug-hunting
+is not one of our agents — it's `/codex:adversarial-review` or Claude's native `/code-review`,
+dispatched by writer per `references/worker-dispatch.md`.
 
 ---
 
@@ -110,7 +112,7 @@ Or individual quality gates:
 ```
 /we:static         (lint/format/types)
 /we:test           (run tests)
-/we:review         (code review)
+/we:ac-review      (AC/DoD alignment + verdict)
 /we:pr             (create PR)
 /we:ci-review      (fix CI findings)
 ```

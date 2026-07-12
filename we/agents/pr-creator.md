@@ -12,11 +12,12 @@ color: green
 
 ## Prerequisites (BLOCKING)
 
-All 3 checkpoints must exist before PR creation:
+All 4 checkpoints must exist before PR creation:
 
 | Checkpoint | From | Required |
 |---|---|---|
-| `review_passed` | `/we:review` | Yes |
+| `ac_verified` | `/we:ac-review` (AC-alignment + DoD) | Yes |
+| `review_passed` | Bug-hunt — Codex adversarial-review or Claude's native `/code-review` | Yes |
 | `static_analysis_passed` | `/we:static` | Yes |
 | `test_passed` | `/we:test` | Yes |
 
@@ -162,7 +163,7 @@ Detection priority + transition-verify-retry procedure: `${CLAUDE_PLUGIN_ROOT}/r
 
 ## Rules
 
-- **VERIFY** all 3 checkpoints before creating PR
+- **VERIFY** all 4 checkpoints before creating PR
 - **STOP** if any checkpoint missing
 - **ALWAYS** rebase on main before push
 - **ALWAYS** save `pr_created` checkpoint after success
