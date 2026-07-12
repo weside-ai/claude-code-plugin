@@ -5,7 +5,8 @@ language is the whole point. A leading word recruits priors the model already ho
 works when every skill uses the same one.
 
 Consumers: `/we:story` (plan authoring), `/we:develop`, `/we:diagnose`,
-`/we:audit-architecture` (deepening lens), the `code-reviewer` agent, `/we:meet` (story cuts).
+`/we:audit-architecture` (deepening lens), the bug-hunt engine at integration (Codex
+adversarial-review or Claude's native `/code-review`), `/we:meet` (story cuts).
 
 ## Terms
 

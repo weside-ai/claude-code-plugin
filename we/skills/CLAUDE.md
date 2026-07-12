@@ -33,7 +33,7 @@ Two categories — both needed, kept separate:
 
 | Category | Who | When | Examples |
 |---|---|---|---|
-| **Activity / Solo** | one companion works alone in a role | scope is clear, routine work | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:build`, `/we:pr`, `/we:review` |
+| **Activity / Solo** | one companion works alone in a role | scope is clear, routine work | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:build`, `/we:pr`, `/we:ac-review` |
 | **Meeting** | several companions + stakeholder coordinate | a decision or alignment is needed | `/we:meet vision`, `/we:meet saga`, `/we:meet epic`, `/we:meet story` |
 
 A meeting produces decomposition + a synthesis; an activity produces the artifact. `/we:meet story` hands off to `/we:story` (Solo) once the crew has agreed the scope; the other meetings (vision/saga/epic) hand off to the matching Solo skill (`/we:vision`/`/we:saga`/`/we:epic`) for the artifact write. Meetings live in **one** argument-dispatched skill, `we/skills/meet/` — the plugin loader does not support nested skill directories.

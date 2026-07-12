@@ -233,8 +233,10 @@ Optional but enhance the pipeline:
 > **Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra
 > install. Two optional engines: **Codex** ([openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc))
 > and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`).
-> Engines cross-review each other's code (`review.cross: true` by default). `/we:setup` runs the
-> wizard. The `we` plugin never hard-depends on Codex or any foreign engine.
+> Engines bug-hunt each other's code once, at integration (`review.cross: true` by default) —
+> whichever engine wrote it, the other reviews it. AC/DoD checking runs separately and always,
+> regardless of which engine wrote the code. `/we:setup` runs the wizard. The `we` plugin never
+> hard-depends on Codex or any foreign engine.
 
 ---
 

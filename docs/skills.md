@@ -140,7 +140,7 @@ Build orchestrator — the autonomous half of the pipeline. Once you trigger it,
 
 > *Dev-only worker slice — implement, gate, commit, push, stop.*
 
-Implements one chunk (a Story, or a `--phases N,M` subset), runs fast local gates (lint/type/affected tests for the touched stack), commits, pushes its branch, and **stops** — no PR, no CI loop, no ticket transition. It's the worker `/we:orchestrate` dispatches, and it works standalone for manual dev work when you want the implementation without the full solo pipeline. Cross-reviews its own diff when `review.cross` is on. Branch shape: `feat/{TICKET}-work`.
+Implements one chunk (a Story, or a `--phases N,M` subset), runs fast local gates (lint/type/affected tests for the touched stack), commits, pushes its branch, and **stops** — no PR, no CI loop, no ticket transition. It's the worker `/we:orchestrate` dispatches, and it works standalone for manual dev work when you want the implementation without the full solo pipeline. Runs an informational AC-check (`we:ac-reviewer`) against its own diff when `review.cross` is on; the bug-hunt runs once, at Lead integration, not per chunk. Branch shape: `feat/{TICKET}-work`.
 
 **When to use:**
 - Dispatched by `/we:orchestrate` per chunk (the common case)
@@ -217,9 +217,14 @@ Boots from state like a colleague — reconstructs where an Epic stands from its
 
 These also run standalone for one-off checks.
 
-### `/we:review`
+### `/we:ac-review`
 
-Diff-based code review, max 10 issues. Dispatched as a background agent (`code-reviewer`) alongside `/we:static` and `/we:test`. In `/we:build` Step 5 it runs only when Claude did not hand the review to `/codex:adversarial-review` (writer-aware single-reviewer rule), and AC + DoD were already gated in Step 3 — so inside the pipeline it reviews for bugs/security/design. Run directly via `/we:review` (no gate ahead of it), it does the full review including AC alignment and the DoD Quick Check.
+AC-alignment and DoD check with verdict — dispatched as a background agent (`ac-reviewer`). Never
+hunts bugs. `/we:build` Step 4 applies the same criteria inline itself (not via this agent, to
+avoid a duplicate pass); the agent runs per chunk in `/we:develop` (informational) and at
+`/we:orchestrate` integration (gating). Bug-hunting is separate: Codex adversarial-review when
+Claude wrote the code, Claude's native `/code-review` otherwise — runs once, at integration, never
+per chunk. See `references/worker-dispatch.md`.
 
 ### `/we:static`
 
@@ -585,7 +590,7 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 
 | Agent | Used by | What it does |
 |---|---|---|
-| `code-reviewer` | `/we:review`, `/we:build` | Diff-based code review, AC alignment |
+| `ac-reviewer` | `/we:ac-review`, `/we:develop`, `/we:orchestrate` | AC-alignment + DoD check, verdict (no bug-hunting) |
 | `static-analyzer` | `/we:static`, `/we:build` | Lint, format, types |
 | `test-runner` | `/we:test`, `/we:build` | Tests with coverage |
 | `pr-creator` | `/we:pr`, `/we:build` | PR creation with checkpoint validation |

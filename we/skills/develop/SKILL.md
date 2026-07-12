@@ -123,31 +123,36 @@ Test quality is gated regardless of when tests were written — the anti-pattern
 
 Gate failures: fix inline, commit fix, re-run. Circuit breaker: 3 failures in the same gate → stop, report to the Lead.
 
-**Do NOT run `/we:review` here** — review is the Lead's step or happens cross-engine (Step 5).
+**Do NOT run `/we:ac-review` standalone here** — this step runs the same agent inline; the
+bug-hunt is the Lead's step at integration, not per chunk (Step 5).
 
 ---
 
-## Step 5: Cross-review (when review.cross is on)
+## Step 5: AC-check (when review.cross is on)
 
 Read `review.cross` from `.weside/config.json`. Default: `true`.
 
 **Only when `review.cross` is true:**
 
-Determine who wrote this chunk (this session / this worker), then run the **other** engine's review
-on the diff — the writer→reviewer matrix is in
-[`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) § Cross-review rule
-(Claude wrote → `/codex:adversarial-review` if `tools.codex: true`, else skip with a note;
-Codex/foreign wrote → local `we:code-reviewer` agent).
+Run `we:ac-reviewer` against **this worker's diff** (not the full branch) — the relevant ACs are
+the ones this chunk claims to satisfy per the plan. See
+[`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md)
+§ AC-review rule.
 
-Cross-review runs against **this worker's diff** (not the full branch). It is informational — the worker commits even with findings. Findings go into the Step 7 report so the Lead decides whether to fix before integration.
+This is informational — the worker reads the findings and decides whether to fix before
+committing; either way findings go into the Step 7 report so the Lead sees them at integration.
 
-**When `review.cross` is false or no second engine is available:** skip; note it in the report.
+**No bug-hunt here.** Bug-hunting (Codex adversarial-review or Claude's native `/code-review`) runs
+exactly once, at Lead integration, against the full merged diff — never per chunk. Running it here
+too would just re-review what integration reviews again.
+
+**When `review.cross` is false:** skip the AC-check; note it in the report.
 
 ---
 
 ## Step 6: Commit and push
 
-Ensure all phase commits are in. If cross-review produced obvious quick-fix findings the worker can own, fix and commit them now (`{KEY}: cross-review fixes`).
+Ensure all phase commits are in. If the AC-check produced obvious quick-fix findings the worker can own, fix and commit them now (`{KEY}: AC-check fixes`).
 
 Push the branch:
 
@@ -168,7 +173,7 @@ Commits: {N commits} — {brief description of what changed}
 
 Local gates: lint ✓ | types ✓ | tests ✓   (or: tests ✗ 2 failures — fixed)
 
-Cross-review ({engine}): {clean | N findings — {high-level summary}}
+AC-check: {clean | N findings — {high-level summary}}
   [list findings if any, one line each]
 
 Blockers: {none | description}
@@ -184,7 +189,7 @@ Next: Lead integrates this branch. Do NOT open a PR.
 + **Stop after push.** No PR, no per-worker CI loop, no ticket transition.
 + **Commit every phase** — atomic commits, one per phase or fix.
 + **Local gates must be green before pushing** — no gate-red push.
-+ **Cross-review is informational** — commit even with findings; surface them in the report.
++ **AC-check is informational** — commit even with findings; surface them in the report.
 + **Never dispatch to a nested /we:build** — you ARE the dev worker; calling /we:build from here is double-overhead.
 + **Honor `--phases` scope** — only implement the listed phases; do not expand scope.
 + **Report even on failure** — if a blocker stops you, report what you completed and why you stopped.
@@ -192,7 +197,7 @@ Next: Lead integrates this branch. Do NOT open a PR.
 
 ## References
 
-+ [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) — full dispatch contract, cross-review rule, integration-branch pattern
-+ [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md) — Codex single-detach rule (if cross-reviewing with Codex)
++ [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) — full dispatch contract, AC-review rule, bug-hunt dispatch, integration-branch pattern
++ [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md) — Codex single-detach rule (if the Lead uses Codex for integration bug-hunting)
 + `/we:orchestrate` — the Lead that dispatches this worker
 + `/we:build` — the solo full-pipeline alternative (PR + CI included)

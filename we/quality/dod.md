@@ -2,7 +2,7 @@
 
 **A story is DONE when all criteria below are met.**
 
-A repo can extend this checklist with its own criteria in `.weside/dod.md` (created by `/we:setup`); the `code-reviewer` agent reads it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
+A repo can extend this checklist with its own criteria in `.weside/dod.md` (created by `/we:setup`); the `we:ac-reviewer` agent reads it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
 
 ---
 
@@ -57,7 +57,8 @@ Verify each item that applies. Skip items that don't apply to your change.
 
 ### Quality Gates
 
-- [ ] `/we:review` passed (review_passed checkpoint)
+- [ ] AC-review passed (`ac_verified` checkpoint — `/we:ac-review` / `we:ac-reviewer`)
+- [ ] Bug-hunt passed (`review_passed` checkpoint — Codex adversarial-review or Claude's native `/code-review`)
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
 - [ ] AI-reviewer threads resolved on GitHub — the repo's configured review gate(s) block on unresolved BLOCKING/WARNING (Critical/Major) threads. Use `/we:ci-review` to fix and resolve all bot threads after PR creation. Skip if no GitHub remote or no AI reviewer is installed; local quality gates (review + static + test) are authoritative in that case.
@@ -98,10 +99,13 @@ Verify each item that applies. Skip items that don't apply to your change.
 
 ## Review Output Format
 
-Code reviewers (`/we:review`) should include in their output:
+`we:ac-reviewer` (`/we:ac-review`) should include in its output:
 
 1. **AC Alignment Table** — Each AC individually checked with status and evidence
 2. **DoD Quick Check** — Architecture compliance, security, wiring, test depth summary
+
+The bug-hunt engine (Codex adversarial-review or Claude's native `/code-review`) reports its
+findings separately — see `worker-dispatch.md` § Bug-hunt dispatch.
 
 ---
 
