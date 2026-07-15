@@ -258,6 +258,12 @@ FAST GATES: run unit tests and fast smoke tests ONLY. Skip integration tests tha
 running database, queue, or network service — those belong to the integration CI the Lead
 runs at the end. If unsure: if the test needs `docker-compose up` or an env variable like
 `DATABASE_URL`, it is an integration test — skip it with a note in your report.
+EXCEPTION — critical-path chunks: when this brief marks the chunk CRITICAL (money, auth,
+tenant isolation) and names a local integration suite + database, RUN that suite before
+reporting done — a critical chunk is never "fast gates only". (Field lesson: a money
+migration shipped green through unit-only gates and would have broken production; only the
+real-database suite catches the ON-CONFLICT/partial-index bug class.) The Lead decides
+which chunks are critical and writes the suite + database into the brief.
 
 ABSOLUTE NO-OPS (any of these voids the single-CI contract):
 - DO NOT `gh pr create` — this triggers GitHub CI per worker, defeating the whole pattern; the
