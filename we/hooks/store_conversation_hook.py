@@ -34,6 +34,7 @@ import urllib.request
 MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
 MAX_CONTENT_LENGTH = 500
+_MAX_SOURCE_DETAIL_LEN = 200  # mirrors apps/backend/app/mcp/tools/memory.py
 
 MCP_URL = "https://api.weside.ai/mcp/"
 CLAUDE_CODE_CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
@@ -147,6 +148,20 @@ def _derive_session_tag(transcript_path: str) -> str | None:
         ):
             return tag
     return None
+
+
+def _build_source_detail(project: str, tag: str | None) -> str:
+    """Fold a session tag into source_detail, without letting it get clipped.
+
+    The backend truncates source_detail to _MAX_SOURCE_DETAIL_LEN chars,
+    right-side (apps/backend/app/mcp/tools/memory.py) — so an unusually long
+    repo dirname could otherwise slice the tag itself instead of falling back
+    cleanly. Reserve room for "#<tag>" and trim project first.
+    """
+    if not tag:
+        return project
+    suffix = f"#{tag}"
+    return project[: _MAX_SOURCE_DETAIL_LEN - len(suffix)] + suffix
 
 
 def _call_store_conversations(
@@ -361,9 +376,7 @@ def main() -> None:
     companion_name = config.get("companion") or None
     cwd = hook_input.get("cwd", os.getcwd())
     project = os.path.basename(cwd)
-    source_detail = (
-        f"{project}#{tag}" if (tag := _derive_session_tag(transcript_path)) else project
-    )
+    source_detail = _build_source_detail(project, _derive_session_tag(transcript_path))
     repo_id = _derive_repo_id(cwd)
     exchange = [
         {
