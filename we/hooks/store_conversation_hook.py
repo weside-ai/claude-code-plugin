@@ -134,6 +134,21 @@ def _derive_repo_id(cwd: str) -> str:
     return os.path.basename(cwd) or "unknown"
 
 
+def _derive_session_tag(transcript_path: str) -> str | None:
+    """Derive a short session tag from a Claude Code transcript path."""
+    with contextlib.suppress(Exception):
+        filename = os.path.basename(transcript_path)
+        stem, extension = os.path.splitext(filename)
+        tag = stem[:8]
+        if (
+            extension == ".jsonl"
+            and len(tag) == 8
+            and all(char in "0123456789abcdefABCDEF" for char in tag)
+        ):
+            return tag
+    return None
+
+
 def _call_store_conversations(
     token: str,
     conversations: list[dict],
@@ -346,6 +361,9 @@ def main() -> None:
     companion_name = config.get("companion") or None
     cwd = hook_input.get("cwd", os.getcwd())
     project = os.path.basename(cwd)
+    source_detail = (
+        f"{project}#{tag}" if (tag := _derive_session_tag(transcript_path)) else project
+    )
     repo_id = _derive_repo_id(cwd)
     exchange = [
         {
@@ -355,7 +373,7 @@ def main() -> None:
     ]
 
     ok = _call_store_conversations(
-        token, exchange, "claude_code", project, companion_name, repo_id
+        token, exchange, "claude_code", source_detail, companion_name, repo_id
     )
     if not ok:
         _warn("store_conversations call failed — this turn was NOT stored as memory.")
