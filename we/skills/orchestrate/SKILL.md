@@ -276,7 +276,8 @@ ABSOLUTE NO-OPS (any of these voids the single-CI contract):
 - DO NOT run frontend gates (`yarn`/`npm install`, `jest`, `tsc`) in a fresh worktree — it has no
   `node_modules` (~1GB) and building them is wasted setup. Implement the frontend changes, run
   ONLY touched-stack unit tests that need no install, and REPORT the skipped frontend validation;
-  the Lead validates frontend via the integration CI.
+  the Lead runs those install-gated gates locally at integration (Step 8 B1c), **before** the PR —
+  CI is the second confirmation, not the first.
 - After a change to a Pydantic schema referenced by a route, regenerate AND commit BOTH OpenAPI
   specs (`generate-openapi.py` → `openapi.json` + client spec), not just `generate:types` — the
   OpenAPI-Types CI check rebuilds TS from the committed spec, so a stale spec fails CI.
@@ -469,6 +470,24 @@ the full integration diff:
 + Every merged chunk was written by Claude, and `tools.codex: true` → `/codex:adversarial-review`
 + Otherwise (any chunk was Codex, a foreign engine, or Claude without Codex configured) → Claude's
   native `/code-review`
+
+**B1c. Lead integration gate — run the workers' skipped install-gated checks, BEFORE the PR.**
+Workers run in fresh worktrees with no `node_modules` (Step 6 brief), so by design they skip every
+install-gated check: frontend `prettier`/`eslint`/`tsc`/`jest`/dead-exports (knip), and any other
+node-tool gate. The Lead's integration worktree is the ONE place in the run that can afford the
+install — so validate here, not at CI. Opening the PR to "let CI catch it" costs one full
+CI cycle **per failing gate class**, serially (an observed run ate four: prettier → tsc →
+dead-exports/baseline → jest, each a ~10-min round-trip).
+
++ **Frontend-touching diff:** `yarn install` (or the repo's package manager) ONCE in the
+  integration worktree, then run the repo's frontend gates over the merged diff — format-write,
+  type-check, the affected tests, dead-exports/knip. Fold the fixes into the integration branch.
++ **Backend / arch gates:** re-run them over the **combined** diff even though each worker was
+  green individually — merge-combined import edges can break an import-linter baseline (or a
+  dead-export gate) that no single worker's diff did. Prefer a minimal hand-add of the new edges
+  over a full baseline regen (a regen can strip annotations a contract test requires).
++ Gate **commands** are repo-specific (read them from the repo's CI config / `CLAUDE.md`); the
+  **step** is not. After B1c, CI (B3) is the second confirmation, not the first.
 
 **B2. Open ONE PR** (`feat/<epic-or-story>-integration → main`). This is the moment GitHub CI
 fires for the first time this run. This is intentional — the whole point of the integration branch
