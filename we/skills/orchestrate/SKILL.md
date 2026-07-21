@@ -179,16 +179,31 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
    get **no** identity (the weside backend is user-scoped — parallel `select_companion` races;
    see `/we:council` "Memory in v1"). No MCP → generic review lens. Degrade gracefully.
 
-4. **Create the integration branch** — do this NOW, before any worker is dispatched. Workers
-   will branch off it; the Lead will merge their branches back here; the final PR runs against
-   it. Creating it here ensures every worker has the same base.
+4. **Create the integration branch in a dedicated worktree** — do this NOW, before any worker is
+   dispatched. Workers branch off the pushed ref; the Lead merges their branches back here; the
+   final PR runs against it. Creating it here ensures every worker has the same base.
+
+   **The Lead never flips the *main* worktree's branch** — the main worktree stays on the default
+   branch, untouched, for the whole run (flipping it lands commits on the wrong branch and lets a
+   stray rebase rewrite a pushed worker branch — a real, repeated failure mode). Instead the Lead
+   integrates from a **dedicated integration worktree** sibling to the repo. Every integration
+   operation below runs *inside* it (`git -C "$INT_WT"` / `cd "$INT_WT"`), never in the main worktree.
+   This is the worktree B1c ("the ONE place… that can afford the install") and the node_modules
+   symlink lesson already assume exists.
 
    ```bash
-   git checkout -b feat/<epic-or-story>-integration
-   git push -u origin feat/<epic-or-story>-integration
+   INT_WT="$(git rev-parse --show-toplevel)-integration"   # sibling dir, never the main worktree
+   BR=feat/<epic-or-story>-integration
    ```
 
-   If the branch already exists (resumed run), just check it out. Do **not** reset it.
+   Three cases (the last two are the resumed-run paths — never reset an existing branch or worktree):
+   + **Worktree already present** (resumed run) → reuse `$INT_WT` as-is.
+   + **Branch exists but no worktree** → `git worktree add "$INT_WT" "$BR"`.
+   + **Neither exists** (fresh run) → `git worktree add "$INT_WT" -b "$BR"` then
+     `git -C "$INT_WT" push -u origin "$BR"`.
+
+   The integration worktree lives until the run ends — Step 9 removes it (it must survive through
+   B3 ci-review, whose fixes are committed here).
 
 ### Step 5: Team is implicit — nothing to open
 
@@ -432,14 +447,14 @@ checkpoints, and commits; brief is a direct template, never a `/we:story` invoca
 **A1. Verify the worktree actually changed** before integrating — `git -C <worktree> status` / `git log`.
 A worker reporting success with no commits signals a lost dispatch. Re-dispatch before integrating; never integrate an empty worktree.
 
-**A2. Merge onto the integration branch.** The integration branch (`feat/<epic-or-story>-integration`)
-was created in Step 4 before any worker was dispatched. Merge each finished worker branch here as
-it arrives — do not wait for all workers to finish first:
+**A2. Merge onto the integration branch — inside the integration worktree.** The integration
+worktree (`$INT_WT`) was created in Step 4 before any worker was dispatched. Merge each finished
+worker branch here as it arrives — do not wait for all workers to finish first. Run every command
+in `$INT_WT`, never flip the main worktree:
 
 ```bash
-git checkout feat/<epic-or-story>-integration
-git merge feat/<TICKET>-work --no-ff -m "integrate: merge feat/<TICKET>-work"
-git push origin feat/<epic-or-story>-integration
+git -C "$INT_WT" merge feat/<TICKET>-work --no-ff -m "integrate: merge feat/<TICKET>-work"
+git -C "$INT_WT" push origin feat/<epic-or-story>-integration
 ```
 
 Resolve conflicts using the plan's Constraints and Pins as the source of truth. Surface any
@@ -452,8 +467,9 @@ If a worker reported blocked, surface the blocker — do not silently merge empt
 Wait until every in-flight worker has either merged or been declared blocked. Then:
 
 **B0. Sync the integration branch onto `main` if it has drifted.** A long run lets `main` advance
-after Step 4 cut the integration branch (other PRs merge). Before opening the PR, `git merge
-origin/main` into the integration branch (preserve history) so the PR diff is **only this work** and
+after Step 4 cut the integration branch (other PRs merge). Before opening the PR, from the
+integration worktree run `git -C "$INT_WT" fetch origin` then `git -C "$INT_WT" merge origin/main`
+into the integration branch (preserve history) so the PR diff is **only this work** and
 stale-base CI failures (e.g. an OpenAPI/types or lint check that main already moved) don't appear.
 The diff-vs-main looking unexpectedly large is the drift tell — merge main first, then re-read it.
 (Generalises 3e-bis, which covers only Alembic migration heads.)
@@ -530,6 +546,12 @@ Then tear down the workers — run the **full teardown sequence** from
 `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown (shutdown message to every
 member → verify termination → `TaskStop` fallback → tmux pane check). Always tear down, even on
 failure paths — a leaked worker blocks the next run in this session.
+
+Then remove the Lead's integration worktree — it has done its job once B3 pushed
+(`git worktree remove "$INT_WT"`; `git worktree remove --force "$INT_WT"` if it reports the tree
+dirty). Leave the integration **branch** in place — the open PR points at it. On a run that ended
+with held stories (the next `/we:orchestrate` resumes this branch), **keep** the worktree so the
+resume path reuses it. Never remove the main worktree.
 
 ---
 
