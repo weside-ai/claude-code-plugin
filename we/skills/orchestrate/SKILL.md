@@ -96,6 +96,12 @@ Story ticket/plan key (e.g. `WA-1330`).
 > the confirm gate (Step 3) and Mode B** — the ready-set (Step 2) does not apply to a single story's
 > phases. The Mode-B section below is the execution path. The rest of Step 1 is the epic-target boot.
 
+**Programme-scale work** (an epic with several waves, spanning sessions and compacts) also reads
+`${CLAUDE_PLUGIN_ROOT}/references/programme-discipline.md` at boot — the state file, living plans,
+self-verification and the `/loop` shape. If the epic has a `docs/plans/<epic>-state.md`, that file
+is the FIRST thing read and the LAST thing written in every run; if it does not exist and the epic
+spans more than one wave, creating it is the run's first act.
+
 Before anything else (epic target), reconstruct "where we stand". Read the **living** files so the
 picture is always current — never rely on cached knowledge:
 
