@@ -140,7 +140,7 @@ hotspots. Common shapes:
 
 | File | Predicted AS verdict |
 |---|---|
-| `api/v1/endpoints/chat.py` (2269 LOC) | MAJOR — endpoint metastasis: business logic in router |
+| `api/v1/endpoints/chat.py` (2269 LOC) | MAJOR — endpoint metastasis: business logic in router (historical example: this file was since deleted in the v2 rooms migration) |
 | `config/settings.py` (1108 LOC, 138 commits) | MINOR — settings-as-bottleneck, but legitimate growth |
 | `api/v1/endpoints/companions.py` (1410 LOC) | MAJOR — same fat-endpoint problem |
 | `services/skill_agent_dispatcher.py` (14 primitives in 457 LOC) | MAJOR — densest per-LOC, 2 LangChain leaks (cross-references EB-1 from `encapsulation-boundaries`) |
