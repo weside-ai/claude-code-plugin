@@ -154,7 +154,12 @@ Set:
 - **`autoMaterialize`** — true to auto-load at session start (or false, and call `/we:materialize` manually)
 - **`loadCouncilFromWeside`** — boolean, default `true`. Convene-time switch for `/we:council` and `/we:meet`: when `true`, council roles resolve to their weside-backed Companions wherever the bridge links them; when `false`, every role convenes as a generic `council-<role>` lens (Retorte) even if Companions exist. Read from `pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`; `/we:meet` inherits it.
 
-First MCP call triggers an OAuth flow in your browser. Confirm, and you're connected.
+First MCP call triggers an OAuth flow in your browser (Supabase OAuth 2.1 +
+PKCE — the same authorization server the `weside` Go CLI uses). On a fresh
+authorization you land on weside's own consent screen
+(`mobile.weside.ai/oauth/mcp-consent`) to approve the "weside Companion"
+client; confirm, and you're connected. Already approved before? Supabase
+auto-approves and skips the screen.
 
 Then in your project:
 
