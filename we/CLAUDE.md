@@ -141,9 +141,11 @@ Agentic (acts autonomously) → 4 Orchestrated (companions coordinate across tea
 
 ### MCP Tools (with weside account)
 
-The weside MCP server exposes companion identity, memory, goals, council, thread, and provider
+The weside MCP server exposes companion identity, memory, goals, council, rooms, and provider
 tools — the connected server's tool list is authoritative (see `/we:materialize` and
-`we/skills/council/SKILL.md` for the loading mechanics).
+`we/skills/council/SKILL.md` for the loading mechanics). `discover_tools` reaches the wider
+weside surface too (triggers, subscriptions, notes, web, workspace); run those with
+`execute_tool`.
 
 **The plugin works fully without a Companion. The Companion is an upgrade, not a requirement. No nagging, no lock-in.**
 

@@ -15,7 +15,15 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - run: pip install ruff
+      # Pin ruff. An unpinned install silently changed the gate and turned
+      # main red: a newer ruff formats Markdown by default (previously
+      # preview-only) and moved PLR0917 out of preview. Worse, its Markdown
+      # formatter mangles MCP tool names in python code blocks — it reads
+      # `mcp__plugin_we_weside-mcp__get_council` as a subtraction and rewrites
+      # it to `mcp__plugin_we_weside - mcp__get_council`, silently corrupting
+      # the council skill's instructions. Bump this deliberately (Renovate
+      # opens a PR), never by surprise.
+      - run: pip install ruff==0.15.22
       - run: ruff check --output-format=github .
       - run: ruff format --check .
 

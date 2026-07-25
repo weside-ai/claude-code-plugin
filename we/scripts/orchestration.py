@@ -1103,6 +1103,7 @@ def cleanup(
 def story_checkpoint(
     story_key: str,
     phase: str,
+    *,
     branch: str | None = None,
     files_modified: list[str] | None = None,
     commits: list[str] | None = None,
@@ -3151,12 +3152,12 @@ def main() -> None:
             result = story_checkpoint(
                 args.story_key,
                 args.phase,
-                args.branch,
-                files,
-                commits,
-                args.pr,
-                args.coverage,
-                extra,
+                branch=args.branch,
+                files_modified=files,
+                commits=commits,
+                pr_number=args.pr,
+                test_coverage=args.coverage,
+                extra_data=extra,
             )
         elif args.action == "resume":
             result = story_resume(args.story_key)

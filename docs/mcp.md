@@ -83,13 +83,20 @@ These appear in the Claude Code session when the weside MCP is connected. The pl
 | `update_goal_status(title, status)` | Move active → paused → completed |
 | `update_goal(...)` | Adjust due dates, follow-up dates, content |
 
-### Threads
+### Rooms
+
+A room is a conversation — a 1:1 (DM) with one companion, or a group with
+several. Rooms are the communication interface; a companion's checkpoint is
+its private interior and is deliberately *not* exposed here (ADR-0070).
 
 | Tool | Purpose |
 |---|---|
-| `list_threads(limit?)` | List the Companion's conversation threads |
-| `show_thread(thread_id)` | Show messages in a thread |
-| `delete_thread(thread_id)` | Delete a thread |
+| `list_rooms(limit?)` | List the Companion's conversation rooms |
+| `show_room(room_id, limit?, before?)` | Read a room's durable timeline |
+| `room_participants(room_id)` | Who is in the room — humans and companions |
+
+Replaces the former `list_threads` / `show_thread` / `delete_thread`, which
+exposed the checkpoint layer instead of the conversation.
 
 ### Provider config
 
