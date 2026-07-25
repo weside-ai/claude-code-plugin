@@ -169,6 +169,7 @@ def _call_store_conversations(
     conversations: list[dict],
     source: str,
     source_detail: str,
+    *,
     companion_name: str | None = None,
     repo_id: str | None = None,
 ) -> bool:
@@ -386,7 +387,12 @@ def main() -> None:
     ]
 
     ok = _call_store_conversations(
-        token, exchange, "claude_code", source_detail, companion_name, repo_id
+        token,
+        exchange,
+        "claude_code",
+        source_detail,
+        companion_name=companion_name,
+        repo_id=repo_id,
     )
     if not ok:
         _warn("store_conversations call failed — this turn was NOT stored as memory.")
