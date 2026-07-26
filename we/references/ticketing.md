@@ -9,6 +9,8 @@ Detect the available ticketing tool in priority order:
 
 Skills use generic actions ("Create ticket", "Move to In Progress") — never tool-specific API calls. Claude maps the generic action to the best available tool.
 
+**Reading a ticket (any skill that loads one):** fetch the ticket **including its comments** — summary/description alone is never the full ask. Comments carry the later corrections, scope cuts, agreed edge cases and answers to open questions; when a comment contradicts the description, the **newest** statement wins and you name the conflict to the user instead of silently picking one. Jira via Composio: `JIRA_GET_ISSUE` with the comment field/expand (inspect via `get_tool_schema`), or `JIRA_GET_COMMENTS` where a separate call is needed; Atlassian MCP: `jira_get_issue` with `comment_limit` > 0; GitHub Issues: `gh issue view {N} --comments`.
+
 Ticket **content** rules (behavioural contracts, testable ACs, no file paths/line numbers) are owned by `ticket-briefs.md`.
 
 **How Composio Jira works (path 1):** tools are called via `execute_tool(name="JIRA_CREATE_ISSUE", arguments='{...}')`. Tool names use the uppercase `JIRA_` prefix. Schemas are self-describing — use `get_tool_schema(name="JIRA_...")` to inspect parameters.

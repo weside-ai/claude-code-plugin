@@ -34,6 +34,11 @@ Resolve the plan file in priority order:
 
 Verify the plan has at least one `### Phase` header. If not, stop and tell the user.
 
+**When a ticket key is known**, also fetch the ticket **including its comments** — corrections and
+scope cuts land there and the plan file may predate them; newest statement wins on conflict and you
+name the conflict to the user (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`). No ticketing tool
+→ plan file only.
+
 ---
 
 ## Step 1: DoR-lite check

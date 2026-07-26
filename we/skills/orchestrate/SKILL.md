@@ -115,8 +115,10 @@ picture is always current — never rely on cached knowledge:
    completeness (the 3-item scan in `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` — same gate
    `/we:build` Step 1 uses).
 3. **Ticketing mirror** — if a ticketing tool is available (weside MCP `JIRA_*` → Atlassian MCP
-   → `gh`), fetch each Story's ticket status. No ticketing tool → use plan frontmatter `status`
-   only (same fallback as `/we:epic`).
+   → `gh`), fetch each Story's ticket status **and its comments** — comments carry corrections
+   and scope cuts the plan file may predate; newest statement wins on conflict and you name the
+   conflict (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`). No ticketing tool → use plan
+   frontmatter `status` only (same fallback as `/we:epic`).
 4. **Build state** — for each Story key, run
    `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status {TICKET}` to read its
    pipeline phase / last checkpoint / PR number.

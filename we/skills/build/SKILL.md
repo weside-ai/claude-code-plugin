@@ -109,7 +109,9 @@ If interrupted → ask user whether to resume from last checkpoint.
 REPO_ROOT=$(git rev-parse --show-toplevel)
 ```
 
-Load story from ticketing tool. Verify DoR: User Story, Plan exists (`${REPO_ROOT}/docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
+Load story from ticketing tool — **including the ticket's comments** (later corrections, scope cuts
+and answered questions live there; newest statement wins on conflict, and you name the conflict
+instead of silently picking one): `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. Verify DoR: User Story, Plan exists (`${REPO_ROOT}/docs/plans/{TICKET}-story.md` — prefer `{TICKET}-story.md`; fall back to legacy `{TICKET}-plan.md` if the new-suffix file is absent).
 
 **Plan Completeness Gate:** After confirming the plan file exists, run the 3-item DoR scan from
 `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` (GWT ACs · Context > 50 chars · `### Phase` headers).

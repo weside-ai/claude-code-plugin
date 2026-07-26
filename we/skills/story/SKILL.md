@@ -78,7 +78,9 @@ Then the UI updates to dark theme immediately
 
 ### Step 1: Load Story
 
-Fetch from ticketing tool. Check if plan already exists at `docs/plans/{TICKET}-story.md`.
+Fetch from ticketing tool — **including the ticket's comments** (they carry corrections and agreed
+edge cases the description doesn't; newest statement wins on conflict): `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+Check if plan already exists at `docs/plans/{TICKET}-story.md`.
 
 ### Step 2: Understand Context (INTERACTIVE)
 
