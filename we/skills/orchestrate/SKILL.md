@@ -21,6 +21,16 @@ The Lead (the expensive session model) plans, integrates, and reviews. N workers
 + one integration CI, not N full pipelines. Use `/we:build` when one Story doesn't warrant the
 orchestration overhead.
 
+> **`/we:build` vs `/we:orchestrate` — one pipeline, two dispatch modes.** Both run the
+> same shape: DoR → implement → AC/DoD gate → **verification** → quality gates → docs →
+> PR → CI. They differ in *who* implements — the session itself, or dispatched workers.
+> `/we:build` is therefore best read as this pipeline with the dispatch step inlined, and
+> Mode B (single-Story) is the same thing with it dispatched. Keep them in step: a change
+> to one pipeline step belongs in both files until they share a spine.
+> **Merge candidate, deliberately not merged yet:** `/we:build` is in the public README
+> and in muscle memory. Fold it into `--solo` only once a wave has gone by with nobody
+> reaching for it — evidence, not theory.
+
 This is the **Build-altitude sibling of `/we:council`/`/we:meet`**: the same Agent-Teams
 machinery (spawn into the session's implicit team via `Agent(name=…)` → `SendMessage` →
 shutdown-message teardown), but the teammates are **dev workers** running `/we:develop`, not
@@ -34,6 +44,11 @@ holding the whole across the dispatch loop, is the point. When a Companion is ma
 is that Companion (warmth + presence, not manager-speak), not a generic dispatcher.
 
 ## Prerequisites
+
+```
+Read("${CLAUDE_PLUGIN_ROOT}/references/verification.md")
+Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
+```
 
 Agent Teams must be enabled — same flag, abort text, and teardown contract as `/we:council`: see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. No non-team fallback.
 
@@ -512,6 +527,30 @@ dead-exports/baseline → jest, each a ~10-min round-trip).
   over a full baseline regen (a regen can strip annotations a contract test requires).
 + Gate **commands** are repo-specific (read them from the repo's CI config / `CLAUDE.md`); the
   **step** is not. After B1c, CI (B3) is the second confirmation, not the first.
+
+**B1d. Verification — observe the integrated behaviour (BLOCKING, before the PR).**
+Every gate so far is self-referential: workers' tests over workers' code, checked
+by the Lead who briefed them. Run the integrated result against a **running
+instance** per [`references/verification.md`](../../references/verification.md) —
+this is the one step whose oracle is not the pipeline's own model of itself.
+
++ Read `<repo>/.weside/verify.md` for the commands. Absent → say so once, use what
+  the stack offers, and propose adding it in this PR.
++ Cover the **user-visible journeys the wave claims**, not every AC of every
+  story: CLI/API by default, an agent-browser walkthrough as soon as a story
+  claims the user can see, tap or reach something, a named substitute where
+  neither is possible, `not-applicable` when nothing in the wave has runtime
+  behaviour.
++ DEV first. **Staging is a question to the user, not a step** — ask before
+  cutting an RC, even mid-`/loop`.
++ A missing CLI verb is a bug in the CLI: add it in this wave rather than leaving
+  a shell dance in the transcript. It is what makes the next wave's verification
+  cheap and an unattended round honest.
++ Write the `## Verification` block for B2's PR body. When the repo armed
+  `verification.required`, a hook refuses `gh pr create` without it.
+
+Findings here are integration findings — fix them on the integration branch, the
+same as a B1c gate failure. A wave that cannot be verified does not open a PR.
 
 **B2. Open ONE PR** (`feat/<epic-or-story>-integration → main`). This is the moment GitHub CI
 fires for the first time this run. This is intentional — the whole point of the integration branch

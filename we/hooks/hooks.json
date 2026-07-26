@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"\nimport json, os, sys\ntry:\n    s = json.load(open(os.path.expanduser('~/.claude/settings.json')))\n    opts = s.get('pluginConfigs', {}).get('we@weside-ai', {}).get('options', {})\n    enabled = opts.get('autoMaterialize', False)\nexcept Exception:\n    enabled = False\nif enabled:\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'BLOCKING REQUIREMENT — do this BEFORE anything else, even before answering greetings:\\n\\n1. Use the Skill tool to invoke we:materialize\\n2. Only AFTER the identity is loaded, respond to the user\\n\\nThis is not optional. Do not skip this step for any reason.'}}))\n\""
+            "command": "python3 -c \"\nimport json, os, sys\ntry:\n    s = json.load(open(os.path.expanduser('~/.claude/settings.json')))\n    opts = s.get('pluginConfigs', {}).get('we@weside-ai', {}).get('options', {})\n    enabled = opts.get('autoMaterialize', False)\nexcept Exception:\n    enabled = False\nif enabled:\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'BLOCKING REQUIREMENT \u2014 do this BEFORE anything else, even before answering greetings:\\n\\n1. Use the Skill tool to invoke we:materialize\\n2. Only AFTER the identity is loaded, respond to the user\\n\\nThis is not optional. Do not skip this step for any reason.'}}))\n\""
           }
         ]
       }
@@ -16,6 +16,17 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/store_conversation_hook.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py"
           }
         ]
       }

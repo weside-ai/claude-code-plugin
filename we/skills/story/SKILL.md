@@ -23,6 +23,8 @@ You produce or sharpen one Story — a sprint-sized feature slice with a build-r
 
 ```
 Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
+Read("${CLAUDE_PLUGIN_ROOT}/references/verification.md")
+Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
 ```
 
 **Repo-local DoR additions (additive, optional):** resolve the repo root (`git rev-parse --show-toplevel`) and check for `<repo-root>/.weside/dor.md`. If it exists, read it too and treat its items as ADDITIVE to the plugin DoR above — both sets of criteria apply, the repo file never replaces the plugin defaults. If the file doesn't exist, silently proceed with the plugin defaults only.
@@ -191,6 +193,18 @@ points — narrative voice.]
 - Unit tests for [X]
 - Integration tests for [Y]
 
+## Verification
+> How this will be observed running — not inferred from green tests. The build
+> skill turns this into the PR's `## Verification` block. See
+> `references/verification.md`; commands live in `<repo>/.weside/verify.md`.
+
+- **Oracle:** cli | ui | substitute | not-applicable — *why this one*
+- **Seed:** [the command that puts the system in the state to observe]
+- **Assert:** [what has to be true — endpoint + field, or route + label]
+- **Not provable here:** [what this oracle cannot show, and who owes it]
+- **Missing CLI verb:** [name it if the seed needs a shell dance — it ships with
+  the story, not as a transcript snippet]
+
 ## Technical Approach
 **Patterns:** [relevant patterns]
 
@@ -261,6 +275,25 @@ User reviews plan. On feedback → adjust. On approval → continue.
    (or /we:build {TICKET} if you'd rather run it inline.)
    ```
    Lead with the recommended surface; name the phase count + which phases parallelise (from `parallel_groups`). Use `/we:build` as the lead recommendation **only** for a trivially straight-line single-phase story.
+
+   **When the work spans more than one sitting, print the long-running invocation
+   too** — printed, never invoked, per `references/long-running.md`:
+
+   ```
+   Long-running:
+     /loop <the round's task, verbatim from the plan's exit criterion>
+   ```
+
+   `/loop` is the default. Add a `/goal` line **only** when being wrong about
+   "am I done" is expensive — money, auth, tenant isolation, a migration, or
+   unattended work nobody will read for hours — because its evaluator runs after
+   *every* turn, and say why in one clause. Everywhere else the exit criterion
+   lives in the plan and the state file, and the loop judges against it.
+
+   Before printing either: the plan's **Verification** section must name a
+   scriptable oracle. A loop that cannot verify unattended produces unchecked
+   commits at 3am — if the oracle is not scriptable yet, say so and make the
+   first round's job to make it so.
 
 ⛔ **STOP after step 6. No implementation. No /we:build. No /we:orchestrate. No branch. No code.** The recommendation is a suggestion in the output — the user invokes the next surface themselves.
 

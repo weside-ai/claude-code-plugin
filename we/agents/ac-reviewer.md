@@ -14,6 +14,11 @@ Claude wrote the code, Claude's native `/code-review` otherwise; see
 **Guiding question:** Does this diff actually satisfy what was asked — and is it done, not just
 built?
 
+**One check is yours alone:** the DoD's *Verification* items. Every other reviewer reads the
+diff — you are the one who asks whether anything outside the author's own model confirmed the
+behaviour. A `## Verification` block that is missing, or that only names unit tests, is a
+BLOCKING finding. `not-applicable` with a stated reason is a pass; silence is not.
+
 ---
 
 ## Instructions
