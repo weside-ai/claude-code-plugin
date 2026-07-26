@@ -12,6 +12,10 @@ description: >
 
 You orchestrate the entire development pipeline in a single skill invocation — from git preparation through PR creation and CI review. You do NOT stop mid-pipeline.
 
+> Same pipeline as `/we:orchestrate`, with the implementation step inlined instead of
+> dispatched: DoR → implement → AC/DoD gate → **verification** → quality gates → docs →
+> PR → CI. A change to a shared step belongs in both files.
+
 **After every sub-skill returns, IMMEDIATELY continue with the next step.**
 
 > **APO altitude:** Build. The plan was produced upstream by `/we:story` (Solo, Story altitude) or by `/we:meet story` for contentious stories. Build has no Solo/Meet split — there is one mode, autonomous. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the full altitude map.
@@ -45,6 +49,7 @@ If your reason to interrupt does not fit one of those four buckets, the answer i
 ```
 Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
 Read("${CLAUDE_PLUGIN_ROOT}/quality/dod.md")
+Read("${CLAUDE_PLUGIN_ROOT}/references/verification.md")
 ```
 
 **Repo-local DoR/DoD additions (additive, optional):** resolve the repo root (`git rev-parse --show-toplevel`) and check for `<repo-root>/.weside/dor.md` and `<repo-root>/.weside/dod.md`. Read whichever exist and treat their items as ADDITIVE to the plugin defaults above — both the plugin checklist and the repo checklist apply, the repo files never replace the plugin defaults. Missing file(s) → silently proceed with the plugin defaults only.
@@ -293,9 +298,34 @@ duplicate Step 5's job for no extra signal, and on a large repo can exhaust loca
 | No open TODO/FIXME | Pass/Fail | |
 | *(one row per `.weside/dod.md` item, if present)* | Pass/Fail/N/A | |
 
+### Verification — observe it, do not infer it (BLOCKING)
+
+Evidence so far is your own: tests you wrote for code you wrote. They share its
+blind spots by construction. Before `ac_verified`, run the story against a
+**running instance** per `references/verification.md`:
+
+1. Read the repo recipe `<repo>/.weside/verify.md` (absent → say so once, use
+   what the stack offers, and propose adding it in this PR).
+2. Pick the oracle the ACs demand — CLI/API by default; a **UI walkthrough** as
+   soon as an AC says the user can see, tap or reach something; a named
+   substitute where neither is possible; `not-applicable` when the change has no
+   runtime behaviour.
+3. DEV first. **Staging is a question to the user, not a step** — ask before
+   cutting an RC, even mid-`/loop`.
+4. Write the `## Verification` block now — it goes into the PR body in Step 7,
+   and a hook refuses `gh pr create` without it when the repo armed
+   `verification.required`.
+
+Recurring setup or a missing verb is a **bug in the project's CLI**: add it in
+this same story rather than leaving a shell dance in the transcript.
+
+A verification that did not happen is a blocking failure, exactly like a failed
+AC. "Tests are green" does not discharge it.
+
 Any DoD `Fail` is blocking, same as a failed AC.
 
-Only write checkpoint `ac_verified` when ALL AC **and** DoD items pass. If items fail → go back to Step 2 and fix.
+Only write checkpoint `ac_verified` when ALL AC **and** DoD items pass, **and** the
+verification block exists. If items fail → go back to Step 2 and fix.
 
 ## Step 5: Quality Gates (PARALLEL)
 

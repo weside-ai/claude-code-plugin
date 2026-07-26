@@ -85,7 +85,22 @@ changes with their choice).
      — level semantics owned by references/test-discipline.md
    → Saved as `test_discipline`; read by /we:develop, /we:build, and worker briefs.
 
-5. "Which bug-hunt engines does this repo use? (Auto-detected: {detected})"
+5. "Should a story have to be observed running before its PR opens? (recommended: yes)"
+   → Explainer first: "Green tests prove the units behave as written — but the same
+     agent wrote both, so they share the same blind spots. This makes a run against a
+     live instance part of Done: the project's CLI/API by default, a browser walkthrough
+     when an AC says the user can *see* or *reach* something, or a stated
+     `not-applicable`. A hook then refuses `gh pr create` without a `## Verification`
+     block."
+   → Options: yes (default) / advisory-only
+   → Saved as `verification.required`; contract in references/verification.md.
+   → On **yes**, offer to scaffold `.weside/verify.md` from what was detected in Step 1
+     (the repo's own CLI, its dev bring-up command, whether a browser driver is
+     available). A repo with no recipe file still works — the skills say so once and
+     fall back to what the stack offers — but the scaffold is what makes the next
+     verification cheap.
+
+6. "Which bug-hunt engines does this repo use? (Auto-detected: {detected})"
    → Detect candidates: codex plugin installed → suggest `codex`;
      a CodeRabbit/Greptile GitHub App or review-gate workflow present → suggest those.
      `claude` (Claude's native `/code-review` skill) is always available. This is bug-hunting
@@ -101,7 +116,7 @@ changes with their choice).
    → Default when nothing else is detected: ["claude"].
 ```
 
-#### Executor wizard (after Q5, non-blocking)
+#### Executor wizard (after Q6, non-blocking)
 
 Ask once: *"What default executor should workers use for `/we:develop` chunks?"*
 
@@ -174,7 +189,8 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
   "engines": ["<profile-name-if-created>"],
   "execution": { "default": "claude-sonnet" },
   "review": { "available": ["claude"], "cross": true },
-  "test_discipline": "tests-after"
+  "test_discipline": "tests-after",
+  "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true }
 }
 ```
 
@@ -184,12 +200,19 @@ The `engines` block lists the profile names created/verified in the executor wiz
 
 The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
 
-The `review.available` block is the reviewer list from Step 2 Q5 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
+The `review.available` block is the reviewer list from Step 2 Q6 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
 
 The `test_discipline` field is the answer to Step 2 Q4: `"tdd"` / `"tests-after"` / `"off"`.
 Level semantics are owned by `references/test-discipline.md`; consumed by `/we:develop`,
 `/we:build`, and inlined into worker briefs by `/we:orchestrate`. Absent field →
 `tests-after` (back-compat).
+
+The `verification` block is the answer to Step 2 Q5. `required: true` arms the
+PreToolUse hook (`hooks/verification_gate.py`), which refuses `gh pr create` when the
+PR body carries no `## Verification` block; `recipe` points at the repo's commands;
+`staging_needs_ask` keeps a staging deploy a question rather than a step. Contract:
+`references/verification.md`. Absent block → advisory only (back-compat: existing repos
+keep working, they just do not get the gate).
 
 If Step 5 runs later, it *extends* this same file (adding `vault`, `council`, `onboarded`, …) rather than replacing it.
 

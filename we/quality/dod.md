@@ -26,6 +26,12 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 - [ ] **Bypass register regenerated** — if any new `# *-BYPASS-OK:` annotation was added AND `scripts/generate-bypass-register.sh` exists in the repo, the register was regenerated (`bash scripts/generate-bypass-register.sh --write`) and committed; skip silently if the script is absent
 - [ ] Not applicable → skip if no architecture constraints in plan
 
+### Verification (observed, not inferred)
+
+- [ ] **The behaviour was observed against a running instance** — via the oracle the ACs demand: the project's CLI/API by default, a UI walkthrough as soon as an AC says the user can see, tap or reach something, a named substitute where neither is possible, or an explicit `not-applicable` with its reason. Green tests do not discharge this: they share the blind spots of whoever wrote the code. Contract: `references/verification.md`; commands: `<repo>/.weside/verify.md`.
+- [ ] **The PR carries a `## Verification` block** — oracle, seed, what was asserted, what stays unproven. No block, no claim of verified.
+- [ ] **Any missing CLI verb shipped with the story** — if verifying needed a multi-step shell dance the project's CLI cannot do, that verb was added, not worked around.
+
 ### Testing
 
 - [ ] Test types from plan implemented (Unit/Integration/E2E)
