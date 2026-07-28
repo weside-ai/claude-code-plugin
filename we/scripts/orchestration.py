@@ -2648,7 +2648,19 @@ def cifix_list(story_key: str | None = None, active_only: bool = False) -> dict[
 # =============================================================================
 
 # Frontmatter status values that indicate a story is effectively built.
-_BUILT_STATUSES = {"In Review", "Done", "Merged"}
+# Ticketing statuses that mean "built" (mirror-table vocabulary), plus the
+# story plan's own lifecycle vocabulary. Both are compared case-insensitively
+# because a plan writes `status: built` while a mirror row writes `**Done**`.
+# Until 2026-07-28 only the ticketing words were listed while the value read
+# came from plan frontmatter, so this comparison could never be true and the
+# checkpoint fallback below was the only working path.
+_BUILT_STATUSES = {
+    "in review",
+    "done",
+    "merged",
+    "built",
+    "shipped",
+}
 
 # Story checkpoint phases that indicate a story has reached a build milestone.
 _BUILT_CHECKPOINT_PHASES = {"pr_created", "ci_passed"}
@@ -2825,6 +2837,50 @@ def _resolve_epic_identifiers(epic: str, plans_path: Path) -> set[str]:
     return identifiers
 
 
+def _is_built_status(status: Any) -> bool:
+    """True when a status string means the story has shipped.
+
+    Case- and vocabulary-insensitive: a plan writes ``status: built``, a mirror
+    row writes ``**Done**``. Markdown emphasis and surrounding whitespace are
+    stripped so the mirror's own rendering does not defeat the comparison.
+    """
+    if not isinstance(status, str):
+        return False
+    return status.strip().strip("*_` ").lower() in _BUILT_STATUSES
+
+
+# One mirror row: `| WA-1776 | [S0] Title | **Done** | ✓ | 2026-07-25 | notes |`
+_MIRROR_ROW_RE = re.compile(r"^\|\s*([A-Z][A-Z0-9_]+-\d+)\s*\|([^|]*)\|([^|]*)\|", re.MULTILINE)
+
+
+def _mirror_story_rows(epic: str, plans_path: Path) -> dict[str, str]:
+    """Child story keys → status, read from the epic plan's mirror block.
+
+    The mirror is the ticketing tool's own roster, refreshed by ``/we:epic``, so
+    it knows about stories that have no plan file yet. Returns ``{}`` when there
+    is no epic plan or no mirror block — the caller then simply keeps the
+    plan-file roster it already has.
+    """
+    if not plans_path.is_dir():
+        return {}
+    identifiers = _resolve_epic_identifiers(epic, plans_path)
+    for epic_path in plans_path.glob("*-epic.md"):
+        try:
+            text = epic_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        fm = _parse_frontmatter(text)
+        stem = epic_path.name[: -len("-epic.md")]
+        fm_ids = {fm.get(f) for f in ("epic", "ticket", "story") if isinstance(fm.get(f), str)}
+        if epic != stem and not (fm_ids & identifiers):
+            continue
+        start = text.find("mirror:start")
+        end = text.find("mirror:end")
+        block = text[start:end] if start != -1 and end != -1 and end > start else text
+        return {m.group(1): m.group(3) for m in _MIRROR_ROW_RE.finditer(block)}
+    return {}
+
+
 def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
     """Read story plan files for ``epic`` and shape them for compute_ready_set.
 
@@ -2853,7 +2909,7 @@ def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
             deps = [deps]
         status = fm.get("status")
 
-        built = status in _BUILT_STATUSES
+        built = _is_built_status(status)
         if not built:
             status_info = story_status(key)
             phases = {cp["phase"] for cp in status_info.get("checkpoints", [])}
@@ -2865,6 +2921,28 @@ def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
                 "refined": _body_is_refined(text),
                 "built": built,
                 "deps": deps,
+            }
+        )
+
+    # A story with NO plan file is not "absent", it is UNREFINED — and unrefined
+    # is precisely what the refine lane exists to consume. Globbing plan files
+    # alone made those stories invisible, so `refinable` came back empty on every
+    # epic whose children had not been refined yet — which is every epic on its
+    # first day. `--refine-ahead` therefore had no producer queue and could never
+    # start (measured 2026-07-28: 12 backlog stories, `refinable: []`).
+    #
+    # The epic plan's mirror table already lists them, so use it as the fallback
+    # roster. Keys that DO have a plan file keep the richer reading above.
+    seen = {story["key"] for story in stories}
+    for key, status in _mirror_story_rows(epic, plans_path).items():
+        if key in seen:
+            continue
+        stories.append(
+            {
+                "key": key,
+                "refined": False,
+                "built": _is_built_status(status),
+                "deps": [],
             }
         )
     return stories

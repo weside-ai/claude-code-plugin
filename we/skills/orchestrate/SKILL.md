@@ -80,6 +80,14 @@ shape (Mode A); it is **not** a third dispatch mode. Default (flag off) = today'
 (`--refine-ahead` and `--rehearsal` apply to **epic targets only** — a single-Story target has no
 ready-set to refine ahead of.)
 
+**Refine two or three ahead, not the whole backlog.** The temptation, once the refine lane
+works, is to bank a deep queue of build-ready plans so dispatch never waits. Don't: a plan
+refined five waves early is written against a `main` that will not exist when its builder picks
+it up. Observed on a 14-story epic — a story's plan promised a workspace-scope hook the design
+had deleted weeks earlier, and the waves themselves ran out of their planned order, so several
+plans had to be rewritten before they could be built. Two ahead is the depth at which a plan is
+still true on arrival; beyond that "plans are living" quietly means writing each one twice.
+
 ### Target resolution (Step 0 — do this before booting)
 
 The argument is either an **Epic** or a **single Story**. Resolve it once, it picks the whole shape:
@@ -196,6 +204,18 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
    the reason explicitly before doing so. A raised cap with uncertain disjointness is a
    judgment call; when in doubt, keep the default.
 
+   **Pair a frontend story with backend slices — not two frontend stories.** Backend work is
+   the cheap concurrency: separate modules under one service tree rarely touch the same file,
+   while two frontend stories in one wave collide on shared surfaces almost by default. A
+   14-story UI epic paid for this twice — two workers editing one inline i18n resource produced
+   three merge conflicts and a duplicated key, and another pair left a directory duplicated
+   under two spellings of the same word. Neither worker could see it; each was right about its
+   own slice, and it surfaced only at integration.
+
+   So a cap of 3 is usually safe as **one FE + two BE**, and usually wrong as three FE. Judge
+   by the file lists in the plans' phases, not by the stories' topics: "different areas" is not
+   the test, *different files* is — a mature `components/` directory can hold fifty of them.
+
 3. **Lead voice (MCP, optional)** — if `mcp__plugin_we_weside-mcp__get_council` exists, call it
    once for the Lead's review role (`product_owner` or `architect`, per `.weside/config.json`)
    and adopt that Companion's `identity_prompt` for the Lead's review voice in Step 8. Builders
@@ -252,10 +272,21 @@ Agent(
 ```
 
 The shared task-list (the `TaskCreate` above) carries the **live** dispatched/in-flight state.
-The **durable** start/end record needs no orchestrator write: the builder's own `/we:build`
-writes `story_workflow` rows into `orchestration.py` automatically — `git_prepared` on start,
-`pr_created`/`ci_passed` on end (this is the single-writer that satisfies AC3). The Lead
-**reads** them via `story status` for the roll-up; it does not write build checkpoints itself.
+The **durable** record is the Lead's to write. Workers run `/we:develop`, which writes no
+`story_workflow` rows at all — so `pr_created` and `ci_passed` land in Step 8 (B2/B4), next to
+the ticket transition, and nowhere else.
+
+**This paragraph used to say the opposite** — that the builder's own `/we:build` was the
+single writer and the Lead only read the rows back. That was true before workers moved to
+`/we:develop`, and its consequence is quiet and long-lived: `built` in the Step-2 ready-set is
+derived from a `pr_created`/`ci_passed` checkpoint, so a story built through orchestrate, merged
+and closed still looks **unbuilt** forever, and the ready-set keeps proposing to build it again.
+Measured 2026-07-28 on a 14-story epic: four merged stories carried only `refined`, and
+`story ready` offered two of them as the next work.
+
+The ticket half of exactly this regression is documented in the next paragraph. It was noticed
+and fixed; the checkpoint half was not. **When a dispatch mode changes, re-read every paragraph
+whose premise is "the worker does X" — not only the ones that name the worker.**
 
 **Transition each dispatched Story → "In Progress" (Lead owns this — workers do NOT).** Workers run
 `/we:develop`, which explicitly does not touch ticket state ("the Lead owns ticket state"). So if

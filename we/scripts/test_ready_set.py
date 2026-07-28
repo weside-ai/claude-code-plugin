@@ -9,7 +9,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from orchestration import _resolve_epic_identifiers, compute_ready_set
+from orchestration import (
+    _is_built_status,
+    _load_epic_stories,
+    _mirror_story_rows,
+    _resolve_epic_identifiers,
+    compute_ready_set,
+)
 
 
 def _story(key, refined=True, built=False, deps=None):
@@ -135,3 +141,105 @@ class ResolveEpicIdentifiersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+_EPIC_WITH_MIRROR = """---
+type: epic-plan
+epic: demo
+ticket: PROJ-1
+---
+
+# Epic: Demo
+
+<!-- mirror:start (auto-generated) -->
+
+| Key | Title | Status | Plan | Last activity |
+|---|---|---|---|---|
+| PROJ-10 | Shipped one | **Done** | \u2713 | 2026-07-01 |
+| PROJ-11 | Not started | Backlog | \u2014 | 2026-07-01 |
+| PROJ-12 | Also open | Backlog | \u2014 | 2026-07-01 |
+
+<!-- mirror:end -->
+"""
+
+_REFINED_BODY = """---
+type: story-plan
+story: PROJ-11
+epic: demo
+status: draft
+---
+
+## Context
+
+A context section long enough to clear the fifty-character floor the scan wants.
+
+## Acceptance Criteria
+1. **Given** a thing **When** it happens **Then** it works
+
+### Phase 1: Do it
+"""
+
+
+class BuiltStatusTest(unittest.TestCase):
+    """`built` is read from two vocabularies that must both work.
+
+    A story plan writes `status: built`; a mirror row writes `**Done**`. Until
+    2026-07-28 only the ticketing words were listed while the value came from
+    plan frontmatter, so the comparison could never be true.
+    """
+
+    def test_plan_lifecycle_vocabulary(self):
+        self.assertTrue(_is_built_status("built"))
+        self.assertTrue(_is_built_status("shipped"))
+
+    def test_ticketing_vocabulary_and_mirror_emphasis(self):
+        self.assertTrue(_is_built_status("Done"))
+        self.assertTrue(_is_built_status("  **Done** "))
+        self.assertTrue(_is_built_status("In Review"))
+
+    def test_open_statuses_are_not_built(self):
+        for value in ("draft", "approved", "Backlog", "", None, 3):
+            self.assertFalse(_is_built_status(value), value)
+
+
+class MirrorRosterTest(unittest.TestCase):
+    """A story with no plan file is UNREFINED, not absent.
+
+    Globbing plan files alone returned `refinable: []` on every epic whose
+    children had not been refined yet — so `--refine-ahead` had no producer
+    queue and could never start.
+    """
+
+    def _plans(self, tmp):
+        path = Path(tmp)
+        (path / "demo-epic.md").write_text(_EPIC_WITH_MIRROR, encoding="utf-8")
+        return path
+
+    def test_mirror_rows_are_parsed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = _mirror_story_rows("demo", self._plans(tmp))
+        self.assertEqual(set(rows), {"PROJ-10", "PROJ-11", "PROJ-12"})
+        self.assertTrue(_is_built_status(rows["PROJ-10"]))
+
+    def test_planless_stories_become_refinable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stories = _load_epic_stories("demo", str(self._plans(tmp)))
+        by_key = {s["key"]: s for s in stories}
+        self.assertEqual(set(by_key), {"PROJ-10", "PROJ-11", "PROJ-12"})
+        self.assertTrue(by_key["PROJ-10"]["built"])
+        self.assertFalse(by_key["PROJ-11"]["refined"])
+        ready = compute_ready_set(stories)
+        self.assertEqual(ready["refinable"], ["PROJ-11", "PROJ-12"])
+
+    def test_a_plan_file_wins_over_its_mirror_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._plans(tmp)
+            (path / "PROJ-11-story.md").write_text(_REFINED_BODY, encoding="utf-8")
+            stories = _load_epic_stories("demo", str(path))
+        by_key = {s["key"]: s for s in stories}
+        self.assertEqual(len(stories), 3, "the mirror must not duplicate a story")
+        self.assertTrue(by_key["PROJ-11"]["refined"])
+
+    def test_no_epic_plan_leaves_the_roster_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(_mirror_story_rows("demo", Path(tmp)), {})
