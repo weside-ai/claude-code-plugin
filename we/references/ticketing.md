@@ -17,6 +17,13 @@ Ticket **content** rules (behavioural contracts, testable ACs, no file paths/lin
 
 **Ticket transition (any skill that moves a ticket):** find the matching transition (names vary: "In Progress", "Start Progress", "In Bearbeitung"), execute it, then **verify** the ticket actually moved (re-fetch status) and retry once with a different transition name if not. Soft-fail loud (log a warning, continue) only when the workflow/permissions genuinely reject the move. GitHub Issues (no status transitions) / no ticketing tool → skip silently.
 
+**Transition first, comment second — never in one call.** A transition's optional
+`comment` field wants Atlassian Document Format, not the Markdown or Wiki Markup the
+description fields take, so passing prose there fails with *"Operation value must be an
+Atlassian Document"* and the transition does not happen either. Move the ticket bare, then add
+the note with the dedicated add-comment tool. Two calls, and a failed comment can no longer
+cost you the status change.
+
 **If weside MCP is connected but Jira tools are missing**, tell the user:
 
 > "Jira is not connected via your weside Companion. To enable it: weside.ai → Integrations → connect Jira, then activate it for your Companion."

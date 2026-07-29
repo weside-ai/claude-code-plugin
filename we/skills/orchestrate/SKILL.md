@@ -187,6 +187,27 @@ Render the three lists as **READY** (would dispatch), **REFINABLE** (the refine-
 **HELD** (with each reason). The table above is the spec, the CLI is the implementation — they must
 not drift.
 
+**The function has no notion of "already dispatched", so read its output against your own
+in-flight list.** `built` is derived from a ticket status or a `pr_created`/`ci_passed`
+checkpoint — none of which exists while a worker is still writing. A dispatched story therefore
+keeps appearing in `ready`, and can be pushed to `held: cap reached` by a story you refined
+*after* dispatching it. Neither is wrong; both are the pure function saying "nothing durable has
+happened yet".
+
+Two places this bites, both avoidable:
+
++ **Under `--refine-ahead`,** a freshly refined story entering `ready` displaces a dispatched one
+  in the cap accounting. Keep your own `in_flight` set and fill the build lane from
+  `ready − in_flight`, not from `ready`.
++ **On a resumed run** (after a compact, a new session, or a crash), `ready` is the *only* thing
+  you have — and it will happily offer a story whose worker is still running or whose branch is
+  already pushed. Before dispatching anything on a resume, check for its branch and worktree
+  (`git worktree list`, `git branch --list 'feat/{KEY}-*'`) and treat either as in-flight.
+
+This is the same class as the checkpoint regression fixed in Step 6 — a durable record missing,
+so the derived state lags reality. Here the missing record is deliberate (a dispatch is not an
+outcome), which is exactly why the Lead has to hold it.
+
 ### Step 3: Confirm gate (human-in-the-loop)
 
 Present the ready set and ask the user to confirm dispatch. This is the first of three human
@@ -215,6 +236,31 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
    So a cap of 3 is usually safe as **one FE + two BE**, and usually wrong as three FE. Judge
    by the file lists in the plans' phases, not by the stories' topics: "different areas" is not
    the test, *different files* is — a mature `components/` directory can hold fifty of them.
+
+   **When one file is genuinely shared, assign sections instead of serializing.** The advice
+   above used to end here, and read as "then don't run that wave" — which is the wrong price
+   when the collision is *one* file. A repo usually has a handful of single-file shared
+   resources every frontend story must touch: an inline i18n bundle, a barrel export, a theme
+   token file, a route manifest. Serializing a whole wave around one of them is expensive; the
+   file is almost always a set of long, contiguous, far-apart blocks, and git merges those
+   cleanly as long as two workers do not append to the *same* block.
+
+   So, before dispatch:
+
+   + **Name the shared file and give each worker disjoint top-level sections**, in the brief,
+     in capitals, with the other worker's sections listed as forbidden. Assign by what the
+     story actually touches — read the components' existing calls, do not guess from the story
+     title.
+   + **Declare the catch-all section read-only for everyone.** There is always one (`common`,
+     `shared`, `misc`) and it is exactly where two workers otherwise both append. A worker
+     needing a new shared-looking key puts it in its own section.
+   + **Verify at merge, not by trust:** locate each hunk's line number in the file's section
+     map and confirm it falls inside that worker's range. This costs one `git diff | grep '^@@'`
+     and catches the failure the file-list disjoint guard is blind to by construction.
+
+   Measured on a 14-story UI epic: the pairing rule alone had already cost three merge
+   conflicts and a duplicated key across two waves. With sections assigned, a two-frontend-worker
+   wave over a 7,494-line i18n file merged with every hunk inside its own namespace.
 
 3. **Lead voice (MCP, optional)** — if `mcp__plugin_we_weside-mcp__get_council` exists, call it
    once for the Lead's review role (`product_owner` or `architect`, per `.weside/config.json`)
@@ -381,6 +427,24 @@ Read `.weside/config.json` at boot: `tools.codex`, `execution.default`, and whet
 | **Foreign engine** | Engine profile in `.weside/engines.local.json` | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` |
 
 At the rolling confirm (Step 7+ or Step 3), offer the available backends. The **default is always cheap Claude** — an empty/ambiguous answer stays on Claude. Codex and foreign engine only run on an explicit per-chunk pick. Never auto-route or make the choice sticky across chunks without re-confirming.
+
+**Only an Agent teammate can be steered mid-flight. Budget for that when you pick.** The
+Worker-Brief's `SendMessage` contract and Step 7's "nudge the builder, at most once" describe
+the **Agent** path. A Codex or foreign-engine worker is a detached process with no inbound
+channel: once dispatched, nothing you learn can reach it. So on those backends the brief is
+your only instrument, and every correction lands at integration instead.
+
+Two practical consequences:
+
++ **Front-load everything into the brief** — the constraint you would otherwise have sent at
+  minute ten (a namespace assignment, a seam you just discovered, a file it must not touch)
+  has to be in the text before dispatch.
++ **Convert what you cannot say into what you will check.** A rule you cannot enforce mid-flight
+  becomes a merge-time audit: write down, at dispatch, the exact command that will verify it.
+  This is not a downgrade — a verified constraint beats an unverified message either way.
+
+Prefer an Agent teammate when the work is genuinely exploratory (the shape may change under
+the worker and you will want to redirect); prefer Codex when the brief can be complete.
 
 **For foreign-engine dispatch via worker-launch.sh:**
 
@@ -630,6 +694,26 @@ Then remove the Lead's integration worktree — it has done its job once B3 push
 dirty). Leave the integration **branch** in place — the open PR points at it. On a run that ended
 with held stories (the next `/we:orchestrate` resumes this branch), **keep** the worktree so the
 resume path reuses it. Never remove the main worktree.
+
+**Kill the worktree's own processes BEFORE you remove it — a removed worktree orphans its
+servers, it does not stop them.** B1d's verification starts a dev server (and possibly a browser
+driver) inside the integration worktree, and those ports are single-owner for the whole workspace.
+Remove the directory without stopping them and the process survives with a deleted working
+directory, still holding the port, and — if the run also pruned its database fork — serving a
+schema that no longer exists, so every read answers 500. The next wave then loses the port at
+exactly the moment it needs to verify, and the failure reads like a broken app.
+
+```bash
+# before `git worktree remove`: stop what this worktree started, BY PID
+ss -ltnp 2>/dev/null | grep -E ':8000|:8081'            # ports are repo-specific; read them from the repo
+ls -l /proc/<pid>/cwd                                    # a `(deleted)` target = an orphan from an earlier run
+kill <pid>                                               # never `pkill -f <pattern>` — it self-matches
+```
+
+The same check is the diagnostic in the other direction: at the **start** of a run, a taken
+single-owner port whose owner's `cwd` reads `(deleted)` is a leftover, not a live neighbour, and
+is yours to clear. A taken port with a live cwd belongs to another session — coordinate, never
+kill.
 
 ---
 

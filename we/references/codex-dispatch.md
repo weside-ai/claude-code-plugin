@@ -52,6 +52,29 @@ A lost dispatch reports success while writing nothing. Before integrating, the
 Lead **verifies the worktree actually changed** (`git -C <worktree> status` /
 `git -C <worktree> log`) — never trust a "done" without commits or a dirty tree.
 
+## There is no way to talk to a running Codex worker
+
+`codex-companion.mjs task` is a detached process, not a teammate. It has no
+inbound channel: `SendMessage` does not reach it, and `/we:orchestrate` Step 7's
+"nudge the builder, at most once" applies to Agent teammates only. Whatever you
+learn after dispatch — a namespace collision, a seam you just found, a file it
+must not touch — cannot be delivered.
+
+So the brief is the whole instrument:
+
+- **Front-load.** Anything you would have said at minute ten belongs in the text
+  before dispatch. When in doubt, over-specify: a Codex worker follows a written
+  constraint well and invents nothing to replace a missing one.
+- **Turn unsendable rules into merge-time checks.** Write down, at dispatch, the
+  command that will verify each constraint you cannot enforce live. A verified
+  constraint is stronger than a message anyway.
+- **Watch the artifacts, not the process.** `git -C <worktree> status --porcelain
+  | wc -l` a minute in tells you the dispatch landed and the worker is writing;
+  an empty tree after several minutes is the lost-dispatch signal above.
+
+This is the one real trade against an Agent teammate. Pick Codex when the brief
+can be complete, an Agent when the shape may change under the worker.
+
 ## Chunk brief template (Mode-B)
 
 Codex gets the same focused brief an Agent teammate would, scoped to one chunk:
