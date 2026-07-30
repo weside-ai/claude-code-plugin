@@ -1,11 +1,11 @@
 # Plan File Format — Cross-Skill Contract
 
 Plan files at `docs/plans/{TICKET}-story.md` are the **build contract** between
-`/we:story` (which writes them) and `/we:build` (which consumes them). This
+`/we:story` (which writes them) and `/we:orchestrate` (which consumes them). This
 document specifies the exact format both sides depend on. Changes here are
 versioned and require explicit consideration of both sides.
 
-> **Filename suffix:** story plans use the `-story.md` suffix. `/we:build`
+> **Filename suffix:** story plans use the `-story.md` suffix. The pipeline
 > reads `docs/plans/{TICKET}-story.md` first and falls back to the legacy
 > `{TICKET}-plan.md` so pre-existing plans keep building during migration. New plans
 > are always written with `-story.md`.
@@ -27,7 +27,7 @@ parallel_groups: []     # Optional. See § parallel_groups below.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `story` | string | yes | Ticket key; used by `/we:build` for checkpoint keying |
+| `story` | string | yes | Ticket key; used for checkpoint keying |
 | `created` | ISO-8601 date | yes | Informational; used in stale-plan detection |
 | `status` | enum | yes | `draft` while being refined; `approved` after `/we:story` Step 5 |
 | `parallel_groups` | list of lists | no | Empty or absent = all phases sequential; see below |
@@ -44,7 +44,7 @@ Phase headers follow the exact regex `^### Phase (\d+): (.+)$`:
 ### Phase 3: Wire frontend
 ```
 
-`/we:build` extracts phase numbers from capture group 1 (`\d+`) and phase
+The pipeline extracts phase numbers from capture group 1 (`\d+`) and phase
 titles from capture group 2 (`.+`). **Do not deviate from this format** — no
 leading zeros, no alternative numbering, no extra text before the phase number.
 
@@ -60,7 +60,7 @@ Each AC uses Given/When/Then (GWT) structure:
 2. **Given** [initial context] **When** [user action] **Then** [observable outcome]
 ```
 
-The DoR (`we/quality/dor.md`) requires GWT structure. `/we:build` Step 1 scans
+The DoR (`we/quality/dor.md`) requires GWT structure. The DoR gate scans
 for the presence of `Given`, `When`, and `Then` tokens in the AC section — the
 plan is rejected at the DoR gate if any are absent.
 
@@ -77,14 +77,14 @@ user cares about most, constraints that aren't obvious from the code, and
 any important context from the design discussion. 3-8 sentences, narrative voice.]
 ```
 
-`/we:build` Step 1 checks that the Context section is non-empty (> 50 characters).
+The DoR gate checks that the Context section is non-empty (> 50 characters).
 A plan without meaningful context cannot be consumed reliably by an autonomous build.
 
 ---
 
 ## parallel_groups
 
-`parallel_groups` is a list of lists of phase numbers. It signals to `/we:build`
+`parallel_groups` is a list of lists of phase numbers. It signals to `/we:orchestrate`
 Step 2 which phases can run as concurrent sub-agents:
 
 ```yaml
@@ -99,7 +99,7 @@ parallel_groups: [[2, 3], [5, 6]]  # Two parallel groups
 - Phases within the same group are dispatched as concurrent sub-agents in a
   single `Agent()` message — they must touch **disjoint files** and have **no
   ordering dependency** (phase N's output must not feed phase N+1 within the group).
-- Conflict detection after a parallel group returns is `/we:build`'s responsibility.
+- Conflict detection after a parallel group returns is the Lead's responsibility.
   If merge conflicts occur, the `parallel_groups` declaration was incorrect — resolve
   manually, and update the plan via `/we:story` to prevent future recurrence.
 - When in doubt, leave the list empty. Explicit sequential runs are always correct;
@@ -109,7 +109,7 @@ parallel_groups: [[2, 3], [5, 6]]  # Two parallel groups
 
 ## Required Sections (DoR gate)
 
-`/we:build` Step 1 hard-stops if any of the following are missing or empty:
+The DoR gate hard-stops if any of the following are missing or empty:
 
 | Check | What is verified |
 |---|---|
@@ -117,7 +117,7 @@ parallel_groups: [[2, 3], [5, 6]]  # Two parallel groups
 | Context section non-empty | More than 50 characters of narrative text |
 | At least one Phase header | Matches `^### Phase (\d+): (.+)$` |
 
-Failure message: `"Plan at docs/plans/{TICKET}-story.md is incomplete: missing <ACs|Context|Phase>. Run /we:story {TICKET} to complete it before /we:build."`
+Failure message: `"Plan at docs/plans/{TICKET}-story.md is incomplete: missing <ACs|Context|Phase>. Run /we:story {TICKET} to complete it before building."`
 
 ---
 
@@ -187,14 +187,14 @@ parallel_groups: []
 ## References
 
 - [`we/skills/story/SKILL.md`](../we/skills/story/SKILL.md) — plan writer (producer)
-- [`we/skills/build/SKILL.md`](../we/skills/build/SKILL.md) — plan consumer
+- [`we/skills/orchestrate/SKILL.md`](../we/skills/orchestrate/SKILL.md) — plan consumer
 - [`we/quality/dor.md`](../we/quality/dor.md) — Definition of Ready (DoR gate)
 
 ---
 
 ## Concept Doc Format — Saga + Epic Mirror Block
 
-The Saga (`docs/plans/<saga>-saga.md`) and Epic (`docs/plans/<saga>-<epic>-epic.md`) docs are not part of the Build contract above — `/we:build` never reads them. (Both are flat under `docs/plans/`, distinguished by filename suffix; the saga-slug prefix on epics groups them — `ls docs/plans/<saga>-*` shows a saga and all its epics.) They are written and updated by `/we:saga` and `/we:epic`, and they carry an auto-generated *mirror block* that reflects child items from the ticketing tool. The mirror is the contract between the Plan skill (writer + consumer of its own block) and the user (owner of all surrounding prose).
+The Saga (`docs/plans/<saga>-saga.md`) and Epic (`docs/plans/<saga>-<epic>-epic.md`) docs are not part of the Build contract above — the pipeline never reads them. (Both are flat under `docs/plans/`, distinguished by filename suffix; the saga-slug prefix on epics groups them — `ls docs/plans/<saga>-*` shows a saga and all its epics.) They are written and updated by `/we:saga` and `/we:epic`, and they carry an auto-generated *mirror block* that reflects child items from the ticketing tool. The mirror is the contract between the Plan skill (writer + consumer of its own block) and the user (owner of all surrounding prose).
 
 ### Frontmatter
 
@@ -279,5 +279,5 @@ The Status mode compares the mirror block in the doc with the live ticketing fet
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-05-18 | Initial spec extracted from `/we:story` + `/we:build` implementation |
+| 1.0 | 2026-05-18 | Initial spec extracted from `/we:story` + build-pipeline implementation |
 | 1.1 | 2026-05-28 | Concept Doc Format section added — Saga + Epic mirror block contract (v2.34.0) |

@@ -28,7 +28,7 @@ All 4 checkpoints must exist before PR creation:
 ### Step 1: Extract Ticket Key
 
 Keep the branch as `$BRANCH` and the extracted key as `$TICKET` — the key is regex-extractable
-because `/we:build` puts it first (`{type}/{TICKET}-description`). Both are used throughout.
+because the pipeline puts it first (`{type}/{TICKET}-description`). Both are used throughout.
 
 ### Step 2: Verify Checkpoints
 

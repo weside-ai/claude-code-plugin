@@ -19,7 +19,7 @@ description: >
 | `epic`              | Epic     | an Epic / one bet  | Stories                  | `/we:epic` (refine Epic), then `/we:story` per Story |
 | `story`             | Story    | a Story / ticket   | a build-ready plan       | hands off to `/we:story` (Solo) for the plan write |
 
-A meeting is a *facilitated workflow*; the **council** (`/we:council`) is the deliberation engine each meeting convenes. The meeting produces synthesis + decomposition; the activity skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) produce the artifact at each altitude. The Build pipeline (`/we:build`) is downstream of `/we:story` and is not a meeting type.
+A meeting is a *facilitated workflow*; the **council** (`/we:council`) is the deliberation engine each meeting convenes. The meeting produces synthesis + decomposition; the activity skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) produce the artifact at each altitude. The Build pipeline (`/we:orchestrate`) is downstream of `/we:story` and is not a meeting type.
 
 For the methodology source of truth, see [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (altitude map, meeting summaries, roster defaults) and [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) (council mechanic + role lenses).
 
@@ -116,7 +116,7 @@ The story meeting is the natural upgrade path for `/we:story` (Solo) when the St
 - **story hands off by instruction**, not by inline `Skill()` call. Same rule for vision/saga/epic when they hand off to the corresponding Solo skill.
 - **Degrade gracefully** — no council configured, no weside: the council falls back to generic agents (handled by `/we:council`), or the meeting runs solo. If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is missing, skip the council offer and run the meeting solo, naming the loss explicitly (see Step 2 env-flag preflight).
 - A meeting produces **decomposition + a synthesis**, not code and not the artifact itself. The Solo skill at the same altitude writes the artifact; the Solo skill at the next altitude down picks up the decomposition.
-- Implementation is `/we:build`. Meetings never call `/we:build`.
+- Implementation is `/we:orchestrate`. Meetings never call it.
 
 ## References
 
@@ -125,6 +125,6 @@ The story meeting is the natural upgrade path for `/we:story` (Solo) when the St
 - `we/skills/saga/SKILL.md` — Saga-altitude Solo
 - `we/skills/epic/SKILL.md` — Epic-altitude Solo
 - `we/skills/story/SKILL.md` — Story-altitude Solo (what `/we:meet story` hands off to)
-- `we/skills/build/SKILL.md` — Build pipeline (downstream of Story; not a meeting type)
+- `we/skills/orchestrate/SKILL.md` — Build pipeline (downstream of Story; not a meeting type)
 - `we/skills/CLAUDE.md` — Activity-vs-Meeting design rationale
 - [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) + [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) — methodology + council mechanic

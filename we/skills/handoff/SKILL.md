@@ -254,7 +254,7 @@ open_pr: <number | null>
 4. **`## Tried and rejected`** — dead ends so the next session doesn't repeat them. Each entry: *Approach · Why it failed · Do not retry unless …*
 5. **`## Open questions / blockers`** — explicitly awaiting user input. Tag `[user]` or `[external]`.
 6. **`## Files touched + status`** — table: path · status (`uncommitted` / `committed-not-pushed` / `pushed` / `in-PR <num>`) · one-line note.
-7. **`## Next concrete steps`** — prioritized 1-2-3 list. If you had to pick one move, do this. End with a **Suggested skills** line: which `/we:*` or other skills the next session should invoke first (e.g. `/we:build WA-123`, `/we:ci-review`).
+7. **`## Next concrete steps`** — prioritized 1-2-3 list. If you had to pick one move, do this. End with a **Suggested skills** line: which `/we:*` or other skills the next session should invoke first (e.g. `/we:orchestrate WA-123`, `/we:ci-review`).
 8. **`## Watch-outs`** — latent bugs, environmental quirks, "remember to ...", gotchas.
 9. **`## References`** — pointers: plan files, retro logs, ADRs, related PRs, companion memory anchors (if MCP).
 10. **`## Companion continuity`** *(only with `--with-companion-state`)* — short journal-style continuation in the Companion's voice. Engineering substance only. Default off; never auto-populates.

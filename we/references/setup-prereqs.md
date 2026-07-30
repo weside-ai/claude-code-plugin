@@ -11,13 +11,13 @@ missing and inform the user (do NOT block).
 
 | Prerequisite | Detection check | Provided by | Used by |
 |---|---|---|---|
-| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:build` PR creation, CI status, review-thread resolution |
-| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:build` ticket fetch and transitions |
-| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `/we:build` Step 4: Simplify |
-| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:build` Step 2 security checks |
-| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:build` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
-| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:build` |
-| superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | brainstorming/debugging discipline skills used throughout `/we:build` |
+| `gh` CLI authenticated | `gh auth status` exits 0 | GitHub CLI install + `gh auth login` | `/we:pr`, `/we:ci-review`, `/we:orchestrate` PR creation, CI status, review-thread resolution |
+| Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:orchestrate` ticket fetch and transitions |
+| `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `references/integration-pipeline.md` § Simplify |
+| security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:develop` per-phase security checks |
+| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:orchestrate` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
+| weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:orchestrate` |
+| superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | brainstorming/debugging discipline skills used throughout the build |
 | graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, code-graph nav rule |
 | turbovault binary | `command -v turbovault` (only when the MCP row above is missing) | TurboVault binary install + MCP registration | distinguishes "binary missing" from "MCP not registered" for the guided fix |
 | Codex backend (optional) | `command -v codex` exits 0 (the official Codex plugin's CLI) | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | `/we:orchestrate` and `/we:develop` optional executor; cross-review via `/codex:adversarial-review`. Absent → workers run on Claude Code with no degradation |
@@ -64,6 +64,6 @@ explicitly:
 > `~/.claude/settings.json`)."
 
 **Do NOT block.** This is informational — the pipeline works without these plugins.
-Downstream skills (e.g. `/we:build` Step 4) MUST trust this gate: they invoke the
+Downstream skills (e.g. the pipeline's Simplify step) MUST trust this gate: they invoke the
 prerequisite directly and only skip when the actual tool call returns "not found", never on
 assumption.

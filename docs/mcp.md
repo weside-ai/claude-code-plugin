@@ -135,7 +135,7 @@ The plugin's skills detect MCP absence and fall through cleanly. Specifically:
 - **`/we:coach`** — boots without Companion identity; reasons from rules + skill landscape.
 - **`/we:setup`**, **`/we:onboarding`** — `/we:onboarding` still builds the full council from scratch, but every role fills with a generic `council-<role>` lens (`Companion ID: null` in the bridge); the structure is complete, with no live Companion linkage.
 - **`/we:sideload`** — degrades to legacy mode (reads CLAUDE.md + always-loaded rules; skips vault step).
-- **`/we:story`**, **`/we:build`** — pipeline runs unchanged. No memory grounding, but full pipeline.
+- **`/we:story`**, **`/we:orchestrate`** — pipeline runs unchanged. No memory grounding, but full pipeline.
 
 You lose continuity and personality. You don't lose any feature.
 

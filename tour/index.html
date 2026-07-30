@@ -1510,7 +1510,7 @@
   <a data-target="saga" data-label="Saga · Theme"></a>
   <a data-target="epic" data-label="Epic · Initiative"></a>
   <a data-target="story" data-label="Story · slice"></a>
-  <a data-target="build" data-label="Build · /we:build"></a>
+  <a data-target="build" data-label="Build · /we:orchestrate"></a>
   <a data-target="coach" data-label="Coach · /we:coach"></a>
   <a data-target="retro" data-label="Retro · KVP loop"></a>
   <a data-target="deliver" data-label="Deliver · you"></a>
@@ -1583,7 +1583,7 @@
         <div class="alt-altitude">BUILD</div>
         <div class="alt-horizon">~ hours to days</div>
         <div class="alt-name">Code</div>
-        <code class="alt-skill">/we:build</code>
+        <code class="alt-skill">/we:orchestrate</code>
         <div class="alt-output">PR with tests, review, CI · ticket → In Review</div>
         <div class="alt-voices">autonomous</div>
       </div>
@@ -1639,7 +1639,7 @@
         <span class="team-role-chip chip-dev">DEVELOPER</span>
         <h4>Ships the how</h4>
         <p>Picks up a refined Story and runs the autonomous pipeline — or a dev-only worker slice inside an orchestrated run.</p>
-        <div class="team-skills"><code>/we:build</code><code>/we:develop</code><code>/we:ci-review</code><code>/we:diagnose</code></div>
+        <div class="team-skills"><code>/we:orchestrate</code><code>/we:develop</code><code>/we:ci-review</code><code>/we:diagnose</code></div>
       </div>
       <div class="team-card">
         <span class="team-role-chip chip-tl">TECH LEAD</span>
@@ -1832,8 +1832,8 @@
         <circle class="loop-ring" cx="905" cy="620" r="128"/>
         <text class="t-level" x="905" y="510" text-anchor="middle">THE SPRINT</text>
         <text class="t-title" x="905" y="574" text-anchor="middle">Build</text>
-        <text class="t-skill" x="905" y="596" text-anchor="middle">/we:build</text>
-        <text class="t-skill2" x="905" y="614" text-anchor="middle">/we:orchestrate + /we:develop</text>
+        <text class="t-skill" x="905" y="596" text-anchor="middle">/we:orchestrate</text>
+        <text class="t-skill2" x="905" y="614" text-anchor="middle">+ /we:develop workers</text>
         <text class="t-title" x="905" y="652" text-anchor="middle" style="font-size:14.5px; fill: var(--fg-muted);">Daily · „where am I?"</text>
         <text class="t-skill" x="905" y="672" text-anchor="middle">/we:coach · /we:handoff</text>
         <text class="t-sub" x="905" y="708" text-anchor="middle">criteria checked · review · lint · tests</text>
@@ -2068,7 +2068,7 @@
         <div class="path-name">/we:story "&lt;idea&gt;"</div>
         <div class="path-title">Solo · interactive Q&amp;A</div>
         <div class="path-when">Claude asks the missing questions; you answer. Quiet Stories pass quickly; contentious ones get more questions. Best for routine work.</div>
-        <div class="path-flow">idea → Q&amp;A → ticket + plan → ready for /we:build</div>
+        <div class="path-flow">idea → Q&amp;A → ticket + plan → ready for /we:orchestrate</div>
       </div>
       <div class="path-card">
         <div class="path-name">/we:meet story</div>
@@ -2110,11 +2110,11 @@
     </div>
   </section>
 
-  <!-- ============ 7. BUILD — /we:build 9-step + discipline ============ -->
+  <!-- ============ 7. BUILD — /we:orchestrate 9-step + discipline ============ -->
   <section id="build">
     <div class="kicker">Station 10 · Build · the autonomous pipeline</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:build</code> — hand it a ticket, watch it ship.</h2>
-    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; <code>/we:build</code> doesn't ask permission for each phase.</p>
+    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:orchestrate</code> — hand it a ticket, watch it ship.</h2>
+    <p class="lede">Nine steps from worktree to PR. Sequential where order matters, parallel where it doesn't. Checkpoints between every step — interruption-safe. By the time you handed it a ticket, you already decided to build it; it doesn't ask permission for each phase.</p>
 
     <div class="story-flow">
       <div class="story-step"><div class="num">01</div><h4>Git prep</h4><p>Worktree, branch, ticket → In Progress.</p></div>
@@ -2151,7 +2151,7 @@
       </div>
     </div>
 
-    <p class="lede" style="margin-top: 1.5rem;"><strong style="color:var(--fg)">/we:build</strong> is the solo fast path shown above — one Story, one pipeline, one PR. For multi-chunk or phased work use <code>/we:orchestrate</code>: the Lead dispatches workers via <code>/we:develop</code> (implement → local gates → commit → push, no PR, no CI). Workers run on <strong>cheap Claude</strong> (Sonnet/Haiku) by default — no extra install. Two optional backends: <strong>Codex</strong> (<code>gpt-5-codex</code>, opt-in) and <strong>foreign engines</strong> (any Anthropic-compatible endpoint via <code>.weside/engines.local.json</code>). Workers push branches; the Lead merges them onto one integration branch and runs CI once. Cross-review is on by default: whichever engine wrote the code, the other hunts bugs in it, once, at integration — Claude wrote → <code>/codex:adversarial-review</code> (if Codex is configured); otherwise → Claude's native <code>/code-review</code>. AC-alignment (<code>we:ac-reviewer</code>) runs separately — informational per chunk, gating once at integration. The plugin never hard-depends on Codex or any foreign engine.</p>
+    <p class="lede" style="margin-top: 1.5rem;">The steps above are the same whichever way the code gets written. <code>/we:orchestrate --solo</code> is the fast path for one small Story — nothing dispatched, one pipeline, one PR. For multi-chunk or phased work the Lead dispatches workers via <code>/we:develop</code> (implement → local gates → commit → push, no PR, no CI). Workers run on <strong>cheap Claude</strong> (Sonnet/Haiku) by default — no extra install. Two optional backends: <strong>Codex</strong> (<code>gpt-5-codex</code>, opt-in) and <strong>foreign engines</strong> (any Anthropic-compatible endpoint via <code>.weside/engines.local.json</code>). Workers push branches; the Lead merges them onto one integration branch and runs CI once. Cross-review is on by default: whichever engine wrote the code, the other hunts bugs in it, once, at integration — Claude wrote → <code>/codex:adversarial-review</code> (if Codex is configured); otherwise → Claude's native <code>/code-review</code>. AC-alignment (<code>we:ac-reviewer</code>) runs separately — informational per chunk, gating once at integration. The plugin never hard-depends on Codex or any foreign engine.</p>
 
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
@@ -2248,11 +2248,11 @@
   <section id="deliver">
     <div class="kicker">Station 13 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
-    <p class="lede">By the time <code>/we:build</code> hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
+    <p class="lede">By the time the pipeline hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
 
     <div class="deliver-wrap">
       <div class="deliver-list">
-        <h4>What /we:build produces</h4>
+        <h4>What the pipeline produces</h4>
         <ul>
           <li>AC-reviewed (criteria + DoD, gating)</li>
           <li>Tests passing (unit + relevant integration)</li>
@@ -2347,7 +2347,7 @@
         <h4>Write your first Story</h4>
         <p>Start with one Story. Ship one PR. Build the muscle. Graduate to councils, upper altitudes, and meetings when contention is real.</p>
         <code>/we:story "your next idea"</code>
-        <code style="margin-top:0.3rem;">/we:build PROJ-1</code>
+        <code style="margin-top:0.3rem;">/we:orchestrate PROJ-1</code>
       </div>
       <div class="step-card">
         <div class="n">04</div>
@@ -2771,7 +2771,7 @@ document.addEventListener("keydown", (e) => {
     { els: ["fl-e-bp", "fl-planning"], title: "Planning — pick the ready set",
       desc: "The PO and Tech Lead pull from Stories that are genuinely ready — a plan exists and nothing blocks them. <code>/we:epic</code> status and <code>/we:map</code> make the ready set obvious." },
     { els: ["fl-e-ps", "fl-sprint"], title: "The sprint — autonomous, gated",
-      desc: "<code>/we:build</code> takes one Story from code to a review-ready PR on its own; <code>/we:orchestrate</code> + <code>/we:develop</code> run several in parallel. Every PR clears the same bar: acceptance criteria backed by evidence, code review, linting, tests." },
+      desc: "<code>/we:orchestrate</code> takes a Story from code to a review-ready PR — <code>--solo</code> in one session, or several in parallel via <code>/we:develop</code> workers. Every PR clears the same bar: acceptance criteria backed by evidence, code review, linting, tests." },
     { els: ["fl-e-sr", "fl-review"], title: "Review — human only, by design",
       desc: "You read the change, decide it's right, merge it, close the ticket. Claude never merges or closes — autonomy stops where the consequences start. By design, not a setting." },
     { els: ["fl-e-rr", "fl-retro"], title: "Retro — every error happens once",

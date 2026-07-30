@@ -1,10 +1,10 @@
 ---
-description: What makes a story verified — the oracle ladder (CLI/API, UI walkthrough, substitute), the receipt that gates the PR, DEV-before-staging, and why green tests are not evidence. Loaded by /we:build, /we:orchestrate and /we:story.
+description: What makes a story verified — the oracle ladder (CLI/API, UI walkthrough, substitute), the receipt that gates the PR, DEV-before-staging, and why green tests are not evidence. Loaded by /we:orchestrate and /we:story.
 ---
 
 # Verification
 
-Consumers: `/we:build` (its own verification step), `/we:orchestrate` (once at
+Consumers: `/we:orchestrate` (once at
 integration, before the PR), `/we:story` (emits the plan's verification section),
 `we:ac-reviewer` (checks the receipt exists and matches).
 

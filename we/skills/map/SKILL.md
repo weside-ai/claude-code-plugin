@@ -131,7 +131,7 @@ showed — e.g. the saga with the most active work, an epic with drift, or a sto
 mid-pipeline:
 
 ```text
-Next: /we:epic teams (most active) · fix 1 ungrouped story · /we:build PROJ-221 when unparked
+Next: /we:epic teams (most active) · fix 1 ungrouped story · /we:orchestrate PROJ-221 when unparked
 ```
 
 ---

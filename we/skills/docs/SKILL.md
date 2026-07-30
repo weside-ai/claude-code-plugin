@@ -25,7 +25,7 @@ description: >
 | Integrate a change | `/we:docs I changed app/db/session.py — what docs need updating?` |
 | Audit for drift | `/we:docs Scan architecture/ for drift vs. the code` |
 | Regenerate register | `/we:docs Refresh the bypass register` |
-| Proactive in pipeline | (invoked automatically by `/we:build` between `simplified` and `pr_created`) |
+| Proactive in pipeline | (invoked automatically by `/we:orchestrate` between `simplified` and `pr_created`) |
 
 ---
 
@@ -79,12 +79,12 @@ the project's `.doc-architect.yml` says.
    fi
    ```
 
-### Proactive (pipeline-driven, from `/we:build`)
+### Proactive (pipeline-driven, from `/we:orchestrate`)
 
-1. `/we:build` calls `/we:docs` between the `simplified` and `pr_created`
+1. The pipeline calls `/we:docs` between the `simplified` and `pr_created`
    checkpoints with a diff summary
 2. Agent returns a list of proposed doc updates (or "nothing needs updating")
-3. `/we:build` shows the proposals to the user and waits for approval
+3. The pipeline shows the proposals to the user and waits for approval
 4. On approval → apply diffs → write `docs_updated` checkpoint → continue
 
 ---
@@ -123,7 +123,7 @@ aggregates and prioritises across files; the per-file work is `doc-improve`'s.
 - Always invoke `doc-architect` agent — never inline the logic here
 - Never suggest writes outside the agent's writable_paths allowlist — keep every proposal inside it
 - Always show the agent's diff before applying via Edit
-- When called proactively from `/we:build`, keep output concise (just the
+- When called proactively from the pipeline, keep output concise (just the
   proposal list, no narrative)
 - When the agent says "no documentation needed", trust it — do not invent
   work

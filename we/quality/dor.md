@@ -2,7 +2,7 @@
 
 **A story is READY for development when all criteria below are met.**
 
-A repo can extend this checklist with its own criteria in `.weside/dor.md` (created by `/we:setup`); `/we:story` and `/we:build` read it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
+A repo can extend this checklist with its own criteria in `.weside/dor.md` (created by `/we:setup`); `/we:story` and `/we:orchestrate` read it additively — both the checklist below and the repo file apply, the repo file never replaces this one.
 
 ---
 
@@ -12,7 +12,7 @@ A repo can extend this checklist with its own criteria in `.weside/dor.md` (crea
 
 - [ ] **Clear Summary** — One-line description (max 80 chars)
 - [ ] **User Story** — "As [role] I want [feature] so that [benefit]" format
-- [ ] **Plan exists** — `docs/plans/{TICKET}-story.md` with implementation details. Once the plan is final, `/we:build` executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the pipeline. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers) to enable parallel sub-agent dispatch in Step 2.
+- [ ] **Plan exists** — `docs/plans/{TICKET}-story.md` with implementation details. Once the plan is final, the pipeline executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the build. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers), the parallel-wave map `/we:orchestrate` dispatches from.
 - [ ] **Ticket linked** — Connected to parent Epic (if using ticketing tool)
 
 ### In Plan (Details)

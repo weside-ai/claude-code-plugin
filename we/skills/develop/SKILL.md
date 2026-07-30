@@ -13,9 +13,9 @@ argument-hint: '[<ticket-key> | <plan-path>] [--phases <N,M>] [--engine <name>]'
 
 Implement the assigned chunk, run local gates, commit, push, stop.
 
-The difference from `/we:build`: no PR, no CI fix loop, no ticket transition.
-The Lead (`/we:orchestrate`) integrates multiple workers onto one branch and runs CI **once**.
-Use `/we:build` instead when you want the complete solo pipeline to a reviewable PR.
+You do not run the integration pipeline: no PR, no CI fix loop, no ticket transition.
+The Lead (`/we:orchestrate`) integrates every worker onto one branch and runs CI **once**.
+No Lead in play → `/we:orchestrate {TICKET} --solo` runs implementation and integration together.
 
 Full dispatch contract: [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md)
 
@@ -44,9 +44,8 @@ name the conflict to the user (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`).
 ## Step 1: DoR-lite check
 
 Run the 3-item scan from `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` (GWT ACs · Context > 50
-chars · `### Phase` headers). If any item fails, stop and say which. This is lighter than
-`/we:build`'s full DoR gate — the goal is to catch a completely un-refined plan, not to be a
-final gate.
+chars · `### Phase` headers). If any item fails, stop and say which. This is lighter than the Lead's full DoR gate — the goal is to catch a completely un-refined
+plan, not to be a final gate.
 
 ---
 
@@ -195,7 +194,7 @@ Next: Lead integrates this branch. Do NOT open a PR.
 + **Commit every phase** — atomic commits, one per phase or fix.
 + **Local gates must be green before pushing** — no gate-red push.
 + **AC-check is informational** — commit even with findings; surface them in the report.
-+ **Never dispatch to a nested /we:build** — you ARE the dev worker; calling /we:build from here is double-overhead.
++ **Never dispatch a nested pipeline** — you ARE the dev worker; implement your chunk and report. Opening a PR or running CI here voids the Lead's single-CI contract.
 + **Honor `--phases` scope** — only implement the listed phases; do not expand scope.
 + **Report even on failure** — if a blocker stops you, report what you completed and why you stopped.
 + **Model tier defaults:** sonnet for normal phases, haiku for mechanical, opus only when the Lead explicitly requests it for a hard chunk.
@@ -205,4 +204,4 @@ Next: Lead integrates this branch. Do NOT open a PR.
 + [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) — full dispatch contract, AC-review rule, bug-hunt dispatch, integration-branch pattern
 + [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md) — Codex single-detach rule (if the Lead uses Codex for integration bug-hunting)
 + `/we:orchestrate` — the Lead that dispatches this worker
-+ `/we:build` — the solo full-pipeline alternative (PR + CI included)
++ [`${CLAUDE_PLUGIN_ROOT}/references/integration-pipeline.md`](../../references/integration-pipeline.md) — what the Lead does with your branch

@@ -33,7 +33,7 @@ Five **state** roles:
 
 - `needs-triage` — maintainer needs to evaluate
 - `needs-info` — waiting on reporter for more information
-- `ready-for-agent` — fully specified, ready for autonomous pickup (`/we:build`)
+- `ready-for-agent` — fully specified, ready for autonomous pickup (`/we:orchestrate`)
 - `ready-for-human` — needs human implementation
 - `wontfix` — will not be actioned
 

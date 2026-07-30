@@ -5,7 +5,8 @@ Guards the error classes the 2026-07 consolidation removed, so they cannot
 silently return:
 
 1. STORY_PHASES mirror  — every phase name in orchestration.py appears in
-   build/SKILL.md, and every `story checkpoint <ticket> <phase>` literal in
+   references/integration-pipeline.md, and every `story checkpoint <ticket> <phase>`
+   literal in
    markdown names a real phase.
 2. Command/skill collision — no we/commands/<name>.md may share a name with a
    we/skills/<name>/ directory (documented dispatch-loop anti-pattern).
@@ -51,12 +52,12 @@ def check_story_phases() -> None:
         return
     phases = re.findall(r'"([a-z_]+)"', match.group(1))
 
-    build = (WE / "skills" / "build" / "SKILL.md").read_text()
+    pipeline = (WE / "references" / "integration-pipeline.md").read_text()
     for phase in phases:
-        if phase not in build:
+        if phase not in pipeline:
             fail(
                 f"STORY_PHASES mirror: phase '{phase}' from orchestration.py "
-                "does not appear in we/skills/build/SKILL.md"
+                "does not appear in we/references/integration-pipeline.md"
             )
 
     # Any checkpoint literal used in markdown must be a real phase

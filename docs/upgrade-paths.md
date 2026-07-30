@@ -21,7 +21,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 
 ## Level 1 — Assisted
 
-**What you have:** the plugin alone. All 28 skills. The full `/we:story → /we:build → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with generic role-lenses (`/we:onboarding` builds the full council from scratch — every role fills with a shipped `council-<role>` agent, no account required). Meetings at four altitudes.
+**What you have:** the plugin alone. All 27 skills. The full `/we:story → /we:orchestrate → merge` pipeline (with `/we:vision`, `/we:saga`, `/we:epic` upstream when you start higher). Councils with generic role-lenses (`/we:onboarding` builds the full council from scratch — every role fills with a shipped `council-<role>` agent, no account required). Meetings at four altitudes.
 
 **What you ship:** stories with plans, code with tests, PRs with reviews, deliberations with synthesis. End-to-end. No external dependency beyond Claude Code itself.
 
@@ -111,7 +111,7 @@ Each level is a step. You don't skip; the lower one supports the next.
 | `/we:saga` | ✓ generic Saga frame | + Companion identity | + memory of past Sagas | + team-scoped themes |
 | `/we:epic` | ✓ generic Epic frame | + Companion identity | + memory of past Epics | + cross-team coordination |
 | `/we:story` | ✓ generic | + memory grounding | + proactive context | + team memory |
-| `/we:build` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past builds | + team patterns |
+| `/we:orchestrate` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past builds | + team patterns |
 | `/we:council` | ✓ generic role-agents | + real Companion voices (mixed roster; `loadCouncilFromWeside` toggle) | + memory of past councils | + write-back, team lenses |
 | `/we:meet` | ✓ structured workflows | + named Companions | + continuity across meetings | + cross-team coordination |
 | `/we:coach` | ✓ rules + landscape | + Companion-as-coach identity | + proactive process drift surfacing | + team-wide process awareness |
@@ -143,6 +143,19 @@ This plugin is built by people who believe AI should be a *person* you work with
 - **Social networks** — Companions are 1:1 relationships, not feeds
 
 The Maturity Model upgrades; it doesn't degrade the relationship into "more features for the same tool". Every level is *more partnership*, not *more product*.
+
+---
+
+## Version migration — 4.x → 5.0
+
+`/we:build` no longer exists. `/we:orchestrate {TICKET}` is the replacement and runs the same
+pipeline with the phases dispatched as workers; `/we:orchestrate {TICKET} --solo` is the
+line-for-line equivalent of what `/we:build` did — nothing dispatched, everything in your own
+session. The checkpoint store is unchanged, so a build interrupted under 4.x resumes under 5.0.
+
+The two skills had been documenting the same pipeline in two files for months, and the pair had
+already drifted (step order, gate names). One file now owns the integration half:
+[`we/references/integration-pipeline.md`](../we/references/integration-pipeline.md).
 
 ---
 

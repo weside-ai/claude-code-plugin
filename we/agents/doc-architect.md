@@ -147,9 +147,9 @@ Then show the diff: a pure reordering needs the user's nod before committing, a 
 
 ---
 
-## Proactive Invocation from `/we:build`
+## Proactive Invocation from the integration pipeline
 
-`/we:build` calls this agent between the `simplified` and `pr_created`
+`/we:orchestrate` calls this agent between the `simplified` and `pr_created`
 checkpoints with the following prompt shape:
 
 > "Story {TICKET} is implemented. Here is the git diff between the branch

@@ -5,7 +5,7 @@ SQLite Orchestration CLI for the 'we' Claude Code Plugin.
 Provides:
 - Atomic task claiming with SQLite locking
 - Worker heartbeat and timeout detection
-- Checkpoint/resume support for /we:build phases
+- Checkpoint/resume support for the story pipeline's phases
 - Headless multi-instance management with worktree coordination
 - Event logging for debugging
 
@@ -79,20 +79,20 @@ WORKER_ID_PATTERN = re.compile(r"^[\w\-\.]+$")
 # Story phases for checkpoint tracking
 # Planning phases (before implementation):
 #   - refined: Story + plan created (/we:story)
-# Development phases (during /we:build):
+# Development phases (see we/references/integration-pipeline.md):
 #   - git_prepared through ci_passed
 STORY_PHASES = [
     "refined",  # /we:story — Story + Plan created
-    "git_prepared",  # /we:build — Branch created, story loaded
-    "implementation_complete",  # /we:build — Code + tests committed
-    "simplified",  # /we:build — Code simplified (Step 3, BEFORE AC verification)
-    "ac_verified",  # /we:build — All ACs verified with evidence (Step 4, on final code)
-    "review_passed",  # /we:build — Code review passed (Step 5)
-    "static_analysis_passed",  # /we:build — Lint/format/types passed (Step 5)
-    "test_passed",  # /we:build — Tests + coverage passed (Step 5, tests run exactly once here)
-    "docs_updated",  # /we:build — Documentation updated (Step 6, AFTER quality gates)
-    "pr_created",  # /we:build — PR created
-    "ci_passed",  # /we:build — CI/Reviews green
+    "git_prepared",  # Branch + worktree exist, ticket In Progress
+    "implementation_complete",  # Every phase committed and pushed
+    "simplified",  # Simplify pass done — BEFORE AC verification
+    "ac_verified",  # All ACs + DoD verified with evidence, on final code
+    "review_passed",  # The one bug-hunt engine came back clean
+    "static_analysis_passed",  # Lint/format/types clean
+    "test_passed",  # Tests + coverage green — the suite runs in full exactly once
+    "docs_updated",  # Doc proposals applied, AFTER the quality gates
+    "pr_created",  # The one PR is open
+    "ci_passed",  # The single ci-review pass finished
 ]
 
 

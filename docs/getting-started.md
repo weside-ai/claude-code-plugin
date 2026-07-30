@@ -26,7 +26,7 @@ The plugin is now active. All `/we:*` skills are available.
 
 ### Recommended companion plugins
 
-Two plugins enhance the pipeline. They're optional — the framework works without them, but `/we:build` runs better with them:
+Two plugins enhance the pipeline. They're optional — the framework works without them, but the build runs better with them:
 
 ```
 /install code-simplifier@claude-plugins-official
@@ -93,15 +93,15 @@ Take five minutes to read the plan. If something's off, tell `/we:story` — it'
 
 ---
 
-## 4. Hand it to `/we:build` (10 minutes of watching)
+## 4. Hand it to `/we:orchestrate` (10 minutes of watching)
 
 When you're happy with the plan:
 
 ```
-/we:build {TICKET}
+/we:orchestrate {TICKET}
 ```
 
-`/we:build` runs the full pipeline autonomously. You watch:
+It runs the full pipeline autonomously. You watch:
 
 ```
 Step 1: git_prepared          ← worktree, branch, ticket → In Progress
@@ -117,7 +117,7 @@ Step 8: ci_passed              ← CI + review findings, fixed in batch
 Step 9: ticket → In Review     ← awaiting your merge
 ```
 
-Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal orchestration CLI — if a build is interrupted, just re-invoke `/we:build {TICKET}` and it resumes from the last checkpoint.
+Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal orchestration CLI — if a build is interrupted, just re-invoke `/we:orchestrate {TICKET}` and it resumes from the last checkpoint.
 
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
@@ -130,7 +130,7 @@ Otherwise it runs.
 
 ## 5. Review + merge
 
-When `/we:build` finishes, you have a PR. Open it. Review it like any PR — your eyes, your call. When you're happy:
+When the run finishes, you have a PR. Open it. Review it like any PR — your eyes, your call. When you're happy:
 
 - Merge via your platform's UI (GitHub, GitLab, Bitbucket, or `git merge` locally)
 - Close the ticket (or watch it auto-transition, depending on your ticketing config)
@@ -171,8 +171,8 @@ Pick one based on where you want to go next:
 ## Common first-time issues
 
 - **`/we:story` produces a plan but the ticket wasn't created** → re-run `/we:setup` to (re)detect your ticketing tool; it records the tool + project key in `.weside/config.json`. Or no ticketing tool detected — that's "Plan-only mode", which is fine.
-- **`/we:build` errors at Step 1 with "DoR failed"** → the plan is missing required sections. Open it, see what's flagged, re-run `/we:story` to fill the gap.
-- **`/we:build` interrupted mid-pipeline** → run `/we:build {TICKET}` again. It picks up from the last checkpoint.
+- **The run stops at the DoR gate** → the plan is missing required sections. Open it, see what's flagged, re-run `/we:story` to fill the gap.
+- **A run was interrupted mid-pipeline** → run `/we:orchestrate {TICKET}` again. It picks up from the last checkpoint.
 - **CI keeps failing** → see the [ci-review skill reference](skills.md#weci-review) and [troubleshooting.md](troubleshooting.md).
 
 ---

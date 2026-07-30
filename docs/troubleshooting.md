@@ -53,7 +53,7 @@ Or skip them — the pipeline works without them, just with smaller quality step
 
 ---
 
-### Plan is too vague to hand to `/we:build`
+### Plan is too vague to hand to `/we:orchestrate`
 
 **Cause:** `/we:story` produced a plan but you (or it) cut the conversation short before scope was tight.
 
@@ -61,11 +61,11 @@ Or skip them — the pipeline works without them, just with smaller quality step
 
 ---
 
-## `/we:build` issues
+## Build-pipeline issues
 
 ### "DoR failed" at Step 1
 
-**Symptom:** `/we:build` errors out before any code is written, complaining about Definition of Ready.
+**Symptom:** the run errors out before any code is written, complaining about Definition of Ready.
 
 **Cause:** the plan is missing required sections (User Story, Acceptance Criteria, or the plan file itself).
 
@@ -80,10 +80,10 @@ Or skip them — the pipeline works without them, just with smaller quality step
 **Fix:** re-invoke:
 
 ```
-/we:build {TICKET}
+/we:orchestrate {TICKET}
 ```
 
-The SQLite checkpoint store at `~/.claude/weside/orchestration.db` knows where you stopped. `/we:build` reads the last checkpoint and picks up from the next step. You won't lose progress. (Internal CLI keeps the `story` table name for back-compat — `python3 scripts/orchestration.py story status {TICKET}`.)
+The SQLite checkpoint store at `~/.claude/weside/orchestration.db` knows where you stopped. The pipeline reads the last checkpoint and picks up from the next step. You won't lose progress. (Internal CLI keeps the `story` table name for back-compat — `python3 scripts/orchestration.py story status {TICKET}`.)
 
 If you want to start over instead:
 
@@ -102,7 +102,7 @@ python3 ~/.claude/plugins/cache/weside-ai/we/<version>/scripts/orchestration.py 
 **Fix:**
 1. Read the verification report — it names which AC failed and why
 2. If the AC is sound but the code is wrong: go back to Step 2, fix the code, re-run the verify
-3. If the AC is poorly written: re-run `/we:story {TICKET}` to sharpen it, then re-run `/we:build`
+3. If the AC is poorly written: re-run `/we:story {TICKET}` to sharpen it, then re-run `/we:orchestrate`
 
 The verification is blocking on purpose. Don't bypass it.
 
@@ -110,7 +110,7 @@ The verification is blocking on purpose. Don't bypass it.
 
 ### CI keeps failing after the ci-review pass
 
-**Symptom:** `/we:build` Step 8 ran its ci-review pass (one by default, at most 2 cycles) and CI is still red.
+**Symptom:** the pipeline ran its ci-review pass (one by default, at most 2 cycles) and CI is still red.
 
 **Cause:** something fundamentally hard or unfixable from this branch — infrastructure issue, flaky test that won't stabilize, dependency conflict.
 
@@ -250,7 +250,7 @@ The legacy mode still works (loads `CLAUDE.md` + always-loaded `.claude/rules/`)
 
 ### Worktree got into a weird state
 
-**Symptom:** `/we:build` failed to create or enter a worktree.
+**Symptom:** the run failed to create or enter a worktree.
 
 **Diagnose:**
 
@@ -265,7 +265,7 @@ git worktree remove .worktrees/<name> --force
 git worktree prune
 ```
 
-Then re-invoke `/we:build` — it'll create a fresh worktree.
+Then re-invoke `/we:orchestrate` — it'll create a fresh worktree.
 
 ---
 

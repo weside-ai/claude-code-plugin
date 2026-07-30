@@ -1,6 +1,6 @@
 ---
 name: programme-discipline
-description: How to run a multi-wave programme (an Epic that spans sessions, context windows and compacts) without losing the thread — the state file, living plans, self-verification, and the /loop shape. Loaded by /we:orchestrate, /we:build and /we:story when the work is bigger than one sitting.
+description: How to run a multi-wave programme (an Epic that spans sessions, context windows and compacts) without losing the thread — the state file, living plans, self-verification, and the /loop shape. Loaded by /we:orchestrate and /we:story when the work is bigger than one sitting.
 ---
 
 # Programme discipline — work that outlives a context window

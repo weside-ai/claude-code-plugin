@@ -84,7 +84,7 @@ changes with their choice).
      the same either way."
    → Options: tdd / tests-after (default) / off
      — level semantics owned by references/test-discipline.md
-   → Saved as `test_discipline`; read by /we:develop, /we:build, and worker briefs.
+   → Saved as `test_discipline`; read by /we:develop, /we:orchestrate, and worker briefs.
 
 5. "Should a story have to be observed running before its PR opens? (recommended: yes)"
    → Explainer first: "Green tests prove the units behave as written — but the same
@@ -201,11 +201,11 @@ The `engines` block lists the profile names created/verified in the executor wiz
 
 The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
 
-The `review.available` block is the reviewer list from Step 2 Q6 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:build`, `/we:develop`, and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
+The `review.available` block is the reviewer list from Step 2 Q6 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:develop` and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
 
 The `test_discipline` field is the answer to Step 2 Q4: `"tdd"` / `"tests-after"` / `"off"`.
 Level semantics are owned by `references/test-discipline.md`; consumed by `/we:develop`,
-`/we:build`, and inlined into worker briefs by `/we:orchestrate`. Absent field →
+`/we:orchestrate`, and inlined into worker briefs. Absent field →
 `tests-after` (back-compat).
 
 The `verification` block is the answer to Step 2 Q5. `required: true` arms the
@@ -232,7 +232,7 @@ If the user provided a vision, save it to `.weside/vision.md`.
 
   If the user already has a concrete check in mind, seed the file with that item instead of the placeholder.
 
-These files are **additive**, never a replacement: `/we:story` and `/we:build` read `.weside/dor.md` alongside the plugin DoR, and the `we:ac-reviewer` agent reads `.weside/dod.md` alongside the plugin DoD — both sets of items apply.
+These files are **additive**, never a replacement: `/we:story` and `/we:orchestrate` read `.weside/dor.md` alongside the plugin DoR, and the `we:ac-reviewer` agent reads `.weside/dod.md` alongside the plugin DoD — both sets of items apply.
 
 ```
 .weside/
@@ -293,8 +293,18 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
    or override per-invocation via `/we:meet --council=…`.
 
 2. **TurboVault registration (if MCP available)**
-   + `list_vaults` → already a vault? If not: `add_vault(name=<repo-basename>, path=<repo-root>)`, then `set_active_vault(<repo-basename>)`.
+   + `list_vaults` → is **this repo's** vault in the list, by name? Ask that, not "is there any
+     vault at all" — on a machine that already has one, the loose check passes, `add_vault` never
+     runs, and the name still gets written below. Every later `set_active_vault` then fails
+     silently and semantic search answers from **another repo's** tree, which reads like a
+     working search right up until the results are wrong.
+   + Not registered → `add_vault(name=<repo-basename>, path=<repo-root>)`, then
+     `set_active_vault(<repo-basename>)`. Only write `"vault"` into `config.json` once both
+     calls succeeded — a name in the config is a claim that the vault exists.
    + weside MCP NOT available → skip silently, set `"vault": null`.
+   + **A small repo may legitimately want no vault.** Semantic search earns its cost over a large
+     doc estate; over a dozen cross-linked files grep is faster and exact. Leaving `vault` unset
+     is a valid outcome, not a failure.
 
 3. **Build the council** — run the onboarding skill via `Skill(skill="onboarding")`
    + Delegates to onboarding, which **actively builds this repo's council from scratch**: for each role it offers to assign an existing Companion, create a new one, or use a generic lens — degrading gracefully to generic when the plan's Companion budget runs out (a mixed council). It writes `.weside/weside.md` (crew + roles + meetings + purpose) **and** `.weside/council.json` (the council bridge `/we:council` resolves members from).
@@ -322,7 +332,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 Ready to go:
   /we:story        — Create/refine the Story (Solo) — build-ready plan
   /we:orchestrate  — Multi-chunk orchestration (workers run /we:develop, CI once)  ← default
-  /we:build        — Solo full pipeline (one Story, no orchestration overhead)
+  /we:orchestrate  — The build pipeline (--solo for one small Story)
   /we:develop      — Dev-only worker slice (implement + push, no PR)
   /we:council      — Convene a council of companions on a topic  ✓ ready
   /we:meet         — Run a vision / saga / epic / story meeting   ✓ ready

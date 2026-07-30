@@ -13,7 +13,7 @@ parallel_groups: []
 
 ## Context
 
-A throwaway fixture Story used to rehearse the full `/we:orchestrate` → builder → `/we:build`
+A throwaway fixture Story used to rehearse the full `/we:orchestrate` → builder → integration
 pipeline without touching real product code. Its only purpose is to give the build pipeline a
 genuine, trivial diff to review and test so skill frictions surface. Not shipped.
 

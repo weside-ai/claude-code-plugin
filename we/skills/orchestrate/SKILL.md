@@ -18,18 +18,15 @@ them as dev-only workers, integrates their branches, and reviews the combined di
 
 **Cost model:** workers run on cheap-tier Claude (Sonnet/Haiku), Codex, or a foreign engine.
 The Lead (the expensive session model) plans, integrates, and reviews. N workers = N dev costs
-+ one integration CI, not N full pipelines. Use `/we:build` when one Story doesn't warrant the
-orchestration overhead.
++ one integration CI, not N full pipelines. A story too small to be worth a worker runs
+`--solo` — same pipeline, nothing dispatched.
 
-> **`/we:build` vs `/we:orchestrate` — one pipeline, two dispatch modes.** Both run the
-> same shape: DoR → implement → AC/DoD gate → **verification** → quality gates → docs →
-> PR → CI. They differ in *who* implements — the session itself, or dispatched workers.
-> `/we:build` is therefore best read as this pipeline with the dispatch step inlined, and
-> Mode B (single-Story) is the same thing with it dispatched. Keep them in step: a change
-> to one pipeline step belongs in both files until they share a spine.
-> **Merge candidate, deliberately not merged yet:** `/we:build` is in the public README
-> and in muscle memory. Fold it into `--solo` only once a wave has gone by with nobody
-> reaching for it — evidence, not theory.
+> **One pipeline, three dispatch shapes.** Every run ends the same way: implement → simplify →
+> AC/DoD gate → **verification** → quality gates → docs → PR → one CI pass. That half is owned by
+> [`references/integration-pipeline.md`](../../references/integration-pipeline.md) and is
+> identical whether the code came from one worker, five, or the Lead's own hands. What differs is
+> only *who implements*: workers per Story (Mode A), workers per phase (Mode B), or nobody
+> (`--solo`).
 
 This is the **Build-altitude sibling of `/we:council`/`/we:meet`**: the same Agent-Teams
 machinery (spawn into the session's implicit team via `Agent(name=…)` → `SendMessage` →
@@ -58,14 +55,15 @@ denies *every* teammate Bash call, because a teammate-message-triggered invocati
 user intent: the worker is dispatched, reaches its first command, and is dead on arrival with "Bash
 denied" and nothing written. So the session must be on **`acceptEdits`** (or bypass), or carry a
 Bash allowlist for the multi-agent path. Surface this at Step 3's confirm gate; if you cannot tell
-the mode, ask. One ready Story is often faster as a direct `/we:build` in the user's own session —
-orchestrate earns its overhead at ≥2 workers.
+the mode, ask. `--solo` needs none of this — it dispatches nothing, so it is the honest answer
+when a single small story would otherwise pay the whole team's setup cost.
 
 ## Invocation
 
 ```
 /we:orchestrate <epic>                 # epic target: boot + status + ready-set; dispatch on confirm (Mode A)
 /we:orchestrate <story-key>            # single-Story target: run THIS story's phases as work-chunks (Mode B)
+/we:orchestrate <story-key> --solo     # single Story, no workers: implement here, then integrate
 /we:orchestrate <epic> --refine-ahead  # build the ready stories AND refine the next during build idle
 /we:orchestrate <epic> --rehearsal     # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                        # boot from the most recently active epic, then status
@@ -95,6 +93,8 @@ The argument is either an **Epic** or a **single Story**. Resolve it once, it pi
   → **Skip Step 2 entirely (no ready-set)** and run **Mode B** over that one plan's `### Phase` blocks.
   This is the low-overhead path `/we:story` recommends for a single multi-phase (or context-heavy)
   change — no synthetic epic, no ready-set. Honour the plan's `parallel_groups` for the parallel waves.
++ **`--solo`** forces the single-Story shape and skips dispatch entirely — see the `--solo`
+  section below. It is the only flag that changes *who implements*.
 + **Epic target** otherwise (an Epic plan exists, or ≥1 story shares the slug/key as `epic:`).
   → the full Step 1–9 workflow (boot, ready-set, per-Story builders = Mode A; one phased Story in the
   set may itself run Mode B per Step 3's mode choice).
@@ -133,8 +133,7 @@ picture is always current — never rely on cached knowledge:
    is valid (a rehearsal or a freshly-cut epic).
 2. **Child Stories** — glob `docs/plans/*-story.md`, keep those whose frontmatter `epic:`
    matches `<epic>`. For each, read frontmatter (`story`, `status`) and scan the body for DoR
-   completeness (the 3-item scan in `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` — same gate
-   `/we:build` Step 1 uses).
+   completeness (the 3-item scan in `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md`).
 3. **Ticketing mirror** — if a ticketing tool is available (weside MCP `JIRA_*` → Atlassian MCP
    → `gh`), fetch each Story's ticket status **and its comments** — comments carry corrections
    and scope cuts the plan file may predate; newest statement wins on conflict and you name the
@@ -296,7 +295,7 @@ For each ready Story (≤2), create a task and spawn a builder-teammate. **All `
 into a single assistant message** so they initialize concurrently.
 
 ```python
-TaskCreate(subject=f"Build {TICKET}", description=f"Run /we:build {TICKET} to a reviewable PR.")
+TaskCreate(subject=f"Build {TICKET}", description=f"Run /we:develop for {TICKET} to a pushed branch.")
 Agent(
     name=f"worker-{TICKET}",
     subagent_type="general-purpose",
@@ -312,8 +311,9 @@ The **durable** record is the Lead's to write: workers run `/we:develop`, which 
 else.
 
 Two halves of the same regression sit behind that sentence, and both were expensive. When workers
-moved from `/we:build` to `/we:develop`, nobody re-read the paragraphs whose premise was "the worker
-does X": tickets stopped moving out of "In Progress", and — unnoticed for longer — checkpoints
+moved from running the whole pipeline themselves to running dev-only `/we:develop`, nobody re-read
+the paragraphs whose premise was "the worker does X": tickets stopped moving out of "In Progress",
+and — unnoticed for longer — checkpoints
 stopped being written, so stories that had shipped and merged still read as **unbuilt** and the
 ready-set kept re-proposing them. **When a dispatch mode changes, re-read every paragraph whose
 premise is what the worker does — not only the ones that name it.**
@@ -367,7 +367,7 @@ ABSOLUTE NO-OPS (any of these voids the single-CI contract):
   rules — IGNORE them; they are not your responsibility)
 - DO NOT transition the ticket — the Lead owns ticket state and transitions it (Step 6 at
   dispatch, Step 8 B4 after integration)
-- DO NOT run /we:build
+- DO NOT run the integration pipeline — no PR, no CI, no doc pass, no ticket transitions
 - DO NOT run frontend gates (`yarn`/`npm install`, `jest`, `tsc`) in a fresh worktree — it has no
   `node_modules` (~1GB) and building them is wasted setup. Implement the frontend changes, run
   ONLY touched-stack unit tests that need no install, and REPORT the skipped frontend validation;
@@ -551,99 +551,44 @@ non-trivial conflict to the user before merging.
 
 If a worker reported blocked, surface the blocker — do not silently merge empty or half-done work.
 
-#### Phase B: PR + CI (once — only after ALL workers are merged)
+#### Phase B: the integration pipeline (once — only after ALL workers are merged)
 
-Wait until every in-flight worker has either merged or been declared blocked. Then:
+Wait until every in-flight worker has either merged or been declared blocked. Then run
+[`references/integration-pipeline.md`](../../references/integration-pipeline.md) **once, over the
+merged diff** — simplify → AC+DoD gate → verification → parallel gates → docs → PR → one CI pass
+→ tickets to In Review. That file is the owner of those steps; what follows is only what an
+orchestrated run does differently.
 
-**B0. Sync the integration branch onto `main` if it has drifted.** A long run lets `main` advance
-after Step 4 cut the integration branch (other PRs merge). Before opening the PR, from the
-integration worktree run `git -C "$INT_WT" fetch origin` then `git -C "$INT_WT" merge origin/main`
-into the integration branch (preserve history) so the PR diff is **only this work** and
-stale-base CI failures (e.g. an OpenAPI/types or lint check that main already moved) don't appear.
-The diff-vs-main looking unexpectedly large is the drift tell — merge main first, then re-read it.
-(Generalises 3e-bis, which covers only Alembic migration heads.)
+**B0. Sync onto `main` first if it has drifted.** A long run lets `main` advance after Step 4 cut
+the integration branch. From the integration worktree, `git -C "$INT_WT" fetch origin` then
+`git -C "$INT_WT" merge origin/main` (preserve history), so the PR diff is **only this work** and
+no stale-base check fails for a reason that has nothing to do with the wave. A diff-vs-main that
+looks unexpectedly large is the drift tell — merge main, then re-read it.
 
-**B1a. AC-review at integration (always, gating).** Run `we:ac-reviewer` once against the full
-integration diff — every dispatched Story's acceptance criteria plus the DoD (see
-[`worker-dispatch.md`](../../references/worker-dispatch.md) § AC-review rule). This is the one
-place in `/we:orchestrate` that gates AC/DoD; the Lead writes `ac_verified` on PASS. BLOCKING →
-fix before B2.
+**B1. The gates see the combined diff, and that is the point.** Every worker was green alone;
+merge-combined import edges, duplicated keys and colliding exports appear only here. The
+install-gated frontend gates the workers skipped (no `node_modules` in a fresh worktree, Step 6's
+brief) run in the integration worktree — it is the one place in the run that can afford the
+install. The reasoning and the cost of skipping it live in the pipeline reference.
 
-**B1b. Bug-hunt at integration (once, when `review.cross` is on).** The writer-aware matrix from
-[`worker-dispatch.md`](../../references/worker-dispatch.md) § Bug-hunt dispatch, run once against
-the full integration diff:
-+ Every merged chunk was written by Claude, and `tools.codex: true` → `/codex:adversarial-review`
-+ Otherwise (any chunk was Codex, a foreign engine, or Claude without Codex configured) → Claude's
-  native `/code-review`
+**B2. Verification covers the journeys *the wave* claims** — not every AC of every story. One
+walkthrough that crosses three merged stories is worth more than three that each stop at their
+own seam. Findings here are integration findings: fix them on the integration branch, never in a
+worker branch (those are done). A wave that cannot be verified does not open a PR.
 
-**B1c. Lead integration gate — run the workers' skipped install-gated checks, BEFORE the PR.**
-Workers run in fresh worktrees with no `node_modules` (Step 6 brief), so by design they skip every
-install-gated check: frontend `prettier`/`eslint`/`tsc`/`jest`/dead-exports (knip), and any other
-node-tool gate. The Lead's integration worktree is the ONE place in the run that can afford the
-install — so validate here, not at CI. Opening the PR to "let CI catch it" costs one full
-CI cycle **per failing gate class**, serially (an observed run ate four: prettier → tsc →
-dead-exports/baseline → jest, each a ~10-min round-trip).
+**B3. The bug-hunt is writer-aware across the whole wave.** Every merged chunk written by Claude
+with `tools.codex: true` → `/codex:adversarial-review`; any chunk from Codex or a foreign engine
+→ Claude's native `/code-review`. The matrix is `worker-dispatch.md` § Bug-hunt dispatch.
 
-+ **Frontend-touching diff:** `yarn install` (or the repo's package manager) ONCE in the
-  integration worktree, then run the repo's frontend gates over the merged diff — format-write,
-  type-check, the affected tests, dead-exports/knip. Fold the fixes into the integration branch.
-+ **Backend / arch gates:** re-run them over the **combined** diff even though each worker was
-  green individually — merge-combined import edges can break an import-linter baseline (or a
-  dead-export gate) that no single worker's diff did. Prefer a minimal hand-add of the new edges
-  over a full baseline regen (a regen can strip annotations a contract test requires).
-+ Gate **commands** are repo-specific (read them from the repo's CI config / `CLAUDE.md`); the
-  **step** is not. After B1c, CI (B3) is the second confirmation, not the first.
+**B4. Tickets: every Story that landed in this run** moves to In Review, not just the one that
+finished last. This was half of a real regression — the PR existed while every ticket still read
+"In Progress", because nothing owned the move once workers stopped doing it.
 
-**B1d. Verification — observe the integrated behaviour (BLOCKING, before the PR).**
-Every gate so far is self-referential: workers' tests over workers' code, checked
-by the Lead who briefed them. Run the integrated result against a **running
-instance** per [`references/verification.md`](../../references/verification.md) —
-this is the one step whose oracle is not the pipeline's own model of itself.
+**The Lead writes the checkpoints, not the workers** — workers run `/we:develop`, which writes no
+`story_workflow` rows at all. Confirm with `story status {TICKET}` before claiming a story shipped.
 
-+ Read `<repo>/.weside/verify.md` for the commands. Absent → say so once, use what
-  the stack offers, and propose adding it in this PR.
-+ Cover the **user-visible journeys the wave claims**, not every AC of every
-  story: CLI/API by default, an agent-browser walkthrough as soon as a story
-  claims the user can see, tap or reach something, a named substitute where
-  neither is possible, `not-applicable` when nothing in the wave has runtime
-  behaviour.
-+ DEV first. **Staging is a question to the user, not a step** — ask before
-  cutting an RC, even mid-`/loop`.
-+ A missing CLI verb is a bug in the CLI: add it in this wave rather than leaving
-  a shell dance in the transcript. It is what makes the next wave's verification
-  cheap and an unattended round honest.
-+ Write the `## Verification` block for B2's PR body. When the repo armed
-  `verification.required`, a hook refuses `gh pr create` without it.
-
-Findings here are integration findings — fix them on the integration branch, the
-same as a B1c gate failure. A wave that cannot be verified does not open a PR.
-
-**B2. Open ONE PR** (`feat/<epic-or-story>-integration → main`). This is the moment GitHub CI
-fires for the first time this run. This is intentional — the whole point of the integration branch
-is that GitHub CI runs exactly once, on the combined diff, not once per worker.
-
-**B3. ONE ci-review pass — start early, hold the push for CI.** Run `/we:ci-review` on the
-integration PR **once**. Start collecting + fixing as soon as the fast reviewers (Claude Review,
-CodeRabbit) have posted — do **not** wait for the long backend CI to begin. **Gate only the push on
-the slow CI:** before pushing, wait until `gh pr checks {PR}` shows no `pending`/`in_progress`, fold
-any CI failures into the same fix-commit, then push once (review-fixes + CI-fixes in one push).
-After the push, wait for the post-push CI to settle → report green/red and **stop**. Fix on the
-integration branch, never in worker branches (those are done). Do **not** loop the pass
-automatically; if CI is still red after the one pass, surface it and let the user decide. This is the
-second human gate — surface the PR to the user; the Lead does **not** merge.
-
-**B4. Transition each built Story → "In Review" (Lead owns this — workers do NOT).** After the
-ci-review pass, move every Story that landed in this run to "In Review" (Mode A = every dispatched
-Story; Mode B = the single Story). This is the other half of the ticket-movement regression: the
-PR exists but nothing moved the tickets out of "In Progress". Detect the ticketing tool per
-`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`; **verify** each move and retry once; soft-fail loud
-only on workflow/permission rejection. **Leave the tickets in "In Review"** — never move to "Done"
-(human's job after merge). GitHub Issues / no ticketing tool → skip silently.
-
-**Checkpoint:** the Lead writes `ac_verified` (B1a), `pr_created`, and `ci_passed` (not the
-workers) — workers only write their local-gate state. Confirm via `story status {TICKET}`.
-
-**CI red:** report it; the user can re-run `/we:ci-review {PR}` on the integration PR.
+**CI red after the one pass:** report it and stop. The user decides whether to run
+`/we:ci-review {PR}` again. This is the second human gate — surface the PR; the Lead never merges.
 
 ### Step 9: Final roll-up + close the team
 
@@ -707,14 +652,14 @@ parallelism discriminating check below before each wave — the plan's `parallel
 hint, not a licence to skip the disjointness check.
 
 Even a **small monolith** is a legitimate Mode-B target: the caller keeps their own context clean
-and reviews the result neutrally. `/we:story` recommends this over `/we:build` whenever the work is
+and reviews the result neutrally. `/we:story` recommends this over `--solo` whenever the work is
 more than trivially straight-line. The shape:
 
 + The Lead holds the **one** Story/Epic **and its phase decomposition** (the Lead already cut it into
   phases — that *is* the overview it holds).
 + Dispatch the phases as **lead-held work-chunks (tasks, not Stories)** via `TaskCreate` +
   `Agent(name=…)`. Teammates do **focused implementation only** — **not** the full
-  `/we:build`, **not** a per-chunk PR. Their brief is scoped to exactly one chunk.
+  the integration pipeline, **not** a per-chunk PR. Their brief is scoped to exactly one chunk.
 + Each teammate works its chunk in its own worktree, runs its **targeted** tests, and reports to the
   Lead via `SendMessage`.
 + The Lead **reviews each diff and integrates it onto one integration branch** — holding the thread,
@@ -757,6 +702,42 @@ Lead owns cross-cutting glue, confirm the worktree root before trusting a green)
 
 ---
 
+## `--solo` — one Story, nothing dispatched
+
+The Lead implements the story itself and then runs the integration pipeline. No teammates, no
+integration branch, no Agent-Teams flag: a plain feature branch in a worktree, the phases run in
+this session, and the same pipeline at the end.
+
+**Reach for it when dispatch buys nothing** — a single straight-line phase, a config change, a
+one-function fix. Anything you would want to split into phases, or keep off your own context,
+is Mode B: the phases go to chunk-workers and you keep the overview. `/we:story` already makes
+that recommendation at the end of refinement; follow it rather than re-deciding here.
+
+The shape:
+
+1. **DoR** — load the ticket **and its comments** (`ticketing.md`), read the plan and every file
+   it names, run the 3-item scan from `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md`. Failing
+   scan → stop and name the missing item; `/we:story {TICKET}` is the fix, not a guess here.
+   A plan older than the code it plans is the other stop condition: check its date against recent
+   changes to the files it names, and re-refine rather than build against a plan that has been
+   overtaken.
+2. **Worktree + ticket** — `EnterWorktree(name="{type}/{TICKET}-short-description")`, ticket to
+   In Progress, checkpoint `git_prepared`.
+3. **Implement** the plan's phases in order, committing per phase. `parallel_groups` in the
+   frontmatter names phases that may run as concurrent `Agent()` sub-tasks — at which point you
+   are doing Mode B by hand and should have said so; honour it, and note it for next time.
+   Checkpoint `implementation_complete`.
+4. **[`references/integration-pipeline.md`](../../references/integration-pipeline.md)** for
+   everything after that.
+
+**Don't ask the user how to run it.** By the time a plan exists and they invoked this, the
+decision to build is made — size and phase count are not negotiation levers. The four things
+still worth interrupting for: the circuit breaker after three failures in one phase, the AC+DoD
+gate (blocking by design), a named gap in the plan that reading the code cannot close, and
+anything destructive. Everything else: execute.
+
+---
+
 ## Rehearsal mode (`--rehearsal`)
 
 Run the complete pipeline against a committed fixture instead of a real epic — the lab for shaking
@@ -774,9 +755,9 @@ required regardless of weside connection.
 
 The steps above are the spec — these are the invariants that are easiest to miss:
 
-+ **Workers run `/we:develop`, not `/we:build`** — dev-only: implement + local gates + commit +
-  push + stop. No per-worker PR, no per-worker CI, no ticket transitions. The Lead integrates
-  branches and runs CI **once**.
++ **Workers implement and stop** — `/we:develop`: implement + local gates + commit + push. The
+  integration pipeline is the Lead's alone; a per-worker PR or CI run voids the single-CI contract
+  the integration branch exists for.
 + **Spawn teammates with `Agent(name=…)`, all in one message — never `Skill()`** — there is no
   `team_name` parameter; workers join the session's implicit team just by being spawned.
 + **Never inject Companion identity into workers** — user-scoped `select_companion` race; only
@@ -795,6 +776,7 @@ single-writer rule) are specified inline in Step 7+ and `references/refine-ahead
 
 ## References
 
++ `${CLAUDE_PLUGIN_ROOT}/references/integration-pipeline.md` — everything after implementation: simplify, AC+DoD, verification, gates, docs, PR, CI
 + `references/worker-dispatch.md` — worker contract, three backends, AC-review rule, bug-hunt dispatch, integration-branch/single-CI
 + `references/codex-dispatch.md` — Codex single-detach rule + chunk-brief template
 + `we/scripts/worker-launch.sh` — foreign-engine launcher (reads `.weside/engines.local.json`)
@@ -805,6 +787,5 @@ single-writer rule) are specified inline in Step 7+ and `references/refine-ahead
 + `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` — env-flag prerequisite + full teardown
 + `we/skills/council/SKILL.md` — the Agent-Teams machinery this skill mirrors
 + `we/skills/develop/SKILL.md` — the dev-only worker skill workers run
-+ `we/skills/build/SKILL.md` — the solo full-pipeline alternative (one Story, no orchestration)
 + `scripts/orchestration.py` — `story status|list|checkpoint|ready` (tracking + ready-set)
 + `scripts/test_ready_set.py` — unit tests for the `compute_ready_set` pure helper

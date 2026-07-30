@@ -12,11 +12,11 @@ The plugin covers the full APO chain — four Plan altitudes, then Build, then D
 
 ```
 Vision → Saga → Epic → Story → Build → Deliver
-  /we:vision   /we:saga  /we:epic   /we:story    /we:build    User merges
+  /we:vision  /we:saga  /we:epic  /we:story  /we:orchestrate  User merges
   + /we:meet vision|saga|epic|story (Council at each altitude)
 ```
 
-Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is autonomous (`/we:build`). Deliver is human-only — Claude never merges PRs or closes tickets.
+Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is autonomous (`/we:orchestrate`). Deliver is human-only — Claude never merges PRs or closes tickets.
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
@@ -31,19 +31,19 @@ Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 ```
 /we:setup    → once per project (detect stack, ticketing, optional vision)
 /we:story    → PO + Claude create Story + plan (INTERACTIVE; Solo)
-/we:build    → Claude runs full pipeline AUTONOMOUSLY:
-               develop (inline or parallel sub-agents) → AC verify → review + static + test (parallel)
-               → docs → PR → CI fix (incl. configured AI reviewers on GitHub) → ticket "In Review"
+/we:orchestrate → Claude runs the pipeline AUTONOMOUSLY:
+               implement (dispatched workers, or --solo in this session) → simplify → AC verify
+               → review + static + test (parallel) → docs → PR → one CI pass → ticket "In Review"
 User         → reviews PR, merges, closes ticket
 ```
 
-**Pipeline:** /we:story (interactive Solo) → /we:build (autonomous) → User merges (manual)
+**Pipeline:** /we:story (interactive Solo) → /we:orchestrate (autonomous) → User merges (manual)
 
 **Upper altitudes** (`/we:vision`, `/we:saga`, `/we:epic` + their Council variants under `/we:meet`) are optional for routine Stories. Reach for them when direction needs alignment, when a Saga needs decomposing into Epics, etc.
 
-**Context flow:** /we:story captures session context (why, trade-offs, rejected alternatives) into the plan's Context and Design Decisions sections, so /we:build understands intent — not just spec. After build completion, /we:build proposes journey docs (`docs/architecture/journey-*.md`) for shipped user-facing flows.
+**Context flow:** /we:story captures session context (why, trade-offs, rejected alternatives) into the plan's Context and Design Decisions sections, so the build understands intent — not just spec. After completion, the doc pass proposes journey docs (`docs/architecture/journey-*.md`) for shipped user-facing flows.
 
-**Internal CLI:** `scripts/orchestration.py story status|checkpoint|resume` and the SQLite schema use `story` as the table/command name. The `/we:build` skill is the public surface.
+**Internal CLI:** `scripts/orchestration.py story status|checkpoint|resume` and the SQLite schema use `story` as the table/command name. `/we:orchestrate` is the public surface.
 
 ---
 
@@ -57,8 +57,8 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 - **Plan:** `/we:vision` · `/we:saga` · `/we:epic` · `/we:story` (Solo formulation), `/we:meet
   vision|saga|epic|story` + `/we:council` (Council deliberation), `/we:prototype` (answer a
   design question before it gets planned)
-- **Build:** `/we:build` (solo full pipeline) · `/we:orchestrate` + `/we:develop` (multi-chunk,
-  Lead + dev-only workers) · `/we:ci-review` · `/we:codex-task`
+- **Build:** `/we:orchestrate` (the Lead — dispatches `/we:develop` workers, or `--solo` for one
+  small story) · `/we:ci-review` · `/we:codex-task`
 - **Quality/analysis:** `/we:audit` · `/we:diagnose` · `/we:smoketest`
   · `/we:find-dead-code` · `/we:doc-improve` · `/we:docs`
 - **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` · `/we:coach` ·
@@ -82,7 +82,7 @@ The plugin writes to three durable directories in the **user repo** — version-
 | `docs/plans/<vision>/PRD.md` + flat `docs/plans/<slug>-{saga,epic,story}.md` | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`, `/we:coach` | Initiative plans at all four Plan altitudes — Vision (PRD), Saga (Theme), Epic (Initiative), Story (Feature slice). The "what to build" + "why" + "how phased". |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *Wins / Pain / Proposals* from the just-shipped cycle. Proposed MD-file edits land in `.claude/rules/` or `CLAUDE.md` so the next cycle is cleaner. The "what we learned" + "how the harness should change". |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *Identity / Current State / Decisions / Tried-and-rejected / Open questions / Files touched / Next steps / Watch-outs / References*. The "where we are right now" + "what the next session should pick up". |
-| `CONTEXT.md` (repo root) | `/we:grill` (writer); read by `/we:story`, `/we:build`, `/we:epic`, `/we:saga`, `/we:diagnose`, doc-architect | The project glossary — canonical domain terms with avoid-lists. Pure glossary, no implementation details. The "what we call things". |
+| `CONTEXT.md` (repo root) | `/we:grill` (writer); read by `/we:story`, `/we:orchestrate`, `/we:epic`, `/we:saga`, `/we:diagnose`, doc-architect | The project glossary — canonical domain terms with avoid-lists. Pure glossary, no implementation details. The "what we call things". |
 | `docs/adr/NNNN-*.md` | `/we:grill` (offers at the 3-gate); read by `/we:diagnose` | Lean ADRs — a paragraph per hard-to-reverse, surprising, real-trade-off decision. The "why we did it this way". |
 | `docs/plans/out-of-scope/<concept>.md` | `/we:triage` (writer, on rejected enhancements); read by `/we:triage` (dedup) and `/we:vision` (Non-Bets) | The rejection memory — one file per rejected concept with the durable reason and every ticket that asked. The "what we deliberately won't build". |
 
@@ -95,7 +95,7 @@ Skills read existing files in these directories at boot (e.g. `/we:coach` Boot P
 ```
 /we:setup          (once per project)
 /we:story PROJ-1   (PO writes the Story + build-ready plan, Solo)
-/we:build PROJ-1   (autonomous: develop → review → test → PR → CI)
+/we:orchestrate PROJ-1   (autonomous: develop → review → test → PR → CI)
 ```
 
 For new direction (new product, new theme, new Epic):
@@ -105,7 +105,7 @@ For new direction (new product, new theme, new Epic):
 /we:saga "Self-host onboarding"  (or /we:meet saga → Epics)
 /we:epic "Ledger Foundation"     (or /we:meet epic → Stories)
 /we:story PROJ-1                 (or /we:meet story for contentious ones)
-/we:build PROJ-1
+/we:orchestrate PROJ-1
 ```
 
 Or individual quality gates:

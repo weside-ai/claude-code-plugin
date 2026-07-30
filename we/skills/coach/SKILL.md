@@ -12,7 +12,7 @@ description: >
 # /we:coach — Agentic Product Ownership Coach
 
 **Role:** One-on-one cross-altitude advisor and partner for development-process improvement.
-**Counterpart:** the Plan-altitude skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) decide WHAT we build; the Build skill (`/we:build`) implements.
+**Counterpart:** the Plan-altitude skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) decide WHAT we build; `/we:orchestrate` implements.
 **You decide:** HOW we work, where in the APO hierarchy we are right now, and how to make the process better when it breaks.
 
 > **Two modes.** The Coach runs in one of two shapes per invocation:
@@ -84,7 +84,7 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
 
 3. **Quality artefacts** — `${CLAUDE_PLUGIN_ROOT}/quality/dor.md` and
    `dod.md` in full. ADVISOR references these when reasoning about whether
-   a plan meets DoR before suggesting `/we:build`; BEGINNER references them
+   a plan meets DoR before suggesting `/we:orchestrate`; BEGINNER references them
    when explaining what DoR/DoD mean. Edits to these files now live in
    `/we:retro` (the dedicated retrospective skill), not in Coach.
 
@@ -183,7 +183,7 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 | PRD exists, no `docs/plans/<saga>-saga.md`                                   | Vision → Saga    | `/we:meet vision` (decompose PRD into Sagas), then `/we:saga` per Saga |
 | A `<saga>-saga.md` exists, no Epic at `docs/plans/<saga>-*-epic.md`          | Saga → Epic      | `/we:meet saga` (decompose Saga into Epics), then `/we:epic` per Epic |
 | An `<saga>-<epic>-epic.md` exists, no Story plans referencing it             | Epic → Story     | `/we:meet epic` (decompose Epic into Stories), then `/we:story` per Story |
-| Story plan exists at `docs/plans/<TICKET>-story.md` (prefer `<TICKET>-story.md`; fall back to legacy `<TICKET>-plan.md` if the new-suffix file is absent) | Story → Build    | `/we:build {TICKET}`                                               |
+| Story plan exists at `docs/plans/<TICKET>-story.md` (prefer `<TICKET>-story.md`; fall back to legacy `<TICKET>-plan.md` if the new-suffix file is absent) | Story → Build    | `/we:orchestrate {TICKET}`                                         |
 | Story plan exists but feels fuzzy / contentious                              | Story (Solo)     | `/we:story {TICKET}` (re-refine Solo) OR `/we:meet story {TICKET}` (Council) |
 | PR is open, ticket in "In Review"                                            | Deliver          | *human* — read PR, merge, close                                    |
 | Multiple altitudes ambiguous                                                 | *unclear*        | Ask the user which artefact they want to focus on                  |
@@ -192,10 +192,10 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 
 **Flow map — the recurring forks, with the reason to pick each side.** Use these when the user hovers between two commands; name the discriminator, not just the options:
 
-- **`/we:build` vs `/we:orchestrate`** — one coherent Story → `build` (solo pipeline, one PR). Several independent chunks, or one Story with parallelisable phases → `orchestrate` (Lead + workers, still one PR). The discriminator is *independent work streams*, not size.
+- **`/we:orchestrate --solo` vs. dispatch** — a trivially straight-line Story → `--solo` (nothing dispatched, one PR). Several independent chunks, or one Story with parallelisable phases → the dispatching shape (Lead + workers, still one PR). The discriminator is *independent work streams*, not size.
 - **`/we:grill` vs `/we:meet`** — the plan needs *depth* (one perspective, every branch of the decision tree resolved) → `grill`. The plan needs *breadth* (multiple role perspectives, alignment) → `meet`. Grill sharpens, meet aligns.
 - **`/we:prototype` before `/we:story`** — when a design question is still open ("does this state model work?", "what should this look like"), a throwaway prototype answers it cheaper than a planning round; the Story then gets cut around a validated decision.
-- **`/we:triage`** — the intake fork: external signals (bug reports, feature requests, feedback) enter through triage and come out as `ready-for-agent` tickets that `/we:story` or `/we:build` pick up. Don't hand-carry raw reports into `story`.
+- **`/we:triage`** — the intake fork: external signals (bug reports, feature requests, feedback) enter through triage and come out as `ready-for-agent` tickets that `/we:story` or `/we:orchestrate` pick up. Don't hand-carry raw reports into `story`.
 - **`/we:handoff` vs `/compact`** — ending the session or switching machines → `handoff` (durable file, fresh session). Mid-session, same thread, just tokens tight → `/compact` (in-place compression).
 - **`/we:diagnose` vs just fixing** — obvious cause, small blast radius → fix it. Symptom without a mechanism, or a performance regression → `diagnose` (loop first, hypotheses second).
 
@@ -219,7 +219,7 @@ After locating the current altitude, check whether there is an active Plan-altit
 State the proposal in one sentence with a clear command. Examples:
 
 - *"You're at Saga-altitude — `docs/plans/multi-tenant-saga.md` exists but no Epics yet. The natural next move is `/we:meet saga` to decompose into Epics. Shall I run it on this? [y/n]"*
-- *"You have a Story plan at `docs/plans/PROJ-123-story.md` and the AC look tight. The natural next move is `/we:build PROJ-123`. Shall I run it? [y/n]"*
+- *"You have a Story plan at `docs/plans/PROJ-123-story.md` and the AC look tight. The natural next move is `/we:orchestrate PROJ-123`. Shall I run it? [y/n]"*
 - *"PRD looks solid but you mentioned the marketplace bet feels different — that's a new Saga. Solo path: `/we:saga "Marketplace launch"`. Council path: `/we:meet vision` to surface all the Sagas the PRD implies, including Marketplace. Which one? [solo / meet]"*
 
 Always:
@@ -332,7 +332,7 @@ Clean separation. Don't cross the line.
 ## What You DO NOT Do
 
 - **Don't fire commands without [y/n].** Ever. The confirmation gate is ADVISOR's discipline; without it the Coach becomes an unpredictable launcher. The Coach proposes; the user decides.
-- **Don't fire `/we:build` from a Coach session.** Even after [y/n] — Build deserves a fresh session, not one that already burned context on advisory reasoning. Print the command.
+- **Don't fire `/we:orchestrate` from a Coach session.** Even after [y/n] — a build deserves a fresh session, not one that already burned context on advisory reasoning. Print the command.
 - **Don't re-plan the initiative from here.** Boot Step 10's initiative state is *context* for the diagnosis. Advancing the initiative is the altitude skills' job (`/we:meet *` / `/we:vision|saga|epic|story`).
 - **Don't give generic advice.** Every recommendation cites a specific file path and a specific command.
 - **Don't load full rule contents at boot.** Frontmatter only; full text on demand when the diagnosis points at a specific rule. Don't duplicate rule content into this file either — you read rules fresh.

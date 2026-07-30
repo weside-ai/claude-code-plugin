@@ -13,7 +13,7 @@ flowchart LR
     V["Vision<br/><i>PRD</i>"] --> S["Saga<br/><i>Theme</i>"]
     S --> E["Epic<br/><i>Initiative</i>"]
     E --> ST["/we:story<br/>interactive"]
-    ST --> B["/we:build<br/>autonomous"]
+    ST --> B["/we:orchestrate<br/>autonomous"]
     B --> M[User merges PR<br/>+ closes ticket]
     M --> R["/we:retro<br/>tighten the harness"]
     R -.lessons.-> V
@@ -32,13 +32,13 @@ Four phases, four responsibilities:
 | Phase | Who | What | Command |
 |---|---|---|---|
 | **Plan** | You + Claude (interactive) | Vision / Saga / Epic / Story + build-ready plan | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` (+ `/we:meet`) |
-| **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:build` |
+| **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:orchestrate` |
 | **Deliver** | You (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
 | **Retro** | You + Claude (interactive) | Find frictions in the just-shipped cycle; encode lessons in `.claude/rules/` + `CLAUDE.md` so they don't recur | `/we:retro` (Coach can suggest it after a merge) |
 
 **Claude never merges PRs or closes tickets.** Those stay with you. **Claude never silently applies retro fixes** either — every proposal passes through a `[y/n]` gate.
 
-The upper Plan altitudes (Vision, Saga, Epic) are drawn lighter because most stories enter the pipeline at Story-altitude — by the time you trigger `/we:story`, the upstream work has usually already happened (in a previous session, in a Council meeting, or in your head). When it hasn't, walk top-down: `/we:vision` → `/we:meet vision` → `/we:saga` → `/we:meet saga` → `/we:epic` → `/we:meet epic` → `/we:story` → `/we:build`. Skipping levels is allowed — when the level above is stable, you don't need to re-do it.
+The upper Plan altitudes (Vision, Saga, Epic) are drawn lighter because most stories enter the pipeline at Story-altitude — by the time you trigger `/we:story`, the upstream work has usually already happened (in a previous session, in a Council meeting, or in your head). When it hasn't, walk top-down: `/we:vision` → `/we:meet vision` → `/we:saga` → `/we:meet saga` → `/we:epic` → `/we:meet epic` → `/we:story` → `/we:orchestrate`. Skipping levels is allowed — when the level above is stable, you don't need to re-do it.
 
 ---
 
@@ -66,21 +66,21 @@ The most common entry point is `/we:story`. It asks the questions that turn an i
 - **Ticket** (minimal): "As X I want Y so that Z" + link to the plan
 - **Plan** (`docs/plans/{TICKET}-story.md`, detailed): context, acceptance criteria, phased implementation, tests, security review, design decisions
 
-Context flows: the plan's *Context* and *Design Decisions* sections capture why you decided what you decided — including rejected alternatives. `/we:build` reads this and understands intent, not just spec.
+Context flows: the plan's *Context* and *Design Decisions* sections capture why you decided what you decided — including rejected alternatives. The build reads this and understands intent, not just spec.
 
 For contentious stories, run `/we:meet story` first — convenes a small council (PO + Architect) for two perspectives before the plan crystallizes. Hands off to `/we:story` once aligned. The other Meet variants (`/we:meet vision|saga|epic`) work the same way, with rosters tuned to the altitude.
 
 ---
 
-## Phase 2: Build with `/we:build`
+## Phase 2: Build with `/we:orchestrate`
 
-You hand the ticket key to `/we:build`. It runs the entire build pipeline autonomously — you can watch, you don't have to drive.
+You hand the ticket key to `/we:orchestrate`. It runs the entire build pipeline autonomously — you can watch, you don't have to drive. Whether it dispatches workers per phase or runs `--solo` changes who writes the code, not what the pipeline does with it.
 
 > **Back-compat:** the orchestration CLI keeps the internal `story` table name; interrupted builds always resume cleanly when re-invoked.
 
 ```mermaid
 flowchart TB
-    Start["/we:build TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
+    Start["/we:orchestrate TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
     DoR --> Dev[Step 2: Develop<br/>phase by phase from plan]
     Dev --> Simp[Step 3: Simplify<br/>code quality pass]
     Simp --> AC[Step 4: AC + DoD verification<br/>BLOCKING checkpoint]
@@ -116,14 +116,14 @@ flowchart TB
 
 | Feature | What it does |
 |---|---|
-| **Checkpoints** | SQLite at `~/.claude/weside/orchestration.db`. Resume after interruption with `/we:build {TICKET}` — picks up where it stopped. (Table name is still `story` for back-compat.) |
+| **Checkpoints** | SQLite at `~/.claude/weside/orchestration.db`. Resume after interruption with `/we:orchestrate {TICKET}` — picks up where it stopped. (Table name is still `story` for back-compat.) |
 | **Circuit breaker** | 3 failures in the same phase → stop and ask. Prevents thrashing. |
 | **Batch-fix pattern** | Collect ALL findings, fix in ONE commit, push ONCE. One CI cycle, not three. |
 | **Reality check** | Warns if the plan is stale vs. recent code changes. Refuses to proceed with an out-of-date plan. |
 
 ### The forbidden interruption
 
-`/we:build` does **not** ask you "should I run this end-to-end or phase by phase" at the start. By the time you've handed it a ticket, you've already decided. The phases-from-the-plan run sequentially with checkpoints. That *is* what "phased" means here.
+The pipeline does **not** ask you "should I run this end-to-end or phase by phase" at the start. By the time you've handed it a ticket, you've already decided. The phases-from-the-plan run sequentially with checkpoints. That *is* what "phased" means here.
 
 Legitimate interruptions stay:
 - Circuit breaker (3 failures in same phase)
@@ -204,8 +204,7 @@ flowchart TB
         saga["/we:saga"]
         epic["/we:epic"]
         story["/we:story"]
-        build["/we:build"]
-        cireview["/we:ci-review<br/>inline in /we:build"]
+        cireview["/we:ci-review<br/>inline in the pipeline"]
     end
     subgraph deliberation[Deliberation]
         council["/we:council"]
@@ -261,7 +260,7 @@ Both are `/we:coach`-aware — Coach surfaces an active handoff at boot and sugg
 
 Three common cases where you sidestep the spine:
 
-- **Hotfix** — typo, dependency bump, copy change. Open a PR by hand; `/we:build` overhead isn't worth it for trivial changes.
+- **Hotfix** — typo, dependency bump, copy change. Open a PR by hand; even `--solo` overhead isn't worth it for trivial changes.
 - **Exploration** — you don't know what you're building yet. Use `/we:meet vision`, `/we:meet saga`, or `/we:meet epic` for upstream deliberation, then walk the altitudes down once direction emerges.
 - **Cross-repo coordination** — `/we:sideload <other-repo>` to pull context, then plan + execute. The pipeline still works per repo; the sideload bridges them.
 

@@ -101,40 +101,11 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 - Ticket in your ticketing tool (minimal: user-story format)
 - `docs/plans/{TICKET}-story.md` (detailed: context, ACs, phases, design decisions, security review)
 
-**Hand-off:** to `/we:build` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
+**Hand-off:** to `/we:orchestrate` (when you're ready to ship the plan) or `/we:meet story` (when the story is contentious enough to want two perspectives first).
 
 ---
 
-## Build altitude skill
-
-### `/we:build`
-
-> *Run the full development pipeline autonomously.*
-
-Build orchestrator — the autonomous half of the pipeline. Once you trigger it, it runs all nine steps + delivery hand-off without pausing unless something is genuinely blocking. No Solo/Meet split at this altitude — there is one mode, and it's autonomous.
-
-> **Internal CLI back-compat:** the orchestration CLI keeps `story` as the table and command name. Interrupted builds always resume cleanly when re-invoked.
-
-**When to use:**
-- After `/we:story` has produced a plan you're happy with
-- To resume an interrupted pipeline (just re-invoke with the same ticket; SQLite checkpoints take you to where you stopped)
-
-**What it produces:**
-- A worktree with your branch
-- Implementation, phase by phase from the plan
-- All quality gates green (review, static, test)
-- Doc updates
-- PR with everything wired
-- Ticket in *In Review*
-
-**Hand-off:** to **you** — review the PR, merge, close the ticket.
-
-**Won't do:**
-- Merge the PR
-- Close the ticket
-- Ask "should I run this end-to-end" — once you've triggered it, run is the answer
-
----
+## Build altitude skills
 
 ### `/we:develop`
 
@@ -162,10 +133,10 @@ Dispatches a single self-contained task to the official Codex plugin runtime (fo
 
 > *Iteratively fix CI and review findings; push only when everything is addressed.*
 
-Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings from CI failures plus whatever AI reviewers the repo configured in `review.available` on GitHub; triages them; fixes them in one batch; pushes once. Reviewer-agnostic — the bot-thread allowlist is built from `review.available`. On repos without a GitHub AI reviewer, local quality gates serve as the sole review signal.
+Runs inline as the last step of the build pipeline, but also standalone. Collects findings from CI failures plus whatever AI reviewers the repo configured in `review.available` on GitHub; triages them; fixes them in one batch; pushes once. Reviewer-agnostic — the bot-thread allowlist is built from `review.available`. On repos without a GitHub AI reviewer, local quality gates serve as the sole review signal.
 
 **When to use standalone:**
-- After CI failed on a PR not driven by `/we:build`
+- After CI failed on a PR the pipeline didn't open
 - After an AI-reviewer pass on a manually-opened PR
 - To iterate review fixes without re-running the full pipeline
 
@@ -184,16 +155,18 @@ Runs inline as Step 8 of `/we:build`, but also standalone. Collects findings fro
 
 Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — and on an explicit confirm dispatches **dev-only `/we:develop` workers** (live Agent Team, same machinery as `/we:council`). Workers implement, run fast local gates, commit, and push their branch — no PR, no CI. The **Lead** merges every worker branch onto **one integration branch**, opens **one PR**, and runs **CI once** on the combined diff. It tracks workers in the shared task-list + orchestration DB, reviews the integrated diff, and never merges. Workers run on cheap-tier Claude (Sonnet/Haiku) by default; Codex or a foreign engine are opt-in per chunk. weside MCP optional — the Lead reviews as your Companion when connected, generic role lens otherwise.
 
-**Two dispatch shapes:**
+**Three dispatch shapes, one pipeline.** Every run ends in the same integration half — simplify, AC+DoD gate, verification, parallel gates, docs, one PR, one CI pass. Only *who implements* differs:
 
 - **Mode A (epic target)** — computes the ready set of buildable Stories and dispatches one worker per ready Story.
 - **Mode B (single-Story target)** — runs that one Story's `### Phase` blocks as lead-integrated work-chunks (one worker per phase / parallel wave).
+- **`--solo`** — nothing dispatched: the Lead implements the story here, then integrates. For work too small to be worth a worker.
 
 **Usage:**
 
 ```
 /we:orchestrate <epic>              # epic target: boot + ready-set; dispatch on confirm (Mode A)
 /we:orchestrate <story-key>         # single-Story target: run its phases as work-chunks (Mode B)
+/we:orchestrate <story-key> --solo  # single Story, no workers: implement here, then integrate
 /we:orchestrate <epic> --refine-ahead  # build ready stories AND refine the next during build idle
 /we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                     # boot from the most recently active epic, then status
@@ -209,20 +182,18 @@ Boots from state like a colleague — reconstructs where an Epic stands from its
 - Worker branches merged onto one integration branch → **one PR**, CI run **once**
 - A live roll-up (in-flight / PR-ready / blocked) + a Lead review of the integrated diff
 
-**Differs from `/we:epic`:** `/we:epic` gives a read-only Status snapshot; `/we:orchestrate` is the dispatch sibling that actually spawns workers. **Differs from `/we:build`:** build is the solo single-Story pipeline; orchestrate coordinates multiple workers into one integration PR. **Won't do:** merge a PR or close a ticket.
+**Differs from `/we:epic`:** `/we:epic` gives a read-only Status snapshot; `/we:orchestrate` is the dispatch sibling that actually spawns workers. **Won't do:** merge a PR, close a ticket, or ask whether to run end-to-end — once you've triggered it, run is the answer.
 
 ---
 
-## CI / Quality gates (called by `/we:build`)
+## CI / Quality gates (called by the pipeline)
 
 These also run standalone for one-off checks.
 
 ### `/we:ac-review`
 
 AC-alignment and DoD check with verdict — dispatched as a background agent (`ac-reviewer`). Never
-hunts bugs. `/we:build` Step 4 applies the same criteria inline itself (not via this agent, to
-avoid a duplicate pass); the agent runs per chunk in `/we:develop` (informational) and at
-`/we:orchestrate` integration (gating). Bug-hunting is separate: Codex adversarial-review when
+hunts bugs. It runs per chunk in `/we:develop` (informational) and once at integration (gating). Bug-hunting is separate: Codex adversarial-review when
 Claude wrote the code, Claude's native `/code-review` otherwise — runs once, at integration, never
 per chunk. See `references/worker-dispatch.md`.
 
@@ -335,7 +306,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Audit all skills in one invocation
 - Re-plan an active initiative (that's `/we:meet` or the Solo Plan skill at the relevant altitude)
 - Silent-fire any `/we:*` command. Every launch is `[y/n]`-gated. The Coach proposes; the user decides.
-- Fire `/we:build` from a Coach session (even after `[y/n]`) — Build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
+- Fire `/we:orchestrate` from a Coach session (even after `[y/n]`) — a build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
 - Handle post-PR engineering-friction analysis — that's `/we:retro`
 
 **Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + **self-grounds in the method via the [`how-we-work.md`](concepts/how-we-work.md) manifest** (APO altitudes, pipeline, skill catalog — the same manifest `/we:retro` loads) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
@@ -361,7 +332,7 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 **Won't do:**
 - Apply any edit without an explicit `y` for that item
 - Quote personal content from the transcript (privacy guard)
-- Modify source code (MDs only — code-level lessons flow back through `/we:build` if needed)
+- Modify source code (MDs only — code-level lessons flow back through the build if needed)
 - Auto-create Jira / GitHub tickets (skill can scaffold one on explicit `--ticket` request, off by default)
 - Push without PR review — rule + CLAUDE.md edits always go through a PR in repos without explicit direct-commit config
 
@@ -576,10 +547,10 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 | Agent | Used by | What it does |
 |---|---|---|
 | `ac-reviewer` | `/we:ac-review`, `/we:develop`, `/we:orchestrate` | AC-alignment + DoD check, verdict (no bug-hunting) |
-| `static-analyzer` | `/we:static`, `/we:build` | Lint, format, types |
-| `test-runner` | `/we:test`, `/we:build` | Tests with coverage |
-| `pr-creator` | `/we:pr`, `/we:build` | PR creation with checkpoint validation |
-| `doc-architect` | `/we:docs`, `/we:build` | Doc proposals; reads landscape fresh on every call |
+| `static-analyzer` | `/we:static`, the pipeline | Lint, format, types |
+| `test-runner` | `/we:test`, the pipeline | Tests with coverage |
+| `pr-creator` | `/we:pr`, the pipeline | PR creation with checkpoint validation |
+| `doc-architect` | `/we:docs`, the pipeline | Doc proposals; reads landscape fresh on every call |
 | `council-architect` | `/we:council`, `/we:meet` | Architect role-lens |
 | `council-product-owner` | `/we:council`, `/we:meet` | PO role-lens |
 | `council-scrum-master` | `/we:council`, `/we:meet` | SM role-lens |

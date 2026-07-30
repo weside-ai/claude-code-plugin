@@ -16,7 +16,7 @@ flowchart TB
     S --> E["/we:meet epic<br/>Epic-altitude<br/>bounded initiative"]
     E --> R["/we:meet story<br/>Story-altitude<br/>concrete change"]
     R --> Solo[hands off to /we:story<br/>→ ticket + plan]
-    Solo --> Build["/we:build<br/>→ implementation"]
+    Solo --> Build["/we:orchestrate<br/>→ implementation"]
 ```
 
 Each meeting answers a different question and decomposes its altitude's item into the next altitude's items.
@@ -214,7 +214,7 @@ You can also override per-invocation:
 
 A meeting **deliberates**. It does not:
 
-- Implement code (that's `/we:build`)
+- Implement code (that's `/we:orchestrate`)
 - Write the artifact (the Solo skill at the same altitude does — `/we:vision`, `/we:saga`, `/we:epic`, `/we:story`)
 - Make the decision *for you* — synthesis returns a recommendation, you decide
 

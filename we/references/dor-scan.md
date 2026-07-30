@@ -1,6 +1,6 @@
 ---
 name: dor-scan-reference
-description: The 3-item plan-completeness scan (GWT ACs, Context, Phase headers). Single owner — referenced by /we:build, /we:develop, /we:orchestrate, /we:story. Loaded on demand.
+description: The 3-item plan-completeness scan (GWT ACs, Context, Phase headers). Single owner — referenced by /we:develop, /we:orchestrate, /we:story. Loaded on demand.
 ---
 
 # DoR Scan (3-item plan-completeness check)

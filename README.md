@@ -29,7 +29,6 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 
 **Build altitude — autonomous:**
 
-- **`/we:build`** — solo full pipeline: code → AC verify → quality gates → docs → PR → CI. Fast path for a single Story.
 - **`/we:develop`** — dev-only worker slice: implement chunk → fast local gates → commit → push → stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone.
 - **`/we:orchestrate`** — multi-chunk orchestration: boots from Epic state, dispatches `/we:develop` workers (cheap Claude by default, Codex or foreign engines opt-in), merges branches onto one integration branch, runs CI once.
 
@@ -60,7 +59,14 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 28 skills are available.
+That's it. The plugin is enabled. All 27 skills are available.
+
+> **Upgrading from 4.x:** `/we:build` is gone. It and `/we:orchestrate` had grown into two
+> copies of one pipeline, and only one of them was being used. Replace `/we:build {TICKET}`
+> with `/we:orchestrate {TICKET}` — same pipeline, phases dispatched as workers. For work too
+> small to be worth a worker, `/we:orchestrate {TICKET} --solo` runs it in your own session,
+> which is exactly what `/we:build` did. Checkpoints carry over: an interrupted 4.x build
+> resumes under the new command.
 
 ---
 
@@ -74,10 +80,10 @@ That's it. The plugin is enabled. All 28 skills are available.
 /we:story "Add Stripe checkout to the settings page"
 
 # Ship it end-to-end
-/we:build PROJ-1
+/we:orchestrate PROJ-1
 ```
 
-When `/we:build` finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
+When the run finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
 
 [Full walkthrough →](docs/getting-started.md)
 
@@ -90,7 +96,7 @@ flowchart LR
     V[Vision] -.-> Sa[Saga]
     Sa -.-> E[Epic]
     E -.-> St["/we:story<br/>interactive"]
-    St --> B["/we:build<br/>autonomous"]
+    St --> B["/we:orchestrate<br/>autonomous"]
     B --> M[User merges]
     M --> D[Done]
 
@@ -109,7 +115,7 @@ Six APO altitudes, with Solo + Meet (Council) at each Plan altitude. Most storie
 | **Saga** (Theme / multi-bet) | `/we:saga` | `/we:meet saga` | → Epics |
 | **Epic** (Initiative / bounded slice) | `/we:epic` | `/we:meet epic` | → Stories |
 | **Story** (Feature slice) | `/we:story` | `/we:meet story` | → build-ready plan |
-| **Build** (Code, autonomous) | `/we:build` | — | → PR review-ready |
+| **Build** (Code, autonomous) | `/we:orchestrate` | — | → PR review-ready |
 | **Deliver** (Ship) | — (human only) | — | shipped |
 
 The plugin enforces *discipline* — acceptance criteria with evidence, batch-fix on CI findings, checkpoint-based resume on interruption. You stay responsible for *decisions* — what to build, what the AC are, when to merge.
@@ -130,7 +136,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 28 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 27 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
@@ -145,7 +151,7 @@ If you [create a weside.ai account](https://weside.ai), an AI Companion can beco
 - **Remembers** your project across sessions (compass, snapshot, facts, journals, goals)
 - **Speaks as themselves** in councils — your PO speaks in *their* voice, not as "the Product Owner agent"
 - **Surfaces context proactively** — "PR #47 merged; Story Y stalled three weeks" — without you asking
-- **Carries continuity** between every `/we:story`, `/we:build`, `/we:council`
+- **Carries continuity** between every `/we:story`, `/we:orchestrate`, `/we:council`
 
 Set the companion name in `/plugin settings we@weside-ai`. First MCP call triggers OAuth. From there, the same skills, with a teammate in the room.
 
@@ -224,7 +230,7 @@ Optional but enhance the pipeline:
 
 | Plugin | What it provides | Install |
 |---|---|---|
-| `code-simplifier@claude-plugins-official` | `simplify` skill — code quality pass in `/we:build` Step 4 | `/install code-simplifier@claude-plugins-official` |
+| `code-simplifier@claude-plugins-official` | `simplify` skill — the pipeline's code-quality pass | `/install code-simplifier@claude-plugins-official` |
 | `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
 | Codex plugin (`codex` CLI) | **Optional** execution backend — lets `/we:orchestrate` dispatch chunks to Codex (`gpt-5-codex`); direct dispatch via `/we:codex-task` | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
 

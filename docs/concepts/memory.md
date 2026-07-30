@@ -41,7 +41,7 @@ You have:
 This is enough for a single developer who keeps good notes. The pipeline still works:
 
 - `/we:story` reads the prior `docs/plans/` to ground a new story
-- `/we:build` reads the plan and references it through every checkpoint
+- `/we:orchestrate` reads the plan and references it through every checkpoint
 - `/we:council` deliberates from the current topic + role-lens; no memory of past councils
 
 What's missing: **cross-session continuity**. The next time you `/we:story` a related story, the agent doesn't know what was decided last week unless you point it at the plan file by hand. Convention + discipline can carry you a long way, but it's all on you.
@@ -65,7 +65,7 @@ The Companion can search across all of this semantically (`search_memories(query
 ### What this changes mechanically
 
 - **`/we:story`** asks the Companion *before* writing a story: "have we talked about this before? what was decided? what was rejected?" The plan you get back already accounts for the relevant history.
-- **`/we:build`** runs the same pipeline, but the develop step has access to the Companion's recall of similar past stories — what worked, what got reverted, what convention was set.
+- **`/we:orchestrate`** runs the same pipeline, but the develop step has access to the Companion's recall of similar past stories — what worked, what got reverted, what convention was set.
 - **`/we:council`** convenes with **member identity that includes their memory of past councils** (Phase-6 deliverable; today the council reads identity + compass, but write-back of council outcomes is the next step).
 - **`/we:coach`** boots with Companion-materialize as one of its steps, so process retros and APO advisory happen *in the persona of your Companion* — whoever you've set up — instead of a generic voice.
 
