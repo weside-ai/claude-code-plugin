@@ -106,8 +106,8 @@ When you're happy with the plan:
 ```
 Step 1: git_prepared          ← worktree, branch, ticket → In Progress
 Step 2: implementation_complete ← code + tests, phase by phase
-Step 3: ac_verified            ← every AC has evidence
-Step 4: simplified             ← code quality pass
+Step 3: simplified             ← code quality pass
+Step 4: ac_verified            ← every AC has evidence, observed running
 Step 5: review_passed          ← parallel: review + static + test
         static_analysis_passed
         test_passed
@@ -121,7 +121,7 @@ Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal or
 
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
-- **Step 3 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
+- **Step 4 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
 - **Step 8 (CI fix)** — review findings (Claude Review plus any CI bots the repo configured in `review.available`, or local quality gates elsewhere) are addressed here in one pass; if a second pass still can't clear them (cap 2 cycles), you're asked.
 
 Otherwise it runs.

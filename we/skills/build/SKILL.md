@@ -28,10 +28,14 @@ You orchestrate the entire development pipeline in a single skill invocation —
 
 By the time `/we:build` runs, the plan already exists (`/we:story` produced it — or `/we:meet story` for contentious ones) and the user has chosen to execute it. The pipeline IS the execution path, not a discovery path. The phases in the plan ARE the phase-by-phase execution — running them sequentially with checkpoints is what "phased" means here.
 
-**Do NOT ask the user how to run the story.** Specifically forbidden:
+**Do NOT ask the user how to run the story.** Two forms of that question are forbidden:
 
-- **At the start:** "Should I run this end-to-end or phase by phase?" / "This story is large — how would you like to proceed?" — No. Just start. Story size and phase count are not negotiation levers; a 6-phase encryption story and a 1-phase typo fix run the same pipeline.
-- **Mid-pipeline, on token-budget grounds:** "The context is getting large, should I split the PR?" / "We're approaching the token limit, want me to stop?" — No. The session runs on a 1M-token model and the runtime auto-compacts older turns. Token pressure is not your problem to solve by interrupting the user. Keep going. If compaction actually happens, the checkpoint system lets you resume — that's exactly what it's for.
+- **"End-to-end or phase by phase?"** / "This story is large — how would you like to proceed?" —
+  just start. Size and phase count are not negotiation levers; a 6-phase encryption story and a
+  1-phase typo fix run the same pipeline.
+- **"The context is getting large, should I stop / split the PR?"** — no. Token pressure is not a
+  question for the user: compaction is automatic and the checkpoints exist precisely so a compacted
+  run resumes. Keep going.
 
 **Legitimate reasons to interrupt the user (these stay — judgment is not abolished):**
 
@@ -124,7 +128,7 @@ This is a hard gate — on failure, stop the pipeline immediately, name the miss
 to `/we:story {TICKET}` + `${CLAUDE_PLUGIN_ROOT}/quality/dor.md`. If `<repo-root>/.weside/dor.md`
 exists (see Prerequisites above), its items apply too — plugin DoR ∪ repo DoR, not plugin DoR alone.
 
-**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
+**Read the plan and the files it names in full.** A partially-read plan produces a partially-built story, and the sections you skip are the ones carrying the constraint. Load more files than feel necessary — a wrong assumption costs more than a wide read.
 
 **Glossary:** If `CONTEXT.md` exists at the repo root, load it alongside the plan and use its canonical vocabulary.
 
@@ -180,36 +184,14 @@ Execute all phases inline in the orchestrator thread, one after another. This is
 
 **When:** `parallel_groups` is a non-empty list in the plan frontmatter.
 
-For each group in `parallel_groups`, dispatch one `Agent()` per phase in that group in a **single message** so they execute concurrently. Wait for all agents in the group before starting the next group or returning to inline phases.
+For each group in `parallel_groups`, dispatch one `Agent()` per phase **in a single message** so they
+run concurrently (`subagent_type="general-purpose"`, `model="sonnet"`, backgrounded). Wait for the
+whole group before the next group or the next inline phase. Phases outside every group run inline in
+plan order — so `parallel_groups: [[2,3]]` means: 1 inline, 2+3 concurrent, 4 inline.
 
-```
-# Example for parallel_groups: [[2,3]] — phases 1 and 4 are inline, 2+3 are parallel
-
-# Phase 1 — inline (not in any group)
-# implement phase 1 directly in the orchestrator thread, commit
-
-# Group [2,3] — dispatch concurrently in ONE message:
-Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
-    run_in_background=True,
-    description="Implement Phase 2 of {TICKET}",
-    prompt=<phase-developer brief for phase 2>
-)
-Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
-    run_in_background=True,
-    description="Implement Phase 3 of {TICKET}",
-    prompt=<phase-developer brief for phase 3>
-)
-
-# Wait for both agents to return, then check for conflicts / integrate
-# Phase 4 — inline (after group completes)
-# implement phase 4 directly in the orchestrator thread, commit
-```
-
-**Conflict recovery:** After a parallel group returns, run `git status` in the feature branch. If merge conflicts exist, `parallel_groups` was misconfigured — the phases were not truly disjoint. Resolve conflicts manually, commit the resolution, and note it in the PR description. Update the plan's `parallel_groups` via `/we:story` to prevent the same conflict in future runs.
+**Conflict recovery:** after a group returns, check the tree. Merge conflicts mean
+`parallel_groups` was wrong — those phases were not disjoint. Resolve, commit, note it in the PR,
+and fix the declaration via `/we:story` so the next run doesn't repeat it.
 
 **Sub-agent brief must be self-contained.** Each dispatched agent's `prompt` must include:
 
@@ -237,8 +219,13 @@ Agent(
 **For each phase** (after it completes — inline or agent returns):
 
 1. Follow project conventions; write tests per the configured test discipline (`test_discipline` from `.weside/config.json`, default `tests-after` — level semantics + good-test rules: `${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`); run auto-fix (ruff/eslint/gofmt/rustfmt — whichever tool is present in the repo); commit.
-2. **Wiring Check** — if the phase introduces new data fields: verify data flows end-to-end through all layers (model → service → API → frontend → UI). Missing wiring = feature not reachable.
-   - **Seed migrations: flipping a field on an EXISTING seeded row needs a FULL-row upsert or a guarded UPDATE, never a partial `{id, col}` upsert.** A partial `seed_upsert(rows=[{"id":N, "col":val}], …)` is INSERT…ON CONFLICT DO UPDATE — if the row is absent at execution time the INSERT fallback fires and violates NOT NULL. To deactivate/flip a column on a row another migration seeded, either mirror that migration's full row (all NOT NULL columns, FKs resolved in Python) or use a guarded `UPDATE … WHERE id=N`. Run a real `alembic upgrade → downgrade → upgrade` roundtrip against a DB before trusting it.
+2. **Wiring Check** — a phase that introduces a new data field verifies it flows end-to-end through
+   every layer (storage → service → API → UI). Missing wiring means the feature is not reachable.
+   - **Flipping a column on an already-seeded row needs a full-row upsert or a guarded UPDATE,
+     never a partial one.** A partial upsert is INSERT…ON CONFLICT DO UPDATE: if the row is absent
+     when it runs, the INSERT branch fires and violates the NOT NULL columns it never supplied. And
+     a migration is verified only by a real `upgrade → downgrade → upgrade` roundtrip against a
+     database — never by reading it.
 3. **Security Check** — if the phase touches auth, external APIs, user data, or file uploads:
 
    | Check | What to Verify |

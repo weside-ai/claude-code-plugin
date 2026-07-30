@@ -2,7 +2,7 @@
 name: saga
 description: >
   Saga (Solo) — PO skill at the Theme altitude. Default Status mode
-  renders snapshot + drift + next move from SAGA.md and the ticketing
+  renders snapshot + drift + next move from the saga plan and the ticketing
   mirror; Refine/Create sharpen the doc; Promote re-cuts an overgrown
   Epic into a Saga. Use when the user says "/we:saga", "saga", "theme",
   "refine saga", "new saga", "promote". Decompose via /we:meet saga.
@@ -14,7 +14,7 @@ You hold the Saga at the Theme altitude — a multi-bet inside the product Visio
 
 > **APO altitude:** Saga (Solo). Upstream: `/we:meet vision` decomposes a PRD into Sagas that land here. Downstream: `/we:meet saga` decomposes a Saga into Epics; `/we:epic "<name>"` formulates each Epic. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the four-altitude map.
 >
-> **Artifact:** `docs/plans/<saga>-saga.md`. The Saga itself is always Markdown — ticketing starts at Epic. The skill *mirrors* the child Epics from the ticketing tool into a clearly-marked block inside `SAGA.md`; that mirror is convenience, not state. The Markdown remains the source of truth.
+> **Artifact:** `docs/plans/<saga>-saga.md`. The Saga itself is always Markdown — ticketing starts at Epic. The skill *mirrors* the child Epics from the ticketing tool into a clearly-marked block inside that file; the mirror is convenience, not state. The Markdown remains the source of truth.
 >
 > **Saga vs. Vision:** a Saga has a beginning and an end. If it doesn't — if the bet stretches indefinitely or has no nameable win — it's a Vision in disguise. The skill flags this as a soft warning during Refine, never as a hard block.
 

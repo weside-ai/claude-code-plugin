@@ -5,82 +5,26 @@ description: Per-dependency install commands, detection checks, and re-check ins
 
 # Dependency Install Guide (Step 1b Concierge)
 
-One section per prerequisite. Each follows the same shape: what it provides,
-how to detect, how to install, how to re-check. The setup skill walks MISSING
-items one at a time with a `[y/n]` gate — never silently installs anything
-that touches user scope, and never blocks the pipeline on a `n`.
+The **detection matrix** — what each prerequisite provides, how to probe it, who consumes it — is
+owned by [`setup-prereqs.md`](setup-prereqs.md). This file carries only what that matrix cannot:
+the install command and the trap that comes with it. The setup skill walks MISSING items one at a
+time behind a `[y/n]` gate, never silently installs into user scope, and never blocks on a `n`.
 
-## gh CLI
+| Prerequisite | Install | The trap |
+|---|---|---|
+| **gh CLI** | platform package manager, then `gh auth login` | `gh auth login` is interactive — suggest the user runs it themselves (`! gh auth login`) rather than trying to drive it |
+| **Jira access** | weside.ai → Integrations → connect Jira (preferred), or register the Atlassian MCP in `~/.claude.json` | — |
+| **simplify skill** | `/install code-simplifier@claude-plugins-official` | Skill list only refreshes after a restart |
+| **security-guidance** | `/install security-guidance@claude-plugins-official` | — |
+| **superpowers** (Anthropic) | `/install superpowers@anthropics` | — |
+| **TurboVault binary** | place the binary on PATH | — |
+| **TurboVault MCP** | add to `~/.claude.json` → `mcpServers`: `{"turbovault": {"command": "<binary>", "args": ["--vault", "<repo>/docs", "--init"]}}` | MCP servers load at session start — the registration only takes effect after a restart |
+| **graphify CLI** | `pip install -U 'graphifyy>=0.8.38'` | The PyPI name has the double *y*. Install into the **same interpreter the repo hooks call** — `python3 -m pip`, never pipx: pipx's isolation breaks `import graphify`. Safe to run directly after a `[y]` (user scope only) |
+| **weside MCP** | needs a weside.ai account; the plugin ships the server — check `pluginConfigs["we@weside-ai"]` | — |
+| **Codex backend** (optional) | the official [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) plugin | Third-party and strictly opt-in — the `we` plugin never vendors or hard-depends on it. Absent → workers run on the configured Claude tier with no loss of capability. Dispatch mechanics: [`codex-dispatch.md`](codex-dispatch.md) |
 
-- **Provides:** PR creation, CI status, review-thread resolution (`/we:pr`, `/we:ci-review`, `/we:build`).
-- **Detect:** `gh auth status` exits 0.
-- **Install:** platform package manager (`apt install gh`, `brew install gh`), then `gh auth login` (interactive — suggest the user runs it themselves, e.g. via `! gh auth login`).
-- **Re-check:** `gh auth status`.
-
-## Jira access
-
-- **Provides:** ticket fetch + transitions (`/we:story`, `/we:build`).
-- **Detect (in priority order):** weside MCP Composio `JIRA_*` via `execute_tool` → `mcp__atlassian__jira_*` tools → `gh issue` (GitHub-Issues mode).
-- **Install:** weside.ai → Integrations → connect Jira (preferred), or register the Atlassian MCP server in `~/.claude.json`.
-- **Re-check:** call the detected tool with a read-only query.
-
-## simplify skill
-
-- **Provides:** `/we:build` Step 4 simplification pass.
-- **Detect:** `simplify` appears in the session skill list.
-- **Install:** `/install code-simplifier@claude-plugins-official`.
-- **Re-check:** skill list after restart.
-
-## security-guidance plugin
-
-- **Provides:** `/we:build` Step 2 security checks.
-- **Detect:** `security-guidance` in `~/.claude/plugins/installed_plugins.json`.
-- **Install:** `/install security-guidance@claude-plugins-official`.
-- **Re-check:** re-read `installed_plugins.json`.
-
-## superpowers plugin (Anthropic)
-
-- **Provides:** discipline skills (`brainstorming`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`) that `/we:build` and general agent work lean on.
-- **Detect:** `superpowers` in `~/.claude/plugins/installed_plugins.json`, or any `superpowers:*` skill in the session skill list.
-- **Install:** `/install superpowers@anthropics`.
-- **Re-check:** skill list after restart.
-
-## TurboVault (MCP + binary)
-
-- **Provides:** semantic search over `docs/` (`/we:story`, `/we:docs`, `/we:doc-improve`, doc-architect).
-- **Detect (liveness, not just presence):** actually call `mcp__turbovault__list_vaults` and confirm it responds. A name-only check ("are `mcp__turbovault__*` tools listed") passes for a registered-but-dead MCP, which then silently degrades every doc search to grep for weeks unnoticed. Three outcomes: responds → **OK**; tool present but call errors/hangs → **DEGRADED** (warn loudly, persist `turbovault: false`); tool absent → **not registered** (then `command -v turbovault` distinguishes binary-missing from MCP-not-registered).
-- **Install (binary missing):** download/build the TurboVault binary, place it on PATH.
-- **Install (MCP not registered):** add to `~/.claude.json` `mcpServers`:
-
-  ```json
-  "turbovault": { "command": "<path-to-binary>", "args": ["--vault", "<repo>/docs", "--init"] }
-  ```
-
-  Restart the session afterwards (MCP servers load at session start).
-- **Re-check:** `mcp__turbovault__list_vaults` responds. Vault registration for the repo happens in Step 5.2 (`add_vault` + `set_active_vault`).
-
-## graphify CLI
-
-- **Provides:** code knowledge graph — `/we:story` blast-radius block, `/we:audit-architecture` graph-drift check, per-repo code-graph nav rules.
-- **Detect:** `python3 -c "import graphify"` exits 0 AND version `>= 0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`). Older versions break the repo hooks (the `to_json(..., force=True)` write that prevents stale graphs needs `>=0.8`).
-- **Install:** `pip install -U 'graphifyy>=0.8.38'` (PyPI name has the double y; user-level install is fine). Safe to run directly after `[y]` — it touches only the user's Python environment. Must land in the same interpreter the repo hooks call (`python3`) — install via `python3 -m pip`, not pipx (pipx isolation breaks `import graphify`).
-- **Re-check:** `python3 -c "import graphify"` again; optionally `graphify --help`.
-- **Post-install (per repo):** pre-commit hook activation is handled generically by `/we:setup` Step 1c — no graphify-specific reminder needed.
-
-## weside MCP
-
-- **Provides:** Companion identity, memories, councils (`/we:materialize`, memory-aware `/we:story`/`/we:build`).
-- **Detect:** `mcp__plugin_we_weside-mcp__get_companion_identity` available.
-- **Install:** requires a weside.ai account; the `we` plugin ships the MCP — check plugin config (`pluginConfigs["we@weside-ai"]`).
-- **Re-check:** call `get_companion_identity`.
-
-## Codex backend (optional)
-
-- **Provides:** an optional execution backend for `/we:orchestrate` and `/we:codex-task`. The Lead dispatches a chunk to Codex (`gpt-5-codex`) and reviews + integrates the result. Bug-hunt: Claude wrote → Codex reviews (`/codex:adversarial-review`); Codex wrote → Claude's native `/code-review` reviews. AC/DoD checking (`we:ac-reviewer`) runs separately either way.
-- **Detect:** `command -v codex` exits 0 (the official Codex plugin's CLI).
-- **Install:** the official Codex plugin [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (third-party, OpenAI's). The `we` plugin declares it as an **optional/recommended** dependency only — it never vendors or hard-depends on it. Follow that repo's install instructions; a `codex` CLI on PATH is the empirical signal we probe for.
-- **Re-check:** `command -v codex` again.
-- **Degradation (the contract):** absent → **workers run on the configured Claude tier, the default, with no loss of capability.** Codex is strictly opt-in. `/we:setup` Step 1b probes for it and persists `tools.codex`. Dispatch mechanics (the single-detach rule): [`codex-dispatch.md`](codex-dispatch.md).
+Re-check after every install by re-running that row's detection check from `setup-prereqs.md` —
+the probe is the source of truth, not the install's exit code.
 
 ## Foreign engine profiles (optional)
 

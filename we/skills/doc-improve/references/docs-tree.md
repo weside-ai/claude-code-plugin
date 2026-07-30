@@ -181,8 +181,8 @@ Annotation, How to Use, Anti-Patterns, References.
   section.
 - Every `architecture/primitives/*.md` should link: its rule, its check
   script, its ADRs, its source code location.
-- Index files (`PRIMITIVES.md`, `BYPASS-REGISTER.md`, `foundations/README.md`,
-  `adr/README.md`) should list every doc in their scope.
+- Index files (the primitive index, the bypass register, the foundations and ADR READMEs)
+  should list every doc in their scope.
 - Promoted ADRs (e.g. ADR-0015 → `foundations/3-layer-model.md`) need a
   forward-link banner near the top of the ADR.
 

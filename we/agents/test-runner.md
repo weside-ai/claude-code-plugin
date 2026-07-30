@@ -14,29 +14,17 @@ color: blue
 
 ## Step 1: Determine Scope
 
-```bash
-# Derive the merge base — don't hardcode 'main'
-BASE=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null) \
-  || BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') \
-  || BASE="main"
-CHANGED=$(git diff --name-only "origin/${BASE}...HEAD" 2>/dev/null)
-# Fallback: last commit (when the base isn't fetched / detached)
-[ -z "$CHANGED" ] && CHANGED=$(git diff --name-only HEAD~1)
-echo "$CHANGED"
-```
+The changed files against the merge base. **Derive the base, never assume `main`** — the PR's
+`baseRefName`, else the remote's `HEAD` symref, else the last commit.
 
-Decide scope from `$CHANGED`. If it touches >50 files **or** crosses test config (`conftest.py`, `jest.config.js`, `jest.setup.js`, fixtures), fall back to the full suite — config changes can break tests outside the diff (see `testing-backend.md` "conftest.py Changes → FULL Test Suite").
+Fall back to the **full suite** when the diff touches >50 files **or** crosses test config
+(`conftest.py`, jest config, fixtures) — a config change breaks tests outside its own diff.
 
 ## Step 2: Detect Stack & Run Affected Tests
 
-**Python — detect pytest-cov before using `--no-cov`:**
-
-```bash
-# --no-cov is registered by pytest-cov; the flag errors when the plugin is absent.
-python -c 'import pytest_cov' 2>/dev/null && COVFLAG="--no-cov" || COVFLAG=""
-```
-
-Use `pytest <paths> -v $COVFLAG` (or `pytest tests/ -v $COVFLAG` for the full suite).
+**Python:** `--no-cov` is registered by pytest-cov and *errors* when the plugin is absent — probe
+for it (`python -c 'import pytest_cov'`) and set `$COVFLAG` to `--no-cov` or empty accordingly, then
+use `$COVFLAG` in the commands below.
 
 | Stack | Affected-Tests Command (default) | Full-Suite Fallback |
 |---|---|---|
@@ -67,11 +55,10 @@ For each failure:
 
 ## Step 4: Save Checkpoint
 
+Extract the ticket key from the branch name into `$TICKET`, then write:
+
 ```bash
-TICKET=$(git branch --show-current | grep -oE '[A-Z]+-[0-9]+')
-if [ -n "$TICKET" ]; then
-  python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" test_passed
-fi
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" test_passed
 ```
 
 **Only if ALL affected tests passed.** Coverage is verified in CI, not here.

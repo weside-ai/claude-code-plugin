@@ -36,8 +36,8 @@ Holds a Saga — a multi-bet inside the Vision. "Make the platform multi-tenant.
 
 **Four modes, picked automatically from argument + repo state:**
 
-- **Status** (default) — read `SAGA.md`, mirror child Epics from the ticketing tool, render snapshot + drift detection + risk-driven next-move recommendation. Read-only.
-- **Refine** (explicit intent: "refine" / "update" / "sharpen") — walks the four frame questions, drafts a tightened `SAGA.md` via plan-mode.
+- **Status** (default) — read `docs/plans/<saga>-saga.md`, mirror child Epics from the ticketing tool, render snapshot + drift detection + risk-driven next-move recommendation. Read-only.
+- **Refine** (explicit intent: "refine" / "update" / "sharpen") — walks the four frame questions, drafts a tightened saga plan via plan-mode.
 - **Create** (slug doesn't exist yet) — walks the frame from scratch.
 - **Mirror-refresh** (intent: "refresh" / "sync" / "mirror") — lightweight write of just the mirror block + frontmatter date + Updates Log.
 
@@ -50,7 +50,7 @@ No flags to memorise. Target Saga is resolved from explicit argument → branch 
 - Multiple Epics in flight that secretly belong to different themes — surface them by running Status across each candidate
 
 **What it produces:**
-- `docs/plans/<saga>/SAGA.md` — Markdown only; ticketing starts at Epic. The doc contains an auto-generated `## Sub-Epics` mirror block between `<!-- mirror:start --> … <!-- mirror:end -->` markers.
+- `docs/plans/<saga>-saga.md` — Markdown only; ticketing starts at Epic. The doc contains an auto-generated `## Sub-Epics` mirror block between `<!-- mirror:start --> … <!-- mirror:end -->` markers.
 
 **Hand-off:** Status footer offers `[r]` refresh, `[f]` Refine, `[m]` `/we:meet saga`, `[q]` done. After Refine, hand off to `/we:meet saga` (decompose) or `/we:epic "<name>"` (formulate one Epic).
 
@@ -324,8 +324,6 @@ A conversation partner for three situations, one skill:
 
 Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended / "which Epics" / "status" → ADVISOR; "I'm new" / "help me start" → BEGINNER. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
 
-> **Renamed from `/we:sm`.** Scope expanded to full APO advisory, RETRO mode extracted to standalone `/we:retro`, Beginner mode added, and Plan-status detail delegated to `/we:saga` / `/we:epic` (Status-default modes) — Coach renders only the one-line snapshot.
-
 **When to use:**
 - You merged a Story / Epic and want to know the sensible next move (ADVISOR)
 - A PRD exists but you're not sure whether to write Sagas Solo or convene `/we:meet vision` (ADVISOR)
@@ -423,7 +421,7 @@ Moves incoming tickets through a five-state triage machine: `needs-triage` → `
 
 > *Project onboarding — detect stack + ticketing, write `.weside/config.json`, optionally compose crew.*
 
-Run once per project. Interactive (4 core questions, ~5 minutes) — vision, ticketing, stack, and which code reviewers the repo uses (the ordered `review.available` list, free-text-extendable; put your preferred local reviewer first, and the order also seeds the CI-bot allowlist `/we:ci-review` reads).
+Run once per project. Interactive (six questions, ~5 minutes) — vision, ticketing, stack, test discipline, verification, and which code reviewers the repo uses (the ordered `review.available` list, free-text-extendable; put your preferred local reviewer first, and the order also seeds the CI-bot allowlist `/we:ci-review` reads).
 
 **Idempotent:** re-running doesn't overwrite existing config; it reports current state and asks before changes.
 

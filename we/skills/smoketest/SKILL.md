@@ -44,20 +44,10 @@ Phase 5: Report       — Summary table with PASS/FAIL per area
 
 ### 1.1 Find the Running Server
 
-Check common local ports for a running backend:
-
-```bash
-# Try common ports
-for port in 8000 3000 5000 8080 4000; do
-  curl -s --max-time 2 "http://localhost:$port/health" && echo " -> port $port" && break
-  curl -s --max-time 2 "http://localhost:$port/" && echo " -> port $port" && break
-done
-```
-
-If no server found, tell the user and offer to start it (check for common
-start commands in package.json scripts, Makefile, docker-compose, etc.).
-
-Store the base URL for all subsequent requests.
+Probe the common local ports (8000, 3000, 5000, 8080, 4000) for a health or root endpoint and keep
+the base URL for every later request. Nothing answering → tell the user and offer to start the app
+(look for the start command in the package scripts, Makefile, or compose file). Don't guess a port
+into the report.
 
 ### 1.2 Discover Endpoints
 
@@ -102,20 +92,9 @@ logs generated during the smoketest.
 
 ## Phase 2 — Test Plan
 
-Group discovered endpoints into **test areas** by resource/domain:
-
-```
-Example grouping:
-  - Health & Status (health checks, version info)
-  - Auth (login, me, token refresh)
-  - Core CRUD (main business entities — list, get, create, update, delete)
-  - Search & Filtering (search endpoints, query parameters)
-  - User Profile (profile read/update, settings, preferences)
-  - Public Endpoints (no auth required)
-  - Admin Endpoints (elevated permissions)
-  - File Upload / Media (multipart, binary)
-  - Webhooks / Callbacks (external integrations)
-```
+Group discovered endpoints into **test areas** by resource/domain — health, auth, the core
+entities' CRUD, search, profile, public, admin, uploads, webhooks. The grouping is what makes the
+report readable; the exact names come from the API you found.
 
 ### Prioritization
 
@@ -153,23 +132,10 @@ For POST/PUT/DELETE endpoints:
 
 ### Execution Pattern
 
-For each test area:
-
-```bash
-# 1. Set up auth header
-AUTH="-H 'Authorization: Bearer $TOKEN'"
-
-# 2. Execute request
-RESP=$(curl -s -w "\nHTTP_STATUS:%{http_code}" $AUTH "$BASE/path")
-STATUS=$(echo "$RESP" | grep "HTTP_STATUS:" | cut -d: -f2)
-BODY=$(echo "$RESP" | grep -v "HTTP_STATUS:")
-
-# 3. Validate
-# - Status code in expected range
-# - Body is valid JSON (for JSON APIs)
-# - Expected fields present
-# - No error messages in success responses
-```
+Per endpoint: send the request with the auth header, then check the status code, that the body
+parses, that the expected fields are present, and that a success response carries no error payload.
+Capture the status separately from the body — a 500 with a JSON error body is a failure even though
+the body parsed.
 
 ### Parallel Execution
 
@@ -179,12 +145,10 @@ areas that depend on previous results (auth before protected endpoints).
 
 ### Handling Failures
 
-- **Connection refused** — Server not running, wrong port
-- **401/403** — Auth token invalid or expired, try refreshing
-- **404** — Endpoint doesn't exist (maybe wrong path/version)
-- **422** — Validation error (check request body schema)
-- **500** — Server error — **always check logs for the stack trace**
-- **307** — Redirect (try with/without trailing slash)
+Read the status, then look in the right place: connection-refused and 404 are *your* configuration
+(wrong port, wrong path/version); 401/403 is the token; 422 is the request body against the schema;
+**500 always means read the server log** — the response body rarely carries the cause; 307 is the
+trailing-slash redirect below.
 
 ### Trailing Slash Handling
 

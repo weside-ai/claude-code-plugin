@@ -22,8 +22,10 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 - [ ] Architecture patterns from plan followed
 - [ ] ADRs referenced in story were followed
 - [ ] Security patterns applied (if Security Review = Yes in plan)
-- [ ] **Platform Primitive compliance** — No new primitive bypasses without an annotated reason; if the project has `docs/architecture/BYPASS-REGISTER.md` and it grew, the PR description cites an ADR or justifies inline
-- [ ] **Bypass register regenerated** — if any new `# *-BYPASS-OK:` annotation was added AND `scripts/generate-bypass-register.sh` exists in the repo, the register was regenerated (`bash scripts/generate-bypass-register.sh --write`) and committed; skip silently if the script is absent
+- [ ] **Deliberate bypasses justified** — where the repo has a bypass convention: every new
+      annotation carries a specific reason, and a grown register is either cited to an ADR or
+      justified in the PR body. If the repo ships a register generator, it was re-run and the
+      result committed. No such convention → skip.
 - [ ] Not applicable → skip if no architecture constraints in plan
 
 ### Verification (observed, not inferred)
@@ -41,25 +43,33 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 
 ### Post-Implementation Semantic Checks
 
-Verify each item that applies. Skip items that don't apply to your change.
+Verify each item that applies; skip the rest. These are the classes that pass unit tests and
+break in production.
 
-- [ ] **Database migrations tested locally** — Run migration tool locally, verify success
-- [ ] **Migration idempotent** — DDL uses `IF NOT EXISTS`/`IF EXISTS`, data uses `ON CONFLICT DO NOTHING`
-- [ ] **Timezone handling** — Date strings use local getters (not `toISOString().slice(0,10)` or UTC-only)
-- [ ] **Range validation** — Date/Number ranges have `from > to` guards
-- [ ] **State wiring complete** — New data fields flow through all layers: storage → service → API → UI
-- [ ] **Index column order** — Selectivity left-to-right for composite indexes
-- [ ] **String length validation** — Text/VARCHAR columns have length validation before insert
-- [ ] **Test depth** — Tests verify actual behavior and parameters, not just return values
-- [ ] **i18n complete** — All user-facing strings use translation functions (if project uses i18n)
-- [ ] **Horizontal scalability** — No new process-local mutable state introduced (no new `TTLCache`, module-level mutable `dict`/`list`/`set`, `@lru_cache` on non-pure funcs, class-level mutable on singletons, `global` mutation, or in-process locks used for cross-request coordination). State that outlives a request lives in Postgres, Redis, or a queue. Exceptions carry an inline `# SCALABILITY-EXEMPT: <reason>` comment.
-- [ ] **Cross-request ORM cache safety** — Any cache that holds ORM objects across request/session boundaries MUST eager-load every relationship it serves and detach the row from its loading session. Lazy attributes on a cached row crash the next request with a "detached instance" error. Reads feeding such a cache use eager-load helpers (e.g. `selectinload`) for every relationship downstream code touches; the cache detaches the row before storing.
-- [ ] **New reference table classification** — A new table that is static/global (same for every tenant, seeded via migration) AND read on a hot path (per LLM call / request / turn) belongs to a typed reference-data layer with a process-level cache. Direct CRUD reads on the hot path bypass the cache and re-introduce per-call DB load. Tenant-scoped tables (RLS, runtime writes) stay under the regular CRUD layer.
-- [ ] **Not applicable** → skip if item does not apply (no migration/date/range/state/index/text column/i18n/scalability)
+- [ ] **Migrations run and reverse** — applied locally, and idempotent (guarded DDL, conflict-safe
+      data writes) so a re-run is not a failure
+- [ ] **State wiring complete** — a new data field flows through every layer: storage → service →
+      API → UI. A field that stops halfway is a feature the user cannot reach.
+- [ ] **Timezone handling** — local-date logic uses local getters, never a UTC-truncated ISO string
+- [ ] **Range validation** — date/number ranges guard the inverted case
+- [ ] **String length validation** — text columns validate length before insert
+- [ ] **Index column order** — composite indexes ordered by selectivity, left to right
+- [ ] **Test depth** — tests assert behaviour and arguments, not merely that a call returned
+- [ ] **i18n complete** — user-facing strings go through the translation layer (if the project has one)
+- [ ] **Horizontal scalability** — no new process-local mutable state that outlives a request
+      (in-process caches, module/class-level mutable containers, memoised impure functions,
+      in-process locks used across requests). Such state belongs in a database, cache, or queue;
+      a deliberate exception carries an inline `# SCALABILITY-EXEMPT: <reason>`.
+- [ ] **Not applicable** → skip when the item has nothing to do with this change
 
-### Verification
+Repo-specific classes (an ORM-cache rule, a reference-data layer, a hot-path convention) belong
+in `.weside/dod.md`, which is read additively alongside this checklist.
 
-- [ ] **Success claims require evidence** — "tests pass", "it works", "fixed" are assertions, not verification. Each claim must be backed by a pasted command + its actual output (in the PR description, a commit message, or an inline comment). An assertion without output fails this gate.
+### Evidence
+
+- [ ] **Success claims carry their output** — "tests pass", "it works", "fixed" are assertions.
+      Each is backed by the command and its actual output, in the PR description, a commit message,
+      or an inline comment. An assertion without output fails this gate.
 
 ### Quality Gates
 
@@ -115,19 +125,5 @@ findings separately — see `worker-dispatch.md` § Bug-hunt dispatch.
 
 ---
 
-## Quick Check
-
-```
-All ACs individually verified?
-Feature reachable for user?
-End-to-end flow works?
-Architecture compliance? (patterns, ADRs, security)
-Post-implementation semantic checks? (migrations, timezone, wiring, ...)
-Quality gates passed? (review + static + test locally, configured AI reviewer(s) on GitHub if available)
-Docs updated? (per Documentation Impact in plan)
-PR created and CI green?
-All BLOCKING/WARNING fixed?
-Ticket → In Review?
-
-All yes → Story is DONE (awaiting user merge)
-```
+A story is DONE when every applicable box above is ticked — **awaiting the user's merge**, which is
+the one step that never belongs to Claude.

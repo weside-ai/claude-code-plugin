@@ -82,9 +82,9 @@ You hand the ticket key to `/we:build`. It runs the entire build pipeline autono
 flowchart TB
     Start["/we:build TICKET"] --> DoR[Step 1: Load story + plan<br/>create worktree<br/>ticket → In Progress]
     DoR --> Dev[Step 2: Develop<br/>phase by phase from plan]
-    Dev --> AC[Step 3: AC + DoD verification<br/>BLOCKING checkpoint]
-    AC --> Simp[Step 4: Simplify<br/>code quality pass]
-    Simp --> Gates[Step 5: Quality gates<br/>PARALLEL]
+    Dev --> Simp[Step 3: Simplify<br/>code quality pass]
+    Simp --> AC[Step 4: AC + DoD verification<br/>BLOCKING checkpoint]
+    AC --> Gates[Step 5: Quality gates<br/>PARALLEL]
     Gates --> Review["writer-aware bug-hunt<br/>codex adversarial or native /code-review"]
     Gates --> Static["/we:static"]
     Gates --> Test["/we:test"]
@@ -103,10 +103,10 @@ flowchart TB
 | Step | What | Notes |
 |---|---|---|
 | **1. Git prep** | Worktree, branch, ticket → In Progress | Worktree isolates the work; if you opt out (`no worktree`), uses a regular branch |
-| **2. Develop** | Implement plan phase by phase | TDD: tests alongside code. Auto-fix runs after each phase. |
-| **3. AC + DoD verify** | Every acceptance criterion checked with concrete evidence, plus the DoD Quick Check against the diff | **Blocking.** No AC passes without a citation (file:line, test name, commit); any DoD failure blocks too. Model-agnostic — the build session runs it, independent of which reviewer runs in Step 5. |
-| **4. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers |
-| **5. Quality gates** | One bug-hunt engine + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one bug-hunt engine runs, chosen by who wrote the code:** Claude wrote + codex available + `review.cross` → `/codex:adversarial-review`; otherwise Claude's native `/code-review`. AC/DoD were already gated in Step 3 by `we:ac-reviewer`'s criteria, applied inline — no separate AC/DoD call here. |
+| **2. Develop** | Implement plan phase by phase | Tests alongside code, per the repo's `test_discipline`. Auto-fix runs after each phase. |
+| **3. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers. Runs *before* the AC gate on purpose — verifying against code that is about to be rewritten wastes the verification. |
+| **4. AC + DoD verify** | Every acceptance criterion checked with concrete evidence, plus the DoD Quick Check against the diff, plus a run against a live instance | **Blocking.** No AC passes without a citation (file:line, test name, commit); any DoD failure blocks too. Model-agnostic — the build session runs it, independent of which reviewer runs in Step 5. |
+| **5. Quality gates** | One bug-hunt engine + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one bug-hunt engine runs, chosen by who wrote the code:** Claude wrote + codex available + `review.cross` → `/codex:adversarial-review`; otherwise Claude's native `/code-review`. AC/DoD were already gated in Step 4 — no separate AC/DoD call here. |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
 | **7. PR** | `/we:pr` verifies all 4 quality-gate checkpoints first | Will not create a PR with failing gates (`ac_verified`, `review_passed`, `static_analysis_passed`, `test_passed`). Any CI reviewers the repo lists in `review.available` run on GitHub if installed; other hosts use local quality gates. |
 | **8. CI fix** | Inline — collect findings, fix all, push once | One pass by default (max 2 cycles when looping). Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |

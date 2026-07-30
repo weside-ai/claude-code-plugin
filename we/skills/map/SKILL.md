@@ -25,7 +25,7 @@ command.
 
 - **No argument** → render every Saga in the repo (the full landscape).
 - **A saga slug** (e.g. `/we:map presence`) → render only that Saga's subtree.
-- **A ticket key** (e.g. `/we:map WA-1206`) → locate that story, render its Epic
+- **A ticket key** (e.g. `/we:map PROJ-206`) → locate that story, render its Epic
   subtree with the story highlighted.
 
 ---
@@ -90,24 +90,24 @@ subtree is small or the user filtered to one saga).
 ```text
 weside plan map — <N> sagas, <E> epics, <S> stories      (built <relative-time>)
 
-▸ presence — Companion-in-all-spaces                      docs/plans/presence-saga.md
+▸ presence — one assistant across every surface                      docs/plans/presence-saga.md
   status: active
 
   ✓ foundation    Channel Architecture Foundation          [9/9 done]
-  ✓ awareness     Cross-Channel Awareness & Memory          [18 done · 1 backlog]
-  ● teams         Teams Enterprise Surface                  [2 done · 2 review · 1 parked]   WA-718…
-      ● WA-1206  Teams Production Hardening      In Review   (ci_passed)
-      ● WA-1214  Owner-triggered tool gate       In Review
-      ○ WA-1221  Multi-Tenant + AppSource        Backlog     parked
-      ⊘ WA-1118  WhatsApp Outreach Templates      Blocked     Meta approval
-  ○ coordination  Multi-Companion at Scale                  [0/2 — not started]
-  ◐ circles       Trust Circles / Scoped Memory             [1 active · 2 refined]
+  ✓ awareness     Cross-channel awareness          [18 done · 1 backlog]
+  ● teams         Enterprise surface                  [2 done · 2 review · 1 parked]   PROJ-18…
+      ● PROJ-206  Rooms production hardening      In Review   (ci_passed)
+      ● PROJ-214  Owner-triggered tool gate      In Review
+      ○ PROJ-221  Multi-tenant marketplace        Backlog     parked
+      ⊘ PROJ-118  Outbound message templates      Blocked     vendor approval
+  ○ coordination  Multi-agent at scale                  [0/2 — not started]
+  ◐ circles       Scoped sharing             [1 active · 2 refined]
 
-  drift: ⚠ 1 story (WA-1202) has no epic: frontmatter — ungrouped
+  drift: ⚠ 1 story (PROJ-202) has no epic: frontmatter — ungrouped
          ~ 3 stories still on legacy -plan.md suffix
 
 Legend: ✓ done  ● active  ◐ partial  ○ not-started/backlog  ⊘ blocked  ~ legacy-name
-For detail: /we:saga presence · /we:epic teams · /we:map WA-1206
+For detail: /we:saga presence · /we:epic teams · /we:map PROJ-206
 ```
 
 Rules for the render:
@@ -131,7 +131,7 @@ showed — e.g. the saga with the most active work, an epic with drift, or a sto
 mid-pipeline:
 
 ```text
-Next: /we:epic teams (most active) · fix 1 ungrouped story · /we:build WA-1221 when unparked
+Next: /we:epic teams (most active) · fix 1 ungrouped story · /we:build PROJ-221 when unparked
 ```
 
 ---

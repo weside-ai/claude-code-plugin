@@ -97,51 +97,28 @@ docs add a fifth pillar layer on top, they don't replace these.
 
 **Question:** Is what this doc claims still true in the code?
 
-**Method:** Extract every factual claim that names a path, function, class,
-field, command, or behaviour. For each, verify against the source:
+**Method:** Extract every factual claim that names a path, function, class, field, command, or
+behaviour, and verify each against the source — does the directory exist with those contents, does
+the symbol exist, is the import live, when did this last change? Grep and `git log` are cheap;
+hallucinations are not.
 
-- `ls <path>` — does the directory exist with the named contents?
-- `grep -n "def <name>\|class <name>" <path>` — does the symbol exist?
-- `grep -rn "<imported_name>" <searchroot>` — is the import live?
-- `git log -1 --format="%ai %s" <path>` — when did this last change?
-
-Catch what humans miss: a directory rename (`adapters/` → `channels/`), a
-field deleted from a dataclass, a middleware count drift, an API method that
-got added but isn't documented, a "Phase 2" plan section describing work
-that was abandoned or already shipped.
+Catch what humans miss: a directory rename, a field deleted from a dataclass, a count that drifted,
+an API method added but never documented, a "Phase 2" section describing work that was abandoned or
+silently shipped.
 
 **Pillar 1 has three named sub-checks. Run all three when applicable:**
 
-**1a — API-surface completeness.** When the doc shows a `class X:` block with
-method signatures, do NOT just verify each listed method exists. Verify the
-**listing is complete** — every public method on the actual class must be
-in the listing or the listing lies by omission.
+**1a — API-surface completeness.** When the doc shows a class with method signatures, don't just
+verify each listed method exists — verify the **listing is complete**. Enumerate the actual public
+methods and compare counts; a listing that omits half the surface lies by omission, and a reader
+using it to discover the API concludes those methods don't exist. Same for dataclass fields, enum
+members, table columns, config keys: *a listing in a doc must be complete against the code.* Missing
+entries are MAJOR.
 
-```bash
-# For every class shown with method signatures in the doc:
-grep -nE "^    (async )?def [a-z]" path/to/impl.py | grep -v "^    def _"
-# Compare counts against the doc. Missing methods = MAJOR finding.
-```
-
-The same applies to dataclass fields, enum members, table-column names,
-config-file keys. *Listing exists in doc → listing must be complete vs code.*
-Real example: `companion-being.md` listed 5 of 11 Gateway methods; a reader
-using the rule to discover the API would have thought 6 methods don't exist.
-
-**1b — Invariant-still-true.** When the doc states an invariant in
-imperative form ("X ONLY in Y", "Z must Y", "never Y"), grep the **negation**
-and confirm zero hits (or only documented exceptions).
-
-```bash
-# Doc says: "LangGraph ONLY in companion/core/"
-grep -rn "from langgraph\|import langgraph" apps/backend/app/companion/gateway/
-# Any non-TYPE_CHECKING hit = invariant has been violated; the doc is lying
-# OR the code is broken. Either way, finding.
-```
-
-Invariants stated in always-loaded rules are the most damaging when wrong —
-the agent acts on them every session. Invariant verification should appear
-as evidence in the finding even when the result is "still true".
+**1b — Invariant-still-true.** When a doc states an invariant in imperative form ("X only in Y",
+"never Z"), grep the **negation** and confirm zero hits outside documented exceptions. Invariants in
+always-loaded rules are the most damaging when wrong — the agent acts on them every session — so put
+the verification in the finding as evidence *even when the answer is "still true"*.
 
 **1c — Cross-claim consistency.** When the doc makes the same claim twice
 (once in a section heading, once in a code block, once in prose), verify all
@@ -206,16 +183,9 @@ the doc's distinctive section headings across the rest of the doc tree.
 
 **Question:** Has the code under this doc moved since the doc was last touched?
 
-**Method:**
-
-```bash
-git log -1 --format="%ai" <doc>             # When was the doc last edited?
-git log --oneline --since=<doc-edit-date> -- <code-path-it-describes>
-```
-
-If the code path has moved a lot since the doc edit, the doc is at risk —
-look harder at the affected sections. Don't fail a doc just for being older
-than the code, but use this as a search beam for Pillar 1 verification.
+**Method:** compare when the doc was last edited against the commits since then on the code paths
+it describes. A doc older than heavy movement in its subject is not automatically wrong — use it as
+a **search beam** for Pillar 1, pointing at the sections most likely to have drifted.
 
 Also: stale-plan signals. "TODO", "Phase 2", "Open Questions", "Next Steps"
 sections. Open them: are the items still open, or silently shipped /
@@ -353,23 +323,16 @@ For rules, this is mandatory in the verdict block: "Pillar 5d
 
 ## Anti-Patterns and Rationalisations
 
-Do not do any of these. These are the failure modes that make a doc review
-feel productive but deliver nothing.
+The failure modes that make a doc review *feel* productive and deliver nothing:
 
 | Rationalisation | Reality |
 |---|---|
-| "The doc looks fine, the structure is good" | Structure ≠ content. Run Pillar 1 anyway. Drift is invisible from the surface. |
-| "I'll suggest frontmatter improvements" | Out of scope unless the missing frontmatter blocks TurboVault indexing. Frontmatter is `doc-architect`'s job. |
-| "I'll fix all the broken links" | Out of scope. Links are mechanical; the user said *content* matters more. |
-| "I'll add a TODO for the team" | No. The skill writes findings, not TODOs. If something is missing, propose its addition or its deletion. |
-| "I'll cite the doc, not the code" | Code is truth, doc is description. Cite the code. |
-| "I'll rewrite from scratch" | Almost always wrong. Most reviews are TIGHTEN / surgical-fix; full rewrites are rare. Default to surgical. |
-| "I won't run grep, I remember this codebase" | Memory is not evidence. Run grep. Hallucinated findings destroy trust faster than missed findings. |
-| "Three findings is too few — let me add some MINOR ones" | Padding hurts. If a doc has three real findings, report three. |
-| "I'll write a finding for the future plan section" | Only if the plan items are silently shipped / abandoned (currency check). "Plan section exists" is not a finding. |
-| "I'll skip Pillar 3 if the file looks self-contained" | Don't. The redundancy check is one of the highest-value pillars. Sibling-doc duplication is the most common drift cause. |
-
----
+| "The structure is good, the doc looks fine" | Structure ≠ content. Drift is invisible from the surface — run Pillar 1 anyway. |
+| "I remember this codebase, no need to grep" | Memory is not evidence. A hallucinated finding destroys trust faster than a missed one. |
+| "This file looks self-contained, skip Pillar 3" | Sibling-doc duplication is the most common drift cause. It is the highest-value pillar, not the optional one. |
+| "Three findings is too few — add some MINORs" | Padding hurts. Three real findings is a good review. |
+| "I'll rewrite it from scratch" | Almost always wrong. Default to surgical: most reviews are TIGHTEN. |
+| "I'll fix the links / frontmatter / add a TODO" | Out of scope — links are mechanical, frontmatter is `doc-architect`'s, and a TODO is a finding you declined to write. |
 
 ## Apply Loop (after approval)
 
@@ -379,15 +342,9 @@ For each approved finding, in order:
 2. If the finding lists downstream impact (same drift in another file), ask
    the user "fix downstream too?". If yes — extend the loop to cover the
    downstream file using the same diff.
-3. If a primitive bypass annotation was added or removed: regenerate
-   `docs/architecture/BYPASS-REGISTER.md` if the script exists:
-   ```bash
-   if [ -f scripts/generate-bypass-register.sh ]; then
-     bash scripts/generate-bypass-register.sh --write
-   fi
-   ```
-   (This is `doc-architect` territory but the skill knows when to flag it.
-   Skip silently on repos that don't ship this script.)
+3. If a bypass annotation was added or removed and the repo ships a register generator, re-run
+   it in write mode. (This is `doc-architect` territory; the skill only knows when to flag it.
+   No generator → skip silently.)
 4. After all approved findings are applied: re-emit the verdict line so the
    user sees the new state.
 

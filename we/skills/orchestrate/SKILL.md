@@ -52,16 +52,14 @@ Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
 
 Agent Teams must be enabled — same flag, abort text, and teardown contract as `/we:council`: see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`. No non-team fallback.
 
-**Permission mode must allow teammate Bash (hard-won on the first real run).** A builder runs
-`/we:build`, which is almost entirely Bash (git, npm, docker, gh, the orchestration CLI). Under
-the **default/auto** permission mode, the auto-mode classifier denies *every* teammate Bash call
-on the grounds that a `teammate-message → agent` invocation carries no direct user intent — so
-the builder is dispatched, reaches Step 1, and is dead-on-arrival with "Bash denied", no code
-written. Autonomous dispatch therefore requires the user to run the session in **`acceptEdits`**
-(or `bypassPermissions`), or to add a Bash allowlist for the multi-agent path, BEFORE dispatch.
-Surface this in Step 3's confirm gate; if you cannot tell the mode, ask the user to confirm they
-are on `acceptEdits`/bypass. A single ready Story is often faster as a direct `/we:build` in the
-user's own session (user intent is then unambiguous) — orchestrate earns its keep at ≥2 builders.
+**Permission mode must allow teammate Bash — check before dispatch, not after.** A worker's job is
+almost entirely Bash (git, gh, the orchestration CLI). Under the default/auto mode the classifier
+denies *every* teammate Bash call, because a teammate-message-triggered invocation carries no direct
+user intent: the worker is dispatched, reaches its first command, and is dead on arrival with "Bash
+denied" and nothing written. So the session must be on **`acceptEdits`** (or bypass), or carry a
+Bash allowlist for the multi-agent path. Surface this at Step 3's confirm gate; if you cannot tell
+the mode, ask. One ready Story is often faster as a direct `/we:build` in the user's own session —
+orchestrate earns its overhead at ≥2 workers.
 
 ## Invocation
 
@@ -101,10 +99,10 @@ The argument is either an **Epic** or a **single Story**. Resolve it once, it pi
   → the full Step 1–9 workflow (boot, ready-set, per-Story builders = Mode A; one phased Story in the
   set may itself run Mode B per Step 3's mode choice).
 
-`<epic>` is an Epic **slug** (e.g. `circles`) or a ticketing Epic key (e.g. `WA-1205`) — either
+`<epic>` is an Epic **slug** (e.g. `circles`) or a ticketing Epic key (e.g. `PROJ-1205`) — either
 works. Stories may reference their epic by slug or by key; `story ready` resolves both via the
 Epic plan's `epic:`/`ticket:` frontmatter (`_resolve_epic_identifiers`). A `<story-key>` is a single
-Story ticket/plan key (e.g. `WA-1330`).
+Story ticket/plan key (e.g. `PROJ-1330`).
 
 ---
 
@@ -272,27 +270,18 @@ this one-shot gate becomes a **rolling** confirm — one per new dispatch — se
    dispatched. Workers branch off the pushed ref; the Lead merges their branches back here; the
    final PR runs against it. Creating it here ensures every worker has the same base.
 
-   **The Lead never flips the *main* worktree's branch** — the main worktree stays on the default
-   branch, untouched, for the whole run (flipping it lands commits on the wrong branch and lets a
-   stray rebase rewrite a pushed worker branch — a real, repeated failure mode). Instead the Lead
-   integrates from a **dedicated integration worktree** sibling to the repo. Every integration
-   operation below runs *inside* it (`git -C "$INT_WT"` / `cd "$INT_WT"`), never in the main worktree.
-   This is the worktree B1c ("the ONE place… that can afford the install") and the node_modules
-   symlink lesson already assume exists.
+   **The Lead never flips the *main* worktree's branch** — it stays on the default branch, untouched,
+   for the whole run. Flipping it lands commits on the wrong branch and lets a stray rebase rewrite a
+   worker's pushed branch; that is a real, repeated failure mode. Instead the Lead integrates from a
+   **dedicated integration worktree** as a sibling of the repo
+   (`$(git rev-parse --show-toplevel)-integration`), and every integration command below runs inside
+   it via `git -C`. It is also the one place in the run that can afford a dependency install (B1c).
 
-   ```bash
-   INT_WT="$(git rev-parse --show-toplevel)-integration"   # sibling dir, never the main worktree
-   BR=feat/<epic-or-story>-integration
-   ```
+   On a resumed run, **never reset an existing branch or worktree**: reuse the worktree if it is
+   there, add one onto the existing branch if only the branch is, and create both plus an upstream
+   push only on a genuinely fresh run.
 
-   Three cases (the last two are the resumed-run paths — never reset an existing branch or worktree):
-   + **Worktree already present** (resumed run) → reuse `$INT_WT` as-is.
-   + **Branch exists but no worktree** → `git worktree add "$INT_WT" "$BR"`.
-   + **Neither exists** (fresh run) → `git worktree add "$INT_WT" -b "$BR"` then
-     `git -C "$INT_WT" push -u origin "$BR"`.
-
-   The integration worktree lives until the run ends — Step 9 removes it (it must survive through
-   B3 ci-review, whose fixes are committed here).
+   The integration worktree lives until Step 9 — B3's ci-review fixes are committed in it.
 
 ### Step 5: Team is implicit — nothing to open
 
@@ -318,30 +307,21 @@ Agent(
 ```
 
 The shared task-list (the `TaskCreate` above) carries the **live** dispatched/in-flight state.
-The **durable** record is the Lead's to write. Workers run `/we:develop`, which writes no
-`story_workflow` rows at all — so `pr_created` and `ci_passed` land in Step 8 (B2/B4), next to
-the ticket transition, and nowhere else.
+The **durable** record is the Lead's to write: workers run `/we:develop`, which writes no
+`story_workflow` rows at all, so `pr_created` and `ci_passed` land in Step 8 (B2/B4) and nowhere
+else.
 
-**This paragraph used to say the opposite** — that the builder's own `/we:build` was the
-single writer and the Lead only read the rows back. That was true before workers moved to
-`/we:develop`, and its consequence is quiet and long-lived: `built` in the Step-2 ready-set is
-derived from a `pr_created`/`ci_passed` checkpoint, so a story built through orchestrate, merged
-and closed still looks **unbuilt** forever, and the ready-set keeps proposing to build it again.
-Measured 2026-07-28 on a 14-story epic: four merged stories carried only `refined`, and
-`story ready` offered two of them as the next work.
+Two halves of the same regression sit behind that sentence, and both were expensive. When workers
+moved from `/we:build` to `/we:develop`, nobody re-read the paragraphs whose premise was "the worker
+does X": tickets stopped moving out of "In Progress", and — unnoticed for longer — checkpoints
+stopped being written, so stories that had shipped and merged still read as **unbuilt** and the
+ready-set kept re-proposing them. **When a dispatch mode changes, re-read every paragraph whose
+premise is what the worker does — not only the ones that name it.**
 
-The ticket half of exactly this regression is documented in the next paragraph. It was noticed
-and fixed; the checkpoint half was not. **When a dispatch mode changes, re-read every paragraph
-whose premise is "the worker does X" — not only the ones that name the worker.**
-
-**Transition each dispatched Story → "In Progress" (Lead owns this — workers do NOT).** Workers run
-`/we:develop`, which explicitly does not touch ticket state ("the Lead owns ticket state"). So if
-the Lead doesn't move the ticket, nothing does — the regression that made tickets stop moving when
-workers switched from `/we:build` to `/we:develop`. For each Story you dispatch, transition its
-ticket to "In Progress" now. Detect the ticketing tool per
-`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`; **verify** the move and retry once; soft-fail loud
-(log a warning, continue) only if the workflow/permissions reject it. GitHub Issues / no ticketing
-tool → skip silently.
+**Transition each dispatched Story → "In Progress" now (Lead owns this — workers do NOT).** If the
+Lead doesn't move the ticket, nothing does. Detect the tool per
+`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`, **verify** the move, retry once, soft-fail loud
+only when the workflow rejects it. GitHub Issues / no ticketing tool → skip silently.
 
 **Worker-Brief** (self-contained — the worker runs dev-only `/we:develop`):
 
@@ -491,37 +471,28 @@ overlay on Step 7**, not a new dispatch mode — it composes with Mode A.
 > below — OFF by default, gated on a rehearsal go/no-go): a Write-only **refiner-teammate** drafts the
 > plan in parallel. Until a rehearsal GO enables P3, all refinement runs the P2 path.
 
-The Lead runs this loop, re-running `story ready <epic>` each pass for fresh `{ready, refinable, held}`:
+Two lanes, one loop. Re-run `story ready <epic>` on every pass — the buckets are the loop state,
+never a cached list.
 
-```
-loop:
-  # BUILD LANE (consumer) — fill to the ≤2 cap, disjoint-gated
-  while in_flight_builds < 2 and ready non-empty:
-      S = lowest-key ready story
-      if S is DISJOINT from every in-flight build (see the disjoint guard) → rolling-confirm → dispatch builder(S)
-      else → HOLD S (waiting on the conflicting build); stop filling (don't busy-pick a blocked story)
-  # REFINE LANE (producer) — keep ~1 story ahead, never over-produce
-  if refined-but-not-built < cap+1 and refinable non-empty:        # the buffer throttle
-      R = lowest-key refinable story
-      if R needs human design input              → Lead refines R interactively WITH the user   (P2)
-                                                    (clarify, draft docs/plans/{R}-story.md with the
-                                                     DoR sections, get the user's nod)
-      elif P3 ENABLED (rehearsal GO) and a refiner slot is free → dispatch ONE refiner-teammate(R) (P3)
-                                                    (Write-only; the Lead verifies + checkpoints on return)
-      else                                       → Lead refines R itself                          (P2)
-      # (P3 is OFF by default — so absent a passed rehearsal go/no-go, refinement always runs P2)
-      → then run `story ready` again: if R now passes (left `refinable`) it enters the build lane
-        next pass; if not, keep refining / retry once / surface what's blocking
-  # DRAIN on events
-  on builder-done:  review the PR (Step 8) + `gh pr checks`; recompute and refill the build lane
-  on refiner-done:  the Lead runs `story ready` (verify R left `refinable` — the body scan, not any
-                    checkpoint, is what moves it) → pass: `story checkpoint refined` (durable record)
-                    + commit the plan to main; fail: retry once, else hand to the P2 lane
-  # TERMINATION — the predicate that prevents spin/hang
-  if no dispatchable-ready story AND refinable is empty AND in-flight (builders+refiner) is empty:
-      terminate + report the held set with reasons   # never loop
-  else: wait for the next event   (idle ≠ done — do not nudge on idle alone)
-```
+**Build lane (consumer).** Fill to the ≤2 cap from **`ready − in_flight`** (Step 2: the function has
+no notion of "dispatched", so the set is yours to hold), taking the lowest-key story that is
+**disjoint** from every in-flight build (guard below). Not disjoint → hold it *and stop filling*;
+busy-picking past a blocked story just dispatches the collision you were avoiding.
+
+**Refine lane (producer).** One story ahead, no deeper — the buffer throttle is
+`refined-but-not-built < cap+1`. Take the lowest-key `refinable` story and refine it: **with the
+user** when it needs a design call, **by the Lead alone** otherwise. (P3's Write-only
+refiner-teammate takes this slot instead, but only after a rehearsal GO — it is off by default.)
+Then re-run `story ready`: a story that left `refinable` enters the build lane next pass; one that
+didn't gets one retry, then its blocker surfaced.
+
+**Drain on events.** Builder done → review its PR (Step 8), recompute, refill. Refiner done → the
+**Lead** runs `story ready` to verify (the body scan is what moves a story, not any claim of
+"done"), then writes `story checkpoint {KEY} refined` and commits the plan.
+
+**Terminate** when no ready story is dispatchable, `refinable` is empty, and nothing is in flight —
+report the held set with reasons. Otherwise wait for the next event; **idle is not done**, so never
+nudge on idle alone.
 
 **The disjoint guard (a hint, not a guarantee).** Before dispatching a ready story while another
 build is in flight, check file overlap: union each story plan's per-phase `**Files:**` lists and
@@ -530,8 +501,8 @@ until the conflicting build lands**. Be honest about its limits — cross-story 
 (the plans were authored independently), a shared *seam* (the `select_responders`/`pending` case —
 same function, not an obviously-shared filename) is invisible to a naive intersection, and the Lead
 cannot see a builder's *uncommitted* edits. **When in doubt, serialize** (the Mode B rule): missing
-file lists, any detected overlap, or any doubt → surface it in the rolling confirm ("WA-X and
-in-flight WA-Y may both touch `select_responders.py` — dispatch or hold?") and default to hold.
+file lists, any detected overlap, or any doubt → surface it in the rolling confirm ("PROJ-X and
+in-flight PROJ-Y may both touch `select_responders.py` — dispatch or hold?") and default to hold.
 (The base Step-6 dispatch does **not** run this guard — there the ≤2 ready Stories are assumed
 independent by `depends_on`; the file-level check is added only here, because `--refine-ahead` lets a
 *just-refined* story join a build that is already in flight, which `depends_on` never vetted.)
@@ -678,11 +649,11 @@ workers) — workers only write their local-gate state. Confirm via `story statu
 
 Emit the final roll-up (shipped-to-review / blocked / held-by-cap).
 
-If held stories exist (e.g. `waiting on WA-1441`): **announce the next run explicitly.** The
-`pr_created` checkpoint on WA-1441 (written in Step 8 B2) immediately unlocks the held stories
+If held stories exist (e.g. `waiting on PROJ-141`): **announce the next run explicitly.** The
+`pr_created` checkpoint on PROJ-141 (written in Step 8 B2) immediately unlocks the held stories
 in the ready-set — re-running `/we:orchestrate <epic>` after the PR is opened (no need to wait
 for human merge) will pick them up. Tell the user this so the Epic progress stays visible:
-> "WA-1442 and WA-1445 are ready for the next run — `/we:orchestrate WA-1440` once the PR is open."
+> "PROJ-142 and PROJ-145 are ready for the next run — `/we:orchestrate PROJ-140` once the PR is open."
 
 Then tear down the workers — run the **full teardown sequence** from
 `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` § Full teardown (shutdown message to every

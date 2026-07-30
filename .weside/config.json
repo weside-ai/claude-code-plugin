@@ -36,12 +36,17 @@
         "ux_researcher",
         "orchestrator"
       ],
-      "initiative": [
+      "saga": [
         "product_owner",
         "architect",
         "orchestrator"
       ],
-      "refinement": [
+      "epic": [
+        "product_owner",
+        "architect",
+        "orchestrator"
+      ],
+      "story": [
         "product_owner",
         "architect"
       ]

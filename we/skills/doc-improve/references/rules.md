@@ -39,16 +39,13 @@ crowding out other always-loaded content.
 
 ### Method
 
-```bash
-# Line count + always-loaded vs path-filtered classification
-wc -l <rule-file>
-head -10 <rule-file>          # see if it has paths:
-
-# What's in the always-loaded set today?
-wc -l .claude/rules/core/*.md .claude/rules/workflows/*.md
-```
+Line-count the rule, read its frontmatter to classify it always-loaded vs path-filtered, and
+line-count the *whole* always-loaded set (`core/` + `workflows/`) so the budget is a number, not a
+feeling.
 
 ### Findings to look for
+
+- **Over-budget always-loaded rule**### Findings to look for
 
 - **Over-budget always-loaded rule** — `core/foo.md` at 320 lines. Either
   tighten or split (e.g. peel "Worktree Branch Guard" detail out into a
@@ -74,8 +71,8 @@ wc -l .claude/rules/core/*.md .claude/rules/workflows/*.md
 ---
 description: One-line summary
 paths:
-  - "apps/backend/app/companion/**/*.py"
-  - "apps/backend/alembic/**"
+  - "<backend>/companion/**/*.py"
+  - "<backend>/migrations/**"
 ---
 ```
 
@@ -86,27 +83,21 @@ Three frontmatter rules:
 2. **No brace-expansion**. `*.{ts,tsx}` does not expand. Write two entries:
    ```yaml
    paths:
-     - "apps/mobile/**/*.ts"
-     - "apps/mobile/**/*.tsx"
+     - "<frontend>/**/*.ts"
+     - "<frontend>/**/*.tsx"
    ```
 3. Rules without `paths:` load **always**. This is correct for `core/` and
    `workflows/`. Anywhere else it's a bug.
 
 ### Method
 
-```bash
-# Inspect frontmatter
-head -10 <rule-file>
-
-# Confirm paths actually match files
-ls $(echo "<glob from paths:>")        # quick sanity
-git ls-files | grep -E "<regex form>"  # exhaustive
-
-# Detect typo (globs: instead of paths:)
-grep -l "^globs:" .claude/rules/**/*.md
-```
+Read the frontmatter, then confirm the globs actually match files in the repo (`git ls-files` piped
+through the pattern's regex form beats a hopeful `ls`). Separately, grep the whole rules tree for a
+`globs:` key — that typo silently promotes a rule to always-loaded.
 
 ### Findings to look for
+
+- **`globs:` typo**### Findings to look for
 
 - **`globs:` typo** — loads as always-loaded by accident. **BLOCKER.**
 - **Brace expansion in a path** — only the literal-brace files match (none).
@@ -117,7 +108,7 @@ grep -l "^globs:" .claude/rules/**/*.md
 - **Glob too narrow** — describes a pattern that applies repo-wide but only
   matches one folder. The rule won't fire when the agent edits the symptom
   elsewhere. **MAJOR — coverage gap.**
-- **Glob points at a non-existent path** — `apps/backend/app/companion/adapters/**`
+- **Glob points at a non-existent path** — `<backend>/companion/adapters/**`
   when the directory was renamed. **MAJOR — rule never fires.**
 - **No `paths:` on a stack-specific rule** — should be path-filtered, isn't.
   **MAJOR — always-loaded budget waste.**
@@ -136,27 +127,18 @@ twice and the always-loaded budget gets eaten.
 
 ### Method
 
-```bash
-# Find rules that match the same files
-for r in .claude/rules/**/*.md; do
-  echo "=== $r ==="
-  awk '/^paths:/,/^[^ ]/' "$r"
-done
-
-# Or: ask the question directly via TurboVault if available
-mcp__turbovault__find_similar_notes(<rule-path>)
-```
-
-For each rule under review: read the frontmatter `paths:` of every other rule
-in the tree, identify overlaps. Then check if the overlapping rules duplicate
-content.
+Collect every rule's `paths:` and find the overlaps, then check whether the overlapping rules
+duplicate *content* — overlap alone is fine, overlap plus repetition is what costs budget. TurboVault's
+`find_similar_notes` answers this faster than reading, when it is live.
 
 ### Findings to look for
+
+- **Same-paths different rules### Findings to look for
 
 - **Same-paths different rules with overlapping content** — propose a merge
   (one rule), or a split-by-audience (different angles, no shared content).
   Real example: `content-seeding.md` and `migration-safety.md` both trigger
-  on `apps/backend/alembic/**` and shared ~30% of the workflow.
+  on `<backend>/migrations/**` and shared ~30% of the workflow.
 - **Reference-instead-of-duplicate** — when sibling rule X already covers
   invariant Y, this rule should reference X with one line, not restate Y.
 - **Path-overlap with a `core/` always-loaded rule** — your path-filtered
@@ -186,9 +168,9 @@ Don't skim the rule and ask "does this feel core". Do this instead:
    companion in `stacks/` or `quality/`.
 
 3. **Walk through three concrete contexts:**
-   - Agent editing `apps/backend/app/companion/being.py` — what does the rule
+   - Agent editing `<backend>/companion/being.py` — what does the rule
      contribute? Tag the sections it activates.
-   - Agent editing `apps/mobile/components/ChatScreen.tsx` — same tagging.
+   - Agent editing `<frontend>/components/ChatScreen.tsx` — same tagging.
    - Agent editing `docs/architecture/MEMORY.md` — same.
 
 4. **Decide:** if context 1 activates 90% and contexts 2+3 activate 10%, the
@@ -197,7 +179,7 @@ Don't skim the rule and ask "does this feel core". Do this instead:
 ### Findings to look for
 
 - **Always-loaded rule with backend-only content** — content is only useful
-  when editing `apps/backend/**`. Move to `stacks/` with the appropriate
+  when editing `<backend>/**`. Move to `stacks/` with the appropriate
   `paths:`. **MAJOR — token waste in every non-backend session.**
 - **Always-loaded rule with subsystem-only content** — companion-specific,
   or auth-specific, or voice-specific. Same fix: split — keep universal
@@ -230,11 +212,9 @@ detail; CLAUDE.md wins for orientation. They should not overlap on facts.
 
 ### Method
 
-```bash
-# Rough overlap check
-diff <(grep -oE "[A-Z][^.]+" CLAUDE.md | sort -u) \
-     <(grep -oE "[A-Z][^.]+" <rule> | sort -u)
-```
+Compare the two documents' factual claims — sentence-level, not word-level. A rough automated pass
+(extract the capitalised sentences from each, diff the sets) surfaces the verbatim repeats; the rest
+needs reading.
 
 Or read both side by side. The rule is the right home for the actual
 mechanism (commands, file paths, invariants). CLAUDE.md is the right home

@@ -28,16 +28,16 @@ Required YAML block (in `.audit-architecture.yml`):
 personality_cohesion:
   identity_construction_paths:
     # Files where Companion identity (system prompt, personality) MAY be constructed
-    - apps/backend/app/companion/core/consciousness.py
-    - apps/backend/app/companion/core/_context_composer.py
+    - <backend>/<agent-core>/consciousness.py
+    - <backend>/<agent-core>/_context_composer.py
 
   five_components_map:
     # Each of the 5 components has a canonical home (one or more directories/files)
-    CONSCIOUSNESS: [apps/backend/app/companion/core/]
-    SENSES:        [apps/backend/app/senses/]
-    BODY:          [apps/backend/app/companion/channels/, apps/backend/app/tools/]
-    MEMORY:        [apps/backend/app/companion/core/memory.py, apps/backend/app/crud/memory.py]
-    EXPERIENCE:    [apps/backend/app/services/evolution/]
+    CONSCIOUSNESS: [<backend>/<agent-core>/]
+    SENSES:        [<backend>/senses/]
+    BODY:          [<backend>/channels/, <backend>/tools/]
+    MEMORY:        [<backend>/<agent-core>/memory.py, <backend>/crud/memory.py]
+    EXPERIENCE:    [<backend>/services/<evolution>/]
 
   forbidden_outside_consciousness:
     # Patterns that may NOT appear in any file outside identity_construction_paths
@@ -50,77 +50,41 @@ If this block is missing, the lens errors out with a helpful message — there i
 
 ## Method
 
-Five sub-checks:
+Five sub-checks. Each one asks the same question from a different angle: *is there exactly one
+place that decides who this Companion is?*
 
-### PC-1 — Identity Construction Sites
+### PC-1 — Identity construction sites
 
-```bash
-grep -rn "system_prompt\|personality\|consciousness" <backend_root>
-```
+Find every mention of identity construction (system prompt, personality, consciousness) and check
+it sits inside `identity_construction_paths`. Only **assignments** count — a docstring, a comment,
+or a function parameter is not a finding. An assignment outside the configured paths is MAJOR.
 
-Verify every match is inside `identity_construction_paths` OR is a docstring/comment OR is a function-parameter (not assignment). Any assignment-style match (e.g., `system_prompt = "..."`, `self.personality = ...`) outside the configured paths is a finding.
+### PC-2 — Five-components boundary
 
-**Severity rule:** assignment outside paths = MAJOR. Documentation-only mention = no finding.
+For each of the five components, confirm the bulk of its logic lives in its canonical home and that
+nothing outside redefines its responsibility. Definitions or imports of a component's core types
+found outside its home are MAJOR (component leak).
 
-### PC-2 — Five-Components Boundary
+The two boundaries that break most often: **BODY** — a service-layer file calling a tool's send
+method directly, bypassing the output path; **MEMORY vs CHECKPOINTER** — long-term factual memory
+conflated with conversation state.
 
-For each of the 5 components, verify:
+### PC-3 — Forbidden patterns outside consciousness
 
-1. The component's canonical home contains the bulk of its logic.
-2. No code OUTSIDE the home redefines or duplicates the component's responsibilities.
+Each pattern in `forbidden_outside_consciousness`, searched outside the identity paths. Every hit is
+MAJOR; a deliberate exception carries an inline `# noqa: personality-cohesion`.
 
-Concretely, for CONSCIOUSNESS:
+### PC-4 — System-prompt construction audit
 
-```bash
-# Find all files importing or defining "consciousness"
-grep -rln "from.*consciousness import\|class.*Consciousness\|class.*Identity" <backend_root>
-```
+Find every site that *builds* a system prompt. Each must be an identity path. The recurring
+offenders: a channel prepending "this came from <channel>", a skill agent composing its own prompt,
+a tool-result sanitiser injecting role hints. Any of them means the Companion has a different
+personality per channel or per skill — the exact opposite of cohesion.
 
-Every match must be inside the CONSCIOUSNESS home paths. Matches outside = MAJOR (component-leak).
+### PC-5 — MEMORY ≠ CHECKPOINTER
 
-For BODY: are tools and channels the ONLY output paths? If a service-layer file calls a tool's send-method directly, BODY is leaking.
-
-For MEMORY: distinct from CHECKPOINTER? MEMORY = long-term factual memory (preferences, history), CHECKPOINTER = LangGraph conversation state. Conflation = MAJOR.
-
-### PC-3 — `forbidden_outside_consciousness` Patterns
-
-For each pattern:
-
-```bash
-grep -rln "<pattern>" <backend_root> | grep -v "<identity_construction_paths joined with -e>"
-```
-
-Every match outside is a MAJOR finding. Whitelist allowed via inline `# noqa: personality-cohesion` comment.
-
-### PC-4 — System-Prompt Construction Audit
-
-Find every site where a system prompt is built:
-
-```bash
-grep -rn "SystemMessage(\|system_prompt\s*=\s*[\"f]" <backend_root>
-```
-
-Each must be in `identity_construction_paths`. Common offenders:
-- Channel files that prepend a "this is from telegram" preamble
-- Skill agents that build their own system prompt
-- Tool-result sanitizers that inject role hints
-
-If a non-consciousness file constructs a system prompt, the Companion has multiple personalities depending on the channel/skill — exact opposite of cohesion.
-
-### PC-5 — MEMORY ≠ CHECKPOINTER Boundary
-
-Verify the documented separation:
-
-- `MEMORY` writes go through `crud/memory.py` only (re-using the `crud-layer` chokepoint).
-- `CHECKPOINTER` writes go through `LangGraphCheckpointer` only (re-using the `langgraph-checkpointer` primitive).
-- No file writes to BOTH `memories` and `checkpoint_*` tables in the same function.
-
-```bash
-# Find conflations
-grep -rln "checkpoint_writes\|checkpoint_blobs" <backend_root> | xargs grep -l "from app.crud.memory"
-```
-
-Any file in the intersection is a MAJOR finding (boundary violation).
+Memory writes go through the memory layer only; conversation-state writes through the checkpointer
+only. A single function writing to both is a boundary violation → MAJOR.
 
 ## Output Format
 
@@ -132,7 +96,7 @@ Each finding follows the standard severity-tagged template:
 **Severity:** MAJOR
 **Lens:** personality-cohesion
 **Sub-check:** PC-1 (Identity Construction Sites)
-**Cite:** `apps/backend/app/skills/agents.py:142`
+**Cite:** `<backend>/skills/agents.py:142`
 
 ```python
 self.system_prompt = f"You are a skill agent for {skill_name}..."

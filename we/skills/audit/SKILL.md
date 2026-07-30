@@ -29,27 +29,12 @@ automated scanning tools.
 
 ## Phase 1 — Tool Availability
 
-Check which tools are installed. Missing tools are warnings, not blockers.
+Probe for `semgrep`, `trivy`, `kubescape`, `gitleaks`, `bandit`. A missing tool is a **warning, not
+a blocker** — note which scans were skipped and continue with what is installed.
 
-```bash
-for tool in semgrep trivy kubescape gitleaks bandit; do
-  if command -v "$tool" &>/dev/null; then
-    echo "OK: $tool ($($tool --version 2>/dev/null | head -1))"
-  else
-    echo "MISSING: $tool — install to enable scanning"
-  fi
-done
-```
-
-**If all tools missing:** Stop and tell the user to install tools first. Recommend:
-```bash
-pip3 install semgrep
-# Trivy: https://aquasecurity.github.io/trivy/
-# Kubescape: curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | bash
-# Gitleaks: https://github.com/gitleaks/gitleaks
-```
-
-**If some tools missing:** Continue with available tools, note which scans were skipped.
+All of them missing → stop and say so; there is nothing to report and a clean-looking summary from
+zero scanners is worse than no summary. Point at the install docs (`pip install semgrep`, the Trivy
+/ Kubescape / Gitleaks project pages).
 
 ## Phase 2 — Run Audit Script
 
@@ -70,51 +55,37 @@ fi
 
 ## Phase 3 — Parse Reports
 
-Read JSON reports (from the project's report directory if a script wrote them,
-otherwise from `/tmp/`) and summarize:
+Read the JSON reports — from the project's report directory when a script wrote them, `/tmp`
+otherwise — and count findings per severity. Where each tool keeps its severity:
 
-```python
-import json, glob
-
-# Adjust the directory to wherever the script (or your manual run) wrote reports.
-report_dir = "docs/security/reports"  # or "/tmp"
-for tool in ["semgrep", "trivy", "kubescape", "gitleaks", "bandit"]:
-    reports = glob.glob(f"{report_dir}/{tool}/*.json") + glob.glob(f"{report_dir}/{tool}.json")
-    # Parse and count findings by severity
-```
-
-**Semgrep:** `results[].extra.severity` → ERROR/WARNING/INFO
-**Trivy:** `Results[].Vulnerabilities[].Severity` → CRITICAL/HIGH/MEDIUM/LOW
-**Kubescape:** `results[].controls[].status` → failed/passed
-**Gitleaks:** Top-level array, each item = one finding
-**Bandit:** `results[].issue_severity` → HIGH/MEDIUM/LOW
+| Tool | Severity field | Scale |
+|---|---|---|
+| Semgrep | `results[].extra.severity` | ERROR / WARNING / INFO |
+| Trivy | `Results[].Vulnerabilities[].Severity` | CRITICAL / HIGH / MEDIUM / LOW |
+| Kubescape | `results[].controls[].status` | failed / passed |
+| Gitleaks | top-level array | one entry = one finding |
+| Bandit | `results[].issue_severity` | HIGH / MEDIUM / LOW |
 
 ## Phase 4 — Present Summary
 
-Format findings as a table:
+One table, tools as rows, severities as columns, totals per row. Then **list every CRITICAL and
+HIGH individually** with its file path and description — a count tells the user there is a problem,
+a path tells them where.
 
-```
-| Tool     | CRITICAL | HIGH | MEDIUM | LOW | Total |
-|----------|----------|------|--------|-----|-------|
-| Semgrep  |        0 |    2 |      5 |   3 |    10 |
-| Trivy    |        1 |    4 |      8 |   2 |    15 |
-| ...      |          |      |        |     |       |
-```
+## Phase 5 — What the scanners cannot see
 
-For CRITICAL/HIGH findings, list each one with file path and description.
+Automated scans find *classes* of bug, never *your* logic. Close the report by naming what still
+owes a human pass:
 
-## Phase 5 — Manual Review Reminder
+- **Auth & access control** — row-level policies, token validation, role checks on the paths that
+  matter
+- **Abuse & billing** — race conditions on credit, webhook idempotency, rate limits on the
+  expensive endpoints
+- **Privacy** — PII in logs and payloads, data residency, retention and deletion paths
+- **Secrets** — at-rest encryption, how CI and the cluster inject them
+- **Infrastructure** — network policy, container hardening, transport security
 
-After automated scans, remind about checks that can't be automated:
-
-- **Auth & Access Control:** RLS policies, JWT validation, role-based access
-- **Billing & Abuse:** Credit race conditions, webhook idempotency, rate limiting
-- **Data Privacy (GDPR):** PII exposure, data residency, retention policies
-- **Secrets:** Encryption-at-rest, K8s/CI secret management
-- **Infrastructure:** Network policies, container security, transport security
-
-If the project keeps a threat-model document (e.g. `docs/security/AUDIT-PROCEDURE.md`),
-reference it here.
+If the project keeps a threat model, point at it here rather than repeating it.
 
 ---
 

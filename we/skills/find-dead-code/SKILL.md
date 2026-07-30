@@ -17,25 +17,8 @@ Remove dead code from a Python backend systematically.
 
 ## Detecting the Source Root
 
-Before running any phase, detect the project's source directory rather than
-assuming `app/`:
-
-```bash
-REPO_ROOT=$(git rev-parse --show-toplevel)
-# Prefer the first of these that exists; adjust for your project layout
-SRC_DIR=$(cd "$REPO_ROOT" && { \
-  [ -d app ]   && echo app;   exit; \
-  [ -d src ]   && echo src;   exit; \
-  [ -d lib ]   && echo lib;   exit; \
-  echo "."; })
-TEST_DIR=$(cd "$REPO_ROOT" && { \
-  [ -d tests ]  && echo tests;  exit; \
-  [ -d test ]   && echo test;   exit; \
-  echo "tests"; })
-```
-
-Use `$SRC_DIR` and `$TEST_DIR` in all phases below instead of hardcoded
-paths. On weside-core the defaults are `app/` and `tests/`.
+Detect the source and test directories instead of assuming `app/` — the first of `app/`, `src/`,
+`lib/` that exists, and `tests/` or `test/`. Every phase below operates on those two.
 
 ---
 
@@ -109,20 +92,12 @@ done
 
 ### Phase 4 — Vulture (80% confidence only)
 
-```bash
-vulture "$SRC_DIR"/ --min-confidence 80 --exclude "$SRC_DIR/db/migrations"
-```
+Run vulture at `--min-confidence 80`, excluding migrations. **Never below 80** — the output becomes
+mostly noise and the triage costs more than the deletions save.
 
-At 80%, false positive rate is low. **Do NOT run below 80%** — produces mostly noise.
-
-**Common false positives (always skip):**
-
-- FastAPI/Django route functions (decorator-registered)
-- Pydantic validators (`@field_validator`, `@model_validator`)
-- Framework middleware hooks
-- `TypedDict` field definitions
-- `Enum` values in type hints
-- `TYPE_CHECKING` imports
+Always-skip false positives: anything a framework calls rather than your code —
+decorator-registered routes and validators, middleware hooks, management commands — plus
+`TypedDict` fields, enum members used only in type positions, and `TYPE_CHECKING` imports.
 
 ### Phase 5 — Test cleanup & quality gate
 

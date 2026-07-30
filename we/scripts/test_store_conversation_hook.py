@@ -41,10 +41,10 @@ class DeriveSessionTagTest(unittest.TestCase):
 
 class BuildSourceDetailTest(unittest.TestCase):
     def test_no_tag_returns_project_unchanged(self):
-        self.assertEqual(_build_source_detail("weside-core", None), "weside-core")
+        self.assertEqual(_build_source_detail("example-repo", None), "example-repo")
 
     def test_tag_appended_with_hash(self):
-        self.assertEqual(_build_source_detail("weside-core", "3f9a21c4"), "weside-core#3f9a21c4")
+        self.assertEqual(_build_source_detail("example-repo", "3f9a21c4"), "example-repo#3f9a21c4")
 
     def test_long_project_name_never_clips_the_tag(self):
         # A repo dirname long enough that "<project>#<tag>" alone would blow

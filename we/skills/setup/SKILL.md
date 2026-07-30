@@ -3,15 +3,16 @@ name: setup
 description: >
   Project onboarding — detects stack, ticketing tool, test discipline, creates project
   vision/DoR/DoD, initializes the Companion Framework (`.weside/`, vault registration,
-  crew onboarding via /we:onboarding). Interactive, minimal (4 core questions + optional
-  crew setup). Use when user says "/we:setup", "configure project", "set up workflow",
+  crew onboarding via /we:onboarding). Interactive — six questions, one at a time, each
+  skippable. Use when user says "/we:setup", "configure project", "set up workflow",
   "initialize repo", "install crew", "first time".
 ---
 
 
 # Project Setup
 
-Interactive project onboarding. Three core questions for project config, then optional Companion Framework initialization (crew + TurboVault + frontmatter).
+Interactive project onboarding: six questions for the project config, then an optional Companion
+Framework init (crew + TurboVault + frontmatter). Every question has a skip path.
 
 ---
 
@@ -57,7 +58,7 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
 4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
-### Step 2: Ask 5 Questions + Executor Wizard
+### Step 2: The six questions + executor wizard
 
 Present the questions **one at a time** — ask, wait for the answer, then move on. Never dump
 them as a battery. Each question that involves a concept the user may not know gets one
@@ -341,25 +342,17 @@ council/meet lines with:
 
 ## Training on the Job
 
-Setup is the first touchpoint. Use it to gently explain WHY things matter:
-
-| Question | What the user learns |
-|---|---|
-| "Do you have a vision?" | Vision helps prioritize — without it, every feature seems equally important |
-| "Which ticketing tool?" | Structured backlogs prevent context loss and enable traceability |
-| "How should the pipeline handle tests?" | Test-first vs. test-after is a team decision, not dogma — but good tests are non-negotiable either way |
-| "Custom DoR/DoD?" | Quality gates prevent rework — catching issues early is 10x cheaper |
-
-**Never block.** Every question has a "skip" path. The user can always run `/we:setup` again later.
-
----
+Setup is the first touchpoint, so each question carries one plain sentence of *why* — a vision makes
+priority decidable, a ticketing tool keeps context out of chat, a test-discipline choice is the
+team's to make, quality gates are cheaper than rework. **Never block:** every question has a skip
+path, and `/we:setup` can be re-run any time.
 
 ## Rules
 
 + NEVER block on any question — always allow skip/default
 + NEVER create .weside/ without user consent
 + Auto-detection first, confirmation second
-+ Four CORE questions maximum (Step 2, one at a time); Step 5 (Framework) is optional and asks once
++ Step 2's six questions come one at a time, never as a battery; Step 5 (Framework) asks once
 + Works without ANY configuration (defaults for everything)
 + **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
 + **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.

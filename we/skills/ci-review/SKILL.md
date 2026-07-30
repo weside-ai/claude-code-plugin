@@ -58,26 +58,13 @@ ability to iterate up to the cycle cap remains; it is opt-in by judgement, not t
 
 ## Phase 1: Collect (Iterative)
 
-Detect PR and repo. If `gh` is unavailable or unauthenticated, skip GitHub-dependent steps and treat local quality gates as authoritative.
+Resolve, and keep for the rest of this run: **`$GH_AVAILABLE`** (is `gh` installed *and*
+authenticated), **`$PR`** (the PR for the current branch), **`$BASE_REF`** (the PR's base — from the
+PR itself, never assumed to be `main`), and **`$REPO` / `$OWNER` / `$REPO_NAME`** for the GraphQL
+calls below. The later blocks all guard on `$GH_AVAILABLE` and `$PR`.
 
-```bash
-# Precheck: gh available and authenticated?
-GH_AVAILABLE=false
-if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-  GH_AVAILABLE=true
-fi
-
-if [ "$GH_AVAILABLE" = true ]; then
-  PR=$(gh pr list --head "$(git branch --show-current)" --json number --jq '.[0].number')
-  # Derive base branch from remote HEAD rather than assuming 'main'
-  BASE=$(gh pr view "$PR" --json baseRefName --jq '.baseRefName' 2>/dev/null \
-    || git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' \
-    || echo "main")
-  REPO=$(gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"')
-  OWNER=$(echo $REPO | cut -d/ -f1)
-  REPO_NAME=$(echo $REPO | cut -d/ -f2)
-fi
-```
+**No authenticated `gh`** → skip every GitHub-dependent step and treat the local quality gates as
+authoritative; say so once rather than failing.
 
 ### 1a. Start with what's ready
 
@@ -188,58 +175,17 @@ BLOCKING/WARNING must fix, SUGGESTION may be consciously skipped with reason).
 
 ### 3b. Local Validation
 
-After ALL fixes — run local validation. **Affected tests only**, not the full suite (CI runs that on push):
+After ALL fixes, validate locally over the **changed surface only** — the full suite and the
+coverage gate run in CI on push, and duplicating them here just burns minutes. Phase 4 catches
+whatever the affected-only run missed.
 
-```bash
-# Determine scope: files changed vs base
-BASE_REF=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo "main")
-CHANGED=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null)
-[ -z "$CHANGED" ] && CHANGED=$(git diff --name-only HEAD~1)
+For each stack the diff touches: lint + format with auto-fix, then the type-checker, then the tests
+covering the diff (mapped paths for pytest, `--findRelatedTests` for Jest). Two rules carry over
+from the `test-runner` agent: **derive the base ref**, never assume `main`, and **fall back to the
+full suite** when the diff crosses test config or exceeds ~50 files.
 
-# Detect source root (first of: src/, app/, lib/, or repo root)
-SRC_ROOT=$(git rev-parse --show-toplevel)
-for candidate in src app lib; do
-  if [ -d "${SRC_ROOT}/${candidate}" ]; then SRC_ROOT="${SRC_ROOT}/${candidate}"; break; fi
-done
-
-# Python: lint/format/types — if ruff is present
-if command -v ruff &>/dev/null; then
-  ruff check . --fix && ruff format .
-fi
-# mypy — detect config and run on detected source root
-if command -v mypy &>/dev/null && [ -f mypy.ini -o -f pyproject.toml -o -f setup.cfg ]; then
-  mypy "$SRC_ROOT"
-fi
-
-# JavaScript/TypeScript: detect package manager and run lint + typecheck
-if [ -f package.json ]; then
-  if [ -f yarn.lock ] && command -v yarn &>/dev/null; then
-    yarn lint --fix && yarn typecheck
-  elif [ -f pnpm-lock.yaml ] && command -v pnpm &>/dev/null; then
-    pnpm lint --fix && pnpm typecheck
-  elif command -v npm &>/dev/null; then
-    npm run lint --if-present && npm run typecheck --if-present
-  fi
-fi
-
-# Tests — only those covering the diff. If CHANGED touches conftest/jest config or >50 files,
-# fall back to the full suite (same policy as the test-runner agent).
-# Backend (pytest): map <src>/<path>.py → tests/unit/<path> + tests/integration/test_<basename>*.py
-#   COVFLAG=; python -c 'import pytest_cov' 2>/dev/null && COVFLAG="--no-cov"
-#   pytest <mapped paths> $COVFLAG -x
-# Frontend (Jest):
-#   yarn test --findRelatedTests <changed .ts/.tsx files>
-
-# Platform Primitive bypass checks (skip silently if scripts are absent):
-for s in scripts/check-primitive-bypass.sh scripts/check-crud-bypass.sh scripts/check-session-bypass.sh; do
-  [ -f "$s" ] || continue
-  bash "$s" || { echo "FAIL: $s"; exit 1; }
-done
-# Bypass register (weside-specific, skip if absent):
-[ -f scripts/generate-bypass-register.sh ] && bash scripts/generate-bypass-register.sh --write
-```
-
-The full suite + coverage gate runs in GitHub Actions on push — duplicating it here only burns time. Phase 4 (post-push CI re-collect) catches anything the affected-only run missed.
+Then run whatever repo-local gate scripts exist (`scripts/check-*.sh`, a register generator) —
+absent script, absent gate, no failure.
 
 ### 3c. Commit
 

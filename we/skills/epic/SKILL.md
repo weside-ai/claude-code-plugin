@@ -14,7 +14,7 @@ You hold the Epic at the Initiative altitude — a bounded deliverable that serv
 
 > **APO altitude:** Epic (Solo). Upstream: `/we:meet saga` decomposes a Saga into Epics that land here. Downstream: `/we:meet epic` decomposes this Epic into Stories; `/we:story "<ticket-or-topic>"` writes each build-ready plan. See [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) for the four-altitude map.
 >
-> **Artifact:** the Epic plan at `docs/plans/<saga>-<epic>-epic.md`. Optionally also a ticketing-tool Epic (e.g. a Jira Epic) with the same name. Both work; pick per Epic. The Markdown plan is always the durable artifact; the ticket, where one exists, is an index. The skill *mirrors* the child Stories from the ticketing tool into a clearly-marked block inside `CONCEPT.md`; that mirror is convenience, not state.
+> **Artifact:** the Epic plan at `docs/plans/<saga>-<epic>-epic.md`. Optionally also a ticketing-tool Epic (e.g. a Jira Epic) with the same name. Both work; pick per Epic. The Markdown plan is always the durable artifact; the ticket, where one exists, is an index. The skill *mirrors* the child Stories from the ticketing tool into a clearly-marked block inside that plan; the mirror is convenience, not state.
 >
 > **Epic vs. Saga vs. Story:** Epics finish; categories don't. If the "Epic" reads like a permanent area of work ("Mobile", "Backend", "Voice"), it isn't one. If it has no nameable end at all, it's a Saga in disguise. If it fits in a single Story-shaped change, it's a Story — `/we:story` is the right skill. The skill flags these as soft warnings during Refine, never as hard blocks.
 

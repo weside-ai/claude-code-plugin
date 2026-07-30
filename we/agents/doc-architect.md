@@ -42,33 +42,18 @@ having those artefacts; skip gracefully if missing.
      names + bypass contract
    - `.claude/rules/core/architecture-boot.md` (if it exists) — mental model
 
-3. **Read the canonical indices** (if they exist):
-   - `docs/architecture/PRIMITIVES.md` — full primitive index
-   - `docs/architecture/BYPASS-REGISTER.md` — current bypass landscape
-   - `docs/foundations/README.md` — foundations inventory
-   - `docs/architecture/README.md` — architecture doc inventory
-   - `docs/adr/README.md` — ADR index + promotion criteria
+3. **Read whichever canonical indices the repo keeps** — the primitive index, the bypass
+   register, the foundations / architecture / ADR READMEs. These are the files that tell you what
+   *should* exist; the tree tells you what does.
 
-4. **Scan the tree via TurboVault** — probe liveness first, then set the
-   `tv_degraded` flag for the rest of this run:
-   ```
-   mcp__turbovault__explain_vault()          — holistic overview (doubles as liveness probe)
-   mcp__turbovault__quick_health_check()     — health score + broken links count
-   ```
-   - Call succeeds → `tv_degraded = false`, use TurboVault throughout.
-   - TurboVault tools absent, OR the call errors/hangs (registered-but-dead MCP)
-     → `tv_degraded = true` and use the fallback below. **Do not fail** — doc
-     work must still complete on grep.
+4. **Scan the tree via TurboVault** — `explain_vault()` (holistic overview, doubles as the
+   liveness probe) + `quick_health_check()`. Set `tv_degraded` once for the whole run:
+   - Call responds → `tv_degraded = false`, use TurboVault throughout.
+   - Tools absent, or the call errors/hangs (registered-but-dead MCP) → `tv_degraded = true`,
+     walk the `docs/` tree yourself instead. **Never fail on this** — doc work completes on grep.
 
-   **Fallback** (when `tv_degraded`):
-   ```bash
-   find docs -maxdepth 2 -type f -name '*.md' | sort
-   find docs/architecture/primitives -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
-   find docs/foundations -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
-   find docs/adr -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
-   ```
-   When `tv_degraded`, you MUST surface the warning banner (see Output Format)
-   — a silent grep fallback is exactly how a dead MCP goes unnoticed for weeks.
+   When `tv_degraded`, you MUST surface the warning banner (see Output Format) — a silent grep
+   fallback is exactly how a dead MCP goes unnoticed for weeks.
 
 5. **Construct your mental map:** which categories exist, which docs live
    in each, what the index files say.
@@ -76,18 +61,10 @@ having those artefacts; skip gracefully if missing.
 6. **Never load full file contents at boot** — only frontmatter and headings.
    Open specific files on demand when the user's request needs them.
 
-7. **Use TurboVault for search** (when `tv_degraded == false`) instead of grepping `docs/`:
-   - `mcp__turbovault__semantic_search(query)` — find conceptually related docs
-   - `mcp__turbovault__advanced_search(query, frontmatter_filters)` — filter by domain/type
-   - `mcp__turbovault__find_similar_notes(path)` — find docs related to a specific doc
-   - `mcp__turbovault__find_duplicates()` — detect near-duplicate content
-
-   **Fallback** (when `tv_degraded` — reuse the flag from step 4, don't re-probe):
-   ```bash
-   grep -r "<query>" docs/ --include="*.md" -l   # keyword search
-   grep -r "<query>" docs/ --include="*.md" -l   # duplicate detection: run for each suspect topic
-   ```
-   Use your boot-time file tree (step 4 fallback) as the primary mental map.
+7. **Search via TurboVault when it is live** — `semantic_search` for conceptually related docs,
+   `advanced_search` to filter by domain/type, `find_similar_notes` for one doc's neighbours,
+   `find_duplicates` for near-duplicate content. Degraded → grep, and reuse the `tv_degraded` flag
+   from step 4 rather than re-probing. Semantic recall is what you lose; the work still lands.
 
 ---
 
@@ -124,11 +101,9 @@ mode argument. Pattern-match these shapes:
    - **glossary term?** — a domain term definition (term → meaning + avoid-list)
      belongs in the repo-root `CONTEXT.md`, not in `architecture/` or
      `foundations/` (those explain concepts; the glossary names them)
-4. **Check for duplicates** before proposing a new doc:
-   - TurboVault available: `mcp__turbovault__find_similar_notes(path)` or
-     `mcp__turbovault__semantic_search(topic)`
-   - TurboVault unavailable: `grep -r "<topic>" docs/ --include="*.md" -l`
-   If similar content exists, propose extending it instead of creating a new file.
+4. **Check for duplicates** before proposing a new doc (`find_similar_notes` /
+   `semantic_search`, or grep when degraded). Similar content exists → propose extending it
+   rather than creating a new file.
 5. Offer to draft the doc in the suggested location (proposes a diff — never
    writes autonomously).
 6. **Ensure frontmatter** on any new doc: `type`, `domain`, `status` fields
@@ -138,14 +113,12 @@ mode argument. Pattern-match these shapes:
 
 1. Boot protocol.
 2. Inspect the git diff (or the user's description) for doc-relevant changes:
-   - New/removed API endpoints → OpenAPI + shared-types
-   - Migrations → `architecture/` data model sections
-   - New companion patterns → `architecture/COMPANION-CORE.md` + any
-     touched primitive detail docs
-   - New `# PRIMITIVE-BYPASS-OK` annotations → regenerate
-     `docs/architecture/BYPASS-REGISTER.md` (if `scripts/generate-bypass-register.sh` exists)
-   - New/changed user-facing flows → check if a `journey-*.md` exists
-     for this flow; propose creating or updating it
+   - New/removed API endpoints → the API spec + generated client types
+   - Migrations → the data-model sections under `architecture/`
+   - A changed subsystem → its thematic architecture doc + any touched primitive detail docs
+   - New deliberate-bypass annotations → regenerate the register, if the repo ships a generator
+   - New/changed user-facing flows → check whether a `journey-*.md` exists for this flow;
+     propose creating or updating it
    - New primitive candidates (3+ usages, invariants) → propose promotion
 3. Propose a concrete list of doc updates, each with a diff sketch.
 4. Wait for approval. On approval, produce the diffs and apply them via
@@ -168,17 +141,9 @@ mode argument. Pattern-match these shapes:
 
 ### Register mode — "refresh the bypass register"
 
-1. Check whether the script exists:
-   ```bash
-   if [ -f scripts/generate-bypass-register.sh ]; then
-     bash scripts/generate-bypass-register.sh --write
-   else
-     echo "No bypass-register script found — skipping (not a weside-core repo)"
-   fi
-   ```
-2. Show the diff. If it's just a reordering, confirm with the user before
-   committing. If it's a net addition, flag it as a primitive bypass
-   growth event (the `/we:coach` skill also looks at this).
+Run the repo's register generator in write mode if it ships one; no script → say so and stop.
+Then show the diff: a pure reordering needs the user's nod before committing, a net addition is a
+**bypass-growth event** and gets flagged as such.
 
 ---
 

@@ -64,20 +64,8 @@ Stories with these patterns are **NOT READY** — send back for refinement:
 
 ## Who Writes What?
 
-| Section | Where | Command |
-|---------|-------|---------|
-| User Story | Ticket (minimal) | `/we:story` |
-| **Implementation Plan** | `docs/plans/{TICKET}-story.md` | `/we:story` |
-| → Context | Plan | (in /we:story) |
-| → Acceptance Criteria | Plan | (in /we:story) |
-| → User Journey | Plan | (in /we:story) |
-| → Design Decisions | Plan | (in /we:story) |
-| → Testing Requirements | Plan | (in /we:story) |
-| → Technical Approach | Plan | (in /we:story) |
-| → Security Review | Plan | (in /we:story) |
-| → Documentation Impact | Plan | (in /we:story) |
-
-**`/we:story` creates Ticket + Plan in one step.**
+`/we:story` writes both, in one step: the **ticket** (minimal — the user story plus a link) and the
+**plan** at `docs/plans/{TICKET}-story.md`, which carries every section listed above.
 
 ---
 
@@ -97,29 +85,12 @@ Implementation Plan: docs/plans/{TICKET}-story.md
 
 ---
 
-## Quick Check
+A story missing any Required or In-Plan item is **not READY** — run `/we:story` first. A legacy
+story carrying inline Implementation Notes instead of a plan file is acceptable; one carrying
+neither is not.
 
-```
-User Story in ticket?
-Plan exists? (docs/plans/{TICKET}-story.md)
-Context section written? (in plan — why this story, what matters)
-ACs defined? (in plan, Given/When/Then)
-Design Decisions documented? (in plan — alternatives + reasoning)
-Documentation impact identified? (in plan)
-
-All yes → Story is READY
-Any missing → Run /we:story first
-```
-
----
-
-## Backwards Compatibility
-
-| Story Type | Status |
-|-----------|--------|
-| With Plan file | Ready |
-| With inline Implementation Notes | Acceptable (legacy) |
-| Without anything | Not Ready → `/we:story` |
+The machine-checkable subset of this checklist (GWT ACs · Context · Phase headers) is the 3-item
+scan in `references/dor-scan.md` — that is what the pipeline gates on before dispatching.
 
 ---
 

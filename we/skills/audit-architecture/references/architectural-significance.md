@@ -33,73 +33,40 @@ Pull from Phase 1 output: files in the top-N where `expected: false`. If Phase 1
 
 ### AS-2 — Coupling Measurement (Afferent)
 
-```bash
-# How many other files import from this module?
-mod_path = file_path → python_module_path
-grep -rln "from ${mod_path} import\|from ${mod_path} import" <backend_root>
-```
+Count the **distinct files that import this module**. That count is its afferent coupling.
 
-Count of distinct importing files = afferent coupling.
-
-**Severity rule:**
-- afferent > 10 + the file is unexpected → MAJOR (god-object risk)
-- afferent 5–10 → MINOR (worth a split-evaluation)
-- afferent < 5 → no finding (low-coupling unexpected hotspots are usually fine)
+| Afferent | Verdict |
+|---|---|
+| > 10, on an unexpected hotspot | MAJOR — god-object risk |
+| 5–10 | MINOR — worth a split-evaluation |
+| < 5 | no finding — a low-coupling hotspot is usually just a big file |
 
 ### AS-3 — Cohesion Heuristic
 
-For each unexpected hotspot, list its **public symbols** (top-level `def`/`class` without `_` prefix):
+List the file's **public symbols** — top-level classes and functions plus the public methods of
+public classes. Parse the AST rather than grepping, so decorators and nesting don't fool you.
 
-```python
-import ast
-tree = ast.parse(file_text)
-public_classes = [n.name for n in tree.body if isinstance(n, ast.ClassDef) and not n.name.startswith("_")]
-public_functions = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
-public_methods = []  # methods of public classes
-for n in tree.body:
-    if isinstance(n, ast.ClassDef) and not n.name.startswith("_"):
-        for m in n.body:
-            if isinstance(m, ast.FunctionDef) and not m.name.startswith("_"):
-                public_methods.append(f"{n.name}.{m.name}")
-```
+Then group them by **verb-object semantics**: which noun does each verb act on? Three or more
+distinct groups means the file is a **service-locator**, not a single-responsibility module → MAJOR.
 
-Then group public symbols by **verb-object pair semantics**:
-- `send_*` / `stream_*` / `save_*` → conversation channel
-- `get_threads` / `get_thread_*` / `delete_thread` / `undo_*` → thread lifecycle
-- `update_*_state` / `memory()` → state + memory access
-
-If public symbols cluster into 3+ distinct verb-object groups, the file is a **service-locator** not a single-responsibility class. MAJOR finding.
+This is the most valuable check in the lens: it tells you *why* a file is dense — legitimate
+orchestration, or an accidental god-object.
 
 ### AS-4 — Stability Probe
 
-Heuristics:
-
-```bash
-# How many places break if this file's public API changes?
-afferent_files = [from AS-2]
-afferent_imports = total count of distinct symbols imported across all afferent files
-```
-
-If afferent_imports / afferent_files > 3 (each importer uses 3+ symbols on average), the API is wide → low stability → MAJOR (any change breaks many things).
+Across the afferent files from AS-2, count the distinct symbols each imports. An average above
+~3 per importer means a **wide API**: any change to it breaks many callers at once → MAJOR.
 
 ### AS-5 — Testability Heuristic
 
-```bash
-# Are there protocol/interface files alongside?
-ls <module_dir>/protocols.py
-ls <module_dir>/interfaces.py
+Two questions: does an interface/protocol declaration sit alongside the implementation, and do the
+tests mock *that* or the concrete class?
 
-# Does the test suite mock the protocol or the concrete class?
-grep -rln "Mock(spec=${ClassName}Protocol)" tests/
-grep -rln "Mock(spec=${ClassName})" tests/
-```
-
-If only concrete-class mocks exist (no protocol-spec mocks), testability is theoretical. If no protocols.py exists, testability is structurally limited.
-
-**Severity rule:**
-- No protocols + concrete-only mocks → MINOR (testable but rigid)
-- protocols.py exists but no Protocol-mocks → NIT (protocol unused)
-- protocols.py + Protocol-mocks → no finding (well-isolated)
+| Protocol declared | Tests mock | Verdict |
+|---|---|---|
+| no | the concrete class | MINOR — testable but rigid |
+| yes | the concrete class | NIT — the protocol is unused |
+| yes | the protocol | no finding — well isolated |
 
 ## Output Format
 
@@ -133,41 +100,32 @@ Use Composition: original class becomes a thin coordinator that delegates to the
 **Effort:** L (4-8h plus call-site updates across 11 files).
 ```
 
-## Examples (illustrative)
+## The shapes this lens surfaces
 
-A real Phase-1 smoke-run typically surfaces a handful of unexpected
-hotspots. Common shapes:
+A Phase-1 run typically produces a handful of unexpected hotspots. The recurring shapes:
 
-| File | Predicted AS verdict |
-|---|---|
-| `api/v1/endpoints/chat.py` (2269 LOC) | MAJOR — endpoint metastasis: business logic in router (historical example: this file was since deleted in the v2 rooms migration) |
-| `config/settings.py` (1108 LOC, 138 commits) | MINOR — settings-as-bottleneck, but legitimate growth |
-| `api/v1/endpoints/companions.py` (1410 LOC) | MAJOR — same fat-endpoint problem |
-| `services/skill_agent_dispatcher.py` (14 primitives in 457 LOC) | MAJOR — densest per-LOC, 2 LangChain leaks (cross-references EB-1 from `encapsulation-boundaries`) |
-| `tools/discovery.py` (1162 LOC, 2 langchain leaks) | MAJOR — tool-discovery should be LangChain-agnostic |
+| Shape | Verdict | Why |
+|---|---|---|
+| A fat endpoint/route module (>1k LOC) | MAJOR | endpoint metastasis — business logic living in the router |
+| A settings/config module with heavy churn | MINOR | bottleneck by nature; growth is usually legitimate |
+| A dispatcher with the highest primitive-density per LOC | MAJOR | accreted unrelated responsibilities |
+| A "framework-agnostic" module that imports the framework | MAJOR | cross-references the `encapsulation-boundaries` lens |
 
-These are predictions; the actual lens-run will produce concrete findings with citations.
-
-## Cross-References to Other Lenses
-
-Architectural-significance findings are often **explained** by other lens findings:
-
-- the `chat.py` MAJOR (god-object) above is **caused by** API → Service → CRUD layering not being enforced (could become a `layering` Phase-2 finding for the subsystem owning that file)
-- `skill_agent_dispatcher.py` MAJOR (god-object) is **partly explained by** EB-1 (LangChain leaks) — if it's leaking encapsulation, it's likely over-reaching its responsibility too
-- `tools/discovery.py` MAJOR (god-object) is **partly explained by** EB-1 (LangChain leaks)
-
-The skill emits cross-reference notes in findings to help the user see these patterns.
+**Findings explain each other.** A god-object verdict is often *caused by* a layering violation
+(business logic in the router) or *accompanied by* a vendor leak — when both fire on the same file,
+say so in the finding. That pairing is what turns two isolated observations into a diagnosis.
 
 ## Why This Lens?
 
-A density-only Phase-1 output (the heatmap script alone) is informational: "these files are dense." Without architectural-significance, the human reader has to manually translate density into "is this a problem?".
+Phase 1 alone is informational: "these files are dense." Translating density into "is this a
+problem?" is what this lens does systematically — every unexpected hotspot gets all four risk
+questions answered with code evidence. Skip it and Phase 1 produces a list of names the reader
+shrugs at.
 
-This lens does that translation systematically. Each unexpected hotspot gets all 4 risk-lens questions answered with code evidence. The cohesion check (AS-3) is the most valuable — it tells you WHY a file is dense (legitimate orchestration vs accidental god-object).
+## Limitations — name them in the finding
 
-The cost of skipping: Phase-1 produces a list of names; the user reads them and shrugs. Findings only emerge if the user has architectural intuition + time to manually deep-read each candidate. Most don't.
-
-## Limitations
-
-- AS-3 (cohesion heuristic) uses crude verb-object pattern matching. False positives on files where the pattern legitimately spans concerns (e.g., a CRUD module with `get_*` AND `update_*` AND `delete_*` — 3 verbs, but cohesive around one entity). Reviewer judgment required.
-- AS-2 (coupling) only counts afferent imports, not transitive dependents. A file imported by 5 widely-used utility modules could have 50+ transitive dependents.
-- AS-5 (testability) is structural-only; cannot detect tests that exist but mock the wrong things.
+- **AS-3** groups by verb-object pattern; a CRUD module over one entity legitimately spans
+  `get_*`/`update_*`/`delete_*`. Reviewer judgment required.
+- **AS-2** counts direct importers only. A file imported by five widely-used utilities can have
+  fifty transitive dependents.
+- **AS-5** is structural: it cannot tell that a test exists but mocks the wrong thing.

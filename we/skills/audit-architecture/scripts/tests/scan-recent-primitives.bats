@@ -16,10 +16,10 @@ case "$*" in
   *"pr list"*)
     cat <<'JSON'
 [
-  {"number": 1, "title": "feat: introduce DispatchService", "body": "Centralize all time-driven work", "files": [{"path": "apps/backend/app/dispatch/service.py"}]},
-  {"number": 2, "title": "fix: bug in dispatch", "body": "small fix", "files": [{"path": "apps/backend/app/dispatch/service.py"}]},
-  {"number": 3, "title": "feat: extend dispatch", "body": "more", "files": [{"path": "apps/backend/app/dispatch/queue.py"}]},
-  {"number": 4, "title": "chore: cleanup", "body": "noise", "files": [{"path": "apps/backend/app/utils/dates.py"}]}
+  {"number": 1, "title": "feat: introduce DispatchService", "body": "Centralize all time-driven work", "files": [{"path": "src/dispatch/service.py"}]},
+  {"number": 2, "title": "fix: bug in dispatch", "body": "small fix", "files": [{"path": "src/dispatch/service.py"}]},
+  {"number": 3, "title": "feat: extend dispatch", "body": "more", "files": [{"path": "src/dispatch/queue.py"}]},
+  {"number": 4, "title": "chore: cleanup", "body": "noise", "files": [{"path": "src/utils/dates.py"}]}
 ]
 JSON
     ;;
@@ -34,7 +34,7 @@ healthcheck:
   missing_primitive_scan:
     enabled: true
     pr_count: 100
-    repo_paths: [apps/backend/app/]
+    repo_paths: [src/]
     keyword_patterns: ["introduce", "centralize"]
 EOF
 
@@ -56,10 +56,10 @@ teardown() {
   [[ "$output" == *"Candidate paths"* ]]
 }
 
-@test "flags apps/backend/app/dispatch/ as ≥3 PRs" {
+@test "flags src/dispatch/ as ≥3 PRs" {
   run bash "$SCRIPT_DIR/scan-recent-primitives.sh" --config "$CONFIG" --repo /tmp --pr-count 10 --output-md
   [ "$status" -eq 0 ]
-  [[ "$output" == *"apps/backend/app/dispatch"* ]]
+  [[ "$output" == *"src/dispatch"* ]]
 }
 
 @test "lists keyword hits (introduce, centralize)" {

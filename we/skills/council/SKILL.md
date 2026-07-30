@@ -39,16 +39,11 @@ In priority order:
 1. `--council=role,role` flag → use exactly those role slugs.
 2. `--meeting=<type>` flag → read `.weside/config.json` → `council.meetings.<type>`.
 
-   **Legacy-key fallback.** If that key is absent, the repo's `.weside/config.json` may predate
-   the 4-altitude schema (pre-v2.28, `aa651d1` — back when meetings were `vision`/`initiative`/
-   `refinement`, not today's `vision`/`saga`/`epic`/`story`). Check the legacy equivalent before
-   falling through to Step 3: `saga` → `council.meetings.initiative`, `story` →
-   `council.meetings.refinement`. `vision`'s key name is unchanged (no legacy check needed).
-   `epic` is a genuinely new altitude introduced in that same refactor — it has **no** legacy
-   equivalent; go straight to Step 3/4 and say so. If a legacy key resolved the roster, use it and
-   append one line to the council output: *"This repo's `.weside/config.json` still uses the
-   pre-v2.28 meeting key `<legacy-key>` — migrate to `<new-key>` via `/we:onboarding` (rebuilds
-   the whole council config) or by hand-editing the key name."*
+   **Legacy-key fallback.** A config predating the 4-altitude schema names meetings
+   `vision`/`initiative`/`refinement`. Before falling through, try `saga` → `initiative` and
+   `story` → `refinement` (`vision` is unchanged; `epic` is genuinely new and has no equivalent —
+   say so and go to Step 3). A legacy key that resolved gets one line in the council output telling
+   the user to migrate the key name, by hand or via `/we:onboarding`.
 3. Otherwise → `.weside/config.json` → `council.default`.
 4. No `.weside/config.json` → the shipped default: `product_owner`, `architect`, `scrum_master`.
 
@@ -127,31 +122,13 @@ The response object:
 - `woken` — list of names auto-woken by this call (used for the Step 9 closing note). Empty when nothing was asleep.
 - `names=None` → all the user's companions; no `not_found` bucket in that case.
 
-Normalise the response (back-compat shim) then parse `status`:
+**Accept both response shapes.** An older backend returns the flat `{name: {...}}` members dict
+with no `members`/`status` envelope — treat that as `status: "OK"` and no `woken` list, so the
+plugin never couples to a deploy order. Then split `status` into its three buckets on `" | "` and
+`": "`.
 
-```python
-resp = mcp__plugin_we_weside-mcp__get_council(names=..., wake=True)
-# Shim: a pre-2.46 backend returns a flat {name: {...}} dict with no members/status.
-# Accept both shapes so the plugin works against an un-upgraded backend (no deploy-order coupling).
-if isinstance(resp, dict) and "members" in resp and "status" in resp:
-    members, status = resp["members"], resp["status"]
-    woken = resp.get("woken", [])          # pre-WA-1362 backend: key absent → []
-else:
-    members, status, woken = resp, "OK", []   # old backend: whole object is the flat members dict
-
-asleep, unavailable, not_found = [], [], []
-if status != "OK":
-    for segment in status.split(" | "):
-        bucket, _, names_str = segment.partition(": ")
-        names_list = [n.strip() for n in names_str.split(", ")]
-        if bucket == "asleep":      asleep = names_list
-        elif bucket == "unavailable": unavailable = names_list
-        elif bucket == "not_found":   not_found = names_list
-```
-
-If the `wake=True` call errors (a pre-WA-1362 backend that rejects the unknown
-`wake` argument), retry once as `get_council(names=...)` without `wake` and rely on
-the Step 3.6 fallback to wake any sleepers via `wake_companion`.
+If the `wake=True` call errors (an older backend rejecting the unknown argument), retry once
+without it and let Step 3.6 wake the sleepers via `wake_companion`.
 
 - One MCP roundtrip returns all awake members' council-scoped projections — no select/get loops in the plugin.
 - `workspace_id` is reserved for future team-scoping; the plugin omits it.
@@ -192,7 +169,7 @@ Otherwise use the `asleep`, `unavailable`, and `not_found` lists parsed in the
 
 **Sleeping companions (`asleep`):** With `wake=True` the server already auto-wakes sleeping
 members — so `asleep` is normally empty. A name only remains here if the server-side wake
-**failed**, or the backend predates WA-1362. **Do not ask the user** — being pulled into a
+**failed**, or the backend predates the wake-aware `get_council`. **Do not ask the user** — being pulled into a
 council *is* the wake. Auto-wake each remaining sleeper:
 
 - Call `mcp__plugin_we_weside-mcp__wake_companion(name=<name>)` for each.
@@ -243,29 +220,13 @@ addressable teammates purely by being spawned with a `name` in Step 6 — procee
 
 ### Step 5.5: Await prep blocks (weside path only)
 
-If prep was kicked off in Step 4, poll for results before spawning members so the context
-can be injected into each brief. **No-weside path:** skip entirely — `prep_blocks = {}`.
+If prep was kicked off in Step 4, poll `council_prep_poll(names, repo_id)` for the blocks before
+spawning, so each brief can carry its member's context. It returns `{name → block | None}`;
+collect the blocks that have arrived and poll again at ~10 s intervals.
 
-```python
-prep_blocks = {}  # name -> prep block string
-if mcp_resolved_names:
-    deadline_secs = 150  # generous upper bound; live prep turns measured up to 104s in prod
-    poll_interval = 10
-    elapsed = 0
-    while elapsed < deadline_secs and len(prep_blocks) < len(mcp_resolved_names):
-        result = mcp__plugin_we_weside-mcp__council_prep_poll(names=mcp_resolved_names, repo_id=repo_id)
-        # result is a dict: {name -> block | None}
-        for name, block in result.items():
-            if block and name not in prep_blocks:
-                prep_blocks[name] = block
-        if len(prep_blocks) < len(mcp_resolved_names):
-            sleep(poll_interval)
-            elapsed += poll_interval
-    # Members whose block didn't arrive get spawned without it — prep is additive, not a gate.
-```
-
-Members missing a prep block are spawned normally in Step 6 with no block section — do not
-abort or delay beyond the deadline.
+**Prep is additive, never a gate.** Give it a generous ceiling — live prep turns have been measured
+at over 100 s, so allow ~150 s — then spawn regardless: a member whose block never arrived is
+spawned without one. **No-weside path:** skip this step entirely.
 
 ### Step 6: Spawn members (all in one message)
 
@@ -348,22 +309,22 @@ The lens-summary line per member is hard-coded for the nine shipped roles. Custo
 
 ### Step 7: Live deliberation — quiescence + hard caps
 
-The lead observes the team's chatter. Track three signals:
+The lead observes the team's chatter and closes it when the deliberation is **ripe**, not when a
+clock says so. Ripe has one necessary condition and three usual triggers:
 
-| Signal               | Track                                                       |
-| -------------------- | ----------------------------------------------------------- |
-| Per-member idle time | Idle-notification timestamp from Claude Code                |
-| Total team messages  | Counter incremented per `SendMessage` observed in the team  |
-| Wall-clock           | Started at Step 6's member spawn                            |
-| Substantive talk     | Number of distinct members who have sent ≥ 1 message        |
+**Necessary:** at least two distinct members have actually spoken. Closing a council before that is
+closing an empty room.
 
-Adjourn the deliberation as soon as **any** of the following triggers fires:
+**Then adjourn on whichever comes first:**
 
-1. **Quiescence (soft):** all members idle for ≥ 30 s AND at least two distinct members have spoken. (This avoids closing before anyone speaks.)
-2. **Message hard-cap:** total team messages ≥ 30.
-3. **Time hard-cap:** wall-clock ≥ 10 min since Step 6's member spawn.
+| Trigger | Shape |
+|---|---|
+| **Quiescence** (the good one) | every member idle for ~30 s — the debate has run out of disagreement |
+| **Message cap** | ~30 team messages — past this, members are filling airtime, not adding lenses |
+| **Time cap** | ~10 min since the spawn — the caps are backstops against a loop, not targets |
 
-When a trigger fires, move to Step 8. Log which trigger fired — useful in the final synthesis ("adjourned at message cap" vs "adjourned at quiescence").
+Log which trigger fired. "Adjourned at quiescence" and "adjourned at the message cap" mean very
+different things about the synthesis that follows, and the reader deserves to know which it was.
 
 ### Step 8: Final-position round
 

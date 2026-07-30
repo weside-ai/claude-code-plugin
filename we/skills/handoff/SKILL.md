@@ -59,25 +59,17 @@ Before producing any output, gather the landscape fresh.
    - `--write … --with-companion-state` → WRITE with opt-in Companion section
    - Anything else: ask the user once for clarification, then proceed
 
-3. **Repo state** — needed by all modes:
-   - `pwd` — confirm working directory
-   - `git -C <repo> rev-parse --show-toplevel` — repo root
-   - `git -C <repo> branch --show-current` — current branch
-   - `git -C <repo> rev-parse HEAD` — last commit SHA
-   - `git -C <repo> status --short` — uncommitted file count + staging state
-   - `git worktree list` — if non-main worktree, note it
-   - `ls docs/handoffs/ 2>/dev/null` — does the directory exist?
+3. **Repo state** — needed by all modes: repo root, current branch, HEAD sha, the uncommitted-file
+   count and staging state, and whether this is a linked worktree. These five go into the frontmatter
+   and are what the staleness check compares against later.
 
-4. **For LOAD / LIST:**
-   - `ls -t docs/handoffs/*.md 2>/dev/null | head -<N>` — most recent handoffs
-   - For each candidate, read frontmatter only (cheap) before deciding which to display in full
+4. **For LOAD / LIST:** the most recent handoffs by mtime; read frontmatter only (cheap) before
+   deciding which to render in full.
 
-5. **For WRITE:**
-   - The session transcript — agent already has it in head if no Compact happened; after a Compact, re-read `~/.claude/projects/<repo-id>/<session-id>.jsonl` (last N turns). Apply privacy guard.
-   - Active plan files: `find docs/plans \( -name '*-story.md' -o -name '*-epic.md' -o -name '*-saga.md' -o -name 'PRD.md' \) -newer "$(date -d '7 days ago' +%Y-%m-%d)" 2>/dev/null` — what's currently being planned
-   - Recent retros: `ls -t docs/retros/*.md 2>/dev/null | head -3` — what was learned recently
-   - Open PR for current branch (if `gh auth status 2>/dev/null` succeeds): `gh pr list --head $(git branch --show-current) --json number,title,state -L 1`; otherwise record `open_pr: null`
-   - Recent commits: `git log --oneline -10`
+5. **For WRITE:** the session transcript (already in head unless a Compact happened — then re-read
+   the session jsonl), the plan files touched in the last week, the most recent retros, the open PR
+   for this branch if `gh` is authenticated (`open_pr: null` otherwise), and the recent commits.
+   Apply the privacy guard to the transcript.
 
 6. **Companion identity** (if configured + WRITE mode + `--with-companion-state` flag): materialize per `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
@@ -244,7 +236,7 @@ session_id: <CC session-id from ~/.claude/projects/<repo-id>/...>
 written_at: <ISO8601 timestamp>
 written_by: <"manual" | "coach-suggested" | "auto">
 plan_files:
-  - <docs/plans/.../CONCEPT.md or similar>
+  - <docs/plans/<slug>-{saga,epic,story}.md or docs/plans/<vision>/PRD.md>
 retro_files:
   - <docs/retros/...>
 companion: <name if MCP active, else null>

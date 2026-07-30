@@ -46,12 +46,12 @@ invariant_catalog:
     - id: I1
       claim: "No print() in production code"
       verify_grep: "^\\s*print\\("
-      verify_excludes: [docs/, tests/, apps/admin/, apps/support/]
+      verify_excludes: [docs/, tests/, <admin-app>/, <support-app>/]
     - id: I3
       claim: "Every request has a trace/correlation ID"
       verify_grep: "bind_context|RequestIDMiddleware"
       verify_must_exist: true   # this pattern MUST appear in middleware/
-      verify_must_be_in: [apps/backend/app/middleware/]
+      verify_must_be_in: [<backend>/middleware/]
     # ...
 ```
 
@@ -67,7 +67,7 @@ For invariants with `verify_grep` defined, run the grep + check:
 
 Output for each invariant:
 ```
-{primitive: "observability-triad", id: "I3", verdict: "✗", evidence: "no match in apps/backend/app/middleware/"}
+{primitive: "observability-triad", id: "I3", verdict: "✗", evidence: "no match in <backend>/middleware/"}
 ```
 
 ### Step 4 — Render Drift Matrix
@@ -87,7 +87,7 @@ Each `✗` becomes a finding:
 **Lens:** doc-vs-reality-drift
 **Primitive:** observability-triad
 **Invariant:** I3 — "Every request has a trace/correlation ID"
-**Cite:** `docs/architecture/primitives/observability-triad.md` claims it; `apps/backend/app/main.py:951–1029` does not register a TraceID middleware.
+**Cite:** `docs/architecture/primitives/observability-triad.md` claims it; `<backend>/main.py:951–1029` does not register a TraceID middleware.
 
 The primitive doc says: *"The FastAPI middleware sets `trace_id` on the structlog
 context so every log line from one request is correlateable."*
@@ -128,23 +128,23 @@ Each `✓` is reported but not a finding.
 [Findings list, severity-tagged]
 ```
 
-## Examples (illustrative)
+## What the verdicts look like in practice
 
-A typical observability-triad primitive doc has on the order of 8
-invariants. A real audit run produces verdicts like this:
+A mature observability primitive doc carries on the order of eight invariants. A real run mixes all
+four verdicts, and the pattern is stable across projects:
 
-| Invariant | Claim | Verdict | Evidence |
-|---|---|---|---|
-| I1 | No `print()` in production | ✓ | grep clean (matches were docstrings) |
-| I2 | Key-value pairs, not f-string logging | ✗ | 8 f-string logger calls (`main.py:197-199, 981, 1003, 1235, 1248`, `core/rate_limit.py:127`) |
-| I3 | Every request has trace_id | ✗ | no trace_id middleware in `main.py:951-1029` |
-| I4 | No PII in logs | ⚠ | `_RedactSecretsFilter` strips secrets but not user content; discipline-only |
-| I5 | InstrumentedChatModel for all LLM calls | ✓ | zero vendor SDK imports outside config/llm.py (verified by Phase 1 leak count) |
-| I6 | Cost-relevant ops emit metrics | ✓ | LLM_COST, VOICE_INTERNAL_COST, STRIPE_METER_EVENTS, BYOK_LLM_USAGE all present |
-| I7 | Sentry captures unhandled exceptions | ✓ | `sentry_sdk.init` with FastApiIntegration + LoggingIntegration |
-| I8 | Low cardinality labels | ✗ | `core/metrics.py:142, 148, 167` — user_id + companion_id on LLM_TOKENS/LLM_COST/LLM_REQUESTS |
+| Invariant shape | Typical verdict | Why |
+|---|---|---|
+| "No `print()` in production code" | ✓ | structurally enforceable, and usually enforced |
+| "Log key-value pairs, not interpolated strings" | ✗ | discipline-only; interpolated calls accumulate |
+| "Every request carries a correlation id" | ✗ | the middleware is often missing while the helper exists, referenced only from its own docstring |
+| "No PII in logs" | ⚠ | a secrets filter exists; user content is not covered |
+| "All model calls go through the instrumented wrapper" | ✓ | a chokepoint that a leak-count check can confirm |
+| "Metrics labels stay low-cardinality" | ✗ | per-user labels creep in one counter at a time |
 
-These 3 ✗ verdicts produced 3 of the 4 MAJOR findings in the observability audit. The 4th MAJOR was the audit-yml-too-narrow scope (process finding, not primitive-drift).
+The ✗ rows are where the value is: each was a documented promise the code had quietly stopped
+keeping. Two of the three shapes above were found *by accident* before this lens existed — a grep
+run for another reason. That is exactly the luck this lens removes.
 
 ## Why This Lens Matters
 

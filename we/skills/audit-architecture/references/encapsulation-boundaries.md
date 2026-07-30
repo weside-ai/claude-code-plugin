@@ -21,67 +21,48 @@ Verify the project's documented encapsulation rules at the import level, **acros
 ```yaml
 hotspots:
   encapsulation_homes:
-    langchain:
-      - apps/backend/app/companion/core/
-      - apps/backend/app/config/llm.py
-      - apps/backend/app/config/_instrumented_model.py
-    langgraph:
-      - apps/backend/app/companion/core/
-  private_module_root: apps/backend/app/companion/core
+    <vendor-import-prefix>:
+      - <the/one/layer/that/may/import/it>/
+      - <and/its/factory.py>
+  private_module_root: <backend>/<agent-core>
 ```
 
 The catalog (`primitives.default.yml`) ships with reasonable defaults for Companion-style projects. Project YAML overrides as needed.
 
 ## Method
 
-Three sub-checks (each a single grep):
+Three sub-checks, each one exhaustive search over the scan root. What matters is not the regex —
+it is that the search runs over the **whole** codebase, because a subsystem-scoped audit only ever
+greps inside one subsystem's `paths:` and structurally cannot see a leak that crosses them.
 
-### EB-1 — Vendor Runtime-Imports
+### EB-1 — Vendor runtime imports
 
-For each `vendor` in `encapsulation_homes`:
+For every vendor in `encapsulation_homes`: find its runtime imports and check each against that
+vendor's configured home paths. Matches outside every home are findings.
 
-```bash
-grep -rEn "^\s*from ${vendor}" <backend_root> --include="*.py"
-```
+| Case | Severity |
+|---|---|
+| One or more violations in a file | MAJOR — one finding per file, not per line |
+| `TYPE_CHECKING`-only import | MINOR — never executes, but the name still leaks into the surface |
 
-Each match is checked against the configured home paths. Matches OUTSIDE all home paths are findings.
+**Fix shape:** move the construction that needs the vendor *into* the home; the outer file consumes
+an abstraction the home returns, not the vendor's own type.
 
-**Severity rule:**
-- 1 violation in a single file: MAJOR
-- Multiple violations in a single file: MAJOR (one finding per file, not per line)
-- TYPE_CHECKING-only imports (`if TYPE_CHECKING: from langgraph...`): MINOR (documented intent matters)
+### EB-2 — Private-module reach-ins
 
-**Fix proposal pattern:**
-> Move the construction/usage that requires `<vendor>` into the configured home (e.g., `companion/core/`). The current file should consume an abstraction provided by the home, not the vendor type directly.
+Find imports of `_`-prefixed symbols from inside `private_module_root` made by files outside it.
+Only siblings within the root may import them. MAJOR per importing file (combine its imports into
+one finding).
 
-### EB-2 — Private-Module Reach-Ins
+**Fix shape:** expose the symbol properly (rename, document), push the consumer inside the root, or
+find a different abstraction. Three choices, all better than the reach-in.
 
-```bash
-grep -rEn "from ${private_module_root_python}\._\w+ import" <backend_root> --include="*.py" \
-  | grep -v "^${private_module_root}/"
-```
+### EB-3 — Transport-layer type construction
 
-(Where `private_module_root_python` is the path-form converted to dotted module form: `apps/backend/app/companion/core` → `apps.backend.app.companion.core`.)
-
-Each match is a file outside the private root importing a `_*` symbol from inside the private root. The convention says these are private — only sibling modules in the same root may import them.
-
-**Severity rule:** MAJOR per importing-file (combine multiple imports from the same file into one finding).
-
-**Fix proposal pattern:**
-> Either expose the symbol publicly (rename without leading `_`, document) OR push the consumer into the private root OR find a different abstraction.
-
-### EB-3 — THIN-Channel Vendor Construction
-
-If `encapsulation_homes.langchain` exists, additionally check:
-
-```bash
-# Find LangChain message construction in channel transports
-grep -rEn "HumanMessage\(|AIMessage\(|SystemMessage\(" <backend_root>/companion/channels/ --include="*.py"
-```
-
-Channels are supposed to be THIN transports: parse incoming, format outgoing, route to gateway. Constructing LangGraph message types in a channel = LangGraph type leaking into transport = MAJOR.
-
-This sub-check assumes the project follows the "THIN channel" convention; absent that, this sub-check produces no findings.
+Where the project treats its channel/transport modules as THIN (parse in, format out, route on),
+find agent-framework message types being *constructed* inside them. A framework type built in a
+transport means the framework has leaked into the transport → MAJOR. No THIN-channel convention in
+this project → this sub-check produces nothing.
 
 ## Output Format
 
@@ -93,68 +74,42 @@ This sub-check assumes the project follows the "THIN channel" convention; absent
 **Sub-check:** EB-1 (Vendor Runtime-Imports)
 **Cite:** `<file>:<line>`
 
-```python
-from langchain_core.messages import AIMessage  # noqa: PLC0415
-```
+<the offending import line>
 
-This file is OUTSIDE the configured `langchain` home paths
-(`apps/backend/app/companion/core/`, `apps/backend/app/config/llm.py`,
-`apps/backend/app/config/_instrumented_model.py`).
+This file is OUTSIDE the configured homes for `<vendor>` (<the configured home paths>).
 
-**Implication:** when LangChain v2 changes the message API or we swap
-the agent runtime, this file breaks. The encapsulation contract exists
-to make exactly this cost zero.
+**Implication:** when `<vendor>` changes that API — or the project swaps the runtime — this file
+breaks. Making that cost zero is the entire purpose of the encapsulation contract.
 
-**Fix:** push the construction into `companion/core/` and have the
-current file call a Core method that returns whatever primitive shape
-it actually needs.
+**Fix:** push the construction into the home and have this file call a home method that returns
+whatever shape it actually needs.
 
 **Effort:** M (1-2h per occurrence)
 ```
 
-## What findings look like
+## The shapes this lens surfaces
 
-Typical shapes a real run produces:
-
-1. **EB-MAJ-1** — A "fat-but-framework-naive" service tier (e.g. a gateway
-   that's supposed to know nothing about LangGraph) does a runtime import
-   from the framework's message types. Often acknowledged by a nearby TODO.
-
-2. **EB-MAJ-2** — A transport-only channel module (telegram, slack, web,
-   etc.) imports a framework-specific message type at runtime. THIN-channel
-   violation; channels were typically renamed from generic `adapters/`
-   precisely to mark them as transport-only.
-
-3. **EB-MIN-1** — A `TYPE_CHECKING`-only import of a framework-internal
-   class. MINOR because it never executes, but it still leaks the name
-   into the gateway's surface and is worth tracking.
-
-EB-2 (private reach-ins) typically surface as a table of 5–15 sites where
-non-owner modules import a `_private` symbol from another package. Common
-shapes:
-
-| Where the reach-in lives | What it reaches in for | Why it's MAJOR |
-|---|---|---|
-| `services/<various>.py` | helper modules under another package's `_*` namespace | services should call the public API, not the helper |
-| `tools/<various>.py` | request-context / loader / cache helpers | the same — public surface only |
-| `api/admin/debug.py` | framework internals | usually exemptable as documented admin/debug exception |
+| Shape | Finding |
+|---|---|
+| A tier that is *supposed* to know nothing about the agent framework imports its message types at runtime — often with a TODO next to it | EB-MAJ |
+| A transport-only channel module imports a framework type at runtime | EB-MAJ — THIN-channel violation |
+| A `TYPE_CHECKING`-only import of a framework internal | EB-MIN — never executes, still leaks the name |
+| Services or tools reaching into another package's `_*` helpers instead of its public API | EB-MAJ per importing file |
+| An admin/debug module reaching into internals | usually exemptable — say so explicitly rather than silently passing it |
 
 ## Cross-Reference with Phase 1
 
-The hotspot script (`audit-hotspots.py`) already counts these as `leaks` and `reach_ins` in the score. The encapsulation-boundaries lens makes them findings (with severity, citations, and fix proposals) rather than just numbers in a column.
+`audit-hotspots.py` already counts leaks and reach-ins into the score. This lens turns those numbers
+into findings — with severity, citation, and a fix.
 
 ## Customization
 
-Projects with different conventions adjust:
-
-- **Multiple-language backends:** add language-specific patterns to `encapsulation_homes` (e.g., a Go module path)
-- **No private convention:** omit `private_module_root` to skip EB-2
-- **No THIN-channel rule:** omit `encapsulation_homes.langchain` channel-specific path to skip EB-3 (or rather, EB-3 only fires if channels paths are configured for langchain home OR if channel files appear in non-channel homes)
+- **Polyglot backend:** add the other language's import patterns to `encapsulation_homes`.
+- **No private-module convention:** omit `private_module_root` → EB-2 is skipped.
+- **No THIN-transport rule:** EB-3 produces nothing. Both are absences, not failures.
 
 ## Why this lens?
 
-Without an explicit cross-cutting lens, encapsulation findings depend on
-auditor luck — a `from langchain` grep done in one subsystem catches the
-gateway leak, while reach-ins into another package's `_private` modules
-only surface if a *different* grep happens to be run. This lens makes the
-same checks systematic and reproducible.
+Without it, encapsulation findings depend on auditor luck: a vendor-import search run inside one
+subsystem catches that subsystem's leak, and reach-ins elsewhere surface only if a different search
+happens to be run. Systematic beats lucky.

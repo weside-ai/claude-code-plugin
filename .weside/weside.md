@@ -19,7 +19,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `orchestrator`
 - **Color:** purple
 - **Focus:** Holds the vision, coordinates the crew, synthesises council perspectives, balances cross-domain priorities
-- **In meetings:** vision, initiative
+- **In meetings:** vision, saga, epic
 
 ### Product Owner — Product Owner
 
@@ -27,7 +27,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `product_owner`
 - **Color:** orange
 - **Focus:** Backlog, prioritization, AC-quality, value-ranking
-- **In meetings:** vision, initiative, refinement
+- **In meetings:** vision, saga, epic, story
 
 ### Scrum Master — Scrum Master
 
@@ -43,7 +43,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `architect`
 - **Color:** green
 - **Focus:** Target architecture, constraints, ADRs, technical coherence
-- **In meetings:** vision, initiative, refinement
+- **In meetings:** vision, saga, epic, story
 
 ### Marketing — Marketing
 
@@ -79,9 +79,10 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 
 ## Meetings held here
 
-- **vision** — roster: Product Owner, Architect, Orchestrator
-- **initiative** — roster: Product Owner, Architect, Orchestrator
-- **refinement** — roster: Product Owner, Architect
+- **vision** — roster: Product Owner, Architect, UX Researcher, Orchestrator
+- **saga** — roster: Product Owner, Architect, Orchestrator
+- **epic** — roster: Product Owner, Architect, Orchestrator
+- **story** — roster: Product Owner, Architect
 
 ## Cross-repo relations
 

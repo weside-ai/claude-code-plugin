@@ -188,67 +188,39 @@ a proposal `[contract]` in the report so Step R6 knows to always confirm it, eve
 
 ### Step R5 — Render the report
 
-Print this shape:
+Four sections, in this order — and always **before** anything is applied:
 
 ```text
-RETRO — PR #1998 (feat/apo-refactor-phase-4, merged 2026-05-17)
-        session: <session-id>  ·  --scan 5  ·  reviewed in 2min
+RETRO — PR #<n> (<branch>, merged <date>)
+        session: <id>  ·  --scan <n>
 
 WINS — keep doing
-  · [memo] Cards animation cascade worked first try — CSS-only, no JS observer
-  · [memo] Single-commit batch of fixes (boundary tone + layout + hero) applied
-    "consolidate phases + PRs" preference from existing session rules
+  · [memo] <what worked, and why it worked — no proposal attached>
 
 PAIN — what cost time this cycle
-  · 30+ min: chased IntersectionObserver, then layout overflow, before finding
-    latent JS SyntaxError in tour/index.html
-       └ evidence: transcript turns 47-62, commits f7d985a..0575bcc
-       └ root: `Press „Convene"` — mismatched ASCII vs German quote, since v2.27.1
-       └ root²: I only ran node --check on my new IIFE, not the whole script
-
-  · 4 CI cycles on PR #1998 → 12min of CI wait that local hooks should have caught
-       └ evidence: gh pr checks 1998 (timestamps)
-       └ root: markdownlint MD028 not in pre-push hook
+  · <duration>: <what happened>
+       └ evidence: <transcript turns, commit range, or check timestamps>
+       └ root: <the actual cause, not the symptom>
+       └ root²: <the cause behind that, when there is one>
 
 PROPOSALS — concrete file changes
-  · [P1 / 5min] NEW  .claude/rules/quality/html-script-validation.md
-                ───  "When editing JS inside HTML <script>, node --check the whole script"
-                Default placement: user repo (project-specific).
-                Diff preview:
-                  + ---
-                  + paths:
-                  +   - "**/*.html"
-                  + ---
-                  + # HTML <script> validation
-                  + When editing inline JS, extract the full <script>...</script>
-                  + and run `node --check` before pushing. Browsers abort the entire
-                  + script on the first parse error — a latent SyntaxError elsewhere
-                  + (even pre-existing) will mask your edit's intent.
-                Override placement? [y/n/edit-path/skip-for-later]
-
-  · [P2 / 2min] EDIT .claude/rules/workflows/ci-workflow.md
-                ───  Add markdownlint-cli2 to local pre-push checklist
-                Diff:
-                  ## Local Tests (Run Before Push)
-                  + - markdownlint-cli2 (catches MD025, MD028 before CI)
+  · [P1 / 5min] NEW  .claude/rules/<category>/<topic>.md
+                ───  <one-line summary of the rule>
+                Default placement: <user repo | plugin — flagged>
+                Diff preview: <the actual lines, frontmatter included>
                 [y/n/edit-path/skip-for-later]
 
-  · [P3 / 30s ] EDIT CLAUDE.md
-                ───  one-liner under "Critical Rules": "lint MD files locally"
-                [y/n/edit-path/skip-for-later]
-
-PATTERN HIGHLIGHTS (--scan 5)
-  · 2 of last 5 retros flag "validate only my edit, not whole artefact"
-       → Structural fix candidate: add a generic "validate full file after edit"
-         rule under quality/, not another file-type-specific one-liner.
-         Add this as P0 proposal? [y/n]
+PATTERN HIGHLIGHTS (--scan only)
+  · <n> of last <N> retros flag <theme> → structural-fix candidate: <what>
 
 SUMMARY
-  · 3 proposals, ~7min of edits total if all accepted
-  · Estimated CI minutes saved next cycle: 8-12 min
-  · Retro log will be written to:
-       docs/retros/2026-05-17-tour-quote-bug.md
+  · <n> proposals, ~<n>min of edits · est. CI minutes saved next cycle
+  · Log target: docs/retros/<date>-<topic>.md
 ```
+
+Two things make this report worth reading rather than skimming: **every PAIN entry carries its
+evidence** (a duration and a citation, not "CI was slow"), and **every proposal carries a real diff**
+the user can approve without opening the file.
 
 ### Step R6 — Per-item gate
 

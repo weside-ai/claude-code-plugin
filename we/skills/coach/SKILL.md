@@ -78,11 +78,9 @@ Before you respond, read the current landscape **fresh**. Don't work from cached
    lines of each. Goal: know which rules exist and what each covers. Do
    NOT load full contents — that's thousands of tokens.
 
-2. **Platform Primitives** (if the project has them):
-   - `.claude/rules/core/platform-primitives.md` — the index rule
-   - `docs/architecture/PRIMITIVES.md` — full primitive list
-   - `docs/architecture/BYPASS-REGISTER.md` — current bypass landscape
-     (a growing register is a process-health signal)
+2. **Architectural constraints, if the repo documents them** — its primitive index and its
+   register of deliberate bypasses. A register that is *growing* is a process-health signal, which
+   is why the Coach reads it and not just the rules.
 
 3. **Quality artefacts** — `${CLAUDE_PLUGIN_ROOT}/quality/dor.md` and
    `dod.md` in full. ADVISOR references these when reasoning about whether
@@ -183,8 +181,8 @@ Read the repo state (Boot Protocol Step 9) and locate the user. Use this decisio
 | ---------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------ |
 | No `docs/plans/<vision>-prd.md` and the user is starting fresh               | *below Vision*   | `/we:vision` (Solo PRD), or `/we:meet vision` if direction is unclear |
 | PRD exists, no `docs/plans/<saga>-saga.md`                                   | Vision → Saga    | `/we:meet vision` (decompose PRD into Sagas), then `/we:saga` per Saga |
-| SAGA.md exists, no Epic at `docs/plans/<saga>-*-epic.md`                     | Saga → Epic      | `/we:meet saga` (decompose Saga into Epics), then `/we:epic` per Epic |
-| Epic `CONCEPT.md` exists, no Stories under `…/stories/`                      | Epic → Story     | `/we:meet epic` (decompose Epic into Stories), then `/we:story` per Story |
+| A `<saga>-saga.md` exists, no Epic at `docs/plans/<saga>-*-epic.md`          | Saga → Epic      | `/we:meet saga` (decompose Saga into Epics), then `/we:epic` per Epic |
+| An `<saga>-<epic>-epic.md` exists, no Story plans referencing it             | Epic → Story     | `/we:meet epic` (decompose Epic into Stories), then `/we:story` per Story |
 | Story plan exists at `docs/plans/<TICKET>-story.md` (prefer `<TICKET>-story.md`; fall back to legacy `<TICKET>-plan.md` if the new-suffix file is absent) | Story → Build    | `/we:build {TICKET}`                                               |
 | Story plan exists but feels fuzzy / contentious                              | Story (Solo)     | `/we:story {TICKET}` (re-refine Solo) OR `/we:meet story {TICKET}` (Council) |
 | PR is open, ticket in "In Review"                                            | Deliver          | *human* — read PR, merge, close                                    |
@@ -210,7 +208,7 @@ After locating the current altitude, check whether there is an active Plan-altit
   > *"Saga: `<Saga name>` — `<n>` Epics (<x> done, <y> active, <z> backlog). Detail: `/we:saga`."*
   > *"Epic: `<Epic name>` — `<n>` Stories (<x> done, <y> active, <z> refined, <w> backlog). Detail: `/we:epic`."*
 
-  Use the artefact's mirror block (the `<!-- mirror:start --> … <!-- mirror:end -->` table inside the SAGA.md / CONCEPT.md) as the source of truth — it is already normalised. If the mirror is missing or older than 7 days, mention it and suggest `/we:saga` or `/we:epic` (Status default mode) to refresh.
+  Use the artefact's mirror block (the `<!-- mirror:start --> … <!-- mirror:end -->` table inside the saga/epic plan) as the source of truth — it is already normalised. If the mirror is missing or older than 7 days, mention it and suggest `/we:saga` or `/we:epic` (Status default mode) to refresh.
 
   Keep the Coach line to ONE sentence per altitude. For the full status snapshot, drift detection, and next-move beratung, **delegate to `/we:saga` / `/we:epic`** — those skills run Status as their default and render the full dashboard. The Coach does not duplicate that detail.
 

@@ -24,7 +24,7 @@ Method:
 
 Configuration:
   Project config (`docs/.audit-architecture.yml`) drives:
-    - backend_root         (path to scan; default `apps/backend/app`)
+    - backend_root         (path to scan; auto-detected when absent, see _detect_source_root)
     - hotspots.top_n       (default 15)
     - hotspots.since       (default "6 months ago")
     - hotspots.expected_hubs (list of paths)
@@ -68,7 +68,28 @@ except ImportError:
 
 # ---------------------------------------------------------------------- defaults
 
-DEFAULT_BACKEND_ROOT = Path("apps/backend/app")
+# No hardcoded project layout: probe the conventional source roots, deepest-first for the
+# monorepo case, and fall back to the repo root. A project with an unusual layout sets
+# `backend_root:` in its own YAML — which is what the SKILL tells it to do.
+_SOURCE_ROOT_CANDIDATES = (
+    "apps/backend/app",
+    "apps/backend/src",
+    "backend/app",
+    "backend/src",
+    "src",
+    "app",
+    "lib",
+)
+
+
+def _detect_source_root() -> Path:
+    """First conventional source root that exists, else the current directory."""
+    for candidate in _SOURCE_ROOT_CANDIDATES:
+        if Path(candidate).is_dir():
+            return Path(candidate)
+    return Path(".")
+
+
 DEFAULT_PROJECT_CONFIG = Path("docs/.audit-architecture.yml")
 DEFAULT_TOP_N = 15
 DEFAULT_SINCE = "6 months ago"
@@ -169,8 +190,9 @@ def load_config(
         hotspots_block.get("private_module_root") or catalog.get("private_module_root", "") or ""
     )
 
-    backend_root = backend_root_override or Path(
-        project.get("backend_root", str(DEFAULT_BACKEND_ROOT))
+    configured_root = project.get("backend_root")
+    backend_root = backend_root_override or (
+        Path(configured_root) if configured_root else _detect_source_root()
     )
     top_n = top_n_override or hotspots_block.get("top_n", DEFAULT_TOP_N)
     since = since_override or hotspots_block.get("since", DEFAULT_SINCE)
@@ -486,7 +508,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--backend-root",
         type=str,
         default=None,
-        help="Override backend root path (default from config or apps/backend/app)",
+        help="Override the scan root (else the YAML's backend_root, else auto-detected)",
     )
     return parser
 

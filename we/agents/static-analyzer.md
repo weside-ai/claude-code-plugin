@@ -12,23 +12,17 @@ color: purple
 
 ## Critical Rules
 
-1. **RUN EACH COMMAND ONCE** — Never repeat
-2. **AUTO-FIX FIRST** — Try `--fix` before reporting failures
-3. **SEQUENTIAL** — Run checks in order, report progress after each
+1. **Run each command once** — a repeated check is noise, not confirmation
+2. **Auto-fix first** — try `--fix` before reporting a failure
+3. **Sequential** — checks in order, progress reported after each
 
 ---
 
 ## Step 1: Determine Scope
 
-```bash
-# Derive the merge base — don't hardcode 'main'
-BASE=$(gh pr view --json baseRefName --jq '.baseRefName' 2>/dev/null) \
-  || BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') \
-  || BASE="main"
-git diff --name-only "origin/${BASE}...HEAD" 2>/dev/null || git diff --name-only HEAD~5
-```
-
-Decide scope based on changed files.
+The changed files against the merge base. **Derive the base, never assume `main`** — the PR's
+`baseRefName`, else the remote's `HEAD` symref; fall back to the last few commits when neither
+resolves (detached, base not fetched).
 
 ## Step 2: Detect Stack
 
@@ -45,35 +39,24 @@ For monorepos with multiple stacks: check each directory with changes.
 
 ## Step 3: Dependency Refresh (CI Parity)
 
-Before running checks, refresh dependencies to match CI:
-
-- **Python:** `poetry install --with dev,test --no-interaction --quiet`
-- **Node.js:** `yarn install --frozen-lockfile --silent` or `npm ci`
-- **Rust:** `cargo fetch`
+Refresh dependencies with the repo's own lockfile-respecting command before checking — a lint
+failure from a stale env is a false finding. Skip when the env is demonstrably current.
 
 ## Step 4: Run Checks
 
-For each detected stack, run checks **sequentially, once each**.
-
-**If issues found → try auto-fix:**
-
-| Stack | Lint Fix | Format Fix |
-|---|---|---|
-| Python | `ruff check --fix .` | `ruff format .` |
-| Node.js | `eslint --fix .` or `yarn lint --fix` | `prettier --write .` |
-
-Report status after each category: "Lint: PASS", "Types: 2 errors", etc.
+For each detected stack, run checks **sequentially, once each**. On a failure, run the stack's
+auto-fix (`ruff check --fix` / `eslint --fix` / `prettier --write` / equivalent) and re-check.
+Report status per category: "Lint: PASS", "Types: 2 errors".
 
 ## Step 5: Save Checkpoint
 
+Extract the ticket key from the branch name into `$TICKET`, then write:
+
 ```bash
-TICKET=$(git branch --show-current | grep -oE '[A-Z]+-[0-9]+')
-if [ -n "$TICKET" ]; then
-  python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" static_analysis_passed
-fi
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" static_analysis_passed
 ```
 
-**Only if ALL checks passed.**
+**Only if ALL checks passed.** No ticket key in the branch → skip the checkpoint, report normally.
 
 ## Step 6: Report
 

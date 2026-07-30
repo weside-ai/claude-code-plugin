@@ -118,6 +118,22 @@ Per-finding template specific to this lens (severity tag, citation style, fix pr
 
 A lens runs IN a phase. The default 7 Phase-2 lenses are the same regardless of which subsystem is being audited; what varies is the `extra_lens:` per subsystem. Phase-3 lenses are project-wide and can be selectively disabled or expanded via CLI.
 
+## Who owns what (single-owner map)
+
+Each surface is defined exactly once. Change it there, cite it everywhere else.
+
+| Surface | Owner |
+|---|---|
+| CLI flags + phase pipeline (Phases 0–4, skip semantics, v2 back-compat) | `SKILL.md` |
+| Phase-0 healthcheck mechanics (incl. optional Graph-Drift check) | `healthcheck.md` |
+| Hotspot score formula | `scripts/audit-hotspots.py` (the executed artifact) |
+| Hotspot method + config keys | `hotspot-density.md` |
+| Lens registry + activation rules | this file |
+| Per-lens method + examples | `<lens-name>.md` |
+| YAML config schema | `subsystems.md` |
+| Output layout + master.md skeleton | `findings-template.md` |
+| Severity classDefs + Mermaid views | `visualization.md` |
+
 ## Backward Compatibility (v2 → v3)
 
 v2 had a fixed 7-lens checklist plus an `extra_lens: privacy` flag for the plans-residency subsystem. v3 generalizes:

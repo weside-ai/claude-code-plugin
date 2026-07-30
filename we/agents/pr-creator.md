@@ -27,10 +27,8 @@ All 4 checkpoints must exist before PR creation:
 
 ### Step 1: Extract Ticket Key
 
-```bash
-BRANCH=$(git branch --show-current)
-TICKET=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
-```
+Keep the branch as `$BRANCH` and the extracted key as `$TICKET` — the key is regex-extractable
+because `/we:build` puts it first (`{type}/{TICKET}-description`). Both are used throughout.
 
 ### Step 2: Verify Checkpoints
 
@@ -38,102 +36,39 @@ TICKET=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status $TICKET
 ```
 
-**If ANY checkpoint missing → STOP. Tell user which gates to run first.**
+**If ANY checkpoint missing → STOP. Tell the user which gates to run first.**
 
-### Step 3: Sync with Main
+### Step 3: Sync with the Base Branch
 
-```bash
-git fetch origin main
-git rebase origin/main
-```
+Fetch and rebase onto the PR's base. On conflicts: abort the rebase and hand it to the user —
+never resolve a rebase conflict on the way to opening a PR.
 
-If conflicts → `git rebase --abort` and inform user.
+### Step 3b: Repo-local pre-PR gates
 
-### Step 3b: Platform Primitive Pre-PR Checks (if the project has them)
-
-If the project has Platform Primitive enforcement (detect via
-`scripts/check-primitive-bypass.sh` existence), run these gates:
-
-```bash
-# 1. All three bypass checks must pass — each is independently guarded
-# so a missing script is an absent-gate case, not a blocking failure.
-for script in \
-    scripts/check-primitive-bypass.sh \
-    scripts/check-crud-bypass.sh \
-    scripts/check-session-bypass.sh
-do
-    if [ -f "$script" ]; then
-        bash "$script" || { echo "FAIL: $script"; exit 1; }
-    fi
-done
-
-# 2. Bypass Register diff check vs main
-if [ -f docs/architecture/BYPASS-REGISTER.md ] && [ -f scripts/generate-bypass-register.sh ]; then
-    # Regenerate and verify it matches what's committed (idempotence)
-    bash scripts/generate-bypass-register.sh > /tmp/pr-register.md
-    if ! diff -q /tmp/pr-register.md docs/architecture/BYPASS-REGISTER.md > /dev/null; then
-        echo "FAIL: BYPASS-REGISTER.md is stale — run 'bash scripts/generate-bypass-register.sh --write' and commit"
-        exit 1
-    fi
-    # Growth check: compare line counts vs main
-    BASE_COUNT=$(git show origin/main:docs/architecture/BYPASS-REGISTER.md 2>/dev/null | grep -c "^| \`" || echo 0)
-    HEAD_COUNT=$(grep -c "^| \`" docs/architecture/BYPASS-REGISTER.md || echo 0)
-    if [ "$HEAD_COUNT" -gt "$BASE_COUNT" ]; then
-        DELTA=$((HEAD_COUNT - BASE_COUNT))
-        echo ""
-        echo "⚠️  BYPASS-REGISTER.md grew by $DELTA entry(s) vs origin/main."
-        echo "   The PR description MUST either:"
-        echo "   (a) cite an ADR that justifies the new bypass(es), or"
-        echo "   (b) explain inline why the bypass is the lesser evil."
-        echo ""
-        echo "   Verify the PR description before marking this gate as pass."
-        # This is a warning, not a hard block — the gh pr create step below
-        # prompts the user to include the justification in the body.
-    fi
-fi
-```
+Run whatever pre-PR check scripts the repo ships (`scripts/check-*.sh` and friends) before
+pushing; a missing script is an absent gate, not a failure. If the repo keeps a generated register
+of deliberate bypasses, regenerate it and confirm the committed copy matches — a stale generated
+file fails CI *after* the PR is open, which costs a full cycle. Grew by an entry? The PR body owes
+a justification or an ADR citation.
 
 ### Step 4: Push
 
-```bash
-git push -u origin $BRANCH --force-with-lease
-```
+`git push -u origin $BRANCH --force-with-lease` — the lease is what makes a rebased push safe.
 
 ### Step 5: Get Ticket Details
 
-If ticketing tool available → fetch story summary for PR body.
+If a ticketing tool is available → fetch the story summary for the PR body.
 
 ### Step 6: Check GitHub CLI availability
 
-```bash
-gh auth status 2>/dev/null && GH_AVAILABLE=true || GH_AVAILABLE=false
-```
-
-If `GH_AVAILABLE=false`: skip Steps 7-8, tell the user to open the PR manually
-(branch is pushed; copy the suggested title and body below), and proceed to
-Step 9 to save the checkpoint.
+No authenticated `gh` → skip Steps 7–8, tell the user to open the PR by hand (the branch is
+pushed; hand them the suggested title and body), then go to Step 9 and save the checkpoint anyway.
 
 ### Step 7: Create PR
 
-```bash
-gh pr create \
-  --title "$TICKET: <Summary>" \
-  --body "$(cat <<'EOF'
-## Summary
-<Brief description>
-
-## Changes
-- [Key changes from commits]
-
-## Test Plan
-- [ ] Tests passing locally
-- [ ] CI checks passing
-
----
-$TICKET
-EOF
-)"
-```
+`gh pr create` with title `$TICKET: <Summary>` and a body carrying: **Summary**, **Changes** (from
+the commits), **Test Plan**, the `## Verification` block from the build's verification step, and
+the ticket key on its own line so the ticket auto-links.
 
 ### Step 8: Link PR to Ticket & Transition
 
@@ -163,12 +98,10 @@ Detection priority + transition-verify-retry procedure: `${CLAUDE_PLUGIN_ROOT}/r
 
 ## Rules
 
-- **VERIFY** all 4 checkpoints before creating PR
-- **STOP** if any checkpoint missing
-- **ALWAYS** rebase on main before push
-- **ALWAYS** save `pr_created` checkpoint after success
-- **ALWAYS** transition ticket → "In Review" in Step 8 (soft-fail only)
-- **If GitHub PR was created:** remind user: *"The repo's configured AI reviewer(s) (whatever `review.available` lists, e.g. CodeRabbit) will review on GitHub. After CI runs, use `/we:ci-review` to fix and resolve threads — unresolved BLOCKING/WARNING (Critical/Major) threads block merge via the review gate(s)."*
-- **If no `gh` CLI:** remind user to open the PR manually; the branch is pushed and ready.
-- **NEVER** merge PR — that's the user's job
-- **NEVER** transition ticket to "Done" — that's the user's job
+- Verify all 4 checkpoints before creating the PR; stop if any is missing.
+- Rebase before pushing; save the `pr_created` checkpoint after success.
+- Transition the ticket → "In Review" in Step 8 — soft-fail loud only when the workflow rejects it.
+- **After a GitHub PR is created**, tell the user: the repo's configured AI reviewer(s) run on
+  GitHub; once CI has run, `/we:ci-review` fixes and resolves the threads — unresolved
+  BLOCKING/WARNING threads block the merge.
+- **Merging and closing stay with the user** — never merge the PR, never move the ticket to "Done".

@@ -41,7 +41,7 @@ Top-N (default 15) sorted descending. Each entry is auto-classified:
 
 ## Score Tuning
 
-The default coefficients reflect a Companion-style backend architecture (LangGraph agent + primitive-based subsystems). Tuning rationale:
+The coefficients were tuned on an agent-runtime backend with primitive-based subsystems. Tuning rationale:
 
 | Component | Coefficient | Why |
 |---|---|---|
@@ -62,13 +62,13 @@ shape of an `expected_hubs:` block for a Companion-style backend:
 ```yaml
 hotspots:
   expected_hubs:
-    - apps/backend/app/main.py                              # app factory (FastAPI / similar)
-    - apps/backend/app/companion/core/being.py              # CONSCIOUSNESS hub
-    - apps/backend/app/companion/core/_langgraph.py         # agent definition
-    - apps/backend/app/companion/gateway/service.py         # FAT entry point
-    - apps/backend/app/api/deps.py                          # auth context chain
-    - apps/backend/app/config/llm.py                        # LLM factory chokepoint
-    - apps/backend/app/config/_instrumented_model.py        # observability chokepoint
+    - <backend>/main.py                              # app factory (FastAPI / similar)
+    - <backend>/<agent-core>/being.py              # CONSCIOUSNESS hub
+    - <backend>/<agent-core>/_graph.py         # agent definition
+    - <backend>/<gateway>/service.py         # FAT entry point
+    - <backend>/api/deps.py                          # auth context chain
+    - <backend>/config/llm.py                        # LLM factory chokepoint
+    - <backend>/config/_instrumented_model.py        # observability chokepoint
     # …add other files the team knows are dense by design.
 ```
 

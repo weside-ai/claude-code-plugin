@@ -60,7 +60,7 @@ If no previous diagram exists, this check produces no finding (first-time audit 
 **How to check:**
 
 - Find all imports referencing the subsystem's `paths:` from outside.
-- Flag any import that reaches *into* a sub-module (e.g. `from app.companion.core._langgraph import X` is a leak — underscore prefix means private).
+- Flag any import that reaches *into* a sub-module (an import of a `_`-prefixed symbol from inside another package is a leak — the underscore is the contract).
 - Public surface should be at most a handful of named exports per package.
 
 **Note on cross-subsystem coverage:** This lens is per-subsystem; a leak FROM a subsystem might be invisible if the importing file is in another subsystem's scope. The Phase-3 `encapsulation-boundaries` lens does the project-wide grep that catches these. See `references/encapsulation-boundaries.md`.
@@ -104,7 +104,7 @@ it from outside.
 
 - For each primitive listed in the subsystem's YAML entry, read the primitive detail doc (`docs/architecture/primitives/<id>.md`) → Invariants section.
 - For each invariant, verify in the subsystem's paths.
-- Cross-check `BYPASS-REGISTER.md` for entries in this subsystem.
+- Cross-check the repo's bypass register, if it keeps one, for entries in this subsystem.
 
 **Synergy with Phase-3:** the `doc-vs-reality-drift` cross-cutting lens runs the same invariant verification project-wide. This per-subsystem check focuses on invariants that are SCOPED to the subsystem.
 
@@ -127,7 +127,7 @@ it from outside.
 
 - Search for `print(` in subsystem paths → MAJOR finding (cross-ref `observability-triad.md` I1).
 - Search for raw `logging.getLogger` instead of the project's structured-logger primitive → MAJOR (a recurring real-world finding pattern in observability audits).
-- Check that LLM calls go through `InstrumentedChatModel`.
+- Check that model calls go through the project's instrumented wrapper, not a vendor SDK directly.
 - Search for `logger.{info,error,warning}(f"…")` → MAJOR (cross-ref `observability-triad.md` I2).
 - Spot-check log lines for PII (email, phone, raw user_id without hash) → CRITICAL if found.
 
@@ -147,7 +147,7 @@ it from outside.
 
 **How to check:**
 
-- Run `cd apps/backend && poetry run pytest --cov=app/<subsystem-path>` if available.
+- Run `cd <backend> && poetry run pytest --cov=app/<subsystem-path>` if available.
 - Note the coverage number; flag <80% as MINOR.
 - For each primitive invariant in scope: search for a test that asserts it. Map invariant-to-test. Missing mapping = MINOR.
 - Look for unit-only paths that should have integration tests (e.g., anything touching DB sessions or LLM calls).

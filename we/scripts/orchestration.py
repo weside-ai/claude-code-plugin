@@ -2810,7 +2810,7 @@ def _resolve_epic_identifiers(epic: str, plans_path: Path) -> set[str]:
 
     A Story references its epic by either the epic plan's slug (``epic:``) or its
     ticketing key (``ticket:``) — e.g. the ``circles`` epic plan carries
-    ``epic: circles, ticket: WA-1205`` while its Stories use ``epic: WA-1205``.
+    ``epic: circles, ticket: PROJ-1205`` while its Stories use ``epic: PROJ-1205``.
 
     Epic plan files are named by slug (``<slug>-epic.md``), so a glob on the
     passed identifier only matches when the arg IS the slug. To make slug-OR-key
@@ -2849,7 +2849,7 @@ def _is_built_status(status: Any) -> bool:
     return status.strip().strip("*_` ").lower() in _BUILT_STATUSES
 
 
-# One mirror row: `| WA-1776 | [S0] Title | **Done** | ✓ | 2026-07-25 | notes |`
+# One mirror row: `| PROJ-176 | [S0] Title | **Done** | ✓ | 2026-07-25 | notes |`
 _MIRROR_ROW_RE = re.compile(r"^\|\s*([A-Z][A-Z0-9_]+-\d+)\s*\|([^|]*)\|([^|]*)\|", re.MULTILINE)
 
 

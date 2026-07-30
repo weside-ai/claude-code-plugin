@@ -138,6 +138,5 @@ aggregates and prioritises across files; the per-file work is `doc-improve`'s.
 - **Agent:** `we/agents/doc-architect.md`
 - **Project config:** `docs/.doc-architect.yml` (per-repo)
 - **Doc standards rule:** `.claude/rules/quality/doc-standards.md`
-- **Primitives index:** `docs/architecture/PRIMITIVES.md`
-- **Bypass register:** `docs/architecture/BYPASS-REGISTER.md`
+- **Repo indices, where they exist:** the primitive index and the bypass register under `docs/architecture/`
 - **Per-file reviewer:** `we/skills/doc-improve/SKILL.md` (used by Audit mode and as a standalone entry point)

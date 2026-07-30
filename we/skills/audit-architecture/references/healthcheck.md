@@ -35,17 +35,10 @@ the table.
 
 **Mechanic:**
 
-```bash
-cd <repo_root>
-bash scripts/generate-bypass-register.sh > /tmp/bypass-current.md
-diff docs/architecture/BYPASS-REGISTER.md /tmp/bypass-current.md
-```
-
-(Script path comes from `healthcheck.bypass_register_drift.generator_script`.)
-
-The committed `BYPASS-REGISTER.md` should equal the freshly-generated one.
-If it differs, the codebase has new (or removed) bypasses that the
-register file is unaware of.
+Run the repo's register generator (path from
+`healthcheck.bypass_register_drift.generator_script`) and diff its output against the committed
+register (`…register_path`). They should be identical; a difference means the codebase gained or
+lost deliberate bypasses that the register never heard about.
 
 **Output format:**
 
@@ -54,8 +47,8 @@ register file is unaware of.
 
 | Change | Annotation | File:Line | Reason |
 |---|---|---|---|
-| NEW | `# CRUD-BYPASS-OK` | app/admin/dashboard.py:88 | "admin cross-user query" |
-| REMOVED | `# SESSION-BYPASS-OK` | app/health/probe.py:14 | (was in v3.4.0, gone now) |
+| NEW | `# DATA-BYPASS-OK` | <path>/admin/dashboard.py:88 | "admin cross-tenant query" |
+| REMOVED | `# SESSION-BYPASS-OK` | <path>/health/probe.py:14 | (present in the last audit, gone now) |
 ```
 
 Plus a recommendation: "Run `bash scripts/generate-bypass-register.sh --write`
@@ -88,8 +81,8 @@ for the implementation.
 
 | Path | PR Count | Already a Primitive? |
 |---|---|---|
-| apps/backend/app/dispatch/ | 8 | ✓ DispatchService |
-| apps/backend/app/proactivity/triggers/ | 4 | ⚠ no primitive |
+| <backend>/dispatch/ | 8 | ✓ DispatchService |
+| <backend>/proactivity/triggers/ | 4 | ⚠ no primitive |
 
 **PR keyword matches (review manually):**
 

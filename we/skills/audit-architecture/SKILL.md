@@ -210,9 +210,8 @@ Plus the backward-compat redirect at `<findings_dir>/<date>-<scope>.md`.
 
 ## References
 
-- [`SPEC-v3.md`](SPEC-v3.md) — design rationale for maintainers (goals, why-v3, future work) — not needed at runtime
 - [`references/subsystems.md`](references/subsystems.md) — YAML schema
-- [`references/lens-library.md`](references/lens-library.md) — lens registry + activation rules
+- [`references/lens-library.md`](references/lens-library.md) — lens registry + activation rules + the single-owner map
 - [`references/healthcheck.md`](references/healthcheck.md) — Phase 0
 - [`references/hotspot-density.md`](references/hotspot-density.md) — Phase 1
 - [`references/audit-checklist.md`](references/audit-checklist.md) — Phase 2

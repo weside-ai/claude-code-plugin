@@ -50,7 +50,7 @@ At the end of a refinement, when the work spans more than one sitting, print the
 ready-to-paste invocation — do not invoke it:
 
 ```text
-Recommended next: /we:orchestrate WA-1234
+Recommended next: /we:orchestrate PROJ-1234
 
 Long-running:
   /loop <the round's task, verbatim from the plan's exit criterion>

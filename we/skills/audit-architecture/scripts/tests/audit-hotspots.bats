@@ -1,7 +1,11 @@
 #!/usr/bin/env bats
 #
-# Tests for audit-hotspots.py — the v3 Phase-1 primitive-density scanner.
-# We use a small in-tmpdir fixture project (3 fake .py files + minimal YAML).
+# Tests for audit-hotspots.py — the Phase-1 primitive-density scanner.
+#
+# The fixture is a deliberately *generic* project (src/ layout, a made-up vendor), because the
+# shipped catalog carries no project-specific defaults: encapsulation homes and the private-module
+# root come from the project's own YAML. These tests therefore also cover that contract — if
+# leak-detection only worked with a catalog default, they would fail.
 
 setup() {
   SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
@@ -11,59 +15,54 @@ setup() {
   TMPROOT="$(mktemp -d)"
   cd "$TMPROOT"
 
-  # Initialize a tiny git repo so churn-counting works
   git init -q
   git config user.email "test@test.local"
   git config user.name "test"
 
-  # Build a tiny fixture backend
-  mkdir -p apps/backend/app/companion/core
-  mkdir -p apps/backend/app/services
-  mkdir -p docs
+  mkdir -p src/core src/services src/config docs
 
-  # File 1: looks like a hub (uses several primitives, small)
-  cat > apps/backend/app/companion/core/being.py <<'EOF'
-"""Mock CompanionBeing."""
-from app.config.llm import LLMFactory
-from app.core.logging import get_logger
-from app.crud import user as crud_user
-from app.companion.core._langgraph import build_graph
+  # File 1: a hub — composes several of the starter catalog's primitives, stays small
+  cat > src/core/engine.py <<'EOF'
+"""Mock engine composing several primitives."""
+from vendorlib import Client
+from src.core.logging import get_logger
+from src.crud import user as crud_user
+from src.core._internal import build_pipeline
 
 logger = get_logger(__name__)
-class CompanionBeing:
+
+
+class Engine:
+    def run(self, session_scope):
+        with session_scope() as s:
+            return s
+EOF
+
+  # File 2: violates encapsulation — vendor import in a service, plus a private reach-in
+  cat > src/services/dispatcher.py <<'EOF'
+"""Mock dispatcher with a vendor leak and a private reach-in."""
+from vendorlib import Client
+from src.core._internal import build_pipeline
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
+EOF
+
+  # File 3: the vendor's legitimate home
+  cat > src/config/clients.py <<'EOF'
+"""Legitimate vendor home."""
+from vendorlib import Client
+
+
+class ClientFactory:
     pass
 EOF
 
-  # File 2: violates encapsulation (langchain in service)
-  cat > apps/backend/app/services/skill_dispatcher.py <<'EOF'
-"""Mock skill dispatcher with vendor leak."""
-from langchain_anthropic import ChatAnthropic
-from app.companion.core._credit_check import current_is_byok
-from app.core.logging import get_logger
-logger = get_logger(__name__)
-EOF
+  touch src/__init__.py src/core/__init__.py src/services/__init__.py src/config/__init__.py
 
-  # File 3: legitimate config/llm.py (langchain home)
-  mkdir -p apps/backend/app/config
-  cat > apps/backend/app/config/llm.py <<'EOF'
-"""Legitimate LLMFactory home."""
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
-
-class LLMFactory:
-    pass
-EOF
-
-  # __init__.py files (excluded from scan)
-  touch apps/backend/app/__init__.py
-  touch apps/backend/app/companion/__init__.py
-  touch apps/backend/app/companion/core/__init__.py
-  touch apps/backend/app/services/__init__.py
-  touch apps/backend/app/config/__init__.py
-
-  # Minimal project config
+  # Project config — carries the encapsulation contract the catalog deliberately leaves empty
   cat > docs/.audit-architecture.yml <<'EOF'
-backend_root: apps/backend/app
+backend_root: src
 findings_dir: docs/audits/
 diagrams_dir: docs/architecture/diagrams/
 
@@ -71,8 +70,12 @@ hotspots:
   top_n: 5
   since: "1 day ago"
   expected_hubs:
-    - apps/backend/app/companion/core/being.py
-    - apps/backend/app/config/llm.py
+    - src/core/engine.py
+    - src/config/clients.py
+  encapsulation_homes:
+    vendorlib:
+      - src/config/
+  private_module_root: src/core
 EOF
 
   git add -A
@@ -84,15 +87,14 @@ teardown() {
   rm -rf "$TMPROOT"
 }
 
-@test "script exists and is executable" {
+@test "script exists" {
   [ -f "$SCRIPT" ]
 }
 
-@test "runs with default config and produces a markdown table" {
+@test "runs and produces a markdown table" {
   run python3 "$SCRIPT" --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Architecture Hotspot Heatmap"* ]]
-  # Fixture has 3 scannable files (excluding __init__.py); top label is min(N, total)
   [[ "$output" == *"by composite score"* ]]
 }
 
@@ -104,33 +106,40 @@ teardown() {
   [[ "$output" == *"churn"* ]]
 }
 
+@test "the starter catalog detects primitives in a generic project" {
+  run python3 "$SCRIPT" --file src/core/engine.py --primitives-catalog "$CATALOG"
+  [ "$status" -eq 0 ]
+  # get_logger → structured-logging; session_scope → db-session; crud import → data-access-layer
+  [[ "$output" == *"structured-logging"* ]]
+  [[ "$output" == *"db-session"* ]]
+}
+
 @test "marks expected_hubs with ✓" {
   run python3 "$SCRIPT" --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
   [ "$status" -eq 0 ]
-  # being.py should be marked as hub (in expected_hubs)
-  [[ "$output" =~ being\.py.*✓ ]] || [[ "$output" =~ "✓" ]]
+  [[ "$output" =~ "✓" ]]
 }
 
-@test "flags vendor leak in skill_dispatcher.py (outside langchain home)" {
-  run python3 "$SCRIPT" --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
+@test "vendor leak detected outside the configured home (from project YAML)" {
+  run python3 "$SCRIPT" --file src/services/dispatcher.py --primitives-catalog "$CATALOG"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"skill_dispatcher.py"* ]]
+  [[ "$output" == *"vendorlib"* ]]
 }
 
-@test "config/llm.py has zero leaks (it IS the langchain home)" {
-  run python3 "$SCRIPT" --file apps/backend/app/config/llm.py --primitives-catalog "$CATALOG"
+@test "the vendor's own home has zero leaks" {
+  run python3 "$SCRIPT" --file src/config/clients.py --primitives-catalog "$CATALOG"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Vendor-leaks: none"* ]]
 }
 
-@test "skill_dispatcher.py has langchain leak detected" {
-  run python3 "$SCRIPT" --file apps/backend/app/services/skill_dispatcher.py --primitives-catalog "$CATALOG"
+@test "private reach-in detected from outside the private root" {
+  run python3 "$SCRIPT" --file src/services/dispatcher.py --primitives-catalog "$CATALOG"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"langchain"* ]]
+  [[ "$output" == *"_internal"* ]] || [[ "$output" == *"each-in"* ]]
 }
 
 @test "--file mode prints detailed breakdown" {
-  run python3 "$SCRIPT" --file apps/backend/app/companion/core/being.py --primitives-catalog "$CATALOG"
+  run python3 "$SCRIPT" --file src/core/engine.py --primitives-catalog "$CATALOG"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Score:"* ]]
   [[ "$output" == *"Primitives composed"* ]]
@@ -149,12 +158,11 @@ teardown() {
 }
 
 @test "loads custom backend_root override" {
-  # Move fixture
-  mkdir -p alt_backend/app
-  cp apps/backend/app/companion/core/being.py alt_backend/app/being.py
-  run python3 "$SCRIPT" --backend-root alt_backend/app --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
+  mkdir -p alt_root/app
+  cp src/core/engine.py alt_root/app/engine.py
+  run python3 "$SCRIPT" --backend-root alt_root/app --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"alt_backend/app"* ]]
+  [[ "$output" == *"alt_root/app"* ]]
 }
 
 @test "errors out helpfully if backend_root does not exist" {
@@ -163,17 +171,25 @@ teardown() {
   [[ "$output" == *"Backend root not found"* ]]
 }
 
+@test "auto-detects the source root when the YAML names none" {
+  # Drop backend_root from the config; src/ must still be found.
+  grep -v '^backend_root:' docs/.audit-architecture.yml > docs/tmp.yml
+  mv docs/tmp.yml docs/.audit-architecture.yml
+  run python3 "$SCRIPT" --primitives-catalog "$CATALOG" --top 5 --since "1 day ago"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"src"* ]]
+}
+
 @test "warns when no primitive detectors configured (empty catalog)" {
   EMPTY_CATALOG="$(mktemp)"
   echo "primitives: []" > "$EMPTY_CATALOG"
   run python3 "$SCRIPT" --primitives-catalog "$EMPTY_CATALOG" --top 5 --since "1 day ago"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"WARNING"* ]] || true   # warning is on stderr, may not be in $output
+  [[ "$output" == *"WARNING"* ]] || true   # warning goes to stderr
   rm "$EMPTY_CATALOG"
 }
 
 @test "project YAML primitive_detectors override catalog entries" {
-  # Add a project-specific detector
   cat >> docs/.audit-architecture.yml <<'EOF'
 
 primitive_detectors:
@@ -181,11 +197,10 @@ primitive_detectors:
     patterns:
       - "MARKER_FOR_TEST"
 EOF
-  # Add a file with the marker
-  echo "MARKER_FOR_TEST = True" >> apps/backend/app/services/skill_dispatcher.py
+  echo "MARKER_FOR_TEST = True" >> src/services/dispatcher.py
   git add -A && git commit -q -m "add marker"
 
-  run python3 "$SCRIPT" --file apps/backend/app/services/skill_dispatcher.py --primitives-catalog "$CATALOG"
+  run python3 "$SCRIPT" --file src/services/dispatcher.py --primitives-catalog "$CATALOG"
   [ "$status" -eq 0 ]
   [[ "$output" == *"custom-test-marker"* ]]
 }

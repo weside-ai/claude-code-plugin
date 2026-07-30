@@ -34,7 +34,7 @@ import urllib.request
 MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
 MAX_CONTENT_LENGTH = 500
-_MAX_SOURCE_DETAIL_LEN = 200  # mirrors apps/backend/app/mcp/tools/memory.py
+_MAX_SOURCE_DETAIL_LEN = 200  # mirrors the backend's own source_detail cap
 
 MCP_URL = "https://api.weside.ai/mcp/"
 CLAUDE_CODE_CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
@@ -154,7 +154,7 @@ def _build_source_detail(project: str, tag: str | None) -> str:
     """Fold a session tag into source_detail, without letting it get clipped.
 
     The backend truncates source_detail to _MAX_SOURCE_DETAIL_LEN chars,
-    right-side (apps/backend/app/mcp/tools/memory.py) — so an unusually long
+    right-side, server-side — so an unusually long
     repo dirname could otherwise slice the tag itself instead of falling back
     cleanly. Reserve room for "#<tag>" and trim project first.
     """

@@ -119,7 +119,7 @@ flowchart TB
         I2["I2 ✗ 8 f-string logger calls"]:::critical
         I3["I3 ✗ no trace_id middleware"]:::critical
         I4["I4 ⚠ partial PII redaction"]:::major
-        I5["I5 ✓ InstrumentedChatModel chokepoint"]:::clean
+        I5["I5 ✓ model calls go through the wrapper"]:::clean
         I6["I6 ✓ all cost paths metered"]:::clean
         I7["I7 ✓ Sentry integration"]:::clean
         I8["I8 ✗ user_id labels on counters"]:::critical
@@ -173,30 +173,11 @@ When applying severity classes to nodes:
 
 ## Worked Example — Subsystem Diagram with Findings
 
-An illustrative memory-subsystem audit produced 0 CRITICAL + 1 MAJOR + 2 MINOR + 1 NIT. Applying v3 conventions, the diagram becomes:
-
-```mermaid
-flowchart TB
-    subgraph Storage["Storage (per-user encrypted)"]
-        MEM["memories<br/>append-only"]
-        BUF["reminder_buffer"]
-        EMB["pgvector chunks"]
-    end
-
-    subgraph CRUD["CRUD Layer (single chokepoint)"]
-        CMEM["crud/memory.py (1424 LOC)"]:::minor
-        CBUF["crud/reminder_buffer.py"]:::clean
-    end
-
-    AME["endpoints/memory.py"]:::clean --> CMEM
-    CMEM --> MEM
-    CBUF --> BUF
-
-    classDef clean fill:#ccffcc,stroke:#00aa00
-    classDef minor fill:#fff5cc,stroke:#cc9900
-```
-
-`crud/memory.py` is colored MINOR because of the file-size finding (M-MIN-1: 1424 LOC future-split candidate). Everything else has no findings → default-styled or `clean` if explicitly verified.
+Take a memory subsystem audited at 0 CRITICAL / 1 MAJOR / 2 MINOR / 1 NIT. The diagram keeps its
+three layers (storage → CRUD chokepoint → API), the CRUD module carries `:::minor` because of its
+file-size finding, the verified-clean nodes carry `:::clean`, and everything without a finding stays
+default-styled. One colour per node, always the maximum severity found on it — that is the whole
+convention, and it is what makes a reader's eye land on the right file first.
 
 ## Master.md Layout (Phase 4)
 

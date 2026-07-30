@@ -19,7 +19,7 @@ Top-level keys of `docs/.audit-architecture.yml` — each is specified in its ow
 findings_dir: docs/audits/                    # REQUIRED (v2)
 diagrams_dir: docs/architecture/diagrams/     # REQUIRED (v2)
 healthcheck: {...}                            # Phase 0 — § Healthcheck Schema
-backend_root: apps/backend/app                # NEW v3 — hotspot scan root (default shown)
+backend_root: <path>                          # NEW v3 — hotspot scan root; SET THIS (see below)
 default_lenses: [...]                         # NEW v3 — § Lens-Activation Schema
 cross_cutting: [...]                          #          "
 optional_lenses: [...]                        #          "
@@ -43,7 +43,7 @@ healthcheck:
     enabled: true|false
     pr_count: 100
     repo_paths:
-      - apps/backend/app/
+      - <backend>/
     keyword_patterns:
       - "introduce"
       - "centralize"
@@ -113,7 +113,7 @@ is no useful default for what "personality" means in any given project.
   primitives:                                   # optional, list of primitive ids
     - foo
   paths:                                        # optional, real existing dirs
-    - apps/backend/app/foo/
+    - <backend>/foo/
   extra_lens:                                   # NEW v3: list (was string in v2)
     - personality-cohesion                      # any lens name from optional_lenses
     - privacy
@@ -130,55 +130,14 @@ is no useful default for what "personality" means in any given project.
 
 ## Reading the YAML at Run-Time
 
-Use Python (yaml module). The skill provides a helper that loads + validates + applies defaults:
+Load it with PyYAML, then apply the v3 defaults for any missing `default_lenses` /
+`cross_cutting` / `optional_lenses` (values in § Lens-Activation Schema above) and coerce a
+string `extra_lens` to a one-item list. Split the subsystems by `mode` — `deep-audit` drives
+Phase 2, `docs_only` gets a diagram + doc review only.
 
-```python
-import yaml
-data = yaml.safe_load(open("docs/.audit-architecture.yml"))
-
-# v3 default-loading
-data.setdefault("default_lenses", ["encapsulation", "layering", "primitive-compliance",
-                                    "security", "observability", "error-handling", "tests"])
-data.setdefault("cross_cutting", ["encapsulation-boundaries",
-                                   "architectural-significance",
-                                   "doc-vs-reality-drift"])
-data.setdefault("optional_lenses", [])
-
-# Backward-compat: extra_lens as string → list
-for s in data["subsystems"]:
-    if isinstance(s.get("extra_lens"), str):
-        s["extra_lens"] = [s["extra_lens"]]
-
-deep_audit = [s for s in data["subsystems"] if s["mode"] == "deep-audit"]
-docs_only = [s for s in data["subsystems"] if s["mode"] == "docs_only"]
-```
-
-## CLI Scope Filtering
-
-```python
-# /we:audit-architecture tools-skills,workspace-io
-scope = "tools-skills,workspace-io".split(",")
-filtered = [s for s in data["subsystems"] if s["id"] in scope]
-unknown = [id for id in scope if id not in {s["id"] for s in data["subsystems"]}]
-if unknown:
-    print(f"Unknown subsystem ids: {unknown}")
-    raise SystemExit(1)
-```
-
-## CLI Lens Filtering
-
-```python
-# /we:audit-architecture --lens=encapsulation-boundaries,personality-cohesion
-lens_filter = args.lens.split(",") if args.lens else None
-if lens_filter:
-    # In Phase 3, only run these lenses
-    cross_cutting_to_run = [l for l in (data["cross_cutting"] + data["optional_lenses"])
-                             if l in lens_filter]
-    unknown = [l for l in lens_filter if l not in (data["cross_cutting"] + data["optional_lenses"])]
-    if unknown:
-        print(f"Unknown lens names: {unknown}. Available: {data['cross_cutting'] + data['optional_lenses']}")
-        raise SystemExit(1)
-```
+**An unknown id fails loudly.** A CLI scope naming a subsystem the YAML does not define, or a
+`--lens=` naming an unregistered lens, aborts with the list of valid names — silently auditing a
+subset the user did not ask for is worse than not running.
 
 ## Reading `.doc-architect.yml` (read-only)
 
@@ -193,31 +152,18 @@ promotion_to_primitive:
 
 Don't duplicate this into the audit YAML — read it directly.
 
+## Set `backend_root` explicitly — the shipped defaults assume one layout
+
+`scripts/audit-hotspots.py` and `scripts/primitives.default.yml` carry defaults taken from the
+project the skill grew up in (`backend_root`, `encapsulation_homes`, `private_module_root`). On any
+other repo they scan the wrong tree or match nothing, and Phase 1 then reports a clean heatmap for
+a codebase it never read. **Set `backend_root` in your YAML, and override
+`hotspots.primitive_detectors` + `encapsulation_homes` with your own patterns** — a density map
+built on someone else's primitives is decoration.
+
 ## Migration from v2 to v3
 
-A v2 config requires NO changes to run on v3. To take advantage of new v3 features:
-
-```yaml
-# Add at the end of the file (anywhere works, YAML is unordered):
-
-backend_root: apps/backend/app          # if not already implicit
-
-hotspots:
-  top_n: 15
-  since: "6 months ago"
-  expected_hubs:
-    - <list documented hub files>
-
-# If you have a Companion-style architecture and want personality-cohesion:
-optional_lenses: [personality-cohesion]
-
-personality_cohesion:
-  identity_construction_paths: [...]
-  five_components_map: {...}
-  forbidden_outside_consciousness: [...]
-
-# Then in your subsystem entries, optionally:
-subsystems:
-  - id: companion-core
-    extra_lens: [personality-cohesion]
-```
+A v2 config runs unchanged on v3. To opt into the v3 features, append: `backend_root`, a
+`hotspots:` block (`top_n`, `since`, `expected_hubs`), and — for a Companion-style architecture —
+`optional_lenses: [personality-cohesion]` plus the `personality_cohesion:` block from
+`references/personality-cohesion.md`, activated per subsystem via `extra_lens:`.

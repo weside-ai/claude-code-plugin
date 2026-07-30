@@ -156,7 +156,7 @@ Distill into the plan:
 - **Design Decisions table:** Every alternative discussed, every "we could also do X"
   that was rejected, with the reasoning. Empty rows are fine if nothing was discussed.
 
-**CRITICAL: Always read files COMPLETELY** (no offset/limit). Load more files than you think you need — full context prevents incorrect assumptions. Never skim or partially read source files.
+**Read the plan and the files it names in full.** A partially-read plan produces a partially-built story, and the sections you skip are the ones carrying the constraint. Load more files than feel necessary — a wrong assumption costs more than a wide read.
 
 ```markdown
 ---
@@ -305,11 +305,10 @@ Both run the same plan; they differ in *who holds the work* and *how much overhe
 
 | | `/we:build {TICKET}` | `/we:orchestrate {TICKET}` (single-Story, Mode B) |
 |---|---|---|
-| **Shape** | One autonomous pass in the caller's session | Lead dispatches each phase as a focused work-chunk to a teammate, integrates onto one branch, runs QS once → one PR |
-| **Best for** | Trivially straight-line work — one phase, small diff, no real decomposition | Anything you'd want to **split into phases**; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
-| **Caller's context** | Fills with the whole implementation | Stays clean — the caller reviews reports + the final PR, not every diff |
-| **Review stance** | Caller is also the implementer | Caller reviews the result **neutrally** (didn't write it) |
-| **Parallelism** | Sub-agent fan-out per `parallel_groups` | Chunk waves per `parallel_groups`, ≤2 concurrent |
+| **Shape** | one autonomous pass in the caller's session | Lead dispatches each phase as a work-chunk, integrates onto one branch, runs QS once → one PR |
+| **Best for** | trivially straight-line work — one phase, small diff | anything worth splitting into phases; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
+| **Caller's context** | fills with the whole implementation | stays clean — reports and the final PR, not every diff |
+| **Review stance** | caller is also the implementer | caller reviews **neutrally** (didn't write it) |
 
 **The heuristic (lead with orchestrate unless it's trivial):**
 
