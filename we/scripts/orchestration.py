@@ -32,7 +32,8 @@ Usage:
     python cli.py story resume <story_key>  # Get latest checkpoint for resume
     python cli.py story status <story_key>  # Get comprehensive story status
     python cli.py story list [--active]  # List stories with checkpoints
-    python cli.py story ready <epic> [--plans-dir <dir>] [--cap <n>]  # Compute ready set
+    python cli.py story state <epic> [--plans-dir <dir>] [--in-flight <keys>]  # State + next actions
+    python cli.py story ready <epic> [--plans-dir <dir>] [--cap <n>]  # Ready set (superseded)
     python cli.py story phases  # List valid story phases
 
     python cli.py circuit check <story_key> <phase>  # Check if phase is allowed
@@ -2948,6 +2949,355 @@ def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
     return stories
 
 
+# --------------------------------------------------------------------------- #
+# Epic state — evidence over bookkeeping
+# --------------------------------------------------------------------------- #
+
+# The state ladder, most-advanced first. The FIRST rule that matches decides,
+# which is why order is load-bearing: a shipped story is never asked whether it
+# was refined, and a merged branch outranks a checkpoint that was never written.
+#
+# `refined` is BOTH a rung and a signal. As a rung it means "planned, nothing
+# built yet". As a signal (`signals: ["unrefined"]`) it survives onto the higher
+# rungs, because "built without a plan" is a real and checkable problem: there
+# are no acceptance criteria for the integration gate to verify.
+EPIC_STATES = ("shipped", "integrated", "built", "refined", "draft", "idea")
+
+# A dependency is satisfied for DEVELOP once its code exists on a branch — the
+# Lead merges finished branches as they arrive, so the dependent worker's base
+# carries it. Waiting for `integrated` would serialise every chain.
+_DEVELOP_DEP_OK = {"shipped", "integrated", "built"}
+
+# For REFINE, planning against a dependency's plan/seam is enough (this is what
+# REFINABLE_DEP_MODE governs for the older ready-set path).
+_REFINE_DEP_OK = {"shipped", "integrated", "built", "refined"}
+
+DEFAULT_CAPS = {"refine": 3, "develop": 2, "integrate": 1}
+
+
+def _git(args: list[str], cwd: Path | None = None) -> tuple[int, str]:
+    """Run a git command, returning (exit code, stripped stdout).
+
+    Never raises: a missing git, a non-repo cwd and a failed command are all
+    reported as a non-zero code, because every caller's fallback is the same —
+    fall back to checkpoint evidence rather than guess.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+    return proc.returncode, proc.stdout.strip()
+
+
+def _git_branch_index(cwd: Path | None = None) -> list[str]:
+    """Every local and remote-tracking branch, as short names. One git call.
+
+    Deliberately does NOT fetch: a fetch inside a status read is a network round
+    trip the caller did not ask for, and stale remote-tracking refs still answer
+    the only question asked here — does work for this story exist locally?
+    """
+    code, out = _git(
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"], cwd
+    )
+    if code != 0:
+        return []
+    return [line for line in out.splitlines() if line and not line.endswith("/HEAD")]
+
+
+def _resolve_base(base: str | None, cwd: Path | None = None) -> str | None:
+    """The ref new work is measured against. None when nothing resolves."""
+    candidates = (
+        [base] if base else ["origin/HEAD", "origin/main", "main", "origin/master", "master"]
+    )
+    for candidate in candidates:
+        if candidate and _git(["rev-parse", "--verify", "--quiet", candidate], cwd)[0] == 0:
+            return candidate
+    return None
+
+
+def _branches_for_key(key: str, branches: list[str], integration_branch: str | None) -> list[str]:
+    """Branches belonging to a story key.
+
+    The plugin's branch invariant is that the ticket key is regex-extractable
+    from the branch name (`feat/PROJ-123-add-login`, `feat/PROJ-123-work`), so
+    match the key on a non-alphanumeric boundary rather than by prefix — that
+    keeps PROJ-12 from claiming PROJ-123's branch. The integration branch is
+    excluded by name: it carries every story's commits and would otherwise make
+    all of them look built.
+    """
+    pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(key)}(?![A-Za-z0-9])")
+    excluded = set()
+    if integration_branch:
+        excluded = {integration_branch, f"origin/{integration_branch}"}
+    return [b for b in branches if b not in excluded and pattern.search(b)]
+
+
+def _git_story_state(
+    key: str,
+    branches: list[str],
+    *,
+    base: str | None,
+    integration_branch: str | None,
+    cwd: Path | None = None,
+) -> dict[str, Any]:
+    """What git knows about one story. Empty dict when git cannot answer.
+
+    An empty return is the signal to fall back to checkpoint evidence — which is
+    what the caller does. Git is preferred because it cannot forget: a story
+    whose checkpoint was never written still has its branch, and that is exactly
+    the failure that let merged stories keep being offered as ready.
+    """
+    if not branches or base is None:
+        return {}
+    own = _branches_for_key(key, branches, integration_branch)
+    if not own:
+        return {"branch": None, "ahead": False, "merged": False}
+
+    target = integration_branch or base
+    merged = any(
+        _git(["merge-base", "--is-ancestor", b, target], cwd)[0] == 0 for b in own if b != target
+    )
+    ahead = False
+    for b in own:
+        code, out = _git(["rev-list", "--count", f"{base}..{b}"], cwd)
+        if code == 0 and out.isdigit() and int(out) > 0:
+            ahead = True
+            break
+    return {"branch": own[0], "ahead": ahead, "merged": merged}
+
+
+def _classify(story: dict[str, Any]) -> str:
+    """One story's evidence → its rung on EPIC_STATES. First match wins."""
+    if story.get("shipped"):
+        return "shipped"
+    if story.get("merged"):
+        return "integrated"
+    if story.get("branch") and story.get("ahead"):
+        return "built"
+    if story.get("refined"):
+        return "refined"
+    if story.get("plan_exists"):
+        return "draft"
+    return "idea"
+
+
+def compute_epic_state(
+    stories: list[dict[str, Any]],
+    *,
+    in_flight: list[str] | None = None,
+    caps: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Turn per-story evidence into states, one next action each, and a dispatch plan.
+
+    Pure: no I/O, no DB, no git. The caller gathers evidence (that is
+    ``_load_epic_state``); this decides what it means.
+
+    Args:
+        stories: dicts with ``key`` plus whatever evidence was available::
+
+            {
+                "key": str,
+                "shipped": bool,        # ticket in review/done, or a PR exists
+                "merged": bool,         # branch is an ancestor of the integration branch
+                "branch": str | None,   # a story branch was found
+                "ahead": bool,          # that branch has commits beyond the base
+                "refined": bool,        # the plan passes the DoR scan
+                "plan_exists": bool,    # a plan file exists at all
+                "deps": list[str],
+                "signals": list[str],   # human-decision signals the Lead detected
+            }
+
+        in_flight: keys already dispatched. The evidence cannot know this — a
+            dispatch is not an outcome — so the Lead holds it and passes it in.
+            Without it a running worker's story keeps being offered.
+        caps: ``{"refine": n, "develop": n, "integrate": n}``; missing keys fall
+            back to ``DEFAULT_CAPS``.
+
+    Returns:
+        ``{"stories": [{key, state, next_action, blocked_by, signals}],
+           "dispatch": {"refine": [...], "develop": [...], "integrate": [...]},
+           "decisions": [{key, reason}], "waiting": [{key, reason}],
+           "in_flight": [...]}``
+
+    ``next_action`` is one of ``REFINE``, ``DEVELOP``, ``INTEGRATE``, ``DECIDE``
+    or ``None``. A story reaches ``dispatch`` only when its action is dispatchable
+    AND its dependencies allow it AND a slot is free; otherwise it appears in
+    ``decisions`` (a human must answer something) or ``waiting`` (with a reason).
+    """
+    flight = set(in_flight or [])
+    limits = {**DEFAULT_CAPS, **(caps or {})}
+
+    state_of = {s["key"]: _classify(s) for s in stories}
+    rows: list[dict[str, Any]] = []
+    dispatch: dict[str, list[str]] = {"refine": [], "develop": [], "integrate": []}
+    decisions: list[dict[str, str]] = []
+    waiting: list[dict[str, str]] = []
+
+    for story in sorted(stories, key=lambda s: s["key"]):
+        key = story["key"]
+        state = state_of[key]
+        deps = story.get("deps") or []
+        signals = list(story.get("signals") or [])
+        if state in ("built", "integrated", "shipped") and not story.get("refined"):
+            # No plan means no acceptance criteria — the integration gate has
+            # nothing to check this story against. Name it rather than let the
+            # ladder swallow it.
+            signals.append("built-without-plan")
+
+        action: str | None = None
+        blocked: str | None = None
+
+        if key in flight:
+            blocked = "in flight"
+        elif state == "shipped":
+            pass
+        elif state == "integrated":
+            blocked = "waiting for the wave to close"
+        elif state == "built":
+            action = "INTEGRATE"
+        elif state == "refined":
+            unmet = next((d for d in deps if state_of.get(d, "idea") not in _DEVELOP_DEP_OK), None)
+            if unmet is not None:
+                blocked = f"waiting on {unmet} ({state_of.get(unmet, 'unknown')})"
+            else:
+                action = "DEVELOP"
+        else:  # draft | idea
+            unmet = next((d for d in deps if state_of.get(d, "idea") not in _REFINE_DEP_OK), None)
+            if unmet is not None:
+                blocked = f"waiting on {unmet} ({state_of.get(unmet, 'unknown')})"
+            elif signals:
+                action = "DECIDE"
+            else:
+                action = "REFINE"
+
+        lane = {"REFINE": "refine", "DEVELOP": "develop", "INTEGRATE": "integrate"}.get(
+            action or ""
+        )
+        if lane:
+            if len(dispatch[lane]) < limits[lane]:
+                dispatch[lane].append(key)
+            else:
+                blocked = f"{lane} cap reached"
+        elif action == "DECIDE":
+            decisions.append({"key": key, "reason": ", ".join(signals)})
+
+        if blocked:
+            waiting.append({"key": key, "reason": blocked})
+
+        rows.append(
+            {
+                "key": key,
+                "state": state,
+                "next_action": action if not blocked else None,
+                "blocked_by": blocked,
+                "signals": signals,
+            }
+        )
+
+    return {
+        "stories": rows,
+        "dispatch": dispatch,
+        "decisions": decisions,
+        "waiting": waiting,
+        "in_flight": sorted(flight),
+    }
+
+
+def _load_epic_state(
+    epic: str,
+    plans_dir: str,
+    *,
+    base: str | None = None,
+    integration_branch: str | None = None,
+    repo: str | None = None,
+) -> list[dict[str, Any]]:
+    """Gather per-story evidence for ``compute_epic_state``.
+
+    Roster: every ``*-story.md`` whose ``epic:`` matches, PLUS the epic plan's
+    mirror rows for stories that have no plan file yet — a story without a plan
+    is unrefined, not absent, and unrefined is what the refine lane consumes.
+
+    Evidence, in the order it is trusted: git (branches, ancestry), then the
+    ticket/plan status vocabulary, then checkpoints. Git first because it cannot
+    forget; checkpoints last because they are only written when someone
+    remembers to write them.
+    """
+    plans_path = Path(plans_dir)
+    cwd = Path(repo) if repo else None
+    branches = _git_branch_index(cwd)
+    resolved_base = _resolve_base(base, cwd)
+
+    stories: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    if plans_path.is_dir():
+        identifiers = _resolve_epic_identifiers(epic, plans_path)
+        for path in sorted(plans_path.glob("*-story.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            fm = _parse_frontmatter(text)
+            if fm.get("epic") not in identifiers:
+                continue
+            key = fm.get("story") or path.name[: -len("-story.md")]
+            deps = fm.get("depends_on", [])
+            if not isinstance(deps, list):
+                deps = [deps]
+            stories.append(
+                {
+                    "key": key,
+                    "plan_exists": True,
+                    "refined": _body_is_refined(text),
+                    "deps": deps,
+                    "status": fm.get("status"),
+                }
+            )
+            seen.add(key)
+
+        for key, status in _mirror_story_rows(epic, plans_path).items():
+            if key in seen:
+                continue
+            stories.append(
+                {"key": key, "plan_exists": False, "refined": False, "deps": [], "status": status}
+            )
+
+    for story in stories:
+        key = story["key"]
+        git_state = _git_story_state(
+            key,
+            branches,
+            base=resolved_base,
+            integration_branch=integration_branch,
+            cwd=cwd,
+        )
+        story["branch"] = git_state.get("branch")
+        story["ahead"] = git_state.get("ahead", False)
+        story["merged"] = git_state.get("merged", False)
+
+        shipped = _is_built_status(story.pop("status", None))
+        if not shipped:
+            phases = {cp["phase"] for cp in story_status(key).get("checkpoints", [])}
+            shipped = bool(phases & _BUILT_CHECKPOINT_PHASES)
+            if not git_state and phases & {"implementation_complete"}:
+                # No git evidence available at all — let the checkpoint stand in
+                # for the branch it cannot see, so a checkpointed run still reads
+                # as built instead of falling back to "idea".
+                story["ahead"] = True
+                story["branch"] = story["branch"] or f"(checkpoint:{key})"
+        story["shipped"] = shipped
+        story["signals"] = []
+
+    return stories
+
+
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="SQLite Orchestration CLI")
@@ -3072,6 +3422,28 @@ def main() -> None:
         "--plans-dir", default="docs/plans", help="Directory of *-story.md plan files"
     )
     story_ready_p.add_argument("--cap", type=int, default=2, help="Max stories in the ready set")
+
+    story_state_p = story_sub.add_parser(
+        "state", help="Per-story state + next action for an epic (evidence-based)"
+    )
+    story_state_p.add_argument("epic", help="Epic key or slug, e.g. PROJ-42 or my-epic")
+    story_state_p.add_argument(
+        "--plans-dir", default="docs/plans", help="Directory holding the plan files"
+    )
+    story_state_p.add_argument(
+        "--repo", default=None, help="Repo root for git evidence (default: cwd)"
+    )
+    story_state_p.add_argument(
+        "--base", default=None, help="Base ref new work is measured against (default: auto-detect)"
+    )
+    story_state_p.add_argument(
+        "--integration-branch", default=None, help="Integration branch for the merged check"
+    )
+    story_state_p.add_argument(
+        "--in-flight", default="", help="Comma-separated keys already dispatched"
+    )
+    story_state_p.add_argument("--refine-cap", type=int, default=None, help="Max REFINE slots")
+    story_state_p.add_argument("--develop-cap", type=int, default=None, help="Max DEVELOP slots")
 
     story_sub.add_parser("phases", help="List valid story phases")
 
@@ -3248,6 +3620,25 @@ def main() -> None:
         elif args.action == "ready":
             stories = _load_epic_stories(args.epic, args.plans_dir)
             result = compute_ready_set(stories, cap=args.cap)
+            result["deprecated"] = "story ready is superseded by `story state` — see EPIC_STATES"
+        elif args.action == "state":
+            caps = {}
+            if args.refine_cap is not None:
+                caps["refine"] = args.refine_cap
+            if args.develop_cap is not None:
+                caps["develop"] = args.develop_cap
+            stories = _load_epic_state(
+                args.epic,
+                args.plans_dir,
+                base=args.base,
+                integration_branch=args.integration_branch,
+                repo=args.repo,
+            )
+            result = compute_epic_state(
+                stories,
+                in_flight=[k.strip() for k in args.in_flight.split(",") if k.strip()],
+                caps=caps or None,
+            )
         elif args.action == "phases":
             result = {"phases": STORY_PHASES, "count": len(STORY_PHASES)}
 
