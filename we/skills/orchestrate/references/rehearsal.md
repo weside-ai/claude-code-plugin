@@ -21,17 +21,19 @@ stumble and optimise them. Repeatable via the built-in `/loop` skill
 This is the lab for the broader skill clean-up: each iteration → `plugin-dev:skill-reviewer` /
 `plugin-validator` against the skill that stumbled → targeted fix → re-loop.
 
-## `--refine-ahead` P3 go/no-go (the refiner-teammate gate)
+## Two-story fixture — the mixed-maturity check
 
-Before enabling the autonomous refiner lane (P3, see `refine-ahead-p3.md`) on real work, prove it in
-rehearsal. Stage a **two-story fixture** into the throwaway repo's `docs/plans/`: copy
-`fixture-story.md` → `FIXTURE-story.md` (already refined → `ready`) **and**
-`fixture-refinable-story.md` → `FIXTURE2-story.md` (unrefined, `depends_on: [FIXTURE]` → `refinable`).
-Then run `/we:orchestrate rehearsal --rehearsal --refine-ahead`. The go/no-go question:
-**does the refiner-teammate write a DoR-passing `docs/plans/{TICKET}-story.md` (the Lead's `story
-ready` shows it left `refinable`) without stalling in plan mode, under the session's permission mode?**
+The single-story run proves the pipeline. The check that matters for the scheduler is whether one
+epic with **two different kinds of story** produces two different actions in **one** pass. Stage both
+fixtures into the throwaway repo's `docs/plans/`: `fixture-story.md` → `FIXTURE-story.md` (refined)
+and `fixture-refinable-story.md` → `FIXTURE2-story.md` (unrefined, `depends_on: [FIXTURE]`). Then run
+`/we:orchestrate rehearsal --rehearsal`.
 
-- **GO** → the refiner lane is safe to enable on real epics.
-- **NO-GO** (stalls at ExitPlanMode, or its output fails the DoR scan, or teammate Bash/Write is denied)
-  → leave P3 disabled; P2's Lead-interactive lane already delivers the build/refine overlap. Log the
-  exact failure to the rehearsal log so the brief can be tuned and re-looped.
+Pass: `story state` puts FIXTURE on `refined` and FIXTURE2 on `draft`, the dispatch plan carries
+**both** a DEVELOP and a REFINE, and the refiner writes a DoR-passing plan without stalling in plan
+mode under the session's permission mode.
+
+Fail: a refiner that stalls at an approval gate, output that fails the DoR scan, or teammate Write
+denied. Log the exact failure to the rehearsal log so the brief can be tuned and re-looped — a
+refiner that cannot run means every unplanned story routes to the human, which is the state this
+scheduler was built to leave behind.

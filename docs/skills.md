@@ -107,6 +107,28 @@ Produces or sharpens a Story — one sprint-sized feature slice with a build-rea
 
 ## Build altitude skills
 
+### `/we:refine`
+
+> *Write a build-ready plan from front-loaded context, with no user in the room.*
+
+The non-interactive counterpart to `/we:story`: same output file, no Q&A. It writes
+`docs/plans/{TICKET}-story.md` and reports the path — no git, no ticket transition, no
+self-verification. That shape is deliberate: a refiner runs without Bash, so it works under a
+permission mode that denies teammate shell calls, and the Lead stays the only writer of
+`docs/plans/` and the only one who runs the DoR scan.
+
+**When to use:**
+- Dispatched by `/we:orchestrate` for a story whose context is settled (the common case)
+- Standalone when the scope is already decided and you just want the plan written
+
+**Reach for `/we:story` instead** when the scope is genuinely open — that path asks the
+questions, sharpens the glossary, and stops at a plan-mode gate.
+
+**Won't do:** ask you anything, guess a design fork (it reports it and stops), or claim its own
+output passed the gate.
+
+---
+
 ### `/we:develop`
 
 > *Dev-only worker slice — implement, gate, commit, push, stop.*
@@ -153,7 +175,7 @@ Runs inline as the last step of the build pipeline, but also standalone. Collect
 
 > *Multi-chunk build orchestration; the Build-altitude sibling of `/we:council`.*
 
-Boots from state like a colleague — reconstructs where an Epic stands from its plans, `epic:` frontmatter, the ticketing mirror, and the orchestration build-state — and on an explicit confirm dispatches **dev-only `/we:develop` workers** (live Agent Team, same machinery as `/we:council`). Workers implement, run fast local gates, commit, and push their branch — no PR, no CI. The **Lead** merges every worker branch onto **one integration branch**, opens **one PR**, and runs **CI once** on the combined diff. It tracks workers in the shared task-list + orchestration DB, reviews the integrated diff, and never merges. Workers run on cheap-tier Claude (Sonnet/Haiku) by default; Codex or a foreign engine are opt-in per chunk. weside MCP optional — the Lead reviews as your Companion when connected, generic role lens otherwise.
+Boots from state like a colleague — reads each story's state from **git first** (a merged branch outranks a checkpoint nobody wrote), then plans, tickets and the mirror — and on an explicit confirm dispatches **`/we:refine` workers for what has no plan and `/we:develop` workers for what does, in the same wave** (live Agent Team, same machinery as `/we:council`). Workers implement, run fast local gates, commit, and push their branch — no PR, no CI. The **Lead** merges every worker branch onto **one integration branch**, opens **one PR**, and runs **CI once** on the combined diff. It tracks workers in the shared task-list + orchestration DB, reviews the integrated diff, and never merges. Workers run on cheap-tier Claude (Sonnet/Haiku) by default; Codex or a foreign engine are opt-in per chunk. weside MCP optional — the Lead reviews as your Companion when connected, generic role lens otherwise.
 
 **Three dispatch shapes, one pipeline.** Every run ends in the same integration half — simplify, AC+DoD gate, verification, parallel gates, docs, one PR, one CI pass. Only *who implements* differs:
 
@@ -161,13 +183,18 @@ Boots from state like a colleague — reconstructs where an Epic stands from its
 - **Mode B (single-Story target)** — runs that one Story's `### Phase` blocks as lead-integrated work-chunks (one worker per phase / parallel wave).
 - **`--solo`** — nothing dispatched: the Lead implements the story here, then integrates. For work too small to be worth a worker.
 
+**Six states, one action each.** `shipped` · `integrated` · `built` → INTEGRATE · `refined` →
+DEVELOP · `draft`/`idea` → REFINE. First match wins, evidence decides — which is what lets one
+epic with mixed maturity move in a single pass instead of needing a flag. Stories that need a
+human decision (an open question in the ticket, a frozen interface, contradicting comments) go
+to a **Decision Queue** presented as one batch at the wave boundary, not as interruptions.
+
 **Usage:**
 
 ```
 /we:orchestrate <epic>              # epic target: boot + ready-set; dispatch on confirm (Mode A)
 /we:orchestrate <story-key>         # single-Story target: run its phases as work-chunks (Mode B)
 /we:orchestrate <story-key> --solo  # single Story, no workers: implement here, then integrate
-/we:orchestrate <epic> --refine-ahead  # build ready stories AND refine the next during build idle
 /we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                     # boot from the most recently active epic, then status
 ```

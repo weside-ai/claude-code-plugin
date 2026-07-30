@@ -204,6 +204,8 @@ flowchart TB
         saga["/we:saga"]
         epic["/we:epic"]
         story["/we:story"]
+        refine["/we:refine<br/>plan, no questions"]
+        orch["/we:orchestrate"]
         cireview["/we:ci-review<br/>inline in the pipeline"]
     end
     subgraph deliberation[Deliberation]

@@ -8,12 +8,14 @@ silently return:
    references/integration-pipeline.md, and every `story checkpoint <ticket> <phase>`
    literal in
    markdown names a real phase.
-2. Command/skill collision — no we/commands/<name>.md may share a name with a
+2. EPIC_STATES mirror  — every state in orchestration.py's ladder appears in
+   orchestrate/SKILL.md's state table.
+3. Command/skill collision — no we/commands/<name>.md may share a name with a
    we/skills/<name>/ directory (documented dispatch-loop anti-pattern).
-3. Dead references — every `references/<file>.md` mention, `/we:<name>`
+4. Dead references — every `references/<file>.md` mention, `/we:<name>`
    mention, and `subagent_type="..."` value in we/**/*.md must resolve to an
    existing file / skill / command / agent.
-4. userConfig readers — every option declared in plugin.json userConfig must
+5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
 
 Stdlib only. Exit 1 on any finding.
@@ -69,6 +71,29 @@ def check_story_phases() -> None:
                     f"{path.relative_to(REPO)}: checkpoint '{m.group(1)}' "
                     "is not in orchestration.py STORY_PHASES"
                 )
+
+
+def check_epic_states() -> None:
+    """Every rung of EPIC_STATES must appear in orchestrate's state table.
+
+    Same class as the STORY_PHASES mirror: a state added to the executed model
+    and not to the prose is a state the Lead never learns to read, and the table
+    then quietly documents a smaller ladder than the CLI returns.
+    """
+    orch = (WE / "scripts" / "orchestration.py").read_text()
+    match = re.search(r"EPIC_STATES = \((.*?)\)", orch, re.DOTALL)
+    if not match:
+        fail("orchestration.py: EPIC_STATES tuple not found")
+        return
+    states = re.findall(r'"([a-z_]+)"', match.group(1))
+
+    skill = (WE / "skills" / "orchestrate" / "SKILL.md").read_text()
+    for state in states:
+        if f"`{state}`" not in skill:
+            fail(
+                f"EPIC_STATES mirror: state '{state}' from orchestration.py "
+                "does not appear in we/skills/orchestrate/SKILL.md"
+            )
 
 
 def check_command_skill_collision() -> None:
@@ -134,6 +159,7 @@ def check_userconfig_readers() -> None:
 
 def main() -> int:
     check_story_phases()
+    check_epic_states()
     check_command_skill_collision()
     check_dead_references()
     check_userconfig_readers()

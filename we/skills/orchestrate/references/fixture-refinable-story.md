@@ -8,14 +8,14 @@ parallel_groups: []
 
 # Plan: Rehearsal fixture (refinable) — add rehearsal_double()
 
-> **Template (refinable counterpart).** `/we:orchestrate --rehearsal --refine-ahead` copies this file
-> into the throwaway repo as `docs/plans/FIXTURE2-story.md`. It is intentionally **un-refined** — it
-> fails the DoR scan (`_body_is_refined`: no GWT acceptance criteria, no `### Phase` header), so it
-> lands in the `refinable` bucket. It `depends_on` the refined `FIXTURE` story, so with
-> `REFINABLE_DEP_MODE="refined"` it is refinable while FIXTURE builds — exercising the chain-overlap
-> the refine lane exists for. The P3 go/no-go: a refiner-teammate turns THIS stub into a DoR-passing
-> plan (full Context + GWT ACs + Phase headers) without stalling, and the Lead's `story ready` then
-> shows it left `refinable`.
+> **Template (unrefined counterpart).** `/we:orchestrate --rehearsal` copies this file into the
+> throwaway repo as `docs/plans/FIXTURE2-story.md`. It is intentionally **un-refined** — it fails
+> the DoR scan (no GWT acceptance criteria, no `### Phase` header), so `story state` puts it on
+> `draft` while its sibling sits on `refined`. That pair is the point: one epic, two maturities,
+> and the run must produce a REFINE and a DEVELOP in the same pass. It `depends_on` FIXTURE, which
+> a refine dependency accepts as met — so planning runs against FIXTURE's seam while FIXTURE
+> builds. Pass: a refiner turns THIS stub into a DoR-passing plan without stalling, and the Lead's
+> re-read shows it left `draft`.
 
 ## Intent (front-loading for the refiner — NOT the finished plan)
 

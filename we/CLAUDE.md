@@ -57,8 +57,8 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 - **Plan:** `/we:vision` · `/we:saga` · `/we:epic` · `/we:story` (Solo formulation), `/we:meet
   vision|saga|epic|story` + `/we:council` (Council deliberation), `/we:prototype` (answer a
   design question before it gets planned)
-- **Build:** `/we:orchestrate` (the Lead — dispatches `/we:develop` workers, or `--solo` for one
-  small story) · `/we:ci-review` · `/we:codex-task`
+- **Build:** `/we:orchestrate` (the Lead — dispatches `/we:refine` and `/we:develop` workers, or
+  `--solo` for one small story) · `/we:ci-review` · `/we:codex-task`
 - **Quality/analysis:** `/we:audit` · `/we:diagnose` · `/we:smoketest`
   · `/we:find-dead-code` · `/we:doc-improve` · `/we:docs`
 - **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` · `/we:coach` ·

@@ -2670,7 +2670,7 @@ _BUILT_CHECKPOINT_PHASES = {"pr_created", "ci_passed"}
 _PHASE_HEADER_RE = re.compile(r"^### Phase \d+", re.MULTILINE)
 
 # What a dependency must be for a story to count as *refinable* (the refine lane,
-# the `--refine-ahead` pipeline). "refined" lets us refine a story against its
+# the older ready-set path). "refined" lets us refine a story against its
 # dependency's plan/seam while that dependency is still building — the overlap the
 # refine lane exists for (without it the lane is inert on A->B->C chains). "built"
 # is the conservative switch: only refine once the dependency is actually built.
@@ -2684,7 +2684,7 @@ def compute_ready_set(stories: list[dict[str, Any]], cap: int = 2) -> dict[str, 
 
     Pure function: no I/O, no DB, no globbing. Given a list of story dicts,
     it returns the ready set (up to ``cap`` stories), the *refinable* set (the
-    producer queue for the ``--refine-ahead`` refine lane), and a list of held
+    producer queue for the refine lane), and a list of held
     stories each with the reason they were held.
 
     Args:
@@ -2929,7 +2929,7 @@ def _load_epic_stories(epic: str, plans_dir: str) -> list[dict[str, Any]]:
     # is precisely what the refine lane exists to consume. Globbing plan files
     # alone made those stories invisible, so `refinable` came back empty on every
     # epic whose children had not been refined yet — which is every epic on its
-    # first day. `--refine-ahead` therefore had no producer queue and could never
+    # first day. The refine lane therefore had no producer queue and could never
     # start (measured 2026-07-28: 12 backlog stories, `refinable: []`).
     #
     # The epic plan's mirror table already lists them, so use it as the fallback

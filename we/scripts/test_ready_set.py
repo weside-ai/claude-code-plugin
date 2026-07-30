@@ -206,7 +206,7 @@ class MirrorRosterTest(unittest.TestCase):
     """A story with no plan file is UNREFINED, not absent.
 
     Globbing plan files alone returned `refinable: []` on every epic whose
-    children had not been refined yet — so `--refine-ahead` had no producer
+    children had not been refined yet — so the refine lane had no producer
     queue and could never start.
     """
 

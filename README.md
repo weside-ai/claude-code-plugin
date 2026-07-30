@@ -29,8 +29,9 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 
 **Build altitude — autonomous:**
 
+- **`/we:refine`** — write a build-ready plan from settled context, no questions asked; the non-interactive counterpart to `/we:story` and what an orchestrated refine-worker runs
 - **`/we:develop`** — dev-only worker slice: implement chunk → fast local gates → commit → push → stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone.
-- **`/we:orchestrate`** — multi-chunk orchestration: boots from Epic state, dispatches `/we:develop` workers (cheap Claude by default, Codex or foreign engines opt-in), merges branches onto one integration branch, runs CI once.
+- **`/we:orchestrate`** — the Lead: reads each story's state from git, dispatches `/we:refine` for what has no plan and `/we:develop` for what does (cheap Claude by default, Codex or foreign engines opt-in), merges the branches onto one integration branch, runs CI once. `--solo` for a story too small to be worth a worker.
 
 **Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
 
@@ -59,7 +60,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 27 skills are available.
+That's it. The plugin is enabled. All 28 skills are available.
 
 > **Upgrading from 4.x:** `/we:build` is gone. It and `/we:orchestrate` had grown into two
 > copies of one pipeline, and only one of them was being used. Replace `/we:build {TICKET}`
@@ -136,7 +137,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 27 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 28 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
