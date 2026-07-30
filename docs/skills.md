@@ -532,19 +532,6 @@ Runs `semgrep / trivy / kubescape / gitleaks` (or your project's own `scripts/se
 
 ## Dev Utilities
 
-### `/we:audit-architecture`
-
-> *Multi-phase backend architecture audit.*
-
-Healthcheck → Hotspot map → Subsystem deep-read → Cross-cutting lenses → Findings. Configurable per-project via `docs/.audit-architecture.yml`.
-
-**When to use:**
-- Periodic architecture health-checks (suggest quarterly)
-- After significant growth — when the codebase outgrew its old structure
-- Before a major refactor — to know what the current shape *actually* is
-
----
-
 ### `/we:find-dead-code`
 
 > *Find and remove dead code from Python backends.*

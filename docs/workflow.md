@@ -219,7 +219,6 @@ flowchart TB
     subgraph review[Review + audit]
         docimprove["/we:doc-improve"]
         audit["/we:audit"]
-        auditarch["/we:audit-architecture"]
         find["/we:find-dead-code"]
         smoke["/we:smoketest"]
     end

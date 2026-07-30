@@ -47,7 +47,7 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 - **`/we:grill`** — relentless one-question-at-a-time interview on a plan or design; sharpens the project glossary (`CONTEXT.md`) inline and offers lean ADRs when a decision is hard to reverse, surprising, and a real trade-off
 - **`/we:diagnose`** — disciplined diagnosis loop for hard bugs: build a fast deterministic feedback loop first, then reproduce → hypothesise → instrument → fix → regression-test
 - **`/we:doc-improve`**, **`/we:audit`** — review + audit
-- **Dev Utilities:** **`/we:audit-architecture`**, **`/we:find-dead-code`**, **`/we:smoketest`** — backend code health
+- **Dev Utilities:** **`/we:find-dead-code`**, **`/we:smoketest`** — code health
 
 Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
 
@@ -60,7 +60,7 @@ Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an opti
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 29 skills are available.
+That's it. The plugin is enabled. All 28 skills are available.
 
 ---
 
@@ -130,7 +130,7 @@ The pitch: *one PO plus Companion equals two POs* — not through automation, bu
 
 ## Standalone first
 
-**Everything in this plugin works without any external account.** All 29 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
+**Everything in this plugin works without any external account.** All 28 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
 
 No lock-in. No nagging. No signup wall.
 
