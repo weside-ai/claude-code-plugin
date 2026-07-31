@@ -42,6 +42,12 @@ are the gate — `references/dor-scan.md` is what will be run against your file:
       what done looks like. One line fails the scan and, worse, tells the builder nothing.
 - [ ] `## Acceptance Criteria` — numbered, each one `**Given** … **When** … **Then** …`. Write
       criteria a reviewer can check against a running system, not against the diff.
+      **Capitalise all three keywords, every time.** The Definition-of-Ready scan matches the
+      literal strings `Given`, `When` and `Then`; a lowercase `**when**` mid-sentence reads
+      perfectly and leaves the plan stuck in `draft` with no error message anywhere. Measured
+      2026-07-30: four consecutive plans, all complete, all rejected by the scan for this alone
+      — the failure is silent by construction, because the plan looks right to every human who
+      opens it.
 - [ ] `## Implementation Phases` — `### Phase 1`, `### Phase 2`, … each with a concrete
       `**Files:**` list. Those lists are what the Lead's disjointness check reads before it dares
       run two workers at once; vague ones make the check lie.
@@ -54,6 +60,14 @@ are the gate — `references/dor-scan.md` is what will be run against your file:
       `## Documentation Impact`.
 
 Full template and field semantics: [`docs/plan-format.md`](../../../docs/plan-format.md).
+
+**Write the plan so its repo's markdown linter accepts it.** The Lead has to commit the file, and
+a pre-commit markdownlint that rejects it turns a finished plan into a silent abort — the commit
+does not land and nothing says why until someone checks `git log`. Two rules cause nearly all of
+it: **wrap prose at 80 columns**, and **leave a blank line before every list**, including one that
+follows a bold lead-in like `**Files:**`. Wrapping inside a code span or a table is worse than a
+long line — leave those alone. If the repo ships a config, its numbers win over these; check
+`.markdownlint*` before assuming 80.
 
 **Phases are the structure, not decoration.** Cut the work into independently-committable chunks
 even when the story is small — that's what lets the Lead dispatch them, and it sharpens the plan
