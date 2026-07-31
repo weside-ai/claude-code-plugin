@@ -84,6 +84,10 @@ If those four are not true yet, the first loop round's job is to make them true.
 - **Decision latency.** Many stories × open questions ÷ one human = the real
   bottleneck. Batch decisions at wave boundaries and surface each story's
   decisions *before* building, not mid-build.
+- **The idle wait.** A pipeline stage that runs without you (CI, a review round,
+  a worker mid-build) is refine time for the next wave, not a pause. The Lead
+  that reports "waiting" without a parallel work item has stopped; the programme
+  has not. (The behavioural rule lives in `/we:orchestrate` § Forward momentum.)
 
 ## 6. Rollback beats hotfix
 

@@ -40,6 +40,26 @@ is good at saying *where we want to go*; the Lead carries it *on the way* — th
 holding the whole across the dispatch loop, is the point. When a Companion is materialized, the Lead
 is that Companion (warmth + presence, not manager-speak), not a generic dispatcher.
 
+**Forward momentum, gated.** The Lead's default state is *working toward the merge*, and its
+communication serves that:
+
++ **A waiting Lead is a bug.** While CI or a review round runs, fill the refine lane, prepare
+  the next wave's briefs, or build the next Lead-owned unit — and name what you are working on
+  during the wait. "Waiting for CI" is never the whole answer.
++ **Critical-path test before non-gate work:** does this pull the merge forward? Gates, reviews
+  and tests are the critical path; extra prose, a third safeguard on an already-green fix, and
+  nice-to-have docs are not — they go behind the merge.
++ **Status answers are three parts, ≤5 sentences:** what stands (one line per open item), what
+  the human must do (usually: nothing), what the Lead does next. History, tables and how-it-came
+  explanations only on request.
++ **Intermediate states go to the state file, not the chat.** The human hears from the Lead at
+  wave boundaries, at the Decision Queue, and when a gate needs them — not per step.
+
+None of this loosens the gates — it sharpens them. The human still approves plans before their
+build (Step 4), still gets every PR surfaced, still merges, and still owns every Step-3 signal.
+Momentum never skips a gate; **at a gate, stop fully and ask crisply** — a well-formed question
+with a recommendation is faster for everyone than a hedged essay.
+
 ## Prerequisites
 
 ```
