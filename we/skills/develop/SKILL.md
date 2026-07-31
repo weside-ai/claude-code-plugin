@@ -195,7 +195,7 @@ Next: Lead integrates this branch. Do NOT open a PR.
 + **Local gates must be green before pushing** — no gate-red push.
 + **AC-check is informational** — commit even with findings; surface them in the report.
 + **Never dispatch a nested pipeline** — you ARE the dev worker; implement your chunk and report. Opening a PR or running CI here voids the Lead's single-CI contract.
-+ **Honor `--phases` scope** — only implement the listed phases; do not expand scope.
++ **Honor `--phases` scope** — only implement the listed phases; do not expand scope. Expanding scope means NEW capability — it does not mean deferring defects: a small finding (≤ ~30 min) on the seam your phase touches gets fixed in the same commit, not reported away. Only product decisions, money-path changes, and foreign-subsystem redesigns go into the report as questions; never create tickets.
 + **Report even on failure** — if a blocker stops you, report what you completed and why you stopped.
 + **Model tier defaults:** sonnet for normal phases, haiku for mechanical, opus only when the Lead explicitly requests it for a hard chunk.
 

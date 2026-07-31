@@ -366,6 +366,11 @@ Your job: run the DEV-ONLY pipeline for {TICKET} via the skill.
 DEV-ONLY means: implement all phases → **fast/unit local gates only** → AC-check your
 diff → commit → push YOUR branch (e.g. `feat/{TICKET}-work`) → STOP.
 
+FINISH FIRST: a small finding (≤ ~30 min) on the seam you touch gets FIXED in your
+branch — "pre-existing" alone is no deferral reason. Only product decisions, money-path
+changes, and foreign-subsystem redesigns go back to the Lead — as QUESTIONS in your
+report, never as new tickets. Workers never create tickets.
+
 TESTS: {test_discipline_instruction — the Lead reads `test_discipline` from
 .weside/config.json and spells the level out here, e.g. "tests-after: write tests in the
 same change, after the code". Always append: no implementation-coupled tests, no

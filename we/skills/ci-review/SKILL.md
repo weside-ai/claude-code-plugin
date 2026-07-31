@@ -35,6 +35,13 @@ incorrect** (cite evidence); the suggestion would **break existing behavior**; o
 **pre-existing pattern** that was 1:1 moved (not introduced by this PR) AND fixing it is a
 separate story's scope.
 
+**Finish-first before ticketizing.** A small finding (≤ ~30 min) on the seam this PR touches
+gets FIXED in this PR — "pre-existing" alone is not a deferral reason. Ticket a finding only
+when it genuinely cannot ride along: a product decision the user owns, a money-path change,
+a foreign subsystem redesign, or a fix that would bury the PR's diff — and the ticket names
+which reason applies. Deferring small on-seam findings into tickets multiplies one review
+into a full dispatch wave.
+
 **Default to a single pass.** Collect → fix all findings → push, then **stop** and report —
 one round is the normal case. Only re-enter the post-push loop (Phase 4) when there is a
 **concrete reason** to expect a second round: a fix you are genuinely unsure resolved the
