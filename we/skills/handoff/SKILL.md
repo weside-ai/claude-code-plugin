@@ -38,7 +38,7 @@ Mode is selected by argument. Default (no args) is LOAD — the most common use 
 | `/we:handoff` | LOAD | Reads the most recent `docs/handoffs/*.md` and renders it back as context |
 | `/we:handoff --load <slug>` | LOAD | Loads a specific handoff (date prefix in slug is optional) |
 | `/we:handoff --list [N]` | LIST | Shows the last N handoffs (default 10) with date · slug · branch · topic · summary |
-| `/we:handoff --write [topic]` | WRITE | Drafts a new handoff from the current session, shows preview, gates with `[y/n/edit]`, then writes |
+| `/we:handoff --write [topic]` | WRITE | Writes a handoff from the current session straight to disk, then reports what it wrote |
 | `/we:handoff --write [topic] --with-companion-state` | WRITE | Adds opt-in Companion-continuity section (engineering substance only) |
 
 ---
@@ -83,13 +83,20 @@ Before producing any output, gather the landscape fresh.
 
 ## WRITE Mode — Step-by-step Workflow
 
-### Step W1 — Confirm scope
+### Step W1 — State the scope
 
-Restate what will be captured:
+Say what is being captured, in one line, and keep going — this is a statement,
+not a question:
 
-> *"I'll write a handoff for: branch `feat/foo`, last commit `abc1234`, working in `your-repo`. Topic: `phase-7-handoff-skill`. Includes uncommitted file count: 3. Sound right? [y/n/adjust-topic]"*
+> *"Handoff for branch `feat/foo`, last commit `abc1234`, 3 uncommitted files.
+> Topic: `phase-7-handoff-skill`."*
 
-If `n` or `adjust-topic`: take the corrected scope.
+The user asks for a handoff when they are about to lose the session — to a
+`/compact`, to a break, to a `/clear`. A gate there spends the very minutes the
+handoff exists to save, and the artefact is a file in git: wrong topic, wrong
+emphasis and missing sections are all one edit away afterwards. If the topic is
+genuinely ambiguous, pick the most specific one from the session and name it in
+that line; the user corrects it if it matters.
 
 ### Step W2 — Draft the handoff
 
@@ -106,29 +113,25 @@ Populate every section honestly:
 - Tried-and-rejected lists only *actually-rejected* approaches with cited turn / commit evidence
 - Watch-outs include any latent bugs surfaced this session (e.g. *"`tour/index.html` had an ASCII vs Unicode quote bug; check `node --check` on the whole script before pushing"*)
 
-### Step W3 — Preview to user
+### Step W3 — Write it
 
-Show the full draft in the conversation. Format:
+No preview, no gate: `Write` the file (Foxy, 2026-08-08 — "ich möchte, dass du
+nicht einen entwurf zeigst sondern direkt die datei schreibst"). Rendering a
+163-line draft into the conversation to ask `[y/n]` costs a screenful of the
+context the handoff is meant to preserve, and the answer is `y` every time
+because the draft came from the session both sides just had.
 
-```
-HANDOFF DRAFT — docs/handoffs/2026-05-18-<slug>.md
+What replaces the gate:
 
-[full file content, frontmatter + body]
+- **The summary after the write** (Step W5) — the same sections, in prose, short
+  enough to scan. That is where the user sees what was captured.
+- **Git.** The file lands in a branch or a commit, so a correction is an edit,
+  not a rewrite.
 
-──
-Privacy check: 0 personal-content references caught and skipped.
-[y / n / edit]
-```
+The privacy guard is NOT part of what was dropped. It runs at drafting time and
+is reported in the closeout line, not offered as a decision.
 
-### Step W4 — Per-item gate
-
-- `y` → write the file
-- `n` → discard, ask if anything should change before redrafting
-- `edit` → user types refinements ("drop section 8", "rephrase decision #2 as ..."); redraft and re-show
-
-⛔ Never write silently. Every WRITE follows an explicit `y`.
-
-### Step W5 — Apply
+### Step W4 — Apply
 
 - **In the user repo:** `mkdir -p docs/handoffs/` if missing, then `Write` the file.
 - **Commit policy** (mirrors `/we:retro`):
@@ -137,11 +140,17 @@ Privacy check: 0 personal-content references caught and skipped.
   - The user can interrupt mid-apply ("skip the PR, just commit directly").
 - Confirm: `applied · <repo>/docs/handoffs/<file>.md (<line-count> lines)`.
 
-### Step W6 — Closeout
+### Step W5 — Closeout
 
-One-line summary:
+Since the file is written without a preview, this is where the user finds out
+what it says. Two parts, both short:
 
-> *Handoff written. Resume in next session with `/we:handoff` (loads latest) or `/we:handoff --load <slug>` (this one specifically).*
+1. **What was captured**, in prose — the sections that carry a decision, not a
+   table of contents. Two or three sentences per body section that has
+   substance; the ones that are "—" are not worth a line.
+2. **The one-liner:**
+
+> *Handoff written · docs/handoffs/2026-05-18-<slug>.md (N lines). Privacy check: 0 personal-content references. Resume with `/we:handoff` (latest) or `/we:handoff --load <slug>`.*
 
 If `/we:coach` had triggered this WRITE via an end-of-session suggestion, also: *"Coach will surface this at the next session's boot — no manual reload needed unless you skip Coach."*
 
@@ -265,9 +274,9 @@ Empty section convention: a single `—` rather than fabricated content.
 
 ## What You DO NOT Do
 
-(The write gate, privacy guard, and commit policy above are the spec — these are the extras:)
+(The privacy guard and commit policy above are the spec — these are the extras:)
 
-- **Don't auto-fire from a hook.** End-of-session WRITE is always Coach-suggested with a `[y/n]` gate, never silent.
+- **Don't auto-fire from a hook.** WRITE runs when a human asks for it — directly, or by accepting Coach's end-of-session suggestion. What is ungated is the *drafting*, not the *decision to write at all*.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
 
 ---
