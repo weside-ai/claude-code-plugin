@@ -29,6 +29,9 @@ the plan file.
 - **The Lead verifies, not you.** Don't claim the plan is refined and don't run the DoR scan on
   your own output — report the path and let whoever asked check it. State-as-truth cuts both ways:
   your "done" is a claim, the scan is evidence.
+- **Opus writes the plan.** A dispatched refiner is spawned on `opus` by the Lead (model-tier rule:
+  `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`); invoked standalone on a cheaper session
+  model, name it once and suggest `/model opus` — then proceed either way.
 - **A genuine design fork stops you.** If the context cannot settle a real decision — which of two
   seams, whether an interface is frozen — say so and stop. A guessed fork produces correctly-built
   wrong code, which costs more than the question would have.

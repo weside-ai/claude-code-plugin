@@ -16,7 +16,9 @@ where the work stands, holds context, decides what each story needs next, dispat
 what comes back, and reviews the combined diff. CI runs **once** on the integration PR, not once per
 worker. It never merges — Deliver stays human.
 
-**Cost model:** workers run on cheap-tier Claude (Sonnet/Haiku), Codex, or a foreign engine. The
+**Cost model:** dev workers run on cheap-tier Claude (Sonnet/Haiku), Codex, or a foreign engine;
+**refiners run on Opus** — the plan is the one artifact every later worker follows (model-tier rule:
+[`references/worker-dispatch.md`](../../references/worker-dispatch.md)). The
 Lead (the expensive session model) plans, integrates, and reviews. N workers = N dev costs + one
 integration CI, not N full pipelines. A story too small to be worth a worker runs `--solo` — same
 pipeline, nothing dispatched.
@@ -307,8 +309,8 @@ purely by being spawned with a `name`. **Put every spawn of a wave in a single a
 they initialize concurrently — refiners and dev workers together; they compete for nothing.
 
 ```python
-# refine lane — Write-only, no worktree, no Bash
-Agent(name=f"refiner-{TICKET}", subagent_type="general-purpose", model="sonnet",
+# refine lane — Write-only, no worktree, no Bash; opus, per the model-tier rule
+Agent(name=f"refiner-{TICKET}", subagent_type="general-purpose", model="opus",
       description=f"Refine {TICKET}", prompt=<Refiner-Brief>)
 
 # develop lane — one worktree each, off the integration branch

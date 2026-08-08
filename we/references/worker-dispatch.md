@@ -33,8 +33,11 @@ The **default executor** is persisted in `.weside/config.json` as `execution.def
 (default: `claude-sonnet`). `/we:orchestrate` reads it; the user can override per-chunk at
 execution time.
 
-**Model-tier rule (single owner):** default `sonnet`; `haiku` only for mechanical/boilerplate
-chunks; `opus` only when the Lead explicitly requests it for a hard chunk.
+**Model-tier rule (single owner):** plan-writing runs on **`opus`** — the refine lane
+(`/we:refine` workers, and an interactive `/we:story` session) produces the plan every
+downstream worker follows, so a weak plan is paid for N times over. **Dev** chunks default to
+`sonnet`; `haiku` only for mechanical/boilerplate chunks; `opus` for a dev chunk only when the
+Lead explicitly requests it for a hard one.
 
 ---
 

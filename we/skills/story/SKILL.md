@@ -29,6 +29,8 @@ Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
 
 **Repo-local DoR additions (additive, optional):** resolve the repo root (`git rev-parse --show-toplevel`) and check for `<repo-root>/.weside/dor.md`. If it exists, read it too and treat its items as ADDITIVE to the plugin DoR above — both sets of criteria apply, the repo file never replaces the plugin defaults. If the file doesn't exist, silently proceed with the plugin defaults only.
 
+**Run this on Opus.** Plan-writing is the one artifact every later worker follows — model-tier rule: `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`. On a cheaper session model, say so once and suggest `/model opus` before starting; never block.
+
 **Verify setup:** if `.weside/` doesn't exist in the project, suggest the user run `/we:setup` first to verify prerequisites (`gh` CLI, Jira access, recommended plugins). Do NOT block — `/we:story` can proceed in degraded modes (no ticketing → Plan-only).
 
 ---
