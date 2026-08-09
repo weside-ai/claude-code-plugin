@@ -81,13 +81,29 @@ in `.weside/dod.md`, which is read additively alongside this checklist.
 
 ### Documentation
 
-- [ ] API changed → API docs/types regenerated
-- [ ] Architecture changed → Architecture documentation updated
-- [ ] CLI changed → CLI documentation updated
-- [ ] Configuration changed → Configuration docs updated
-- [ ] User-flow changed → Journey doc updated or created (`docs/architecture/journey-*.md`)
-- [ ] Documentation Impact from plan addressed (if specified)
-- [ ] No doc changes needed (skip if nothing relevant changed)
+Documentation is a **cascade**, not a checklist. Each step applies only when the one above
+it cannot carry the knowledge — most changes stop at the first.
+
+- [ ] **Behaviour changed → the docstring at the site was updated.** Always, and first.
+      What it does, which trap it avoids, what a caller must not do — written where the
+      code is, because that is the only place the next reader is guaranteed to look. A
+      change whose sole record lives in a file elsewhere in the tree has, in practice, no
+      record at all.
+- [ ] **Interplay across module boundaries changed → the one thematic architecture doc.**
+      Only for knowledge that genuinely spans files no single docstring owns: a flow
+      through several subsystems, a contract between them. A changed user-facing flow is
+      this case — it updates the journey doc rather than spawning a new one.
+- [ ] **Hard to reverse, surprising, real trade-off → an ADR.** Rare by construction.
+- [ ] **A NEW doc carries its justification** — one sentence on why the code cannot hold
+      this. "It felt like documentation" is not one; absent a reason it belongs in a
+      docstring. Every doc created is a doc someone must keep true.
+- [ ] **A doc contradicting the code was corrected or deleted** — never deferred, never
+      annotated as outdated. This is the class that survives longest, because nothing
+      fails when prose goes stale, and a wrong doc costs more than a missing one.
+- [ ] **Generated artefacts regenerated** — API spec/types, CLI reference, any register the
+      repo ships a generator for. Codegen, not prose; it never substitutes for the first item.
+- [ ] Documentation Impact from the plan addressed (if specified)
+- [ ] Nothing above applies → skip
 
 ### CI/CD
 

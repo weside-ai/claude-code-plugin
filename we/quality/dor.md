@@ -26,7 +26,7 @@ A repo can extend this checklist with its own criteria in `.weside/dor.md` (crea
 - [ ] **Glossary vocabulary** — Terms match the repo-root `CONTEXT.md` glossary, if one exists (no `_Avoid_` terms)
 - [ ] **Security Review Required** — Yes/No with reason
 - [ ] **Code Guidance** — DO/DON'T patterns for implementation
-- [ ] **Documentation Impact** — Which docs are affected? (API, architecture, README, user-facing). Used by `/we:docs` in pipeline Step 6.
+- [ ] **Documentation Impact** — Where does the knowledge land? Answer along the DoD cascade (`quality/dod.md` § Documentation): a docstring at the site, the one thematic architecture doc, or an ADR. **"Nowhere — the code carries it" is a complete answer**, and the usual one. Naming a NEW doc means saying why the code cannot hold it. Read by `/we:docs` in pipeline Step 6.
 
 ### Recommended
 

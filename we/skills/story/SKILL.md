@@ -238,13 +238,14 @@ points — narrative voice.]
 [Yes/No] — [reason]
 
 ## Documentation Impact
-- [ ] **API docs** — [Yes/No: endpoints added/changed?]
-- [ ] **Architecture docs** — [Yes/No: patterns/ADRs changed?]
-- [ ] **README/Setup** — [Yes/No: install/config steps changed?]
-- [ ] **User-facing docs** — [Yes/No: features/workflows changed?]
-- [ ] **No documentation changes needed**
+> Where does the knowledge land? A cascade — most stories stop at the first line, and
+> "the code carries it" is a complete answer. Full contract: `quality/dod.md` § Documentation.
 
-Specific files to update: [list affected doc files if known]
+- **Docstrings** — [which files/symbols hold the reasoning once this lands — the default]
+- **Architecture doc** — [only if interplay across modules changes: which doc, what changes]
+- **ADR** — [only if hard to reverse ∧ surprising ∧ a real trade-off]
+- **Generated** — [API spec/types, CLI reference, registers to regenerate]
+- **New doc** — [name it only with the reason the code cannot hold it]
 ```
 
 ### Step 5: User Approval (ExitPlanMode)

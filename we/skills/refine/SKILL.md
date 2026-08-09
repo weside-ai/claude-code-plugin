@@ -60,7 +60,9 @@ are the gate — `references/dor-scan.md` is what will be run against your file:
 - [ ] `## Testing Requirements` — per AC, at the level `.weside/config.json`'s `test_discipline`
       asks for.
 - [ ] `## User Journey`, `## Code Guidance`, `## Security Review Required`,
-      `## Documentation Impact`.
+      `## Documentation Impact` — the last one asks *where the knowledge lands*, along the
+      cascade in `quality/dod.md` § Documentation. A docstring at the site is the usual
+      answer; naming a new doc means naming why the code cannot hold it.
 
 Full template and field semantics: [`docs/plan-format.md`](../../../docs/plan-format.md).
 

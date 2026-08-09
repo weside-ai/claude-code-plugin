@@ -175,12 +175,16 @@ parallel_groups: []
 [Yes/No] — [reason]
 
 ## Documentation Impact
-- [ ] API docs
-- [ ] Architecture docs
-- [ ] README/Setup
-- [ ] User-facing docs
-- [ ] No documentation changes needed
+- **Docstrings** — [which files/symbols hold the reasoning — the default]
+- **Architecture doc** — [only if interplay across modules changes]
+- **ADR** — [only if hard to reverse ∧ surprising ∧ a real trade-off]
+- **Generated** — [API spec/types, CLI reference, registers]
+- **New doc** — [only with the reason the code cannot hold it]
 ```
+
+The cascade is the point: each line applies only when the one above cannot carry the
+knowledge, and most stories stop at the first. "Nowhere — the code carries it" is a
+complete answer. Full contract: [`we/quality/dod.md`](../we/quality/dod.md) § Documentation.
 
 ---
 

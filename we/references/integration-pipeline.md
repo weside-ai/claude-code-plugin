@@ -128,16 +128,23 @@ Agent(
     subagent_type="we:doc-architect",
     description=f"Update documentation for {TICKET}",
     prompt=f"Story {TICKET} is implemented. Diff between this branch and the base: <summary>. "
-           "Proactive mode: what documentation needs updating? Does this introduce or change a "
-           "user-facing flow that wants a journey doc? Return file / change / why per item, or "
-           "say explicitly that nothing needs updating.",
+           "Proactive mode, along the DoD cascade (quality/dod.md § Documentation). Ask in "
+           "this order: (1) does the code already carry this — is a docstring at the site "
+           "missing or now wrong? (2) only then, does interplay across modules change, so a "
+           "thematic architecture or journey doc is owed? (3) does anything in the docs now "
+           "CONTRADICT the diff — that is a correction or a deletion, not a note. Return "
+           "file / change / why per item, docstring proposals included as diffs, or say "
+           "explicitly that nothing needs updating.",
     run_in_background=True,
 )
 ```
 
 Present its proposals, apply the approved ones, commit, checkpoint `docs_updated`. It never
-writes on its own — every change is a diff it waits for approval on. "Nothing needs updating"
-is a complete answer; write the checkpoint and move on rather than inventing work.
+writes on its own — every change is a diff it waits for approval on. **Docstring proposals it
+cannot apply itself**: its write allowlist covers docs, not source, so those diffs land through
+you. That is deliberate — a doc agent with source-write is a much larger blast radius than the
+convenience is worth. "Nothing needs updating" is a complete answer; write the checkpoint and
+move on rather than inventing work.
 
 If a bypass annotation changed and the repo ships `scripts/generate-bypass-register.sh`,
 regenerate the register into the same docs commit.

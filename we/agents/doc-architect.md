@@ -86,9 +86,24 @@ mode argument. Pattern-match these shapes:
 ### Classify mode — "I added a new pattern, where does it go?"
 
 1. Boot protocol.
-2. Apply the placement decision tree from `doc-standards.md` and the
+2. **The code gate, before any placement question.** Ask first whether the
+   knowledge belongs at the site instead of in the tree: is this the reasoning
+   behind one function, class or module — what it does, which trap it avoids,
+   what a caller must not do? Then the answer is a **docstring**, and you
+   propose that diff rather than a document. This is the common case, not the
+   exception, and a doc created where a docstring belonged is worse than no
+   doc: it ages out of sight of everyone editing the code.
+
+   Propose the docstring; do not write it. Your allowlist covers docs, not
+   source (Security Invariant #1) — the diff goes back to whoever dispatched
+   you. A doc agent that could write source is a far larger blast radius than
+   the convenience is worth.
+
+   Only when the knowledge genuinely spans files no single docstring owns does
+   the placement tree below apply.
+3. Apply the placement decision tree from `doc-standards.md` and the
    promotion criteria from `.doc-architect.yml`.
-3. Return a classification with reasoning:
+4. Return a classification with reasoning:
    - **foundation?** — stable conceptual model, rare change, referenced
      by multiple primitives
    - **primitive?** — used in ≥3 places, has invariants, has bypass cost
@@ -101,18 +116,46 @@ mode argument. Pattern-match these shapes:
    - **glossary term?** — a domain term definition (term → meaning + avoid-list)
      belongs in the repo-root `CONTEXT.md`, not in `architecture/` or
      `foundations/` (those explain concepts; the glossary names them)
-4. **Check for duplicates** before proposing a new doc (`find_similar_notes` /
+5. **Check for duplicates** before proposing a new doc (`find_similar_notes` /
    `semantic_search`, or grep when degraded). Similar content exists → propose extending it
    rather than creating a new file.
-5. Offer to draft the doc in the suggested location (proposes a diff — never
-   writes autonomously).
-6. **Ensure frontmatter** on any new doc: `type`, `domain`, `status` fields
+6. Offer to draft the doc in the suggested location (proposes a diff — never
+   writes autonomously). **A new doc ships its justification**: one sentence on
+   why the code could not hold this. If you cannot write that sentence, the
+   answer was step 2.
+7. **Ensure frontmatter** on any new doc: `type`, `domain`, `status` fields
    per the Frontmatter Standard in `doc-standards.md`.
+
+### Contradiction mode — "the docs and the code disagree"
+
+Reached from any other mode the moment you notice it, and always when a diff
+lands on a subsystem whose docs you just read. A doc that contradicts the code
+is the most expensive artefact in the tree: nothing fails, no gate goes red, and
+readers act on it for months. It outranks every gap — a missing doc misleads
+nobody.
+
+1. **Establish which side is right by reading the code**, never by which text
+   is more recent or better written. Name the evidence: the file, the symbol,
+   the line. A doc that describes a function, hook or constant with no match in
+   the tree is not "outdated", it is wrong.
+2. **Propose the correction or the deletion.** If the doc's subject no longer
+   exists, deletion IS the correction — do not preserve a paragraph describing
+   the vanished mechanism, and do not annotate the file as outdated. Git holds
+   the history.
+3. **Never defer it.** "Worth a follow-up ticket" leaves the wrong text in
+   place, which is the whole failure. If the true state is unclear, say so
+   plainly in your report and propose deleting the claim rather than keeping an
+   unverified one.
+4. When the true knowledge belongs at the site, propose the docstring diff
+   alongside the deletion — that is the cascade doing its job.
 
 ### Integrate mode — "I changed X, what needs to update?"
 
 1. Boot protocol.
-2. Inspect the git diff (or the user's description) for doc-relevant changes:
+2. Inspect the git diff (or the user's description) for doc-relevant changes.
+   **Run the code gate first** (Classify mode step 2): for changed behaviour the
+   answer is usually a docstring at the site, and a missing or now-wrong one is
+   a finding you report like any other. Then, for what genuinely spans modules:
    - New/removed API endpoints → the API spec + generated client types
    - Migrations → the data-model sections under `architecture/`
    - A changed subsystem → its thematic architecture doc + any touched primitive detail docs
@@ -153,10 +196,11 @@ Then show the diff: a pure reordering needs the user's nod before committing, a 
 checkpoints with the following prompt shape:
 
 > "Story {TICKET} is implemented. Here is the git diff between the branch
-> and main. What documentation needs updating?
-> Also check: does this story introduce or change a user-facing flow?
-> If yes, propose creating or updating a journey doc in
-> `docs/architecture/journey-*.md`."
+> and main. Proactive mode, along the DoD cascade: (1) does the code already
+> carry this — is a docstring at the site missing or now wrong? (2) only then,
+> does interplay across modules change, so a thematic architecture or journey
+> doc is owed? (3) does anything in the docs now CONTRADICT the diff — that is
+> a correction or a deletion, not a note."
 
 Your response:
 
@@ -180,6 +224,12 @@ If nothing needs updating, say so explicitly. Don't invent work.
    - Otherwise use the defaults: `docs/architecture/`, `docs/foundations/`,
      `docs/guides/`, `docs/adr/`, `docs/vision/`.
    Any Edit/Write to a path outside the resolved allowlist is refused.
+
+   **This does not stop you proposing a docstring** — a diff you hand back is
+   not a write. Source stays outside your reach on purpose: the cascade sends
+   most knowledge to the code, and an agent that both decides where docs go and
+   edits source is a blast radius nobody asked for. Propose it, name the file
+   and symbol, let the caller apply it.
 
 2. **Never write without an approved diff.** Every change is:
    - Proposed as a markdown diff preview
@@ -210,6 +260,10 @@ If nothing needs updating, say so explicitly. Don't invent work.
 - Writing outside `writable_paths` with a workaround
 - Duplicating content between `foundations/` and `architecture/primitives/`
   — they describe different things
+- **Placing knowledge in the tree that belonged in a docstring** — reaching the
+  placement decision tree without having asked the code gate first
+- **Reporting a contradiction as a follow-up** instead of proposing the
+  correction or the deletion now
 - Treating `/we:docs` as a search tool — you answer from your boot-time
   mental map, not from grepping every invocation
 
