@@ -497,6 +497,18 @@ never combine it with a companion `--background` flag. Brief format:
    3. `gh pr checks {PR}` if a PR exists — what is CI *actually* saying?
    4. Only after 1–3: nudge the worker, **at most once**.
 
+   **A wait condition may only watch state the WORKER changes.** Never anchor it
+   on a branch the Lead moves while integrating: `until git log
+   <integration-branch>..HEAD | grep -q .` goes permanently false for a worker
+   whose branch you just merged, so the trigger can never fire and the Lead sits
+   on an impossibility believing it is still waiting. Anchor on a fixed sha
+   (`rev-list --count <sha>..HEAD`), a remote branch's existence, or a file only
+   the worker writes. The bug appears precisely when the Lead integrates EARLY —
+   which this skill recommends — so better integration makes it more likely, not
+   less. Diagnosing it: `pgrep -af until` shows whether the wait still lives and
+   what it compares against; a live wait on an unsatisfiable condition is this
+   mistake.
+
 Reports arrive by `SendMessage` (delivered automatically — do not poll a terminal) and via the
 shared task-list. Emit a running roll-up:
 `refining: {…} | building: {…} | to integrate: {…} | waiting: {…}`.

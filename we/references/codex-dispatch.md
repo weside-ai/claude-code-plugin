@@ -71,6 +71,22 @@ So the brief is the whole instrument:
 - **Watch the artifacts, not the process.** `git -C <worktree> status --porcelain
   | wc -l` a minute in tells you the dispatch landed and the worker is writing;
   an empty tree after several minutes is the lost-dispatch signal above.
+- **A FULL tree with no commit is the other failure, and it is the expensive
+  one.** Codex can finish the work correctly and die before committing — no
+  error, no message, nothing to observe but a dirty worktree that looks
+  identical to one still being written. Measured 2026-08-17: a complete,
+  well-built chunk sat unnoticed for ten hours while the Lead reported "still
+  running", because a watcher waited on a commit that could never come and
+  `pgrep -af codex` was counting the Lead's own shells (they carry the Codex env
+  vars). Only the human asking twice surfaced it.
+
+  So **never wait on the commit.** Arm the wait on `git status --porcelain`
+  going non-empty AND a timeout — when the timeout fires, read the worktree
+  yourself: if the work is there, verify and commit it (crediting the worker in
+  the trailer and saying in the body that the Lead committed it). A Codex worker
+  has no liveness signal in either direction, so the Lead's timeout IS the
+  signal. An Agent teammate needs none of this: it reports or it is reported
+  terminated.
 
 This is the one real trade against an Agent teammate. Pick Codex when the brief
 can be complete, an Agent when the shape may change under the worker.
