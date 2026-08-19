@@ -474,6 +474,15 @@ Two practical consequences:
 + **Convert what you cannot say into what you will check.** A rule you cannot enforce mid-flight
   becomes a merge-time audit: write down, at dispatch, the exact command that will verify it.
   This is not a downgrade — a verified constraint beats an unverified message either way.
++ **Make the report an artifact, not a message.** The `SendMessage` clause in the brief above is
+  an Agent contract; a detached worker has no such channel, so "report at the end" asks for a
+  message with no addressee. On those backends the brief instead requires
+  **`WORKER-REPORT.md` in the worktree** — what it built, what it skipped, which test went red on
+  the rollback probe, what it could not settle. Then `git status` shows every ending, including
+  the one that otherwise looks exactly like a worker that never started: **stopped early, wrote
+  nothing, has a question.** Checking whether such a worker is still alive:
+  [`references/codex-dispatch.md`](../../references/codex-dispatch.md) § *Is it still working?* —
+  process count and `/codex:status` both answer confidently and wrongly.
 
 Prefer an Agent teammate when the work is genuinely exploratory (the shape may change under
 the worker and you will want to redirect); prefer Codex when the brief can be complete.

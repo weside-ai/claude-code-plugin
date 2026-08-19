@@ -27,6 +27,16 @@ cannot see it (confirmed failure 2026-06). So pick exactly one:
 
 Never `--background` **and** Bash background together.
 
+**But do not build your monitoring on `/codex:status`.** It answered *"No jobs
+recorded yet"* for two workers dispatched exactly as prescribed above — the job
+files were never written, so its jobs directory did not exist at all (measured
+2026-08-20, companion 1.0.6). It also filters by
+`CODEX_COMPANION_SESSION_ID`, so a job dispatched before a compact can drop out
+of view even when it was recorded. **An empty status is not an absent job**, and
+a dispatch that returns a `task-…` id is not a dispatch you can later query.
+Treat the id as a receipt for the launch and nothing more; the ground truth is
+below.
+
 ## Resolve the runtime
 
 ```bash
@@ -51,6 +61,40 @@ worktree, never the main one.
 A lost dispatch reports success while writing nothing. Before integrating, the
 Lead **verifies the worktree actually changed** (`git -C <worktree> status` /
 `git -C <worktree> log`) — never trust a "done" without commits or a dirty tree.
+
+## Is it still working? Three signals, first one that answers wins
+
+An empty worktree is ambiguous by construction: **"never started" and "finished
+without needing to write" look identical.** So do not ask the processes, ask in
+this order:
+
+1. **`git -C <worktree> log` / `status`.** A commit or a dirty tree is work, and
+   settles it whenever the worker actually wrote something.
+2. **The rollout file** — `tail -1 ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
+   Its last line carries `payload.type == "task_complete"` plus
+   `payload.last_agent_message`, the worker's verbatim closing words. **This is
+   the only place a "stopped early, wrote nothing" outcome exists.**
+3. **CPU time, not process count** — `ps -eo pid,etime,time,cmd`. Seconds of CPU
+   against an hour of elapsed time means idle, not busy.
+
+**Counting processes under the worktree proves nothing.** The broker keeps its
+`--cwd` and outlives the task, so a finished phase still shows a handful of live
+PIDs — measured hours after that phase had merged. Eleven live processes and 17
+seconds of CPU in 98 minutes was a worker that had been done since minute two.
+
+## Make the outcome an artifact, because the report has no recipient
+
+The brief should require the worker to write **`WORKER-REPORT.md` into its
+worktree**: what it built, what it skipped, which test went red on the rollback
+probe, and anything it could not settle. Asking for a "report at the end" without
+naming a destination asks for a message with no addressee — the words end up in
+the rollout file and nowhere a Lead is looking.
+
+With the file, every ending is visible to `git status`, including the one that
+matters most: **stopped early, wrote nothing, has a question.** In the case that
+produced this section, a worker hit a genuine contract fork after two minutes and
+said so precisely; the wave stood still for 98 minutes because that answer was
+sitting somewhere nobody thought to read.
 
 ## There is no way to talk to a running Codex worker
 
