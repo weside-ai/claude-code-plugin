@@ -112,6 +112,18 @@ So the brief is the whole instrument:
 - **Turn unsendable rules into merge-time checks.** Write down, at dispatch, the
   command that will verify each constraint you cannot enforce live. A verified
   constraint is stronger than a message anyway.
+- **Put the report in the file list.** A brief that asks for `WORKER-REPORT-<n>.md` while
+  saying "touch nothing outside this list" contradicts itself, and a conscientious worker
+  reports THAT as its fork instead of writing the report — so the artifact meant to make a
+  silent stop visible fails in exactly the silent stop.
+- **Never wait on `dirty || commit` alone.** A worker that stops to ask a question writes
+  nothing, so the worktree stays clean and that condition can never fire. Watch the rollout
+  file, which carries every outcome:
+  `tail -1 ~/.codex/sessions/$(date +%Y/%m/%d)/rollout-*.jsonl` → `payload.type == "task_complete"`.
+- **Reconcile the file list with the brief's prose before dispatch.** Every file the
+  instructions require changing must be listed — generated artifacts (`openapi.json`, the TS
+  client) and the report included. Measured on one wave: three of five phases stopped on this
+  contradiction alone, each a full dispatch round trip.
 - **Watch the artifacts, not the process.** `git -C <worktree> status --porcelain
   | wc -l` a minute in tells you the dispatch landed and the worker is writing;
   an empty tree after several minutes is the lost-dispatch signal above.
