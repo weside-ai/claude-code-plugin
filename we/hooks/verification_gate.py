@@ -247,8 +247,12 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
     return (verb, body, seen)
 
 
+_FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1", re.MULTILINE | re.DOTALL)
+
+
 def _section(body: str) -> str | None:
     """The `## Verification` block itself — a template quoted elsewhere is not a receipt."""
+    body = _FENCE.sub("", body)
     found = _HEADING.search(body)
     if not found:
         return None
