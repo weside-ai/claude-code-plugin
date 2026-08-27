@@ -122,7 +122,7 @@ Checkpoint names (`git_prepared`, `ac_verified`, etc.) come from the internal or
 Don't tab away the whole time — there are two checkpoints where Claude might ask you something:
 
 - **Step 4 (AC verification)** — if an AC can't be satisfied with evidence, you'll be told.
-- **Step 8 (CI fix)** — review findings (Claude Review plus any CI bots the repo configured in `review.available`, or local quality gates elsewhere) are addressed here in one pass; if a second pass still can't clear them (cap 2 cycles), you're asked.
+- **Step 8 (CI fix)** — review findings (Claude Review plus any CI bots the repo configured in `review.available`, or local quality gates elsewhere) are addressed here in one pass; without an explicit cycle budget from you it stops after the first push and asks.
 
 Otherwise it runs.
 
