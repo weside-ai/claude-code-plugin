@@ -46,11 +46,23 @@ the human typing "was ist das review gate".
 ## Verification
 
 - **Oracle:** substitute — the simulation grade and the consistency check; behaviour of a live
-  run is measured later by `scripts/harness/plugin-usage-scan.py` in weside-core.
+  run is measured later by `scripts/harness/plugin-usage-scan.py` in the host repo.
 - **Seed:** none (documents only).
 - **Assert:** every scenario ≥ 4/5 in the final round; `validate-consistency.py` exit 0.
 - **Not provable here:** that a live worker/Lead behaves as simulated — the next real
-  `/we:orchestrate` wave in weside-core is the observation.
+  `/we:orchestrate` wave in the host repo is the observation.
+
+### Receipt (2026-08-27, integration e5ffa3c)
+
+- **Oracle:** substitute — per-chunk final-round grades read from
+  `docs/plans/SIM-1-context/*/`, `python3 scripts/validate-consistency.py`, `python3 -m pytest
+  we/hooks -q`.
+- **Seed:** `git checkout feat/SIM-1-integration` at e5ffa3c.
+- **Asserted:** develop+refine a 4 · b 4 · c 4 · d 5 (3 rounds) · ci-review a 4 · b 4 · c 4.5 · d 4.5
+  (4 rounds) · story a 4 · b 4 · c 4 · d 4 (4 rounds) · gates A 4 · B 4 · C 4 · D 4 (3 rounds);
+  consistency PASSED; 52 hook tests passed.
+- **Not proven:** live behaviour of the four skills — observed on the next real wave; the five
+  post-grade edits in ci-review and the Lead's glue commit were not re-simulated.
 
 ## Technical Approach
 
