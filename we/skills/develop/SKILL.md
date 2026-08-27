@@ -11,199 +11,188 @@ argument-hint: '[<ticket-key> | <plan-path>] [--phases <N,M>] [--engine <name>]'
 
 # /we:develop — Dev-Only Worker Slice
 
-Implement the assigned chunk, run local gates, commit, push, stop.
+Implement the assigned chunk, run local gates, commit, push, stop. No PR, no CI fix loop, no
+ticket transition — the Lead (`/we:orchestrate`) merges every worker onto one branch and runs CI
+**once**; with no Lead in play, `--solo` does both.
 
-You do not run the integration pipeline: no PR, no CI fix loop, no ticket transition.
-The Lead (`/we:orchestrate`) integrates every worker onto one branch and runs CI **once**.
-No Lead in play → `/we:orchestrate {TICKET} --solo` runs implementation and integration together.
+**The Lead's brief outranks every default in this skill.** Where the brief names a worktree,
+branch, test discipline, gate list or integration suite, that value wins over `.weside/config.json`
+and over the steps below; you name the override in your report. The brief is silent → the step
+applies. What it does not override is a **stop**: a brief says build, and the stop branches below
+fire on facts the Lead did not have when it wrote one. Full dispatch contract:
+[`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md)
 
-Full dispatch contract: [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md)
+**You are talking to the Lead, not a user.** Dispatched, your printed output is invisible: the
+only channels out are `WORKER-REPORT.md` and exactly one `SendMessage` (Step 6) — invoked by a
+human instead, the same content goes to the chat. **Stopping early** means all three: write the
+report file with what you completed and why you stopped, send the one message with
+`blocked: <reason>`, stop. A stop without a message is a chunk the Lead waits on forever.
 
 ---
 
 ## Step 0: Locate the plan
 
-Resolve the plan file in priority order:
-
 1. Explicit path argument → use as-is
-2. Ticket key argument → `docs/plans/{KEY}-story.md`
-3. No argument → look for an in-flight plan via `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status` and pick the active one
+2. Ticket key → `docs/plans/{KEY}-story.md` (relative to the repo root the brief names, not the
+   worktree, when they differ)
+3. No argument → `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status` and pick
+   the active one
 
-**Frontmatter:** read `parallel_groups` to know which phases can run concurrently.
-**`--phases N,M`:** restrict to those phase numbers only. If absent, run all phases.
+**`--phases N,M`:** implement only those `### Phase` blocks. Absent → all phases.
 
-Verify the plan has at least one `### Phase` header. If not, stop and tell the user.
+**Standalone invocation only** (no Lead brief): run the 3-item scan from
+[`${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md`](../../references/dor-scan.md) and stop if it
+fails, naming the item. A briefed worker skips it — the Lead ran it before dispatch.
 
-**When a ticket key is known**, also fetch the ticket **including its comments** — corrections and
-scope cuts land there and the plan file may predate them; newest statement wins on conflict and you
-name the conflict to the user (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`). No ticketing tool
-→ plan file only.
+**A plan carrying an `## Open Fork` section is not buildable** — a refiner left a decision open
+there. Stop and hand it back; building past it pins behaviour nobody chose.
+
+**When a ticket key is known**, fetch the ticket **including its comments**
+([`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`](../../references/ticketing.md)). A comment that
+only clarifies: build the newest statement and record the conflict in your report. A comment that
+**changes scope** after the plan was approved (a cut, a new AC, a different seam) is not yours to
+absorb — stop and hand it back as a question; re-planning is the refine lane's job. No ticketing
+tool → plan file only, say so.
 
 ---
 
-## Step 1: DoR-lite check
+## Step 1: Worktree + branch
 
-Run the 3-item scan from `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` (GWT ACs · Context > 50
-chars · `### Phase` headers). If any item fails, stop and say which. This is lighter than the Lead's full DoR gate — the goal is to catch a completely un-refined
-plan, not to be a final gate.
-
----
-
-## Step 2: Worktree + branch
-
-**If the Lead's brief names a worktree path** (or `git worktree list` shows the current path as a linked worktree): `cd` there and skip creation — it already exists on the right branch, cut from the integration branch, which `EnterWorktree` cannot do.
-
-**Otherwise:** create one:
-
-```
-EnterWorktree(name="feat/{KEY}-work")
-```
-
-Branch naming: `feat/{KEY}-work` for a whole story, `feat/{KEY}-p{N}` when `--phases N` scopes the
-chunk — the Lead's integration step merges exactly these. A branch named in the Lead's brief takes
-precedence. Run the repo's worktree bootstrap from the brief (or `.weside/orchestrate.md`) before any
-gate.
+**Brief names a worktree** (or `git worktree list` shows the current path as a linked worktree):
+`cd` there, do not call `EnterWorktree`, and run the bootstrap the brief names unless it says the
+worktree is already bootstrapped. **Otherwise:** `EnterWorktree(name="feat/{KEY}-work")` —
+`feat/{KEY}-p{N}` when `--phases N` scopes the chunk. A branch named in the brief wins.
 
 Do **not** transition the ticket — the Lead owns ticket state.
 
 ---
 
-## Step 3: Implement phases
+## Step 2: Implement phases
 
-Read the plan completely. Run phases in the order the plan defines them.
+Read the plan completely and implement its phases **in the order the plan defines them, inline**.
+Never fan the *implementation* out to sub-agents (the gates in Step 3 are the exception, and they
+write nothing): phases in one worktree share one git index, so two concurrent committers race
+`.git/index.lock` and push the same branch. `parallel_groups` is the Lead's tool
+for splitting phases across separate worker worktrees. A phase grouped with yours but outside your
+`--phases` scope may be building right now: a file listed under **both** it and your phases is a
+shared seam — say so in your report rather than assuming you own it.
 
-**Parallel phases:** if `parallel_groups` declares a group and all phases in the group are within scope (`--phases` filter), dispatch them concurrently with one `Agent()` call per phase in a single message:
+Per phase:
 
-```python
-Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
-    description="Implement Phase {N} of {KEY}",
-    prompt=<self-contained brief: plan path, phase number, Goal + Files + Approach verbatim,
-             repo root, branch name, conventions file.
-             Instruction: implement, commit `{KEY}: phase {N} — {description}`, push.
-             Instruction: test discipline is `{test_discipline}` — tdd: failing test
-             before code at each seam; tests-after: tests in the same change, after the
-             code; off: no new tests unless the plan asks. Good-test rules apply at every
-             level (inline the anti-pattern list from references/test-discipline.md —
-             the sub-agent cannot load references).
-             Return a ≤150-token report: what changed, any deferrals, blockers.
-             Do NOT open a PR or run CI.>,
-)
+1. Apply the test discipline the brief names (`.weside/config.json`'s `test_discipline` is the
+   fallback, default `tests-after`) — level semantics and the anti-patterns that fail review at
+   every level: [`${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`](../../references/test-discipline.md).
+   A test file the discipline requires is in scope even when the plan's `**Files:**` omits it.
+2. Wiring check — a new data field flows end-to-end, not just into the model.
+3. Security check — touching auth, external APIs or user data: auth on new endpoints, no
+   hardcoded secrets, parameterized queries.
+4. Regenerate what the brief lists as a generated artifact (OpenAPI schema, typed client) and
+   commit it; leave gate-baseline files (coverage ratchets, allowlists) to the Lead.
+5. Stage the phase's files **by path** — never `git add -A`, which would sweep
+   `WORKER-REPORT.md` into the diff. Commit:
+
+```
+{KEY}: phase {N} — {description}
+
+Co-Authored-By: <Engine> <Model> <noreply@…>
 ```
 
-**Serial phases:** implement inline.
-
-**Per-phase checklist (both modes):**
-
-1. Follow project conventions; apply the configured test discipline (`test_discipline` from `.weside/config.json`, default `tests-after` — level semantics + good-test rules: `${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`)
-2. Wiring check — if the phase introduces new data fields, verify they flow end-to-end
-3. Security check — if touching auth/external APIs/user data: auth on new endpoints, no hardcoded secrets, parameterized queries
-4. Run auto-fix for the detected stack: `ruff check --fix` / `eslint --fix` / `gofmt` / `rustfmt`
-5. Commit: `{KEY}: phase {N} — {description}`
-
-**Model tier (when dispatching subagents):** default `sonnet`; mechanical/boilerplate phases → `haiku`; explicitly hard chunks → `opus`. The Lead's model choice (if specified in the brief) takes precedence.
+Fill the trailer with the engine and model actually running you (the brief names them when it
+dispatched a specific backend); the Lead never re-signs a worker's commits.
 
 ---
 
-## Step 4: Local quality gates
+## Step 3: Local quality gates
 
-After all phases complete, run gates in parallel for the **touched stack(s)**:
+Run both for the **touched stack(s)**, in one message:
 
 ```python
-Agent(subagent_type="we:static-analyzer", ...)  # lint + format + types
-Agent(subagent_type="we:test-runner", ...)       # fast/unit tests only (see below)
+Agent(subagent_type="we:static-analyzer",
+      prompt="Lint, format and type-check the changes on branch {branch} in {worktree}. "
+             "Do not run `yarn`/`npm install`, `tsc` or `eslint` in a worktree without "
+             "node_modules — report that as skipped. Report findings; fix nothing.")
+Agent(subagent_type="we:test-runner",
+      prompt="Run only unit and fast smoke tests for the changes on {branch} in {worktree}. "
+             "SKIP any test needing DATABASE_URL, REDIS_URL, a queue, an HTTP service or "
+             "docker-compose, and list what you skipped. Do not run `yarn`/`npm install`, "
+             "`jest` or `tsc` in a worktree without node_modules — report that as skipped.")
 ```
 
-**Fast-tests-only rule:** run unit tests and fast smoke tests. Skip any test that requires an
-external service (running database, message queue, HTTP endpoint, Docker Compose). The
-discriminator: if the test needs `DATABASE_URL`, `REDIS_URL`, `docker-compose up`, or similar —
-it is an integration test and belongs to the integration CI the Lead runs after merging all
-workers. Mark skipped integration tests in your Step 7 report so the Lead knows what CI will
-cover.
+**Fast-tests-only, with one exception:** when the brief names an integration suite and a database
+for a **critical** chunk (money, auth, tenant isolation, migration), that chunk is never
+fast-gates-only — run the suite and keep its last 20 lines for the report file you write in
+Step 6, so the claim is checkable. Everything else needing an external service belongs to the
+Lead's integration CI: an integration test the plan asks you to *write* gets written and left
+unrun, listed as unverified.
 
-Test quality is gated regardless of when tests were written — the anti-patterns in
-[`${CLAUDE_PLUGIN_ROOT}/references/test-discipline.md`](../../references/test-discipline.md)
-(implementation-coupled, tautological, horizontal slicing) fail review even under
-`test_discipline: off`.
-
-Gate failures: fix inline, commit fix, re-run. Circuit breaker: 3 failures in the same gate → stop, report to the Lead.
-
-**Do NOT run `/we:ac-review` standalone here** — this step runs the same agent inline; the
-bug-hunt is the Lead's step at integration, not per chunk (Step 5).
+Gate failures: fix inline, commit the fix, re-run. Circuit breaker: 3 failures in the same gate →
+stop.
 
 ---
 
-## Step 5: AC-check (when review.cross is on)
+## Step 4: AC-check your diff
 
-Read `review.cross` from `.weside/config.json`. Default: `true`.
+Run when the brief orders an AC-check, or — brief silent — when `review.cross` in
+`.weside/config.json` is true (its default). Explicit brief beats the flag either way.
 
-**Only when `review.cross` is true:**
+```python
+Agent(subagent_type="we:ac-reviewer",
+      prompt="Check `git diff {integration_branch}...HEAD` against the ACs the phases "
+             "you built ({the --phases scope, or all}) claim to satisfy in "
+             "docs/plans/{KEY}-story.md. Findings only.")
+```
 
-Run `we:ac-reviewer` against **this worker's diff** (not the full branch) — the relevant ACs are
-the ones this chunk claims to satisfy per the plan. See
-[`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md)
-§ AC-review rule.
-
-This is informational — the worker reads the findings and decides whether to fix before
-committing; either way findings go into the Step 7 report so the Lead sees them at integration.
-
-**No bug-hunt here.** Bug-hunting (Codex adversarial-review or Claude's native `/code-review`) runs
-exactly once, at Lead integration, against the full merged diff — never per chunk. Running it here
-too would just re-review what integration reviews again.
-
-**When `review.cross` is false:** skip the AC-check; note it in the report.
+The integration branch comes from the brief; standalone, use the branch you cut from. Findings are
+**informational** — fix what you own, commit it (`{KEY}: AC-check fixes`), report them either way.
+No separate `/we:ac-review` pass and no bug-hunt: Codex adversarial-review and `/code-review` run
+exactly once, at Lead integration, over the merged diff (`references/worker-dispatch.md`
+§ AC-review rule).
 
 ---
 
-## Step 6: Commit and push
-
-Ensure all phase commits are in. If the AC-check produced obvious quick-fix findings the worker can own, fix and commit them now (`{KEY}: AC-check fixes`).
-
-Push the branch:
+## Step 5: Push
 
 ```bash
-git push origin {branch-name}
+git push -u origin {branch} && git ls-remote --heads origin {branch}
 ```
+
+An empty `ls-remote` means the push did not land — that is a blocker, not a done.
 
 ---
 
-## Step 7: Report to the Lead
+## Step 6: Report
 
-Print a structured report (≤300 tokens). When dispatched by `/we:orchestrate`, this becomes the worker's `SendMessage`:
+Write `WORKER-REPORT.md` in the worktree root — what you built, what you skipped, what you could
+not settle, plus the critical-gate output if Step 3 ran one. It is not part of the change: never
+`git add` it.
 
+Then send exactly one message (`SendMessage` is a deferred tool — `ToolSearch` for it first):
+
+```python
+SendMessage(to="team-lead", summary="worker-{KEY} done|blocked",
+            message="{branch} | commits: N | gates: lint ✓ types ✓ tests ✓ | "
+                    "AC-check: clean|N findings | skipped: … (or none) | "
+                    "questions: … | blockers: none|reason")
 ```
-Worker: develop-{KEY} [phases: {N-M or "all"}]
-Branch: {branch-name}
-Commits: {N commits} — {brief description of what changed}
 
-Local gates: lint ✓ | types ✓ | tests ✓   (or: tests ✗ 2 failures — fixed)
-
-AC-check: {clean | N findings — {high-level summary}}
-  [list findings if any, one line each]
-
-Blockers: {none | description}
-Deferrals: {none | what was deferred and why}
-
-Next: Lead integrates this branch. Do NOT open a PR.
-```
+Invoked by a human instead of a Lead: print the same fields.
 
 ---
 
 ## Rules
 
-+ **Stop after push.** No PR, no per-worker CI loop, no ticket transition.
-+ **Commit every phase** — atomic commits, one per phase or fix.
-+ **Local gates must be green before pushing** — no gate-red push.
-+ **AC-check is informational** — commit even with findings; surface them in the report.
-+ **Never dispatch a nested pipeline** — you ARE the dev worker; implement your chunk and report. Opening a PR or running CI here voids the Lead's single-CI contract.
-+ **Honor `--phases` scope** — only implement the listed phases; do not expand scope. Expanding scope means NEW capability — it does not mean deferring defects: a small finding (≤ ~30 min) on the seam your phase touches gets fixed in the same commit, not reported away. Only product decisions, money-path changes, and foreign-subsystem redesigns go into the report as questions; never create tickets.
-+ **Report even on failure** — if a blocker stops you, report what you completed and why you stopped.
-+ **Model tier defaults:** sonnet for normal phases, haiku for mechanical, opus only when the Lead explicitly requests it for a hard chunk.
++ **Stop after push.** No PR, no per-worker CI loop, no ticket transition, no nested pipeline —
+  opening a PR or running CI here voids the Lead's single-CI contract.
++ **Local gates green before pushing** — no gate-red push.
++ **Honor `--phases` scope.** Expanding scope means NEW capability, not deferred defects: a
+  finding ≤ ~30 min on the seam your phase touches gets fixed here. A **money-path** finding is
+  the exception — fix it in its own commit *and* raise it as a question, so the Lead can revert it
+  at integration. Product decisions and foreign-subsystem redesigns are questions only; workers
+  never create tickets.
++ **Report even on failure** — what you completed, why you stopped.
 
 ## References
 
-+ [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) — full dispatch contract, AC-review rule, bug-hunt dispatch, integration-branch pattern
-+ [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md) — Codex single-detach rule (if the Lead uses Codex for integration bug-hunting)
-+ `/we:orchestrate` — the Lead that dispatches this worker
++ [`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`](../../references/worker-dispatch.md) — dispatch contract, AC-review rule, model tiers
 + [`${CLAUDE_PLUGIN_ROOT}/references/integration-pipeline.md`](../../references/integration-pipeline.md) — what the Lead does with your branch
++ [`${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md`](../../references/codex-dispatch.md) · `/we:orchestrate` — the Codex single-detach rule, and the Lead that dispatches you
