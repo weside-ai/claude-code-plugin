@@ -50,12 +50,13 @@ review**: Fixed / Still Open / New Issues.
 - **ACs met?** Each AC individually verified against the diff, with evidence (file path, test
   name, commit) — no item passes without a citation, and each AC gets its own row. The same
   standard binds every DoD row: one you cannot cite evidence for is a Fail, not a Pass —
-  unless the evidence cannot exist yet at this gate (the PR, CI, the ticket move), which is
-  `N/A` naming the stage that owes it.
+  unless the evidence cannot exist yet at this gate — the PR, CI, the ticket move, and the
+  gates that run after this one (bug-hunt, static, test) — which is `N/A` naming the stage
+  that owes it.
 - **Feature reachable?** User can navigate to the feature. **End-to-end?** The complete flow works.
 - **DoD:** every applicable row of `${CLAUDE_PLUGIN_ROOT}/quality/dod.md` — it owns the
-  definitions, including *Every planned phase landed*, which is a Fail whoever committed the
-  phase. A section with no fixed row in the format below gets a row of its own, `N/A` with its
+  definitions, including *Every planned phase landed*: a phase whose files
+  did not change Fails, whoever committed it. A section with no fixed row in the format below gets a row of its own, `N/A` with its
   reason when nothing in it applies.
 - **Repo DoD:** when `<repo-root>/.weside/dod.md` exists (`git rev-parse --show-toplevel`), every
   applicable row of that file too — **additive and mandatory when it is there**, never a
@@ -102,6 +103,7 @@ the file lands in `.reviews/` itself. Timestamp first so the directory sorts chr
 | Deliberate bypasses justified | Pass/Fail/N/A | |
 | Horizontal scalability | Pass/Fail/N/A | |
 | No open TODO/FIXME | Pass/Fail | |
+| *(one row per `quality/dod.md` section with no fixed row above)* | Pass/Fail/N/A | |
 | *(one row per `.weside/dod.md` item, if present)* | Pass/Fail/N/A | |
 
 ## Verdict

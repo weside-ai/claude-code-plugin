@@ -41,7 +41,7 @@ _HEREDOC = re.compile(
 # `;` onto the word before it, so the trailing character counts too.
 _SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "(", ")", "{", "}", "then", "do", "else", "!"})
 # Words that precede a command without being one.
-_PREFIXES = frozenset({"command", "env", "exec", "sudo", "nohup", "time"})
+_PREFIXES = frozenset({"command", "env", "exec", "sudo", "nohup", "time", "timeout"})
 _NEWLINE = re.compile(r"\n(?=(?:[^'\"]|'[^']*'|\"[^\"]*\")*$)")
 
 
@@ -69,7 +69,9 @@ _PLACEHOLDERS = frozenset({"", "-", "tbd", "todo", "n/a", "na", "none", "…", "
 def _line(body: str, name: str) -> str | None:
     """The value on a `**Name:** value` line, or None when there is no such line."""
     found = re.search(
-        rf"^[ \t]*\**[ \t]*{name}\**[ \t]*:(?P<v>[^\n]*)$", body, re.IGNORECASE | re.MULTILINE
+        rf"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*{name}\**[ \t]*:(?P<v>[^\n]*)$",
+        body,
+        re.IGNORECASE | re.MULTILINE,
     )
     return found.group("v") if found else None
 
@@ -78,10 +80,10 @@ def _filled(body: str, name: str) -> bool:
     value = _line(body, name)
     if value is None:
         return False
-    value = value.strip().strip("*_` ").strip()
-    if value.startswith("<") or value.strip("_ ").lower() in _PLACEHOLDERS:
+    value = value.strip().strip("*_`| ").strip()
+    if re.fullmatch(r"<[^<>]*>", value):
         return False
-    return len(value) >= 3
+    return value.strip("_ ").lower() not in _PLACEHOLDERS
 
 
 def _oracles(body: str) -> set[str] | None:
@@ -97,8 +99,8 @@ _WHERE = (
     "The receipt is not authored here: copy the `## Verification` block verbatim from the story "
     "plan (`docs/plans/<TICKET>-story.md` § Verification) into the PR body, and pass the body as "
     "`--body-file` so it can be read. It needs one `**Oracle:**` — cli | ui | substitute | "
-    "not-applicable — and, unless that oracle is not-applicable, a filled `**Seed:**` and "
-    "`**Asserted:**`.\n\n"
+    "not-applicable — and, unless that oracle is not-applicable, a filled `**Seed:**`, "
+    "`**Asserted:**` and `**Not proven:**`.\n\n"
     "If the plan carries no such block, verification did not happen. Say so and stop; do not "
     "write a receipt for a run that did not take place.\n\n"
     "Contract: the `we` plugin's references/verification.md. Repo recipes: .weside/verify.md."
@@ -110,9 +112,31 @@ def _strip_heredocs(command: str) -> tuple[str, list[str]]:
 
     def take(match: re.Match[str]) -> str:
         bodies.append(match.group(3))
-        return "<<HEREDOC"
+        return f"<<HEREDOC:{len(bodies) - 1}"
 
     return _HEREDOC.sub(take, command), bodies
+
+
+def _written_here(argv: list[str], path: str, bodies: list[str]) -> str | None:
+    """The heredoc this command redirects into `path` — a body written and used in one call."""
+    for i, tok in enumerate(argv):
+        if tok not in (">", ">>") or i + 1 >= len(argv):
+            continue
+        if os.path.basename(argv[i + 1]) != os.path.basename(path):
+            continue
+        for later in argv[i + 2 :]:
+            found = re.fullmatch(r"<<HEREDOC:(\d+)", later)
+            if found:
+                return bodies[int(found.group(1))]
+    return None
+
+
+def _cwd_after_cd(argv: list[str], cwd: str | None) -> str | None:
+    """Where a relative body-file actually lives after this command's own `cd`."""
+    for i, tok in enumerate(argv):
+        if tok.rstrip(";&|") in ("cd", "pushd") and i + 1 < len(argv):
+            cwd = os.path.join(cwd or "", argv[i + 1].rstrip(";&|"))
+    return cwd
 
 
 def _repo_root(cwd: str | None) -> str | None:
@@ -158,7 +182,10 @@ def _body_arg(rest: list[str], j: int) -> tuple[str, bool] | None:
 def _pr_verb(argv: list[str]) -> tuple[str, list[str]] | None:
     """The `create`/`edit` verb and its remaining args — command position only."""
     for i, tok in enumerate(argv):
-        if (tok != "gh" and not tok.endswith("/gh")) or not _starts_a_command(argv, i):
+        bare = tok.lstrip("({")
+        if (bare != "gh" and not bare.endswith("/gh")) or not (
+            tok != bare or _starts_a_command(argv, i)
+        ):
             continue
         if argv[i + 1 : i + 3] in (["pr", "create"], ["pr", "edit"]):
             return (argv[i + 2], argv[i + 3 :])
@@ -183,8 +210,7 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
     if found is None:
         return (None, None, False)
     verb, rest = found
-    if argv[0] == "cd" and len(argv) > 1:
-        cwd = os.path.join(cwd or "", argv[1])
+    cwd = _cwd_after_cd(argv, cwd)
     if "--web" in rest:
         return (verb, None, True)
 
@@ -199,27 +225,43 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
         if value == "-":
             return (verb, None, True)
         if is_file:
-            try:
-                with open(os.path.join(cwd or "", value)) as fh:
-                    body = fh.read()
-            except Exception:
-                body = None
-        elif "$" in value or value.count("`") % 2:
+            # A body this same command writes wins over whatever is on disk: the
+            # heredoc has not run yet, so the file is absent or stale.
+            body = _written_here(argv, value, heredocs)
+            if body is None:
+                try:
+                    with open(os.path.join(cwd or "", value)) as fh:
+                        body = fh.read()
+                except Exception:
+                    body = None
+        elif re.search(r"\$\(|^\s*[\"']?\$", value) or value.count("`") % 2:
             # Unexpanded — PreToolUse runs before the shell, so a substitution or a
             # variable is not the body. A balanced backtick pair is a code span, not
             # a substitution, and stays readable. The one unexpanded shape we can
             # still read is the heredoc it was fed from.
-            body = "\n".join(heredocs) if heredocs else None
+            marker = re.search(r"<<HEREDOC:(\d+)", value)
+            body = heredocs[int(marker.group(1))] if marker else None
         else:
             body = value
 
     return (verb, body, seen)
 
 
-def _receipt_problem(body: str) -> str | None:
+def _section(body: str) -> str | None:
+    """The `## Verification` block itself — a template quoted elsewhere is not a receipt."""
+    found = _HEADING.search(body)
+    if not found:
+        return None
+    rest = body[found.end() :]
+    nxt = re.search(r"^\s{0,3}#{1,6}\s", rest, re.MULTILINE)
+    return rest[: nxt.start()] if nxt else rest
+
+
+def _receipt_problem(full: str) -> str | None:
     """What is wrong with this PR body, in the words the author needs."""
-    named = _oracles(body)
-    if not _HEADING.search(body) or named is None:
+    body = _section(full)
+    named = _oracles(body) if body else None
+    if body is None or named is None:
         return (
             "This PR claims work is done without saying how that was observed. Unit tests "
             "do not count — they share the blind spots of whoever wrote the code."

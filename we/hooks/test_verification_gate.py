@@ -353,3 +353,61 @@ def test_an_unexpanded_variable_body_lets_through(armed: Path) -> None:
 def test_a_python_heredoc_is_not_a_pr(armed: Path) -> None:
     script = "print('gh pr create --body x')\n"
     assert refuse(f"python3 - <<'PY-BODY'\n{script}PY-BODY", armed) is None
+
+
+# --- the write-then-create seam the instructed shape steers into -----------------
+
+
+def _write_then_create(name: str, text: str) -> str:
+    return f"cat > {name} <<'EOF'\n{text}EOF\ngh pr create --title 'T' --body-file {name}"
+
+
+def test_a_body_written_in_the_same_call_is_read(armed: Path) -> None:
+    """The file does not exist yet at PreToolUse — the heredoc is the body."""
+    assert refuse(_write_then_create("pr-body.md", NO_RECEIPT), armed) is not None
+
+
+def test_a_body_written_in_the_same_call_can_pass(armed: Path) -> None:
+    assert refuse(_write_then_create("pr-body.md", RECEIPT), armed) is None
+
+
+def test_a_stale_file_does_not_outrank_the_body_being_written(armed: Path) -> None:
+    """A leftover receiptless file must not deny a PR whose new body carries one."""
+    body_file(armed, NO_RECEIPT)
+    assert refuse(_write_then_create("pr-body.md", RECEIPT), armed) is None
+
+
+def test_the_right_heredoc_supplies_the_body(armed: Path) -> None:
+    """A receipt in a NOTE heredoc does not vouch for a receiptless PR body."""
+    command = (
+        f"cat > note.md <<'N'\n{RECEIPT}N\n"
+        f"gh pr create --title 'T' --body \"$(cat <<'EOF'\n{NO_RECEIPT}EOF\n)\""
+    )
+    assert refuse(command, armed) is not None
+
+
+def test_a_dollar_inside_prose_does_not_disarm_the_gate(armed: Path) -> None:
+    assert refuse("gh pr create --body 'ships $VAR, no receipt'", armed) is not None
+
+
+def test_a_receipt_as_a_bullet_list_is_a_receipt(armed: Path) -> None:
+    name = body_file(
+        armed,
+        "## Verification\n\n- **Oracle:** cli\n- **Seed:** `weside widgets create`\n"
+        "- **Asserted:** 201 and an id\n",
+    )
+    assert refuse(f"gh pr create --body-file {name}", armed) is None
+
+
+def test_a_template_quoted_outside_the_section_is_not_a_receipt(armed: Path) -> None:
+    name = body_file(armed, "## Verification\n\nnothing\n\n## Changes\n\n" + RECEIPT)
+    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+
+
+def test_a_cd_after_another_command_still_locates_the_body(armed: Path) -> None:
+    sub = armed / "apps"
+    sub.mkdir()
+    body_file(sub, NO_RECEIPT)
+    assert (
+        refuse("git status && cd apps && gh pr create --body-file pr-body.md", armed) is not None
+    )

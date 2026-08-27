@@ -39,11 +39,6 @@ Fetch and rebase onto the PR's base — **derive it, never assume `main`** (the 
 symref, or the base the plan names). On conflicts: abort the rebase and hand it to the user —
 never resolve a rebase conflict on the way to opening a PR.
 
-### Step 3b: Repo-local pre-PR gates
-
-Run whatever pre-PR check scripts the repo ships (`scripts/check-*.sh` and friends) before
-pushing; a missing script is an absent gate, not a failure.
-
 ### Step 4: Push
 
 `git push -u origin $BRANCH --force-with-lease` — the lease is what makes a rebased push safe.
@@ -62,8 +57,9 @@ hand (the branch is pushed), then Step 9.
 Write the body to a file and pass it as `--body-file` — a body behind `--body "$(…)"` cannot be
 read by the repo's verification gate, which then either blocks a good PR or waves a bad one
 through. The body carries: **Summary**, **Changes** (from the commits), **Test Plan**, the ticket
-key on its own line so the ticket auto-links, and the `## Verification` block **copied verbatim
-from `docs/plans/${TICKET}-story.md` § Verification**.
+key on its own line so the ticket auto-links, the `## Verification` block **copied verbatim
+from `docs/plans/${TICKET}-story.md` § Verification**, and — for any phase committed by
+someone other than its worker — who committed it and why.
 
 **Never author that block here.** You did not run the verification, so you cannot testify to it.
 No block in the plan → the verification step did not happen: stop, report that, and let the Lead
