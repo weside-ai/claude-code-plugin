@@ -51,7 +51,7 @@ plan, not to be a final gate.
 
 ## Step 2: Worktree + branch
 
-**If already in a dedicated worktree** (detected by: `git worktree list` shows the current path as a linked worktree, or the user says so): skip creation — work here.
+**If the Lead's brief names a worktree path** (or `git worktree list` shows the current path as a linked worktree): `cd` there and skip creation — it already exists on the right branch, cut from the integration branch, which `EnterWorktree` cannot do.
 
 **Otherwise:** create one:
 
@@ -59,7 +59,10 @@ plan, not to be a final gate.
 EnterWorktree(name="feat/{KEY}-work")
 ```
 
-Branch naming: `feat/{KEY}-work` — this exact shape, because the Lead's integration step merges `feat/{TICKET}-work` branches. If the Lead's brief names a different branch, that takes precedence.
+Branch naming: `feat/{KEY}-work` for a whole story, `feat/{KEY}-p{N}` when `--phases N` scopes the
+chunk — the Lead's integration step merges exactly these. A branch named in the Lead's brief takes
+precedence. Run the repo's worktree bootstrap from the brief (or `.weside/orchestrate.md`) before any
+gate.
 
 Do **not** transition the ticket — the Lead owns ticket state.
 
@@ -75,7 +78,6 @@ Read the plan completely. Run phases in the order the plan defines them.
 Agent(
     subagent_type="general-purpose",
     model="sonnet",
-    run_in_background=True,
     description="Implement Phase {N} of {KEY}",
     prompt=<self-contained brief: plan path, phase number, Goal + Files + Approach verbatim,
              repo root, branch name, conventions file.

@@ -112,8 +112,8 @@ So the brief is the whole instrument:
 - **Turn unsendable rules into merge-time checks.** Write down, at dispatch, the
   command that will verify each constraint you cannot enforce live. A verified
   constraint is stronger than a message anyway.
-- **Put the report in the file list.** A brief that asks for `WORKER-REPORT-<n>.md` while
-  saying "touch nothing outside this list" contradicts itself, and a conscientious worker
+- **Put the report in the file list — as write-allowed, not committed.** A brief that asks for
+  `WORKER-REPORT.md` while saying "touch nothing outside this list" contradicts itself, and a conscientious worker
   reports THAT as its fork instead of writing the report — so the artifact meant to make a
   silent stop visible fails in exactly the silent stop.
 - **Never wait on `dirty || commit` alone.** A worker that stops to ask a question writes

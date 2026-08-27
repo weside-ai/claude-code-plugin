@@ -195,7 +195,6 @@ to a **Decision Queue** presented as one batch at the wave boundary, not as inte
 /we:orchestrate <epic>              # epic target: boot + ready-set; dispatch on confirm (Mode A)
 /we:orchestrate <story-key>         # single-Story target: run its phases as work-chunks (Mode B)
 /we:orchestrate <story-key> --solo  # single Story, no workers: implement here, then integrate
-/we:orchestrate <epic> --rehearsal  # run the pipeline against a fixture, no real PR/ticket
 /we:orchestrate                     # boot from the most recently active epic, then status
 ```
 
@@ -203,7 +202,6 @@ to a **Decision Queue** presented as one batch at the wave boundary, not as inte
 - An Epic has several refined Stories ready to build and you want them dispatched together
 - One coherent change is split into phases and you'd rather keep your own context clean
 - You want one persistent Lead that knows where the Epic stands instead of couriering between sessions
-- `--rehearsal` — shake out skill friction against a fixture before a real run
 
 **What it produces:**
 - Worker branches merged onto one integration branch → **one PR**, CI run **once**

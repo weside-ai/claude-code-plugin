@@ -25,8 +25,8 @@ when it was dispatched.
 | Phase | Written when | Written by |
 |---|---|---|
 | `refined` | the plan passes the DoR scan (`dor-scan.md`) | Lead, after verifying — never the refiner |
-| `git_prepared` | branch + worktree exist, ticket moved to In Progress | Lead at dispatch |
-| `implementation_complete` | every phase committed and pushed | Lead, on the worker's report |
+| `git_prepared` | the Lead created the chunk worktree on its branch (`/we:orchestrate` Step 5.7) | Lead |
+| `implementation_complete` | every phase merged onto the integration branch — from the diff, once per story | Lead |
 | `simplified` | § Simplify done | Lead |
 | `ac_verified` | § AC + DoD gate passed **and** the verification block exists | Lead |
 | `review_passed` | the one bug-hunt engine came back clean | Lead |
@@ -77,9 +77,10 @@ Every gate so far is self-referential: tests written for code by whoever wrote t
 by whoever briefed them. Run the result against a **running instance** per
 `verification.md`, which owns the oracle ladder and the receipt format. In short: read
 `<repo>/.weside/verify.md`, cover the user-visible journeys this change claims, DEV first —
-**staging is a question to the user, not a step** — and write the `## Verification` block now,
-because the PR body needs it and a repo that armed `verification.required` refuses `gh pr create`
-without it.
+**staging is a question to the user, not a step** — and write the `## Verification` block now
+into the story plan's `## Verification` section (the receipt lives with the plan; `pr-creator`
+copies it into the PR body), because a repo that armed `verification.required` refuses
+`gh pr create` without it.
 
 A verification that did not happen is a blocking failure, exactly like a failed AC. "Tests are
 green" does not discharge it.
@@ -135,7 +136,6 @@ Agent(
            "CONTRADICT the diff — that is a correction or a deletion, not a note. Return "
            "file / change / why per item, docstring proposals included as diffs, or say "
            "explicitly that nothing needs updating.",
-    run_in_background=True,
 )
 ```
 

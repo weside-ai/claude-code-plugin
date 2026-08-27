@@ -3639,6 +3639,9 @@ def main() -> None:
                 in_flight=[k.strip() for k in args.in_flight.split(",") if k.strip()],
                 caps=caps or None,
             )
+            # An empty roster with exit 0 reads as "nothing to do"; say when the
+            # key resolved to no epic plan and no mirror row at all.
+            result["epic_resolved"] = bool(stories)
         elif args.action == "phases":
             result = {"phases": STORY_PHASES, "count": len(STORY_PHASES)}
 

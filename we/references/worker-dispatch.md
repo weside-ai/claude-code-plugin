@@ -90,8 +90,9 @@ at integration, against the full merged diff. Never per chunk; it's the expensiv
 | Claude, `tools.codex: true`, script resolves | `/codex:adversarial-review` |
 | Anything else — Claude without Codex, Codex, or a foreign engine | Claude's native `/code-review` |
 
-See [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 8 B1b for the
-integration-time dispatch, including the mixed-authorship case.
+Mixed authorship in one wave (a Codex chunk beside Claude chunks, or a tree the Lead committed
+for a dead worker) counts as "anything else": Claude's native `/code-review` over the whole
+integrated diff. Integration-time dispatch: [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 8 B.
 
 When dispatching Claude's native `/code-review`, point it at
 [`test-discipline.md`](test-discipline.md)'s anti-patterns (implementation-coupled,

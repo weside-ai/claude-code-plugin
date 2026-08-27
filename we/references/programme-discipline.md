@@ -30,7 +30,8 @@ thirty seconds, current enough to trust:
 - **Update protocol** — restated inside the file, so it survives the author.
 
 The rule that makes it work: **it is updated in the same PR as the change it
-describes**, never afterwards, never "when things calm down". A state file that
+describes** — or in the close-out commit the moment that PR merges (`/we:orchestrate`
+Step 10) — never "when things calm down". A state file that
 lags is worse than none, because it is trusted.
 
 Every session and every loop round **starts** by reading it and **ends** by

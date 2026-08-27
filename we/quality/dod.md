@@ -115,7 +115,7 @@ it cannot carry the knowledge — most changes stop at the first.
 
 - [ ] Ticket moved to "In Review"
 - [ ] User reviewed and merged
-- [ ] Ticket moved to "Done" — **USER ONLY, never automated**
+- [ ] Ticket moved to "Done" — only on the human's explicit word after their merge (`/we:orchestrate` Step 10), never as a pipeline step
 
 ---
 
