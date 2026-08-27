@@ -41,7 +41,7 @@ as the main agent, invoked as `/we:ci-review` in `the host repo` on `feat/TICKET
    only for a conflicted rebase (L242-243) — so I hand-resolve, migration `down_revision` hunk
    included, unaided (round-2 defect 4, still open).
 4. L87 *"apply 3f's one-head check if the branch carries migrations"* → the branch adds a
-   migration → `Bash: cd apps/backend && alembic heads` → **two heads**, the second from `main`.
+   migration → `Bash: cd src/backend && alembic heads` → **two heads**, the second from `main`.
 5. 3f L243-245 → **stop and ask the user**; the merge-heads migration belongs on `main`.
 
 **The run ends here.** Not reached: the unblocking push, 1b collection, 1c, the findings table,

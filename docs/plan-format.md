@@ -18,19 +18,28 @@ Every plan file begins with a YAML frontmatter block:
 
 ```yaml
 ---
-story: {TICKET}         # Ticket key (e.g. PROJ-123). Required.
-created: YYYY-MM-DD     # ISO date. Required.
-status: draft           # One of: draft | approved. Required.
-parallel_groups: []     # Optional. See § parallel_groups below.
+type: story-plan
+story: {TICKET}
+epic: {EPIC-SLUG-OR-KEY}
+created: YYYY-MM-DD
+status: draft
+parallel_groups: []
+depends_on: []
 ---
 ```
 
+Frontmatter ships **bare** — `_parse_frontmatter` in `orchestration.py` keeps an inline `# comment`
+as part of the value, so `epic: rooms  # optional` never matches the epic roster.
+
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `type` | string | yes | `story-plan` |
 | `story` | string | yes | Ticket key; used for checkpoint keying |
+| `epic` | string | when the story belongs to an epic | slug or ticketing key; `/we:orchestrate` rosters by it |
 | `created` | ISO-8601 date | yes | Informational; used in stale-plan detection |
-| `status` | enum | yes | `draft` while being refined; `approved` after `/we:story` Step 5 |
+| `status` | enum | yes | `draft` while being refined; `blocked` while a `## Open Fork` section is open; `approved` after `/we:story` Step 5 |
 | `parallel_groups` | list of lists | no | Empty or absent = all phases sequential; see below |
+| `depends_on` | list of keys | no | stories that must be `built` before this one enters the develop lane |
 
 ---
 
@@ -60,11 +69,18 @@ Each AC uses Given/When/Then (GWT) structure:
 2. **Given** [initial context] **When** [user action] **Then** [observable outcome]
 ```
 
-The DoR (`we/quality/dor.md`) requires GWT structure. The DoR gate scans
-for the presence of `Given`, `When`, and `Then` tokens in the AC section — the
-plan is rejected at the DoR gate if any are absent.
+The DoR (`we/quality/dor.md`) requires GWT structure. The DoR gate scans the **whole
+document** for the tokens `Given`, `When` and `Then` (a substring test, not per AC) — the
+plan is rejected if any is absent.
 
 ---
+
+## Open Fork (optional, written by `/we:refine`)
+
+A refiner that hits a design fork its context cannot settle writes the plan as far as the fork
+allows and adds `## Open Fork` directly after `## Context`: the two options, a recommendation,
+what each pins. `/we:develop` refuses to build past it; `/we:orchestrate` treats the plan as
+`draft` and queues the fork. Answering the fork deletes the section.
 
 ## Context Section
 
@@ -96,9 +112,10 @@ parallel_groups: [[2, 3], [5, 6]]  # Two parallel groups
 **Semantics:**
 
 - A phase not mentioned in any group always runs inline in plan order.
-- Phases within the same group are dispatched as concurrent sub-agents in a
-  single `Agent()` message — they must touch **disjoint files** and have **no
-  ordering dependency** (phase N's output must not feed phase N+1 within the group).
+- Phases within the same group are dispatched as concurrent chunk workers, each in its own
+  worktree, ≤ 2 at a time unless the Lead raises the cap with a reason — they must touch
+  **disjoint files** and have **no ordering dependency**. A group runs after every
+  lower-numbered phase has merged (`/we:orchestrate` Step 5.4).
 - Conflict detection after a parallel group returns is the Lead's responsibility.
   If merge conflicts occur, the `parallel_groups` declaration was incorrect — resolve
   manually, and update the plan via `/we:story` to prevent future recurrence.
@@ -148,6 +165,12 @@ parallel_groups: []
 ## Testing Requirements
 - Unit tests for [X]
 - Integration tests for [Y]
+
+## Verification
+- **Oracle:** cli | ui | substitute | not-applicable — why
+- **Seed:** [command]
+- **Assert:** [what must be true]
+- **Not provable here:** [what, and who owes it]
 
 ## Technical Approach
 **Patterns:** [relevant patterns]
@@ -285,3 +308,4 @@ The Status mode compares the mirror block in the doc with the live ticketing fet
 |---|---|---|
 | 1.0 | 2026-05-18 | Initial spec extracted from `/we:story` + build-pipeline implementation |
 | 1.1 | 2026-05-28 | Concept Doc Format section added — Saga + Epic mirror block contract (v2.34.0) |
+| 1.2 | 2026-08-27 | `type`, `epic`, `depends_on`, `blocked`, `## Open Fork`, `## Verification`; bare frontmatter; parallel_groups cap (5.5.0) |

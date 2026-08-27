@@ -28,7 +28,8 @@ Keep the branch as `$BRANCH` and the key it carries as `$TICKET`; both are used 
 ### Step 2: Verify Checkpoints
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status $TICKET
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* | sort -V | tail -1)}
+python3 "$WE_ROOT/scripts/orchestration.py" story status $TICKET
 ```
 
 **If any of the four above is missing → STOP. Tell the user which gates to run first.**
@@ -87,7 +88,7 @@ Only once a PR exists — a URL from `gh pr create`, or the user's confirmation 
 by hand. A refused or failed call is not a created PR: report it and write nothing.
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint $TICKET pr_created
+python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint $TICKET pr_created
 ```
 
 ---

@@ -13,7 +13,7 @@ A repo can extend this checklist with its own criteria in `.weside/dor.md` (crea
 - [ ] **Clear Summary** — One-line description (max 80 chars)
 - [ ] **User Story** — "As [role] I want [feature] so that [benefit]" format
 - [ ] **Plan exists** — `docs/plans/{TICKET}-story.md` with implementation details. Once the plan is final, the pipeline executes it without re-negotiating scope, phasing, or PR size — open questions belong in `/we:story`, not in the build. For stories with 3+ independent phases (disjoint files, no ordering dependency), the plan frontmatter optionally declares `parallel_groups` (list-of-lists of phase numbers), the parallel-wave map `/we:orchestrate` dispatches from.
-- [ ] **Ticket linked** — Connected to parent Epic (if using ticketing tool)
+- [ ] **Ticket linked** — connected to its parent Epic where the ticketing tool has parents (Jira); GitHub Issues: the plan's `epic:` field carries it
 
 ### In Plan (Details)
 
@@ -98,6 +98,4 @@ scan in `references/dor-scan.md` — that is what the pipeline gates on before d
 
 After `/we:story`: `phase=refined`
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined
-```
+`/we:story` Step 6 writes it (single owner of the command).

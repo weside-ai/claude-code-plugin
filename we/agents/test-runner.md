@@ -58,7 +58,8 @@ For each failure:
 Extract the ticket key from the branch name into `$TICKET`, then write:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" test_passed
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* | sort -V | tail -1)}
+python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint "$TICKET" test_passed
 ```
 
 **Only if ALL affected tests passed.** Coverage is verified in CI, not here.

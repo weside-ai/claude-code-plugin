@@ -82,7 +82,7 @@ Bash: gh api graphql -f query='…reviewThreads(first:100)…' \
         -F pr=3730 -F owner=the host repo-ai -F repo=the host repo \
         --jq '…select(.isResolved==false)'
   → 1 node: author.login="coderabbitai[bot]", body "Nitpick: 'Änderungen
-    gespeichert' vs 'Gespeichert' — pick one voice", path apps/mobile/…/toast.ts
+    gespeichert' vs 'Gespeichert' — pick one voice", path src/mobile/…/toast.ts
 ```
 
 ```
@@ -130,7 +130,7 @@ Bash: gh run view <run-id> --log-failed
 | # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |
 |---|---|---|---|---|---|---|---|
 | 1 | CI · Backend (Test) | — | BLOCKING | tests/mobile/toast.spec.ts:41 | asserts pre-change copy | — | fix |
-| 2 | CodeRabbit | yes | NITPICK | apps/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (cheap) |
+| 2 | CodeRabbit | yes | NITPICK | src/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (cheap) |
 | 3 | Claude | yes | — | — | VERDICT:PASS, no SEV rows | — | none |
 
 Row 3 is a row the skill's own format cannot express: line 160 says the Claude
@@ -150,10 +150,10 @@ No commit between them (line 181).
 
 ```
 Edit: tests/mobile/toast.spec.ts   (assertion → 'Änderungen gespeichert')
-Edit: apps/mobile/…/toast.ts       (unify voice)
+Edit: src/mobile/…/toast.ts       (unify voice)
 Bash: yarn lint --fix … ; yarn tsc --noEmit ; yarn jest --findRelatedTests <2 files>   → green
 Bash: ls scripts/check-*.sh  → run the ones that apply  → green
-Bash: git add tests/mobile/toast.spec.ts apps/mobile/…/toast.ts
+Bash: git add tests/mobile/toast.spec.ts src/mobile/…/toast.ts
 Bash: git commit -m "fix: address CI and review findings
 
 {TICKET}"

@@ -98,7 +98,7 @@ Classified per 131–132 as a real finding, not the runner. No re-run.
 | # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |
 |---|---|---|---|---|---|---|---|
 | 1 | CI · Backend (Test) → CI Summary | — | BLOCKING | tests/mobile/toast.spec.ts:41 | asserts pre-change copy | — | fix |
-| 2 | CodeRabbit | yes | NITPICK | apps/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (finish-first, 50–53) |
+| 2 | CodeRabbit | yes | NITPICK | src/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (finish-first, 50–53) |
 
 The PASS comment yields zero rows (152–155). No human threads, so 155's
 surface-to-the-user instruction is inert (it would not have been — see Q4).
@@ -109,7 +109,7 @@ surface-to-the-user instruction is inert (it would not have been — see Q4).
 
 ```
 Edit: tests/mobile/toast.spec.ts   (assertion → 'Änderungen gespeichert')
-Edit: apps/mobile/…/toast.ts       (unify voice)
+Edit: src/mobile/…/toast.ts       (unify voice)
 Bash: /we:static → green ; /we:test (affected: 2 files) → green
 Bash: ls scripts/check-*.sh → run the applicable ones → green
 Bash: git add -A && git commit -m "fix: address CI and review findings

@@ -65,7 +65,7 @@ read-only for workers — a fix there is a fork.
 - **Goal:** a worker spawned with the 5.4.0 Refiner-/Worker-Brief runs the skill without
   inventing a step; the skills are shorter.
 - **Files:** `we/skills/develop/SKILL.md`, `we/skills/refine/SKILL.md`,
-  `we/skills/refine/references/dor-scan.md`, `docs/plans/SIM-1-context/workers/`.
+  `we/references/dor-scan.md`, `docs/plans/SIM-1-context/workers/`.
 - **Approach:** Scenarios: (a) Agent worker with a Mode-B brief (`--phases 2`, worktree path
   given, critical chunk with integration suite, `WORKER-REPORT.md`); (b) worker with a
   whole-story brief and `parallel_groups` in the plan; (c) refiner with a front-loaded context

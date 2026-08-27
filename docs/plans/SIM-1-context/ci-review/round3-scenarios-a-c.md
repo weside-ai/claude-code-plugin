@@ -156,7 +156,7 @@ citation, not a test name). L44-48 gives the destination:
 ```bash
 gh pr comment 3725 --body "Disputed BLOCKING (claude-review): 'target_ref written without
 tenant filter'. False — the call site applies apply_tenant_scope(db, uid) at
-apps/backend/app/services/service.py:115, three lines above the write. Not changing the code;
+src/backend/app/services/service.py:115, three lines above the write. Not changing the code;
 this PR needs a human gate override."
 ```
 

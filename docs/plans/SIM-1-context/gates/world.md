@@ -31,7 +31,7 @@ real ticket key, a real repo path, or a person's name into a report — this rep
 | `app/services/widget_summary.py` | **new LLM call site outside the being** — `LLMFactory.get_chat_model()` then `ainvoke`, no reservation, no settle, no `meter()` |
 | `app/models/widget.py` | new table + `user_id`, RLS policy in the migration |
 | `alembic/versions/9f2_widgets.py` | create table + policy |
-| `apps/mobile/src/screens/WidgetsScreen.tsx` | list + **Create widget** button calling the endpoint |
+| `src/mobile/src/screens/WidgetsScreen.tsx` | list + **Create widget** button calling the endpoint |
 | `tests/api/test_widgets.py` | endpoint tests, `tests-after`, no skips |
 | `tests/services/test_widget_summary.py` | asserts the summary string, mocks the chat model |
 

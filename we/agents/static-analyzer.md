@@ -53,7 +53,8 @@ Report status per category: "Lint: PASS", "Types: 2 errors".
 Extract the ticket key from the branch name into `$TICKET`, then write:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" static_analysis_passed
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* | sort -V | tail -1)}
+python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint "$TICKET" static_analysis_passed
 ```
 
 **Only if ALL checks passed.** No ticket key in the branch → skip the checkpoint, report normally.

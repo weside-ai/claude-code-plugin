@@ -39,7 +39,7 @@ I am `/we:story PROJ-1207`. One argument that looks like a ticket key → **Refi
 Requirements are not vague (description + a directive comment), so no brainstorming detour.
 Four questions, each with my recommendation; I explore the repo instead of asking where I can.
 
-11. `Bash("rg -n 'webhook' apps/backend/app --type py -l")` → `app/services/webhook_dispatch.py`,
+11. `Bash("rg -n 'webhook' src/backend/app --type py -l")` → `app/services/webhook_dispatch.py`,
     `app/models/webhook_endpoint.py`, `app/api/admin/__init__.py`. Existing delivery path found —
     so I do not ask "does an outbound webhook sender exist".
 
@@ -221,11 +221,11 @@ deploy is rolled back by clearing that key without a code revert.
 ### Phase 1: Attempt table + migration
 - **Goal:** `webhook_delivery_attempts` exists with the unique `(delivery_id, attempt_no)`
   constraint, plus `next_attempt_at` and `state` on `webhook_deliveries`; CRUD reads/writes it.
-- **Files:** `apps/backend/app/models/webhook_delivery_attempt.py`,
-  `apps/backend/app/models/webhook_delivery.py`,
-  `apps/backend/alembic/versions/8f21c4a0b3de_webhook_delivery_attempts.py`,
-  `apps/backend/app/crud/webhook_delivery.py`,
-  `apps/backend/tests/crud/test_webhook_delivery.py`
+- **Files:** `src/backend/app/models/webhook_delivery_attempt.py`,
+  `src/backend/app/models/webhook_delivery.py`,
+  `src/backend/alembic/versions/8f21c4a0b3de_webhook_delivery_attempts.py`,
+  `src/backend/app/crud/webhook_delivery.py`,
+  `src/backend/tests/crud/test_webhook_delivery.py`
 - **Approach:** additive Alembic revision off the current head; unique constraint in the
   migration, not only in the model. CRUD gets `claim_due_deliveries()` using
   `FOR UPDATE SKIP LOCKED` and `record_attempt()`.
@@ -233,11 +233,11 @@ deploy is rolled back by clearing that key without a code revert.
 ### Phase 2: Retry scheduler with backoff and per-delivery lock
 - **Goal:** a scheduler tick claims due deliveries one at a time per delivery id, re-sends via
   `WebhookDispatchService`, records the attempt, schedules the next one, and dead-letters at 6.
-- **Files:** `apps/backend/app/services/webhook_retry_scheduler.py`,
-  `apps/backend/app/services/webhook_dispatch.py`,
-  `apps/backend/app/tasks/scheduler.py`,
-  `apps/backend/app/core/config.py`,
-  `apps/backend/tests/services/test_webhook_retry_scheduler.py`
+- **Files:** `src/backend/app/services/webhook_retry_scheduler.py`,
+  `src/backend/app/services/webhook_dispatch.py`,
+  `src/backend/app/tasks/scheduler.py`,
+  `src/backend/app/core/config.py`,
+  `src/backend/tests/services/test_webhook_retry_scheduler.py`
 - **Approach:** `backoff(n) = min(2**n + full_jitter, 3600)`. The claim, the attempt insert and
   the send happen in one transaction boundary so a crash cannot leave a claimed-but-unrecorded
   attempt. Behind `WEBHOOK_RETRY_ENABLED`.
@@ -245,12 +245,12 @@ deploy is rolled back by clearing that key without a code revert.
 ### Phase 3: Dead-letter list in the admin UI
 - **Goal:** an admin can open the Webhooks screen's "Dead letter" tab and see every
   dead-lettered delivery for the tenant.
-- **Files:** `apps/backend/app/api/admin/webhooks.py`,
-  `apps/backend/app/schemas/webhook_admin.py`,
-  `apps/backend/tests/api/admin/test_webhooks_dead_letter.py`,
-  `apps/mobile/src/screens/admin/WebhookDeadLetterTab.tsx`,
-  `apps/mobile/src/api/webhooks.ts`,
-  `apps/mobile/src/screens/admin/__tests__/WebhookDeadLetterTab.test.tsx`
+- **Files:** `src/backend/app/api/admin/webhooks.py`,
+  `src/backend/app/schemas/webhook_admin.py`,
+  `src/backend/tests/api/admin/test_webhooks_dead_letter.py`,
+  `src/mobile/src/screens/admin/WebhookDeadLetterTab.tsx`,
+  `src/mobile/src/api/webhooks.ts`,
+  `src/mobile/src/screens/admin/__tests__/WebhookDeadLetterTab.test.tsx`
 - **Approach:** `GET /admin/webhooks/dead-letter` paginated, tenant-scoped; the tab is a
   read-only list. No requeue action — out of scope.
 
@@ -319,7 +319,7 @@ compounds every producer gap under it.
 | **Step 3 signal 1** — open question in the ticket | No open question. Description + one directive comment. | `jira_get_issue(PROJ-1207, comments)` re-read at boot. Clean. |
 | **Step 3 signal 2** — epic names it and nothing more | N/A — the plan is detailed. | — |
 | **Step 3 signal 3** — mirror caveats (`TBD`, `blocked on`) | No epic plan → no mirror block to check. | Skipped, named as skipped in the roll-up. |
-| **Step 3 signal 4** — freezes an interface others consume | **NO. The plan has no field for this at all.** Phase 1's unique constraint + `claim_due_deliveries()` signature and Phase 2's `state` enum are consumed by both Phase 3 (the admin endpoint) and Phase 4 (the CLI). Nothing in the plan says "this is frozen". | Derived by hand: `graphify affected "claim_due_deliveries" --relation calls --depth 2` plus `rg -n 'webhook_delivery' apps/cli apps/mobile`. I concluded phases 1 and 2 are the seam, must be serial and first — which matches the plan's ordering, but I had to *re-derive* that rather than read it. `worker-dispatch.md` and Step 8 A both tell me to resolve merge conflicts "by the plan's **Constraints and Pins**" — **the producer template emits no Constraints and no Pins section**, so that instruction has no referent. |
+| **Step 3 signal 4** — freezes an interface others consume | **NO. The plan has no field for this at all.** Phase 1's unique constraint + `claim_due_deliveries()` signature and Phase 2's `state` enum are consumed by both Phase 3 (the admin endpoint) and Phase 4 (the CLI). Nothing in the plan says "this is frozen". | Derived by hand: `graphify affected "claim_due_deliveries" --relation calls --depth 2` plus `rg -n 'webhook_delivery' apps/cli src/mobile`. I concluded phases 1 and 2 are the seam, must be serial and first — which matches the plan's ordering, but I had to *re-derive* that rather than read it. `worker-dispatch.md` and Step 8 A both tell me to resolve merge conflicts "by the plan's **Constraints and Pins**" — **the producer template emits no Constraints and no Pins section**, so that instruction has no referent. |
 | **Step 3 signal 5** — comments contradict the plan | **Cannot be answered from the plan.** The lead's comment (idempotent, one in-flight, 6 attempts, admin UI) *is* reflected in the ACs, but nothing in the plan records **which comments it was written against**. | I diffed the ticket's comment text against the plan by hand, clause by clause. If a second comment had landed after the plan was written I would have no way to tell it from the first except by date-vs-`created:` — and `created: 2026-08-27` is a *date*, not a comment watermark. This is exactly the signal that sends a `refined` story back to the refine lane, and the plan gives me no cheap way to fire it. |
 | **Step 3/5** — `depends_on:` slot in frontmatter | **No slot.** Neither the producer template nor `docs/plan-format.md` lists `depends_on`. | Not fatal *here*: Step 3.4 says "in Mode B the wave map and the state file carry the order instead", so I wrote the order into the state file. But the producer cannot express a cross-story dependency at all, and PROJ-1207 plausibly has one (a sibling story in PROJ-1200 touching `webhook_dispatch.py`). |
 | **Step 5.2** — risk class per chunk | **Partly derivable, never stated.** Phase 1's `**Files:**` contains `alembic/versions/…` → I classify it **migration** (a named risk class) from the path alone. Phase 2 touches `app/core/config.py` and a send path — ordinary. Phases 3–4 ordinary. | The risk class is my inference from a filename, not a producer declaration. `## Security Review Required` says "No", which is a *different axis* and, read carelessly, reads as "nothing critical here" over a migration chunk. Repo risk-class file lists live in `.weside/orchestrate.md` — absent, so I derived from `CLAUDE.md`. Consequence I had to invent: Phase 1 is **never fast-gates-only**, **never on a detached backend** ("a migration never on one at all"), and starts at `opus` or the Lead. |
@@ -328,7 +328,7 @@ compounds every producer gap under it.
 | **Step 5.6/5.7** — worktree bootstrap, install rule | Not the plan's job. | Derived from `CLAUDE.md`, no `.weside/orchestrate.md`. |
 | **Step 5.8** — verbs the verification needs | **Yes — the producer's best line.** `**Missing CLI verb:** app check webhooks --dead-letter --json. app check webhooks today reports live endpoint health only…` I would have caught it: I read `.weside/verify.md` (verbs `app seed --tenant <id>`, `app check webhooks`), and `--dead-letter` is not there. | **But the sequencing contradicts Step 5.8.** The plan makes the verb **Phase 4**, in the last parallel group, depending on 1 and 2. Step 5.8 says a missing verb is "cut in **wave 0** so its PR's merge window overlaps the build — not discovered at Step 8 B when every worker is gone". Same repo here, so no cross-repo PR wait — but the plan's own ordering puts the verification oracle last, and the producer never tells the story writer to sequence it first. I re-planned it into wave 0 alongside Phase 1? No — it reads through `crud/webhook_delivery.py`, which Phase 1 creates. So it genuinely cannot be wave 0, and the plan should have said so. I recorded the reasoning in the state file myself. |
 | **Step 6** — `test_discipline` for the brief | **No.** Not a plan field. | `.weside/config.json` → invented as `tests-after` (the skill's stated default when absent). |
-| **Step 6/5.2** — integration suite + database for the critical chunk | **No line exists.** `## Testing Requirements` says *"Integration tests (real Postgres)"* — a test *type*, not a runnable suite path or a database name. | Invented: `pytest apps/backend/tests/crud -m integration` against `proj_test`, plus `alembic upgrade head` first. Both derived from `CLAUDE.md`, not from the plan. |
+| **Step 6/5.2** — integration suite + database for the critical chunk | **No line exists.** `## Testing Requirements` says *"Integration tests (real Postgres)"* — a test *type*, not a runnable suite path or a database name. | Invented: `pytest src/backend/tests/crud -m integration` against `proj_test`, plus `alembic upgrade head` first. Both derived from `CLAUDE.md`, not from the plan. |
 | **Step 8 A** — "Constraints and Pins" for conflict resolution | **No such section exists.** | Substituted `## Code Guidance` (DO/DON'T) + the Design Decisions table. Workable, but it is not what the reference names, and a foreign-engine brief that copies the `worker-dispatch.md` template will emit an empty `Pins:` line. |
 | **Step 8 B / verification receipt** | **Section exists, labels drift.** The plan's block uses `**Assert:**` and `**Not provable here:**`; `verification.md`'s receipt uses `**Asserted:**` and `**Not proven:**`. | I write the receipt into the plan's `## Verification` at integration. I had to decide whether to overwrite the intent block or append under it — nothing says. I appended, keeping the intent above. |
 | **Step 10** — Done check: every `### Phase`'s `**Files:**` actually changed | **Yes**, four phases with concrete file lists. | Nothing guessed — except that the two generated artifacts I added to P3 are now in *my* list and not in the plan's, so a literal Step-10 check reads the stale list. I rewrote P3's `**Files:**` in the close-out per Step 10's living-plan rule. |
@@ -362,11 +362,11 @@ No gh pr create, no CI, no ticket transition, no doc pass.
 CHUNK (verbatim from docs/plans/PROJ-1207-story.md § Phase 1):                          [PLAN]
   Goal: webhook_delivery_attempts exists with the unique (delivery_id, attempt_no) constraint,
   plus next_attempt_at and state on webhook_deliveries; CRUD reads/writes it.
-  Files: apps/backend/app/models/webhook_delivery_attempt.py
-         apps/backend/app/models/webhook_delivery.py
-         apps/backend/alembic/versions/8f21c4a0b3de_webhook_delivery_attempts.py
-         apps/backend/app/crud/webhook_delivery.py
-         apps/backend/tests/crud/test_webhook_delivery.py
+  Files: src/backend/app/models/webhook_delivery_attempt.py
+         src/backend/app/models/webhook_delivery.py
+         src/backend/alembic/versions/8f21c4a0b3de_webhook_delivery_attempts.py
+         src/backend/app/crud/webhook_delivery.py
+         src/backend/tests/crud/test_webhook_delivery.py
          WORKER-REPORT.md (write-allowed, NOT committed)                           [INVENTED]
   Approach: additive Alembic revision off the current head; unique constraint in the migration,
   not only in the model. CRUD gets claim_due_deliveries() using FOR UPDATE SKIP LOCKED and
@@ -396,7 +396,7 @@ tests, no tautological assertions, mock at system boundaries only.   [INVENTED �
 
 GATES: CRITICAL chunk (migration). Not fast-gates-only. Before reporting done run
   `alembic upgrade head && alembic downgrade -1 && alembic upgrade head` against proj_test,
-  then `pytest apps/backend/tests/crud -m integration`,
+  then `pytest src/backend/tests/crud -m integration`,
   and append the last 20 lines of each to WORKER-REPORT.md.
                                     [INVENTED — suite path, marker, and database name; the plan
                                      says only "Integration tests (real Postgres)"]

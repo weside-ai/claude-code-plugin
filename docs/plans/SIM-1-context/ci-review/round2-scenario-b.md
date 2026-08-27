@@ -107,7 +107,7 @@ Not green (L174's three conditions fail on "zero open SEV findings"). Proceed.
 
 ### Phase 3f — Migration branches (L237-243)
 
-1. `git fetch origin main` (already merged at step 2). `cd apps/backend && alembic heads`
+1. `git fetch origin main` (already merged at step 2). `cd src/backend && alembic heads`
     → **two heads**. The second came in from `main`.
 2. L242-243 → **I stop and ask the user**: the merge-heads migration belongs on `main`.
 

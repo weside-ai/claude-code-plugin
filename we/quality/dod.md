@@ -122,10 +122,7 @@ it cannot carry the knowledge — most changes stop at the first.
 A DoD row that Fails blocks exactly like an unmet acceptance criterion — there is no second,
 softer tier for "only" the DoD.
 
-| Level | Action |
-|---|---|
-| **BLOCKING / WARNING** | MUST fix |
-| **INFO/NITPICK** | Fix or document skip reason |
+Severity vocabulary and what each level requires: `/we:ci-review` (single owner).
 
 ---
 

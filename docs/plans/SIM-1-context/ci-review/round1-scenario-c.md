@@ -83,11 +83,11 @@ Returns the five threads. `author.login` classification per L151–153:
 
 | # | login | bot? | path:line | text |
 |---|---|---|---|---|
-| T1 | `coderabbitai[bot]` | yes | `apps/backend/app/services/service.py:88` | 🛠️ Refactor suggestion: extract the retry loop |
-| T2 | `coderabbitai[bot]` | yes | `apps/mobile/src/hooks/useThing.ts:41` | ⚠️ Potential issue: missing dep in useEffect |
-| T3 | `coderabbitai[bot]` | yes | `apps/backend/tests/test_service.py:12` | 🧹 Nitpick: unused import |
-| T4 | `github-actions[bot]` | yes | `apps/backend/app/services/service.py:120` | Claude inline review thread |
-| T5 | `maintainer` | **no** | `apps/backend/app/services/service.py:60` | "das war Absicht, siehe ADR" |
+| T1 | `coderabbitai[bot]` | yes | `src/backend/app/services/service.py:88` | 🛠️ Refactor suggestion: extract the retry loop |
+| T2 | `coderabbitai[bot]` | yes | `src/mobile/src/hooks/useThing.ts:41` | ⚠️ Potential issue: missing dep in useEffect |
+| T3 | `coderabbitai[bot]` | yes | `src/backend/tests/test_service.py:12` | 🧹 Nitpick: unused import |
+| T4 | `github-actions[bot]` | yes | `src/backend/app/services/service.py:120` | Claude inline review thread |
+| T5 | `maintainer` | **no** | `src/backend/app/services/service.py:60` | "das war Absicht, siehe ADR" |
 
 ### Step 4 — 1a source (3): latest review body per bot
 
@@ -134,7 +134,7 @@ WARNING → must fix; 🧹 Nitpick → may skip; 🛠️ Refactor suggestion →
 
 ### Step 7 — the factually-wrong BLOCKING finding (row 1)
 
-I read `apps/backend/app/services/service.py` around the write and find the call site
+I read `src/backend/app/services/service.py` around the write and find the call site
 three lines up already runs `await apply_tenant_scope(db, uid)`, so the transaction is
 tenant-scoped and the finding is wrong.
 
@@ -192,20 +192,20 @@ L165 (`0 findings → STOP`) does not fire. L167–170 re-states the L19–23 ta
 files (< 50, no test-config change → affected-only, base ref `feat/TICKET-000-integration`):
 
 ```bash
-ruff check --fix apps/backend/app/services/service.py apps/backend/tests/test_service.py
-ruff format apps/backend/app/services/service.py apps/backend/tests/test_service.py
-mypy apps/backend/app/services/service.py
-a test apps/backend/tests/test_service.py
+ruff check --fix src/backend/app/services/service.py src/backend/tests/test_service.py
+ruff format src/backend/app/services/service.py src/backend/tests/test_service.py
+mypy src/backend/app/services/service.py
+a test src/backend/tests/test_service.py
 yarn workspace @the host repo-ai/mobile lint --fix src/hooks/useThing.ts
 yarn workspace @the host repo-ai/mobile tsc --noEmit
-yarn jest --findRelatedTests apps/mobile/src/hooks/useThing.ts
+yarn jest --findRelatedTests src/mobile/src/hooks/useThing.ts
 ls scripts/check-*.sh   # then run the ones that exist
 ```
 
 3c (L199–206):
 
 ```bash
-git add apps/backend/app/services/service.py apps/mobile/src/hooks/useThing.ts apps/backend/tests/test_service.py
+git add src/backend/app/services/service.py src/mobile/src/hooks/useThing.ts src/backend/tests/test_service.py
 git commit -m "fix: address CI and review findings
 
 {TICKET}"

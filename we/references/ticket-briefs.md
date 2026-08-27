@@ -6,7 +6,7 @@ moves, and refactors.
 
 Consumers: `/we:story` (ticket *wording* only — its ticket stays minimal and the ACs live in the
 plan), `/we:triage` (agent briefs), `references/worker-dispatch.md` (worker briefs inline these
-rules — workers can't load references).
+rules — a detached worker has no plugin context).
 
 ## Principles
 

@@ -167,7 +167,7 @@ Runs inline as the last step of the build pipeline, but also standalone. Collect
 - All bot review threads resolved (whichever reviewers are active on the repo)
 - A push only after every blocker is addressed
 
-**Limit:** one pass by default; when it does loop, max 2 cycles — after the second, stops and asks.
+**Limit:** one pass by default; an explicit user budget ("bis merged, max 3 Runden") sets the cycle cap; without one it stops after the first pass and asks.
 
 ---
 

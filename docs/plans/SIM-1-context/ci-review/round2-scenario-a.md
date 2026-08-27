@@ -101,7 +101,7 @@ I do not stop here.
   a GraphQL type error, and `$REVIEW_ALLOWLIST` is empty (226 explicitly forbids redefining it). The
   checklist itself is satisfiable by hand: no BLOCKING row is Fixed, so item 1 fails → I do not
   push.
-- **3f (237-243).** `git diff --name-only origin/main...HEAD -- apps/backend/alembic/` — my own
+- **3f (237-243).** `git diff --name-only origin/main...HEAD -- src/backend/alembic/` — my own
   test; the skill still leaves "is this a migration branch" to me. Out of scenario scope.
 - **3g (245-252).** "(a) every check has concluded and its failures are folded into the fix commit."
   My failure is disposed of by a re-run, not folded into a commit, so (a) is unsatisfiable as

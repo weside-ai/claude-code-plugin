@@ -112,7 +112,7 @@ skill's own terminal condition is phrased on finding-count, not on check colour.
   **The hard gate passes.**
 - **3e-bis (271-278).** Branch is `TICKET-000-ledger` — plausibly a migration branch; the skill
   gives no test for "adds an Alembic migration", so I would check `git diff --name-only
-  origin/main...HEAD -- apps/backend/alembic/` myself. Out of scenario scope.
+  origin/main...HEAD -- src/backend/alembic/` myself. Out of scenario scope.
 - **3f (280-289).** The push conditions: "(a) … `gh pr checks $PR` shows no `pending`/`in_progress`"
   — **true**; "(b) 3e confirms 0 unresolved bot threads" — **true**; (c) n/a. **Every stated push
   condition is satisfied while `codex-review` is red.** The skill then says `git push`. In this

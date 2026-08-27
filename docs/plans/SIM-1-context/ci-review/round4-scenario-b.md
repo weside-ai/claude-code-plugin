@@ -94,7 +94,7 @@ Not the all-green stop. Rows 1, 2 fixed; 3 surfaced; 4, 5 owned by 3f.
 - **3f** — `git fetch origin main` → `git merge origin/main` → conflicts (the PR is `CONFLICTING`
   by construction). L243-244 now says to resolve them *"the way you would any conflict"* — real
   guidance where round 3 had none, though still nothing specific to a `down_revision` hunk.
-  Then `cd apps/backend && alembic heads` → **two**, second from `main`. L245-248 → the
+  Then `cd src/backend && alembic heads` → **two**, second from `main`. L245-248 → the
   merge-heads migration belongs on `main`; **push what I fixed**, report the two heads, stop at
   terminal state 3.
 - **3g** — three separate lines forbid the push 3f just ordered. See New defect 1. I take 3f's

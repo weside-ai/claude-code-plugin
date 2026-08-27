@@ -132,7 +132,7 @@ Row 4 vs row 1: **still no dedupe rule** (round-1 defect 6). I carry both.
 
 ### Step 6 — the dispute. This is where round 2 differs
 
-I read `apps/backend/app/services/service.py` and confirm `await apply_tenant_scope(db, uid)`
+I read `src/backend/app/services/service.py` and confirm `await apply_tenant_scope(db, uid)`
 runs three lines above the write. The finding is wrong. The skill now tells me exactly what that
 buys me and what it costs:
 
@@ -152,7 +152,7 @@ The pair answers round 1's open question — a **file:line citation suffices; no
 ```bash
 gh pr comment 3725 --body "Disputed BLOCKING (claude-review, newest review comment): \
 'target_ref written without tenant filter'. False — the call site applies \
-apply_tenant_scope(db, uid) at apps/backend/app/services/service.py:115, three lines above \
+apply_tenant_scope(db, uid) at src/backend/app/services/service.py:115, three lines above \
 the write, so the transaction is already tenant-scoped. Not changing the code. \
 claude-review will stay red on the re-run; this PR needs a human gate override."
 ```

@@ -132,7 +132,7 @@ model and asserts a string — the repo DoD's money-path row Fails. BLOCKING on 
 | AC | Status | Evidence |
 |----|--------|----------|
 | 1 · POST /api/v2/widgets creates and returns a widget | Met | `app/api/v2/widgets.py` new route + `APIError` path; `app/crud/widget.py::create_widget`; `tests/api/test_widgets.py` asserts 201 + body |
-| 2 · User sees widgets and can tap **Create widget** | Met | `apps/mobile/src/screens/WidgetsScreen.tsx` renders list + button and calls the endpoint; screen registered in the navigator (same diff); plan `## Verification` walkthrough covers the tap |
+| 2 · User sees widgets and can tap **Create widget** | Met | `src/mobile/src/screens/WidgetsScreen.tsx` renders list + button and calls the endpoint; screen registered in the navigator (same diff); plan `## Verification` walkthrough covers the tap |
 | 3 · A one-line summary is generated on create | Met | `app/services/widget_summary.py` invoked from the create path; `tests/services/test_widget_summary.py` asserts the summary. Behaviour met — its money path is a DoD Fail below, not an AC gap |
 
 **Feature reachable:** yes

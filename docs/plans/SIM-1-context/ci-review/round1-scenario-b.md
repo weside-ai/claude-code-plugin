@@ -56,9 +56,9 @@ block that is harmless, but no line says so.)
 1. `Bash: gh api graphql … reviewThreads … select(.isResolved==false)` (skill L90-96)
    → two nodes:
    - `PRRT_kwAAA_coderabbit` · `coderabbitai[bot]` · "consider extracting this dict literal"
-     · `apps/backend/app/rooms/projection.py:88`
+     · `src/backend/app/rooms/projection.py:88`
    - `PRRT_kwAAA_human` · `maintainer` · "warum projizierst du hier zweimal?"
-     · `apps/backend/app/rooms/projection.py:141`
+     · `src/backend/app/rooms/projection.py:141`
 
 2. `Bash: gh api repos/the app repo/pulls/3718/reviews --jq '…endswith("[bot]")…'`
    (skill L100-103) → CodeRabbit summary body, no new findings beyond the thread.
@@ -104,22 +104,22 @@ L38-43 "Finish-first" pushes toward fixing); finding 3 = unclassifiable, carried
 
 ### Phase 3a — Batch fix (skill L178-181)
 
-1. `Read: apps/backend/alembic/versions/20260826_add_projection.py`
-2. `Read: apps/backend/tests/…/test_migrations.py` (locate the existing pattern)
+1. `Read: src/backend/alembic/versions/20260826_add_projection.py`
+2. `Read: src/backend/tests/…/test_migrations.py` (locate the existing pattern)
 3. `Edit`: add a `down_revision` chain assertion for the new revision.
-4. `Edit: apps/backend/app/rooms/projection.py` — extract the dict literal (finding 2).
+4. `Edit: src/backend/app/rooms/projection.py` — extract the dict literal (finding 2).
 No commit between fixes (L181).
 
 ### Phase 3b — Local validation (skill L183-196)
 
 1. `Bash: ruff format … && ruff check --fix …` on the two touched files
 2. `Bash: mypy` / repo type gate on the diff
-3. `Bash: a test apps/backend/tests/…/test_migrations.py` — the diff-covering suite (L191)
+3. `Bash: a test src/backend/tests/…/test_migrations.py` — the diff-covering suite (L191)
 4. `Bash: ls scripts/check-*.sh` then run the matching gates (L195)
 
 ### Phase 3c — Commit (skill L198-206)
 
-1. `Bash: git add apps/backend/alembic/versions/20260826_add_projection.py apps/backend/tests/.../test_migrations.py apps/backend/app/rooms/projection.py`
+1. `Bash: git add src/backend/alembic/versions/20260826_add_projection.py src/backend/tests/.../test_migrations.py src/backend/app/rooms/projection.py`
 2. `Bash: git commit -m "fix: address CI and review findings\n\n{TICKET}"`
 
 **`{TICKET}` is never defined in the skill.** No line resolves it, no line says "derive it
@@ -157,7 +157,7 @@ The branch adds `20260826_add_projection.py`, so this fires:
     whose next sentence is about `alembic heads`.
 
 Suppose I hand-resolve (the skill did not tell me to; I would):
-1. `Bash: cd apps/backend && alembic heads` → **two heads** (main gained a second).
+1. `Bash: cd src/backend && alembic heads` → **two heads** (main gained a second).
     The skill's fix, L277-278:
     > "If a second head appears, merge it (a `down_revision = (head_a, head_b)` merge
     > migration) and re-run the check until `alembic heads` == 1."

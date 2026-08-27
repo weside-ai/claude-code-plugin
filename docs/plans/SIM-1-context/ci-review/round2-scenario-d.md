@@ -112,7 +112,7 @@ the roll-up of the same job — one root cause, no re-run.
 | # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |
 |---|---|---|---|---|---|---|---|
 | 1 | CI · Backend (Test) | — | BLOCKING | tests/mobile/toast.spec.ts:41 | asserts pre-change copy | — | fix |
-| 2 | CodeRabbit | yes | NITPICK | apps/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (finish-first, 49–52) |
+| 2 | CodeRabbit | yes | NITPICK | src/mobile/…/toast.ts | voice inconsistency | PRRT_kwDO… | fix (finish-first, 49–52) |
 
 The claude[bot] PASS comment produces zero rows, per 154–156 ("splits into one
 row per `SEV:` finding"). Round 1 flagged that the gate-is-green signal leaves no
@@ -128,7 +128,7 @@ check non-red, zero unresolved threads, zero open SEV) fails on check #1.
 
 ```
 Edit: tests/mobile/toast.spec.ts   (assertion → 'Änderungen gespeichert')
-Edit: apps/mobile/…/toast.ts       (unify voice)
+Edit: src/mobile/…/toast.ts       (unify voice)
 Bash: /we:static  → green ;  /we:test (affected: 2 files)  → green
 Bash: ls scripts/check-*.sh → run the applicable ones → green
 Bash: git add -A && git commit -m "fix: address CI and review findings
