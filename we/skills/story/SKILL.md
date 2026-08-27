@@ -47,12 +47,11 @@ the **ticket and the plan** (never its `_Avoid_` terms).
 | User Story | Ticket (minimal) | "As X I want Y so that Z" |
 | **Plan** | `docs/plans/{TICKET}-story.md` | Acceptance Criteria, Technical Approach, Phases, Tests |
 
-`{TICKET}` is the ticketing key; with no ticketing tool it is a kebab-case slug of the story
-title. The same token names the plan file, the frontmatter `story:`, the checkpoint and the
-branch — pick it once, in Step 1, and never vary it. Detection:
-`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
-
-**Ticket is MINIMAL. Plan contains ALL details.**
+`{TICKET}` is the ticketing key — for GitHub Issues the bare issue number, so `gh issue view
+{TICKET}` keeps working; with no ticketing tool, a kebab-case slug of the story title. The same
+token names the plan file, the frontmatter `story:`, the checkpoint and the branch: pick it at
+the first step that names it (Step 1 when refining, the ticket creation when creating) and never
+vary it. Detection: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ## Modes
 
@@ -70,7 +69,8 @@ Fetch the ticket from the ticketing tool — **including its comments** (they ca
 agreed edge cases the description doesn't; newest statement wins on conflict):
 `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. Note the newest comment's id or timestamp; it
 becomes the plan's `comments_read_through:`, which is how a later Lead tells "the comments have
-overtaken this plan" from "this plan already answered them".
+overtaken this plan" from "this plan already answered them". Take `epic:` from the ticket's parent
+key — with no ticketing tool, from the slug of the `-epic.md` plan that lists this story.
 
 If `docs/plans/{TICKET}-story.md` exists, read it in full and refine **in place**, preserving its
 Design Decisions rows; otherwise you are writing a new one.
@@ -120,7 +120,8 @@ be incomplete. Check the MCP config." — then `Grep(pattern="<topic keyword>", 
 `Glob(pattern="docs/architecture/**/*.md")`. Reference what you find in the plan's Technical
 Approach.
 
-**Blast radius.** When `.weside/config.json` → `tools.graphify` is true, ground the per-phase
+**Blast radius.** When `.weside/config.json` → `tools.graphify` is true — or the file is absent
+and `graphify --version` answers, which is the un-set-up repo's case — ground the per-phase
 `Files:` lists and the `parallel_groups` decision in the code graph — identifier-style terms
 (`ChannelAdapter`, `DispatchService`), not prose:
 
@@ -128,25 +129,34 @@ Approach.
 graphify affected "<identifier>" --relation calls --depth 2
 ```
 
-When the flag is false or absent, derive the lists with `rg` on the same identifiers and write
+When neither holds, derive the lists with `rg` on the same identifiers and write
 "`Files:` lists are grep-derived — no code graph" into the plan's Technical Approach, so the Lead
 knows how much the disjointness guard is worth.
 
 **Session context → plan.** Distil the conversation into the Context section (a narrative brief
 for a colleague who wasn't in the room — the most important section for the implementing agent)
-and into the Design Decisions table (every alternative discussed and why it was rejected). Load
-more files than feel necessary; a wrong assumption costs more than a wide read.
+and into the Design Decisions table (every alternative discussed and why it was rejected).
+
+The frontmatter parser is hand-rolled and strips no `#` comment — a trailing comment becomes part
+of the value, and `depends_on: []  # optional` parses as a dependency key nothing can satisfy.
+Emit these lines **bare**; the meanings are below, not beside them.
+
+- `epic:` — REQUIRED when the story belongs to an Epic. `/we:orchestrate`'s ready-set filters on
+  it, and a missing value makes the story invisible. Omit the line entirely for standalone stories.
+- `depends_on:` — story keys that must merge first; `[]` when none.
+- `comments_read_through:` — the newest comment you read, or `none`.
+- `parallel_groups:` — `[[N, M], …]`; see the independence check below.
 
 ```markdown
 ---
 type: story-plan
 story: {TICKET}
-epic: {EPIC-SLUG-OR-KEY}  # REQUIRED when the story belongs to an Epic — /we:orchestrate's ready-set filters on it, and a missing epic: makes the story invisible. Omit only for standalone stories.
-depends_on: []            # optional: story keys that must merge first
-comments_read_through: {newest comment id or timestamp, or "none"}
+epic: {EPIC-SLUG-OR-KEY}
+depends_on: []
+comments_read_through: {newest comment id or timestamp, or none}
 created: YYYY-MM-DD
 status: draft
-parallel_groups: []       # optional: [[N, M, ...], ...] — see the independence check below
+parallel_groups: []
 ---
 
 # Plan: [Story Title]
@@ -166,20 +176,27 @@ most, constraints that aren't obvious from the code, what the design discussion 
 
 ## Testing Requirements
 - Unit tests for [X]
-- Integration tests for [Y] — name the runnable suite and the database, not just the type
+- Integration tests for [Y] — name the runnable suite and the database, not just the type, and
+  say which phase each belongs to when they differ (the Lead interpolates them per chunk)
 
 ## Verification
 > How this will be observed running — not inferred from green tests. The build turns this into
 > the PR's `## Verification` receipt. See `references/verification.md`; commands live in
 > `<repo>/.weside/verify.md` — absent → say so once and propose it under Documentation Impact.
 
-- **Oracle:** cli | ui | substitute | not-applicable — *why this one*
+- **Oracle:** the highest rung the ACs demand, plus every lower rung you also assert
+  (`ui + cli`, `cli`, `substitute`, `not-applicable`) — *why each*
 - **Seed:** [the command that puts the system in the state to observe]
 - **Asserted:** [what has to be true — endpoint + field, or route + label]
 - **Not proven:** [what this oracle cannot show, and who owes it]
 - **Exit criterion:** [what someone else could run to decide "done"]
-- **Missing CLI verb:** [name it if the seed needs a shell dance — and say which phase ships it,
-  as early as that phase's own dependencies allow; if it cannot be first, say why]
+- **Missing CLI verb:** [name it if the seed or the assert needs a verb the repo lacks — and say
+  which phase ships it, as early as that phase's own dependencies allow; if it cannot be first,
+  say why]
+
+Audit the verbs `.weside/verify.md` already lists against the ACs before you conclude none is
+missing: **a verb that cannot go red is as absent as one that does not exist.** Name it under
+*Missing CLI verb* when the existing verb observes a different thing than the AC claims.
 
 ## Technical Approach
 **Patterns:** [relevant patterns]
@@ -191,7 +208,8 @@ most, constraints that aren't obvious from the code, what the design discussion 
 - **Files:** [affected files — including what the change *causes* to change: generated artifacts
   (OpenAPI spec, generated clients, snapshots) and the existing test files whose call sites it
   breaks (`rg` the symbol under the test trees)]
-- **Risk:** ordinary | migration | money | auth | tenant-isolation — [why]
+- **Risk:** ordinary | migration | money | auth | tenant-isolation — [why, and on *what*: the
+  table, the money path or the isolation boundary the chunk touches]
 - **Approach:** [how]
 
 ### Phase 2: [Name]
@@ -238,27 +256,32 @@ most, constraints that aren't obvious from the code, what the design discussion 
 
 ## Step 4: User Approval (ExitPlanMode)
 
-User reviews the plan. On feedback → adjust and present again. On approval → Step 5 immediately.
+Feedback → adjust and present again, as often as it takes.
 
 ## Step 5: Post-Approval — EXECUTE IMMEDIATELY
 
 ⛔ **ExitPlanMode approval means "run Step 5", not "stop and summarize".** Run these in order.
 
 0. **Resolve the main worktree** — the plan belongs where `main` is checked out, not in the
-   feature worktree you may be standing in:
+   feature worktree you may be standing in. Shell state does not survive between tool calls, so
+   **print the path and use it literally** in every step below:
    ```bash
-   MAIN_WORKTREE=$(git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}')
+   git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}'
    ```
-1. **Save plan:** write the approved plan to `$MAIN_WORKTREE/docs/plans/{TICKET}-story.md` with
+   Empty output means no worktree is on `main`: say so, skip step 4, and keep going.
+1. **Save plan:** write the approved plan to `<main-worktree>/docs/plans/{TICKET}-story.md` with
    `status: approved` and `story: {TICKET}` in the frontmatter. (`~/.claude/plans/` is temporary;
    `docs/plans/` is permanent.) Write the accepted `CONTEXT.md` glossary entry, if any, now.
 2. **Scan what you wrote:** run the 3-item check in
    `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` against the file. A failure means fix the plan
    — never skip ahead to the checkpoint.
-3. **Ticket, in one pass** (`references/ticketing.md` — transition first, comment second, verify
-   the move): set the description to the minimal body below, add ONE comment naming each
-   contradiction you resolved and each question you parked, and transition the ticket to the
-   repo's ready state. No ticketing tool → skip silently.
+3. **Ticket, in one pass** (`references/ticketing.md`): transition it to the repo's ready state —
+   the state named in `.weside/orchestrate.md` if that file exists, otherwise the one meaning
+   *refined, not yet started*; ask once when the board's names are ambiguous — verify the move,
+   then set the description to the minimal body below and add ONE comment naming each
+   contradiction you resolved and each question you parked. Your comment is now the newest, so
+   set the plan's `comments_read_through:` to **its** id — the marker means "everything through my
+   answer". No ticketing tool → skip silently.
    ```markdown
    ## User Story
    As [role] I want [feature] so that [benefit].
@@ -273,7 +296,7 @@ User reviews the plan. On feedback → adjust and present again. On approval →
    ```bash
    [ -n "$MAIN_WORKTREE" ] || { echo "WARN: no worktree on main — plan saved, not committed."; exit; }
    cd "$MAIN_WORKTREE" || exit
-   git add docs/plans/{TICKET}-story.md && \
+   git add docs/plans/{TICKET}-story.md CONTEXT.md && \
      git commit -m "docs: add {TICKET} plan — {Story Title}" || \
      { echo "WARN: commit failed (hook rewrite?) — re-add and commit by hand."; exit; }
    git push || echo "WARN: committed locally, push failed (branch protection?) — push by hand."
@@ -291,7 +314,7 @@ User reviews the plan. On feedback → adjust and present again. On approval →
    Recommended next: /we:orchestrate {TICKET}   ← <one-line why: phases N, parallel waves {…}, or context-hygiene>
    (or /we:orchestrate {TICKET} --solo if you'd rather run it inline.)
    ```
-   Lead with the recommended shape and name the phase count plus which phases parallelise. Print
+   Print
    the `/loop` (or, at its bar, `/goal`) invocation when `references/long-running.md`'s trigger
    fires — printed, never invoked, and only once the plan's `## Verification` names a scriptable
    oracle. If the oracle is not scriptable yet, say so and make the first round's job to make it so.
@@ -315,19 +338,18 @@ Both run the same plan through the same pipeline; they differ in *who holds the 
 **Recommend `/we:orchestrate`** when ANY holds: the plan has 2+ real phases; `parallel_groups` is
 non-empty; it is a coherent multi-layer/refactor/migration change; or the caller benefits from
 context-hygiene plus neutral review (true even for a *small monolith*). **Recommend `--solo`**
-only for a genuinely trivial, straight-line single-phase story — a typo, a one-function fix, a
-config tweak — where dispatch overhead buys nothing.
+for a genuinely trivial, straight-line single-phase story — a typo, a one-function fix, a config
+tweak — where dispatch overhead buys nothing, **and whenever Agent Teams is disabled**: dispatch
+aborts on orchestrate's own prerequisites there, so `--solo` is the only shape that runs. Say so,
+and say that enabling Agent Teams unlocks the other one.
 
 ---
 
 ## Rules
 
-- The plan filename suffix is `-story.md` (legacy `-plan.md` still read for back-compat).
+- Legacy `-plan.md` files are still read for back-compat; new plans are always `-story.md`.
 - **Plans are living.** When the story belongs to a multi-wave programme, its DoD includes
   rewriting this plan to match what was actually BUILT before the PR merges, and updating
   `docs/plans/<epic>-state.md` in the same PR — the next agent reads the plan, not the diff, and
   after a compact that agent is you. See
   `${CLAUDE_PLUGIN_ROOT}/references/programme-discipline.md`.
-- **User-visible surfaces owe a proof block.** If the story changes something a user sees, its
-  `## Verification` names how it will be checked against a RUNNING app and what stays owed
-  without a manual round — "tests are green" is a claim about units, not about the app.
