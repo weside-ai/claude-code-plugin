@@ -168,14 +168,11 @@ def _required(root: str) -> bool:
 def _body_arg(rest: list[str], j: int) -> tuple[str, bool] | None:
     """(value, it_is_a_path) for the body flag at `rest[j]`, or None."""
     tok = rest[j]
-    if tok in ("--body", "-b") and j + 1 < len(rest):
-        return (rest[j + 1], False)
-    if tok.startswith("--body="):
-        return (tok.split("=", 1)[1], False)
-    if tok in ("--body-file", "-F") and j + 1 < len(rest):
-        return (rest[j + 1], True)
-    if tok.startswith("--body-file="):
-        return (tok.split("=", 1)[1], True)
+    for long, short, is_file in (("--body", "-b", False), ("--body-file", "-F", True)):
+        if tok in (long, short) and j + 1 < len(rest):
+            return (rest[j + 1], is_file)
+        if tok.startswith(f"{long}="):
+            return (tok.split("=", 1)[1], is_file)
     return None
 
 
@@ -183,9 +180,10 @@ def _pr_verb(argv: list[str]) -> tuple[str, list[str]] | None:
     """The `create`/`edit` verb and its remaining args — command position only."""
     for i, tok in enumerate(argv):
         bare = tok.lstrip("({")
-        if (bare != "gh" and not bare.endswith("/gh")) or not (
-            tok != bare or _starts_a_command(argv, i)
-        ):
+        if bare != "gh" and not bare.endswith("/gh"):
+            continue
+        # A `(`/`{` on the token IS the command position; anything else has to earn it.
+        if tok == bare and not _starts_a_command(argv, i):
             continue
         if argv[i + 1 : i + 3] in (["pr", "create"], ["pr", "edit"]):
             return (argv[i + 2], argv[i + 3 :])

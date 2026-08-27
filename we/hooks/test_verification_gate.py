@@ -72,6 +72,24 @@ def body_file(root: Path, text: str, name: str = "pr-body.md") -> str:
     return name
 
 
+def refuse_body(root: Path, text: str) -> str | None:
+    """The gate's verdict on a PR whose body file carries `text`."""
+    return refuse(f"gh pr create --body-file {body_file(root, text)}", root)
+
+
+def hook_payload(root: Path, text: str) -> str:
+    command = f"gh pr create --body-file {body_file(root, text)}"
+    return json.dumps({"tool_name": "Bash", "cwd": str(root), "tool_input": {"command": command}})
+
+
+def run_hook(stdin: str) -> str:
+    """The hook as the harness runs it: JSON on stdin, decision on stdout."""
+    out = subprocess.run(
+        [sys.executable, str(HOOK)], input=stdin, capture_output=True, text=True, check=True
+    )
+    return out.stdout.strip()
+
+
 # --- false positives: these open no PR and must never be denied -----------------
 
 
@@ -110,8 +128,7 @@ def test_command_substitution_with_no_heredoc_lets_through(armed: Path) -> None:
 
 def test_not_armed_repo_lets_everything_through(tmp_path: Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    name = body_file(tmp_path, NO_RECEIPT)
-    assert refuse(f"gh pr create --body-file {name}", tmp_path) is None
+    assert refuse_body(tmp_path, NO_RECEIPT) is None
 
 
 def test_non_bash_tool_is_ignored(armed: Path) -> None:
@@ -122,8 +139,7 @@ def test_non_bash_tool_is_ignored(armed: Path) -> None:
 
 
 def test_body_file_without_receipt_is_denied(armed: Path) -> None:
-    name = body_file(armed, NO_RECEIPT)
-    reason = refuse(f"gh pr create --body-file {name}", armed)
+    reason = refuse_body(armed, NO_RECEIPT)
     assert reason is not None
     assert "docs/plans/<TICKET>-story.md" in reason
 
@@ -144,35 +160,30 @@ def test_fill_is_a_claim_with_no_receipt(armed: Path) -> None:
 
 def test_the_unfilled_template_does_not_pass(armed: Path) -> None:
     """The old denial message, pasted back verbatim, used to satisfy the gate."""
-    name = body_file(armed, UNFILLED)
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    assert refuse_body(armed, UNFILLED) is not None
 
 
 def test_a_chosen_oracle_over_placeholders_does_not_pass(armed: Path) -> None:
     half = UNFILLED.replace("cli | ui | substitute | not-applicable", "cli")
-    name = body_file(armed, half)
-    reason = refuse(f"gh pr create --body-file {name}", armed)
+    reason = refuse_body(armed, half)
     assert reason is not None
     assert "placeholders" in reason
 
 
 def test_heading_over_nothing_does_not_pass(armed: Path) -> None:
-    name = body_file(armed, "## Verification\n\nTests are green.\n")
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    assert refuse_body(armed, "## Verification\n\nTests are green.\n") is not None
 
 
 def test_deep_heading_still_counts(armed: Path) -> None:
     """A receipt one heading level too deep is a receipt, not a violation."""
-    name = body_file(armed, RECEIPT.replace("## Verification", "##### Verification"))
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    assert refuse_body(armed, RECEIPT.replace("## Verification", "##### Verification")) is None
 
 
 # --- the receipt itself ---------------------------------------------------------
 
 
 def test_complete_receipt_passes(armed: Path) -> None:
-    name = body_file(armed, RECEIPT)
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    assert refuse_body(armed, RECEIPT) is None
 
 
 def test_receipt_inside_a_heredoc_body_passes(armed: Path) -> None:
@@ -186,10 +197,8 @@ def test_missing_receipt_inside_a_heredoc_body_is_denied(armed: Path) -> None:
 
 
 def test_not_applicable_needs_no_seed(armed: Path) -> None:
-    name = body_file(
-        armed, "## Verification\n\n**Oracle:** not-applicable — docs only, no runtime surface.\n"
-    )
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    text = "## Verification\n\n**Oracle:** not-applicable — docs only, no runtime surface.\n"
+    assert refuse_body(armed, text) is None
 
 
 def test_after_a_separator_gh_still_counts(armed: Path) -> None:
@@ -210,46 +219,17 @@ def test_pr_edit_with_a_bodyless_body_is_denied(armed: Path) -> None:
 
 
 def test_denial_is_emitted_as_a_permission_decision(armed: Path) -> None:
-    name = body_file(armed, NO_RECEIPT)
-    payload = {
-        "tool_name": "Bash",
-        "cwd": str(armed),
-        "tool_input": {"command": f"gh pr create --body-file {name}"},
-    }
-    out = subprocess.run(
-        [sys.executable, str(HOOK)],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    decision = json.loads(out.stdout)["hookSpecificOutput"]
+    decision = json.loads(run_hook(hook_payload(armed, NO_RECEIPT)))["hookSpecificOutput"]
     assert decision["hookEventName"] == "PreToolUse"
     assert decision["permissionDecision"] == "deny"
 
 
 def test_a_pass_prints_nothing(armed: Path) -> None:
-    name = body_file(armed, RECEIPT)
-    payload = {
-        "tool_name": "Bash",
-        "cwd": str(armed),
-        "tool_input": {"command": f"gh pr create --body-file {name}"},
-    }
-    out = subprocess.run(
-        [sys.executable, str(HOOK)],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert out.stdout.strip() == ""
+    assert run_hook(hook_payload(armed, RECEIPT)) == ""
 
 
 def test_unparseable_stdin_is_silent() -> None:
-    out = subprocess.run(
-        [sys.executable, str(HOOK)], input="not json", capture_output=True, text=True, check=True
-    )
-    assert out.stdout.strip() == ""
+    assert run_hook("not json") == ""
 
 
 # --- shapes that walked past the command-position check ------------------------
@@ -276,15 +256,13 @@ def test_an_absolute_gh_still_counts(armed: Path) -> None:
     assert refuse(f"/usr/bin/gh pr create --body-file {name}", armed) is not None
 
 
-def test_every_body_flag_spelling_is_read(armed: Path) -> None:
+@pytest.mark.parametrize(
+    "flag",
+    ["--body-file={name}", "-F {name}", "-b 'no receipt here'", "--body='no receipt'"],
+)
+def test_every_body_flag_spelling_is_read(armed: Path, flag: str) -> None:
     name = body_file(armed, NO_RECEIPT)
-    for flag in (
-        f"--body-file={name}",
-        f"-F {name}",
-        "-b 'no receipt here'",
-        "--body='no receipt'",
-    ):
-        assert refuse(f"gh pr create {flag}", armed) is not None, flag
+    assert refuse(f"gh pr create {flag.format(name=name)}", armed) is not None
 
 
 def test_two_heredocs_still_yield_the_body(armed: Path) -> None:
@@ -297,40 +275,36 @@ def test_web_types_its_body_elsewhere(armed: Path) -> None:
 
 
 def test_a_missing_cwd_does_not_crash() -> None:
-    """No `cwd` key at all: the hook falls back to its own, and must not raise."""
-    out = gate._refusal({"tool_name": "Bash", "tool_input": {"command": "gh pr create --fill"}})
-    assert out is None or isinstance(out, str)
+    """No `cwd` key at all: the hook falls back to its own. Not raising IS the assertion —
+    the verdict depends on whether the hook's own repo happens to be armed."""
+    gate._refusal({"tool_name": "Bash", "tool_input": {"command": "gh pr create --fill"}})
 
 
 # --- receipts that are only receipt-shaped -------------------------------------
 
 
 def test_an_empty_seed_does_not_pass(armed: Path) -> None:
-    name = body_file(armed, "## Verification\n\n**Oracle:** cli\n**Seed:**\n**Asserted:** 201\n")
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    text = "## Verification\n\n**Oracle:** cli\n**Seed:**\n**Asserted:** 201\n"
+    assert refuse_body(armed, text) is not None
 
 
 def test_a_tbd_seed_does_not_pass(armed: Path) -> None:
-    name = body_file(
-        armed, "## Verification\n\n**Oracle:** cli\n**Seed:** _TBD_\n**Asserted:** 201 ok\n"
-    )
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    text = "## Verification\n\n**Oracle:** cli\n**Seed:** _TBD_\n**Asserted:** 201 ok\n"
+    assert refuse_body(armed, text) is not None
 
 
 def test_bare_not_applicable_carries_no_reason(armed: Path) -> None:
-    name = body_file(armed, "## Verification\n\n**Oracle:** not-applicable\n")
-    reason = refuse(f"gh pr create --body-file {name}", armed)
+    reason = refuse_body(armed, "## Verification\n\n**Oracle:** not-applicable\n")
     assert reason is not None
     assert "carries its reason" in reason
 
 
 def test_two_named_oracles_are_a_choice_not_a_menu(armed: Path) -> None:
-    name = body_file(
-        armed,
+    text = (
         "## Verification\n\n**Oracle:** cli | ui\n**Seed:** `weside widgets create`\n"
-        "**Asserted:** 201 and the button reaches the screen\n",
+        "**Asserted:** 201 and the button reaches the screen\n"
     )
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    assert refuse_body(armed, text) is None
 
 
 # --- shapes the second simulation round found -----------------------------------
@@ -391,17 +365,16 @@ def test_a_dollar_inside_prose_does_not_disarm_the_gate(armed: Path) -> None:
 
 
 def test_a_receipt_as_a_bullet_list_is_a_receipt(armed: Path) -> None:
-    name = body_file(
-        armed,
+    text = (
         "## Verification\n\n- **Oracle:** cli\n- **Seed:** `weside widgets create`\n"
-        "- **Asserted:** 201 and an id\n",
+        "- **Asserted:** 201 and an id\n"
     )
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    assert refuse_body(armed, text) is None
 
 
 def test_a_template_quoted_outside_the_section_is_not_a_receipt(armed: Path) -> None:
-    name = body_file(armed, "## Verification\n\nnothing\n\n## Changes\n\n" + RECEIPT)
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    text = "## Verification\n\nnothing\n\n## Changes\n\n" + RECEIPT
+    assert refuse_body(armed, text) is not None
 
 
 def test_a_cd_after_another_command_still_locates_the_body(armed: Path) -> None:
@@ -415,15 +388,11 @@ def test_a_cd_after_another_command_still_locates_the_body(armed: Path) -> None:
 
 def test_a_receipt_inside_a_fenced_block_is_a_quotation(armed: Path) -> None:
     """A PR body that SHOWS the receipt format does not thereby carry one."""
-    name = body_file(
-        armed, "## Verification\n\nSee below.\n\n## Changes\n\n```markdown\n" + RECEIPT + "```\n"
-    )
-    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+    text = "## Verification\n\nSee below.\n\n## Changes\n\n```markdown\n" + RECEIPT + "```\n"
+    assert refuse_body(armed, text) is not None
 
 
 def test_the_section_rule_does_not_break_a_receipt_that_ends_the_body(armed: Path) -> None:
     """The inverse of the out-of-section test: last section, nothing after it."""
-    name = body_file(
-        armed, "## Summary\n\nWidgets.\n\n" + RECEIPT[RECEIPT.index("## Verification") :]
-    )
-    assert refuse(f"gh pr create --body-file {name}", armed) is None
+    text = "## Summary\n\nWidgets.\n\n" + RECEIPT[RECEIPT.index("## Verification") :]
+    assert refuse_body(armed, text) is None
