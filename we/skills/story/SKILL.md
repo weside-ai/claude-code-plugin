@@ -32,8 +32,9 @@ Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
 
 **Repo-local DoR (additive):** resolve the repo root (`git rev-parse --show-toplevel`) and read
 `<repo-root>/.weside/dor.md` if it exists — its rows apply *on top of* the plugin DoR, never
-instead of it. Each repo-local row gets its own labelled line in the plan (`**<Row name>:** …`),
-because `/we:orchestrate` gates on it and names the failing row.
+instead of it. Each repo-local row gets its own labelled line (`**<Row name>:** …`) appended to
+the plan's `## Constraints and Pins`, because `/we:orchestrate` gates on it and names the failing
+row — one fixed home, so the gate knows where to look.
 
 **Glossary:** read `CONTEXT.md` at the repo root if it exists, and use its canonical vocabulary in
 the **ticket and the plan** (never its `_Avoid_` terms).
@@ -103,8 +104,6 @@ under "too big":
   stays a **single Story** with a phased plan, run by `/we:orchestrate {TICKET}`. Splitting a
   coherent change into N stories just to dispatch it multiplies overhead the work does not need;
   the phase decomposition and `parallel_groups` carry the structure instead.
-
-The urge to split into phases is the orchestrate signal, not the epic signal.
 
 ## Step 3: Create Plan (EnterPlanMode)
 
@@ -279,9 +278,9 @@ Feedback → adjust and present again, as often as it takes.
    the state named in `.weside/orchestrate.md` if that file exists, otherwise the one meaning
    *refined, not yet started*; ask once when the board's names are ambiguous — verify the move,
    then set the description to the minimal body below and add ONE comment naming each
-   contradiction you resolved and each question you parked. Your comment is now the newest, so
-   set the plan's `comments_read_through:` to **its** id — the marker means "everything through my
-   answer". No ticketing tool → skip silently.
+   contradiction you resolved and each question you parked. Set the summary too when it carries a
+   glossary `_Avoid_` term — it is the field every board and roll-up shows — and say in the
+   comment that you rewrote it. No ticketing tool → skip silently.
    ```markdown
    ## User Story
    As [role] I want [feature] so that [benefit].
@@ -289,35 +288,36 @@ Feedback → adjust and present again, as often as it takes.
    ## Plan
    Implementation Plan: docs/plans/{TICKET}-story.md
    ```
-   Anything beyond this template follows `${CLAUDE_PLUGIN_ROOT}/references/ticket-briefs.md` for
-   *wording* — behavioural, durable, no file paths or line numbers.
+   Anything beyond this template follows `${CLAUDE_PLUGIN_ROOT}/references/ticket-briefs.md`.
+3b. **Re-open the plan** and set `comments_read_through:` to the id of the comment you just
+   posted — it is the newest now, and the marker means "everything through my answer". A
+   frontmatter value; the step-2 scan still holds.
 4. **Commit the plan** — one failure mode per message, so a wrong diagnosis never sends the
    reader to the wrong place:
    ```bash
-   [ -n "$MAIN_WORKTREE" ] || { echo "WARN: no worktree on main — plan saved, not committed."; exit; }
-   cd "$MAIN_WORKTREE" || exit
+   cd <main-worktree> || exit
    git add docs/plans/{TICKET}-story.md CONTEXT.md && \
      git commit -m "docs: add {TICKET} plan — {Story Title}" || \
      { echo "WARN: commit failed (hook rewrite?) — re-add and commit by hand."; exit; }
    git push || echo "WARN: committed locally, push failed (branch protection?) — push by hand."
    ```
 5. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined`
-   (the CLI keeps the `story` table name for back-compat).
 6. **Vault links (TurboVault only):** run `mcp__turbovault__suggest_links` on the new plan doc and
    offer each suggestion `[y/n]`. Skip silently without TurboVault.
 7. **Output + execution-surface recommendation** — decide dispatched vs. `--solo` per the
-   *Execution Surface* heuristic below, then emit:
+   *Execution Surface* heuristic below, put the **recommended** shape on the `Recommended next:`
+   line and the other one in the parenthetical, then emit:
    ```
    Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE.
    State file: docs/plans/{TICKET}-state.md (the Lead creates it on the first run).
 
-   Recommended next: /we:orchestrate {TICKET}   ← <one-line why: phases N, parallel waves {…}, or context-hygiene>
-   (or /we:orchestrate {TICKET} --solo if you'd rather run it inline.)
+   Recommended next: /we:orchestrate {TICKET} [--solo]   ← <one-line why: phases N, parallel waves {…}, context-hygiene, or Agent Teams off>
+   (or <the other shape> if you'd rather run it the other way.)
    ```
-   Print
-   the `/loop` (or, at its bar, `/goal`) invocation when `references/long-running.md`'s trigger
-   fires — printed, never invoked, and only once the plan's `## Verification` names a scriptable
-   oracle. If the oracle is not scriptable yet, say so and make the first round's job to make it so.
+   Print the `/loop` (or, at its bar, `/goal`) invocation when `references/long-running.md`'s
+   trigger fires — printed, never invoked. When the plan's `## Verification` does not yet name a
+   scriptable oracle, print it anyway with the blocker named on the line above it, and make the
+   first round's job to make the oracle scriptable.
 
 ⛔ **STOP after Step 5.** Story + Plan is the whole job — no implementation, no branch, no
 auto-continue to `/we:orchestrate`. The user invokes the next surface.
@@ -332,14 +332,13 @@ Both run the same plan through the same pipeline; they differ in *who holds the 
 |---|---|---|
 | **Shape** | one autonomous pass in the caller's session | Lead dispatches each phase as a work-chunk, integrates onto one branch, runs CI once → one PR |
 | **Best for** | trivially straight-line work — one phase, small diff | anything worth splitting into phases; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
-| **Caller's context** | fills with the whole implementation | stays clean — reports and the final PR, not every diff |
-| **Review stance** | caller is also the implementer | caller reviews **neutrally** (didn't write it) |
 
 **Recommend `/we:orchestrate`** when ANY holds: the plan has 2+ real phases; `parallel_groups` is
 non-empty; it is a coherent multi-layer/refactor/migration change; or the caller benefits from
 context-hygiene plus neutral review (true even for a *small monolith*). **Recommend `--solo`**
 for a genuinely trivial, straight-line single-phase story — a typo, a one-function fix, a config
-tweak — where dispatch overhead buys nothing, **and whenever Agent Teams is disabled**: dispatch
+tweak — where dispatch overhead buys nothing, **and whenever Agent Teams is disabled** (the env
+flag in `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`; ask when you cannot read it): dispatch
 aborts on orchestrate's own prerequisites there, so `--solo` is the only shape that runs. Say so,
 and say that enabling Agent Teams unlocks the other one.
 
@@ -347,7 +346,6 @@ and say that enabling Agent Teams unlocks the other one.
 
 ## Rules
 
-- Legacy `-plan.md` files are still read for back-compat; new plans are always `-story.md`.
 - **Plans are living.** When the story belongs to a multi-wave programme, its DoD includes
   rewriting this plan to match what was actually BUILT before the PR merges, and updating
   `docs/plans/<epic>-state.md` in the same PR — the next agent reads the plan, not the diff, and
