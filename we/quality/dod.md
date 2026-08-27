@@ -15,6 +15,7 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 - [ ] Feature REACHABLE: User can navigate to the feature (button/route/screen)
 - [ ] End-to-end: Complete user flow works, not just individual parts
 - [ ] No unresolved TODO/FIXME left
+- [ ] **Every planned phase landed** — each plan `### Phase` block's `**Files:**` actually changed in this diff; a phase committed by someone other than its worker is named in the PR body with who did it and why.
 - [ ] **Parallelisation considered** — for stories with 3+ independent implementation phases: `parallel_groups` is set in the plan frontmatter, or there is an explicit note in the plan explaining why phases must be sequential. Skip for stories with 1–2 phases.
 
 ### Architecture Compliance
@@ -26,7 +27,6 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
       annotation carries a specific reason, and a grown register is either cited to an ADR or
       justified in the PR body. If the repo ships a register generator, it was re-run and the
       result committed. No such convention → skip.
-- [ ] Not applicable → skip if no architecture constraints in plan
 
 ### Verification (observed, not inferred)
 
@@ -60,7 +60,6 @@ break in production.
       (in-process caches, module/class-level mutable containers, memoised impure functions,
       in-process locks used across requests). Such state belongs in a database, cache, or queue;
       a deliberate exception carries an inline `# SCALABILITY-EXEMPT: <reason>`.
-- [ ] **Not applicable** → skip when the item has nothing to do with this change
 
 Repo-specific classes (an ORM-cache rule, a reference-data layer, a hot-path convention) belong
 in `.weside/dod.md`, which is read additively alongside this checklist.
@@ -103,7 +102,6 @@ it cannot carry the knowledge — most changes stop at the first.
 - [ ] **Generated artefacts regenerated** — API spec/types, CLI reference, any register the
       repo ships a generator for. Codegen, not prose; it never substitutes for the first item.
 - [ ] Documentation Impact from the plan addressed (if specified)
-- [ ] Nothing above applies → skip
 
 ### CI/CD
 
@@ -121,6 +119,9 @@ it cannot carry the knowledge — most changes stop at the first.
 
 ## Issue Severity
 
+A DoD row that Fails blocks exactly like an unmet acceptance criterion — there is no second,
+softer tier for "only" the DoD.
+
 | Level | Action |
 |---|---|
 | **BLOCKING** | MUST fix |
@@ -129,17 +130,8 @@ it cannot carry the knowledge — most changes stop at the first.
 
 ---
 
-## Review Output Format
+## Who checks this
 
-`we:ac-reviewer` (`/we:ac-review`) should include in its output:
-
-1. **AC Alignment Table** — Each AC individually checked with status and evidence
-2. **DoD Quick Check** — Architecture compliance, security, wiring, test depth summary
-
-The bug-hunt engine (Codex adversarial-review or Claude's native `/code-review`) reports its
-findings separately — see `worker-dispatch.md` § Bug-hunt dispatch.
-
----
-
-A story is DONE when every applicable box above is ticked — **awaiting the user's merge**, which is
-the one step that never belongs to Claude.
+`we:ac-reviewer` fills a row per applicable item above; its output format lives in
+`agents/ac-reviewer.md`. The bug-hunt engine reports separately — `worker-dispatch.md`
+§ Bug-hunt dispatch.
