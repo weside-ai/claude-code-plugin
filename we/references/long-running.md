@@ -46,8 +46,10 @@ that cannot verify is a loop that produces unchecked commits at 3am.
 
 ## What `/we:story` emits
 
-At the end of a refinement, when the work spans more than one sitting, print the
-ready-to-paste invocation — do not invoke it:
+At the end of a refinement, print the ready-to-paste invocation — do not invoke it. The trigger
+is structural, not a feeling about session length: **the plan has 4+ phases, or a non-empty
+`depends_on:`, or the user says they will be away.** Printing an unneeded `/loop` line costs a
+line; omitting a needed one loses the mechanic.
 
 ```text
 Recommended next: /we:orchestrate PROJ-1234
@@ -65,4 +67,5 @@ one clause:
 
 An exit criterion is checkable when someone else could run it. "Rooms wave is
 finished" is not; "all six W3 stories merged and the parity boxes for §1–§5
-ticked" is.
+ticked" is. It lives in the plan's `## Verification` block as **Exit criterion:** — terminal
+output is not an artifact, and the loop's next round is read by a session that never saw it.
