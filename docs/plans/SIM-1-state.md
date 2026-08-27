@@ -48,6 +48,13 @@ p4 (gates), integrated 525046c — grades A 4, B 4, C 4, D 4; ac-reviewer −8 %
 15. `verification.md` consumer list omits `pr-creator`.
 16. `orchestration.py` stores a checkpoint as a bare name — `--evidence` proposed (tool follow-up, not this wave).
 
+p2 (ci-review), integrated a8d8fc9 (worker's two commits squashed by the Lead so the internal names in commit 1 never reach history) — grades a 4, b 4, c 4.5, d 4.5; 335 → 295 lines; five report-named fixes landed after the last graded round, un-simulated:
+17. Known-CI-states table exists only in the host repo's `ci-workflow.md` (brief premise wrong) — host keeps it, plugin carries the generic mechanic; no change.
+18. `integration-pipeline.md` § "One ci-review pass" re-implements the procedure for the Lead with an unbounded "wait for CI" (scenario b deadlock) — Lead glue: point it at the skill's gate definition and terminal states.
+19. `quality/dod.md` carries a third copy of the severity scale — Lead glue.
+20. `docs/skills.md` § ci-review "max 2 cycles" vs. user budget — Lead glue.
+21. Leak scan over the integrated tree: `apps/backend|apps/mobile` paths in all sim fixtures (generic host-app names, not this repo's rule-compliant) — Lead neutralises at Step 8 B; pre-existing hits in `handoff/SKILL.md:221` and `test_ready_set.py` are out of scope.
+
 ## Verification log
 
-p1: validate-consistency ✓ after merge 313bcf8. p4: consistency ✓, pytest 50 ✓ after merge 525046c.
+p1: validate-consistency ✓ after merge 313bcf8. p4: consistency ✓, pytest 50 ✓ after merge 525046c. p2: consistency ✓ after merge a8d8fc9.
