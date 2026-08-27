@@ -37,7 +37,7 @@ as part of the value, so `epic: rooms  # optional` never matches the epic roster
 | `story` | string | yes | Ticket key; used for checkpoint keying |
 | `epic` | string | when the story belongs to an epic | slug or ticketing key; `/we:orchestrate` rosters by it |
 | `created` | ISO-8601 date | yes | Informational; used in stale-plan detection |
-| `status` | enum | yes | `draft` while being refined; `blocked` while a `## Open Fork` section is open; `approved` after `/we:story` Step 5 |
+| `status` | enum | yes | `draft` while being refined (an open `## Open Fork` keeps it `draft`); `approved` after `/we:story` Step 5 |
 | `parallel_groups` | list of lists | no | Empty or absent = all phases sequential; see below |
 | `depends_on` | list of keys | no | stories that must be `built` before this one enters the develop lane |
 
@@ -169,8 +169,8 @@ parallel_groups: []
 ## Verification
 - **Oracle:** cli | ui | substitute | not-applicable — why
 - **Seed:** [command]
-- **Assert:** [what must be true]
-- **Not provable here:** [what, and who owes it]
+- **Asserted:** [what was true, with the output]
+- **Not proven:** [what, and who owes it]
 
 ## Technical Approach
 **Patterns:** [relevant patterns]
@@ -308,4 +308,4 @@ The Status mode compares the mirror block in the doc with the live ticketing fet
 |---|---|---|
 | 1.0 | 2026-05-18 | Initial spec extracted from `/we:story` + build-pipeline implementation |
 | 1.1 | 2026-05-28 | Concept Doc Format section added — Saga + Epic mirror block contract (v2.34.0) |
-| 1.2 | 2026-08-27 | `type`, `epic`, `depends_on`, `blocked`, `## Open Fork`, `## Verification`; bare frontmatter; parallel_groups cap (5.5.0) |
+| 1.2 | 2026-08-27 | `type`, `epic`, `depends_on`, `## Open Fork`, `## Verification`; bare frontmatter; parallel_groups cap (5.5.0) |

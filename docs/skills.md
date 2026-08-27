@@ -124,7 +124,7 @@ permission mode that denies teammate shell calls, and the Lead stays the only wr
 **Reach for `/we:story` instead** when the scope is genuinely open — that path asks the
 questions, sharpens the glossary, and stops at a plan-mode gate.
 
-**Won't do:** ask you anything, guess a design fork (it reports it and stops), or claim its own
+**Won't do:** ask you anything, guess a design fork (it writes the plan as far as the fork allows, adds an `## Open Fork` section, and stops — `/we:develop` refuses to build past it, `/we:orchestrate` queues it), or claim its own
 output passed the gate.
 
 ---
