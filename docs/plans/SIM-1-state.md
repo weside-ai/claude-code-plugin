@@ -38,6 +38,16 @@ p1 (develop+refine), integrated 313bcf8 — grades a 4, b 4, c 4, d 5; develop +
 7. A blocked plan (`## Open Fork`) passes the DoR scan mechanically → orchestrate Step 1 would checkpoint `refined`; orchestrate must treat `## Open Fork` as `draft` + Decision Queue.
 8. Lead-rewritten plans (orchestrate Step 1) never clear `## Open Fork` — clause belongs in orchestrate.
 
+p4 (gates), integrated 525046c — grades A 4, B 4, C 4, D 4; ac-reviewer −8 %, pr-creator −1 %, dod.md −2 %, hook 5.2k → 12.6k + 14.8k test matrix (50 tests). Hook now blocks `gh pr create --fill`; `--web`/MCP-opened PRs stay ungated (docstring):
+9. `integration-pipeline.md` names three blocking checkpoints before the PR, pr-creator four (`ac_verified`) — align the reference to four.
+10. `integration-pipeline.md` § Quality gates restates the bug-hunt matrix without the mixed-authorship case — replace with a pointer to `worker-dispatch.md`.
+11. Same section: `/code-review` is a skill and would run in the Lead's context — wrap in `Agent()`.
+12. Checkpoint table credits `static_analysis_passed`/`test_passed` to the agents; orchestrate says every checkpoint is the Lead's — align.
+13. `worker-dispatch.md`: `review.cross` governs the bug-hunt and, next clause, does not; its matrix keys on `tools.codex` — align to `execution.default` + `tools.codex`.
+14. Per-chunk AC-check is required of headless workers that cannot run it; `.reviews/` is branch-keyed — drop the per-chunk requirement for detached backends.
+15. `verification.md` consumer list omits `pr-creator`.
+16. `orchestration.py` stores a checkpoint as a bare name — `--evidence` proposed (tool follow-up, not this wave).
+
 ## Verification log
 
-p1: validate-consistency ✓ after merge 313bcf8.
+p1: validate-consistency ✓ after merge 313bcf8. p4: consistency ✓, pytest 50 ✓ after merge 525046c.
