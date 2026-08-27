@@ -44,8 +44,10 @@ report file with what you completed and why you stopped, send the one message wi
 [`${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md`](../../references/dor-scan.md) and stop if it
 fails, naming the item. A briefed worker skips it — the Lead ran it before dispatch.
 
-**A plan carrying an `## Open Fork` section is not buildable** — a refiner left a decision open
-there. Stop and hand it back; building past it pins behaviour nobody chose.
+**A plan carrying an unanswered `## Open Fork` section is not buildable** — a refiner left a
+decision open there, and building past it pins behaviour nobody chose: stop and hand it back. The
+section survives an answer written straight into the plan or the brief (nobody re-ran the refiner
+to clear it): where the answer is there, name it in your report and build on it.
 
 **When a ticket key is known**, fetch the ticket **including its comments**
 ([`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`](../../references/ticketing.md)). A comment that
