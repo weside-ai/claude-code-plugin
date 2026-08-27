@@ -411,3 +411,19 @@ def test_a_cd_after_another_command_still_locates_the_body(armed: Path) -> None:
     assert (
         refuse("git status && cd apps && gh pr create --body-file pr-body.md", armed) is not None
     )
+
+
+def test_a_receipt_inside_a_fenced_block_is_a_quotation(armed: Path) -> None:
+    """A PR body that SHOWS the receipt format does not thereby carry one."""
+    name = body_file(
+        armed, "## Verification\n\nSee below.\n\n## Changes\n\n```markdown\n" + RECEIPT + "```\n"
+    )
+    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+
+
+def test_the_section_rule_does_not_break_a_receipt_that_ends_the_body(armed: Path) -> None:
+    """The inverse of the out-of-section test: last section, nothing after it."""
+    name = body_file(
+        armed, "## Summary\n\nWidgets.\n\n" + RECEIPT[RECEIPT.index("## Verification") :]
+    )
+    assert refuse(f"gh pr create --body-file {name}", armed) is None
