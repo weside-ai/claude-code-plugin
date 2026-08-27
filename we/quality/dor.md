@@ -98,4 +98,4 @@ scan in `references/dor-scan.md` — that is what the pipeline gates on before d
 
 After `/we:story`: `phase=refined`
 
-`/we:story` Step 6 writes it (single owner of the command).
+`/we:story` writes it after approval (Step 5); `/we:orchestrate` Step 1 writes it for a plan it verified but did not write.

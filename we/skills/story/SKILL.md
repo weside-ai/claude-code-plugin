@@ -301,7 +301,7 @@ Feedback → adjust and present again, as often as it takes.
      { echo "WARN: commit failed (hook rewrite?) — re-add and commit by hand."; exit; }
    git push || echo "WARN: committed locally, push failed (branch protection?) — push by hand."
    ```
-5. **Checkpoint:** `python3 <plugin-root>/scripts/orchestration.py story checkpoint {TICKET} refined`
+5. **Checkpoint:** `WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint {TICKET} refined`
    — `${CLAUDE_PLUGIN_ROOT}` is a skill-text token, not a shell variable: substitute the real
    path here as you did the worktree in item 0, or the shell reads `/scripts/…` and fails.
 6. **Vault links (TurboVault only):** run `mcp__turbovault__suggest_links` on the new plan doc and

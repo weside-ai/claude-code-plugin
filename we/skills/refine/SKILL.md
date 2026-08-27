@@ -88,7 +88,7 @@ lets the Lead dispatch them. Phases touching disjoint files with no ordering dep
 2. **Read the brief's architecture refs, then the code they name** — locate the seam from the refs
    and the repo's `CLAUDE.md`, then `Grep` the route or symbol the story names.
 3. **Write the file** at `docs/plans/{TICKET}-story.md`, then `Grep` it back — `Given`, `When`,
-   `Then` capitalised in *every* AC, `^### Phase \d+:` for the headers, `**Files:**` under each —
+   `Then` capitalised in *every* AC, `^### Phase \d+` for the headers, `**Files:**` under each —
    and read `## Context` to confirm it is a paragraph. Do the same after a step-0 edit.
 4. **Report.** Dispatched into a team, exactly one `SendMessage` to `team-lead`
    (`ToolSearch` for it first):

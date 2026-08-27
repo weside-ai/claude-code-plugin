@@ -172,11 +172,11 @@ run on every chunk."*
 + `coderabbit` / `greptile` / **any other id** → CI bots. They run on GitHub via App/workflow — the plugin does NOT invoke or gate them; it only *allowlists* their threads for `/we:ci-review` to collect. Not locally invokable.
 
 **Exactly ONE bug-hunt engine runs, chosen by who wrote the code** — not by list order and not by
-a count. The engine is the one that did NOT write the code: Claude wrote + `tools.codex` +
-`review.cross` → `/codex:adversarial-review`; codex/foreign wrote, or no codex → Claude's native
+a count. The engine is the one that did NOT write the code: Claude wrote + `tools.codex` (or
+`execution.default: codex`) → `/codex:adversarial-review`; codex/foreign wrote, or no codex → Claude's native
 `/code-review`. `review.available`'s only job is to seed the CI-bot allowlist `/we:ci-review`
 collects from; its order is cosmetic for local review. `we:ac-reviewer` is separate from this
-list entirely — it always runs, regardless of `review.available` or `review.cross`.
+list entirely — it always runs, regardless of `review.available` or `review.cross` — `review.cross` governs only the per-chunk AC-check.
 
 ### Step 3: Save Configuration
 

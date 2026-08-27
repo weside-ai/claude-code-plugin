@@ -302,7 +302,7 @@ def test_bare_not_applicable_carries_no_reason(armed: Path) -> None:
 def test_two_named_oracles_are_a_choice_not_a_menu(armed: Path) -> None:
     text = (
         "## Verification\n\n**Oracle:** cli | ui\n**Seed:** `weside widgets create`\n"
-        "**Asserted:** 201 and the button reaches the screen\n"
+        "**Asserted:** 201 and the button reaches the screen\n**Not proven:** device geometry\n"
     )
     assert refuse_body(armed, text) is None
 
@@ -367,7 +367,7 @@ def test_a_dollar_inside_prose_does_not_disarm_the_gate(armed: Path) -> None:
 def test_a_receipt_as_a_bullet_list_is_a_receipt(armed: Path) -> None:
     text = (
         "## Verification\n\n- **Oracle:** cli\n- **Seed:** `weside widgets create`\n"
-        "- **Asserted:** 201 and an id\n"
+        "- **Asserted:** 201 and an id\n- **Not proven:** nothing\n"
     )
     assert refuse_body(armed, text) is None
 
@@ -396,3 +396,56 @@ def test_the_section_rule_does_not_break_a_receipt_that_ends_the_body(armed: Pat
     """The inverse of the out-of-section test: last section, nothing after it."""
     text = "## Summary\n\nWidgets.\n\n" + RECEIPT[RECEIPT.index("## Verification") :]
     assert refuse_body(armed, text) is None
+
+
+# --- SIM-1 bug-hunt pins ------------------------------------------------------
+
+
+def _run(armed: Path, command: str) -> int:
+    """2 when the gate refuses, 0 when it lets the command through."""
+    return 2 if refuse(command, armed) is not None else 0
+
+
+def test_heredoc_with_redirect_on_the_opening_line_is_the_body(armed: Path) -> None:
+    # H2: `cat <<'EOF' > f` used to lose the redirect; a stale receipt on disk then vouched.
+    (armed / "pr-body.md").write_text(RECEIPT)
+    cmd = "cat <<'EOF' > pr-body.md\n" + NO_RECEIPT + "EOF\ngh pr create --body-file pr-body.md"
+    assert _run(armed, cmd) == 2
+
+
+def test_heredoc_after_the_redirect_is_the_body_too(armed: Path) -> None:
+    cmd = "cat > pr-body.md <<'EOF'\n" + RECEIPT + "EOF\ngh pr create --body-file pr-body.md"
+    assert _run(armed, cmd) == 0
+
+
+def test_not_proven_is_required(armed: Path) -> None:
+    # M2
+    body = RECEIPT.replace("**Not proven:** device geometry\n", "")
+    assert gate._receipt_problem(body) is not None
+
+
+def test_a_fenced_seed_inside_the_receipt_survives(armed: Path) -> None:
+    # M3
+    body = RECEIPT.replace(
+        "**Seed:** `weside widgets create --json`",
+        "**Seed:**\n\n```bash\nweside widgets create --json\n```",
+    )
+    assert gate._receipt_problem(body) is None
+
+
+def test_gh_global_flags_before_the_verb_are_still_a_pr(armed: Path) -> None:
+    # L1
+    assert _run(armed, "gh -R o/r pr create --fill") == 2
+    assert _run(armed, "gh --repo=o/r pr create --fill") == 2
+
+
+def test_a_cd_after_the_gh_call_does_not_move_the_lookup(armed: Path) -> None:
+    # L3
+    (armed / "pr-body.md").write_text(RECEIPT)
+    (armed / "sub").mkdir()
+    assert _run(armed, "gh pr create --body-file pr-body.md && cd sub") == 0
+
+
+def test_a_trailing_separator_on_the_body_file_token_is_stripped(armed: Path) -> None:
+    (armed / "pr-body.md").write_text(NO_RECEIPT)
+    assert _run(armed, "if true; then gh pr create --body-file pr-body.md; fi") == 2

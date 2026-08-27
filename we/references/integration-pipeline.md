@@ -37,7 +37,7 @@ when it was dispatched.
 | `ci_passed` | the single ci-review pass finished | Lead |
 
 ```bash
-WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* | sort -V | tail -1)}
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; : "${WE_ROOT:?we plugin root not found}"
 python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint {TICKET} {phase}
 python3 "$WE_ROOT/scripts/orchestration.py" story status {TICKET}
 ```

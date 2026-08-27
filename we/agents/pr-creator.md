@@ -14,8 +14,8 @@ color: green
 |---|---|---|
 | `ac_verified` | the Lead, after the AC + DoD gate **and** the verification receipt exists | Yes |
 | `review_passed` | the Lead, after the one bug-hunt pass | Yes |
-| `static_analysis_passed` | `/we:static` | Yes |
-| `test_passed` | `/we:test` | Yes |
+| `static_analysis_passed` | the Lead, on `we:static-analyzer`'s report | Yes |
+| `test_passed` | the Lead, on `we:test-runner`'s report | Yes |
 
 ---
 
@@ -28,7 +28,7 @@ Keep the branch as `$BRANCH` and the key it carries as `$TICKET`; both are used 
 ### Step 2: Verify Checkpoints
 
 ```bash
-WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* | sort -V | tail -1)}
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; : "${WE_ROOT:?we plugin root not found}"
 python3 "$WE_ROOT/scripts/orchestration.py" story status $TICKET
 ```
 
@@ -88,6 +88,7 @@ Only once a PR exists — a URL from `gh pr create`, or the user's confirmation 
 by hand. A refused or failed call is not a created PR: report it and write nothing.
 
 ```bash
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; : "${WE_ROOT:?we plugin root not found}"
 python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint $TICKET pr_created
 ```
 

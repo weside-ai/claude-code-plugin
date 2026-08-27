@@ -34,7 +34,8 @@ import sys
 # (`--body "$(cat <<'EOF' … EOF)"`) is a heredoc, and everything else that reaches
 # `shlex` unquoted is prose.
 _HEREDOC = re.compile(
-    r"<<-?[ \t]*(['\"]?)([^\s'\"]+)\1[^\n]*\n(.*?)^\t*\2[ \t]*$", re.MULTILINE | re.DOTALL
+    r"<<-?[ \t]*(['\"]?)([^\s'\"]+)\1(?P<rest>[^\n]*)\n(?P<body>.*?)^\t*\2[ \t]*$",
+    re.MULTILINE | re.DOTALL,
 )
 
 # Tokens after which the next word starts a new command. `shlex` glues a trailing
@@ -81,6 +82,19 @@ def _filled(body: str, name: str) -> bool:
     if value is None:
         return False
     value = value.strip().strip("*_`| ").strip()
+    if not value:
+        # `**Seed:**` followed by a fenced block or a paragraph on the next lines.
+        after = re.split(
+            rf"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*{name}\**[ \t]*:",
+            body,
+            maxsplit=1,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )[-1]
+        nxt = re.search(
+            r"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*\w[\w \-]*\**[ \t]*:", after[1:], re.MULTILINE
+        )
+        value = after[1 : nxt.start() + 1] if nxt else after[1:]
+        value = re.sub(r"```+|~~~+", "", value).strip().strip("*_`| ").strip()
     if re.fullmatch(r"<[^<>]*>", value):
         return False
     return value.strip("_ ").lower() not in _PLACEHOLDERS
@@ -111,29 +125,50 @@ def _strip_heredocs(command: str) -> tuple[str, list[str]]:
     bodies: list[str] = []
 
     def take(match: re.Match[str]) -> str:
-        bodies.append(match.group(3))
-        return f"<<HEREDOC:{len(bodies) - 1}"
+        # The rest of the opening line stays: `cat <<'EOF' > pr-body.md` keeps its redirect.
+        bodies.append(match.group("body"))
+        return f"<<HEREDOC:{len(bodies) - 1}" + match.group("rest")
 
     return _HEREDOC.sub(take, command), bodies
 
 
+def _same_command(argv: list[str], i: int) -> list[str]:
+    """The tokens of the simple command containing argv[i] — up to the separators around it."""
+    lo = i
+    while lo > 0 and argv[lo - 1] not in _SEPARATORS and argv[lo - 1][-1:] not in (";", "&", "|"):
+        lo -= 1
+    hi = i
+    while (
+        hi + 1 < len(argv)
+        and argv[hi + 1] not in _SEPARATORS
+        and argv[hi][-1:] not in (";", "&", "|")
+    ):
+        hi += 1
+    return argv[lo : hi + 1]
+
+
 def _written_here(argv: list[str], path: str, bodies: list[str]) -> str | None:
-    """The heredoc this command redirects into `path` — a body written and used in one call."""
+    """The heredoc this command redirects into `path` — a body written and used in one call.
+
+    `cat <<'EOF' > f` and `cat > f <<'EOF'` are the same write; the heredoc token may sit on
+    either side of the redirect, so the whole simple command is searched.
+    """
     for i, tok in enumerate(argv):
         if tok not in (">", ">>") or i + 1 >= len(argv):
             continue
-        if os.path.basename(argv[i + 1]) != os.path.basename(path):
+        if os.path.normpath(argv[i + 1]) != os.path.normpath(path):
             continue
-        for later in argv[i + 2 :]:
-            found = re.fullmatch(r"<<HEREDOC:(\d+)", later)
+        for near in _same_command(argv, i):
+            found = re.fullmatch(r"<<HEREDOC:(\d+)", near)
             if found:
                 return bodies[int(found.group(1))]
     return None
 
 
-def _cwd_after_cd(argv: list[str], cwd: str | None) -> str | None:
-    """Where a relative body-file actually lives after this command's own `cd`."""
-    for i, tok in enumerate(argv):
+def _cwd_after_cd(argv: list[str], cwd: str | None, stop: int | None = None) -> str | None:
+    """Where a relative body-file actually lives after this command's own `cd` — a `cd` after the
+    `gh` call has not happened yet when `gh` runs."""
+    for i, tok in enumerate(argv[:stop]):
         if tok.rstrip(";&|") in ("cd", "pushd") and i + 1 < len(argv):
             cwd = os.path.join(cwd or "", argv[i + 1].rstrip(";&|"))
     return cwd
@@ -176,17 +211,23 @@ def _body_arg(rest: list[str], j: int) -> tuple[str, bool] | None:
     return None
 
 
-def _pr_verb(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The `create`/`edit` verb and its remaining args — command position only."""
+def _pr_verb(argv: list[str]) -> tuple[int, str, list[str]] | None:
+    """(index of `gh`, the `create`/`edit` verb, its remaining args) — command position only.
+
+    Global flags before the verb (`gh -R o/r pr create`, `gh --repo=o/r pr create`) are skipped.
+    """
     for i, tok in enumerate(argv):
-        bare = tok.lstrip("({")
+        bare = tok.lstrip("({$")
         if bare != "gh" and not bare.endswith("/gh"):
             continue
         # A `(`/`{` on the token IS the command position; anything else has to earn it.
         if tok == bare and not _starts_a_command(argv, i):
             continue
-        if argv[i + 1 : i + 3] in (["pr", "create"], ["pr", "edit"]):
-            return (argv[i + 2], argv[i + 3 :])
+        j = i + 1
+        while j < len(argv) and argv[j].startswith("-"):
+            j += 1 if "=" in argv[j] or argv[j] not in ("-R", "--repo") else 2
+        if argv[j : j + 2] in (["pr", "create"], ["pr", "edit"]):
+            return (i, argv[j + 1], argv[j + 2 :])
     return None
 
 
@@ -207,8 +248,8 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
     found = _pr_verb(argv)
     if found is None:
         return (None, None, False)
-    verb, rest = found
-    cwd = _cwd_after_cd(argv, cwd)
+    at, verb, rest = found
+    cwd = _cwd_after_cd(argv, cwd, stop=at)
     if "--web" in rest:
         return (verb, None, True)
 
@@ -219,6 +260,7 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
         if arg is None:
             continue
         value, is_file = arg
+        value = value.rstrip(";&|")
         seen = True
         if value == "-":
             return (verb, None, True)
@@ -249,8 +291,11 @@ _FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1", re.MULTILINE | re.DOTALL)
 
 
 def _section(body: str) -> str | None:
-    """The `## Verification` block itself — a template quoted elsewhere is not a receipt."""
-    body = _FENCE.sub("", body)
+    """The `## Verification` block itself — a template quoted elsewhere is not a receipt.
+
+    Only a fence that carries the heading is a quotation; a fenced seed inside the real block stays.
+    """
+    body = _FENCE.sub(lambda m: "" if _HEADING.search(m.group(0)) else m.group(0), body)
     found = _HEADING.search(body)
     if not found:
         return None
@@ -278,10 +323,10 @@ def _receipt_problem(full: str) -> str | None:
             "`not-applicable` is a legitimate answer and it carries its reason — say what "
             "about this change has no runtime behaviour to observe."
         )
-    if not (_filled(body, "seed") and _filled(body, "asserted")):
+    if not (_filled(body, "seed") and _filled(body, "asserted") and _filled(body, "not proven")):
         return (
             "This PR carries a `## Verification` heading over an unfilled receipt — the "
-            "seed and the assertion are still the template's placeholders."
+            "seed, the assertion or the `Not proven` line are still the template's placeholders."
         )
     return None
 

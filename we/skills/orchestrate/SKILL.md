@@ -303,9 +303,8 @@ WORKTREE: `{worktree_path}`, already on branch `{branch}` (off `{integration_bra
 bootstrapped. `cd` there; do not call EnterWorktree. Run: Skill(skill="develop") for {TICKET}
 {--phases N}.
 
-DEV-ONLY: implement {all phases | phase N} → fast local gates → AC-check your diff (when
-`review.cross` is on; skip on a detached backend) → commit →
-push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
+DEV-ONLY: implement {all phases | phase N}, committing per phase → fast local gates → AC-check
+your diff (when `review.cross` is on; skip on a detached backend) → push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
 merges every branch onto {integration_branch} and runs ONE CI on ONE PR.
 
 FINISH FIRST: a small finding (≤ ~30 min) on the seam you touch gets FIXED in your branch —

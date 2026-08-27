@@ -171,6 +171,7 @@ parallel_groups: []
 - **Seed:** [command]
 - **Asserted:** [what was true, with the output]
 - **Not proven:** [what, and who owes it]
+- **Exit criterion:** [what someone else could run to decide "done"]
 
 ## Technical Approach
 **Patterns:** [relevant patterns]
