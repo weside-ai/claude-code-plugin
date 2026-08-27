@@ -289,19 +289,21 @@ Feedback → adjust and present again, as often as it takes.
    Implementation Plan: docs/plans/{TICKET}-story.md
    ```
    Anything beyond this template follows `${CLAUDE_PLUGIN_ROOT}/references/ticket-briefs.md`.
-3b. **Re-open the plan** and set `comments_read_through:` to the id of the comment you just
+3b. **Re-open `<main-worktree>/docs/plans/{TICKET}-story.md`** and set `comments_read_through:` to the id of the comment you just
    posted — it is the newest now, and the marker means "everything through my answer". A
    frontmatter value; the step-2 scan still holds.
 4. **Commit the plan** — one failure mode per message, so a wrong diagnosis never sends the
    reader to the wrong place:
    ```bash
    cd <main-worktree> || exit
-   git add docs/plans/{TICKET}-story.md CONTEXT.md && \
-     git commit -m "docs: add {TICKET} plan — {Story Title}" || \
+   git add docs/plans/{TICKET}-story.md && git add CONTEXT.md 2>/dev/null
+   git commit -m "docs: add {TICKET} plan — {Story Title}" || \
      { echo "WARN: commit failed (hook rewrite?) — re-add and commit by hand."; exit; }
    git push || echo "WARN: committed locally, push failed (branch protection?) — push by hand."
    ```
-5. **Checkpoint:** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} refined`
+5. **Checkpoint:** `python3 <plugin-root>/scripts/orchestration.py story checkpoint {TICKET} refined`
+   — `${CLAUDE_PLUGIN_ROOT}` is a skill-text token, not a shell variable: substitute the real
+   path here as you did the worktree in item 0, or the shell reads `/scripts/…` and fails.
 6. **Vault links (TurboVault only):** run `mcp__turbovault__suggest_links` on the new plan doc and
    offer each suggestion `[y/n]`. Skip silently without TurboVault.
 7. **Output + execution-surface recommendation** — decide dispatched vs. `--solo` per the
@@ -312,10 +314,12 @@ Feedback → adjust and present again, as often as it takes.
    State file: docs/plans/{TICKET}-state.md (the Lead creates it on the first run).
 
    Recommended next: /we:orchestrate {TICKET} [--solo]   ← <one-line why: phases N, parallel waves {…}, context-hygiene, or Agent Teams off>
-   (or <the other shape> if you'd rather run it the other way.)
+   (or <the other shape> if you'd rather run it the other way — with Agent Teams off, say what
+    enabling it would unlock instead, because dispatch cannot run.)
    ```
-   Print the `/loop` (or, at its bar, `/goal`) invocation when `references/long-running.md`'s
-   trigger fires — printed, never invoked. When the plan's `## Verification` does not yet name a
+   Print the `/loop` invocation when `references/long-running.md`'s trigger fires, and **add** its
+   `/goal` line below when the story also meets the critical bar — printed, never invoked. When
+   the plan's `## Verification` does not yet name a
    scriptable oracle, print it anyway with the blocker named on the line above it, and make the
    first round's job to make the oracle scriptable.
 
