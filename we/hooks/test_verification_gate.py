@@ -129,9 +129,11 @@ def test_body_file_without_receipt_is_denied(armed: Path) -> None:
 
 
 def test_relative_body_file_is_read_from_the_command_cwd(armed: Path) -> None:
-    """`cd x && gh pr create --body-file b.md` must not read the hook's own cwd."""
-    name = body_file(armed, NO_RECEIPT)
-    assert refuse(f"cd {armed} && gh pr create --body-file {name}", armed) is not None
+    """`cd sub && gh pr create --body-file b.md` must not read the hook's own cwd."""
+    sub = armed / "apps"
+    sub.mkdir()
+    body_file(sub, NO_RECEIPT)
+    assert refuse("cd apps && gh pr create --body-file pr-body.md", armed) is not None
 
 
 def test_fill_is_a_claim_with_no_receipt(armed: Path) -> None:
@@ -248,3 +250,106 @@ def test_unparseable_stdin_is_silent() -> None:
         [sys.executable, str(HOOK)], input="not json", capture_output=True, text=True, check=True
     )
     assert out.stdout.strip() == ""
+
+
+# --- shapes that walked past the command-position check ------------------------
+
+
+def test_semicolon_before_gh_still_counts(armed: Path) -> None:
+    name = body_file(armed, NO_RECEIPT)
+    assert refuse(f"git push; gh pr create --body-file {name}", armed) is not None
+
+
+def test_a_newline_starts_a_command(armed: Path) -> None:
+    name = body_file(armed, NO_RECEIPT)
+    assert refuse(f"git push\ngh pr create --body-file {name}", armed) is not None
+
+
+def test_an_env_prefix_still_counts(armed: Path) -> None:
+    name = body_file(armed, NO_RECEIPT)
+    assert refuse(f"env GH_TOKEN=x gh pr create --body-file {name}", armed) is not None
+    assert refuse(f"command gh pr create --body-file {name}", armed) is not None
+
+
+def test_an_absolute_gh_still_counts(armed: Path) -> None:
+    name = body_file(armed, NO_RECEIPT)
+    assert refuse(f"/usr/bin/gh pr create --body-file {name}", armed) is not None
+
+
+def test_every_body_flag_spelling_is_read(armed: Path) -> None:
+    name = body_file(armed, NO_RECEIPT)
+    for flag in (
+        f"--body-file={name}",
+        f"-F {name}",
+        "-b 'no receipt here'",
+        "--body='no receipt'",
+    ):
+        assert refuse(f"gh pr create {flag}", armed) is not None, flag
+
+
+def test_two_heredocs_still_yield_the_body(armed: Path) -> None:
+    command = f"gh pr create --title \"$(cat <<'T'\nWidgets\nT\n)\" --body \"$(cat <<'EOF'\n{RECEIPT}EOF\n)\""
+    assert refuse(command, armed) is None
+
+
+def test_web_types_its_body_elsewhere(armed: Path) -> None:
+    assert refuse("gh pr create --web --body x", armed) is None
+
+
+def test_a_missing_cwd_does_not_crash() -> None:
+    """No `cwd` key at all: the hook falls back to its own, and must not raise."""
+    out = gate._refusal({"tool_name": "Bash", "tool_input": {"command": "gh pr create --fill"}})
+    assert out is None or isinstance(out, str)
+
+
+# --- receipts that are only receipt-shaped -------------------------------------
+
+
+def test_an_empty_seed_does_not_pass(armed: Path) -> None:
+    name = body_file(armed, "## Verification\n\n**Oracle:** cli\n**Seed:**\n**Asserted:** 201\n")
+    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+
+
+def test_a_tbd_seed_does_not_pass(armed: Path) -> None:
+    name = body_file(
+        armed, "## Verification\n\n**Oracle:** cli\n**Seed:** _TBD_\n**Asserted:** 201 ok\n"
+    )
+    assert refuse(f"gh pr create --body-file {name}", armed) is not None
+
+
+def test_bare_not_applicable_carries_no_reason(armed: Path) -> None:
+    name = body_file(armed, "## Verification\n\n**Oracle:** not-applicable\n")
+    reason = refuse(f"gh pr create --body-file {name}", armed)
+    assert reason is not None
+    assert "carries its reason" in reason
+
+
+def test_two_named_oracles_are_a_choice_not_a_menu(armed: Path) -> None:
+    name = body_file(
+        armed,
+        "## Verification\n\n**Oracle:** cli | ui\n**Seed:** `weside widgets create`\n"
+        "**Asserted:** 201 and the button reaches the screen\n",
+    )
+    assert refuse(f"gh pr create --body-file {name}", armed) is None
+
+
+# --- shapes the second simulation round found -----------------------------------
+
+
+def test_a_hyphenated_heredoc_delimiter_is_still_a_heredoc(armed: Path) -> None:
+    doc = "Run this: git push && gh pr create --title T --body x\n"
+    assert refuse(f"cat > runbook.md <<'DOC-END'\n{doc}DOC-END", armed) is None
+
+
+def test_a_code_span_in_the_body_does_not_disarm_the_gate(armed: Path) -> None:
+    assert refuse("gh pr create --body 'shipped `foo`, no receipt'", armed) is not None
+
+
+def test_an_unexpanded_variable_body_lets_through(armed: Path) -> None:
+    """`$BODY` is not the body — fail open, like every other unexpanded shape."""
+    assert refuse('gh pr create --body "$BODY"', armed) is None
+
+
+def test_a_python_heredoc_is_not_a_pr(armed: Path) -> None:
+    script = "print('gh pr create --body x')\n"
+    assert refuse(f"python3 - <<'PY-BODY'\n{script}PY-BODY", armed) is None

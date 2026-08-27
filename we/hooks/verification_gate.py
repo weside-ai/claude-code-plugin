@@ -14,8 +14,9 @@ Deliberately narrow:
     an unreadable `--body-file`) it lets through: a hook that guesses wrong is
     worse than no hook. A `create` carrying **no** body flag at all (`--fill`)
     is not unresolvable — it is a claim with no receipt, and it blocks.
-  * One transport. A PR opened through an MCP tool or `gh pr create --web` never
-    reaches this code; the gate is armed against one spelling of the action.
+  * One transport. A PR opened through an MCP tool never reaches this code, and
+    `--web` types its body in a browser we cannot read — the gate is armed against
+    one spelling of the action.
 
 Contract: `references/verification.md`. Repo recipes: `.weside/verify.md`.
 """
@@ -33,31 +34,64 @@ import sys
 # (`--body "$(cat <<'EOF' … EOF)"`) is a heredoc, and everything else that reaches
 # `shlex` unquoted is prose.
 _HEREDOC = re.compile(
-    r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)^\t*\2[ \t]*$", re.MULTILINE | re.DOTALL
+    r"<<-?[ \t]*(['\"]?)([^\s'\"]+)\1[^\n]*\n(.*?)^\t*\2[ \t]*$", re.MULTILINE | re.DOTALL
 )
 
-# Tokens after which the next word starts a new command.
+# Tokens after which the next word starts a new command. `shlex` glues a trailing
+# `;` onto the word before it, so the trailing character counts too.
 _SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "(", ")", "{", "}", "then", "do", "else", "!"})
-
-# The receipt: a heading, ONE named oracle (not the menu of them), and — unless the
-# oracle is `not-applicable` — a seed and an assertion that are filled in. A heading
-# with a template under it is the same silence the gate exists to catch.
-_HEADING = re.compile(r"^\s{0,3}#{1,6}\s*verification\b", re.IGNORECASE | re.MULTILINE)
-_ORACLE = re.compile(
-    r"^[ \t]*\**\s*oracle\**\s*:\s*\**\s*(cli|ui|substitute|not[-\s]applicable)\b[^|\n]*$",
-    re.IGNORECASE | re.MULTILINE,
-)
+# Words that precede a command without being one.
+_PREFIXES = frozenset({"command", "env", "exec", "sudo", "nohup", "time"})
+_NEWLINE = re.compile(r"\n(?=(?:[^'\"]|'[^']*'|\"[^\"]*\")*$)")
 
 
-def _field(name: str) -> re.Pattern[str]:
-    """`**Name:** value`, where value is present and not a `<placeholder>`."""
-    return re.compile(
-        rf"^[ \t]*\**\s*{name}\**\s*:\s*(?![\s*]*<)(\S.*)$", re.IGNORECASE | re.MULTILINE
+def _starts_a_command(argv: list[str], i: int) -> bool:
+    if i == 0:
+        return True
+    prev = argv[i - 1]
+    return (
+        prev in _SEPARATORS
+        or prev[-1:] in (";", "&", "|")
+        or prev in _PREFIXES
+        or ("=" in prev and not prev.startswith("-"))
     )
 
 
-_SEED = _field("seed")
-_ASSERTED = _field("asserted")
+# The receipt: a heading, an oracle line naming what was driven (the four-way menu
+# from a template is not a choice), and — unless the oracle is `not-applicable` — a
+# seed and an assertion that are filled in. A heading over a template is the same
+# silence the gate exists to catch.
+_HEADING = re.compile(r"^\s{0,3}#{1,6}\s*verification\b", re.IGNORECASE | re.MULTILINE)
+_ORACLES = ("cli", "ui", "substitute", "not-applicable")
+_PLACEHOLDERS = frozenset({"", "-", "tbd", "todo", "n/a", "na", "none", "…", "..."})
+
+
+def _line(body: str, name: str) -> str | None:
+    """The value on a `**Name:** value` line, or None when there is no such line."""
+    found = re.search(
+        rf"^[ \t]*\**[ \t]*{name}\**[ \t]*:(?P<v>[^\n]*)$", body, re.IGNORECASE | re.MULTILINE
+    )
+    return found.group("v") if found else None
+
+
+def _filled(body: str, name: str) -> bool:
+    value = _line(body, name)
+    if value is None:
+        return False
+    value = value.strip().strip("*_` ").strip()
+    if value.startswith("<") or value.strip("_ ").lower() in _PLACEHOLDERS:
+        return False
+    return len(value) >= 3
+
+
+def _oracles(body: str) -> set[str] | None:
+    """The oracles named on the Oracle line — None when the line is a menu of all of them."""
+    value = _line(body, "oracle")
+    if value is None:
+        return None
+    named = {o for o in _ORACLES if re.search(rf"\b{o}\b", value, re.IGNORECASE)}
+    return None if len(named) == len(_ORACLES) or not named else named
+
 
 _WHERE = (
     "The receipt is not authored here: copy the `## Verification` block verbatim from the story "
@@ -124,7 +158,7 @@ def _body_arg(rest: list[str], j: int) -> tuple[str, bool] | None:
 def _pr_verb(argv: list[str]) -> tuple[str, list[str]] | None:
     """The `create`/`edit` verb and its remaining args — command position only."""
     for i, tok in enumerate(argv):
-        if tok != "gh" or (i and argv[i - 1] not in _SEPARATORS):
+        if (tok != "gh" and not tok.endswith("/gh")) or not _starts_a_command(argv, i):
             continue
         if argv[i + 1 : i + 3] in (["pr", "create"], ["pr", "edit"]):
             return (argv[i + 2], argv[i + 3 :])
@@ -139,6 +173,7 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
     through rather than guessing.
     """
     stripped, heredocs = _strip_heredocs(command)
+    stripped = _NEWLINE.sub(" ; ", stripped)
     try:
         argv = shlex.split(stripped)
     except ValueError:
@@ -148,6 +183,10 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
     if found is None:
         return (None, None, False)
     verb, rest = found
+    if argv[0] == "cd" and len(argv) > 1:
+        cwd = os.path.join(cwd or "", argv[1])
+    if "--web" in rest:
+        return (verb, None, True)
 
     seen = False
     body: str | None = None
@@ -157,16 +196,20 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
             continue
         value, is_file = arg
         seen = True
+        if value == "-":
+            return (verb, None, True)
         if is_file:
             try:
                 with open(os.path.join(cwd or "", value)) as fh:
                     body = fh.read()
             except Exception:
                 body = None
-        elif "$(" in value or "`" in value:
-            # An unexpanded substitution — PreToolUse runs before the shell. The
-            # one shape we can still read is the heredoc it was fed from.
-            body = heredocs[0] if len(heredocs) == 1 else None
+        elif "$" in value or value.count("`") % 2:
+            # Unexpanded — PreToolUse runs before the shell, so a substitution or a
+            # variable is not the body. A balanced backtick pair is a code span, not
+            # a substitution, and stays readable. The one unexpanded shape we can
+            # still read is the heredoc it was fed from.
+            body = "\n".join(heredocs) if heredocs else None
         else:
             body = value
 
@@ -175,14 +218,23 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
 
 def _receipt_problem(body: str) -> str | None:
     """What is wrong with this PR body, in the words the author needs."""
-    if not _HEADING.search(body) or not (found := _ORACLE.search(body)):
+    named = _oracles(body)
+    if not _HEADING.search(body) or named is None:
         return (
             "This PR claims work is done without saying how that was observed. Unit tests "
             "do not count — they share the blind spots of whoever wrote the code."
         )
-    if found.group(1).lower().replace(" ", "-") == "not-applicable":
-        return None
-    if not (_SEED.search(body) and _ASSERTED.search(body)):
+    if named == {"not-applicable"}:
+        reason = re.sub(
+            r"not[-\s]applicable", "", _line(body, "oracle") or "", flags=re.IGNORECASE
+        )
+        if len(reason.strip(" *_`—-:")) >= 3:
+            return None
+        return (
+            "`not-applicable` is a legitimate answer and it carries its reason — say what "
+            "about this change has no runtime behaviour to observe."
+        )
+    if not (_filled(body, "seed") and _filled(body, "asserted")):
         return (
             "This PR carries a `## Verification` heading over an unfilled receipt — the "
             "seed and the assertion are still the template's placeholders."

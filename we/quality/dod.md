@@ -16,7 +16,7 @@ A repo can extend this checklist with its own criteria in `.weside/dod.md` (crea
 - [ ] End-to-end: Complete user flow works, not just individual parts
 - [ ] No unresolved TODO/FIXME left
 - [ ] **Every planned phase landed** — each plan `### Phase` block's `**Files:**` actually changed in this diff; a phase committed by someone other than its worker is named in the PR body with who did it and why.
-- [ ] **Parallelisation considered** — for stories with 3+ independent implementation phases: `parallel_groups` is set in the plan frontmatter, or there is an explicit note in the plan explaining why phases must be sequential. Skip for stories with 1–2 phases.
+- [ ] **Parallelisation considered** (checked at DoR, not at the AC gate) — for stories with 3+ independent implementation phases: `parallel_groups` is set in the plan frontmatter, or there is an explicit note in the plan explaining why phases must be sequential. Skip for stories with 1–2 phases.
 
 ### Architecture Compliance
 
@@ -73,7 +73,7 @@ in `.weside/dod.md`, which is read additively alongside this checklist.
 ### Quality Gates
 
 - [ ] AC-review passed (`ac_verified` checkpoint — `/we:ac-review` / `we:ac-reviewer`)
-- [ ] Bug-hunt passed (`review_passed` checkpoint — Codex adversarial-review or Claude's native `/code-review`)
+- [ ] Bug-hunt passed (`review_passed` checkpoint) — clean means no BLOCKING or WARNING finding left unfixed by the one engine that ran, whichever it was
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
 - [ ] AI-reviewer threads resolved on GitHub — the repo's configured review gate(s) block on unresolved BLOCKING/WARNING (Critical/Major) threads. Use `/we:ci-review` to fix and resolve all bot threads after PR creation. Skip if no GitHub remote or no AI reviewer is installed; local quality gates (review + static + test) are authoritative in that case.
@@ -124,14 +124,13 @@ softer tier for "only" the DoD.
 
 | Level | Action |
 |---|---|
-| **BLOCKING** | MUST fix |
-| **WARNING** | MUST fix |
+| **BLOCKING / WARNING** | MUST fix |
 | **INFO/NITPICK** | Fix or document skip reason |
 
 ---
 
 ## Who checks this
 
-`we:ac-reviewer` fills a row per applicable item above; its output format lives in
+`we:ac-reviewer` fills a row per applicable item or section above; its output format lives in
 `agents/ac-reviewer.md`. The bug-hunt engine reports separately — `worker-dispatch.md`
 § Bug-hunt dispatch.

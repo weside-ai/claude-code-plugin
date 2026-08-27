@@ -31,7 +31,7 @@ Keep the branch as `$BRANCH` and the key it carries as `$TICKET`; both are used 
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status $TICKET
 ```
 
-**If ANY checkpoint is missing → STOP. Tell the user which gates to run first.**
+**If any of the four above is missing → STOP. Tell the user which gates to run first.**
 
 ### Step 3: Sync with the Base Branch
 
@@ -42,9 +42,7 @@ never resolve a rebase conflict on the way to opening a PR.
 ### Step 3b: Repo-local pre-PR gates
 
 Run whatever pre-PR check scripts the repo ships (`scripts/check-*.sh` and friends) before
-pushing; a missing script is an absent gate, not a failure. Regenerate any register the repo
-ships a generator for and confirm the committed copy matches — a stale generated file fails CI
-*after* the PR is open, which costs a full cycle.
+pushing; a missing script is an absent gate, not a failure.
 
 ### Step 4: Push
 
@@ -69,8 +67,9 @@ from `docs/plans/${TICKET}-story.md` § Verification**.
 
 **Never author that block here.** You did not run the verification, so you cannot testify to it.
 No block in the plan → the verification step did not happen: stop, report that, and let the Lead
-run it. The same holds if the PR call is refused by a hook — report the refusal message verbatim
-and stop.
+run it. The same holds if the PR call is refused by a hook for a missing block. A refusal naming a
+mechanical fix that authors nothing — a wrong flag, an unreadable body file — you fix once and
+retry once; a second refusal is a stop, with its message reported verbatim.
 
 Title: `$TICKET: <Summary>`.
 

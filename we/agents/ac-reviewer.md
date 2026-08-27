@@ -16,7 +16,8 @@ built?
 **One check is yours alone:** the DoD's *Verification* items. Every other reviewer reads the
 diff — you are the one who asks whether anything outside the author's own model confirmed the
 behaviour. It is the first row of your table and it Fails like any other: a `## Verification`
-block that is missing, or that only names unit tests, is BLOCKING. `not-applicable` with a
+block that is missing — from the story plan at integration, from the PR body once a PR
+exists — or that only names unit tests, is BLOCKING. `not-applicable` with a
 stated reason is a Pass; silence is not.
 
 ---
@@ -48,14 +49,18 @@ review**: Fixed / Still Open / New Issues.
 
 - **ACs met?** Each AC individually verified against the diff, with evidence (file path, test
   name, commit) — no item passes without a citation, and each AC gets its own row. The same
-  standard binds every DoD row: one you cannot cite evidence for is a Fail, not a Pass.
+  standard binds every DoD row: one you cannot cite evidence for is a Fail, not a Pass —
+  unless the evidence cannot exist yet at this gate (the PR, CI, the ticket move), which is
+  `N/A` naming the stage that owes it.
 - **Feature reachable?** User can navigate to the feature. **End-to-end?** The complete flow works.
-- **Every planned phase landed?** Each `### Phase` block's `**Files:**` in the plan actually
-  changed in this diff. A phase that produced nothing is a Fail, whoever committed it.
-- **DoD:** every applicable row of `${CLAUDE_PLUGIN_ROOT}/quality/dod.md`, and — when
-  `<repo-root>/.weside/dod.md` exists (`git rev-parse --show-toplevel`) — every applicable row of
-  that file too. The repo file is **additive and mandatory when it is there**, never a
-  replacement; give each of its items its own row. No such file → skip silently.
+- **DoD:** every applicable row of `${CLAUDE_PLUGIN_ROOT}/quality/dod.md` — it owns the
+  definitions, including *Every planned phase landed*, which is a Fail whoever committed the
+  phase. A section with no fixed row in the format below gets a row of its own, `N/A` with its
+  reason when nothing in it applies.
+- **Repo DoD:** when `<repo-root>/.weside/dod.md` exists (`git rev-parse --show-toplevel`), every
+  applicable row of that file too — **additive and mandatory when it is there**, never a
+  replacement. One row per item, except an item a fixed row already carries: name that row
+  instead of repeating it. No such file → skip silently.
 
 ### Step 5: Save Review
 
