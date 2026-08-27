@@ -55,6 +55,16 @@ p2 (ci-review), integrated a8d8fc9 (worker's two commits squashed by the Lead so
 20. `docs/skills.md` § ci-review "max 2 cycles" vs. user budget — Lead glue.
 21. Leak scan over the integrated tree: `apps/backend|apps/mobile` paths in all sim fixtures (generic host-app names, not this repo's rule-compliant) — Lead neutralises at Step 8 B; pre-existing hits in `handoff/SKILL.md:221` and `test_ready_set.py` are out of scope.
 
+p3 (story), integrated 6bc7fa4 — grades a 4, b 4, c 4, d 4 (4 rounds); story 21.6k → 18.7k; long-running +380, ticket-briefs +190 (report-named):
+22. `docs/plan-format.md` missing `type`/`epic`/`## Verification`, no `blocked`, parallel_groups without cap — Lead glue (1.2).
+23. `quality/dor.md`: `${CLAUDE_PLUGIN_ROOT}` in a shell block, duplicate checkpoint block, "parent Epic" row unsatisfiable on GitHub Issues — Lead glue.
+24. `ticketing.md` defines no `{TICKET}` for GitHub Issues / plan-only — Lead glue.
+25. orchestrate Step 0: a single key with `epic:` flipped to the Epic path — Lead glue.
+26. Frontmatter inline `#` comments are parsed as values by `_parse_frontmatter` — templates ship bare now; `orchestration.py` unchanged (tool follow-up).
+27. Unsettled by design: `/we:story` Step 5 commits the plan to `main` without a consent gate — `po-altitude.md` sets that convention for all Plan skills; changing it is one decision across four skills, not this wave's.
+
+Pipeline (Lead): simplify → nothing (d0cd109 later formatted the test file only) · AC+DoD gate BLOCKING on AC 2 (refine +32 %, ~800 B unbought) → cut to 7.3k (709bd00) → ac_verified · static ✓ · tests 133 → 62 hook tests after the bug-hunt fixes · bug-hunt (`/code-review high` in an Agent): 3 high / 10 medium / 6 low, all closed in 3b59e42 (H1 receipt field names in plan-format, H2 heredoc redirect lost → stale file vouched, H3 agents wrote integration checkpoints from chunk diffs) · docs pass: 5 corrections applied (bbab94c, 0e7f4f0) · version 5.5.0.
+
 ## Verification log
 
-p1: validate-consistency ✓ after merge 313bcf8. p4: consistency ✓, pytest 50 ✓ after merge 525046c. p2: consistency ✓ after merge a8d8fc9.
+p1: validate-consistency ✓ after merge 313bcf8. p4: consistency ✓, pytest 50 ✓ after merge 525046c. p2: consistency ✓ after merge a8d8fc9. p3: consistency ✓ after merge 6bc7fa4. Integration 3b59e42: consistency ✓, pre-commit ✓, pytest we/hooks 62 ✓, we/scripts ✓.
