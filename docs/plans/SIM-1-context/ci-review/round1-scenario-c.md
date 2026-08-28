@@ -474,7 +474,7 @@ test — which is exactly how defect 1's silent skip passes for a completed coll
 as an adjective. Scenario C is the hard case: is "the call site three lines up already ran
 `apply_tenant_scope`" a demonstration, or do I owe a test name? No pair, no format, no threshold.
 **Fix:** two lines under L36 — good: *"BLOCKING 'no tenant filter' → disputed: `service.py:115`
-runs `apply_tenant_scope(db, uid)` on the same transaction; pinned by `test_preset_rls_scope`."*
+runs `apply_tenant_scope(db, uid)` on the same transaction; pinned by `test_tenant_scope`."*
 bad: *"I checked, it's fine."*
 
 ### 15. Unpaired negations — MINOR (plugin-authoring violation)

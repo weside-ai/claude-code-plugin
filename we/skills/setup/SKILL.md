@@ -1,11 +1,9 @@
 ---
 name: setup
 description: >
-  Project onboarding — detects stack, ticketing tool, test discipline, creates project
-  vision/DoR/DoD, initializes the Companion Framework (`.weside/`, vault registration,
-  crew onboarding via /we:onboarding). Interactive — six questions, one at a time, each
-  skippable. Use when user says "/we:setup", "configure project", "set up workflow",
-  "initialize repo", "install crew", "first time".
+  Project onboarding — stack, ticketing, test discipline, vision/DoR/DoD, .weside/ and crew. Six
+  skippable questions. Triggers: "/we:setup", "configure project", "initialize repo", "first
+  time".
 ---
 
 
@@ -365,7 +363,7 @@ path, and `/we:setup` can be re-run any time.
 + Step 2's six questions come one at a time, never as a battery; Step 5 (Framework) asks once
 + Works without ANY configuration (defaults for everything)
 + **Idempotent.** Re-running never overwrites existing config silently. Report current state, ask before replacing.
-+ **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via `/we:docs` or doc-architect agent.
++ **Respects existing frontmatter.** Step 5 only *reports* — does not rewrite docs. Migration is explicit user-triggered via the `we:doc-architect` agent or doc-architect agent.
 + **Standalone-first.** If weside MCP is unavailable, Step 5 still creates `.weside/config.json` + invokes onboarding (stub crew). No feature silently disappears.
 
 ## References

@@ -1,11 +1,8 @@
 ---
 name: saga
 description: >
-  Saga (Solo) — PO skill at the Theme altitude. Default Status mode
-  renders snapshot + drift + next move from the saga plan and the ticketing
-  mirror; Refine/Create sharpen the doc; Promote re-cuts an overgrown
-  Epic into a Saga. Use when the user says "/we:saga", "saga", "theme",
-  "refine saga", "new saga", "promote". Decompose via /we:meet saga.
+  Saga (Solo) at the Theme altitude: status, refine/create, or promote an overgrown Epic.
+  Triggers: "/we:saga", "saga", "theme", "promote".
 ---
 
 # Saga (Solo) — Product Owner at the Theme altitude

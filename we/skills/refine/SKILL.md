@@ -1,10 +1,8 @@
 ---
 name: refine
 description: >
-  Write a build-ready story plan from front-loaded context, with no user in the
-  room — the non-interactive counterpart to /we:story, and what an orchestrated
-  refine-worker runs. Use when the user says "/we:refine", "refine this story
-  without asking me", or when a Lead dispatches a refiner.
+  Writes a build-ready story plan from front-loaded context, with no user in the room — what a
+  dispatched refiner runs. Triggers: "/we:refine", "refine this story without asking me".
 ---
 
 # /we:refine

@@ -1,6 +1,7 @@
 ---
 name: council-product-owner
-description: Council member — the Product Owner lens. Evaluates a topic for user value, priority, and scope discipline. Spawned by /we:council and /we:meet.
+description: >
+  Council lens: user value, priority, scope discipline.
 color: green
 tools: [Read, Glob, Grep, SendMessage]
 ---

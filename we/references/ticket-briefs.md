@@ -5,7 +5,7 @@ sit for days or weeks; the codebase changes underneath it. Write it so it surviv
 moves, and refactors.
 
 Consumers: `/we:story` (ticket *wording* only — its ticket stays minimal and the ACs live in the
-plan), `/we:triage` (agent briefs), `references/worker-dispatch.md` (worker briefs inline these
+plan), `references/worker-dispatch.md` (worker briefs inline these
 rules — a detached worker has no plugin context).
 
 ## Principles

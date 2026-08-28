@@ -1,11 +1,8 @@
 ---
 name: onboarding
 description: >
-  Interactive crew composition — builds the repo's council from scratch
-  (assign existing Companions, create new ones, or generic role-lenses) and
-  writes .weside/weside.md + council.json + config.json. Invoked by /we:setup
-  Step 5 or standalone. Use when the user says "onboarding", "crew setup",
-  "build a council", "compose team", "who works here".
+  Builds the repo's crew and writes .weside/weside.md + council.json + config.json. Triggers:
+  "/we:onboarding", "crew setup", "build a council", "who works here".
 ---
 
 

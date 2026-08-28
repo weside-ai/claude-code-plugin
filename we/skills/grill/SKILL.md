@@ -1,11 +1,8 @@
 ---
 name: grill
 description: >
-  Relentless one-question-at-a-time interview that stress-tests a plan or
-  design until every branch of the decision tree is resolved — sharpening
-  the project glossary (CONTEXT.md) and offering lean ADRs as decisions
-  crystallise. Use when user says "/we:grill", "grill me", "stress-test
-  this plan", "challenge my design".
+  One question at a time until every branch of a plan is resolved; sharpens CONTEXT.md, offers
+  lean ADRs. Triggers: "/we:grill", "grill me", "stress-test this plan".
 ---
 
 # /we:grill

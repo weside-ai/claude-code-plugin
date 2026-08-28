@@ -299,7 +299,6 @@ The Status mode compares the mirror block in the doc with the live ticketing fet
 
 - [`we/skills/saga/SKILL.md`](../we/skills/saga/SKILL.md) — Saga writer + consumer
 - [`we/skills/epic/SKILL.md`](../we/skills/epic/SKILL.md) — Epic writer + consumer
-- [`we/skills/coach/SKILL.md`](../we/skills/coach/SKILL.md) — surfaces a one-line Plan-status from the mirror
 
 ---
 

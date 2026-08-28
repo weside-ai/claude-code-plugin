@@ -1,11 +1,8 @@
 ---
 name: meet
 description: >
-  Structured Council meeting at one of four APO altitudes — vision, saga,
-  epic, or story. Validates the current artifact, decomposes it into the
-  next altitude's items, then hands off to the matching Solo skill. Use
-  when the user says "/we:meet", "vision meeting", "saga meeting", "epic
-  meeting", "story meeting", "let's meet", "run a meeting".
+  Council meeting at one APO altitude — validates the artifact, decomposes it, hands off to the
+  Solo skill. Triggers: "/we:meet", "vision meeting", "epic meeting", "run a meeting".
 ---
 
 # /we:meet

@@ -1,11 +1,8 @@
 ---
 name: epic
 description: >
-  Epic (Solo) — PO skill at the Initiative altitude. Default Status mode
-  renders snapshot + drift + next move from the Epic plan and ticketing
-  mirror; Refine/Create sharpen the doc via plan-mode; Mirror-refresh is
-  a light write. Use when the user says "/we:epic", "epic", "initiative",
-  "refine epic", "new epic". Decompose into Stories via /we:meet epic.
+  Epic (Solo) at the Initiative altitude: status from plan + ticketing mirror, or refine/create.
+  Triggers: "/we:epic", "epic", "refine epic", "new epic".
 ---
 
 # Epic (Solo) — Product Owner at the Initiative altitude

@@ -15,7 +15,7 @@ missing and inform the user (do NOT block).
 | Jira access (one of) | weside MCP Composio `JIRA_*` via `execute_tool` (preferred) / `mcp__atlassian__jira_*` (fallback) / `gh issue` for GitHub-Issues mode | weside MCP + Composio Jira, or Atlassian MCP, or GitHub CLI | `/we:story`, `/we:orchestrate` ticket fetch and transitions |
 | `simplify` skill | `Skill(skill="simplify")` available in the skill list | `code-simplifier@claude-plugins-official` (ships an agent that the harness exposes as the `simplify` skill) | `references/integration-pipeline.md` § Simplify |
 | security guidance hooks | `security-guidance` plugin in `~/.claude/plugins/installed_plugins.json` | `security-guidance@claude-plugins-official` | `/we:develop` per-phase security checks |
-| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:orchestrate` (architecture context), `/we:docs`, `/we:doc-improve` (skills have fallbacks if missing) |
+| TurboVault MCP | **Liveness, not just presence:** actually call `mcp__turbovault__list_vaults` and confirm it responds. Tool name present but the call errors/hangs → **DEGRADED** (registered but not responding). Tool name absent → **not registered**. | TurboVault MCP server | `/we:story` (semantic search), `/we:orchestrate` (architecture context), `we:doc-architect` (skills have fallbacks if missing) |
 | weside MCP | `mcp__plugin_we_weside-mcp__get_companion_identity` available | weside MCP (requires weside.ai account) | `/we:materialize`, optional companion memory in `/we:story` and `/we:orchestrate` |
 | superpowers plugin | `superpowers` in `~/.claude/plugins/installed_plugins.json` (or `Skill(skill="superpowers:brainstorming")` listed) | `superpowers@anthropics` (Anthropic) | brainstorming/debugging discipline skills used throughout the build |
 | graphify CLI | `python3 -c "import graphify"` exits 0 AND `graphifyy>=0.8.38` (`python3 -c "from importlib.metadata import version; print(version('graphifyy'))"`) | `pip install -U 'graphifyy>=0.8.38'` (user-level) | `/we:story` blast-radius block, code-graph nav rule |
@@ -59,7 +59,7 @@ back to grep for weeks. If the liveness probe fails, persist `"turbovault": fals
 explicitly:
 
 > "⚠️ TurboVault MCP is registered but NOT responding — `list_vaults` failed. Doc search
-> (`/we:docs`, `/search`, `/we:story`) is running on grep fallback, which is much weaker.
+> (`we:doc-architect`, `/search`, `/we:story`) is running on grep fallback, which is much weaker.
 > Restart the session or check the MCP config (`~/.claude.json` /
 > `~/.claude/settings.json`)."
 

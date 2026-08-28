@@ -65,22 +65,6 @@ The PR/CI data source via `gh api` is intrinsically engineering-only — that's 
 
 ---
 
-## Relationship to `/we:coach`
-
-Previously, `/we:coach` included a RETRO mode that handled single-friction fixes inline. That surface has since been extracted into its own skill — `/we:retro` now owns the full retro workflow. The two skills serve distinct triggers and scopes:
-
-| | `/we:coach` | `/we:retro` |
-|---|---|---|
-| **Trigger** | User describes a specific friction | Manual or Coach-suggested |
-| **Scope** | One pain-point | Whole PR + CI cycle, all friction surfaces |
-| **Output** | 2-3 fix options for the user to pick from | Wins / Pain / Proposals report |
-| **Action** | Applies one chosen fix | Applies N approved fixes after per-item gate |
-| **Use when** | "X broke again, fix the gap" | "Retro the last cycle, find everything" |
-
-The Coach can *suggest* `/we:retro` proactively when it detects retro-worthy signals in its Boot Protocol — a PR just merged, CI cycles ≥ 3 on the current branch, end-of-session prompts ("bis morgen", "wrap up"). The suggestion is always a `[y/n]` gate; Coach never auto-fires.
-
----
-
 ## What you get out
 
 **Per invocation, a structured report** with three (or four with `--scan`) sections:
@@ -114,10 +98,6 @@ The Coach can *suggest* `/we:retro` proactively when it detects retro-worthy sig
 
 Pattern Highlights section fires if any recurrence ≥ 2.
 
-**3. Coach-triggered:**
-
-User opens `/we:coach`. Coach's Boot Protocol notices PR #1998 merged 30min ago with 4 CI cycles. Coach offers retro `[y/n]`. User: `y`. Coach prints hand-off; user invokes `/we:retro --pr 1998` in a fresh session. Skill runs.
-
 **4. Clean cycle:**
 
 Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log still written (`docs/retros/2026-05-17-clean-cycle.md`) — future `--scan` runs see "yes, clean cycles happen, here's what we did right".
@@ -129,5 +109,4 @@ Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log still writ
 - **Skill reference:** [`/we:retro` in skills.md](../skills.md#weretro)
 - **Full skill spec:** [`we/skills/retro/SKILL.md`](../../we/skills/retro/SKILL.md)
 - **Workflow context:** [`workflow.md` Phase 4](../workflow.md#phase-4-retro-with-weretro)
-- **Coach integration:** [`/we:coach` Suggesting `/we:retro` section](../../we/skills/coach/SKILL.md#suggesting-weretro)
 - **APO cycle overview:** [workflow.md](../workflow.md) — Retro is the fourth phase of the APO loop, sibling to Plan / Build / Deliver

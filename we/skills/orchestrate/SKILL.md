@@ -1,11 +1,9 @@
 ---
 name: orchestrate
 description: >
-  The Lead for a story or an epic — reads state from git, refines what has no
-  plan, dispatches dev workers for what does, integrates their branches, and
-  runs CI once on one PR. Use when the user says "/we:orchestrate", "orchestrate
-  the epic", "orchestrate this story", "dispatch the ready stories", "run the
-  phases".
+  The Lead: reads state from git, refines what has no plan, dispatches workers for what does,
+  integrates, runs CI once on one PR. Triggers: "/we:orchestrate", "orchestrate the epic",
+  "dispatch the ready stories", "run the phases".
 ---
 
 # /we:orchestrate

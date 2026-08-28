@@ -16,7 +16,6 @@ description: >
 
 **Counterpart skills:**
 
-- `/we:coach` — reads the most recent handoff at boot (Boot Protocol Step 10) and offers to load it. Also suggests `/we:handoff --write` at end-of-session signals.
 - `/we:retro` — sibling under `docs/retros/`; retros capture *lessons*, handoffs capture *position*. Different artifact, different purpose.
 
 > **Companion-aware:** render voiced by the active Companion when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`. Opt-in `--with-companion-state` adds a "Companion continuity" section (engineering substance only — privacy guard still applies).
@@ -152,8 +151,6 @@ what it says. Two parts, both short:
 
 > *Handoff written · docs/handoffs/2026-05-18-<slug>.md (N lines). Privacy check: 0 personal-content references. Resume with `/we:handoff` (latest) or `/we:handoff --load <slug>`.*
 
-If `/we:coach` had triggered this WRITE via an end-of-session suggestion, also: *"Coach will surface this at the next session's boot — no manual reload needed unless you skip Coach."*
-
 ---
 
 ## LOAD Mode — Step-by-step Workflow
@@ -243,7 +240,7 @@ worktree: <path if non-main worktree, else "main">
 ticket_or_initiative: <Jira key | initiative slug | null>
 session_id: <CC session-id from ~/.claude/projects/<repo-id>/...>
 written_at: <ISO8601 timestamp>
-written_by: <"manual" | "coach-suggested" | "auto">
+written_by: <"manual" | "auto">
 plan_files:
   - <docs/plans/<slug>-{saga,epic,story}.md or docs/plans/<vision>/PRD.md>
 retro_files:
@@ -276,18 +273,10 @@ Empty section convention: a single `—` rather than fabricated content.
 
 (The privacy guard and commit policy above are the spec — these are the extras:)
 
-- **Don't auto-fire from a hook.** WRITE runs when a human asks for it — directly, or by accepting Coach's end-of-session suggestion. What is ungated is the *drafting*, not the *decision to write at all*.
+- **Don't auto-fire from a hook.** WRITE runs when a human asks for it — directly. What is ungated is the *drafting*, not the *decision to write at all*.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
 
 ---
-
-## Integration with `/we:coach`
-
-Coach surfaces the most recent handoff (< 14 days) at its boot with a `[y/n]` load offer, and suggests `/we:handoff --write` at end-of-session signals ("bis morgen", "schlafen", long sessions without a handoff). Always `[y/n]`-gated, never auto-fired, hand-off by printed command (handoff is heavy, no inline `Skill()`).
-
-**No GitHub / no `gh` auth:** the PR step falls back to a local commit + "push manually" message; `open_pr: null` in the frontmatter. `--with-companion-state` without a Companion is a no-op (say so, skip section 10).
-
-**Doc edits outside `docs/handoffs/`:** delegate to `/we:docs` so the doc landscape stays coherent.
 
 ## References
 

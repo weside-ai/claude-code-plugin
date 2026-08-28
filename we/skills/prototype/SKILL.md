@@ -1,11 +1,9 @@
 ---
 name: prototype
 description: >
-  Build a throwaway prototype that answers exactly one design question before it gets
-  planned — a logic/state question (interactive terminal shell over a pure module) or a
-  UI question (3 radically different variants behind ?variant=). Use when the user says
-  "/we:prototype", "prototype this", "does this state model feel right",
-  "what should this look like".
+  A throwaway prototype answering exactly one design question — a terminal shell over a pure
+  module, or three UI variants. Triggers: "/we:prototype", "prototype this", "what should this
+  look like".
 ---
 
 # Prototype

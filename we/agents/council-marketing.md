@@ -1,6 +1,7 @@
 ---
 name: council-marketing
-description: Council member — the Marketing lens. Evaluates a topic for positioning, resonance, naming, and brand fit. Spawned by /we:council and /we:meet.
+description: >
+  Council lens: positioning, resonance, naming, brand fit.
 color: yellow
 tools: [Read, Glob, Grep, SendMessage]
 ---
