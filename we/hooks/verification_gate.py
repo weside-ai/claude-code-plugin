@@ -182,8 +182,6 @@ def _cwd_after_cd(argv: list[str], cwd: str | None, stop: int | None = None) -> 
 
 
 def _argv_or_none(command: str) -> list[str]:
-    import shlex
-
     stripped, _ = _strip_heredocs(command)
     try:
         return shlex.split(_NEWLINE.sub(" ; ", stripped))
