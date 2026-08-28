@@ -2,6 +2,8 @@
 
 ## Right now
 
+Wave 1 closed 2026-08-28 00:05 UTC. **PR #43 open** (<https://github.com/weside-ai/claude-code-plugin/pull/43>), squash-merge requested; one ci-review pass: CI ruff PLC0415 fixed in 6ef36e2. Waiting on the human's merge → Step 10 (remove integration worktree + branches, plugin update to 5.5.0, `/reload-plugins`). Teammates torn down; chunk worktrees removed.
+
 Wave 1 dispatched 2026-08-27 ~22:50 UTC by the Lead (host-repo session, /we:orchestrate 5.4.0).
 Integration: worktree `~/weside/claude-code-plugin-SIM-1-integration`, branch `feat/SIM-1-integration`.
 
@@ -24,7 +26,15 @@ Integration: worktree `~/weside/claude-code-plugin-SIM-1-integration`, branch `f
 
 ## Open decisions
 
-(none for the human)
+(none for the human — merge #43)
+
+## Orchestrate 5.4.0 — live observations for the next cut
+
+- Step 5.7: cut the chunk worktrees only after the integration branch verifiably carries the plan (my plan commit failed markdownlint and the worktrees were cut without it).
+- A worker's Bash commit that trips an auto-fixing pre-commit hook aborts silently; `git log -1` after every commit (the host repo's rule) belongs in the Worker-Brief.
+- Simplify/AC/docs/bug-hunt as Agents each cost 5–10 min; the bug-hunt re-ran itself (round 2) and overwrote its report while the Lead was fixing round 1 — a report file needs a round suffix or the agent must not rewrite.
+- Bug-hunt round 1 carried 5 harness artefacts (shared tmp repo); "one fresh repo per case" belongs in the code-review brief for hooks.
+- The Lead squashed p2 before merging to keep host-repo names out of history; a public-repo leak scan belongs in Step 8 A for repos that declare themselves public.
 
 ## Forks reported by workers (Lead glue at Step 8 B, or plugin follow-up)
 
