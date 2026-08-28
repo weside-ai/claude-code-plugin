@@ -17,6 +17,8 @@ silently return:
    existing file / skill / command / agent.
 5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
+6. Listing budget — `name` + `description` of every skill, agent and command sit in
+   every session's context before the user has typed anything. The sum is capped.
 
 Stdlib only. Exit 1 on any finding.
 
@@ -157,12 +159,49 @@ def check_userconfig_readers() -> None:
             )
 
 
+def check_listing_budget() -> None:
+    """The always-on cost of this plugin: `name` + `description` per entry, summed.
+
+    This text is loaded in every session of every repo that installs the plugin, before
+    anything is asked of it — so it is a budget, and a budget without a gate drifts. It
+    was 12,188 chars over 46 entries before the 6.0.0 cut and is the reason eight uncalled
+    skills were removed. To raise the cap, change the number here in a PR that says why.
+    """
+    budget = 6_000
+    total, entries = 0, 0
+    for pattern in ("skills/*/SKILL.md", "agents/*.md", "commands/*.md"):
+        for path in sorted(WE.glob(pattern)):
+            text = path.read_text(encoding="utf-8")
+            found = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", text, re.DOTALL)
+            if not found:
+                fail(
+                    f"{path.relative_to(REPO)}: no YAML frontmatter — it carries no listing entry"
+                )
+                continue
+            fm = found.group(1)
+            name = re.search(r"^name:\s*(.*)$", fm, re.MULTILINE)
+            desc = re.search(
+                r"^description:\s*([\s\S]*?)(?=^[A-Za-z_][A-Za-z0-9_-]*\s*:|\Z)", fm, re.MULTILINE
+            )
+            if desc is None:
+                fail(f"{path.relative_to(REPO)}: no description — it would be unlistable")
+                continue
+            total += len((name.group(1) if name else "") + " ".join(desc.group(1).split()))
+            entries += 1
+    if total > budget:
+        fail(
+            f"listing budget: {total} chars over {entries} entries, cap {budget}. "
+            "This text loads in every session — cut a description or drop an entry."
+        )
+
+
 def main() -> int:
     check_story_phases()
     check_epic_states()
     check_command_skill_collision()
     check_dead_references()
     check_userconfig_readers()
+    check_listing_budget()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")
