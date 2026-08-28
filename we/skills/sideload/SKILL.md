@@ -1,10 +1,8 @@
 ---
 name: sideload
 description: >
-  Load a neighbour repo's essential context (CLAUDE.md + ALL rules + crew)
-  into the current session without leaving it. A stopgap — prefer a native
-  session in the target repo. Triggers: sideload, load context for,
-  cross-repo, work on other repo, come up to speed.
+  Loads a neighbour repo's CLAUDE.md, all rules and crew into this session — a stopgap; a native
+  session there is better. Triggers: "/we:sideload", "load context for", "cross-repo".
 ---
 
 # /we:sideload
@@ -52,7 +50,7 @@ so once. That makes sideload useful before a repo is onboarded.
 ## Rules
 
 - **Loading all rules is the design, not an oversight** — a frugal sideload is a broken sideload.
-- **Read-only in the target repo.** Migration and curation belong to `/we:setup` or `/we:docs`.
+- **Read-only in the target repo.** Migration and curation belong to `/we:setup` or the `we:doc-architect` agent.
 - **Degrade quietly.** No MCP, no vault, no `.weside/` — CLAUDE.md plus the rules still load.
 - Track which repos are already loaded this session; don't reload one twice.
 

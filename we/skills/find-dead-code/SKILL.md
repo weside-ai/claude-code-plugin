@@ -1,9 +1,8 @@
 ---
 name: find-dead-code
 description: >
-  Find and remove dead code from Python backends. Covers method-level detection,
-  test-only reference detection, vulture static analysis, and coverage-based detection.
-  Use when asked to find dead code, clean up unused functions, or reduce codebase size.
+  Finds and removes dead code in Python backends (method-level, test-only, vulture, coverage).
+  Triggers: "/we:find-dead-code", "find dead code".
 ---
 
 

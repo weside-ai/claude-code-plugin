@@ -1,11 +1,8 @@
 ---
 name: handoff
 description: >
-  Durable cross-session handoff — writes session state (decisions, dead
-  ends, file status, next steps, watch-outs) to docs/handoffs/ and
-  restores it later. Modes: --write, default/--load, --list. Use when
-  the user says "/we:handoff", "handoff", "pick up where we left off",
-  "carry over to next session", "bis morgen", "ich muss weg jetzt".
+  Writes session state to docs/handoffs/ and restores it later (--write | --load | --list).
+  Triggers: "/we:handoff", "pick up where we left off", "bis morgen".
 ---
 
 # /we:handoff — Durable Session Handoff
@@ -16,7 +13,6 @@ description: >
 
 **Counterpart skills:**
 
-- `/we:coach` — reads the most recent handoff at boot (Boot Protocol Step 10) and offers to load it. Also suggests `/we:handoff --write` at end-of-session signals.
 - `/we:retro` — sibling under `docs/retros/`; retros capture *lessons*, handoffs capture *position*. Different artifact, different purpose.
 
 > **Companion-aware:** render voiced by the active Companion when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`. Opt-in `--with-companion-state` adds a "Companion continuity" section (engineering substance only — privacy guard still applies).
@@ -152,7 +148,7 @@ what it says. Two parts, both short:
 
 > *Handoff written · docs/handoffs/2026-05-18-<slug>.md (N lines). Privacy check: 0 personal-content references. Resume with `/we:handoff` (latest) or `/we:handoff --load <slug>`.*
 
-If `/we:coach` had triggered this WRITE via an end-of-session suggestion, also: *"Coach will surface this at the next session's boot — no manual reload needed unless you skip Coach."*
+If the relevant skill had triggered this WRITE via an end-of-session suggestion, also: *"Coach will surface this at the next session's boot — no manual reload needed unless you skip Coach."*
 
 ---
 
@@ -280,14 +276,6 @@ Empty section convention: a single `—` rather than fabricated content.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
 
 ---
-
-## Integration with `/we:coach`
-
-Coach surfaces the most recent handoff (< 14 days) at its boot with a `[y/n]` load offer, and suggests `/we:handoff --write` at end-of-session signals ("bis morgen", "schlafen", long sessions without a handoff). Always `[y/n]`-gated, never auto-fired, hand-off by printed command (handoff is heavy, no inline `Skill()`).
-
-**No GitHub / no `gh` auth:** the PR step falls back to a local commit + "push manually" message; `open_pr: null` in the frontmatter. `--with-companion-state` without a Companion is a no-op (say so, skip section 10).
-
-**Doc edits outside `docs/handoffs/`:** delegate to `/we:docs` so the doc landscape stays coherent.
 
 ## References
 

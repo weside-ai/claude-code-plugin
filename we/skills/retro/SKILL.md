@@ -1,18 +1,14 @@
 ---
 name: retro
 description: >
-  Systematic retrospective on a session + PR/CI cycle — finds frictions
-  from transcript + gh api, proposes concrete .claude/rules/ and
-  CLAUDE.md edits behind a per-item [y/n] gate, logs to docs/retros/.
-  Use when the user says "/we:retro", "retro", "post-mortem",
-  "what went wrong", "ci took too long", "we keep failing at X".
+  Finds frictions in a session + PR/CI cycle and proposes rule edits behind a [y/n] gate, logged
+  to docs/retros/. Triggers: "/we:retro", "post-mortem", "what went wrong", "we keep failing at
+  X".
 ---
 
 # /we:retro — Continuous-Improvement Retrospective
 
 **Role:** Systematic pass over the recent engineering cycle (session + PR + CI). Find frictions the user paid time for. Propose concrete MD-file edits that prevent the next occurrence. Apply only what the user approves, per item. Log the run for future pattern detection.
-
-**Counterpart:** `/we:coach` RETRO mode is the small, reactive cousin — *user reports one pain point, Coach proposes 2-3 fixes*. `/we:retro` is the comprehensive periodic pass — *scan everything from the last cycle, surface all frictions, apply N approved fixes*. Coach can delegate to this skill via a `[y/n]` suggestion when it detects retro-worthy signals.
 
 **Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once — the retro catches it, an MD-file change in the user repo's `.claude/rules/` or `CLAUDE.md` bans it forever.
 
@@ -51,7 +47,6 @@ Third source, opt-in via `--scan N` (default 0): **`docs/retros/*` historical** 
 - `/we:retro --pr 1998 --scan 10` — combine
 - `/we:retro --auto` — apply every proposal immediately instead of gating each one on `[y/n]`,
   except the cases that still need a human call (see "Auto Mode" below). Combine with `--pr`/`--scan` as usual.
-- `/we:coach` (in a session after a PR merge) → Coach offers: *"This PR took 4 CI cycles. `/we:retro` would catch why in ~3min. Run it? [y/n]"* → user types `y` → Coach hands off to this skill
 
 ### Auto Mode (`--auto`)
 
@@ -106,7 +101,7 @@ Before producing any output, gather the landscape fresh.
    - `${CLAUDE_PLUGIN_ROOT}/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
    - Don't load full contents — that's thousands of tokens.
 
-4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest `/we:coach` loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies. **If the manifest is absent in this repo** (most repos), note it once and ground from the plugin skill/agent descriptions instead — do not degrade silently.
+4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest the relevant skill loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies. **If the manifest is absent in this repo** (most repos), note it once and ground from the plugin skill/agent descriptions instead — do not degrade silently.
 
 5. **Historical retros (if `--scan N`)**:
    - `ls docs/retros/ 2>/dev/null | sort -r | head -N` — last N retros
@@ -314,13 +309,3 @@ If a PR was opened, print its URL.
 - **Don't push to protected repos directly** — repos without standing direct-commit auth always go through PR (rules and CLAUDE.md edits need human review).
 
 ---
-
-## Integration with `/we:coach`
-
-Coach detects retro-worthy signals at its boot (PR just merged, CI cycles ≥ 3, end-of-session, same skill failed twice) and offers `/we:retro` behind a `[y/n]` gate — one-time per session per signal, never auto-fired, hand-off by printed command (retro is heavy, no inline `Skill()`).
-
-**No GitHub / no `gh` auth:** retro runs from transcript + local `git log` only — the PR/CI source is skipped gracefully.
-
-**Clean cycle (0 proposals):** still write the log — future `--scan` runs should see what went right.
-
-**Doc edits outside `.claude/rules/` + `CLAUDE.md`:** delegate to `/we:docs` (`Skill(skill="we:docs", prompt="Apply this retro proposal: <details + diff>")`) so the doc landscape stays coherent.

@@ -1,6 +1,7 @@
 ---
 name: static-analyzer
-description: Static code analysis — linting, formatting, types, dead code, complexity. Auto-detects project stack. Use for code quality checks before tests.
+description: >
+  Lint, format, types, dead code, complexity — stack auto-detected. Before the tests.
 color: purple
 ---
 

@@ -1,6 +1,8 @@
 ---
 name: ac-reviewer
-description: AC-alignment and DoD check — verifies a diff against the Story's acceptance criteria and the Definition of Done, then writes the BLOCKING/PASS verdict. Does not hunt bugs (that's Codex adversarial-review or Claude's native /code-review). Use when checking whether a diff satisfies what was asked and is actually done.
+description: >
+  Checks a diff against the Story's acceptance criteria and the DoD and writes the BLOCKING/PASS
+  verdict. Hunts no bugs.
 color: purple
 ---
 

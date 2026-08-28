@@ -1,11 +1,8 @@
 ---
 name: story
 description: >
-  Story (Solo) — PO skill at the Story altitude. Creates or refines one
-  sprint-sized Story with a build-ready plan (ticket MINIMAL, plan
-  DETAILED, EnterPlanMode). Use when the user says "/we:story",
-  "new story", "refine story", "acceptance criteria".
-  Contentious stories: /we:meet story first.
+  Story (Solo): one sprint-sized Story with a build-ready plan — ticket minimal, plan detailed.
+  Triggers: "/we:story", "new story", "refine story", "acceptance criteria".
 ---
 
 

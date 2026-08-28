@@ -90,7 +90,7 @@ read-only for workers — a fix there is a fork.
   says what the review gate is; shorter.
 - **Files:** `we/skills/ci-review/SKILL.md`, `docs/plans/SIM-1-context/ci-review/`.
 - **Approach:** Scenarios: (a) `codex-review` red with `VERDICT:ERROR` and no finding;
-  (b) `ci-core-fired` pending behind a merge conflict; (c) CodeRabbit + claude-review threads,
+  (b) a required check pending behind a merge conflict; (c) CodeRabbit + claude-review threads,
   one factually wrong WARNING; (d) "automerge aktiviert, mache /ci-review bis merged, max 3
   Runden". The known-CI-states table in the host repo's CI rules must end up with ONE
   home — report as a fork which side keeps it.

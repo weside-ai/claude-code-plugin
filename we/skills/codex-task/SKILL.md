@@ -1,6 +1,8 @@
 ---
 name: codex-task
-description: Send a task directly to Codex (gpt-5-codex) via the official Codex plugin runtime. Foreground by default; --background detaches the job (poll with /codex:status, read with /codex:result). Requires the openai/codex-plugin-cc plugin to be installed.
+description: >
+  Sends one task to Codex (gpt-5-codex) via the Codex plugin runtime; --background detaches it.
+  Trigger: "/we:codex-task".
 argument-hint: '[--background] <task text>'
 allowed-tools: Bash(node:*), Bash(ls:*)
 ---

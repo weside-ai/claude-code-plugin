@@ -4,7 +4,7 @@ The shared language for designing and cutting code. Use these terms exactly — 
 language is the whole point. A leading word recruits priors the model already holds; it only
 works when every skill uses the same one.
 
-Consumers: `/we:story` (plan authoring), `/we:develop`, `/we:diagnose`, the bug-hunt
+Consumers: `/we:story` (plan authoring), `/we:develop`, the relevant skill, the bug-hunt
 engine at integration (Codex adversarial-review or Claude's native `/code-review`),
 `/we:meet` (story cuts).
 

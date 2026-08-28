@@ -1,6 +1,7 @@
 ---
 name: council-ux-researcher
-description: Council member — the UX Researcher lens. Represents the user's lived experience — journeys, friction, reachability. Spawned by /we:council and /we:meet.
+description: >
+  Council lens: the user's lived experience — journeys, friction, reachability.
 color: pink
 tools: [Read, Glob, Grep, SendMessage]
 ---

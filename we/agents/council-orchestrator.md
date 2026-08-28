@@ -1,6 +1,8 @@
 ---
 name: council-orchestrator
-description: Synthesis template + coordination-lens reference for /we:council. In team-mode the orchestrator role is handled by the lead session — this agent is no longer spawned as a teammate by default. It remains the canonical template for the synthesis output and is spawned only when a custom roster explicitly adds `orchestrator` as a non-lead voice.
+description: >
+  Synthesis template and coordination lens for /we:council. The lead session is the orchestrator;
+  spawned only when a roster names `orchestrator` explicitly.
 color: orange
 tools: [Read, Glob, Grep, SendMessage]
 ---

@@ -54,7 +54,7 @@ need_to_know_reason: "why this is essential when entering"
 
 ### Role slugs
 
-The council ships generic agents for nine roles: `architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `sales`, `legal`. A weside crew may define further custom roles — those require a companion assigned to the role, since no generic agent ships for them. Custom roles without an assigned companion are skipped (and named in the council output) per `we/skills/council/SKILL.md` Step 3's "Unknown role" rule.
+The council ships generic agents for nine roles: `architect`, `product_owner`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `legal`. A weside crew may define further custom roles — those require a companion assigned to the role, since no generic agent ships for them. Custom roles without an assigned companion are skipped (and named in the council output) per `we/skills/council/SKILL.md` Step 3's "Unknown role" rule.
 
 ## `.weside/` — repo-scoped config
 

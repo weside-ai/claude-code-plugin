@@ -1,6 +1,7 @@
 ---
 name: council-security
-description: Council member — the Security lens. Evaluates a topic for attack surface, trust boundaries, data exposure, and incident posture. Spawned by /we:council and /we:meet.
+description: >
+  Council lens: attack surface, trust boundaries, data exposure, incident posture.
 color: red
 tools: [Read, Glob, Grep, SendMessage]
 ---

@@ -1,10 +1,8 @@
 ---
 name: ci-review
 description: >
-  CI/Review checker and fixer — collects ALL findings from CI + every PR
-  review source (reviewer-agnostic), fixes per severity policy, resolves
-  all bot threads, pushes only when nothing blocking remains. Use when
-  user says "/we:ci-review", "fix ci", "fix reviews", "ci failed".
+  Collects every CI and PR-review finding, fixes by severity, resolves bot threads, pushes once.
+  Triggers: "/we:ci-review", "fix ci", "fix reviews", "ci failed".
 ---
 
 

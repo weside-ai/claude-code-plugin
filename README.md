@@ -39,15 +39,10 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 
 - **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
 - **`/we:map`** — plan-tree dashboard: a read-only text overview of every Saga › Epics › Stories with status buckets, scanned flat from `docs/plans/` by filename suffix and joined with build-pipeline state. The bird's-eye view (`/we:saga` / `/we:epic` give the deep per-artifact view).
-- **`/we:coach`** — APO advisor: altitude mapping, next-move suggestions, beginner walkthrough, one-line Plan-status snapshots (full detail delegated to `/we:saga` / `/we:epic`)
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
-- **`/we:triage`** — backlog intake: moves incoming tickets through a five-state triage machine (needs-triage → ready-for-agent/-human/wontfix), verifies claims, writes agent-ready briefs; rejected ideas land in a durable out-of-scope memory
 - **`/we:prototype`** — throwaway code that answers exactly one design question before it gets planned: a logic/state question (terminal shell over a pure module) or a UI question (3 radically different variants behind `?variant=`)
 - **`/we:grill`** — relentless one-question-at-a-time interview on a plan or design; sharpens the project glossary (`CONTEXT.md`) inline and offers lean ADRs when a decision is hard to reverse, surprising, and a real trade-off
-- **`/we:diagnose`** — disciplined diagnosis loop for hard bugs: build a fast deterministic feedback loop first, then reproduce → hypothesise → instrument → fix → regression-test
-- **`/we:doc-improve`**, **`/we:audit`** — review + audit
-- **Dev Utilities:** **`/we:find-dead-code`**, **`/we:smoketest`** — code health
 
 Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
 

@@ -88,7 +88,7 @@ flowchart TB
     Gates --> Review["writer-aware bug-hunt<br/>codex adversarial or native /code-review"]
     Gates --> Static["/we:static"]
     Gates --> Test["/we:test"]
-    Review & Static & Test --> Docs[Step 6: /we:docs<br/>doc-architect proposes diffs]
+    Review & Static & Test --> Docs[Step 6: doc-architect<br/>proposes diffs]
     Docs --> PR[Step 7: /we:pr<br/>verifies all gates pass]
     PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>one pass; a user budget sets the cap]
     CI --> Verify[Step 9: ticket → In Review]
@@ -187,7 +187,7 @@ The skill reads session transcripts and must skip personal content (Companion-mo
 
 ### Coach can suggest it
 
-`/we:coach` watches for retro-worthy signals during its Boot Protocol — recent PR merge, CI cycles ≥ 3, end-of-session prompts — and offers `/we:retro` via a `[y/n]` gate. Never auto-fires.
+the relevant skill watches for retro-worthy signals during its Boot Protocol — recent PR merge, CI cycles ≥ 3, end-of-session prompts — and offers `/we:retro` via a `[y/n]` gate. Never auto-fires.
 
 **Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once; the next time it shows up, it's a rule the agent already follows.
 
@@ -213,15 +213,15 @@ flowchart TB
         meet["/we:meet<br/>vision / saga / epic / story"]
     end
     subgraph process[Process]
-        coach["/we:coach<br/>APO advisor"]
+        coach["the relevant skill<br/>APO advisor"]
         retro["/we:retro<br/>full systematic retro"]
         handoff["/we:handoff<br/>cross-session state"]
     end
     subgraph review[Review + audit]
-        docimprove["/we:doc-improve"]
-        audit["/we:audit"]
+        docimprove["the relevant skill"]
+        audit["the relevant skill"]
         find["/we:find-dead-code"]
-        smoke["/we:smoketest"]
+        smoke["the relevant skill"]
     end
     subgraph framework[Framework]
         setup["/we:setup<br/>once per project"]
@@ -254,7 +254,7 @@ Two operational skills sit alongside the spine and handle the boundary problems 
 - **`/we:retro`** — *after* a cycle: scans what just shipped (session + PR + CI), proposes rule changes so the friction doesn't recur. Writes `docs/retros/YYYY-MM-DD-*.md`.
 - **`/we:handoff`** — *between* sessions: captures the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/YYYY-MM-DD-*.md`. A future session loads it back with a plain `/we:handoff` and continues. Replaces `/compact` as the primary tool for cross-session continuity (`/compact` still wins for in-session token reclamation).
 
-Both are `/we:coach`-aware — Coach surfaces an active handoff at boot and suggests `/we:handoff --write` at end-of-session signals; same `[y/n]` discipline as advisor command launches.
+Both are the relevant skill-aware — Coach surfaces an active handoff at boot and suggests `/we:handoff --write` at end-of-session signals; same `[y/n]` discipline as advisor command launches.
 
 ---
 
@@ -276,7 +276,6 @@ Three things look different:
 
 - The Plan skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) don't ground new artifacts in cross-session memory — they work from the current conversation + plan files.
 - `/we:council` and `/we:meet` convene each role as a generic role-agent rather than a named Companion. (With an account, a council is a mix: each role-lens is either generic or weside-backed, governed by the `loadCouncilFromWeside` toggle — see [upgrade-paths.md](upgrade-paths.md).)
-- `/we:coach` boots without companion identity.
 
 You still get a pipeline that ships code. You don't get a teammate who remembers across days.
 

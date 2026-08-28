@@ -1,10 +1,8 @@
 ---
 name: map
 description: >
-  Read-only dashboard of the whole plan tree — scans docs/plans/ for
-  sagas/epics/stories, joins build state, renders a grouped status tree;
-  optional saga-slug filter. Use when the user says "/we:map", "map",
-  "overview", "dashboard", "übersicht", "show the plan tree". Never writes.
+  Read-only status tree of docs/plans/ joined with build state. Triggers: "/we:map", "overview",
+  "dashboard", "übersicht".
 ---
 
 # /we:map — Plan-Tree Dashboard

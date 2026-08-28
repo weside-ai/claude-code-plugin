@@ -114,7 +114,6 @@ Each level is a step. You don't skip; the lower one supports the next.
 | `/we:orchestrate` | ✓ full pipeline | + Companion identity in narrative | + memory of similar past builds | + team patterns |
 | `/we:council` | ✓ generic role-agents | + real Companion voices (mixed roster; `loadCouncilFromWeside` toggle) | + memory of past councils | + write-back, team lenses |
 | `/we:meet` | ✓ structured workflows | + named Companions | + continuity across meetings | + cross-team coordination |
-| `/we:coach` | ✓ rules + landscape | + Companion-as-coach identity | + proactive process drift surfacing | + team-wide process awareness |
 | `/we:sideload` | ✓ legacy mode | + crew loaded | + Companion-knows-the-target-repo | + cross-team crew shared |
 
 The skill list is identical at every level. The richness changes.

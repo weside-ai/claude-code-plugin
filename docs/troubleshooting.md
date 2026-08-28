@@ -2,7 +2,7 @@
 
 Common stumbles, organized by symptom. Each entry has: what you see, what's happening, what to do.
 
-If your issue isn't here, `/we:coach` is the meta-skill for that — a process-improvement conversation partner that boots with the current rules + skill landscape + your active initiative state. Tell it what broke; it diagnoses and proposes a concrete fix.
+If your issue isn't here, the relevant skill is the meta-skill for that — a process-improvement conversation partner that boots with the current rules + skill landscape + your active initiative state. Tell it what broke; it diagnoses and proposes a concrete fix.
 
 ---
 
@@ -275,13 +275,11 @@ Then re-invoke `/we:orchestrate` — it'll create a fresh worktree.
 
 **Cause:** a recurring friction; either a missing check, an unclear rule, or a tool gap.
 
-**Fix:** invoke `/we:coach` with a description of what broke:
-
 ```
-/we:coach The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing.
+the relevant skill The last 3 PRs failed because we forgot to resolve CodeRabbit threads before pushing.
 ```
 
-`/we:coach` will diagnose the gap (missing rule? unclear skill step? missing DoD item?) and propose 2–3 concrete fixes with file paths and costs. You approve one; it applies it. Next time the friction doesn't happen.
+the relevant skill will diagnose the gap (missing rule? unclear skill step? missing DoD item?) and propose 2–3 concrete fixes with file paths and costs. You approve one; it applies it. Next time the friction doesn't happen.
 
 ---
 
@@ -297,7 +295,7 @@ Or just ask: "I want to do X — which skill?" Claude will tell you (and probabl
 
 ## When to escalate
 
-If the issue is structural — a rule that doesn't fit your repo's reality, a skill step that's wrong for your workflow — that's `/we:coach` territory. He'll diagnose, propose, and (with your approval) apply.
+If the issue is structural — a rule that doesn't fit your repo's reality, a skill step that's wrong for your workflow — that's the relevant skill territory. He'll diagnose, propose, and (with your approval) apply.
 
 If it's a bug in the plugin itself, file an issue at <https://github.com/weside-ai/claude-code-plugin/issues> with:
 - Plugin version (`/plugin list | grep we@weside-ai`)
@@ -314,4 +312,3 @@ If it's a bug in the plugin itself, file an issue at <https://github.com/weside-
 - [skills.md](skills.md) — per-skill reference
 - [concepts/companion-framework.md](concepts/companion-framework.md) — `.weside/` mechanics
 - [mcp.md](mcp.md) — MCP architecture + tools
-- [`/we:coach`](skills.md#wecoach) — the process-improvement conversation partner

@@ -1,6 +1,7 @@
 ---
 name: test-runner
-description: Run tests affected by current changes. Auto-detects project stack. Use AFTER static analysis passes.
+description: >
+  Runs the tests the current changes affect — stack auto-detected. After static analysis.
 color: blue
 ---
 

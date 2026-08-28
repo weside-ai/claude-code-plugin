@@ -234,10 +234,6 @@ Runs tests affected by the current changes. Auto-detects framework (pytest, jest
 
 Creates a PR with prerequisite validation. Won't open a PR until all three quality gates have passed checkpoints. Then it links the ticket and attaches the plan. The repo's configured GitHub AI reviewers (`review.available`) review after the PR opens; on other hosts or without a GitHub reviewer, the local quality gates are treated as authoritative.
 
-### `/we:docs`
-
-Documentation steward. Invokes the `doc-architect` agent, which reads the doc landscape fresh on every call, identifies what needs updating for the current diff, and proposes diffs. Never writes autonomously — every change is a proposal you approve.
-
 ---
 
 ## Deliberation skills
@@ -308,36 +304,6 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 
 ---
 
-### `/we:coach`
-
-> *APO Coach — cross-altitude advisor and onboarding partner.*
-
-A conversation partner for three situations, one skill:
-
-- **ADVISOR mode** — you don't know what to do next. The Coach reads repo state, maps to the APO altitude you're at, and proposes the next `/we:*` command with a `[y/n]` confirmation gate before any command fires. If an open Saga or Epic is detected, ADVISOR also surfaces a one-line Plan-status — and delegates the detail to `/we:saga` or `/we:epic` (which both run a full Status dashboard as their default mode).
-- **BEGINNER mode** — you're new to APO or the plugin. The Coach walks you through the four-altitude workflow, checks whether `.weside/config.json` exists, and proposes a sensible starting command. Triggered by "I'm new" / "what is this" / first-session markers.
-- **Process-improvement front door (Scrum-Master)** — you want to *discuss or improve* how we work — a skill, the pipeline, the method — not report a specific breakage. The Coach engages a grounded discussion (from the `how-we-work.md` method it loaded at boot) and routes to `/we:retro` (a systematic pass) or `/we:story` (spec the change). Triggered by "how could we improve…", "let's rethink…", "discuss the workflow".
-
-Intent is detected from the prompt shape — "where am I" / "what's next" / open-ended / "which Epics" / "status" → ADVISOR; "I'm new" / "help me start" → BEGINNER. Default ADVISOR when ambiguous. Companion-aware when weside MCP is connected (the Coach speaks as your Companion).
-
-**When to use:**
-- You merged a Story / Epic and want to know the sensible next move (ADVISOR)
-- A PRD exists but you're not sure whether to write Sagas Solo or convene `/we:meet vision` (ADVISOR)
-- You're coming to the plugin for the first time or returning after a long gap (BEGINNER)
-- You want a structured summary of which Sagas / Epics are in flight (ADVISOR — Coach surfaces the one-liner and points you to `/we:saga` or `/we:epic` for the full Status dashboard)
-
-**Won't do:**
-- Generic reports without a prompt
-- Audit all skills in one invocation
-- Re-plan an active initiative (that's `/we:meet` or the Solo Plan skill at the relevant altitude)
-- Silent-fire any `/we:*` command. Every launch is `[y/n]`-gated. The Coach proposes; the user decides.
-- Fire `/we:orchestrate` from a Coach session (even after `[y/n]`) — a build is a long autonomous run that deserves its own session; the Coach prints the command for the user to run fresh.
-- Handle post-PR engineering-friction analysis — that's `/we:retro`
-
-**Boot protocol:** reads rules + skill descriptions + DoR/DoD + (with weside) materializes the user's Companion + **self-grounds in the method via the [`how-we-work.md`](concepts/how-we-work.md) manifest** (APO altitudes, pipeline, skill catalog — the same manifest `/we:retro` loads) + reads repo state (Plan files, recent commits, open tickets, pipeline state) + surfaces active-initiative state. Then engages in dialog in the matched mode.
-
----
-
 ### `/we:retro`
 
 > *Systematic continuous-improvement pass on the just-shipped cycle. Every error happens exactly once.*
@@ -352,16 +318,12 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - At end-of-session when you want the cycle's lessons to outlive the conversation
 - With `--scan N` to look for patterns across the last N retros (e.g. "same issue showed up 3 times — promote to structural fix")
 
-**Triggered by `/we:coach`:** Coach detects retro-worthy signals during its Boot Protocol (PR just merged, CI cycles ≥ 3, end-of-session prompts) and offers `/we:retro` via a `[y / n]` gate. Coach never auto-fires it.
-
 **Won't do:**
 - Apply any edit without an explicit `y` for that item
 - Quote personal content from the transcript (privacy guard)
 - Modify source code (MDs only — code-level lessons flow back through the build if needed)
 - Auto-create Jira / GitHub tickets (skill can scaffold one on explicit `--ticket` request, off by default)
 - Push without PR review — rule + CLAUDE.md edits always go through a PR in repos without explicit direct-commit config
-
-**Differs from `/we:coach`:** Coach ADVISOR reads repo state and proposes the next `/we:*` command. `/we:retro` proactively scans the full PR + CI cycle and proposes concrete engineering rule fixes — a different artifact with a different purpose.
 
 ---
 
@@ -380,8 +342,6 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Switching between long-running threads of work — each gets its own handoff slug
 - Companion-mode (with `--with-companion-state`) — adds an opt-in "Companion continuity" section in the Companion's voice, still privacy-guarded
 
-**Triggered by `/we:coach`:** Coach Boot Protocol Step 10 surfaces an active handoff (`docs/handoffs/*.md` written < 14 days ago) and offers to load it via `[y/n]` gate. Coach also offers `/we:handoff --write` at end-of-session signals (`bis morgen`, `schlafen`, `save_compass`, long sessions > 30 turns without a handoff). Never auto-fires.
-
 **Won't do:**
 - Write silently — every WRITE follows an explicit `y` for the rendered draft
 - Quote personal/Companion-mode content from the transcript (privacy guard)
@@ -391,23 +351,6 @@ Intent is detected from the prompt shape — "where am I" / "what's next" / open
 - Push without PR review — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without direct-commit config
 
 **Differs from `/we:retro`:** Both write to `docs/<category>/YYYY-MM-DD-<slug>.md`. `/we:retro` captures *lessons* — frictions in the cycle that should become rules so they don't recur. `/we:handoff` captures *position* — where the work is, what was decided, what the next concrete step is. Different artifact, different purpose; both live in the user repo.
-
----
-
-### `/we:triage`
-
-> *Backlog intake — external signals become plan-chain work.*
-
-Moves incoming tickets through a five-state triage machine: `needs-triage` → `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`, plus a `bug`/`enhancement` category. Verifies the claim before recommending (reproduce the bug, run the PR's tests), grills fuzzy requests into shape via `/we:grill`, and writes agent-ready briefs (`references/ticket-briefs.md` — behavioural contracts, no file paths). Rejected enhancements land in `docs/plans/out-of-scope/` — one file per concept, so the same request never gets re-litigated.
-
-**When to use:**
-- "What needs my attention?" — see the unlabeled / in-triage / reporter-replied buckets
-- A bug report or feature request arrives and needs a verdict
-- "Move TICKET-42 to ready-for-agent" — quick state override
-
-**Won't do:**
-- Post any tracker comment without the AI disclaimer line
-- Record already-implemented features in the out-of-scope memory — pointing to where the feature lives is the answer; only real rejections are remembered
 
 ---
 
@@ -468,19 +411,6 @@ Walks every branch of the decision tree — one question per turn, each with a r
 
 ---
 
-### `/we:diagnose`
-
-> *Disciplined diagnosis loop for hard bugs and performance regressions.*
-
-Phase 1 is the skill: build a fast, deterministic, agent-runnable feedback loop (failing test, curl script, replay harness, bisection — 10 escalating options). Then reproduce → 3-5 ranked falsifiable hypotheses → instrument one variable at a time → fix with a regression test at a correct seam → cleanup + post-mortem.
-
-**When to use:**
-- A bug survives the first obvious fix attempt
-- Non-deterministic / flaky failures
-- Performance regressions (measure first, fix second)
-
----
-
 ### `/we:prototype`
 
 > *Throwaway code that answers exactly one design question.*
@@ -500,32 +430,6 @@ Two branches by question type. **Logic** ("does this state model feel right?"): 
 
 ## Review + audit skills
 
-### `/we:doc-improve`
-
-> *Substantive review of one or more doc files.*
-
-Checks claims vs. implementation, finds drift, identifies redundancy with sibling docs, flags stale plans. For rules under `.claude/rules/`, additionally enforces token budget and path-pattern correctness.
-
-**When to use:**
-- After a refactor that may have made docs stale
-- When you suspect a rule isn't triggering the way it should
-- Periodic doc sweeps
-
----
-
-### `/we:audit`
-
-> *Tool-driven security scan.*
-
-Runs `semgrep / trivy / kubescape / gitleaks` (or your project's own `scripts/security-audit.sh`), parses JSON reports, summarizes findings by severity.
-
-**When to use:**
-- Pre-release security pass
-- After integrating a new external dependency
-- Compliance check-ins
-
----
-
 ## Dev Utilities
 
 ### `/we:find-dead-code`
@@ -533,19 +437,6 @@ Runs `semgrep / trivy / kubescape / gitleaks` (or your project's own `scripts/se
 > *Find and remove dead code from Python backends.*
 
 Method-level detection, test-only references, vulture static analysis, coverage-based detection. Surgical removal.
-
----
-
-### `/we:smoketest`
-
-> *Manual API smoketest against a running backend.*
-
-Discovers endpoints via OpenAPI or route scanning, authenticates, builds a test plan, executes curl requests, checks logs for errors.
-
-**When to use:**
-- After a deploy, to verify the API behaves as expected
-- When testing a new endpoint you just wrote
-- Before opening a PR for an API change
 
 ---
 
@@ -575,7 +466,6 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 | `static-analyzer` | `/we:static`, the pipeline | Lint, format, types |
 | `test-runner` | `/we:test`, the pipeline | Tests with coverage |
 | `pr-creator` | `/we:pr`, the pipeline | PR creation with checkpoint validation |
-| `doc-architect` | `/we:docs`, the pipeline | Doc proposals; reads landscape fresh on every call |
 | `council-architect` | `/we:council`, `/we:meet` | Architect role-lens |
 | `council-product-owner` | `/we:council`, `/we:meet` | PO role-lens |
 | `council-scrum-master` | `/we:council`, `/we:meet` | SM role-lens |
@@ -583,7 +473,6 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 | `council-orchestrator` | `/we:council`, `/we:meet` | Orchestrator + synthesis |
 | `council-marketing` | `/we:council`, `/we:meet` | Marketing role-lens |
 | `council-security` | `/we:council`, `/we:meet` | Security role-lens |
-| `council-sales` | `/we:council`, `/we:meet` | Sales role-lens |
 | `council-legal` | `/we:council`, `/we:meet` | Legal role-lens |
 
 For the council lenses, see [concepts/roles.md](concepts/roles.md).

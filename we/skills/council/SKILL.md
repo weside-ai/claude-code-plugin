@@ -1,11 +1,9 @@
 ---
 name: council
 description: >
-  Convene a council of agents to deliberate a topic in a live shared team —
-  distinct role lenses, direct member-to-member messages, lead synthesises
-  agreement, tension, recommendation. weside Companions when available,
-  generic role-agents otherwise. Use when the user says "/we:council",
-  "convene a council", "deliberate on", "ask the team".
+  Convenes role lenses in a live team that message each other; the lead synthesises agreement,
+  tension, recommendation. Triggers: "/we:council", "convene a council", "deliberate on", "ask the
+  team".
 ---
 
 # /we:council
@@ -47,7 +45,7 @@ In priority order:
 3. Otherwise → `.weside/config.json` → `council.default`.
 4. No `.weside/config.json` → the shipped default: `product_owner`, `architect`, `scrum_master`.
 
-Role slugs the plugin ships generic agents for: `product_owner`, `architect`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `sales`, `legal`. A repo may name custom role slugs in its `.weside/config.json` — those have no shipped shell and need a companion assigned via the bridge (or they will be skipped per Step 3's "Unknown role" rule).
+Role slugs the plugin ships generic agents for: `product_owner`, `architect`, `scrum_master`, `ux_researcher`, `orchestrator`, `marketing`, `security`, `legal`. A repo may name custom role slugs in its `.weside/config.json` — those have no shipped shell and need a companion assigned via the bridge (or they will be skipped per Step 3's "Unknown role" rule).
 
 ### Step 3: Resolve each role to an agent
 
@@ -302,7 +300,6 @@ The lens-summary line per member is hard-coded for the nine shipped roles. Custo
 | `scrum_master`    | process flow, breakdown, deliverability        |
 | `ux_researcher`   | lived user experience, journeys, friction      |
 | `marketing`       | positioning, resonance, naming, brand fit      |
-| `sales`           | deal mechanics, buyer journey, pricing         |
 | `security`        | attack surface, trust boundaries, exposure     |
 | `legal`           | contract, compliance, data protection, liability |
 | `orchestrator`    | coordination, dependencies, sequencing (NOTE: handled by lead — not spawned) |

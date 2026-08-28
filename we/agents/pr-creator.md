@@ -1,6 +1,8 @@
 ---
 name: pr-creator
-description: Create Pull Request with prerequisite validation and ticket linking. Use AFTER all quality gates pass.
+description: >
+  Opens the one PR after the quality gates passed, links the ticket, carries the verification
+  receipt.
 color: green
 ---
 

@@ -109,7 +109,7 @@ This is what makes the handoff safe to commit (often via PR) into the user repo.
 
 ## Coach integration
 
-`/we:coach` Boot Protocol Step 10 reads `docs/handoffs/` alongside `docs/plans/`. If a handoff exists and was written less than 14 days ago, Coach surfaces it in its boot summary:
+the relevant skill Boot Protocol Step 10 reads `docs/handoffs/` alongside `docs/plans/`. If a handoff exists and was written less than 14 days ago, Coach surfaces it in its boot summary:
 
 > *"Active handoff: `docs/handoffs/2026-05-18-phase-7-handoff-skill.md` (written 14 hours ago, on `feat/handoff-skill`). Load it to restore session state? [y/n]"*
 
@@ -143,7 +143,6 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 
 | Directory | Skills | What lives there |
 |---|---|---|
-| `docs/plans/<vision>/PRD.md` + `docs/plans/<slug>-{saga,epic,story}.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` `/we:coach` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* (Vision nests in a `<vision>/` dir; Saga-and-below are flat) |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *what we learned, how the harness should change* |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *where we are now, what the next session should pick up* |
 
@@ -179,7 +178,7 @@ Table of the last 10 handoffs. Pick one by slug.
 
 **4. Coach-triggered:**
 
-User opens `/we:coach`. Coach Boot Step 10 detects yesterday's handoff. Coach offers `[y/n]`. User: `y`. Coach prints the hand-off; user invokes `/we:handoff` in the next turn (or runs it immediately). Full state restored.
+User opens the relevant skill. Coach Boot Step 10 detects yesterday's handoff. Coach offers `[y/n]`. User: `y`. Coach prints the hand-off; user invokes `/we:handoff` in the next turn (or runs it immediately). Full state restored.
 
 **5. Staleness warning:**
 
@@ -192,6 +191,5 @@ User opens `/we:coach`. Coach Boot Step 10 detects yesterday's handoff. Coach of
 - **Skill reference:** [`/we:handoff` in skills.md](../skills.md#wehandoff)
 - **Full skill spec:** [`we/skills/handoff/SKILL.md`](../../we/skills/handoff/SKILL.md)
 - **Workflow context:** [`workflow.md` § Continuity utilities](../workflow.md#continuity-utilities)
-- **Coach integration:** [`/we:coach` Suggesting `/we:handoff` section](../../we/skills/coach/SKILL.md#suggesting-wehandoff)
 - **Sibling skill for retrospectives:** [`/we:retro`](../skills.md#weretro) — captures *lessons* (under `docs/retros/`); handoffs capture *position* (under `docs/handoffs/`)
 - **APO cycle overview:** [workflow.md](../workflow.md) — handoffs are a continuity utility around the Plan/Build/Deliver/Retro cycle, not a methodology pillar themselves

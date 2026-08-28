@@ -1,11 +1,9 @@
 ---
 name: develop
 description: >
-  Dev-only worker slice — implements the assigned chunk, runs local quality
-  gates, commits, pushes its branch, and STOPS (no PR, no CI loop, no ticket
-  transition; the Lead integrates and runs CI once). Use when the user says
-  "/we:develop", "implement only", "dev worker", "no PR", or when
-  /we:orchestrate dispatches a chunk.
+  Dev-only worker: implements its chunk, runs local gates, commits, pushes, stops — no PR, no CI,
+  no ticket. Triggers: "/we:develop", "implement only", "dev worker", or an /we:orchestrate
+  dispatch.
 argument-hint: '[<ticket-key> | <plan-path>] [--phases <N,M>] [--engine <name>]'
 ---
 
