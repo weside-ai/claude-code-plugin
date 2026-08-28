@@ -55,13 +55,8 @@ For each failure:
 
 ## Step 4: Save Checkpoint
 
-Extract the ticket key from the branch name into `$TICKET`, then write:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" test_passed
-```
-
-**Only if ALL affected tests passed.** Coverage is verified in CI, not here.
+Write no checkpoint — the Lead writes `test_passed` on your report, once, over the integrated
+diff. Coverage is verified in CI, not here.
 
 ## Step 5: Report
 

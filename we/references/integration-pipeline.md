@@ -30,15 +30,16 @@ when it was dispatched.
 | `simplified` | § Simplify done | Lead |
 | `ac_verified` | § AC + DoD gate passed **and** the verification block exists | Lead |
 | `review_passed` | the one bug-hunt engine came back clean | Lead |
-| `static_analysis_passed` | lint/format/types clean | `static-analyzer` |
-| `test_passed` | tests green (coverage met where measured) | `test-runner` |
+| `static_analysis_passed` | lint/format/types clean (on `static-analyzer`'s report) | Lead |
+| `test_passed` | tests green (coverage met where measured; on `test-runner`'s report) | Lead |
 | `docs_updated` | doc proposals applied, or "nothing to update" | Lead |
-| `pr_created` | the one PR is open | `pr-creator` |
+| `pr_created` | the one PR is open (on `pr-creator`'s report) | Lead |
 | `ci_passed` | the single ci-review pass finished | Lead |
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint {TICKET} {phase}
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story status {TICKET}
+WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; : "${WE_ROOT:?we plugin root not found}"
+python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint {TICKET} {phase}
+python3 "$WE_ROOT/scripts/orchestration.py" story status {TICKET}
 ```
 
 ---
@@ -97,8 +98,9 @@ Launch all three in **one message** so they run concurrently:
 - **one bug-hunt engine** → `review_passed`
 
 **Exactly one bug-hunt engine runs, and the writer picks it: the engine that did *not* write the
-code.** The full matrix (Claude wrote + Codex configured → `/codex:adversarial-review`;
-otherwise Claude's native `/code-review`) is owned by `worker-dispatch.md` § Bug-hunt dispatch.
+code** — the matrix, including mixed authorship, is owned by `worker-dispatch.md` § Bug-hunt
+dispatch. Claude's native `/code-review` is a skill: run it inside an `Agent()` so it does not
+load into the Lead's context.
 Codex answers with JSON rather than a marker — `approve` → write `review_passed`;
 `needs-attention` → fix, re-run, then write it. Skip that mapping and the blocking gate in
 `pr-creator` never gets set.
@@ -151,7 +153,7 @@ regenerate the register into the same docs commit.
 
 ## PR — one, and only after the gates
 
-**Blocking:** `review_passed`, `static_analysis_passed` and `test_passed` must all exist.
+**Blocking:** `ac_verified`, `review_passed`, `static_analysis_passed` and `test_passed` must all exist.
 Missing one → back to the gates. A PR with a failing gate wastes the reviewer's attention on
 something the pipeline already knew.
 
@@ -175,8 +177,10 @@ context and costs the Lead its overview; the procedure is short enough to run di
 2. **Triage and fix**: BLOCKING and WARNING must be fixed unless the reviewer is factually
    wrong; SUGGESTION and NITPICK are done or consciously skipped with a reason. Accumulate —
    don't commit or push between them.
-3. **Wait for CI to conclude** (`gh pr checks {PR}` shows no `pending`/`in_progress`) and fold
-   its failures into the same set.
+3. **Wait for CI to conclude** — `gh pr checks {PR} --required` shows no `pending`; a check
+   pending behind a merge conflict never concludes, so read `mergeStateStatus` first and merge
+   the base when it says `DIRTY`/`BEHIND` (the gate definition and terminal states are
+   `/we:ci-review`'s) — and fold its failures into the same set.
 4. Nothing found and CI green → checkpoint `ci_passed`, done.
 5. **Commit** every fix as one commit.
 6. **Resolve** every bot-authored thread via GraphQL and verify zero unresolved bot threads.

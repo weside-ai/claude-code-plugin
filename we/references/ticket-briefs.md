@@ -4,9 +4,9 @@ How to write ticket bodies and agent briefs that stay correct while they wait. A
 sit for days or weeks; the codebase changes underneath it. Write it so it survives renames,
 moves, and refactors.
 
-Consumers: `/we:story` (ticket body), `/we:triage` (agent briefs),
-`references/worker-dispatch.md` (worker briefs inline these rules — workers can't load
-references).
+Consumers: `/we:story` (ticket *wording* only — its ticket stays minimal and the ACs live in the
+plan), `/we:triage` (agent briefs), `references/worker-dispatch.md` (worker briefs inline these
+rules — a detached worker has no plugin context).
 
 ## Principles
 
@@ -19,7 +19,8 @@ references).
   it. The implementing agent explores the codebase fresh and makes its own implementation
   decisions.
 - **Complete acceptance criteria.** The agent needs to know when it's done. Every criterion
-  is concrete, testable, and independently verifiable.
+  is concrete, testable, and independently verifiable. (In a brief that *replaces* a plan. A
+  `/we:story` ticket carries none of these — its plan does, and the ticket links it.)
 - **Explicit scope boundaries.** State what is out of scope — it prevents gold-plating and
   assumptions about adjacent features.
 

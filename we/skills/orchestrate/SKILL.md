@@ -70,9 +70,9 @@ honour it, and when a Step-3 signal or a risk class contradicts it, that is one 
 question, never a silent override. A backend named in the invocation is a standing pick for the
 run: the per-chunk confirm shows it pre-selected instead of asking again.
 
-**Step 0 — resolve the target.** **Single Story** when one argument matches
-`docs/plans/{KEY}-story.md` (or its ticket resolves to one) and no Epic plan / no other story
-shares it as `epic:` → Mode B over that plan's `### Phase` blocks. **Ad-hoc roster** when several
+**Step 0 — resolve the target.** **Single Story** when one key is given and it matches
+`docs/plans/{KEY}-story.md` (or its ticket resolves to one) → Mode B over that plan's
+`### Phase` blocks, whatever its `epic:` says — a single key is a single Story. **Ad-hoc roster** when several
 keys are given without an epic → the Epic path over exactly those stories, with the state
 derived by hand (Step 2); the **first key** in the invocation is `<primary-key>` everywhere
 below. `--solo` forces the single-Story shape without dispatch. Otherwise an **Epic** (slug or
@@ -94,8 +94,11 @@ file → synthesise the frame from the stories), every story's plan **completely
 **with comments** (newest wins, name conflicts — `references/ticketing.md`; a comment that asks
 for a check is work: answer it by reading the repo now, before the confirm), a recent
 `docs/handoffs/` entry, the state (Step 2). The `refined` checkpoint means the plan passes
-`references/dor-scan.md` — the same three checks the CLI computes; write it now, whoever wrote
-the plan. `quality/dor.md` plus `<repo>/.weside/dor.md` are the Lead's approval read at the
+`references/dor-scan.md` — the same three checks the CLI computes — **and carries no
+`## Open Fork` section** (a refiner that stopped at a fork writes one; the scan cannot see it):
+write it now, whoever wrote the plan; a plan with an open fork is `draft` and its fork is a
+Decision-Queue item. When the Lead answers a fork by rewriting the plan, it deletes the
+`## Open Fork` section — no worker builds past one. `quality/dor.md` plus `<repo>/.weside/dor.md` are the Lead's approval read at the
 confirm: a plan that fails a row there goes back to the refine lane with the row named, however
 the CLI classified it. An investigation that retires a phase rewrites the plan before the confirm
 — the Done check (Step 10) reads the rewritten plan, and a plan the Lead rewrote is presented at
@@ -300,8 +303,8 @@ WORKTREE: `{worktree_path}`, already on branch `{branch}` (off `{integration_bra
 bootstrapped. `cd` there; do not call EnterWorktree. Run: Skill(skill="develop") for {TICKET}
 {--phases N}.
 
-DEV-ONLY: implement {all phases | phase N} → fast local gates → AC-check your diff → commit →
-push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
+DEV-ONLY: implement {all phases | phase N}, committing per phase → fast local gates → AC-check
+your diff (when `review.cross` is on; skip on a detached backend) → push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
 merges every branch onto {integration_branch} and runs ONE CI on ONE PR.
 
 FINISH FIRST: a small finding (≤ ~30 min) on the seam you touch gets FIXED in your branch —

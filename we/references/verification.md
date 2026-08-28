@@ -4,9 +4,9 @@ description: What makes a story verified — the oracle ladder (CLI/API, UI walk
 
 # Verification
 
-Consumers: `/we:orchestrate` (once at
-integration, before the PR), `/we:story` (emits the plan's verification section),
-`we:ac-reviewer` (checks the receipt exists and matches).
+Consumers: `/we:orchestrate` (once at integration, before the PR), `/we:story` (emits the
+plan's verification section), `we:ac-reviewer` (checks the receipt exists and matches),
+`we:pr-creator` (copies the receipt into the PR body; the hook gates on it).
 
 ## Why this exists
 

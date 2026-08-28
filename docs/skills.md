@@ -124,7 +124,7 @@ permission mode that denies teammate shell calls, and the Lead stays the only wr
 **Reach for `/we:story` instead** when the scope is genuinely open — that path asks the
 questions, sharpens the glossary, and stops at a plan-mode gate.
 
-**Won't do:** ask you anything, guess a design fork (it reports it and stops), or claim its own
+**Won't do:** ask you anything, guess a design fork (it writes the plan as far as the fork allows, adds an `## Open Fork` section, and stops — `/we:develop` refuses to build past it, `/we:orchestrate` queues it), or claim its own
 output passed the gate.
 
 ---
@@ -167,7 +167,7 @@ Runs inline as the last step of the build pipeline, but also standalone. Collect
 - All bot review threads resolved (whichever reviewers are active on the repo)
 - A push only after every blocker is addressed
 
-**Limit:** one pass by default; when it does loop, max 2 cycles — after the second, stops and asks.
+**Limit:** one pass by default; an explicit user budget ("bis merged, max 3 Runden") sets the cycle cap; without one it stops after the first pass and asks — except on a concrete reason (an unsure fix, a flaky check, interdependent findings, a high-stakes PR), where it loops at most twice.
 
 ---
 

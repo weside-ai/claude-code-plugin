@@ -17,7 +17,7 @@ Check all three:
 2. **Context section non-empty:** the plan has a Context section with > 50 characters of
    actual content (not just a header).
 3. **Phase headers present:** at least one `### Phase \d+:` header exists
-   (regex: `^### Phase [0-9]+:`).
+   (regex: `^### Phase \d+` — the same expression `_body_is_refined` uses; the colon is convention, not gate).
 
 **On failure:** stop, name the specific missing item(s), and point to `/we:story {TICKET}`
 to complete the plan. Do NOT proceed with an incomplete plan.

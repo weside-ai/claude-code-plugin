@@ -44,19 +44,14 @@ failure from a stale env is a false finding. Skip when the env is demonstrably c
 
 ## Step 4: Run Checks
 
-For each detected stack, run checks **sequentially, once each**. On a failure, run the stack's
-auto-fix (`ruff check --fix` / `eslint --fix` / `prettier --write` / equivalent) and re-check.
+For each detected stack, run checks **sequentially, once each**. Fix nothing unless the dispatcher's prompt says `--fix`; then run the stack's auto-fix
+(`ruff check --fix` / `eslint --fix` / `prettier --write` / equivalent) and re-check.
 Report status per category: "Lint: PASS", "Types: 2 errors".
 
 ## Step 5: Save Checkpoint
 
-Extract the ticket key from the branch name into `$TICKET`, then write:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration.py story checkpoint "$TICKET" static_analysis_passed
-```
-
-**Only if ALL checks passed.** No ticket key in the branch → skip the checkpoint, report normally.
+Write no checkpoint — the Lead writes `static_analysis_passed` on your report, once, over the
+integrated diff; a chunk worker's run is informational.
 
 ## Step 6: Report
 

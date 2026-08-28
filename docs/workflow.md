@@ -90,7 +90,7 @@ flowchart TB
     Gates --> Test["/we:test"]
     Review & Static & Test --> Docs[Step 6: /we:docs<br/>doc-architect proposes diffs]
     Docs --> PR[Step 7: /we:pr<br/>verifies all gates pass]
-    PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>one pass, max 2 cycles]
+    PR --> CI[Step 8: /we:ci-review<br/>collect + fix + push<br/>one pass; a user budget sets the cap]
     CI --> Verify[Step 9: ticket → In Review]
     Verify --> Hand[Hand off to user]
 
@@ -103,13 +103,13 @@ flowchart TB
 | Step | What | Notes |
 |---|---|---|
 | **1. Git prep** | Worktree, branch, ticket → In Progress | Worktree isolates the work; if you opt out (`no worktree`), uses a regular branch |
-| **2. Develop** | Implement plan phase by phase | Tests alongside code, per the repo's `test_discipline`. Auto-fix runs after each phase. |
+| **2. Develop** | Implement plan phase by phase | Tests alongside code, per the repo's `test_discipline`. Lint runs once, at Step 3, via `we:static-analyzer`. |
 | **3. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers. Runs *before* the AC gate on purpose — verifying against code that is about to be rewritten wastes the verification. |
 | **4. AC + DoD verify** | Every acceptance criterion checked with concrete evidence, plus the DoD Quick Check against the diff, plus a run against a live instance | **Blocking.** No AC passes without a citation (file:line, test name, commit); any DoD failure blocks too. Model-agnostic — the build session runs it, independent of which reviewer runs in Step 5. |
-| **5. Quality gates** | One bug-hunt engine + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one bug-hunt engine runs, chosen by who wrote the code:** Claude wrote + codex available + `review.cross` → `/codex:adversarial-review`; otherwise Claude's native `/code-review`. AC/DoD were already gated in Step 4 — no separate AC/DoD call here. |
+| **5. Quality gates** | One bug-hunt engine + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one bug-hunt engine runs, chosen by who wrote the code:** Claude wrote + codex available → `/codex:adversarial-review`; otherwise Claude's native `/code-review`. AC/DoD were already gated in Step 4 — no separate AC/DoD call here. |
 | **6. Docs** | `doc-architect` agent proposes doc updates | Never writes autonomously — every change is a diff proposal |
 | **7. PR** | `/we:pr` verifies all 4 quality-gate checkpoints first | Will not create a PR with failing gates (`ac_verified`, `review_passed`, `static_analysis_passed`, `test_passed`). Any CI reviewers the repo lists in `review.available` run on GitHub if installed; other hosts use local quality gates. |
-| **8. CI fix** | Inline — collect findings, fix all, push once | One pass by default (max 2 cycles when looping). Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
+| **8. CI fix** | Inline — collect findings, fix all, push once | One pass by default; an explicit user budget sets the cycle cap. Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
 | **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
 
 ### Robustness

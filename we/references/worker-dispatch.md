@@ -51,11 +51,11 @@ ticket work. That is the Lead's responsibility after integrating.
 1. **Locate plan** — read `docs/plans/<story>/` (or chunk brief if dispatched headlessly)
 2. **Implement** — the assigned phases/files, respecting the plan's Constraints and Pins,
    and the test discipline the brief states (the Lead reads `test_discipline` from
-   `.weside/config.json` and spells the level out in every brief — workers can't load
-   references; level semantics: `test-discipline.md`)
-3. **Local gates** — lint, type-check, affected tests; fix gate failures before committing
-4. **AC-check own diff** (when `review.cross: true`) — see below
-5. **Commit** — atomic commit with a clear message referencing the Story/chunk
+   `.weside/config.json` and spells the level out in every brief so a detached worker
+   needs no reference; level semantics: `test-discipline.md`)
+3. **Commit per phase** — atomic commits with a clear message referencing the Story/chunk
+4. **Local gates** — lint, type-check, affected tests; fix gate failures before pushing
+5. **AC-check own diff** (when `review.cross: true`, Agent teammates only) — see below
 6. **Push** branch
 7. **Report** — structured summary: what changed, gate results, any fork decisions, blockers
 
@@ -69,16 +69,17 @@ files outside their assigned chunk scope.
 `we:ac-reviewer` checks a diff against the Story's acceptance criteria and the DoD —
 never bugs. It runs at two points, same agent both times:
 
-- **Per chunk** — against the worker's own diff, before committing. Informational, not
-  a gate: the worker reads the findings and decides whether to fix before committing;
-  findings go into the report either way so the Lead sees them at integration.
+- **Per chunk** — against the worker's own diff, after the gates and before the push.
+  Informational, not a gate: the worker reads the findings and decides whether to fix;
+  findings go into the report either way. Agent teammates only — a Codex or foreign worker
+  cannot spawn `we:ac-reviewer`, and its findings would land in a branch-keyed `.reviews/`
+  the integration never reads.
 - **At integration** — against the full merged diff, once, gating. See
   [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 8.
 
 To disable the per-chunk pass (integration still gates): `review.cross: false` in
-`.weside/config.json`. `review.cross` is the one flag that governs both the per-chunk
-AC-check and the bug-hunt dispatch below — turning it off skips the early, informational
-checks, not the final gate.
+`.weside/config.json`. `review.cross` governs only this per-chunk pass; the bug-hunt below
+always runs once at integration.
 
 ## Bug-hunt dispatch
 
@@ -87,7 +88,7 @@ at integration, against the full merged diff. Never per chunk; it's the expensiv
 
 | Writer | Bug-hunt engine |
 |---|---|
-| Claude, `tools.codex: true`, script resolves | `/codex:adversarial-review` |
+| Claude, `tools.codex: true` or `execution.default: codex`, script resolves | `/codex:adversarial-review` |
 | Anything else — Claude without Codex, Codex, or a foreign engine | Claude's native `/code-review` |
 
 Mixed authorship in one wave (a Codex chunk beside Claude chunks, or a tree the Lead committed
