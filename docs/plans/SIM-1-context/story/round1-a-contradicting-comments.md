@@ -7,7 +7,7 @@
 Session model Sonnet, mode `acceptEdits`, Agent Teams off, cwd `/home/user/proj` (main worktree, branch `main`).
 User types: `/we:story PROJ-812`.
 
-**1.** `Read("/home/fbiebl/weside/claude-code-plugin-SIM-1-p3/we/quality/dor.md")` — Prerequisites block.
+**1.** `Read("<worktree>/we/quality/dor.md")` — Prerequisites block.
 
 **2.** `Read(".../we/references/verification.md")` — Prerequisites block.
 
@@ -123,7 +123,7 @@ git push || echo "WARN: main worktree not on main branch — plan saved but not 
 ```
 Two problems I would hit for real. The `||` binds to the whole chain, so a **failed `git push`** (protected branch, no upstream, network) prints *"not on main branch"* — a message that is simply false, and I would go debug the wrong thing. And the block pushes straight to `main` with no user gate, on a repo whose branch protection I have not checked. → **Defect D7.** I ran the commit and stopped before `git push`, asking the user.
 
-**32.** Step 6.4 — `Bash("python3 /home/fbiebl/weside/claude-code-plugin-SIM-1-p3/we/scripts/orchestration.py story checkpoint PROJ-812 refined")`.
+**32.** Step 6.4 — `Bash("python3 <worktree>/we/scripts/orchestration.py story checkpoint PROJ-812 refined")`.
 
 **33.** Step 6.5 — TurboVault unavailable → skipped silently. Correct.
 

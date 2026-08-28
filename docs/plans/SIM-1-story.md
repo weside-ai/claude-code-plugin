@@ -11,7 +11,7 @@ parallel_groups: [[1, 2, 3, 4]]
 ## Context
 
 Plugin 5.4.0 rebuilt `/we:orchestrate` from a 30-day usage scan and three rounds of Opus
-table-top simulation (weside-core `docs/plans/WA-2087-context/plugin-usage-scan.md`; method:
+table-top simulation (a 30-day usage scan in the host repo; method:
 read the skill and its references completely, trace every tool call against a concrete world
 state without executing, list defects adversarially, grade 1–5, re-judge the previous round).
 Round 1 found 50 defects a read-through had missed. The same method is now applied to the
@@ -92,7 +92,7 @@ read-only for workers — a fix there is a fork.
 - **Approach:** Scenarios: (a) `codex-review` red with `VERDICT:ERROR` and no finding;
   (b) `ci-core-fired` pending behind a merge conflict; (c) CodeRabbit + claude-review threads,
   one factually wrong WARNING; (d) "automerge aktiviert, mache /ci-review bis merged, max 3
-  Runden". The known-CI-states table in weside-core's `ci-workflow.md` must end up with ONE
+  Runden". The known-CI-states table in the host repo's CI rules must end up with ONE
   home — report as a fork which side keeps it.
 
 ### Phase 3: `story`

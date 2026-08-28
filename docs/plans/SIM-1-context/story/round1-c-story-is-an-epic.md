@@ -134,7 +134,7 @@ Mode from the key shape. **[UNPROMPTED]**
     → the same 2 ADRs + a billing overview.
 28. `Read(<each of the 3>)` — "read the top 3-5 results".
 29. `Bash("python3 scripts/graphify/check.py --build-if-missing")` — **this is where the skill
-    breaks**, see Defect D2. `scripts/graphify/` is a weside-core path shipped in a
+    breaks**, see Defect D2. `scripts/graphify/` is a the host repo path shipped in a
     stack-agnostic plugin. In this repo it does not exist; `python3` exits 2 with
     `can't open file`. The skill promised "silently no-ops when graphify is not installed".
     I improvised: `Bash("command -v graphify && graphify explain CreditLedger --relation calls")`.
@@ -504,7 +504,7 @@ then print — never invoke — `/we:epic {TICKET}` and STOP. If no Saga exists,
 same line: `/we:epic` will ask for one.
 ```
 
-### D2 — the graphify block cannot run outside weside-core, and its escape hatch is wrong — **blocking**
+### D2 — the graphify block cannot run outside the host repo, and its escape hatch is wrong — **blocking**
 
 > `we/skills/story/SKILL.md`:
 > "```bash
@@ -523,7 +523,7 @@ on most (`**Files:**` lists and `parallel_groups`).
 **Smallest fix:** gate it and name the fallback in the same breath:
 
 ```bash
-# only if the repo ships them (weside-core: scripts/graphify/); else use `rg` on the
+# only if the repo ships them (the host repo: scripts/graphify/); else use `rg` on the
 # identifiers and say in the plan that Files: lists are grep-derived
 [ -f scripts/graphify/query.py ] && python3 scripts/graphify/query.py "<identifiers>" --top 10
 ```

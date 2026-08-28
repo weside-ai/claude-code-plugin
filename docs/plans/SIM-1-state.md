@@ -2,7 +2,7 @@
 
 ## Right now
 
-Wave 1 dispatched 2026-08-27 ~22:50 UTC by the Lead (weside-core session, /we:orchestrate 5.4.0).
+Wave 1 dispatched 2026-08-27 ~22:50 UTC by the Lead (host-repo session, /we:orchestrate 5.4.0).
 Integration: worktree `~/weside/claude-code-plugin-SIM-1-integration`, branch `feat/SIM-1-integration`.
 
 ## Dispatches

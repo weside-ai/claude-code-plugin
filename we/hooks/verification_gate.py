@@ -105,7 +105,9 @@ def _oracles(body: str) -> set[str] | None:
     value = _line(body, "oracle")
     if value is None:
         return None
-    named = {o for o in _ORACLES if re.search(rf"\b{o}\b", value, re.IGNORECASE)}
+    # The choice is the part before the reason (`not-applicable — docs only, no CLI`).
+    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
+    named = {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
     return None if len(named) == len(_ORACLES) or not named else named
 
 
@@ -154,12 +156,17 @@ def _written_here(argv: list[str], path: str, bodies: list[str]) -> str | None:
     either side of the redirect, so the whole simple command is searched.
     """
     for i, tok in enumerate(argv):
-        if tok not in (">", ">>") or i + 1 >= len(argv):
+        if tok in (">", ">>") and i + 1 < len(argv):
+            target, near = argv[i + 1], _same_command(argv, i)
+        elif tok == "tee" and i + 1 < len(argv) and i > 0 and argv[i - 1] == "|":
+            # `cat <<'EOF' | tee f` — the heredoc sits in the command before the pipe.
+            target, near = argv[i + 1].lstrip("-a "), _same_command(argv, i - 2)
+        else:
             continue
-        if os.path.normpath(argv[i + 1]) != os.path.normpath(path):
+        if os.path.normpath(target) != os.path.normpath(path):
             continue
-        for near in _same_command(argv, i):
-            found = re.fullmatch(r"<<HEREDOC:(\d+)", near)
+        for tok2 in near:
+            found = re.fullmatch(r"<<HEREDOC:(\d+)", tok2)
             if found:
                 return bodies[int(found.group(1))]
     return None
@@ -172,6 +179,16 @@ def _cwd_after_cd(argv: list[str], cwd: str | None, stop: int | None = None) -> 
         if tok.rstrip(";&|") in ("cd", "pushd") and i + 1 < len(argv):
             cwd = os.path.join(cwd or "", argv[i + 1].rstrip(";&|"))
     return cwd
+
+
+def _argv_or_none(command: str) -> list[str]:
+    import shlex
+
+    stripped, _ = _strip_heredocs(command)
+    try:
+        return shlex.split(_NEWLINE.sub(" ; ", stripped))
+    except ValueError:
+        return []
 
 
 def _repo_root(cwd: str | None) -> str | None:
@@ -216,6 +233,7 @@ def _pr_verb(argv: list[str]) -> tuple[int, str, list[str]] | None:
 
     Global flags before the verb (`gh -R o/r pr create`, `gh --repo=o/r pr create`) are skipped.
     """
+    first: tuple[int, str, list[str]] | None = None
     for i, tok in enumerate(argv):
         bare = tok.lstrip("({$")
         if bare != "gh" and not bare.endswith("/gh"):
@@ -227,8 +245,15 @@ def _pr_verb(argv: list[str]) -> tuple[int, str, list[str]] | None:
         while j < len(argv) and argv[j].startswith("-"):
             j += 1 if "=" in argv[j] or argv[j] not in ("-R", "--repo") else 2
         if argv[j : j + 2] in (["pr", "create"], ["pr", "edit"]):
-            return (i, argv[j + 1], argv[j + 2 :])
-    return None
+            # Only this simple command's own args: a later `gh pr comment --body` is not
+            # this PR's body, and a `create` after an `edit` is the one that claims.
+            own = _same_command(argv, i)
+            hit = (i, argv[j + 1], own[j - i + 2 :])
+            if argv[j + 1] == "create":
+                return hit
+            if first is None:
+                first = hit
+    return first
 
 
 def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, bool]:
@@ -346,7 +371,7 @@ def _refusal(payload: dict) -> str | None:
     if verb is None or (seen and body is None) or (not seen and verb != "create"):
         return None
 
-    root = _repo_root(cwd)
+    root = _repo_root(_cwd_after_cd(_argv_or_none(command), cwd))
     if not root or not _required(root):
         return None
 

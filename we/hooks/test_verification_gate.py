@@ -449,3 +449,46 @@ def test_a_cd_after_the_gh_call_does_not_move_the_lookup(armed: Path) -> None:
 def test_a_trailing_separator_on_the_body_file_token_is_stripped(armed: Path) -> None:
     (armed / "pr-body.md").write_text(NO_RECEIPT)
     assert _run(armed, "if true; then gh pr create --body-file pr-body.md; fi") == 2
+
+
+# --- bug-hunt round 2 ---------------------------------------------------------
+
+
+def test_a_later_pr_comment_body_is_not_this_prs_body(armed: Path) -> None:
+    # H1: the create's own receipt decides; a following `gh pr comment --body` is not it.
+    body_file(armed, RECEIPT, "good.md")
+    assert (
+        refuse("gh pr create --body-file good.md && gh pr comment 1 --body 'notes'", armed) is None
+    )
+    body_file(armed, RECEIPT, "receipt.md")
+    assert (
+        refuse("gh pr create --fill && gh pr comment 1 --body-file receipt.md", armed) is not None
+    )
+
+
+def test_a_create_after_an_edit_is_still_gated(armed: Path) -> None:
+    # H2
+    assert refuse("gh pr edit 1 --add-label x && gh pr create --fill", armed) is not None
+
+
+def test_cd_into_the_armed_repo_arms_the_gate(armed: Path, tmp_path: Path) -> None:
+    # M1: the repo is resolved where `gh` runs, not where the shell started.
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    assert refuse(f"cd {armed} && gh pr create --fill", outside) is not None
+
+
+def test_tee_is_a_write_too(armed: Path) -> None:
+    # M2
+    cmd = (
+        "cat <<'EOF' | tee pr-body.md\n" + NO_RECEIPT + "EOF\ngh pr create --body-file pr-body.md"
+    )
+    assert refuse(cmd, armed) is not None
+    cmd = "cat <<'EOF' | tee pr-body.md\n" + RECEIPT + "EOF\ngh pr create --body-file pr-body.md"
+    assert refuse(cmd, armed) is None
+
+
+def test_a_not_applicable_reason_may_name_the_surfaces_it_lacks(armed: Path) -> None:
+    # M3
+    text = "## Verification\n\n**Oracle:** not-applicable — docs only, no CLI and no UI surface.\n"
+    assert refuse_body(armed, text) is None

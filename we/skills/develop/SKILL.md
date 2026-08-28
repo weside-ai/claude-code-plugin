@@ -135,7 +135,9 @@ stop.
 ## Step 4: AC-check your diff
 
 Run when the brief orders an AC-check, or — brief silent — when `review.cross` in
-`.weside/config.json` is true (its default). Explicit brief beats the flag either way.
+`.weside/config.json` is true (its default). Explicit brief beats the flag either way. Agent
+teammates only: a Codex or foreign-engine worker cannot spawn `we:ac-reviewer` — skip and say so
+in the report; the Lead's integration gate covers it.
 
 ```python
 Agent(subagent_type="we:ac-reviewer",

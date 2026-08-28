@@ -11,7 +11,7 @@
 
 ### Prerequisites block
 
-1. `Read("/home/fbiebl/weside/claude-code-plugin-SIM-1-p3/we/quality/dor.md")` — done.
+1. `Read("<worktree>/we/quality/dor.md")` — done.
 2. `Read(".../we/references/verification.md")` — done.
 3. `Read(".../we/references/long-running.md")` — done.
 4. `Bash("git rev-parse --show-toplevel")` → `/home/user/app`.
@@ -184,7 +184,7 @@ Requirements are vague ("make onboarding less painful"), so per Refine Step 2 I 
     Executable here. But I **stopped and asked** before running it, because it pushes to `main`
     unprompted. Defect D6.
 38. **6.4 Checkpoint.**
-    `Bash("python3 /home/fbiebl/weside/claude-code-plugin-SIM-1-p3/we/scripts/orchestration.py story checkpoint GH-7 refined")`
+    `Bash("python3 <worktree>/we/scripts/orchestration.py story checkpoint GH-7 refined")`
     → executes; `story_key` is a free string in the sqlite schema, so `GH-7` is accepted.
     This is the one of the six that works verbatim.
 39. **6.5 Vault links.** TurboVault absent → skipped silently, as instructed. A no-op line.
@@ -661,7 +661,7 @@ reader, but it is the kind of literal a headless worker copies.
 - **Whether a feature worktree is allowed to be the cwd at all.** 6.1 acknowledges the case; the
   prerequisites (`git rev-parse --show-toplevel` for `.weside/dor.md`) and the graphify commands
   (bare relative `scripts/graphify/...`) do not. In this repo the graph would build in whichever
-  worktree I stand in — the weside-core convention is that it builds only in main. No guidance.
+  worktree I stand in — the host repo's convention is that it builds only in main. No guidance.
 - **A criterion for "more than one sitting"** and hence for printing the `/loop` line. (D14)
 - **Where the `.weside/verify.md` proposal goes in the plan.** Documentation Impact? Verification?
   I put it in both. (D13)
