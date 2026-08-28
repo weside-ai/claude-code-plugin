@@ -1,9 +1,13 @@
 ---
 name: vision
 description: >
-  Vision (Solo) at the PRD altitude: audience, problem, intended change, non-bets, at
-  docs/plans/<vision>/PRD.md. Triggers: "/we:vision", "PRD", "write a vision".
+  Vision (Solo) — PO skill at the PRD altitude. Creates or refines the
+  Product Requirements Document (audience, problem, intended change,
+  non-bets) at docs/plans/<vision>/PRD.md. Use when the user says
+  "/we:vision", "PRD", "write a vision", "refine vision".
+  Decompose into Sagas via /we:meet vision.
 ---
+
 
 # Vision (Solo) — Product Owner at the PRD altitude
 
@@ -128,7 +132,7 @@ User reviews. On feedback → revise. On approval → continue.
 Trigger: `/we:vision "<product-name>"` with no existing PRD.
 
 1. Ask the four frame questions in order, one at a time. Get a sharp answer for each before moving on.
-2. Ask for the explicit non-bets — this is the hardest question and the one most often skipped. If `docs/plans/out-of-scope/` exists (written by the relevant skill on rejected enhancements), read it first: those concepts are already-decided non-bets — surface them instead of re-litigating.
+2. Ask for the explicit non-bets — this is the hardest question and the one most often skipped. If `docs/plans/out-of-scope/` exists (rejected enhancements), read it first: those concepts are already-decided non-bets — surface them instead of re-litigating.
 3. Surface the bets and assumptions the answers rest on.
 4. Draft the PRD using the template above (EnterPlanMode).
 5. User approval (ExitPlanMode).

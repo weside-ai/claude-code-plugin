@@ -98,10 +98,6 @@ The PR/CI data source via `gh api` is intrinsically engineering-only — that's 
 
 Pattern Highlights section fires if any recurrence ≥ 2.
 
-**3. Coach-triggered:**
-
-User opens the relevant skill. Coach's Boot Protocol notices PR #1998 merged 30min ago with 4 CI cycles. Coach offers retro `[y/n]`. User: `y`. Coach prints hand-off; user invokes `/we:retro --pr 1998` in a fresh session. Skill runs.
-
 **4. Clean cycle:**
 
 Skill runs, finds 2 wins, 0 pain, 0 proposals. Report shows wins. Log still written (`docs/retros/2026-05-17-clean-cycle.md`) — future `--scan` runs see "yes, clean cycles happen, here's what we did right".

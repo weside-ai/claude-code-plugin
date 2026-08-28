@@ -51,14 +51,15 @@ User         → reviews PR, merges, closes ticket
 
 Every skill is directly invocable as `/we:<name>`; the authoritative catalog is the skills'
 own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROOT}/skills/` —
-the relevant skill and `/we:retro` already do). Orientation by altitude:
+`/we:retro` already does). Orientation by altitude:
 
 - **Plan:** `/we:vision` · `/we:saga` · `/we:epic` · `/we:story` (Solo formulation), `/we:meet
   vision|saga|epic|story` + `/we:council` (Council deliberation), `/we:prototype` (answer a
   design question before it gets planned)
 - **Build:** `/we:orchestrate` (the Lead — dispatches `/we:refine` and `/we:develop` workers, or
   `--solo` for one small story) · `/we:ci-review` · `/we:codex-task`
-  · `/we:find-dead-code` · the relevant skill
+- **Quality/analysis:** `/we:find-dead-code`
+- **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` ·
   `/we:retro` · `/we:handoff` · `/we:grill` · `/we:materialize`
 
 **Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:ac-review`, `/we:static`, `/we:test`.
@@ -76,10 +77,13 @@ The plugin writes to three durable directories in the **user repo** — version-
 
 | Directory | Owner skills | What lives there |
 |---|---|---|
+| `docs/plans/<vision>/PRD.md` + flat `docs/plans/<slug>-{saga,epic,story}.md` | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` | Initiative plans at all four Plan altitudes — Vision (PRD), Saga (Theme), Epic (Initiative), Story (Feature slice). The "what to build" + "why" + "how phased". |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *Wins / Pain / Proposals* from the just-shipped cycle. Proposed MD-file edits land in `.claude/rules/` or `CLAUDE.md` so the next cycle is cleaner. The "what we learned" + "how the harness should change". |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *Identity / Current State / Decisions / Tried-and-rejected / Open questions / Files touched / Next steps / Watch-outs / References*. The "where we are right now" + "what the next session should pick up". |
+| `CONTEXT.md` (repo root) | `/we:grill` (writer); read by `/we:story`, `/we:orchestrate`, `/we:epic`, `/we:saga`, `we:doc-architect` | The project glossary — canonical domain terms with avoid-lists. Pure glossary, no implementation details. The "what we call things". |
+| `docs/adr/NNNN-*.md` | `/we:grill` (offers at the 3-gate) | Lean ADRs — a paragraph per hard-to-reverse, surprising, real-trade-off decision. The "why we did it this way". |
 
-Skills read existing files in these directories at boot (e.g. the relevant skill Boot Protocol Step 10 reads both `docs/plans/*-{saga,epic}.md` and `docs/handoffs/*.md`) and write new ones per the per-skill conventions documented in each `SKILL.md`. The three categories are the **plugin's durable surface in the user repo** — anything that should outlive a single session belongs here, not in CC's opaque session jsonl or in ephemeral memory.
+Skills read existing files in these directories at boot (e.g. `/we:orchestrate` reads `docs/plans/*-{saga,epic}.md` and `docs/handoffs/*.md`) and write new ones per the per-skill conventions documented in each `SKILL.md`. The three categories are the **plugin's durable surface in the user repo** — anything that should outlive a single session belongs here, not in CC's opaque session jsonl or in ephemeral memory.
 
 ---
 

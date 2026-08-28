@@ -304,6 +304,8 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 
 ---
 
+---
+
 ### `/we:retro`
 
 > *Systematic continuous-improvement pass on the just-shipped cycle. Every error happens exactly once.*
@@ -351,6 +353,8 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 - Push without PR review — default PR-workflow with branch `handoff/YYYY-MM-DD-<slug>` for repos without direct-commit config
 
 **Differs from `/we:retro`:** Both write to `docs/<category>/YYYY-MM-DD-<slug>.md`. `/we:retro` captures *lessons* — frictions in the cycle that should become rules so they don't recur. `/we:handoff` captures *position* — where the work is, what was decided, what the next concrete step is. Different artifact, different purpose; both live in the user repo.
+
+---
 
 ---
 
@@ -411,6 +415,8 @@ Walks every branch of the decision tree — one question per turn, each with a r
 
 ---
 
+---
+
 ### `/we:prototype`
 
 > *Throwaway code that answers exactly one design question.*
@@ -430,6 +436,10 @@ Two branches by question type. **Logic** ("does this state model feel right?"): 
 
 ## Review + audit skills
 
+---
+
+---
+
 ## Dev Utilities
 
 ### `/we:find-dead-code`
@@ -437,6 +447,8 @@ Two branches by question type. **Logic** ("does this state model feel right?"): 
 > *Find and remove dead code from Python backends.*
 
 Method-level detection, test-only references, vulture static analysis, coverage-based detection. Surgical removal.
+
+---
 
 ---
 
@@ -466,6 +478,7 @@ Skills dispatch agents to do heavy lifting in their own context. You don't invok
 | `static-analyzer` | `/we:static`, the pipeline | Lint, format, types |
 | `test-runner` | `/we:test`, the pipeline | Tests with coverage |
 | `pr-creator` | `/we:pr`, the pipeline | PR creation with checkpoint validation |
+| `doc-architect` | the integration pipeline | Doc proposals; reads landscape fresh on every call |
 | `council-architect` | `/we:council`, `/we:meet` | Architect role-lens |
 | `council-product-owner` | `/we:council`, `/we:meet` | PO role-lens |
 | `council-scrum-master` | `/we:council`, `/we:meet` | SM role-lens |

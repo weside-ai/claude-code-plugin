@@ -803,32 +803,6 @@
     line-height: 1.4;
   }
 
-  /* ─── 8. /we:coach ─── */
-  .sm-flow {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr auto 1fr;
-    gap: 0;
-    max-width: 1100px;
-    width: 100%;
-    align-items: stretch;
-  }
-  .sm-step {
-    background: var(--bg-card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1.1rem 1.2rem;
-  }
-  .sm-step .sm-step-num {
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.16em;
-    color: var(--aria);
-    margin-bottom: 0.4rem;
-  }
-  .sm-step h4 { font-size: 0.98rem; font-weight: 500; margin-bottom: 0.4rem; }
-  .sm-step p { font-size: 0.84rem; color: var(--fg-muted); line-height: 1.5; }
-  .sm-step code { color: var(--gold-glow); font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; }
-  .sm-arrow { color: var(--fg-dim); align-self: center; font-size: 1.3rem; padding: 0 0.4rem; }
 
   /* ─── 9. RETRO — compact body, default heading ─── */
   section#retro { padding-top: 4vh; padding-bottom: 4vh; }
@@ -975,21 +949,6 @@
     font-family: ui-monospace, Menlo, monospace;
     font-size: 0.88em;
   }
-  .retro-trigger-note {
-    max-width: 1200px;
-    width: 100%;
-    font-size: 0.82rem;
-    color: var(--fg-muted);
-    line-height: 1.4;
-    margin-bottom: 0.5rem;
-  }
-  .retro-trigger-note strong { color: var(--fg); }
-  .retro-trigger-note code {
-    color: var(--gold-glow);
-    font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.92em;
-  }
-  .retro-trigger-note em { color: var(--gold-glow); font-style: italic; }
 
   /* ─── 10. DELIVER ─── */
   .deliver-wrap {
@@ -1132,8 +1091,6 @@
     .discipline-mini { grid-template-columns: 1fr 1fr; }
     .meeting-grid, .two-paths, .deliver-wrap { grid-template-columns: 1fr; gap: 1.3rem; }
     .council-grid { grid-template-columns: 1fr; }
-    .sm-flow { grid-template-columns: 1fr; }
-    .sm-arrow { display: none; }
     .retro-demo { grid-template-columns: 1fr; }
     #cta .steps { grid-template-columns: 1fr; }
   }
@@ -1511,7 +1468,6 @@
   <a data-target="epic" data-label="Epic · Initiative"></a>
   <a data-target="story" data-label="Story · slice"></a>
   <a data-target="build" data-label="Build · /we:orchestrate"></a>
-  <a data-target="coach" data-label="Coach · /we:coach"></a>
   <a data-target="retro" data-label="Retro · KVP loop"></a>
   <a data-target="deliver" data-label="Deliver · you"></a>
   <a data-target="maturity" data-label="Maturity · L1→L4"></a>
@@ -1639,19 +1595,19 @@
         <span class="team-role-chip chip-dev">DEVELOPER</span>
         <h4>Ships the how</h4>
         <p>Picks up a refined Story and runs the autonomous pipeline — or a dev-only worker slice inside an orchestrated run.</p>
-        <div class="team-skills"><code>/we:orchestrate</code><code>/we:develop</code><code>/we:ci-review</code><code>/we:diagnose</code></div>
+        <div class="team-skills"><code>/we:orchestrate</code><code>/we:develop</code><code>/we:ci-review</code></div>
       </div>
       <div class="team-card">
         <span class="team-role-chip chip-tl">TECH LEAD</span>
         <h4>Holds the whole</h4>
         <p>Orchestrates multi-Story work, reviews the integrated diff, keeps the architecture honest with periodic audits.</p>
-        <div class="team-skills"><code>/we:orchestrate</code><code>/we:map</code><code>/we:review</code><code>/we:audit</code></div>
+        <div class="team-skills"><code>/we:orchestrate</code><code>/we:map</code><code>/we:ci-review</code></div>
       </div>
       <div class="team-card">
         <span class="team-role-chip chip-team">EVERYONE</span>
         <h4>Same rituals</h4>
         <p>Orientation, retros, and cross-session continuity work identically for every seat — and every session.</p>
-        <div class="team-skills"><code>/we:coach</code><code>/we:retro</code><code>/we:handoff</code><code>/we:sideload</code></div>
+        <div class="team-skills"><code>/we:retro</code><code>/we:handoff</code><code>/we:sideload</code></div>
       </div>
     </div>
 
@@ -1790,8 +1746,7 @@
         <rect class="story-card" x="222" y="627" width="150" height="35" rx="6"/>
         <text class="t-skill2" x="234" y="650">WA-103 · raw</text>
         <rect class="story-card" x="222" y="670" width="150" height="26" rx="6"/>
-        <text class="t-skill2" x="234" y="688">intake: /we:triage</text>
-      </g>
+              </g>
 
       <g id="fl-refine" data-fl class="hover-glow">
         <rect class="node" x="200" y="740" width="335" height="112" rx="12"/>
@@ -1835,7 +1790,7 @@
         <text class="t-skill" x="905" y="596" text-anchor="middle">/we:orchestrate</text>
         <text class="t-skill2" x="905" y="614" text-anchor="middle">+ /we:develop workers</text>
         <text class="t-title" x="905" y="652" text-anchor="middle" style="font-size:14.5px; fill: var(--fg-muted);">Daily · „where am I?"</text>
-        <text class="t-skill" x="905" y="672" text-anchor="middle">/we:coach · /we:handoff</text>
+        <text class="t-skill" x="905" y="672" text-anchor="middle">/we:retro · /we:handoff</text>
         <text class="t-sub" x="905" y="708" text-anchor="middle">criteria checked · review · lint · tests</text>
         <text class="t-sub" x="905" y="726" text-anchor="middle">each Story → one PR</text>
         <rect class="chip chip-dev" x="851" y="762" width="44" height="18" rx="9"/>
@@ -2040,7 +1995,7 @@
           <div class="roster-member"><div class="roster-avatar" style="background: var(--blair)">AR</div><div class="roster-meta"><div class="role-name">Architect</div><div class="role-lens">decomposition · failure modes</div></div></div>
           <div class="roster-member"><div class="roster-avatar" style="background: var(--aria)">OR</div><div class="roster-meta"><div class="role-name">Orchestrator</div><div class="role-lens">sequencing · synthesis</div></div></div>
         </div>
-        <div style="margin-top: 0.9rem; font-size: 0.78rem; color: var(--fg-dim);">Add <code style="color:var(--gold-glow);">--council=security,sales,…</code> for domain-heavy Epics.</div>
+        <div style="margin-top: 0.9rem; font-size: 0.78rem; color: var(--fg-dim);">Add <code style="color:var(--gold-glow);">--council=security,legal,…</code> for domain-heavy Epics.</div>
       </div>
     </div>
 
@@ -2050,7 +2005,7 @@
         <li>A vision has been agreed and now needs concrete sequencing</li>
         <li>A large piece of work needs breaking down before Story-altitude planning starts</li>
         <li>Dependencies between teams or repos need to be made explicit</li>
-        <li>Domain-heavy Epics (security, legal, sales) — extend the roster per call</li>
+        <li>Domain-heavy Epics (security, legal) — extend the roster per call</li>
       </ul>
     </div>
 
@@ -2156,38 +2111,10 @@
     <a class="doc-link" href="../docs/workflow.md">Build pipeline reference →</a>
   </section>
 
-  <!-- ============ 8. COACH — /we:coach (APO advisor) ============ -->
-  <section id="coach">
-    <div class="kicker">Station 11 · Coach · the APO advisor</div>
-    <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:coach</code> — where am I, what's next?</h2>
-    <p class="lede">One job: orient you. The Coach reads repo state — your plans, recent commits, open tickets, pipeline checkpoints — maps it to an APO altitude, and proposes the natural next <code>/we:*</code> command with a <code>[y/n]</code> gate. Companion-aware: with weside, the Coach speaks in your Companion's voice. For systematic retrospectives after Deliver, see Station 12 — <code>/we:retro</code> owns that loop.</p>
-
-    <div class="sm-flow">
-      <div class="sm-step">
-        <div class="sm-step-num">B · BEGINNER</div>
-        <h4>First-Use Orientation</h4>
-        <p>No <code>.weside/</code> yet? The Coach offers to run <code>/we:setup</code> right now. Set up but no plans? It points at <code>/we:story "your first feature"</code>. The on-ramp for new repos and new users.</p>
-      </div>
-      <div class="sm-arrow">→</div>
-      <div class="sm-step">
-        <div class="sm-step-num">A · ADVISOR</div>
-        <h4>„where am I, what's next?"</h4>
-        <p>Reads <code>docs/plans/</code>, recent commits, open tickets, pipeline state. Maps to altitude (Vision / Saga / Epic / Story / Build), proposes the natural next move with <code>[y/n]</code>. Mid-Saga or mid-Epic: surfaces a one-line Plan-status ("Epic: Ledger — 6 Stories, 2 shipped, 1 active, 3 refined") and points you to <code>/we:saga</code> or <code>/we:epic</code> for the full Status dashboard. <strong style="color:var(--fg)">Build is always handed off, never launched from a Coach session.</strong></p>
-      </div>
-      <div class="sm-arrow">→</div>
-      <div class="sm-step">
-        <div class="sm-step-num">CONFIRMATION</div>
-        <h4>You decide. Always.</h4>
-        <p>Every advisor-launched command waits for <code>[y/n]</code>. The Coach proposes; you decide — that's the discipline. Doc changes are delegated to <code>/we:docs</code>; retros are handed to <code>/we:retro</code>; the Coach itself stays in its advisory lane.</p>
-      </div>
-    </div>
-
-    <a class="doc-link" href="../docs/skills.md">/we:coach reference →</a>
-  </section>
 
   <!-- ============ 9. RETRO — /we:retro (KVP loop) ============ -->
   <section id="retro">
-    <div class="kicker">Station 12 · Retro · the harness improves itself</div>
+    <div class="kicker">Station 11 · Retro · the harness improves itself</div>
     <h2 class="section-title"><code style="font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; color: var(--gold-glow);">/we:retro</code> — every error happens exactly once.</h2>
     <p class="lede">After Deliver, the loop closes. <code>/we:retro</code> walks the shipped PR — session transcript + <code>gh api</code> (CI, review-bot threads, push-fix cycles) — and proposes concrete MD-file edits, primarily in your repo's <code>.claude/rules/</code> and <code>CLAUDE.md</code>. Per-item <code>[y/n]</code> gate. The harness grows tighter every cycle.</p>
 
@@ -2237,18 +2164,14 @@
       <span>Approved proposals applied via Edit/Write (default: PR into user repo). Retro log → <code>docs/retros/YYYY-MM-DD-*.md</code>; next <code>/we:retro --scan 10</code> reads it for recurring patterns.</span>
     </div>
 
-    <div class="retro-trigger-note">
-      <strong>Coach can suggest it.</strong> <code>/we:coach</code> watches for retro-worthy signals at boot (PR merge, CI cycles ≥ 3, end-of-session) and offers <code>/we:retro</code> with a <code>[y/n]</code> gate. Never auto-fires. <em>Jeder Fehler passiert nur einmal.</em>
-    </div>
-
     <a class="doc-link" href="../docs/concepts/retro.md">/we:retro concept doc →</a>
   </section>
 
   <!-- ============ 10. DELIVER ============ -->
   <section id="deliver">
-    <div class="kicker">Station 13 · Deliver — you</div>
+    <div class="kicker">Station 12 · Deliver — you</div>
     <h2 class="section-title">What you get. What stays yours.</h2>
-    <p class="lede">By the time the pipeline hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is human work. By design.</p>
+    <p class="lede">By the time the pipeline hands off, the PR is in a known-good state. The remaining work — judging it, merging it, closing the ticket — is yours.</p>
 
     <div class="deliver-wrap">
       <div class="deliver-list">
@@ -2282,7 +2205,7 @@
 
   <!-- ============ MATURITY ============ -->
   <section id="maturity">
-    <div class="kicker">Station 14 · Where this goes</div>
+    <div class="kicker">Station 13 · Where this goes</div>
     <h2 class="section-title">Four maturity levels. Start free, grow when it pinches.</h2>
     <p class="lede">Agentic Product Ownership meets you where you are. The plugin alone carries a team to Level&nbsp;2; the weside platform lifts the same skills — same names, same pipeline — to proactive and organisational maturity. No level is forced; you upgrade when the level below stops fitting.</p>
 
@@ -2322,7 +2245,7 @@
 
   <!-- ============ 10. TRY IT ============ -->
   <section id="cta">
-    <div class="kicker">Station 15 · Try it</div>
+    <div class="kicker">Station 14 · Try it</div>
     <h2 class="section-title" style="max-width: 28ch; text-align: center; margin: 0 auto 1.2rem;">In your own workflow — 60 seconds.</h2>
     <div class="install-block">
       <span class="prompt-sign">$</span>
@@ -2363,15 +2286,11 @@
       <code>/we:vision</code>
       <code>/we:saga</code>
       <code>/we:epic</code>
-      <code>/we:triage</code>
       <code>/we:prototype</code>
-      <code>/we:coach</code>
       <code>/we:council</code>
       <code>/we:retro</code>
       <code>/we:handoff</code>
-      <code>/we:doc-improve</code>
       <code>/we:find-dead-code</code>
-      <code>/we:smoketest</code>
       <code>/we:setup</code>
       <code>/we:onboarding</code>
       <code>/we:sideload</code>
@@ -2574,7 +2493,7 @@ document.getElementById("convene").addEventListener("click", runCouncil);
 //
 // Navigation
 //
-const sections = ["hero", "overview", "team", "sprintloop", "crew", "vision", "saga", "epic", "story", "build", "coach", "retro", "deliver", "maturity", "cta"];
+const sections = ["hero", "overview", "team", "sprintloop", "crew", "vision", "saga", "epic", "story", "build", "retro", "deliver", "maturity", "cta"];
 const dots = document.querySelectorAll("nav.dots a");
 const main = document.getElementById("main");
 const counter = document.getElementById("counter-now");

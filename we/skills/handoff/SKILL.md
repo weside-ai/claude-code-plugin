@@ -1,8 +1,11 @@
 ---
 name: handoff
 description: >
-  Writes session state to docs/handoffs/ and restores it later (--write | --load | --list).
-  Triggers: "/we:handoff", "pick up where we left off", "bis morgen".
+  Durable cross-session handoff — writes session state (decisions, dead
+  ends, file status, next steps, watch-outs) to docs/handoffs/ and
+  restores it later. Modes: --write, default/--load, --list. Use when
+  the user says "/we:handoff", "handoff", "pick up where we left off",
+  "carry over to next session", "bis morgen", "ich muss weg jetzt".
 ---
 
 # /we:handoff — Durable Session Handoff
@@ -148,8 +151,6 @@ what it says. Two parts, both short:
 
 > *Handoff written · docs/handoffs/2026-05-18-<slug>.md (N lines). Privacy check: 0 personal-content references. Resume with `/we:handoff` (latest) or `/we:handoff --load <slug>`.*
 
-If the relevant skill had triggered this WRITE via an end-of-session suggestion, also: *"Coach will surface this at the next session's boot — no manual reload needed unless you skip Coach."*
-
 ---
 
 ## LOAD Mode — Step-by-step Workflow
@@ -239,7 +240,7 @@ worktree: <path if non-main worktree, else "main">
 ticket_or_initiative: <Jira key | initiative slug | null>
 session_id: <CC session-id from ~/.claude/projects/<repo-id>/...>
 written_at: <ISO8601 timestamp>
-written_by: <"manual" | "coach-suggested" | "auto">
+written_by: <"manual" | "auto">
 plan_files:
   - <docs/plans/<slug>-{saga,epic,story}.md or docs/plans/<vision>/PRD.md>
 retro_files:
@@ -272,7 +273,7 @@ Empty section convention: a single `—` rather than fabricated content.
 
 (The privacy guard and commit policy above are the spec — these are the extras:)
 
-- **Don't auto-fire from a hook.** WRITE runs when a human asks for it — directly, or by accepting Coach's end-of-session suggestion. What is ungated is the *drafting*, not the *decision to write at all*.
+- **Don't auto-fire from a hook.** WRITE runs when a human asks for it — directly. What is ungated is the *drafting*, not the *decision to write at all*.
 - **Don't cross repos.** One handoff per repo. Multi-repo handoffs are out of scope.
 
 ---

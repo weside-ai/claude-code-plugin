@@ -207,6 +207,7 @@ The plugin ships nine role-lenses under `we/agents/council-<role>.md`. Each can 
 | `ux_researcher` | User experience, friction, reachability |
 | `marketing` | Positioning, naming, brand fit |
 | `security` | Attack surface, trust boundaries, data exposure |
+| `sales` | Buyer journey, objections, pricing fit |
 | `legal` | Contracts, compliance, liability |
 
 Each shell is ~30 lines of focused persona prompt. Full descriptions: [roles.md](roles.md).

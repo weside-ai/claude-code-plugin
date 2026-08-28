@@ -60,7 +60,7 @@ worktree: <path if non-main worktree, else "main">
 ticket_or_initiative: <Jira key | initiative slug | null>
 session_id: <CC session-id from ~/.claude/projects/...>
 written_at: <ISO8601 timestamp>
-written_by: <"manual" | "coach-suggested" | "auto">
+written_by: <"manual" | "auto">
 plan_files: [<docs/plans/...-story.md>, ...]
 retro_files: [<docs/retros/...>, ...]
 companion: <name if MCP active, else null>
@@ -107,24 +107,6 @@ This is what makes the handoff safe to commit (often via PR) into the user repo.
 
 ---
 
-## Coach integration
-
-the relevant skill Boot Protocol Step 10 reads `docs/handoffs/` alongside `docs/plans/`. If a handoff exists and was written less than 14 days ago, Coach surfaces it in its boot summary:
-
-> *"Active handoff: `docs/handoffs/2026-05-18-phase-7-handoff-skill.md` (written 14 hours ago, on `feat/handoff-skill`). Load it to restore session state? [y/n]"*
-
-`y` → Coach prints the hand-off (`/we:handoff`). User runs it; full state restored.
-
-Coach also suggests `/we:handoff --write` at end-of-session signals:
-
-- User says "bis morgen" / "schlafen" / "going home" / "wrap up"
-- `save_compass` or `save_snapshot` called via MCP this session (Companion-mode end-of-day signal)
-- Session is long (> 30 turns) and no handoff has been written this session yet
-
-Always `[y/n]`-gated. Never auto-fires. Coach won't suggest the same signal twice in one session.
-
----
-
 ## Apply mechanics
 
 When a WRITE-mode draft is approved:
@@ -143,6 +125,7 @@ User can interrupt mid-apply ("skip the PR, just commit directly").
 
 | Directory | Skills | What lives there |
 |---|---|---|
+| `docs/plans/<vision>/PRD.md` + `docs/plans/<slug>-{saga,epic,story}.md` | `/we:vision` `/we:saga` `/we:epic` `/we:story` | Initiative plans at all four Plan altitudes — *what to build, why, how phased* (Vision nests in a `<vision>/` dir; Saga-and-below are flat) |
 | `docs/retros/YYYY-MM-DD-<topic>.md` | `/we:retro` | Retrospective logs — *what we learned, how the harness should change* |
 | `docs/handoffs/YYYY-MM-DD-<topic>.md` | `/we:handoff` | Session handoffs — *where we are now, what the next session should pick up* |
 
@@ -175,10 +158,6 @@ Skill loads the latest handoff, renders all body sections back into the conversa
 ```
 
 Table of the last 10 handoffs. Pick one by slug.
-
-**4. Coach-triggered:**
-
-User opens the relevant skill. Coach Boot Step 10 detects yesterday's handoff. Coach offers `[y/n]`. User: `y`. Coach prints the hand-off; user invokes `/we:handoff` in the next turn (or runs it immediately). Full state restored.
 
 **5. Staleness warning:**
 

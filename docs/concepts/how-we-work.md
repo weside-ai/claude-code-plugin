@@ -5,7 +5,7 @@ method, the altitudes, the pipeline, and the skill catalog. It is an **index, no
 every entry points to a living doc and names the compact part to load. The content stays in the
 living docs, so this manifest **cannot drift** from them.
 
-the relevant skill and `/we:retro` both load this at boot, so both reason from the same, always-current
+`/we:retro` loads this at boot, so it reasons from the always-current
 picture of how we work — without the user having to explain anything.
 
 ## How to use this manifest
