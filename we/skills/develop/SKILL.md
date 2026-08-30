@@ -146,6 +146,9 @@ Agent(subagent_type="we:ac-reviewer",
 
 The integration branch comes from the brief; standalone, use the branch you cut from. Findings are
 **informational** — fix what you own, commit it (`{KEY}: AC-check fixes`), report them either way.
+A message from the Lead outranks this brief: act on it at your next stop, and when it names a
+file to write, write that file first — it is the Lead's only proof you heard it.
+
 No separate `/we:ac-review` pass and no bug-hunt: Codex adversarial-review and `/code-review` run
 exactly once, at Lead integration, over the merged diff (`references/worker-dispatch.md`
 § AC-review rule).

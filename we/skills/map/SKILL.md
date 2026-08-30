@@ -15,7 +15,8 @@ command.
 > **Counterpart to the altitude skills.** `/we:saga` and `/we:epic` render a
 > *deep* Status dashboard for ONE artifact (drift detection, next-move). `/we:map`
 > is the *wide, shallow* view across ALL artifacts — the bird's eye. For detail on
-> any one node, hand off to `/we:saga <slug>` or `/we:epic <slug-or-key>`.
+> any one node, hand off to `/we:saga <slug>` or `/we:epic <slug-or-key>`; for the branch
+> you are standing on right now — ticket, PR, CI, next move — `/we:standup`.
 
 ---
 

@@ -20,7 +20,7 @@ Solo formulates an N-item; Meet decomposes an N-item into N+1-items. Build is au
 
 **The pitch:** "One PO plus companion equals two POs — not through automation, but through a companion that thinks along, remembers, and never loses the overview."
 
-**Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra install. Two optional backends: **Codex** (`gpt-5-codex`, via [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`). `/we:orchestrate` dispatches workers to whichever backend is configured; `/we:setup` runs the wizard. Two separate checks: `we:ac-reviewer` verifies AC/DoD (cheap, runs per chunk and at integration); the bug-hunt runs once, at integration, on whichever engine did NOT write the code (`review.cross` toggles only the per-chunk AC-check) — see `references/worker-dispatch.md`. Direct Codex dispatch: `/we:codex-task`. The plugin never hard-depends on Codex or any foreign engine.
+**Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra install. Two optional backends: **Codex** (`gpt-5-codex`, via [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)) and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`). `/we:orchestrate` dispatches workers to cheap Claude by default, and to Codex or a foreign engine only when the user names it in that run — the configured key is a candidate, not a standing licence; `/we:setup` runs the wizard. Two separate checks: `we:ac-reviewer` verifies AC/DoD (cheap, runs per chunk and at integration); the bug-hunt runs once, at integration, on whichever engine did NOT write the code (`review.cross` toggles only the per-chunk AC-check) — see `references/worker-dispatch.md`. Direct Codex dispatch: `/we:codex-task`. The plugin never hard-depends on Codex or any foreign engine.
 
 Learn more: [agenticproductownership.com](https://agenticproductownership.com)
 
@@ -59,7 +59,8 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 - **Build:** `/we:orchestrate` (the Lead — dispatches `/we:refine` and `/we:develop` workers, or
   `--solo` for one small story) · `/we:ci-review` · `/we:codex-task`
 - **Quality/analysis:** `/we:find-dead-code`
-- **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` ·
+- **Process/continuity:** `/we:standup` (this branch, now) · `/we:map` (all plans) ·
+  `/we:setup` · `/we:onboarding` · `/we:sideload` ·
   `/we:retro` · `/we:handoff` · `/we:grill` · `/we:materialize`
 
 **Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:ac-review`, `/we:static`, `/we:test`.

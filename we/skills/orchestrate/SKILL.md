@@ -277,6 +277,9 @@ CONTEXT (front-loaded — this replaces the clarification a human would give):
 
 If you hit a design fork this context cannot settle, do NOT guess — report the fork and stop.
 
+INBOUND: a message from "team-lead" outranks this brief. Act on it at your next stop; when it
+names a file to write, write that file first — it is the lead's only proof you heard it.
+
 REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead. Send EXACTLY ONE message:
   SendMessage(to="team-lead", summary="refiner-{TICKET} done|blocked",
               message="wrote docs/plans/{TICKET}-story.md | blocked: <fork/reason>")
@@ -327,6 +330,9 @@ gate baselines, shared-file sections assigned to you and the sections you must n
 REPORT FILE: write WORKER-REPORT.md in your worktree root before you stop — what you built,
 skipped, could not settle. It is not part of the change: do not `git add` it.
 
+INBOUND: a message from "team-lead" outranks this brief. Act on it at your next stop; when it
+names a file to write, write that file first — it is the lead's only proof you heard it.
+
 REPORTING IS NOT OPTIONAL: your plain-text output is INVISIBLE to the lead. Send EXACTLY ONE message:
   SendMessage(to="team-lead", summary="worker-{TICKET} done|blocked",
               message="<branch | commits: N | gates: lint ✓ types ✓ tests ✓ | AC-check: clean|N findings |
@@ -340,16 +346,19 @@ plugin context. When a rule changes, update the owner AND the brief.
 #### Executor selection (per chunk, at the confirm)
 
 Read `.weside/config.json` (`tools.codex`, `execution.default`; absent keys mean cheap Claude)
-and `.weside/engines.local.json` (absent means no foreign engine).
+and `.weside/engines.local.json` (absent means no foreign engine). **Claude workers are the
+default; Codex and foreign engines run only on the user's word in this run** — the config key is
+a candidate, not a licence (`references/worker-dispatch.md` § Three worker backends).
 
 | Backend | When | How |
 |---|---|---|
 | **Cheap Claude** | default, or `execution.default: claude-sonnet\|claude-haiku` | `Agent(model="sonnet", …)` with the brief above |
-| **Codex** | `tools.codex: true` + confirmed (per chunk, standing from the invocation, or `execution.default: codex`) | `references/codex-dispatch.md` |
-| **Foreign engine** | profile in `engines.local.json` | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` (brief: `references/worker-dispatch.md`) |
+| **Codex** | `tools.codex: true` **and** the user named Codex this run (invocation, per-chunk confirm, or mid-run steer) — `execution.default: codex` alone does not arm it | `references/codex-dispatch.md` |
+| **Foreign engine** | profile in `engines.local.json` **and** the user named it this run | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` (brief: `references/worker-dispatch.md`) |
 
-Risk class overrides the pick (Step 5.2). **Only an Agent teammate can be steered mid-flight**;
-a Codex or foreign worker is a detached process with no inbound channel and no liveness signal.
+Risk class overrides the pick (Step 5.2). **Only an Agent teammate has an inbound mailbox at
+all** (Step 7 item 2 — reachable, but not on a schedule you control); a Codex or foreign worker
+is a detached process with no inbound channel and no liveness signal.
 On those backends the brief is the whole instrument: front-load every constraint, turn what you
 cannot send into a merge-time check you write down at dispatch, and reconcile the file list with
 the prose before dispatch — generated artifacts, `WORKER-REPORT.md`, and the foreign test files a
@@ -363,22 +372,34 @@ be complete.
 ### Step 7: Monitor
 
 1. **Idle ≠ done.** A worker idles between turns; wait for its `SendMessage`, which can take many
-   minutes of silence. A message you send lands only at the worker's next turn boundary.
-2. **State is truth.** To know a worker's state — long idle, ambiguous report, after a compact,
+   minutes of silence.
+2. **You can talk to a running teammate — but a sent steer is not a delivered steer.**
+   `SendMessage(to=<worker-name>, …)` needs no team tool; the name is the address
+   (`references/agent-teams.md`). Send the moment you learn something the worker needs: a
+   constraint the plan missed, a file another chunk just claimed, a scope cut, an abort. **When
+   it lands is not yours to control** — the message queues in the teammate's mailbox and is read
+   at a turn boundary, so a worker inside a long tool chain may not look for many minutes
+   (measured: a worker running sequential 20 s Bash calls had not acted on a steer after 140 s).
+   So **every steer names an artifact** ("write `<path>` before you go on") and the Lead checks
+   for that artifact rather than assuming: a worker that never heard you and one that obeyed look
+   identical from outside. No artifact → not received: re-send once, then fall back to the
+   evidence ladder below. Codex and foreign workers have no mailbox at all — there the brief is
+   the whole instrument.
+3. **State is truth.** To know a worker's state — long idle, ambiguous report, after a compact,
    before any roll-up claim — read evidence, in order: `ListAgents` (is the teammate alive) →
    `git -C <worktree> status`/`log` (is work landing; for a refiner: `ls -l
    docs/plans/{KEY}-story.md`, its only artifact) → `WORKER-REPORT.md` in the worktree →
    for Codex the rollout file and CPU time (`references/codex-dispatch.md` § *Is it still
    working?* — process count and `/codex:status` both answer confidently and wrongly) → only
-   then nudge, at most once. Never spawn a replacement while the original may be alive: two
+   then **nudge** — a liveness probe, at most once. A steer (item 2) is not a nudge and is not rationed. Never spawn a replacement while the original may be alive: two
    workers on one host corrupt each other — kill, verify, then spawn. The state file says which
    backend and name each dispatch had; after a compact it is the only place that does.
-3. **Never wait on a commit alone.** A Codex chunk can finish and die uncommitted; a worker that
+4. **Never wait on a commit alone.** A Codex chunk can finish and die uncommitted; a worker that
    stops to ask writes nothing. Arm the wait on the worktree going dirty AND a timeout; when it
    fires, read the worktree yourself. A rescued tree is un-gated by construction: run the chunk's
    full gate list and the AC-check the worker owed before you commit it (crediting the worker in
    the trailer).
-4. **A wait condition may only watch state the worker changes.** Anchoring on a branch the Lead
+5. **A wait condition may only watch state the worker changes.** Anchoring on a branch the Lead
    moves while integrating (`git log <integration>..HEAD`) goes permanently false after the
    merge; anchor on a fixed sha, a remote branch's existence, or a file only the worker writes.
 

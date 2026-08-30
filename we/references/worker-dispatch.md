@@ -28,10 +28,17 @@ skip the AC-review at either point.
 | **Codex** | `codex-companion.mjs task --write --cwd <worktree> "…"` | When `tools.codex` is `true` and user confirms; see [`codex-dispatch.md`](codex-dispatch.md) |
 | **Foreign engine** | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` | When `.weside/engines.local.json` has a profile for that engine; requires Anthropic-compatible endpoint |
 
-The **default executor** is persisted in `.weside/config.json` as `execution.default`
-(`claude-sonnet` / `claude-haiku` / `codex` / `<engine-name>`). `/we:setup` wizard writes this
-(default: `claude-sonnet`). `/we:orchestrate` reads it; the user can override per-chunk at
-execution time.
+**Claude workers are the default; a non-Claude backend needs the user's word in this run.**
+`.weside/config.json` `execution.default` (`claude-sonnet` / `claude-haiku` / `codex` /
+`<engine-name>`) records what `/we:setup` wrote — for `codex` and for a named engine that is a
+*candidate*, never a standing licence. Dispatch to one only when the user names it for this run:
+in the invocation ("… mit codex"), at the per-chunk confirm, or as a mid-run steer; that pick
+then stands for the rest of the run. Every other case — key absent, unreadable, or naming a
+non-Claude backend with no user word — runs `claude-sonnet`. A Claude tier in `execution.default`
+dispatches without asking: that choice is between Claude tiers, not between engines.
+
+Bug-hunt routing is untouched by this rule — the cross-engine table below keys on who *wrote*
+the code, not on who was allowed to.
 
 **Model-tier rule (single owner):** plan-writing runs on **`opus`** — the refine lane
 (`/we:refine` workers, and an interactive `/we:story` session) produces the plan every

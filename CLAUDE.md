@@ -18,8 +18,8 @@ claude-code-plugin/
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
 │   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
 │   ├── commands/             # Slash commands for agent-dispatched tools (4)
-│   ├── skills/              # 29 skills (directly invocable via /we:*)
-│   ├── agents/              # 14 agents (4 pipeline + doc-architect + 9 council)
+│   ├── skills/              # 22 skills (directly invocable via /we:*)
+│   ├── agents/              # 13 agents (4 pipeline + doc-architect + 8 council)
 │   ├── quality/             # DoR, DoD (quality gate definitions)
 │   ├── references/          # Shared on-demand reference docs (privacy guard, ticketing, design vocabulary, test discipline, …)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize

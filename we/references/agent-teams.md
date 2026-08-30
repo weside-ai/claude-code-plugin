@@ -29,6 +29,10 @@ Agent(name=<role-slug>, subagent_type=<...>, model="sonnet", description=<...>, 
 
 - **Never pass `team_name`** — the parameter no longer exists; drop it from any spawn call or brief text that still carries it.
 - Once spawned, a member is addressable by `name` from any other session (lead or teammate) via `SendMessage(to=<name>, message=..., summary=...)` — no separate join step.
+- A message reaches a member that is still **working**, not only a finished one — but it queues
+  in that member's mailbox and is read at a turn boundary, so delivery is guaranteed while
+  timing is not. Whoever sends a steer verifies it landed by an artifact the steer asked for;
+  see [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 7 item 2.
 - **All member spawns still go in one assistant message** — that is what makes them initialize concurrently and start hearing each other from message 1. This rule is unchanged by the API change.
 
 ## Full teardown (mandatory, even on failure paths)

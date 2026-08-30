@@ -127,6 +127,10 @@ Options (show only available ones):
   Show the profile names. Or offer to create a new profile (see below).
 + **Create a new engine profile** — guides through the schema below.
 
+Say the consequence back when recording the pick: a Claude tier dispatches silently, while
+Codex and a named engine stay a *candidate* — `/we:orchestrate` takes the user's word for those
+per run (`references/worker-dispatch.md` § Three worker backends).
+
 **If the user picks "Create engine profile":**
 
 1. Ask: engine name (used as the key in the JSON, e.g. `kimi`).
