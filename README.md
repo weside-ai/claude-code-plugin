@@ -194,6 +194,15 @@ After install, configure via `/plugin settings we@weside-ai`:
 | `autoStoreConversations` | `false` | Store meaningful turns as Companion memories |
 | `loadCouncilFromWeside` | `true` | Convene weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses |
 
+### Statusline
+
+`/we:setup` offers to install the shipped statusline — model, branch, PR review state, context
+bar, RAM, session cost and 5h/7d rate-limit budgets on one width-aware line. It needs `node`,
+copies the script to `~/.claude/we-statusline.js` and points `statusLine` in
+`~/.claude/settings.json` at the copy. A statusline you already configured is never replaced
+without your explicit yes, and the old value is backed up. To undo, run `/we:setup` and say you
+want the statusline removed — it restores the backup, or drops the key if there was none.
+
 Ticketing and test discipline are **not** plugin settings — `/we:setup` records both per repo in `.weside/config.json`: the ticketing tool (+ project key) and `test_discipline` (`tdd` / `tests-after` / `off`, default `tests-after` — whether the pipeline writes failing tests first, tests after the code, or none unless the plan asks).
 
 ---

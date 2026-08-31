@@ -24,7 +24,9 @@ claude-code-plugin/
 │   ├── references/          # Shared on-demand reference docs (privacy guard, ticketing, design vocabulary, test discipline, …)
 │   ├── hooks/hooks.json     # SessionStart auto-materialize
 │   └── scripts/
-│       └── orchestration.py # SQLite checkpoint system (Python stdlib only)
+│       ├── orchestration.py # SQLite checkpoint system (Python stdlib only)
+│       ├── statusline.js    # Shipped statusline (model · branch · PR · context · cost)
+│       └── install_statusline.py # Installs it into ~/.claude/settings.json (owns the procedure)
 ├── README.md                # Public-facing documentation
 └── CLAUDE.md                # This file (developer guide)
 ```

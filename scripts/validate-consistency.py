@@ -195,6 +195,32 @@ def check_listing_budget() -> None:
         )
 
 
+def check_statusline_verdicts() -> None:
+    """The installer prints a `VERDICT:` line; /we:setup branches on its wording.
+
+    Two files, one contract, and no compiler between them: rename a verdict in the
+    script and Step 4b's branching stops matching without any test going red.
+    """
+    script = WE / "scripts" / "install_statusline.py"
+    skill = WE / "skills" / "setup" / "SKILL.md"
+    if not script.exists():
+        fail("we/scripts/install_statusline.py missing — /we:setup Step 4b calls it")
+        return
+    verdicts = set(re.findall(r'^VERDICT_[A-Z]+ = "([^"]+)"', script.read_text(), re.MULTILINE))
+    if not verdicts:
+        fail(
+            "install_statusline.py defines no VERDICT_* constants — Step 4b has nothing to branch on"
+        )
+        return
+    text = skill.read_text()
+    for verdict in sorted(verdicts):
+        if verdict not in text:
+            fail(
+                f"install_statusline.py prints VERDICT '{verdict}' which "
+                "we/skills/setup/SKILL.md does not branch on"
+            )
+
+
 def main() -> int:
     check_story_phases()
     check_epic_states()
@@ -202,6 +228,7 @@ def main() -> int:
     check_dead_references()
     check_userconfig_readers()
     check_listing_budget()
+    check_statusline_verdicts()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

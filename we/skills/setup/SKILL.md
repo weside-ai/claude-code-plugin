@@ -258,6 +258,31 @@ Engine <name>:  configured  (or: none)
 Cross-review:   on  (or: off)  — per-chunk AC-check + bug-hunt cross-review
 ```
 
+### Step 4b: Statusline (optional — ask once)
+
+The plugin ships a statusline that keeps model, branch, PR state, context usage, RAM, cost and
+rate-limit budgets in view — the numbers that decide when to split a session or a Story.
+Installing it writes `statusLine` to user-scope `~/.claude/settings.json`.
+
+The whole procedure — node check, current-value detection, copy, backup, merge, revert — is
+owned by `${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py`. Do not re-implement it here:
+
+1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py --status` and read its
+   `VERDICT:` line — the three wordings below are the branches; any `NOTE:` lines are for the
+   user.
+2. `offer to install` → ask: *"Install the we statusline? (model · branch · PR · context · cost)
+   [y/n, default y]"* — on yes run `--apply`.
+3. `already active` → say so in one line; run `--apply` when the verdict adds that the script is
+   stale (that refresh is the only thing a plugin update cannot do by itself). Asked to remove it
+   — here or in any later session — run `--revert`.
+4. `keep theirs` → **default to keeping their statusline.** Show the command string the script
+   printed and ask whether to replace it; only on an explicit yes run `--apply --force`, which
+   backs up the old value first.
+5. Relay the script's output verbatim, including the restart note. `BLOCKED:` (no `node`) is
+   informational — report it and continue, never block setup.
+
+`--revert` restores the backed-up statusline, so the offer is reversible; mention that once.
+
 ### Step 5: Companion Framework Setup (optional — ask first!)
 
 Ask: *"Set up the Companion Framework for this repo now? It composes a crew, registers a TurboVault, and — with a weside account — turns your Companions into a council you can convene via `/we:council` and `/we:meet`. You can also run `/we:onboarding` later."*
@@ -268,7 +293,7 @@ If **yes** — this step is **idempotent**: if `.weside/config.json` already exi
 
 0. **Enable Agent Teams (prerequisite for `/we:council` and `/we:meet`)**
 
-   Live teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Read `~/.claude/settings.json`: flag already `"1"` → move on. Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after.)"* — on yes, merge the key into the `env` block (create if missing), write back, tell the user to restart; on no, warn that council/meet will abort with a remediation hint, then continue. This is the only step that touches user-scope settings.
+   Live teams need `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Read `~/.claude/settings.json`: flag already `"1"` → move on. Otherwise ask: *"Enable Agent Teams in `~/.claude/settings.json`? `/we:council` and `/we:meet` need this. (Restart required after.)"* — on yes, merge the key into the `env` block (create if missing), write back, tell the user to restart; on no, warn that council/meet will abort with a remediation hint, then continue. Together with Step 4b's statusline, this is the only user-scope settings this skill touches.
 
 1. **Ensure `.weside/config.json`** — EXTEND the file Step 3 wrote (never re-emit its keys); add:
 
