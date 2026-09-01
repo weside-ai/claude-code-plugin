@@ -216,11 +216,18 @@ leaves every lane and its ticket goes to the repo's backlog state (`.weside/orch
    `$(git rev-parse --show-toplevel)-<epic-or-key>-integration` on
    `feat/<epic-or-key>-integration`; every integration command via `git -C`. Reuse an existing
    worktree only when it is on **this run's** branch — a path on a foreign branch is another
-   run's, never reset, never adopted. The main worktree stays on the default branch. The
-   integration worktree has exactly one writer: handing a PR to a second engine hands over the
-   work — review read-only until its work is a commit on the remote. Run the repo's worktree
+   run's, never reset, never adopted. The integration worktree has exactly one writer:
+   handing a PR to a second engine hands over the work — review read-only until its work is
+   a commit on the remote. Run the repo's worktree
    bootstrap **and its install rule** here, once (`.weside/orchestrate.md`); until the install
    has run, per-merge broad checks are backend-only.
+
+   **The main worktree's checkout is shared, and it is not yours.** Another session switches it
+   to its own branch without telling you — measured mid-wave: `main` → `fix/…` → `feat/…`
+   inside twenty minutes. So `git -C <main-worktree> branch --show-current` **immediately
+   before every plan or state commit**, and never conclude that a direct-commit escape hatch
+   lands on the default branch because it did an hour ago. A plan commit on a stranger's
+   feature branch is invisible until their PR merges or their branch is deleted.
 7. **Chunk worktrees are the Lead's.** For every chunk, whatever the backend, **when its wave
    starts** — off the integration branch as it stands then, so a later chunk carries the merged
    foundation: `git worktree add <path> -b <branch> <integration-branch>` + the repo bootstrap.
