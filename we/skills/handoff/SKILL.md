@@ -5,7 +5,7 @@ description: >
   ends, file status, next steps, watch-outs) to docs/handoffs/ and
   restores it later. Modes: --write, default/--load, --list. Use when
   the user says "/we:handoff", "handoff", "pick up where we left off",
-  "carry over to next session", "bis morgen", "ich muss weg jetzt".
+  "bis morgen".
 ---
 
 # /we:handoff — Durable Session Handoff

@@ -33,11 +33,12 @@ Solo Plan skills pick their mode automatically from the user's prompt + repo sta
 - **`/we:develop`** — dev-only worker slice: implement chunk → fast local gates → commit → push → stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone.
 - **`/we:orchestrate`** — the Lead: reads each story's state from git, dispatches `/we:refine` for what has no plan and `/we:develop` for what does (cheap Claude by default, Codex or foreign engines opt-in), merges the branches onto one integration branch, runs CI once. `--solo` for a story too small to be worth a worker.
 
-**Deliver altitude — human-only:** you review the PR, merge, close the ticket. Claude never merges and never closes.
+**Deliver altitude — human-only:** you review the PR and merge it. Claude never merges. Everything after your word is mechanical, and `/we:merged` does it.
 
 **Around the spine:**
 
 - **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
+- **`/we:merged`** — the close-out after you merged: verifies the merge on GitHub, tears down the run's worktrees, branches and processes, moves the tickets to Done, refreshes the epic mirror and state file, then names only what is still owed — a live round, a deploy, a decision. Together with `/we:standup` (this branch, right now) it is the pair that answers "where do we stand".
 - **`/we:map`** — plan-tree dashboard: a read-only text overview of every Saga › Epics › Stories with status buckets, scanned flat from `docs/plans/` by filename suffix and joined with build-pipeline state. The bird's-eye view (`/we:saga` / `/we:epic` give the deep per-artifact view).
 - **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / `CLAUDE.md` so the same error doesn't happen twice
 - **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.

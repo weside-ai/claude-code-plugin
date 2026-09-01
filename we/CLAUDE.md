@@ -59,8 +59,9 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 - **Build:** `/we:orchestrate` (the Lead — dispatches `/we:refine` and `/we:develop` workers, or
   `--solo` for one small story) · `/we:ci-review` · `/we:codex-task`
 - **Quality/analysis:** `/we:find-dead-code`
-- **Process/continuity:** `/we:standup` (this branch, now) · `/we:map` (all plans) ·
-  `/we:setup` · `/we:onboarding` · `/we:sideload` ·
+- **Where do we stand:** `/we:standup` (this branch, now) · `/we:merged` (after the human
+  merged: teardown, tickets to Done, and what is still owed) · `/we:map` (all plans)
+- **Process/continuity:** `/we:setup` · `/we:onboarding` · `/we:sideload` ·
   `/we:retro` · `/we:handoff` · `/we:grill` · `/we:materialize`
 
 **Commands** (thin `Agent()` dispatchers): `/we:pr`, `/we:ac-review`, `/we:static`, `/we:test`.

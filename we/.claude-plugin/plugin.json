@@ -1,7 +1,7 @@
 {
   "name": "we",
-  "version": "6.3.0",
-  "description": "Agentic Product Ownership toolkit for Claude Code — four Plan altitudes (Vision/Saga/Epic/Story) with Solo + Council deliberation, autonomous Build pipeline, runtime-agnostic worker dispatch (/we:develop + /we:orchestrate), CI automation, and optional AI companion augmentation.",
+  "version": "6.4.0",
+  "description": "Agentic Product Ownership toolkit for Claude Code \u2014 four Plan altitudes (Vision/Saga/Epic/Story) with Solo + Council deliberation, autonomous Build pipeline, runtime-agnostic worker dispatch (/we:develop + /we:orchestrate), CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
     "email": "info@weside.ai",
@@ -26,7 +26,7 @@
     "companion": {
       "type": "string",
       "title": "Companion Name",
-      "description": "Name of your weside Companion (optional — requires weside.ai account). Leave empty for no companion.",
+      "description": "Name of your weside Companion (optional \u2014 requires weside.ai account). Leave empty for no companion.",
       "required": false
     },
     "autoMaterialize": {

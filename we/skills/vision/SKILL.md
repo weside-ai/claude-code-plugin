@@ -5,7 +5,6 @@ description: >
   Product Requirements Document (audience, problem, intended change,
   non-bets) at docs/plans/<vision>/PRD.md. Use when the user says
   "/we:vision", "PRD", "write a vision", "refine vision".
-  Decompose into Sagas via /we:meet vision.
 ---
 
 

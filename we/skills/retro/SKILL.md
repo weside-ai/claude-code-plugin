@@ -5,7 +5,7 @@ description: >
   from transcript + gh api, proposes concrete .claude/rules/ and
   CLAUDE.md edits behind a per-item [y/n] gate, logs to docs/retros/.
   Use when the user says "/we:retro", "retro", "post-mortem",
-  "what went wrong", "ci took too long", "we keep failing at X".
+  "what went wrong".
 ---
 
 # /we:retro — Continuous-Improvement Retrospective
