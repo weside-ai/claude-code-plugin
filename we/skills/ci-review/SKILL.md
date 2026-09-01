@@ -86,6 +86,27 @@ push-time problem: resolve it in 3f by **merging** `origin/$BASE_REF` (not rebas
 pushed commits needs a force-push, which is the user's call), and after that merge **re-collect
 Phase 1**, because the merge changes the diff every finding is judged against.
 
+**`UNKNOWN` is not an answer — poll until it is one.** GitHub computes mergeability
+asynchronously, so for a few seconds after every push both fields answer `UNKNOWN`. Read that
+once and move on, and a conflicted PR passes for clean; the check that exists to catch conflicts
+then never runs. Re-poll until it resolves, and if it still will not, report `UNKNOWN` as
+`UNKNOWN` rather than as mergeable:
+
+```bash
+for i in 1 2 3 4 5; do
+  MERGE_STATE=$(gh pr view $PR --json mergeStateStatus --jq .mergeStateStatus)
+  [ "$MERGE_STATE" != "UNKNOWN" ] && break
+  sleep 5
+done
+echo "mergeStateStatus: $MERGE_STATE"
+```
+
+**`mergeStateStatus: BEHIND`** is not a conflict — the base simply moved. It still blocks the
+merge wherever the repo requires the branch to be up to date, and it is invisible in the checks
+table, so treat it like a conflict for 3f's purposes: merge `origin/$BASE_REF` in before the
+final push. `BLOCKED` means a required check or a required review is missing, which the findings
+table already covers — do not merge the base for that one.
+
 ### 1b. Collect from every source
 
 There is **ONE** collection path regardless of which bot posted. Do not special-case a reviewer
@@ -237,7 +258,7 @@ Re-run the same query with `| length` — re-deriving `$REVIEW_ALLOWLIST` exactl
 
 ### 3f. Merge the base in; one migration head
 
-Merge `origin/$BASE_REF` before the final push whenever the PR is conflicted or the branch adds a
+Merge `origin/$BASE_REF` before the final push whenever the PR is conflicted, is `BEHIND`, or adds a
 migration, and for a migration branch confirm the heads resolve to exactly one. Resolve merge
 conflicts in the code the way you would any conflict; a rebase instead of the merge forces
 `--force-with-lease`, which is the user's decision, not yours. If the second head came in from the
@@ -290,4 +311,7 @@ decision and the open question in the report, and stop — never expand the budg
 - Findings table with the Action column (Fixed / Skipped + evidence)
 - Fix summary, one line each
 - Push status · gate status per required check · terminal state (1, 2 or 3 above)
+- **Merge state**, always, in one line: `CLEAN`, `BEHIND`, `DIRTY` (conflicts — name the files),
+  `BLOCKED` or an `UNKNOWN` that would not resolve. A green PR that cannot be merged is not a
+  finished run, and the user finds out here or at the merge button.
 - Unresolved bot threads (must be 0) and every human thread, verbatim, for the user
