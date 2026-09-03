@@ -214,7 +214,10 @@ leaves every lane and its ticket goes to the repo's backlog state (`.weside/orch
    review-role Companion for Step 8. Teammates never get an identity.
 6. **Integration branch + worktree, now.** Worktree
    `$(git rev-parse --show-toplevel)-<epic-or-key>-integration` on
-   `feat/<epic-or-key>-integration`; every integration command via `git -C`. Reuse an existing
+   `feat/<epic-or-key>-integration`; every integration command via `git -C`. Then point the
+   statusline at it — the Lead's cwd is the main worktree, which is not where the work is:
+   `mkdir -p ~/.claude/we-focus && printf '{"dir":"%s","branch":"%s"}' "$INT_WT" "$INT_BRANCH" > ~/.claude/we-focus/$CLAUDE_SESSION_ID.json`.
+   Add `"pr": <n>` once the PR exists (Step 8 B); remove the file at Step 10. Reuse an existing
    worktree only when it is on **this run's** branch — a path on a foreign branch is another
    run's, never reset, never adopted. The integration worktree has exactly one writer:
    handing a PR to a second engine hands over the work — review read-only until its work is
@@ -231,6 +234,10 @@ leaves every lane and its ticket goes to the repo's backlog state (`.weside/orch
 7. **Chunk worktrees are the Lead's.** For every chunk, whatever the backend, **when its wave
    starts** — off the integration branch as it stands then, so a later chunk carries the merged
    foundation: `git worktree add <path> -b <branch> <integration-branch>` + the repo bootstrap.
+   **Create the next wave's worktrees when you dispatch the current one**, and merge the
+   integration branch into each right before its dispatch — that restores the foundation the
+   early cut misses, and the bootstrap runs behind a working wave. Never block a Lead turn
+   polling a bootstrap.
    `story checkpoint {KEY} git_prepared` once per story, at its first worktree (checkpoints
    append; a second row regresses the recorded phase). `EnterWorktree` cannot take a base ref,
    so a worker that creates its own worktree branches off the default branch and silently loses
@@ -469,9 +476,18 @@ CI red after the one pass → report and stop; the human decides on `/we:ci-revi
 
 Write the state file first — one row per action this wave, decisions taken, what is open. Then
 the roll-up (shipped-to-review / integrated / waiting, with reasons) and, if stories are waiting,
-the next invocation (`pr_created` unlocks them before the human merges). Tear down every teammate
+the next invocation (`pr_created` unlocks them before the human merges).
+
+**The closing message opens with one line the reader can act on without scrolling:**
+`PR #<n> · <branch> · <integration worktree path>` — plus the CI state. Every later roll-up in
+the run repeats that line first. A status without the PR number is a status about nothing in
+particular.
+
+Tear down every teammate
 (`references/agent-teams.md` § Full teardown), even on failure paths; a detached backend (Codex,
-foreign engine) has no message channel and is torn down by PID against its worktree cwd. Remove the chunk worktrees;
+foreign engine) has no message channel and is torn down by PID against its worktree cwd. Remove the chunk worktrees —
+but ask each worker first whether anything is in flight: a reviewer it launched may still be
+out, and uncommitted fixes die with the tree;
 **keep the integration worktree and branch until Step 10** — the open PR points at the branch,
 and a CI-review fix needs the tree. Before removing any worktree, kill the processes it started
 by PID (`ss -ltnp` on the repo's ports, `ls -l /proc/<pid>/cwd` — `(deleted)` is an orphan,

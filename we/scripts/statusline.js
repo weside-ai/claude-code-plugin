@@ -147,7 +147,15 @@ process.stdin.on('end', () => {
     const modelPlain = is1M ? `${modelName} (1M)` : modelName;
 
     // Git branch
-    const dir = data.workspace?.current_dir || process.cwd();
+    // A Lead runs from the main worktree while the work lives elsewhere. If the
+    // session declared a focus (written by /we:orchestrate at Step 5.6), show
+    // that — cwd would name a branch nobody in this session is working on.
+    let focus = null;
+    try {
+      focus = JSON.parse(fs.readFileSync(
+        path.join(os.homedir(), '.claude', 'we-focus', `${data.session_id}.json`), 'utf8'));
+    } catch {}
+    const dir = focus?.dir || data.workspace?.current_dir || process.cwd();
     let branch = '';
     try {
       branch = execFileSync(
@@ -163,7 +171,7 @@ process.stdin.on('end', () => {
     // PR — the host's own association first (it is authoritative when present),
     // then our cached lookup for the branch above, so a directory the host never
     // linked still shows its PR.
-    let prNumber = data.pr?.number;
+    let prNumber = focus?.pr ?? data.pr?.number;
     let prState = data.pr?.review_state; // approved | pending | changes_requested | draft
     if (prNumber == null && branch) {
       const cached = readPrCache(dir, branch);

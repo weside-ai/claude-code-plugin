@@ -104,19 +104,20 @@ dispatched a specific backend); the Lead never re-signs a worker's commits.
 
 ## Step 3: Local quality gates
 
-Run both for the **touched stack(s)**, in one message:
+Run them yourself. These are deterministic commands, not judgement — an agent wrapped around
+`ruff` costs minutes of boot and re-reading to report what the command already said.
 
-```python
-Agent(subagent_type="we:static-analyzer",
-      prompt="Lint, format and type-check the changes on branch {branch} in {worktree}. "
-             "Do not run `yarn`/`npm install`, `tsc` or `eslint` in a worktree without "
-             "node_modules — report that as skipped. Report findings; fix nothing.")
-Agent(subagent_type="we:test-runner",
-      prompt="Run only unit and fast smoke tests for the changes on {branch} in {worktree}. "
-             "SKIP any test needing DATABASE_URL, REDIS_URL, a queue, an HTTP service or "
-             "docker-compose, and list what you skipped. Do not run `yarn`/`npm install`, "
-             "`jest` or `tsc` in a worktree without node_modules — report that as skipped.")
-```
+**Static:** the repo's linter, formatter and type-checker. Scope to the files changed against
+your base where the tool takes paths; a whole-tree type-check is fine when that is how the repo
+invokes it.
+
+**Tests:** only the suites covering your changed surface — map each changed source file to its
+unit and integration suites. Run the full suite only when the diff exceeds ~50 files or touches
+test configuration. Coverage is CI's.
+
+Skip anything needing a database, queue, HTTP service or docker-compose and list what you
+skipped. No `yarn`/`npm install`, `jest` or `tsc` in a worktree without `node_modules` — report
+that as skipped.
 
 **Fast-tests-only, with one exception:** when the brief names an integration suite and a database
 for a **critical** chunk (money, auth, tenant isolation, migration), that chunk is never
@@ -146,6 +147,11 @@ Agent(subagent_type="we:ac-reviewer",
 
 The integration branch comes from the brief; standalone, use the branch you cut from. Findings are
 **informational** — fix what you own, commit it (`{KEY}: AC-check fixes`), report them either way.
+
+**Commit before you sweep, and never report done while the reviewer is out.** Its findings land
+after the work looks finished, and an uncommitted fix dies with the worktree the moment the Lead
+integrates. Either wait for the verdict, or say in your report that it is still out and a second
+message follows.
 A message from the Lead outranks this brief: act on it at your next stop, and when it names a
 file to write, write that file first — it is the Lead's only proof you heard it.
 
