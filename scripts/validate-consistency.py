@@ -17,6 +17,9 @@ silently return:
    existing file / skill / command / agent.
 5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
+7. Indiscretion guard — no credential, personal identifier, or internal weside
+   detail in any tracked file of this public repo (a hardcoded password once
+   shipped here and had to be rotated).
 6. Listing budget — `name` + `description` of every skill, agent and command sit in
    every session's context before the user has typed anything. The sum is capped.
 
@@ -28,6 +31,7 @@ Usage:
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -221,6 +225,83 @@ def check_statusline_verdicts() -> None:
             )
 
 
+# --- Indiscretion guard -------------------------------------------------------
+# One credential leak (a password hardcoded as an os.environ.get default) reached
+# this public repo and had to be rotated. These patterns are the classes that must
+# never land in a public artefact again. Each entry: (label, regex).
+# Deliberately narrow: `/home/user/...` fixtures and api.weside.ai (the public
+# product endpoint) are legitimate and must not trip the check.
+INDISCRETION_PATTERNS: list[tuple[str, str]] = [
+    (
+        "hardcoded credential default",
+        r"""environ(?:\.get)?\(\s*["'][A-Z_]*(?:PASSWORD|SECRET|TOKEN|API_?KEY)["']\s*,\s*["'][^"']+["']""",
+    ),
+    (
+        "credential literal",
+        r"""["'](?:password|passwd|secret|api_?key)["']\s*[:=]\s*["'][^"'{$][^"']{5,}["']""",
+    ),
+    ("JWT / bearer token", r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"),
+    (
+        "provider API key",
+        r"\b(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b",
+    ),
+    ("personal email address", r"[A-Za-z0-9._%+-]+@(?:gmx\.(?:net|de)|colenet\.de|gmail\.com)"),
+    ("internal test account", r"(?:claude-test|nox-acceptance[a-z-]*)@weside\.ai"),
+    # `/home/user/`, `/home/dev/` etc. are the docs' generic placeholders; a real
+    # login name in a path is what leaks who and where.
+    ("developer home path", r"/home/(?!user|dev|me|you|alice|bob|<)[a-z][a-z0-9_-]*/"),
+    ("internal host or IP", r"(?:workspace\.weside\.ai|\b46\.224\.112\.\d{1,3}\b)"),
+    ("Supabase project ref", r"\b(?:pqykrwpmhjqjhpsnjxbd|yauruvmadvvdravrlixu)\b"),
+    ("internal k8s namespace", r"\bweside-(?:production|staging)\b"),
+]
+
+# Files that document the patterns themselves (the ban list, and this checker).
+INDISCRETION_ALLOWLIST = {
+    "CLAUDE.md",
+    "scripts/validate-consistency.py",
+    ".claude/rules/plugin-authoring.md",
+}
+
+
+def _tracked_text_files() -> list[Path]:
+    """Every git-tracked file, minus binaries and the allowlist."""
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout
+    files = []
+    for rel in out.split("\0"):
+        if not rel or rel in INDISCRETION_ALLOWLIST:
+            continue
+        path = REPO / rel
+        if not path.is_file():
+            continue
+        try:
+            path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        files.append(path)
+    return files
+
+
+def check_no_indiscretions() -> None:
+    """No credential, personal identifier, or internal weside detail in a public file.
+
+    This repo is public and published as a Claude Code plugin. A leak here is not
+    a lint finding — it is a rotation.
+    """
+    compiled = [(label, re.compile(pat)) for label, pat in INDISCRETION_PATTERNS]
+    for path in _tracked_text_files():
+        rel = path.relative_to(REPO).as_posix()
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for lineno, line in enumerate(lines, 1):
+            for label, rx in compiled:
+                if rx.search(line):
+                    fail(f"{rel}:{lineno} — {label} in a public file")
+
+
 def main() -> int:
     check_story_phases()
     check_epic_states()
@@ -229,6 +310,7 @@ def main() -> int:
     check_userconfig_readers()
     check_listing_budget()
     check_statusline_verdicts()
+    check_no_indiscretions()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

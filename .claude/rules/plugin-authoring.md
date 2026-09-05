@@ -90,5 +90,10 @@ skill gains a description with no trigger phrases.
 Run `python3 scripts/validate-consistency.py` (plus the frontmatter/structure validators — all
 run in CI too). It rejects: STORY_PHASES drift between `orchestration.py` and the markdown,
 command/skill name collisions, dead `references/*.md` / `/we:*` / `subagent_type` mentions, and
-`plugin.json` userConfig options that no file reads. **When you find a new cross-file error
+`plugin.json` userConfig options that no file reads, and **indiscretions** — credentials,
+personal email addresses, developer home paths, internal hosts, Supabase project refs, k8s
+namespaces or test accounts in any tracked file. That last check exists because a hardcoded
+password shipped here once and had to be rotated: this repo is public, so a leak is not a lint
+finding, it is a rotation. Write placeholders (`/home/user/`, `os.environ["X"]` with no
+default), never a real value. **When you find a new cross-file error
 class, add a check there — don't just fix the instance.**
