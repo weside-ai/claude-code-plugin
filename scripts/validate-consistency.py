@@ -256,6 +256,9 @@ INDISCRETION_PATTERNS: list[tuple[str, str]] = [
     # Ticket keys in shipped examples use the neutral `PROJ-` placeholder; `WA-`
     # is weside's real Jira prefix and names real internal work.
     ("internal ticket prefix", r"\bWA-(?:\d+|\{|…)"),
+    # Private sibling repos of this workspace. `weside-cli` and `weside-mcp` are
+    # public product names and stay allowed; examples name a neutral repo instead.
+    ("internal repo name", r"\bweside-(?:core|infrastructure)\b|leading-companions"),
 ]
 
 # Files that document the patterns themselves (the ban list, and this checker).

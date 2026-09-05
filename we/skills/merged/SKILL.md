@@ -52,7 +52,7 @@ git branch --list 'feat/<KEY>-*'
 
 **Only the trees and branches of THIS run.** A worktree whose branch belongs to another key is
 another session's, live or not — never remove it, and say in the report that you left it.
-`weside-core-PROJ-2136-p1` is not yours because it sits next to yours in the listing.
+`otherrepo-PROJ-2136-p1` is not yours because it sits next to yours in the listing.
 
 ## Step M3 — Tear down, in this order
 
