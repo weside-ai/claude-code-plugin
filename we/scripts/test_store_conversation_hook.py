@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone unittest for store_conversation_hook session tags (WA-1720).
+"""Standalone unittest for store_conversation_hook session tags (PROJ-1720).
 
 Run with: python3 we/scripts/test_store_conversation_hook.py
 No pytest required.

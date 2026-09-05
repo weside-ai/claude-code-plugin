@@ -42,7 +42,7 @@ class CircuitBreakerTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_fresh_phase_is_closed_and_allowed(self):
-        result = circuit_check("WA-1", "git_prepared")
+        result = circuit_check("PROJ-1", "git_prepared")
         self.assertTrue(result["allowed"])
         self.assertEqual(result["state"], CIRCUIT_STATE_CLOSED)
 
@@ -51,27 +51,27 @@ class CircuitBreakerTest(unittest.TestCase):
         # No prior checkpoint for this story → rollback is a graceful no-op,
         # so this test never shells out to git.
         for _ in range(max_failures - 1):
-            res = circuit_fail("WA-1", "git_prepared", "boom")
+            res = circuit_fail("PROJ-1", "git_prepared", "boom")
             self.assertFalse(res["circuit_opened"])
 
-        opened = circuit_fail("WA-1", "git_prepared", "boom")
+        opened = circuit_fail("PROJ-1", "git_prepared", "boom")
         self.assertTrue(opened["circuit_opened"])
         self.assertEqual(opened["state"], CIRCUIT_STATE_OPEN)
         self.assertFalse(opened["rollback_triggered"])  # no checkpoint to roll back to
 
-        blocked = circuit_check("WA-1", "git_prepared")
+        blocked = circuit_check("PROJ-1", "git_prepared")
         self.assertFalse(blocked["allowed"])
         self.assertEqual(blocked["state"], CIRCUIT_STATE_OPEN)
 
     def test_failures_are_scoped_per_phase(self):
-        circuit_fail("WA-1", "git_prepared", "boom")
-        other = circuit_check("WA-1", "test_passed")
+        circuit_fail("PROJ-1", "git_prepared", "boom")
+        other = circuit_check("PROJ-1", "test_passed")
         self.assertTrue(other["allowed"])
 
     def test_success_resets_circuit(self):
-        circuit_fail("WA-1", "git_prepared", "boom")
-        circuit_success("WA-1", "git_prepared")
-        result = circuit_check("WA-1", "git_prepared")
+        circuit_fail("PROJ-1", "git_prepared", "boom")
+        circuit_success("PROJ-1", "git_prepared")
+        result = circuit_check("PROJ-1", "git_prepared")
         self.assertTrue(result["allowed"])
         self.assertEqual(result["state"], CIRCUIT_STATE_CLOSED)
 

@@ -24,7 +24,7 @@ know what is still owed, not what happened. Reach for `/we:retro` when the lesso
 /we:merged --keep-worktrees  # tickets + state only; leave the trees on disk
 ```
 
-Free text after the number is an instruction ("… lass den Integrationsbaum stehen", "… WA-2139
+Free text after the number is an instruction ("… lass den Integrationsbaum stehen", "… PROJ-2139
 bleibt offen") — honour it over the defaults below.
 
 ## Step M1 — Verify the merge before touching anything
@@ -52,7 +52,7 @@ git branch --list 'feat/<KEY>-*'
 
 **Only the trees and branches of THIS run.** A worktree whose branch belongs to another key is
 another session's, live or not — never remove it, and say in the report that you left it.
-`weside-core-WA-2136-p1` is not yours because it sits next to yours in the listing.
+`weside-core-PROJ-2136-p1` is not yours because it sits next to yours in the listing.
 
 ## Step M3 — Tear down, in this order
 

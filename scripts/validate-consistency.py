@@ -253,6 +253,9 @@ INDISCRETION_PATTERNS: list[tuple[str, str]] = [
     ("internal host or IP", r"(?:workspace\.weside\.ai|\b46\.224\.112\.\d{1,3}\b)"),
     ("Supabase project ref", r"\b(?:pqykrwpmhjqjhpsnjxbd|yauruvmadvvdravrlixu)\b"),
     ("internal k8s namespace", r"\bweside-(?:production|staging)\b"),
+    # Ticket keys in shipped examples use the neutral `PROJ-` placeholder; `WA-`
+    # is weside's real Jira prefix and names real internal work.
+    ("internal ticket prefix", r"\bWA-(?:\d+|\{|…)"),
 ]
 
 # Files that document the patterns themselves (the ban list, and this checker).

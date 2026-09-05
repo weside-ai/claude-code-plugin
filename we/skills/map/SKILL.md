@@ -38,8 +38,8 @@ marker; the saga-slug prefix on epics IS the grouping.
 | Altitude | Filename | Frontmatter keys |
 |---|---|---|
 | Saga | `<saga>-saga.md` | `saga: <slug>` |
-| Epic | `<saga>-<epic>-epic.md` | `saga: <slug>`, `epic: <slug>`, `ticket: WA-…` |
-| Story | `<TICKET>-story.md` | `story: WA-…`, `epic: WA-…` |
+| Epic | `<saga>-<epic>-epic.md` | `saga: <slug>`, `epic: <slug>`, `ticket: PROJ-…` |
+| Story | `<TICKET>-story.md` | `story: PROJ-…`, `epic: PROJ-…` |
 
 **Transition tolerance (until migration completes):** also pick up legacy shapes —
 `<TICKET>-plan.md` (old story suffix) and `<anything>/CONCEPT.md` (old nested epic).

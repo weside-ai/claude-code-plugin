@@ -21,7 +21,7 @@ const RIGHT_MARGIN = 15; // room for Claude Code's own right-aligned status text
 const SEP = ' │ ';
 
 function truncateRight(str, max) {
-  // Cuts off the END, keeps the start. Use for branch names: "feat/WA-1915-…"
+  // Cuts off the END, keeps the start. Use for branch names: "feat/PROJ-1915-…"
   // keeps the ticket key, which is the part that matters.
   if (str.length <= max) return str;
   if (max <= 1) return str.slice(0, max);
