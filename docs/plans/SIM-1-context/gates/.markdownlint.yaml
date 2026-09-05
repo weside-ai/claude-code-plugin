@@ -1,7 +1,0 @@
-# Simulation reports are quoted verbatim from the agents that wrote them: they carry
-# code spans of shell commands, numbered findings that continue across sections, and
-# tables of traces. Style rules over that text change the evidence, not the prose.
-extends: ../../../../.markdownlint.yaml
-MD029: false
-MD038: false
-MD056: false

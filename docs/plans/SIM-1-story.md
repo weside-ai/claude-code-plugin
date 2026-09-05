@@ -10,6 +10,10 @@ parallel_groups: [[1, 2, 3, 4]]
 
 ## Context
 
+> Die Simulationsprotokolle unter `docs/plans/SIM-1-context/` sind entfernt —
+> sie trugen Entwickler-Home-Pfade in ein öffentliches Repo. Verweise darauf im
+> Folgenden zeigen ins Leere und bleiben nur als Protokoll stehen.
+
 Plugin 5.4.0 rebuilt `/we:orchestrate` from a 30-day usage scan and three rounds of Opus
 table-top simulation (a 30-day usage scan in the host repo; method:
 read the skill and its references completely, trace every tool call against a concrete world
