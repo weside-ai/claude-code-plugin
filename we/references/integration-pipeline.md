@@ -29,11 +29,11 @@ when it was dispatched.
 | `implementation_complete` | every phase merged onto the integration branch — from the diff, once per story | Lead |
 | `simplified` | § Simplify done | Lead |
 | `ac_verified` | § AC + DoD gate passed **and** the verification block exists | Lead |
-| `review_passed` | the one bug-hunt engine came back clean | Lead |
-| `static_analysis_passed` | lint/format/types clean (on `static-analyzer`'s report) | Lead |
-| `test_passed` | tests green (coverage met where measured; on `test-runner`'s report) | Lead |
+| `static_analysis_passed` | lint/format/types clean — the Lead ran the commands | Lead |
+| `test_passed` | the affected suites green (coverage met where measured) — the Lead ran them | Lead |
 | `docs_updated` | doc proposals applied, or "nothing to update" | Lead |
 | `pr_created` | the one PR is open (on `pr-creator`'s report) | Lead |
+| `review_passed` | every review gate in `review.available` concluded on the PR with no BLOCKING/WARNING left unfixed | Lead, in the ci-review pass |
 | `ci_passed` | the single ci-review pass finished | Lead |
 
 ```bash
@@ -89,24 +89,25 @@ green" does not discharge it.
 Checkpoint `ac_verified` only when every AC passes, every DoD row passes, **and** the
 verification block exists.
 
-## Quality gates (parallel)
+## Quality gates — two commands, no agents
 
-Launch all three in **one message** so they run concurrently:
+Run the repo's static gates and the affected test suites **yourself, as direct commands**, the
+way `develop/SKILL.md` § Local quality gates already tells a worker to: these are deterministic,
+not judgement, and an agent wrapped around `ruff` or `pytest` costs minutes of boot and
+re-reading to report what the command already printed. Static → `static_analysis_passed`; the
+affected suites (named explicitly, mapped from the changed files — the full suite runs in CI)
+→ `test_passed`. A repo whose pre-push hook already runs its static set has discharged static
+the moment the push went through; say so rather than running it a third time.
 
-- **`static-analyzer`** — lint, format, types → `static_analysis_passed`
-- **`test-runner`** — tests + coverage → `test_passed`
-- **one bug-hunt engine** → `review_passed`
+**There is no local bug-hunt.** The question "does this diff actually work?" is asked by the
+repo's CI review gates — every reviewer in `review.available`, each a required check on the PR,
+each fail-closed when its own runner errors. A local adversarial pass asked the same question a
+third time, before a PR existed, on the scarcer engine's quota, and could only move a finding
+from one CI round earlier to the PR's first round — the same fix either way. Its checkpoint,
+`review_passed`, is now written in the ci-review pass below, once those gates have concluded.
+`worker-dispatch.md` § Bug-hunt owns the rule and its one residue.
 
-**Exactly one bug-hunt engine runs, and the writer picks it: the engine that did *not* write the
-code** — the matrix, including mixed authorship, is owned by `worker-dispatch.md` § Bug-hunt
-dispatch. Claude's native `/code-review` is a skill: run it inside an `Agent()` so it does not
-load into the Lead's context.
-Codex answers with JSON rather than a marker — `approve` → write `review_passed`;
-`needs-attention` → fix, re-run, then write it. Skip that mapping and the blocking gate in
-`pr-creator` never gets set.
-
-**No `we:ac-reviewer` call belongs here** — the AC gate above already ran it; this step hunts
-bugs only.
+**No `we:ac-reviewer` call belongs here** — the AC gate above already ran it.
 
 **Install-gated gates run here too, not at CI.** Workers work in fresh worktrees with no
 `node_modules`, so by design they skip every node-tool gate: prettier, eslint, tsc, jest,
@@ -153,9 +154,11 @@ regenerate the register into the same docs commit.
 
 ## PR — one, and only after the gates
 
-**Blocking:** `ac_verified`, `review_passed`, `static_analysis_passed` and `test_passed` must all exist.
+**Blocking:** `ac_verified`, `static_analysis_passed` and `test_passed` must all exist.
 Missing one → back to the gates. A PR with a failing gate wastes the reviewer's attention on
-something the pipeline already knew.
+something the pipeline already knew. `review_passed` is deliberately NOT in this set: the
+reviewers that write it run ON the PR, so gating the PR's creation on it was a checkpoint nobody
+could ever have written first.
 
 ```python
 Agent(subagent_type="we:pr-creator", prompt=f"Create PR for {TICKET}")
@@ -181,7 +184,12 @@ context and costs the Lead its overview; the procedure is short enough to run di
    pending behind a merge conflict never concludes, so read `mergeStateStatus` first and merge
    the base when it says `DIRTY`/`BEHIND` (the gate definition and terminal states are
    `/we:ci-review`'s) — and fold its failures into the same set.
-4. Nothing found and CI green → checkpoint `ci_passed`, done.
+4. **Every review gate in `review.available` concluded, and no BLOCKING/WARNING is left
+   unfixed → checkpoint `review_passed`.** This is the bug-hunt's receipt; it is written here
+   and nowhere earlier. A reviewer that did not run on this PR (a skip rule, an author without
+   write access, a runner that never posted) is a gate that did not conclude — say which, and do
+   not write the checkpoint on the strength of the other one alone.
+   Nothing else found and CI green → checkpoint `ci_passed`, done.
 5. **Commit** every fix as one commit.
 6. **Resolve** every bot-authored thread via GraphQL and verify zero unresolved bot threads.
    Never auto-resolve a human's thread.

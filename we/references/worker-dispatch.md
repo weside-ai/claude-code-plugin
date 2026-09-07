@@ -10,13 +10,12 @@ the AC-review rule, the bug-hunt dispatch matrix, and the integration-branch /
 single-CI pattern. For Codex-specific dispatch mechanics (the single-detach
 rule), see [`codex-dispatch.md`](codex-dispatch.md).
 
-**Two separate checks, two separate rhythms.** AC-review (`we:ac-reviewer`) asks
-"does this satisfy the Story's acceptance criteria and our DoD?" — it's cheap, so it
-runs after every chunk, informationally, plus once more, gating, at integration.
-Bug-hunt (Codex adversarial-review or Claude's native `/code-review`) asks "does this
-diff actually work?" — it's the expensive pass, so it runs exactly once, at
-integration, against the full merged diff. Never run the bug-hunt per chunk; never
-skip the AC-review at either point.
+**Two separate checks, two separate owners.** AC-review (`we:ac-reviewer`) asks
+"does this satisfy the Story's acceptance criteria and our DoD?" — the Lead runs it
+once, gating, at integration (and per chunk only where `review.cross` asks for it).
+Bug-hunt asks "does this diff actually work?" — and that question belongs to the repo's
+CI review gates on the PR, not to a local pass. Never run a bug-hunt per chunk, never run
+one locally; never skip the AC-review at integration.
 
 ---
 
@@ -88,24 +87,30 @@ To disable the per-chunk pass (integration still gates): `review.cross: false` i
 `.weside/config.json`. `review.cross` governs only this per-chunk pass; the bug-hunt below
 always runs once at integration.
 
-## Bug-hunt dispatch
+## Bug-hunt
 
-Whoever wrote the code, the **other** engine hunts bugs in it — runs exactly **once**,
-at integration, against the full merged diff. Never per chunk; it's the expensive pass.
+**The bug-hunt is the repo's CI review gates.** Every reviewer in `.weside/config.json`
+`review.available` runs as a required check on the PR, over the full diff, independently of who
+wrote the code — so "the engine that did not write it hunts" is satisfied by construction
+wherever two engines are configured, and a single configured engine is what the repo chose. The
+Lead writes `review_passed` in the ci-review pass once every configured gate has concluded with
+no BLOCKING/WARNING left unfixed (`integration-pipeline.md` § One ci-review pass).
 
-| Writer | Bug-hunt engine |
-|---|---|
-| Claude, `tools.codex: true` or `execution.default: codex`, script resolves | `/codex:adversarial-review` |
-| Anything else — Claude without Codex, Codex, or a foreign engine | Claude's native `/code-review` |
+There is no local pass before the PR. One used to run here — `/codex:adversarial-review` or
+Claude's native `/code-review`, picked by writer — and it asked the identical question a third
+time, on the scarcer engine's quota, before a PR existed to review; the only thing it bought was
+finding a defect one CI round earlier, for the same fix. Removed 2026-09-07 (weside-core retro,
+council-tested).
 
-Mixed authorship in one wave (a Codex chunk beside Claude chunks, or a tree the Lead committed
-for a dead worker) counts as "anything else": Claude's native `/code-review` over the whole
-integrated diff. Integration-time dispatch: [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 8 B.
+**The one residue, named so nobody inherits it silently:** a PR the review gates skip by their
+own rules — a dependency-bot PR, an author without write access, a reviewer whose repo variable is
+unset — gets no adversarial LLM review at all. That was true before the local pass was removed,
+because the local pass ran only inside an orchestrated story, but the gap is now the whole story:
+a Lead whose PR falls into that class says so in the PR body and does not write `review_passed`.
 
-When dispatching Claude's native `/code-review`, point it at
-[`test-discipline.md`](test-discipline.md)'s anti-patterns (implementation-coupled,
-tautological, horizontal-slicing) as part of what to look for — that check moved here from the
-old `code-reviewer` agent and belongs with the other bug-hunt findings, not with `we:ac-reviewer`.
+Test anti-patterns (implementation-coupled, tautological, horizontal-slicing —
+[`test-discipline.md`](test-discipline.md)) are the CI reviewers' concern too; a repo's review
+prompt names them, and `we:ac-reviewer` does not hunt them.
 
 ---
 

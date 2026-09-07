@@ -73,7 +73,7 @@ in `.weside/dod.md`, which is read additively alongside this checklist.
 ### Quality Gates
 
 - [ ] AC-review passed (`ac_verified` checkpoint — `/we:ac-review` / `we:ac-reviewer`)
-- [ ] Bug-hunt passed (`review_passed` checkpoint) — clean means no BLOCKING or WARNING finding left unfixed by the one engine that ran, whichever it was
+- [ ] Bug-hunt passed (`review_passed` checkpoint) — every review gate in `review.available` concluded on the PR, and no BLOCKING or WARNING finding is left unfixed; a gate that skipped this PR by its own rules is named, not counted as passed
 - [ ] `/we:static` passed (static_analysis_passed checkpoint)
 - [ ] `/we:test` passed (test_passed checkpoint)
 - [ ] AI-reviewer threads resolved on GitHub — the repo's configured review gate(s) block on unresolved BLOCKING/WARNING (Critical/Major) threads. Use `/we:ci-review` to fix and resolve all bot threads after PR creation. Skip if no GitHub remote or no AI reviewer is installed; local quality gates (review + static + test) are authoritative in that case.
@@ -129,5 +129,5 @@ Severity vocabulary and what each level requires: `/we:ci-review` (single owner)
 ## Who checks this
 
 `we:ac-reviewer` fills a row per applicable item or section above; its output format lives in
-`agents/ac-reviewer.md`. The bug-hunt engine reports separately — `worker-dispatch.md`
-§ Bug-hunt dispatch.
+`agents/ac-reviewer.md`. The bug-hunt reports separately, on the PR, through the repo's CI
+review gates — `worker-dispatch.md` § Bug-hunt.

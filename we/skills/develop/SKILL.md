@@ -155,9 +155,9 @@ message follows.
 A message from the Lead outranks this brief: act on it at your next stop, and when it names a
 file to write, write that file first — it is the Lead's only proof you heard it.
 
-No separate `/we:ac-review` pass and no bug-hunt: Codex adversarial-review and `/code-review` run
-exactly once, at Lead integration, over the merged diff (`references/worker-dispatch.md`
-§ AC-review rule).
+No separate `/we:ac-review` pass and no bug-hunt: the AC gate runs once, at Lead integration,
+over the merged diff, and the bug-hunt is the repo's CI review gates on the one PR
+(`references/worker-dispatch.md` § AC-review rule, § Bug-hunt).
 
 ---
 

@@ -56,7 +56,7 @@ class CheckpointResumeTest(unittest.TestCase):
         story_checkpoint("PROJ-1", "git_prepared")
         result = story_resume("PROJ-1")
         self.assertEqual(result["checkpoint"]["phase"], "ac_verified")
-        self.assertEqual(result["next_phase"], "review_passed")
+        self.assertEqual(result["next_phase"], "static_analysis_passed")
 
     def test_resume_ignores_stale_stored_phase_index(self):
         # Simulate a row written before a STORY_PHASES reorder: correct phase

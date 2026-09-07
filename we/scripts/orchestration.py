@@ -88,11 +88,15 @@ STORY_PHASES = [
     "implementation_complete",  # Every phase committed and pushed
     "simplified",  # Simplify pass done — BEFORE AC verification
     "ac_verified",  # All ACs + DoD verified with evidence, on final code
-    "review_passed",  # The one bug-hunt engine came back clean
     "static_analysis_passed",  # Lint/format/types clean
     "test_passed",  # Tests + coverage green — the suite runs in full exactly once
     "docs_updated",  # Doc proposals applied, AFTER the quality gates
     "pr_created",  # The one PR is open
+    # The bug-hunt is CI's job: the repo's review gates (`review.available`) both
+    # concluded on the PR with no BLOCKING/WARNING left unfixed. It sits AFTER
+    # pr_created because a review needs a PR to review — the earlier position
+    # gated PR creation on a checkpoint CI could not yet have written.
+    "review_passed",
     "ci_passed",  # The single ci-review pass finished
 ]
 

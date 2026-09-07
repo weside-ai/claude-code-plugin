@@ -68,8 +68,10 @@ own frontmatter `description` lines (enumerate fresh via `ls ${CLAUDE_PLUGIN_ROO
 
 **Agents** (background, called by commands/skills): `ac-reviewer`, `static-analyzer`,
 `test-runner`, `pr-creator`, `doc-architect`, and the nine `council-*` role lenses. Bug-hunting
-is not one of our agents — it's `/codex:adversarial-review` or Claude's native `/code-review`,
-dispatched by writer per `references/worker-dispatch.md`.
+is not one of our agents and not a local pass — it is the repo's CI review gates on the PR
+(`references/worker-dispatch.md` § Bug-hunt); `static-analyzer` and `test-runner` serve the
+standalone `/we:static` and `/we:test` commands, while the integration pipeline runs those
+commands directly.
 
 ---
 

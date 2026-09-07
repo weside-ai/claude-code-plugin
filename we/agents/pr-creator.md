@@ -15,9 +15,12 @@ color: green
 | Checkpoint | Written by | Required |
 |---|---|---|
 | `ac_verified` | the Lead, after the AC + DoD gate **and** the verification receipt exists | Yes |
-| `review_passed` | the Lead, after the one bug-hunt pass | Yes |
-| `static_analysis_passed` | the Lead, on `we:static-analyzer`'s report | Yes |
-| `test_passed` | the Lead, on `we:test-runner`'s report | Yes |
+| `static_analysis_passed` | the Lead, having run the repo's static gates | Yes |
+| `test_passed` | the Lead, having run the affected suites | Yes |
+
+`review_passed` is **not** a prerequisite here: the reviewers that write it are the repo's CI
+review gates, and they run on the PR this agent is about to open. It is written afterwards, in
+the ci-review pass.
 
 ---
 
@@ -34,7 +37,7 @@ WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev
 python3 "$WE_ROOT/scripts/orchestration.py" story status $TICKET
 ```
 
-**If any of the four above is missing → STOP. Tell the user which gates to run first.**
+**If any of the three above is missing → STOP. Tell the user which gates to run first.**
 
 ### Step 3: Sync with the Base Branch
 

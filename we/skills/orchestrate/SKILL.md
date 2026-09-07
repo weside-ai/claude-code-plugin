@@ -196,7 +196,8 @@ leaves every lane and its ticket goes to the repo's backlog state (`.weside/orch
    brief names the integration suite and the database); on a detached backend only when every constraint is verifiable at merge time and the checks are
    written down before dispatch, and a migration never on one at all (no channel for a wrong
    revision); and it gets
-   full-surface AC review plus the bug-hunt over the integrated diff. A chunk too small or too
+   full-surface AC review over the integrated diff, and the PR body names it as money/auth/
+   tenant work so the CI reviewers read it as such. A chunk too small or too
    critical for any worker is a **Lead-owned chunk**: its own worktree and `feat/{KEY}-lead`
    branch off the integration branch, the same gates, the same Step 8 A merge.
 3. **Disjointness is about files, not topics.** Union each plan's per-phase `**Files:**` lists
@@ -463,10 +464,10 @@ Review. What an orchestrated run adds:
   `/we:ci-review`, not this wave's). The wave's Done counts every repo the wave touched;
 - a migration chunk gets a real-database `alembic upgrade → downgrade → upgrade` by the Lead — a
   worker in a throwaway worktree can only defer it;
-- the bug-hunt is writer-aware across the whole wave: every chunk Claude-written and Codex
-  configured → `/codex:adversarial-review`; any chunk from Codex, a foreign engine, or a tree the
-  Lead committed for a dead worker → Claude's native `/code-review` over the whole diff
-  (`references/worker-dispatch.md` § Bug-hunt);
+- the bug-hunt is CI's: the repo's review gates run on the one PR over the whole integrated
+  diff, whoever wrote which chunk, and `review_passed` is written in the ci-review pass once
+  they have all concluded (`references/worker-dispatch.md` § Bug-hunt). No local adversarial
+  pass runs before the PR;
 - **every** story that landed moves to In Review. Confirm with `story status` before claiming a
   story shipped.
 
@@ -573,7 +574,7 @@ flag is required regardless.
 ## References
 
 - `${CLAUDE_PLUGIN_ROOT}/references/integration-pipeline.md` — everything after implementation
-- `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` — worker contract, backends, AC-review rule, bug-hunt matrix, foreign-engine brief
+- `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` — worker contract, backends, AC-review rule, the bug-hunt (CI's), foreign-engine brief
 - `${CLAUDE_PLUGIN_ROOT}/references/codex-dispatch.md` — Codex dispatch, liveness, chunk brief
 - `${CLAUDE_PLUGIN_ROOT}/references/programme-discipline.md` — the state file and the `/loop` shape
 - `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md` — env flag + teardown
