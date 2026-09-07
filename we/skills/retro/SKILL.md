@@ -35,7 +35,16 @@ The skill reads two complementary sources. Neither is subordinate.
 
 The two combine: transcript says *"the agent forgot X"*, PR/CI says *"and CI then caught it after Y min"*. The lesson is the intersection.
 
-Third source, opt-in via `--scan N` (default 0): **`docs/retros/*` historical** — surfaces recurring patterns across past retros, so a pattern that shows up for the third time gets promoted from a one-line patch to a structural fix.
+Third source, **always on for the most recent entries, deeper via `--scan N`**:
+**`docs/retros/*` historical** — surfaces recurring patterns across past retros, so a
+pattern that shows up for the third time gets promoted from a one-line patch to a
+structural fix.
+
+The most recent entries are read *unconditionally* because the alternative was measured
+and it fails quietly: a retro that cannot see the previous ones re-proposes what they
+already proposed, and nothing in the report says so. A run whose surface was retro'd
+hours earlier is exactly when that happens, and exactly when nobody thinks to pass a
+flag. `--scan N` widens the window; it no longer gates it.
 
 ---
 
@@ -45,7 +54,7 @@ Third source, opt-in via `--scan N` (default 0): **`docs/retros/*` historical** 
 
 - `/we:retro` — full pass on the current branch + last merged PR on it
 - `/we:retro --pr 1998` — specific PR (open or merged)
-- `/we:retro --scan 5` — full pass *and* read the last 5 entries in `docs/retros/` for patterns
+- `/we:retro --scan 5` — widen the historical window from the default 3 to 5 entries
 - `/we:retro --pr 1998 --scan 10` — combine
 - `/we:retro --auto` — apply every proposal immediately instead of gating each one on `[y/n]`,
   except the cases that still need a human call (see "Auto Mode" below). Combine with `--pr`/`--scan` as usual.
@@ -105,9 +114,12 @@ Before producing any output, gather the landscape fresh.
 
 4. **Method grounding (how we work)** — read [`docs/concepts/how-we-work.md`](../../../docs/concepts/how-we-work.md), the canonical index, and the compact sections it points to (the altitudes, the pipeline, the skill catalog). This is the **same** manifest `/we:retro` loads — it grounds the improvement scan in the *current* APO method, so a friction is placed against how the pipeline is actually meant to work, not just the session diff. Indexed *sections* only, not full skill bodies. **If the manifest is absent in this repo** (most repos), note it once and ground from the plugin skill/agent descriptions instead — do not degrade silently.
 
-5. **Historical retros (if `--scan N`)**:
-   - `ls docs/retros/ 2>/dev/null | sort -r | head -N` — last N retros
-   - Read each (they're small, structured) — note recurring themes
+5. **Historical retros — the recent ones always, more with `--scan N`**:
+   - `ls docs/retros/ 2>/dev/null | sort -r | head -$(( ${SCAN:-0} > 3 ? SCAN : 3 ))` —
+     the 3 most recent by default, N when `--scan N` asks for more
+   - Read each (they're small, structured) — note recurring themes, and note every
+     **accepted** proposal in them: Step R3b measures what became of it
+   - Absent directory or zero entries is normal on a first run — say so once and move on
 
 6. **Companion identity** (if configured): materialize per `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
@@ -115,7 +127,7 @@ Before producing any output, gather the landscape fresh.
 
 - The full transcript file (read it surgically in Step 2 of the workflow below)
 - Full text of every rule/skill (frontmatter is enough for placement)
-- The full body of past retros if `--scan` is 0 (default — opt-in only)
+- The full body of retros older than the 3 most recent, unless `--scan N` asks for them
 
 ---
 
@@ -140,7 +152,8 @@ Run these as parallel tool calls:
   - **PR checks:** `gh pr checks <N>` — see which check runs flipped red across cycles
   - **Failed check logs (only red ones, tail):** for each failed check run, `gh run view <run-id> --log` and tail to the failure block (don't pull full logs)
 - **If `HAS_GH=0` (no GitHub/gh):** skip the `gh` calls above. The PR/CI source is absent — note this in the report: *"No GitHub access — PR/CI data unavailable; analysis is transcript + commit log only."* Local quality gates (ruff, mypy, markdownlint, test output visible in transcript) substitute for CI evidence.
-- **Historical retros if `--scan`:** read the N most recent under `docs/retros/`
+- **Historical retros:** read the 3 most recent under `docs/retros/` always, N with
+  `--scan N` — and pull out every accepted proposal for Step R3b
 
 ### Step R3 — Triage findings
 
@@ -160,6 +173,31 @@ For each friction surfaced, classify by surface:
 | `Tooling / friction` | a tool was slow, denied permission, or returned cache-stale |
 
 Every friction = "a thing failed first, was fixed second; that fix is a lesson we should encode." If a friction has no MD-file remedy, drop it (or move to `WINS` if the fix was actually elegant).
+
+### Step R3b — Measure what the last retros' proposals did
+
+For every **accepted** proposal in the retros read at boot, say which of three it is —
+and say it with the number, not the intention:
+
+| Verdict | What it takes to claim it |
+|---|---|
+| **worked** | the metric it aimed at moved, and you name the before and after |
+| **did not work** | the metric did not move, or moved the wrong way — that is a PAIN entry in *this* retro, not a footnote |
+| **not yet measurable** | too few cycles since it landed, or the metric does not exist yet — name what would measure it and when |
+
+Two rules keep this honest. **An applied file is not an effect**: a rule that landed and
+a rule that changed behaviour are different claims, and only the second one counts here.
+And **a proposal nobody can verify is a finding about the proposal** — if a past retro
+accepted something whose effect cannot be measured at all, the fix is to make it
+measurable, not to leave it standing.
+
+This step is what closes the loop. Without it a retro is a suggestion into the void: a
+run can accept six proposals, hand two of them to tickets, and no later retro ever asks
+whether any of it helped. Measured on this skill's own history — the effect of a
+previous run's accepted proposals surfaced only because someone happened to look for it.
+
+Nothing here to measure (first retro, or no accepted proposals in the window) → say that
+in one line and move on. That is a complete answer.
 
 ### Step R4 — Propose fixes (placement + effort)
 
@@ -185,7 +223,7 @@ a proposal `[contract]` in the report so Step R6 knows to always confirm it, eve
 
 ### Step R5 — Render the report
 
-Four sections, in this order — and always **before** anything is applied:
+In this order — and always **before** anything is applied:
 
 ```text
 RETRO — PR #<n> (<branch>, merged <date>)
@@ -193,6 +231,11 @@ RETRO — PR #<n> (<branch>, merged <date>)
 
 WINS — keep doing
   · [memo] <what worked, and why it worked — no proposal attached>
+
+EFFECT — what the last retros' accepted proposals did
+  · <proposal> (<retro date>) → worked | did not work | not yet measurable
+       └ before <n> · after <n> · <what measured it>
+       └ [when "did not work"] this is PAIN below, not a footnote
 
 PAIN — what cost time this cycle
   · <duration>: <what happened>
@@ -207,7 +250,7 @@ PROPOSALS — concrete file changes
                 Diff preview: <the actual lines, frontmatter included>
                 [y/n/edit-path/skip-for-later]
 
-PATTERN HIGHLIGHTS (--scan only)
+PATTERN HIGHLIGHTS
   · <n> of last <N> retros flag <theme> → structural-fix candidate: <what>
 
 SUMMARY
@@ -275,12 +318,22 @@ proposals_rejected: 0
 applied_files:
   - .claude/rules/quality/html-script-validation.md
   - .claude/rules/workflows/ci-workflow.md
+# Step R3b's verdicts, so the NEXT run can read them without re-deriving them.
+# One entry per accepted proposal of an earlier retro that this run measured.
+effects_measured:
+  - proposal: "cache the tour quote lookup"
+    from_retro: 2026-05-12-tour-quote-bug
+    verdict: worked            # worked | did-not-work | not-yet-measurable
+    before: "4 CI rounds"
+    after: "2 CI rounds"
+    measured_by: "gh pr checks over the 6 PRs since"
+effects_pending: 1             # accepted proposals still not-yet-measurable
 ---
 
 # Retro — PR #1998 (tour animation pass)
 
-[Full Wins / Pain / Proposals report exactly as rendered in Step R5, plus
- a "Decisions" section noting which proposals were accepted, deferred,
+[Full Effect / Wins / Pain / Proposals report exactly as rendered in Step R5,
+ plus a "Decisions" section noting which proposals were accepted, deferred,
  or rejected, and why if user gave a reason.]
 ```
 
@@ -292,7 +345,7 @@ If `docs/retros/` does not exist in the user repo, create it on first run.
 
 One-line summary:
 
-> *Retro done. 2 of 3 proposals applied → 1 PR open (retro/2026-05-17-tour-quote-bug, #NN). 1 deferred. Log: docs/retros/2026-05-17-tour-quote-bug.md. Run `/we:retro --scan 10` next time to surface patterns.*
+> *Retro done. 2 of 3 proposals applied → 1 PR open (retro/2026-05-17-tour-quote-bug, #NN). 1 deferred. Of the last window's proposals: 1 worked, 1 not yet measurable. Log: docs/retros/2026-05-17-tour-quote-bug.md.*
 
 If a PR was opened, print its URL.
 
@@ -307,6 +360,10 @@ If a PR was opened, print its URL.
 - **Don't modify source code.** Retros change MDs only. Code-level lessons (e.g. "this function had a race condition") flow back through the build if needed — retro proposes the rule, not the code fix.
 - **Don't open the PR before applying the file changes.** Branch → apply → PR — in that order, so the PR body can reference the actual diff.
 - **Don't auto-create tickets.** Skill can scaffold a Jira/GitHub issue stub only on explicit user request (`--ticket` flag, off by default).
+- **Don't claim an effect you did not measure.** Step R3b's verdict for an accepted
+  proposal is `worked` only with a before and an after; a file that landed is not an
+  effect. `not-yet-measurable` is a complete and respectable answer — a guess dressed as
+  a verdict is what makes the next run's baseline worthless.
 - **Don't analyse cross-repo merges in one pass.** One PR per invocation; multi-PR retrospection is a future enhancement.
 - **Don't push to protected repos directly** — repos without standing direct-commit auth always go through PR (rules and CLAUDE.md edits need human review).
 
