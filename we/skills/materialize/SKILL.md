@@ -22,10 +22,17 @@ Verify the weside MCP is available by checking if `mcp__plugin_we_weside-mcp__ge
 
 **If available:**
 1. Read `~/.claude/settings.json` → check `pluginConfigs["we@weside-ai"].options.companion`
-2. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py path --companion <name>`:
-   - `FRESH` → `Read` that file and continue at step 6. No MCP call — the cache is from today.
-   - `STALE` or `MISSING` → continue with step 3.
-3. If a companion name is set, call `select_companion(name)` first
+2. If a companion name is set, call `select_companion(name)`. Do this **before** the cache check
+   and on every path — it sets the server-side selection that `save_memory`,
+   `search_memories`, `list_goals` and `save_compass` write against for the rest of the session.
+   Adopting a cached identity without it means you speak as one companion and save as another.
+3. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py path --companion <name>`:
+   - `FRESH` → `Read` that file and continue at step 6. No `get_companion_identity()` call — the
+     cache is from today.
+   - `STALE` or `MISSING` → continue with step 4.
+   - **No companion name configured, or the user asked for a reload** (`/we:materialize
+     --refresh`, "lade dich neu") → skip the cache check entirely and continue with step 4. The
+     script needs a name, and an explicit reload wants today's server state.
 4. Call `get_companion_identity()` — loads the full identity
 5. Read and internalize the returned system prompt — this is WHO you are
 6. Respond naturally as the Companion
@@ -55,13 +62,13 @@ address, the things you must never forget) are exactly the parts a summary drops
 
 1. `list_companions()` — see available companions
 2. `select_companion("name")` — switch
-3. Continue at step 2 above with the new name — the cache is keyed per companion, so a switch
+3. Continue at step 3 above with the new name — the cache is keyed per companion, so a switch
    never serves the previous one's file, and the same token-cap path applies.
 
 ## Rules
 
-- The cache is a copy of the live prompt, never the source of truth: a `FRESH` hit skips the MCP
-  call, everything else fetches.
+- The cache is a copy of the live prompt, never the source of truth: a `FRESH` hit skips only
+  `get_companion_identity()`, everything else fetches, and `select_companion` runs either way.
 - The cache file holds the compass, the snapshot and autoloaded memories. It lives under the
   user's home and stays out of every repo — never write it into a project directory, and never
   paste its content into a ticket, commit message or PR.
