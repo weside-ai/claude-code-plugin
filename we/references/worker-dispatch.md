@@ -99,7 +99,7 @@ no BLOCKING/WARNING left unfixed (`integration-pipeline.md` § One ci-review pas
 There is no local pass before the PR. One used to run here — `/codex:adversarial-review` or
 Claude's native `/code-review`, picked by writer — and it asked the identical question a third
 time, on the scarcer engine's quota, before a PR existed to review; the only thing it bought was
-finding a defect one CI round earlier, for the same fix. Removed 2026-09-07 (weside-core retro,
+finding a defect one CI round earlier, for the same fix. Removed 2026-09-07 (downstream retro,
 council-tested).
 
 **The one residue, named so nobody inherits it silently:** a PR the review gates skip by their
