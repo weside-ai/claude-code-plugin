@@ -10,6 +10,14 @@ description: >
 Read-only: reads git, the plan, the ticketing mirror and `gh`; writes nothing, dispatches
 nobody, transitions no ticket. One screen, then out.
 
+**Who reads this.** A person with ten Claude windows open, coming back to this one after an hour
+in the others, who has to re-learn what *this* window was doing. So the screen answers three
+questions in order, concretely and with names: **what was achieved** (not what ran — what is
+now true that was not), **which story or stories come next** (keys, not "the roster"), and
+**what the human must do** (a merge, a decision, a device round — or nothing, said as nothing).
+`/we:orchestrate` and `/we:ci-review` end by running this skill, so it is the last thing a
+window says before it goes quiet.
+
 **Neighbours, same landscape, different cut.** `/we:map` is wide and shallow across every plan ·
 `/we:saga` / `/we:epic` go deep on one artifact · `/we:handoff` writes a durable file for the
 *next* session · `/we:standup` is **this branch, right now**. `/we:orchestrate`'s `status`
@@ -29,6 +37,10 @@ is a different thing: the Lead's spoken roll-up mid-wave, not this dashboard.
 5. **In flight** — `ListAgents` for this session's teammates, plus `docs/plans/*-state.md` if the
    branch has one. A running worker is the difference between "nothing to do" and "wait".
 6. **Verdict** — one move, and it may be *nothing*.
+7. **Name** — the tmux window title should read the ticket key or the epic's one word
+   (`${CLAUDE_PLUGIN_ROOT}/references/session-name.md`); if it does not, set it now and print the
+   `/rename` line once. A window whose title still says the last job is the reason the human
+   has to ask.
 
 ## Output
 
@@ -37,13 +49,18 @@ STANDUP — {KEY} · {branch}
   story     {title} · {ticket-state} · phases {done}/{total}
   pr        #{n} {state} · checks {n green / n red / pending} · review {decision}
   tree      {clean | n dirty} · {ahead/behind}
-  recap     {≤3 lines}
   in flight {worker names, or —}
-  open      {one line per remaining item}
+
+  ACHIEVED  {≤3 lines: what is now true that was not — a number, a merged PR, a closed ticket}
+  NEXT      {story key(s) and the command that starts them — or: epic closed, nothing queued}
+  OPEN      {at most three items someone owes, each with an owner — or: nothing}
 
   YOUR MOVE
   → {the one action, with the command}          # or: nothing — {why}
 ```
+
+`OPEN` is work, not knowledge: a thing worth knowing goes in the plan or the state file, never
+here. More than three items under `OPEN` means the story is not finished — say that instead.
 
 ## Rules
 

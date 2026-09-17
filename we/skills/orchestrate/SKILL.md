@@ -80,6 +80,9 @@ ticket key) → Steps 1–10.
 
 ### Step 1: Boot from state
 
+**Name the window first** — `references/session-name.md`: the ticket key or one word for the
+epic, into the tmux title now, and the `/rename` line printed once for the user.
+
 **State file:** `docs/plans/<epic>-state.md` for an epic, `docs/plans/<primary-key>-state.md`
 for a single Story or an ad-hoc roster. It is the first thing read and the last thing written in
 every run: decisions taken, what was tried, per dispatch the worker name, backend, branch,
@@ -455,7 +458,14 @@ Review. What an orchestrated run adds:
   (`.weside/orchestrate.md`);
 - verification covers the journeys *the wave* claims — one walkthrough across three stories
   beats three that stop at their own seam; the receipt is written once per landed story into its
-  plan's `## Verification`, each with its own "not proven" line; before starting a server, check who owns the
+  plan's `## Verification`, each with its own "not proven" line. **The round runs BEFORE the PR
+  opens and carries a fix budget:** every finding it produces that is ≤ ~30 min and inside the
+  files this story touched is fixed in the same PR, without asking — `finish-first` rung 1,
+  and "not this phase's file" is not a reason (measured 2026-09: three stories in a row closed
+  with 6 → 9 → 9 open items, at least five of the nine ≤ 30 min and in the story's own files).
+  When the human asks for the PR first and the round after, say the price in one sentence
+  before doing it: *a round after the PR turns every finding into debt, because nothing can
+  land in the PR any more.* Then do what they decide; before starting a server, check who owns the
   single-owner ports (a busy port is a question, not a kill), and stop what you started, by PID,
   as soon as verification ends — not at worktree removal;
 - the verb chunk from Step 5.8 has its own PR in its repo; until the human merges it the wave
@@ -484,6 +494,21 @@ the next invocation (`pr_created` unlocks them before the human merges).
 the run repeats that line first. A status without the PR number is a status about nothing in
 particular.
 
+**Then three buckets, and only the first is called "open".** *Work someone owes* — at most
+**three** items; a fourth means the story is not finished, go back and fix. *Decisions the
+human owns* — asked as questions with a recommendation, never listed as items. *Things worth
+knowing* — into the plan's dev-round doc or the state file's record, **never into the closing
+message**: a list of nine where six are knowledge reads as nine open jobs, and the human has to
+ask what is actually left. A worker's "questions for the Lead" are the Lead's to answer; one
+reaches the human only when the Lead would genuinely answer it differently than they would.
+
+**No new story ticket during an epic run.** A finding goes into the current PR or into the
+state file; at the epic's close-out the Lead proposes **one** consolidated follow-up, never one
+ticket per nudge. Three tickets spawned by three "mach"s is the failure this rule names.
+
+**End every run with `/we:standup`** — after the closing message, before you stop, so the
+human returning to this window reads the same recap they would get by asking.
+
 Tear down every teammate
 (`references/agent-teams.md` § Full teardown), even on failure paths; a detached backend (Codex,
 foreign engine) has no message channel and is torn down by PID against its worktree cwd. Remove the chunk worktrees —
@@ -504,7 +529,8 @@ that word, not by a click; refresh the epic mirror / state file with the merged 
 story plan to what was actually built if it still describes an intention — a story is Done only
 when every `### Phase` block's `**Files:**` actually changed, in every repo the plan names; do the
 release or deploy the human asked for, and nothing they did not. Then say what is next (the state
-read on the remaining roster).
+read on the remaining roster), rename the window to what it is now for
+(`references/session-name.md`), and run `/we:standup`.
 
 ---
 

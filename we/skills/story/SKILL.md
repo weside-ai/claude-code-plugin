@@ -63,6 +63,10 @@ vary it. Detection: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ## Step 1: Load
 
+**Name the window first** — `${CLAUDE_PLUGIN_ROOT}/references/session-name.md`: the ticket key
+into the tmux title now, the `/rename {TICKET}` line printed once. The window's purpose just
+changed; its name follows.
+
 Fetch the ticket from the ticketing tool — **including its comments** (they carry corrections and
 agreed edge cases the description doesn't; newest statement wins on conflict):
 `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. Note the newest comment's id or timestamp; it

@@ -50,10 +50,17 @@ FIXED here — "pre-existing" alone is not a deferral. Ticket only what genuinel
 along: a product decision the user owns, a money-path change, a foreign subsystem redesign, or a
 fix that would bury the diff — and name which reason applies.
 
-**One pass by default.** Collect → fix → push → report. Re-enter Phase 4 only with a concrete
-reason (a fix you are unsure of, a flaky check, interdependent findings, a high-stakes PR you want
-to see green) — **or because the user set a budget** ("bis gemerged, max 3 Runden"): an explicit
-user instruction outranks the default, sets the cap, and defines when you may stop.
+**One to three rounds, at your discretion.** Collect → fix → push → report is one round. Run a
+second or third when a round produced a fix worth re-reviewing, a check was flaky, or the PR is
+one you want to see green — stop earlier the moment the gate is satisfied, and never run a fourth
+on your own: after three the human decides. A user-stated budget ("bis gemerged, max 5 Runden")
+replaces this default. **Codex is strict, and strict is not the same as right.** A Codex WARNING
+that names a real defect is fixed like any other; one that asks for a rewrite of prose, a rename,
+a defensive branch for an input the code cannot receive, or a test the PR's own red arm already
+covers is skipped **with the evidence in the reply** — a skip with a cited line is a legitimate
+outcome, a skip with "I disagree" is not. Measured 2026-09-16: seven Codex rounds on one PR, seven
+justified findings; the same day on the next PR a WARNING that the exit criterion's count was off
+by one. Both are findings; only one deserved a round.
 
 ---
 
@@ -280,9 +287,8 @@ git push
 
 ## Phase 4: Post-push check (opt-in, or user-budgeted)
 
-One **cycle** = one push plus the checks and re-reviews it triggers. Default: stop after the
-first push and report; when an exception applies, loop at most twice — a user-stated budget
-replaces that cap.
+One **cycle** = one push plus the checks and re-reviews it triggers. Default: one to three cycles
+at your discretion (see the policy above); a user-stated budget replaces that cap.
 
 Per cycle: wait for the checks to settle (`gh pr checks $PR --watch`), re-collect all sources,
 then run Phase 3 again in full — 3d and 3e included, never a bare re-push. **A repeat is the same
@@ -315,3 +321,6 @@ decision and the open question in the report, and stop — never expand the budg
   `BLOCKED` or an `UNKNOWN` that would not resolve. A green PR that cannot be merged is not a
   finished run, and the user finds out here or at the merge button.
 - Unresolved bot threads (must be 0) and every human thread, verbatim, for the user
+
+**Then run `/we:standup`** — the human returning to this window after the review reads the same
+recap they would get by asking, and does not have to.
