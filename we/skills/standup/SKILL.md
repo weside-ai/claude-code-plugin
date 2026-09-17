@@ -37,10 +37,10 @@ is a different thing: the Lead's spoken roll-up mid-wave, not this dashboard.
 5. **In flight** — `ListAgents` for this session's teammates, plus `docs/plans/*-state.md` if the
    branch has one. A running worker is the difference between "nothing to do" and "wait".
 6. **Verdict** — one move, and it may be *nothing*.
-7. **Name** — the tmux window title should read the ticket key or the epic's one word
-   (`${CLAUDE_PLUGIN_ROOT}/references/session-name.md`); if it does not, set it now and print the
-   `/rename` line once. A window whose title still says the last job is the reason the human
-   has to ask.
+7. **Name** — the session title should read the ticket key or the epic's one word
+   (`${CLAUDE_PLUGIN_ROOT}/references/session-name.md`); the tmux window follows it by hook. If it
+   does not, print the `/rename` line once. A window whose title still says the last job is the
+   reason the human has to ask.
 
 ## Output
 

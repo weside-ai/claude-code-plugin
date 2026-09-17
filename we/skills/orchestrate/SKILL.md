@@ -81,7 +81,7 @@ ticket key) → Steps 1–10.
 ### Step 1: Boot from state
 
 **Name the window first** — `references/session-name.md`: the ticket key or one word for the
-epic, into the tmux title now, and the `/rename` line printed once for the user.
+epic — the `/rename` line printed once for the user; the tmux window follows the title by hook.
 
 **State file:** `docs/plans/<epic>-state.md` for an epic, `docs/plans/<primary-key>-state.md`
 for a single Story or an ad-hoc roster. It is the first thing read and the last thing written in
