@@ -1,6 +1,6 @@
 ---
 name: session-name-reference
-description: Claude Code's session title is the window's name; a Stop hook makes the tmux title follow it. Owner — referenced by /we:orchestrate, /we:story, /we:standup.
+description: Claude Code's session title is the window's name; a Stop + UserPromptSubmit hook makes the tmux title follow it. Owner — referenced by /we:orchestrate, /we:story, /we:standup.
 ---
 
 # The session's title is its purpose, and the tmux window follows it
@@ -16,10 +16,17 @@ left, and `/rename <name>` sets it by hand. Both land in the session transcript 
 
 ## tmux follows automatically — do not rename it from a skill
 
-`~/.claude/we/sync-tmux-title.sh`, wired as a `Stop` hook in `~/.claude/settings.json`,
-reads the last title off the end of the transcript (`tac`, ~40 ms on a 200 MB file) and
-renames the pane's window when it differs. A skill that renamed tmux itself would be
-overwritten at the next turn — so skills leave tmux alone.
+`~/.claude/we/sync-tmux-title.sh`, wired as BOTH a `Stop` and a `UserPromptSubmit` hook in
+`~/.claude/settings.json`, reads the last title off the end of the transcript (`tac`, ~40 ms
+on a 200 MB file) and renames the pane's window when it differs. A skill that renamed tmux
+itself would be overwritten at the next turn — so skills leave tmux alone.
+
+Why two events: `/rename` is a local command, and the user typically types it together
+with their next prompt. Wired on `Stop` alone the window keeps its old name for the whole
+following turn (measured 2026-09-19: a `/rename WA-2302` sent with a "go" left the window
+on `bash` through the entire build turn). `UserPromptSubmit` fires before that turn starts,
+so the window is right while the work runs; `Stop` still covers a title Claude Code sets
+itself mid-turn.
 
 ```bash
 tac "$transcript" | grep -m1 '"type":"custom-title"' | jq -r .customTitle   # what the hook reads
