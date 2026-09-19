@@ -31,3 +31,20 @@ instruction_file() {           # $1 = directory, defaults to .
 (default: AGENTS.md only where the ancestor chain holds no CLAUDE.md), `claude-md-and-agents-md`
 (both, de-duplicated) and `managed-only`. A skill never depends on the mode — it resolves the
 name from the filesystem, which is true in every mode.
+
+## Regeln für Agenten ohne Claude-Code-Regelladen
+
+`.claude/rules/**` lädt nur Claude Code von selbst. Jeder andere Agent holt sie über
+`we/scripts/load-rules.py` — repo-unabhängig, der Root kommt aus `git rev-parse
+--show-toplevel` oder `--root`:
+
+```bash
+python3 "$LOADER" path/to/file.py     # vor der ersten Änderung
+python3 "$LOADER" --changed           # gegen den aktuellen Diff
+python3 "$LOADER" --explain path.py   # warum eine Regel greift oder nicht
+python3 "$LOADER" --list              # nur die Pfade
+```
+
+`/we:setup` legt dafür `.agents/skills/claude-rules/SKILL.md` aus
+`templates/agents-skill/` an, wenn das Repo Regeln hat. Der Loader selbst wandert nie ins
+Repo — er gehört dem Plugin und zieht mit ihm mit.

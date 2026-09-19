@@ -56,6 +56,19 @@ If the repo ships a `.pre-commit-config.yaml`, the `/we:*` pipeline assumes its 
    > "⚠️ `core.hooksPath` is set to a custom dir — skipping pre-commit hook install to avoid clobbering it. Install hooks manually if intended."
 4. **Otherwise** → collect every distinct stage the config declares (each hook's `stages:`, plus top-level `default_install_hook_types:` / `default_stages:`), always including the `pre-commit` baseline, and run `pre-commit install --hook-type <each>` per distinct stage. Report what was activated. Idempotent — safe to re-run. If one `--hook-type X` errors (a stage renamed across pre-commit versions), report it and continue with the rest.
 
+### Step 1d: Bridge the rules to non-Claude agents
+
+Only when the repo has a `.claude/rules/` directory. Claude Code loads those rules by
+itself; Codex and every other runtime do not, and a rule nobody loads governs nothing.
+
+1. `.agents/skills/claude-rules/SKILL.md` already exists → skip silently.
+2. Otherwise copy `${CLAUDE_PLUGIN_ROOT}/templates/agents-skill/SKILL.md` there, unchanged.
+   It resolves `we/scripts/load-rules.py` from the plugin cache at run time, so nothing is
+   duplicated into the repo and nothing drifts.
+3. Say one line about what was installed and that `AGENTS.md` should point at it.
+
+Never write the loader itself into the repo — it ships with the plugin and moves with it.
+
 ### Step 2: The six questions + executor wizard
 
 Present the questions **one at a time** — ask, wait for the answer, then move on. Never dump
