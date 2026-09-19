@@ -1,6 +1,6 @@
 # The Workflow
 
-Agentic Product Ownership has four phases — *plan*, *build*, *deliver*, *retro*. The plugin gives you four altitudes of Plan skills, one autonomous Build skill, a Deliver phase that stays with you, and a Retro phase that feeds lessons from the just-shipped cycle back into the rules and CLAUDE.md files that govern the next one.
+Agentic Product Ownership has four phases — *plan*, *build*, *deliver*, *retro*. The plugin gives you four altitudes of Plan skills, one autonomous Build skill, a Deliver phase that stays with you, and a Retro phase that feeds lessons from the just-shipped cycle back into the rules and instruction files that govern the next one.
 
 This page maps the full pipeline and explains where each skill fits. For learning by doing, start with [getting-started.md](getting-started.md). For the why behind the structure, see [agenticproductownership.com](https://agenticproductownership.com).
 
@@ -34,7 +34,7 @@ Four phases, four responsibilities:
 | **Plan** | You + Claude (interactive) | Vision / Saga / Epic / Story + build-ready plan | `/we:vision`, `/we:saga`, `/we:epic`, `/we:story` (+ `/we:meet`) |
 | **Build** | Claude (autonomous) | Code → review → test → docs → PR → CI | `/we:orchestrate` |
 | **Deliver** | You (manual) | Review PR, merge, close ticket | GitHub / Ticketing |
-| **Retro** | You + Claude (interactive) | Find frictions in the just-shipped cycle; encode lessons in `.claude/rules/` + `CLAUDE.md` so they don't recur | `/we:retro` (Coach can suggest it after a merge) |
+| **Retro** | You + Claude (interactive) | Find frictions in the just-shipped cycle; encode lessons in `.claude/rules/` + the instruction file so they don't recur | `/we:retro` (Coach can suggest it after a merge) |
 
 **Claude never merges PRs or closes tickets.** Those stay with you. **Claude never silently applies retro fixes** either — every proposal passes through a `[y/n]` gate.
 
@@ -159,7 +159,7 @@ flowchart LR
     M[Deliver: PR merged] --> R["/we:retro --pr N"]
     R --> Report["Wins / Pain / Proposals report"]
     Report --> Gate["[y/n] per proposal"]
-    Gate -->|y| Apply["Edit MD files<br/>in user repo's<br/>.claude/rules/ or CLAUDE.md"]
+    Gate -->|y| Apply["Edit MD files<br/>in user repo's<br/>.claude/rules/ or AGENTS.md"]
     Gate -->|n| Log["Log only"]
     Apply --> Log
     Log --> Done["docs/retros/YYYY-MM-DD-*.md"]
@@ -175,7 +175,7 @@ flowchart LR
 |---|---|
 | **Source scope** | Default: current branch + last merged PR. `--pr N` for a specific PR. `--scan N` to also read the last N retros in `docs/retros/` for recurring patterns. |
 | **Data fetch** | Session transcript (what the agent did) + external CI/review data via `gh api` on GitHub (CI checks, review-bot threads, push-fix-push cycles) — or the session transcript alone when `gh` is unavailable. |
-| **Propose** | Each friction → 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/` over `CLAUDE.md` over `docs/`; plugin MDs rare and explicitly flagged), effort tag, diff preview. |
+| **Propose** | Each friction → 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/` over the instruction file over `docs/`; plugin MDs rare and explicitly flagged), effort tag, diff preview. |
 | **Per-item gate** | `[y / n / edit-path / skip-for-later]` for each proposal. Never silent. |
 | **Apply** | Approved items → Edit/Write. Default PR-workflow in user repo; direct-commit if repo configured that way. |
 | **Log** | Always writes `docs/retros/YYYY-MM-DD-<topic>.md` with structured frontmatter — the corpus future `--scan` runs read for patterns. |

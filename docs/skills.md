@@ -310,7 +310,7 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 
 > *Systematic continuous-improvement pass on the just-shipped cycle. Every error happens exactly once.*
 
-`/we:retro` is the dedicated retrospective skill. It reads two complementary sources — the **session transcript** (what the agent *did*) and the **GitHub PR + CI history** via `gh api` (what failed *externally* — checks, review-bot threads, push-fix-push cycles) — and surfaces engineering frictions that cost time during the cycle. For each friction it drafts 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/<topic>.md`, then `CLAUDE.md`, then `docs/`; plugin MDs rare and explicitly flagged), an effort tag, and a diff preview. You approve per item via `[y / n / edit-path / skip-for-later]`. Approved items get applied via Edit/Write — default PR-workflow in the user repo, direct-commit when the repo is configured for it. A retro log (`docs/retros/YYYY-MM-DD-<topic>.md`) is always written, regardless of how many proposals applied — that's the corpus the optional `--scan N` flag reads later to surface recurring patterns across past retros.
+`/we:retro` is the dedicated retrospective skill. It reads two complementary sources — the **session transcript** (what the agent *did*) and the **GitHub PR + CI history** via `gh api` (what failed *externally* — checks, review-bot threads, push-fix-push cycles) — and surfaces engineering frictions that cost time during the cycle. For each friction it drafts 1–2 concrete MD-file proposals with default placement (preferring user-repo `.claude/rules/<topic>.md`, then the repo instruction file, then `docs/`; plugin MDs rare and explicitly flagged), an effort tag, and a diff preview. You approve per item via `[y / n / edit-path / skip-for-later]`. Approved items get applied via Edit/Write — default PR-workflow in the user repo, direct-commit when the repo is configured for it. A retro log (`docs/retros/YYYY-MM-DD-<topic>.md`) is always written, regardless of how many proposals applied — that's the corpus the optional `--scan N` flag reads later to surface recurring patterns across past retros.
 
 **Privacy guard (mandatory):** if session content reads as personal, skip it — analyse only engineering surfaces (tool calls, file diffs, CI logs, PR comments). Companion-mode conversations, `save_memory` payloads, and `save_compass` writes are categorically out-of-scope.
 
@@ -325,7 +325,7 @@ A fast, read-only text overview of everything in flight: every Saga, its Epics, 
 - Quote personal content from the transcript (privacy guard)
 - Modify source code (MDs only — code-level lessons flow back through the build if needed)
 - Auto-create Jira / GitHub tickets (skill can scaffold one on explicit `--ticket` request, off by default)
-- Push without PR review — rule + CLAUDE.md edits always go through a PR in repos without explicit direct-commit config
+- Push without PR review — rule + instruction-file edits always go through a PR in repos without explicit direct-commit config
 
 ---
 
@@ -391,7 +391,7 @@ Guided council builder: for each role it offers three ways to fill the lens — 
 Cross-repo work without leaving your current repo. A main agent rooted in the wrong repo never receives path-filtered rules from the harness, so sideload compensates by loading everything eagerly. Three layers:
 
 1. **Shape** — `mcp__turbovault__explain_vault(<vault>)` overview
-2. **Essentials** — CLAUDE.md + **every** rule under `.claude/rules/**/*.md` (all of them, eager, no filter)
+2. **Essentials** — the instruction file + **every** rule under `.claude/rules/**/*.md` (all of them, eager, no filter)
 3. **Crew** — reads the target's `.weside/weside.md` and prints the crew summary
 
 **When to use:**

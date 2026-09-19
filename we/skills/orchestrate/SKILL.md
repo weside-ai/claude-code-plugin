@@ -45,7 +45,7 @@ Read(".weside/orchestrate.md")
 
 `.weside/orchestrate.md` is the repo's own dispatch notes — worktree bootstrap, generated
 artifacts, gate baselines, single-owner host resources, risk-class file lists, where plan and
-state commits may land. Absent → derive the same items from the repo's `CLAUDE.md` and
+state commits may land. Absent → derive the same items from the repo's instruction file (`AGENTS.md`, else `CLAUDE.md`) and
 always-loaded rules, say in the roll-up that the file is missing, and offer to write it.
 
 Agent Teams must be enabled — flag, abort text and teardown: `references/agent-teams.md`. The

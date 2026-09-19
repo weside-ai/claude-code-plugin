@@ -244,7 +244,7 @@ cd ../other-repo
 /we:setup   # or use the bootstrap script
 ```
 
-The legacy mode still works (loads `CLAUDE.md` + always-loaded `.claude/rules/`), but you miss the crew + repo-purpose context.
+The legacy mode still works (loads the instruction file + always-loaded `.claude/rules/`), but you miss the crew + repo-purpose context.
 
 ---
 

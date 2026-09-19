@@ -18,7 +18,7 @@ Claude Code already has session-management features. None of them produce a dura
 | `/compact` | Summarises the current conversation in-place to reclaim tokens | Stays inside the current session; lost on `/clear` or new session |
 | `claude --resume` | Resumes the last session from the opaque jsonl | Full-replay; no curation; no structured "what's next" guidance |
 | `SessionStart` hook | Runs shell commands before context is prepared | Cannot inject content into the LLM context window |
-| `CLAUDE.md` / `MEMORY.md` | Auto-loads at session start | Static — meant for project conventions, not per-session state |
+| `AGENTS.md` / `MEMORY.md` | Auto-loads at session start | Static — meant for project conventions, not per-session state |
 
 `/we:handoff` fills the gap: a deliberate, structured, version-controlled hand-off file that survives any session boundary. **Complements `/compact`, doesn't replace it** — `/compact` reclaims tokens *in-place*; `/we:handoff` writes a *durable artifact* for the next session.
 

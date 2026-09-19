@@ -12,7 +12,7 @@ For the per-step skill reference, see [`/we:retro`](../skills.md#weretro). For t
 
 A team that ships well still bleeds time to the same classes of mistake every week: a CodeRabbit thread that always blocks merge, a markdownlint rule that local hooks didn't catch, an ASCII-vs-Unicode quote bug that hides in a `<script>` block for three releases, a CI cycle that ate twelve minutes because one rule wasn't in the pre-push checklist. The pain is real but each individual occurrence is small — too small to interrupt the next story for, easy to write off as "one of those days".
 
-The harness — the user repo's `.claude/rules/`, its `CLAUDE.md` files, the plugin's skill definitions — *should* be growing tighter each week so those classes of mistake stop being possible. In practice it grows only when someone notices, stops, and writes the rule down. That noticing is the bottleneck.
+The harness — the user repo's `.claude/rules/`, its instruction files, the plugin's skill definitions — *should* be growing tighter each week so those classes of mistake stop being possible. In practice it grows only when someone notices, stops, and writes the rule down. That noticing is the bottleneck.
 
 `/we:retro` makes the noticing systematic. After a PR ships, the skill scans what just happened and asks: *which frictions cost time this cycle, and which of them could a single rule change prevent next time?*
 
@@ -40,11 +40,11 @@ A third, opt-in source is **`docs/retros/*` historical**, enabled via `--scan N`
 The skill defaults to writing into the **user repo**, not the plugin. Plugin docs ship to every plugin user; rule changes that are project-specific (most of them) belong where they were caused.
 
 1. **`<user-repo>/.claude/rules/<category>/<topic>.md`** — preferred. Path-filtered (`paths:` in frontmatter), scoped to the files that triggered the lesson. Loads only when relevant. Examples: `quality/html-script-validation.md`, `quality/markdown-pre-push.md`, `workflows/coderabbit-resolution.md`.
-2. **`<user-repo>/CLAUDE.md`** or `<user-repo>/<area>/CLAUDE.md` — for lessons that must always be loaded for that area.
+2. **`<user-repo>/AGENTS.md`** or `<user-repo>/<area>/AGENTS.md` (`CLAUDE.md` where a repo still carries that name) — for lessons that must always be loaded for that area.
 3. **`<user-repo>/docs/...`** — when the lesson is reference documentation, not behavioural rule (e.g. a runbook addition).
 4. **Plugin MDs** (`claude-code-plugin/...`) — **rare**. Only when the lesson is universal across every plugin user. The skill flags these explicitly: *"This fix changes plugin docs that ship to everyone — sure?"*
 
-The proposed placement is part of every proposal. The user can re-target per item in the `[y/n/edit-path]` gate ("no, put this in `CLAUDE.md` instead").
+The proposed placement is part of every proposal. The user can re-target per item in the `[y/n/edit-path]` gate ("no, put this in the instruction file instead").
 
 ---
 

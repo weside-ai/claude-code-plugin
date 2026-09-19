@@ -23,7 +23,7 @@ Welcome. Pick your entry point.
 
 ## I want to contribute or extend
 
-- **[../CLAUDE.md](../CLAUDE.md)** — developer guide for plugin contributors (strategy, conventions, cross-repo)
+- **[../AGENTS.md](../AGENTS.md)** — developer guide for plugin contributors (strategy, conventions, cross-repo)
 - **[../we/CLAUDE.md](../we/CLAUDE.md)** — plugin instructions (loaded by Claude Code when the plugin is active)
 
 ---

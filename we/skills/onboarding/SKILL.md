@@ -39,7 +39,7 @@ Rule of thumb: human/companion reads it to *understand the repo* → `weside.md`
 
 ### 1. Greet + detect repo flavor + read state
 
-- Read `CLAUDE.md` + existing `.weside/config.json` + `.weside/weside.md` + `.weside/council.json` (if any).
+- Read the repo's instruction file (`AGENTS.md`, else `CLAUDE.md`) + existing `.weside/config.json` + `.weside/weside.md` + `.weside/council.json` (if any).
 - Detect repo type: backend code? landing page? business docs? plugin/toolkit? mixed?
 - Suggest a default council roster based on flavor:
 

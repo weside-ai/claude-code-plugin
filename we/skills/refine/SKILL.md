@@ -84,7 +84,7 @@ lets the Lead dispatch them. Phases touching disjoint files with no ordering dep
    wins; you name the conflict in `## Design Decisions` rather than silently picking. No ticketing
    access → work from the brief alone and say so in `## Context`.
 2. **Read the brief's architecture refs, then the code they name** — locate the seam from the refs
-   and the repo's `CLAUDE.md`, then `Grep` the route or symbol the story names.
+   and the repo's instruction file (`AGENTS.md`, else `CLAUDE.md`), then `Grep` the route or symbol the story names.
 3. **Write the file** at `docs/plans/{TICKET}-story.md`, then `Grep` it back — `Given`, `When`,
    `Then` capitalised in *every* AC, `^### Phase \d+` for the headers, `**Files:**` under each —
    and read `## Context` to confirm it is a paragraph. Do the same after a step-0 edit.

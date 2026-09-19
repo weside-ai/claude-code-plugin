@@ -28,13 +28,13 @@ claude-code-plugin/
 │       ├── statusline.js    # Shipped statusline (model · branch · PR · context · cost)
 │       └── install_statusline.py # Installs it into ~/.claude/settings.json (owns the procedure)
 ├── README.md                # Public-facing documentation
-└── CLAUDE.md                # This file (developer guide)
+└── AGENTS.md                # This file (developer guide)
 ```
 
 ### Key Distinction
 
 - **`we/CLAUDE.md`** — Loaded by Claude Code when the plugin is active. Instructions for the AI.
-- **`CLAUDE.md`** (this file) — Loaded when developing IN this repo. Instructions for the developer + AI.
+- **`AGENTS.md`** (this file) — Loaded when developing IN this repo, by Claude Code and by every other AGENTS.md-aware agent. Instructions for the developer + AI.
 
 ---
 

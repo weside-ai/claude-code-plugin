@@ -42,7 +42,7 @@ def get_category(filepath: str) -> str | None:
     return None
 
 
-DOC_FILENAMES = {"CLAUDE.md", "README.md"}
+DOC_FILENAMES = {"AGENTS.md", "CLAUDE.md", "README.md"}
 
 
 def validate_file(filepath: str) -> list[str]:

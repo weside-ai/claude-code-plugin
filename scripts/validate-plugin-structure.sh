@@ -51,7 +51,7 @@ echo ""
 
 echo "--- Required files ---"
 check_file "README.md" "Repository README"
-check_file "CLAUDE.md" "Developer guide"
+check_file "AGENTS.md" "Developer guide"
 check_file "we/CLAUDE.md" "Plugin instructions"
 
 echo ""

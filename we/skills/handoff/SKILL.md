@@ -135,7 +135,7 @@ is reported in the closeout line, not offered as a decision.
 - **In the user repo:** `mkdir -p docs/handoffs/` if missing, then `Write` the file.
 - **Commit policy** (mirrors `/we:retro`):
   - Default (PR-required repos): create branch `handoff/YYYY-MM-DD-<slug>`, apply Write, then — if `gh auth status 2>/dev/null` succeeds — open a PR with the rendered handoff as the PR body; user merges via normal flow. If `gh` is unavailable/unauthenticated: commit to the branch and print *"No GitHub access — push `handoff/YYYY-MM-DD-<slug>` manually and open a PR when ready."*
-  - Direct-commit repos (standing main-auth explicitly configured in `.weside/config.json` or repo CLAUDE.md): Write on `main` directly. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
+  - Direct-commit repos (standing main-auth explicitly configured in `.weside/config.json` or the repo's instruction file): Write on `main` directly. Commit message: `docs(handoff): YYYY-MM-DD-<slug> — session state for next pickup`.
   - The user can interrupt mid-apply ("skip the PR, just commit directly").
 - Confirm: `applied · <repo>/docs/handoffs/<file>.md (<line-count> lines)`.
 

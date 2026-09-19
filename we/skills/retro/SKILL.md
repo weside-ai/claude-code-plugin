@@ -3,7 +3,7 @@ name: retro
 description: >
   Systematic retrospective on a session + PR/CI cycle — finds frictions
   from transcript + gh api, proposes concrete .claude/rules/ and
-  CLAUDE.md edits behind a per-item [y/n] gate, logs to docs/retros/.
+  AGENTS.md/CLAUDE.md edits behind a per-item [y/n] gate, logs to docs/retros/.
   Use when the user says "/we:retro", "retro", "post-mortem",
   "what went wrong".
 ---
@@ -12,7 +12,7 @@ description: >
 
 **Role:** Systematic pass over the recent engineering cycle (session + PR + CI). Find frictions the user paid time for. Propose concrete MD-file edits that prevent the next occurrence. Apply only what the user approves, per item. Log the run for future pattern detection.
 
-**Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once — the retro catches it, an MD-file change in the user repo's `.claude/rules/` or `CLAUDE.md` bans it forever.
+**Motto:** *Jeder Fehler passiert nur einmal.* Every error happens exactly once — the retro catches it, an MD-file change in the user repo's `.claude/rules/` or its instruction file bans it forever.
 
 > **Companion-aware:** report voiced by the active Companion when one is materialised — see `${CLAUDE_PLUGIN_ROOT}/references/companion-voice.md`.
 
@@ -67,7 +67,7 @@ only Step R6's gate:
 
 - **Auto-applied without asking:** any proposal targeting the **user's own repo** that is neither
   a plugin-repo edit nor a contract change (see below). These are the routine cases — a new
-  path-filtered rule, a CLAUDE.md one-liner, a doc-only note.
+  path-filtered rule, a one-liner in the instruction file, a doc-only note.
 - **Still asks, even under `--auto`** (this is "only when truly necessary"):
   - **Plugin-repo proposals** — ships to *every* plugin user; always confirm explicitly, same as
     non-auto mode.
@@ -108,7 +108,7 @@ Before producing any output, gather the landscape fresh.
 
 3. **Rules + skills + docs landscape (user repo)** — frontmatter + first 10 lines only:
    - `.claude/rules/**/*.md` — to know which rules exist (for placement decisions later)
-   - `CLAUDE.md` files at root + any sub-area (`apps/*/CLAUDE.md`) — to know what's always-loaded
+   - the instruction files at root + any sub-area (`AGENTS.md`, else `CLAUDE.md`; also `apps/*/AGENTS.md`) — to know what's always-loaded
    - `${CLAUDE_PLUGIN_ROOT}/skills/` — frontmatter `description:` of each skill (for cases where a fix belongs in the plugin)
    - Don't load full contents — that's thousands of tokens.
 
@@ -205,14 +205,14 @@ For each kept friction, draft 1-2 proposals. Each proposal carries:
 
 - **Placement** — where the MD edit should land. Default by priority:
   1. `<user-repo>/.claude/rules/<category>/<topic>.md` (preferred, path-filtered)
-  2. `<user-repo>/CLAUDE.md` or `<user-repo>/<area>/CLAUDE.md` (always-loaded)
+  2. `<user-repo>/AGENTS.md` or `<user-repo>/<area>/AGENTS.md` — whichever name the repo carries, `CLAUDE.md` where it has not moved (always-loaded)
   3. `<user-repo>/docs/...` (reference docs, not behavioural)
   4. **Plugin MDs** (`claude-code-plugin/...`) — flag explicitly: *"ships to all plugin users — sure?"*
 - **Action** — NEW (file create) or EDIT (file modify, with diff preview)
 - **Effort tag** — `30s`, `2min`, `5min`, `15min`, `30min`
 - **Priority** — `P1` (recurring or high-cost), `P2` (single occurrence, real cost), `P3` (nice-to-have)
 
-When multiple placements are reasonable, pick the most specific (path-filtered rule > always-loaded CLAUDE.md > generic doc). The user can re-target per item in the gate.
+When multiple placements are reasonable, pick the most specific (path-filtered rule > always-loaded instruction file > generic doc). The user can re-target per item in the gate.
 
 **Contract changes ship their doc update in the same proposal.** If a proposal changes a
 contract — a schema, an MCP tool signature, a config-key name/shape, a public skill invocation
@@ -268,7 +268,7 @@ For each proposal in order, present and wait. Accepted tokens:
 
 - `y` → apply, move to next
 - `n` → skip permanently (record in log as "rejected by user")
-- `edit-path: <new path>` → apply with redirected placement (e.g. user wants CLAUDE.md instead of rules/)
+- `edit-path: <new path>` → apply with redirected placement (e.g. user wants the instruction file instead of rules/)
 - `edit-content: ...` → user wants different wording; offer revised draft, re-ask
 - `skip-for-later` → leave in log as "deferred", don't apply now
 - `stop` → halt the gate, apply nothing further, jump to Step R8 (log)
@@ -365,6 +365,6 @@ If a PR was opened, print its URL.
   effect. `not-yet-measurable` is a complete and respectable answer — a guess dressed as
   a verdict is what makes the next run's baseline worthless.
 - **Don't analyse cross-repo merges in one pass.** One PR per invocation; multi-PR retrospection is a future enhancement.
-- **Don't push to protected repos directly** — repos without standing direct-commit auth always go through PR (rules and CLAUDE.md edits need human review).
+- **Don't push to protected repos directly** — repos without standing direct-commit auth always go through PR (rules and instruction-file edits need human review).
 
 ---

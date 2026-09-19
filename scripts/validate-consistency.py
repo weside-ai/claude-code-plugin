@@ -263,7 +263,7 @@ INDISCRETION_PATTERNS: list[tuple[str, str]] = [
 
 # Files that document the patterns themselves (the ban list, and this checker).
 INDISCRETION_ALLOWLIST = {
-    "CLAUDE.md",
+    "AGENTS.md",
     "scripts/validate-consistency.py",
     ".claude/rules/plugin-authoring.md",
 }

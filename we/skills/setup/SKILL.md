@@ -36,7 +36,7 @@ Scan the project to detect:
 
 **Existing Config:**
 + `.weside/` directory exists → already configured
-+ `CLAUDE.md` exists → read for conventions
++ `AGENTS.md` or `CLAUDE.md` exists → read for conventions
 
 ### Step 1b: Check Plugin Prerequisites
 
