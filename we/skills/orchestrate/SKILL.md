@@ -544,7 +544,14 @@ one-function fix. `/we:story` already recommended the shape; follow it.
    (`references/dor-scan.md`). Failing scan → stop, name the item; `/we:story {TICKET}` is the
    fix. A plan older than the code it plans is the other stop.
 2. **Worktree + ticket** — `EnterWorktree(name="{type}/{TICKET}-…")`, the repo bootstrap, In
-   Progress, checkpoint `git_prepared`.
+   Progress, checkpoint `git_prepared`. Two things `EnterWorktree` does that the name
+   suggests it does not, both measured 2026-09-19: it creates the branch as
+   **`worktree-<name>`** with `/` rewritten to `+`, so rename it to the branch the ticket
+   wants (`git branch -m <type>/{TICKET}-…`) before the first commit or the PR carries a
+   name nobody searches for; and the repo's `post-checkout` bootstrap does **not** fire, so
+   the tree has no `.env`, no venv and no database until you run it yourself. Run the
+   bootstrap explicitly and check its state file before the first gate — a missing venv
+   surfaces three commands later as an unrelated-looking import error.
 3. **Implement** phases in order, commit per phase, checkpoint `implementation_complete`.
    `parallel_groups` in the frontmatter means you should have run Mode B — note it.
 4. `references/integration-pipeline.md` for everything after.

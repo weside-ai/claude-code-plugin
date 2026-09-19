@@ -45,6 +45,11 @@ person will look: **the PR body, under `## Verification`.** Minimum:
 **Not proven:** <what this oracle cannot show, and who owes it>
 ```
 
+**The four labels are read literally, by a hook, at `gh pr create`.** Write them exactly as
+above — `**Seed:**`, not `**Seed (the one that discriminates):**` — and pass the body as
+`--body-file`, or the gate refuses the PR and says the receipt is still a template.
+Decorating a label costs a round trip (measured 2026-09-19).
+
 Rules that make the receipt worth having:
 
 - **A screenshot is evidence for a human, not for you.** Assert on structure —
@@ -53,6 +58,13 @@ Rules that make the receipt worth having:
 - **State what failed, if something did.** A receipt that only ever says "works"
   is decoration. The four defects that motivated this contract were all found by
   a walkthrough that expected success.
+- **Run the control arm, and believe it when it comes back green.** A probe whose
+  timing depends on something you do not control measures that thing, not your
+  change: WA-2302 SIGTERMed a backend mid-turn and the fixed tree looked perfect,
+  until the same probe on the UNFIXED tree also passed — the two turns had taken
+  14.7 s and 6.0 s. Fix the one variable that decides the outcome, keep everything
+  else real, and put both arms' output in the receipt. A green control arm is not
+  a nuisance to explain away; it is the probe telling you it proves nothing.
 - **`not-applicable` is a legitimate answer and must carry its reason.** What is
   forbidden is silence.
 
