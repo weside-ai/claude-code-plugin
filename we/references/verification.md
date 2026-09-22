@@ -77,6 +77,25 @@ cut the RC.
 If DEV cannot be brought up, that is a finding about the environment, not a
 licence to skip. Say so and fall to oracle 3.
 
+**The dev ports are a singleton, deliberately, and you release yours when the round ends.**
+Verification serialises across sessions, and that is the cheaper trade — decided 2026-09-22
+after a night where two sessions wanted DEV:
+
+- **The browser driver is single-owner too.** One daemon, one profile; a second `close --all`
+  kills the first. Per-session backends would therefore parallelise oracle 1 only and leave
+  oracle 2 — the expensive half — serialised anyway.
+- **The isolation that protects correctness already exists** at the database, per worktree. What
+  per-session ports would add is configuration surface: the app pointing at the right backend,
+  the CORS and auth origins, the CLI's `--api-url`. Every one of those is a fresh way to produce
+  a receipt against the wrong tree, and a receipt against the wrong tree is worse than none,
+  because it looks like one.
+- **Serialisation was not what cost the time** in the measured case. What cost it was an
+  ownership question the documented lookup could not answer. Fix the lookup, not the topology.
+
+Revisit when three or more sessions routinely need DEV at once — then the queue, not the config
+surface, is the larger cost. Until then: check the port before you start, ask its owner rather
+than clearing it, and stop your own server as soon as the round ends.
+
 ## The standing consequence: a missing verb is a bug in the CLI
 
 If verifying needs a multi-step shell dance the project's own CLI cannot do,

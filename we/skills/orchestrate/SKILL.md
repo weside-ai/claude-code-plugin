@@ -465,9 +465,10 @@ Review. What an orchestrated run adds:
   with 6 → 9 → 9 open items, at least five of the nine ≤ 30 min and in the story's own files).
   When the human asks for the PR first and the round after, say the price in one sentence
   before doing it: *a round after the PR turns every finding into debt, because nothing can
-  land in the PR any more.* Then do what they decide; before starting a server, check who owns the
-  single-owner ports (a busy port is a question, not a kill), and stop what you started, by PID,
-  as soon as verification ends — not at worktree removal;
+  land in the PR any more.* Then do what they decide; before starting a server,
+  check who owns the single-owner ports (a busy port is a question, not a kill) and release
+  yours the moment verification ends — the three-outcome ownership lookup and the release duty
+  live once, in Step 9;
 - the verb chunk from Step 5.8 has its own PR in its repo; until the human merges it the wave
   is **waiting on your merge in `<repo>`** — a roll-up state, named as such, and the story PR
   waits behind it because its verification receipt cannot exist yet (a red CI there is that PR's
@@ -515,9 +516,32 @@ foreign engine) has no message channel and is torn down by PID against its workt
 but ask each worker first whether anything is in flight: a reviewer it launched may still be
 out, and uncommitted fixes die with the tree;
 **keep the integration worktree and branch until Step 10** — the open PR points at the branch,
-and a CI-review fix needs the tree. Before removing any worktree, kill the processes it started
-by PID (`ss -ltnp` on the repo's ports, `ls -l /proc/<pid>/cwd` — `(deleted)` is an orphan,
-yours to clear; a live cwd belongs to another session — coordinate, never kill; never `pkill -f`).
+and a CI-review fix needs the tree.
+
+**Release the single-owner host resources the moment verification ends** — not at worktree
+removal, and not when the run closes. A dev server left running while its session idles is what
+turns the port into a queue nobody can see: the next session finds it busy, cannot tell whose it
+is, and pays for the archaeology. Kill what you started, by PID, and verify the port went free.
+
+**Whose process is it? The lookup has three outcomes, not two** — and two documented facts
+about it are false negatives that read like proof:
+
+- `ls -l /proc/<pid>/cwd` — **`(deleted)`** is an orphan, yours to clear. A **live cwd in your
+  own worktree** is yours. A **live cwd in another worktree** is someone else's: coordinate,
+  never kill, never `pkill -f`.
+- **`ListAgents` does not list another session's teammates.** It shows your own teammates and
+  peer *sessions*; a worker spawned by a different session appears in neither. Its emptiness is
+  therefore not evidence that the owner is gone, and using it that way is how a live session's
+  server gets killed (measured 2026-09-22).
+- **PPID 1 is the normal state of a backgrounded dev server**, because `a start -b` and its kind
+  detach on purpose. It is not evidence of an orphan and must not corroborate one.
+- The third outcome: **a live cwd whose owner you cannot reach.** That is not a licence — it is
+  a question for the human, with what you measured attached. Ask, then act on the answer.
+
+**Killing a server's parent leaves children that still block.** A reloader's or a
+`multiprocessing` child survives its parent, holds no port, and the start guard refuses on the
+*process from a foreign worktree*, not on the listener — so the port reads free while the next
+start is still refused. Enumerate the family by cwd before concluding you cleared it.
 
 ### Step 10: Close-out — after the human says "merged"
 
