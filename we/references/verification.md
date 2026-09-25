@@ -60,7 +60,7 @@ Rules that make the receipt worth having:
   a walkthrough that expected success.
 - **Run the control arm, and believe it when it comes back green.** A probe whose
   timing depends on something you do not control measures that thing, not your
-  change: WA-2302 SIGTERMed a backend mid-turn and the fixed tree looked perfect,
+  change: PROJ-2302 SIGTERMed a backend mid-turn and the fixed tree looked perfect,
   until the same probe on the UNFIXED tree also passed — the two turns had taken
   14.7 s and 6.0 s. Fix the one variable that decides the outcome, keep everything
   else real, and put both arms' output in the receipt. A green control arm is not

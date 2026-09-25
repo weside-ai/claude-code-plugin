@@ -23,7 +23,7 @@ itself would be overwritten at the next turn — so skills leave tmux alone.
 
 Why two events: `/rename` is a local command, and the user typically types it together
 with their next prompt. Wired on `Stop` alone the window keeps its old name for the whole
-following turn (measured 2026-09-19: a `/rename WA-2302` sent with a "go" left the window
+following turn (measured 2026-09-19: a `/rename PROJ-2302` sent with a "go" left the window
 on `bash` through the entire build turn). `UserPromptSubmit` fires before that turn starts,
 so the window is right while the work runs; `Stop` still covers a title Claude Code sets
 itself mid-turn.
@@ -41,6 +41,6 @@ boots, or a close-out ends: print the exact line **once**, and nothing else abou
 /rename <name>
 ```
 
-— where `<name>` is short and is what the window IS: the ticket key (`WA-2284`) or one
+— where `<name>` is short and is what the window IS: the ticket key (`PROJ-2284`) or one
 word for the epic (`design-v2`). Never a sentence. After plan mode Claude Code has usually
 already set a title; print the line only when that title is not the name you would choose.
