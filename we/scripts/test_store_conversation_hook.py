@@ -15,6 +15,7 @@ from store_conversation_hook import (
     _MAX_SOURCE_DETAIL_LEN,
     _build_source_detail,
     _derive_session_tag,
+    redact,
 )
 
 
@@ -53,6 +54,32 @@ class BuildSourceDetailTest(unittest.TestCase):
         result = _build_source_detail(long_project, "3f9a21c4")
         self.assertTrue(result.endswith("#3f9a21c4"))
         self.assertLessEqual(len(result), _MAX_SOURCE_DETAIL_LEN)
+
+
+class RedactTest(unittest.TestCase):
+    def test_provider_tokens_are_replaced(self):
+        samples = [
+            "sk-" + "a" * 32,
+            "sk-ant-" + "b" * 40,
+            "ghp_" + "c" * 36,
+            "github_pat_" + "d" * 40,
+            "sbp_" + "e" * 40,
+            "AKIA" + "F" * 16,
+            "eyJ" + "g" * 20 + "." + "h" * 20 + "." + "i" * 20,
+        ]
+        for s in samples:
+            self.assertEqual(redact(f"value {s} end"), "value [REDACTED] end", s)
+
+    def test_key_value_assignment_is_replaced(self):
+        self.assertNotIn("hunter2hunter2", redact("password=hunter2hunter2xyz"))
+
+    def test_private_key_block_is_replaced(self):
+        block = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+        self.assertEqual(redact(block), "[REDACTED]")
+
+    def test_ordinary_text_is_untouched(self):
+        text = "Der Backfill hat 9799 Zeilen gefüllt, sha256 f93e8c0c3310 stimmt."
+        self.assertEqual(redact(text), text)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ import base64
 import contextlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -331,6 +332,31 @@ def is_worth_storing(user_msg: str, assistant_msg: str) -> bool:
     return not any(lower.startswith(p) for p in technical_prefixes)
 
 
+# Credential-shaped strings are replaced before an exchange leaves the machine. A turn that accidentally shows a
+# token must not additionally land in the companion's memory on api.weside.ai. Best effort: the patterns cover the
+# common provider formats, not every secret.
+_REDACT_PATTERNS = [
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
+    re.compile(r"AGE-SECRET-KEY-1[0-9A-Z]{20,}"),
+    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"),
+    re.compile(r"\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bsbp_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
+    re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[\"']?[^\s\"']{12,}"),
+]
+
+
+def redact(text: str) -> str:
+    """Replace credential-shaped substrings with a marker."""
+    for pattern in _REDACT_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
+
+
 def condense(text: str, max_chars: int = MAX_CONTENT_LENGTH) -> str:
     """Truncate text, keeping meaningful content."""
     if len(text) <= max_chars:
@@ -381,8 +407,8 @@ def main() -> None:
     repo_id = _derive_repo_id(cwd)
     exchange = [
         {
-            "user_message": condense(user_msg),
-            "assistant_response": condense(assistant_msg),
+            "user_message": condense(redact(user_msg)),
+            "assistant_response": condense(redact(assistant_msg)),
         }
     ]
 
