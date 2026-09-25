@@ -170,7 +170,7 @@ combined diff. Extract the PR number, checkpoint `pr_created`.
 No GitHub remote → skip the PR and the CI pass; the local gates are then authoritative, and you
 say so once rather than silently degrading.
 
-## One ci-review pass — start early, hold the push
+## One ci-review pass — reviews first, tests last
 
 Execute this inline. **Never `Skill(skill="ci-review")`** — that loads the skill into the main
 context and costs the Lead its overview; the procedure is short enough to run directly:
@@ -180,10 +180,13 @@ context and costs the Lead its overview; the procedure is short enough to run di
 2. **Triage and fix**: BLOCKING and WARNING must be fixed unless the reviewer is factually
    wrong; SUGGESTION and NITPICK are done or consciously skipped with a reason. Accumulate —
    don't commit or push between them.
-3. **Wait for CI to conclude** — `gh pr checks {PR} --required` shows no `pending`; a check
-   pending behind a merge conflict never concludes, so read `mergeStateStatus` first and merge
-   the base when it says `DIRTY`/`BEHIND` (the gate definition and terminal states are
-   `/we:ci-review`'s) — and fold its failures into the same set.
+3. **Push a review fix without waiting for the long checks** (`/we:ci-review` 1e): the push
+   cancels the stale run and the test suite runs once, on the commit that answers every review.
+   Wait for CI to conclude only when the reviews are green and a test check is what is left —
+   `gh pr checks {PR} --required` shows no `pending`; a check pending behind a merge conflict
+   never concludes, so read `mergeStateStatus` first and merge the base when it says
+   `DIRTY`/`BEHIND` (the gate definition and terminal states are `/we:ci-review`'s) — and fold
+   its failures into the same set.
 4. **Every review gate in `review.available` concluded, and no BLOCKING/WARNING is left
    unfixed → checkpoint `review_passed`.** This is the bug-hunt's receipt; it is written here
    and nowhere earlier. A reviewer that did not run on this PR (a skip rule, an author without

@@ -111,9 +111,10 @@ Run them yourself. These are deterministic commands, not judgement — an agent 
 your base where the tool takes paths; a whole-tree type-check is fine when that is how the repo
 invokes it.
 
-**Tests:** only the suites covering your changed surface — map each changed source file to its
-unit and integration suites. Run the full suite only when the diff exceeds ~50 files or touches
-test configuration. Coverage is CI's.
+**Tests:** only the tests your change affects — map each changed source file to the tests that
+import it and to its callers' tests (the code graph, `rg`), plus the repo's whole-repo contract
+suites when a route or boundary changed. Never the whole suite: CI selects and runs what local
+derivation cannot see. Coverage is CI's.
 
 Skip anything needing a database, queue, HTTP service or docker-compose and list what you
 skipped. No `yarn`/`npm install`, `jest` or `tsc` in a worktree without `node_modules` — report

@@ -181,13 +181,21 @@ Then classify from the log, not from the check name:
 - **Surface human-authored threads to the user NOW**, before fixing — one may say the code is
   intentional and make a bot finding moot. Never auto-resolve them.
 
-### 1e. Long checks: start now, hold the push
+### 1e. Reviews first, tests last
 
-Reviews post within a minute or two; the test suites take much longer. Start triaging and fixing
-immediately, but **gate the push** on the long checks concluding, so review-fixes and CI-fixes
-ship in one push. While waiting, use `gh pr checks $PR --watch`. If a check sits pending with no
-run started, re-read merge state (1a) instead of waiting further; if it is still pending after
-~2× its usual runtime, report that rather than blocking indefinitely.
+Reviews post within one to fifteen minutes; a full test suite can take twenty-five. Do not wait
+for the long checks before fixing what a review already said: **a red review verdict is pushed
+as soon as it is fixed**, and the push cancels the stale run where the workflow declares
+`concurrency: cancel-in-progress` (check once — without it, the old run keeps going and costs a
+runner, nothing else). The test suite then runs once, on the commit that answers every review.
+Measured on one PR (2026-09-25): all eight follow-up rounds were review-driven and the test job
+was green in every one of them — waiting for it cost twenty minutes a round and found nothing.
+
+Wait for the long checks only when they are what is left: every review green and a test check
+still pending, or a red test check to read. That is also where "fix everything, push once"
+still holds — review fixes and CI fixes from the same round ship together. If a check sits
+pending with no run started, re-read merge state (1a) instead of waiting; if it is still
+pending after ~2× its usual runtime, report that rather than blocking indefinitely.
 
 ---
 
@@ -275,8 +283,9 @@ stop at terminal state 3 rather than patching around it.
 
 ### 3g. Push
 
-Push only when: (a) every check has concluded and each failure is fixed, re-run, or documented
-as skipped;
+Push only when: (a) every review verdict that has posted is fixed or skipped with evidence, and every
+concluded check's failure is fixed, re-run, or documented — a still-running test job is not a
+reason to hold a review fix (1e);
 (b) 3e's checklist is clear; (c) 3f holds for migration branches. Start early, push late.
 
 ```bash
@@ -290,8 +299,8 @@ git push
 One **cycle** = one push plus the checks and re-reviews it triggers. Default: one to three cycles
 at your discretion (see the policy above); a user-stated budget replaces that cap.
 
-Per cycle: wait for the checks to settle (`gh pr checks $PR --watch`), re-collect all sources,
-then run Phase 3 again in full — 3d and 3e included, never a bare re-push. **A repeat is the same
+Per cycle: wait for the reviews (and, once they are green, for the tests — 1e), re-collect all
+sources, then run Phase 3 again in full — 3d and 3e included, never a bare re-push. **A repeat is the same
 finding text on the same `file:line` after a fix aimed at it**; that means the fix is not landing
 where the reviewer looks, so stop and escalate. A new finding *caused* by your fix is a new
 finding: fix it and continue.

@@ -189,7 +189,13 @@ leaves every lane and its ticket goes to the repo's backlog state (`.weside/orch
 
 ### Step 5: Preflight
 
-1. **Caps:** refine ≤ 3, develop ≤ 2, integrate serial. Raise the develop cap only for
+The caps, shapes and gate lists below are defaults for judgement, not a script. The Lead decides
+how much runs in parallel, which chunk it builds itself, which checks a chunk's risk actually
+needs and where a wait can be cut — and writes the reason into the PR body when it departs from a
+default. What does not bend: one writer per worktree, the risk-class floor for critical chunks,
+and CI as the single place that runs the whole suite and the bug-hunt.
+
+1. **Caps:** refine ≤ 3, develop ≤ 2, integrate serial — defaults. Raise the develop cap for
    demonstrably disjoint work, and say why.
 2. **Risk class per chunk.** Money, auth, tenant isolation, a migration on such a table — the
    repo's file lists live in `.weside/orchestrate.md`, and the class follows the **call site**,
@@ -322,8 +328,9 @@ WORKTREE: `{worktree_path}`, already on branch `{branch}` (off `{integration_bra
 bootstrapped. `cd` there; do not call EnterWorktree. Run: Skill(skill="develop") for {TICKET}
 {--phases N}.
 
-DEV-ONLY: implement {all phases | phase N}, committing per phase → fast local gates → AC-check
-your diff (when `review.cross` is on; skip on a detached backend) → push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
+DEV-ONLY: implement {all phases | phase N}, committing per phase → fast local gates →
+{AC-check your diff → | nothing: omit it — resolve this from `review.cross` at dispatch, never pass
+the condition to the worker} push {branch} → STOP. No `gh pr create`, no CI, no ticket transition, no doc pass — the Lead
 merges every branch onto {integration_branch} and runs ONE CI on ONE PR.
 
 FINISH FIRST: a small finding (≤ ~30 min) on the seam you touch gets FIXED in your branch —
@@ -335,8 +342,11 @@ TESTS: {test_discipline from .weside/config.json; absent → tests-after: write 
 change, after the code}. No implementation-coupled tests, no tautological assertions, mock at
 system boundaries only.
 
-FAST GATES: unit + fast smoke only. A test that needs a running database, queue or network
-service belongs to the Lead's integration run — skip it and say so in your report. No
+FAST GATES: only the tests your change affects — derive them (the tests importing what you
+touched, the callers the code graph names, the repo's whole-repo contract suites when a route or
+boundary changed); never the whole suite, not per iteration and not before the push — CI selects
+and runs the rest. A test that needs a running database, queue or network service belongs to the
+Lead's integration run — skip it and say so in your report. No
 `yarn`/`npm install`, `jest`, `tsc` in a fresh worktree; report the skipped frontend validation.
 {CRITICAL chunk (money / auth / tenant isolation / migration): run `{integration suite}` against
 `{database}` before reporting done — this chunk is never fast-gates-only — and append the run's
@@ -443,7 +453,8 @@ git -C "$INT_WT" push origin feat/<epic-or-key>-integration
 
 Conflicts resolve by the plan's Constraints and Pins; a non-trivial one goes to the user. A
 blocked worker's blocker is surfaced, never merged half-done. After each merge run the broad
-check on the merged tree (type-checker, the affected unit AND integration suites), not the
+check on the merged tree (type-checker, the affected unit AND integration suites — affected by
+the merged diff, not the whole suite; CI runs what selection is blind to), not the
 chunk's slice — a foundation chunk's contract change breaks a sibling file no worker's gate
 covers. Glue fixes the Lead makes are small, separately named integration commits. Checkpoint
 `implementation_complete` once per story, from the diff after its last chunk merged — not from a
