@@ -123,6 +123,8 @@ Skills live in `we/skills/{name}/SKILL.md`. Each skill needs:
 
 Use `/plugin-dev:skill-development` for guidance on skill structure.
 
+- Test a revised skill by table-top simulation: 2-3 Opus agents trace every tool call against concrete world states (no execution), list defects adversarially; repeat until the verdict stops moving.
+
 ### Command Development
 
 Commands in `we/commands/{name}.md` are only needed for **agent-dispatched** tools
@@ -148,6 +150,8 @@ Agent(subagent_type="we:agent-name", prompt="...$ARGUMENTS")
 
 Agents in `we/agents/{name}.md` run in the background.
 Use `/plugin-dev:agent-development` for agent frontmatter and structure.
+
+- `we:pr-creator` can touch other stories' `docs/plans/*.md` unasked: its prompt must forbid creating follow-up plans; after runs check `git diff main..HEAD --stat`.
 
 ### Versioning (CRITICAL)
 
