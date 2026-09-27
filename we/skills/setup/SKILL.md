@@ -34,7 +34,8 @@ never commit yourself.
 
 ## 2. Questions
 
-1. **Vision** (link, file or short text) → `.weside/vision.md`. Skip → no vision check.
+1. **Vision**: a PRD at `docs/plans/*/PRD.md` is used as is; else a link, file or short text →
+   `.weside/vision.md`, or `/we:vision` later writes the PRD. Skip → no vision check.
 2. **Ticketing** tool confirmed; for Jira, the project key.
 3. **Stack** confirmed or corrected.
 4. **Tests**: when does a worker write them? `tdd` (failing test first) · `tests-after` (default,
@@ -96,7 +97,21 @@ every lens is generic and still works. `/we:onboarding` can do it later." On yes
 5. Set `onboarded: true`, `onboarded_at`. Prerequisites for live council deliberation are named in
    `/we:council`.
 
-## 5. Next
+## 5. Rule bridge and statusline
+
+- **Rule bridge**, when the repo has `.claude/rules/`: Claude Code loads the rules itself, every other
+  agent (Codex, Gemini) does not. `.agents/skills/claude-rules/SKILL.md` exists → skip. Otherwise copy
+  `${CLAUDE_PLUGIN_ROOT}/templates/agents-skill/SKILL.md` there unchanged and name the instruction-file
+  line that points at it. The template resolves `scripts/load-rules.py` from the plugin cache
+  (`~/.claude/plugins/cache/weside-ai/we/*/`) at run time, so the repo carries no copy of the loader.
+- **Statusline** (model · branch · PR · context · cost; follows `/we:orchestrate`'s
+  `~/.claude/we-focus/<session>.json`): run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py --status`.
+  `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`
+  refreshes `~/.claude/we-statusline.js`. `keep theirs` → keep the user's statusline and
+  mention `--apply --force` (backed up, `--revert` restores it). This and the council agents are the only
+  user-scope files setup touches.
+
+## 6. Next
 
 `/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR) → the human merges →
 `/we:merged`.

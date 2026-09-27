@@ -33,7 +33,8 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
   `docs/plans/*-epic.md` that lists the story.
 - **Existing plan.** Read it in full; the refiner edits it in place and keeps its Design Decisions rows.
 - **Decision records.** The instruction file chain (`AGENTS.md`, else `CLAUDE.md`), the repo rules for the paths
-  the story touches, the ADR directory, the epic plan, `.weside/dor.md`, `.weside/vision.md` if present, and the
+  the story touches, the ADR directory, the epic plan, `.weside/dor.md`, the vision (the PRD
+  `docs/plans/*/PRD.md` that `/we:vision` writes; none → `.weside/vision.md`; neither → no vision check), and the
   glossary the instruction file names (else `CONTEXT.md`). The most frequent correction in past sessions was a
   wrong assumption about the environment or an earlier decision; these files hold both.
 - **Code.** The seam the story names: the code graph where `.weside/config.json` → `tools.graphify` is true,
@@ -46,7 +47,7 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 - A decision already on record is stated with its source ("ADR-0065 settles this: …"), not asked again. Ask
   when two records disagree, or when the record predates the change the ticket describes.
 - A vague "why": the first question is what success looks like. ACs come after the goal is clear.
-- A tension with `.weside/vision.md` or the epic's success criteria is named.
+- A tension with the vision (step 1) or the epic's `## Success Criteria` (older epics: `## Success Metrics`) is named.
 - A resolved term becomes a glossary line (`${CLAUDE_PLUGIN_ROOT}/skills/grill/references/context-format.md`); collect
   the lines and write them in step 5's commit.
 - **Too big — which kind?** Independent slices with separate user value and separate PRs are epic-sized: write
@@ -57,15 +58,7 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
 ## 3. Write the plan — `we:dev-high`
 
-Where plan commits land is a repo fact: `.weside/orchestrate.md` or the instruction files. Absent → a detached
-scratch worktree off the default branch, in your scratchpad:
-
-```bash
-git fetch origin && git -c core.hooksPath=/dev/null worktree add --detach <scratch>/plan-{TICKET} origin/<default>
-```
-
-Disabling hooks for the `worktree add` keeps a post-checkout bootstrap from building a venv or a database for a
-tree that carries one file (measured 25.09.: four orphan databases); commit hooks still run in step 5.
+Open the scratch worktree `<scratch>/plan-{TICKET}` per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 1–2 (repo fact first).
 
 Dispatch `Agent(subagent_type: "we:dev-high", description: "refine {TICKET}", prompt: <brief>)`. Plan-writing
 is a named `dev-high` case (Foxy 27.09.); the session's own `medium` default would otherwise write it. The brief:
@@ -113,17 +106,9 @@ the refiner from writing the file.
    - One comment only when the plan overrides a statement in the ticket or its comments, naming each override;
      set `comments_read_through:` to that comment's id.
    - No other ticket. Side findings from the interview go into the output as a list (Foxy 25.09.).
-3. Scan again, then commit and push:
-
-   ```bash
-   git -C <scratch> add docs/plans/{TICKET}-story.md <glossary file, if changed>
-   git -C <scratch> commit -m "docs({TICKET}): story plan — <title>" && git -C <scratch> log --oneline -1
-   git -C <scratch> push origin HEAD:<default>
-   ```
-
-   A commit that did not move HEAD was aborted by an auto-fixing hook: `add` again and commit again. Set a
-   direct-commit variable (such as `ALLOW_COMMIT_TO_MAIN=1`) only where the instruction files grant it for docs.
-   A rejected push is reported with its message, never forced. Then `git worktree remove <scratch>`.
+3. Scan again, then commit, push and clean up per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 4–6: files
+   `docs/plans/{TICKET}-story.md` plus the glossary file if changed, subject
+   `docs({TICKET}): story plan — <title>`.
 4. Output, then stop:
 
    ```text

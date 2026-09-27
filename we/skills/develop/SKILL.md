@@ -68,7 +68,7 @@ brief says "not yours": skip it and say so. Invoked by a human: run it.
 
 ## 6. Report
 
-Push only when the brief says so (`git push -u origin <branch> && git ls-remote --heads origin
+Push only when the brief says `Push: yes` (`git push -u origin <branch> && git ls-remote --heads origin
 <branch>`; an empty answer is a blocker). Then end with the § Report fields as your final
 message, one line per AC with its evidence. Stopping early is a report too: what you
 completed, why you stopped, `blockers: <reason>`.

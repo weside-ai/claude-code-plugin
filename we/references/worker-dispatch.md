@@ -49,7 +49,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   gate fails three times, or when the work needs a product decision, a money-path redesign or a
   foreign subsystem's redesign.
 - The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges a branch, or
-  edits files outside its chunk. It pushes only when the brief says so.
+  edits files outside its chunk. It pushes only when the brief says `Push: yes`.
 - The worker implements the plan's phases in order, inline, and never fans implementation out to
   sub-agents: one worktree has one git index, and a second committer races `.git/index.lock`.
 - The worker commits per phase and stages by path, never `git add -A`. Every commit carries

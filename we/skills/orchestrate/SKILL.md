@@ -31,8 +31,8 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
-3. Read every story plan completely, every ticket with its comments, the epic plan's
-   `## Success Criteria`. A comment that asks for a check is work: answer it by reading the repo now.
+3. Read every story plan completely, every ticket with its comments, the epic plan's success
+   section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first
    status message: one line per story step (refine, build, finish, PR, CI green), ticked as you go.
    Run state lives in that checklist, git and the ticket (Foxy 25.09.2026: no `docs/plans/*-state.md`).
@@ -65,6 +65,7 @@ approval, a risk-class call. Ask it once before the first build and then only at
 two to four plans per batch at most. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. Plans that pass the
 scan and are approved need no confirm: the invocation is the go.
+<!-- pending Foxy: no confirm gate for approved plans (recommended 27.09.2026) -->
 
 ## Refine lane
 
@@ -75,9 +76,9 @@ in/out, known constraints and seams, one to three architecture docs to read firs
 fork you cannot settle → write `## Open Fork` and stop".
 
 On return, run the DoR scan on the plan in the returned worktree. Pass → approval batch. Fail →
-re-dispatch once naming the missing item, then Decision Queue. An approved plan is committed where
-`.weside/orchestrate.md` says plans land (never the shared main checkout); then remove the
-refiner's worktree with the repo's verb (weside-core: `a worktree remove`), and move the ticket to the plan-approved status.
+re-dispatch once naming the missing item, then Decision Queue. An approved plan is committed per
+`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (copied out of the refiner's worktree, step 3; never the shared main checkout); then remove the
+refiner's worktree (step 6) and move the ticket to the plan-approved status.
 
 ## Build
 
@@ -97,9 +98,12 @@ Tests: <test_discipline from .weside/config.json, spelled out; absent → tests 
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
 Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
+Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Report: worker-dispatch.md § Report fields, as your final message.
 ```
+
+<!-- pending Foxy: workers push only when the brief says `Push: yes` (recommended 27.09.2026) -->
 
 **While a worker runs:** refine the next story or draft the PR body; the Agent result brings the
 report. A steer is `SendMessage(to=<name>)`; it is read
@@ -132,9 +136,11 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    landed story to In Review and verify.
 4. Arm `Monitor` on `gh pr checks <PR> --json name,bucket`, emitting each concluded check and
    exiting when none is pending. Meanwhile refine or prepare the next story.
-5. Red CI or a BLOCKING/WARNING review → `/we:ci-review <PR>` without asking, never from the shared
-   main checkout: `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it.
-   Its round cap and terminal states end the run.
+5. Once no check is pending, green or red, run `/we:ci-review <PR>` without asking: open bot threads
+   and review findings remain on a green run. Never from the shared main checkout:
+   `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it. Its round cap
+   (three) and terminal states end the run.
+   <!-- pending Foxy: automatic /we:ci-review after CI concludes, 3-round cap (recommended 27.09.2026) -->
 
 ## Close the run
 
@@ -143,8 +149,10 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   plan. No new ticket during a run; propose one consolidated follow-up at the epic's close.
 - Stop leftover agents with `TaskStop`. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
-- End with `/we:standup`. After the human says "merged", `/we:merged` closes out: it finds the
-  run's branches and worktrees by `<KEY>` in git and the PR by number.
+- The closing message is the last output; no `/we:standup` after it (it would repeat the message).
+  After the human says "merged", `/we:merged` closes out: it finds the run's branches and worktrees
+  by `<KEY>` in git and the PR by number.
+  <!-- pending Foxy: closing /we:standup call dropped (recommended 27.09.2026) -->
 
 ## `--solo`
 

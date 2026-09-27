@@ -41,7 +41,7 @@ Your final message is the report the dispatcher reads (step 5).
 2. **Read before writing.**
    - The brief's refs, then the instruction file chain (`AGENTS.md`, else `CLAUDE.md`) and the repo rules for
      the paths the story touches.
-   - ADRs and earlier plans on the same seam; the epic plan's success criteria.
+   - ADRs and earlier plans on the same seam; the epic plan's `## Success Criteria` (older epics: `## Success Metrics`).
    - `.weside/dor.md`: each row becomes a labelled line in `## Constraints and Pins`.
    - `.weside/config.json`: `test_discipline` (`tdd`, `tests-after` as the default, `off`) sets the level of
      `## Testing Requirements`; `tools.graphify` and `tools.turbovault` say which search tools exist.

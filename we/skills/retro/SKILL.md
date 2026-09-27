@@ -61,8 +61,7 @@ WINS if its fix was good, else it is dropped.
    - keep the charter within its own length cap.
 4. A decision that belongs to the product owner (product, comfort, cost above a cap, deleting) is
    one question with a recommendation, not a ledger entry.
-5. Commit from your own worktree, never the shared main checkout, the way the repo commits docs;
-   check `git log --oneline -1 -- <file>` afterwards.
+5. Commit per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`.
 
 ## Rules mode
 
@@ -77,8 +76,8 @@ several retros is a structural-fix candidate) · SUMMARY. Then gate each proposa
 `edit-path: <p>` · `skip-for-later` · `stop`. Under `--auto`, routine same-repo proposals apply
 without the gate; plugin-repo proposals, `[contract]` proposals and an unclear placement still ask.
 
-Apply the accepted ones the way the repo takes rule changes (its instruction files decide between a
-direct docs commit and a branch with a PR; a plugin repo always gets a PR).
+Apply the accepted ones per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (the repo decides between a direct docs commit and a branch
+with a PR; a plugin repo always gets a PR).
 
 ## Log (both modes)
 

@@ -20,5 +20,31 @@
     "ai-companion"
   ],
   "version": "7.0.0-dev",
-  "skills": "./skills"
+  "skills": "./skills",
+  "userConfig": {
+    "companion": {
+      "type": "string",
+      "title": "Companion Name",
+      "description": "Name of your weside Companion (optional — requires weside.ai account). Leave empty for no companion.",
+      "required": false
+    },
+    "autoMaterialize": {
+      "type": "boolean",
+      "title": "Auto-load Companion",
+      "description": "Automatically load your Companion at session start (requires weside.ai account)",
+      "default": false
+    },
+    "autoStoreConversations": {
+      "type": "boolean",
+      "title": "Auto-store Conversations",
+      "description": "Store each meaningful conversation turn as a companion memory (requires weside.ai account + MCP connection)",
+      "default": false
+    },
+    "loadCouncilFromWeside": {
+      "type": "boolean",
+      "title": "Load Council Members from weside",
+      "description": "Use your weside Companions as council members where the bridge links them (requires weside.ai account). Off = always use the generic role-lenses (Retorte), even if Companions exist.",
+      "default": true
+    }
+  }
 }

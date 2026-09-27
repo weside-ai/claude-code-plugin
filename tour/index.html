@@ -1601,7 +1601,7 @@
         <span class="team-role-chip chip-tl">TECH LEAD</span>
         <h4>Holds the whole</h4>
         <p>Orchestrates multi-Story work, reviews the integrated diff, keeps the architecture honest with periodic audits.</p>
-        <div class="team-skills"><code>/we:orchestrate</code><code>/we:map</code><code>/we:ci-review</code></div>
+        <div class="team-skills"><code>/we:orchestrate</code><code>/we:ci-review</code></div>
       </div>
       <div class="team-card">
         <span class="team-role-chip chip-team">EVERYONE</span>
@@ -1706,8 +1706,8 @@
         <rect class="node" x="1160" y="60" width="250" height="112" rx="12"/>
         <text class="t-title" x="1180" y="92">The whole tree</text>
         <text class="t-sub" x="1180" y="113">the whole plan tree, one view</text>
-        <text class="t-skill" x="1180" y="139">/we:map</text>
-        <text class="t-skill2" x="1180" y="158">read-only dashboard</text>
+        <text class="t-skill" x="1180" y="139">/we:saga · /we:epic</text>
+        <text class="t-skill2" x="1180" y="158">Status mode, read-only</text>
       </g>
 
       <g id="fl-e-se" data-fl>
@@ -1771,7 +1771,7 @@
         <rect class="node" x="475" y="508" width="205" height="108" rx="12"/>
         <text class="t-title" x="495" y="541">Planning</text>
         <text class="t-sub" x="495" y="562">pick the ready set</text>
-        <text class="t-skill" x="495" y="588">/we:epic · /we:map</text>
+        <text class="t-skill" x="495" y="588">/we:epic</text>
         <rect class="chip chip-po" x="495" y="598" width="36" height="18" rx="9"/>
         <text class="t-role tr-po" x="505" y="611">PO</text>
         <rect class="chip chip-tl" x="537" y="598" width="36" height="18" rx="9"/>
@@ -2077,7 +2077,7 @@
       <div class="story-step gate"><div class="num">03</div><span class="tag">Blocking</span><h4>AC + DoD verify</h4><p>Every AC checked with concrete evidence — no item passes without a file:line citation — plus the DoD checked against the diff.</p></div>
       <div class="story-step"><div class="num">04</div><h4>Simplify</h4><p>Remove dead code, simplify expressions, reuse helpers.</p></div>
       <div class="story-step parallel"><div class="num">05</div><span class="tag">Parallel</span><h4>Quality gates</h4><p>One writer-aware bug-review + static + tests, in a single message — concurrent.</p></div>
-      <div class="story-step"><div class="num">06</div><h4>Docs</h4><p>doc-architect proposes diffs. Never writes autonomously.</p></div>
+      <div class="story-step"><div class="num">06</div><h4>Docs</h4><p>The last writer updates the docs the plan names under Documentation Impact.</p></div>
       <div class="story-step"><div class="num">07</div><h4>PR</h4><p>Verifies all four quality gates first. Won't create a PR with failing gates.</p></div>
       <div class="story-step parallel"><div class="num">08</div><span class="tag">Loop</span><h4>CI fix</h4><p>Collect ALL findings, fix in ONE commit, push ONCE. One pass by default (max 2 cycles when looping).</p></div>
       <div class="story-step"><div class="num">09</div><h4>Hand off</h4><p>Ticket → In Review. Never „Done" — that move stays with you.</p></div>
@@ -2682,13 +2682,13 @@ document.addEventListener("keydown", (e) => {
     { els: ["fl-e-vs", "fl-saga"], title: "Saga — a big theme with a nameable win",
       desc: "Something big enough to need breaking down, small enough that you can say when it's done. <code>/we:saga</code> tracks where it stands; <code>/we:meet saga</code> splits it into Epics." },
     { els: ["fl-e-se", "fl-epic", "fl-map"], title: "Epic — the living coordination point",
-      desc: "One bounded deliverable. <code>/we:epic</code> pulls its Stories from your ticketing tool and shows what shipped, what drifted, and what's next. <code>/we:map</code> shows the whole plan tree at a glance." },
+      desc: "One bounded deliverable. <code>/we:epic</code> pulls its Stories from your ticketing tool and shows what shipped, what drifted, and what's next." },
     { els: ["fl-e-eb", "fl-backlog"], title: "Stories land in the backlog",
-      desc: "Breaking down an Epic drops rough Stories into <code>docs/plans/</code> — plain Markdown, versioned in git, readable by the whole team. Green cards already have a build-ready plan; grey ones are still raw. External signals — bug reports, feature requests, user feedback — enter through <code>/we:triage</code>, which turns them into agent-ready tickets." },
+      desc: "Breaking down an Epic drops rough Stories into <code>docs/plans/</code> — plain Markdown, versioned in git, readable by the whole team. Green cards already have a build-ready plan; grey ones are still raw." },
     { els: ["fl-refine", "fl-e-refine"], title: "Refinement — continuous, not a meeting slot",
       desc: "<code>/we:story</code> turns a raw idea into a plan solid enough to build from — clear acceptance criteria, phases, tests. <code>/we:meet story</code> adds a second, independent perspective when the call is hard. And when a design question is still open, <code>/we:prototype</code> answers it with throwaway code before anything gets planned. This runs all sprint long, not in one slot." },
     { els: ["fl-e-bp", "fl-planning"], title: "Planning — pick the ready set",
-      desc: "The PO and Tech Lead pull from Stories that are genuinely ready — a plan exists and nothing blocks them. <code>/we:epic</code> status and <code>/we:map</code> make the ready set obvious." },
+      desc: "The PO and Tech Lead pull from Stories that are genuinely ready — a plan exists and nothing blocks them. <code>/we:epic</code> status makes the ready set obvious." },
     { els: ["fl-e-ps", "fl-sprint"], title: "The sprint — autonomous, gated",
       desc: "<code>/we:orchestrate</code> takes a Story from code to a review-ready PR — <code>--solo</code> in one session, or several in parallel via <code>/we:develop</code> workers. Every PR clears the same bar: acceptance criteria backed by evidence, code review, linting, tests." },
     { els: ["fl-e-sr", "fl-review"], title: "Review — human only, by design",

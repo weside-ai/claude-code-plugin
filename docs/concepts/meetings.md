@@ -51,8 +51,7 @@ a nested `docs/plans/<vision>/` directory (the PRD plus optional `research/`).
 
 - **Iteration without an index:** `ls docs/plans/*-saga.md` lists every Saga;
   `*-epic.md` every Epic; `*-story.md` every Story. `ls docs/plans/<saga>-*` shows one
-  Saga and all its Epics grouped together — that glob is a built-in mini-dashboard
-  (`/we:map` renders the full tree on top of it).
+  Saga and all its Epics grouped together — that glob is a built-in mini-dashboard.
 - **Linkage lives in frontmatter:** a Story's `epic:` field points to its parent Epic;
   an Epic's `saga:` field + filename prefix point to its parent Saga.
 - **The Jira gap:** most ticketing tools have only Epic→Story, no Saga level. The Saga

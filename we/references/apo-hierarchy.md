@@ -45,8 +45,9 @@ stays in v7, even where Vision and Saga are rarely used).
 - A Story named only in an Epic's `## Sequencing` has no key: `/we:orchestrate <epic>` rosters it only
   after `/we:story "<name>"` gave it a ticket or a plan.
 - Readers below the Epic (`/we:story`, `/we:refine`, `/we:orchestrate`) read the Epic's
-  `## Success Criteria` and `## Scope`. Epics written before v7 name the first one
-  `## Success Metrics`; a Refine renames the heading.
+  success section and `## Scope`. The success section is `## Success Criteria`, or
+  `## Success Metrics` in Epics written before v7 (12 in weside-core, 27.09.2026): readers accept
+  both, writers write `## Success Criteria`.
 - Ticketing has no Saga level. A ticketing Epic under a Saga is titled `[<saga-slug>] <Epic Title>`
   (JQL `summary ~ "[<saga-slug>]"`). A ticket description carries the one-line purpose and the plan
   path, never the plan's content.
@@ -92,7 +93,7 @@ _Mirror of child Stories in the ticketing tool, refreshed YYYY-MM-DD._
    the children per bucket, drift against the mirror (`+` missing, `-` gone, `!` stale status), one
    risk-driven next move, and the offers `[r]` refresh · `[f]` Refine · `[m]` print the Meet verb ·
    `[q]` done. Status never writes.
-4. Mirror-refresh is mechanical: the session writes the block itself and commits it. No writer.
+4. Mirror-refresh is mechanical: the session writes the block itself and commits it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. No writer.
 5. Each transition (Status → Refine → Meet) needs the user's choice.
 
 ## Drafting a doc (Refine and Create, every upper altitude)
@@ -101,9 +102,8 @@ _Mirror of child Stories in the ticketing tool, refreshed YYYY-MM-DD._
    recommendation, a decision on record cited instead of asked, the altitude's frame questions in
    order. Read first: the doc, its parent, the instruction files, ADRs, `docs/plans/out-of-scope/`
    when present, and the glossary the instruction files name.
-2. Worktree and commit path: the same as `/we:story` (`${CLAUDE_PLUGIN_ROOT}/skills/story/SKILL.md`
-   § 3 and § 5 step 3): the repo's plan-commit fact, else a detached scratch worktree off the
-   default branch.
+2. Worktree and commit path: `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (repo fact first, else a detached scratch
+   worktree off the default branch).
 3. Dispatch `Agent(subagent_type: "we:dev-high", description: "draft <altitude> <slug>", prompt: <brief>)`.
    Plan-writing is a named `dev-high` case (Foxy 27.09.2026); the session's `medium` would write it
    otherwise. Brief: first line `Read <abs>/skills/<verb>/references/template.md and <abs>/references/apo-hierarchy.md, then follow § Writer contract.`

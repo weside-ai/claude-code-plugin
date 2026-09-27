@@ -86,13 +86,13 @@ Ticketing tool, in priority order: weside MCP (`execute_tool` with `JIRA_*`), th
 
 - **Plan:** if `docs/plans/{KEY}-story.md` still describes an intention rather than what was built, correct it.
   The next agent reads the plan, not the diff.
-- **Epic mirror:** if the story has an `epic:`, update that epic's mirror table with the merged PR,
-  so the next roster does not offer a shipped story again (`/we:epic` owns the table).
+- **Epic mirror:** if the story has an `epic:`, update that story's row in the epic's mirror block
+  per `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block (status bucket, `Plan` column,
+  `updated:`, one `## Updates Log` line), so the next roster does not offer a shipped story again.
 - **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
   the report (owner decision 2026-09-25).
 - **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
-- **Where these commits land:** `.weside/orchestrate.md` § *Where plan commits land* says where. A shared
-  main worktree takes no plan edit. Never push a tree that carries another session's unpushed commits.
+- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Never push a tree that carries another session's unpushed commits.
 
 ## 6 · Report what is still open
 

@@ -45,9 +45,7 @@ written_at: <ISO 8601>
 - <approach · why it failed · what would justify a retry>
 ```
 
-An empty section gets `—`, never filler. Commit it the way the repo's instruction files say
-documentation is committed (a repo that allows docs on the default branch: from your own worktree,
-not the shared main checkout); no branch or PR per handoff unless the repo demands PRs for docs.
+An empty section gets `—`, never filler. Commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`; no branch or PR per handoff unless the repo demands PRs for docs.
 Then report the path, the byte count and a two-line summary of the decisions and the next step.
 
 ## Load

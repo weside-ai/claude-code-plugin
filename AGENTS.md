@@ -16,16 +16,16 @@ claude-code-plugin/
 │   ├── .claude-plugin/
 │   │   └── plugin.json      # name: "we" + the version /plugin update compares
 │   ├── .mcp.json            # weside-mcp (OAuth, optional)
-│   ├── CLAUDE.md            # Plugin instructions (loaded when plugin active)
-│   ├── commands/             # Slash commands for agent-dispatched tools (4)
-│   ├── skills/              # 22 skills (directly invocable via /we:*)
-│   ├── agents/              # 13 agents (4 pipeline + doc-architect + 8 council)
-│   ├── quality/             # DoR, DoD (quality gate definitions)
-│   ├── references/          # Shared on-demand reference docs (privacy guard, ticketing, design vocabulary, test discipline, …)
-│   ├── hooks/hooks.json     # SessionStart auto-materialize
+│   ├── AUTHORING.md         # Binding authoring contract for every file in we/ (v7)
+│   ├── skills/              # 24 skills (directly invocable via /we:*)
+│   ├── agents/              # 11 agents (dev-medium, dev-high + 9 council lenses)
+│   ├── references/          # Shared on-demand contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy guard)
+│   ├── templates/agents-skill/ # .agents/skills/claude-rules/SKILL.md that /we:setup installs for non-Claude agents
+│   ├── hooks/               # hooks.json + SessionStart materialize, Stop store-conversation, PreToolUse verification gate
 │   └── scripts/
-│       ├── orchestration.py # SQLite checkpoint system (Python stdlib only)
-│       ├── statusline.js    # Shipped statusline (model · branch · PR · context · cost)
+│       ├── load-rules.py    # Prints the .claude/rules that apply to given files (for non-Claude agents)
+│       ├── identity_cache.py # Companion identity cache
+│       ├── statusline.js    # Shipped statusline (model · branch · PR · context · cost; reads ~/.claude/we-focus)
 │       └── install_statusline.py # Installs it into ~/.claude/settings.json (owns the procedure)
 ├── README.md                # Public-facing documentation
 └── AGENTS.md                # This file (developer guide)

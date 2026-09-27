@@ -111,7 +111,6 @@ Step 4: ac_verified            ← every AC has evidence, observed running
 Step 5: review_passed          ← parallel: review + static + test
         static_analysis_passed
         test_passed
-Step 6: docs_updated           ← doc-architect proposes diffs, you approve
 Step 7: pr_created             ← PR opened with all gates passed
 Step 8: ci_passed              ← CI + review findings, fixed in batch
 Step 9: ticket → In Review     ← awaiting your merge

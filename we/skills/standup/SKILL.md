@@ -10,7 +10,7 @@ description: >
 Read-only: read git, the plan, the ticket and `gh`; write nothing, dispatch nobody, move no ticket.
 The reader comes back to this window after an hour elsewhere and needs three answers: what is now
 true that was not, which story comes next (by key), and what the human must do (often nothing).
-`/we:orchestrate` ends with this skill. When the user's instruction files define a status form
+When the user's instruction files define a status form
 (for example a sentence cap), that form wins over the layout below.
 
 ## Gather
