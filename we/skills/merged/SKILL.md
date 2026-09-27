@@ -22,7 +22,7 @@ description: >
 /we:merged --keep-worktrees  # tickets and record only; the trees stay on disk
 ```
 
-Free text after the number is an instruction ("lass den Integrationsbaum stehen", "WA-2139 bleibt
+Free text after the number is an instruction ("lass den Integrationsbaum stehen", "PROJ-139 bleibt
 offen"). It overrides the defaults below.
 
 ## 1 · Verify the merge
@@ -48,7 +48,7 @@ git branch --list '*<KEY>*'
 ```
 
 A worktree or branch carrying another key belongs to another session, even when its name looks
-like yours (`otherrepo-WA-2136-p1` next to `WA-2139`). Leave it and say in the report that you left it.
+like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the report that you left it.
 
 ## 3 · Tear down, in this order
 
@@ -58,7 +58,7 @@ like yours (`otherrepo-WA-2136-p1` next to `WA-2139`). Leave it and say in the r
    which matches its own command line and exits 144.
 2. **Check each tree:** `git -C <path> status --porcelain`. An untracked `WORKER-REPORT.md` is
    expected. Anything else is unmerged work: leave that tree and name it.
-3. **Remove the worktrees**, then `git worktree prune`. A repo with its own verb (weside-core: `a worktree remove`, which also
+3. **Remove the worktrees**, then `git worktree prune`. A repo with its own worktree-removal verb (one that also
    drops the tree's database fork) uses that verb. That verb also kills a running agent-browser Chrome. If another session is
    driving agent-browser, use `git worktree remove` and name the leftover database fork in the report.
 4. **Delete the branches**, local (`git branch -D`) and remote (`git push origin --delete <branch>`).

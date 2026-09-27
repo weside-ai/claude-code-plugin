@@ -27,6 +27,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   only when the union of their plan `**Files:**` lists does not intersect and the contract between
   them already exists on the base branch. Migrations, lockfiles, generated artifacts
   (`openapi.json`, typed clients) and gate baselines always serialize.
+- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches.
 
 ### What `isolation: "worktree"` does (Claude Code 2.1.283)
 

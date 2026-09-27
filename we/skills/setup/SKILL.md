@@ -1,8 +1,8 @@
 ---
 name: setup
 description: >
-  Project onboarding: detects stack, ticketing and tools, asks up to five skippable questions,
-  writes .weside/config.json, optionally builds the council. Triggers: "/we:setup", "configure
+  Project setup: detects stack, ticketing and tools, asks up to five skippable questions,
+  writes .weside/config.json, optionally the council rosters. Triggers: "/we:setup", "configure
   project", "initialize repo", "first time".
 ---
 
@@ -74,8 +74,8 @@ block (stack, ticketing, vision, test discipline, verification, review gates, mi
 
 ## 4. Council (optional, ask once)
 
-"Build this repo's council now? `/we:council` and `/we:meet` convene it; without a weside account
-every lens is generic and still works. `/we:onboarding` can do it later." On yes:
+"Set up this repo's council now? `/we:council` and `/we:meet` convene it; without a weside account
+every lens is generic and still works." On yes:
 
 1. Extend `config.json` (never re-emit its keys) with `vault`, `framework_version: 1`, and the
    meeting rosters `/we:meet` and `/we:council` read:
@@ -87,15 +87,9 @@ every lens is generic and still works. `/we:onboarding` can do it later." On yes
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
    after both succeeded. A small repo may want no vault: `vault: null` is valid.
-3. Run `/we:onboarding` through the Skill tool.
-4. With a weside account, for each Companion in `.weside/weside.md`, one after another
-   (`select_companion` is global state): `select_companion` → `get_companion_identity` → write
-   `~/.claude/agents/companion-<slug>.md` (frontmatter `name: companion-<slug>`, `description`,
-   `color`; body = identity plus "answer in the council brief's format, stay in role"). The path must
-   start with `~/.claude/agents/`, never a repo. Afterwards `select_companion(<configured companion>)`
-   restores the session's identity. Tell the user to restart once so the agents load.
-5. Set `onboarded: true`, `onboarded_at`. Prerequisites for live council deliberation are named in
-   `/we:council`.
+3. `.weside/council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`) is
+   read by `/we:council` and written by nothing: the user edits it by hand; without it every lens is
+   generic.
 
 ## 5. Rule bridge and statusline
 

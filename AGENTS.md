@@ -1,255 +1,60 @@
-# claude-code-plugin — Developer Guide
+# claude-code-plugin — developer guide
 
-Plugin "we" for Claude Code — Agentic Product Ownership toolkit by [weside.ai](https://weside.ai).
+Repository of the Claude Code plugin `we` (Agentic Product Ownership plus build pipeline) by
+[weside.ai](https://weside.ai). User-facing overview: [README.md](README.md).
 
-**IMPORTANT: This is a PUBLIC repository. Never commit internal weside architecture, API keys, internal URLs, customer data, or proprietary business logic. If in doubt, don't commit it.**
+This is a public repository. Never commit internal weside architecture, API keys, internal URLs,
+customer data or proprietary business logic.
 
----
+## Binding contract
 
-## Repository Structure
+Every file under `we/` follows [we/AUTHORING.md](we/AUTHORING.md): what earns a line, the shape of a
+skill, built-ins first, the measured facts a skill must respect.
 
+## Layout
+
+```text
+.claude-plugin/marketplace.json   publisher weside-ai
+we/                               plugin root
+  .claude-plugin/plugin.json      name, version, userConfig
+  .mcp.json                       weside-mcp (OAuth, optional)
+  AUTHORING.md                    authoring contract
+  skills/<verb>/SKILL.md          one directory per /we:<verb>
+  agents/                         dev-medium, dev-high, council-<role> lenses
+  references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard)
+  hooks/                          hooks.json + SessionStart materialize, Stop store-conversation,
+                                  PreToolUse verification gate, SubagentStart/Stop timing
+  scripts/                        load-rules.py, identity cache, statusline
+  templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
+docs/                             user docs (index: docs/README.md)
+tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
+scripts/                          repo validators (frontmatter, structure)
 ```
-claude-code-plugin/
-├── .claude-plugin/
-│   └── marketplace.json     # Publisher: weside-ai
-├── we/                      # Plugin root
-│   ├── .claude-plugin/
-│   │   └── plugin.json      # name: "we" + the version /plugin update compares
-│   ├── .mcp.json            # weside-mcp (OAuth, optional)
-│   ├── AUTHORING.md         # Binding authoring contract for every file in we/ (v7)
-│   ├── skills/              # 24 skills (directly invocable via /we:*)
-│   ├── agents/              # 11 agents (dev-medium, dev-high + 9 council lenses)
-│   ├── references/          # Shared on-demand contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy guard)
-│   ├── templates/agents-skill/ # .agents/skills/claude-rules/SKILL.md that /we:setup installs for non-Claude agents
-│   ├── hooks/               # hooks.json + SessionStart materialize, Stop store-conversation, PreToolUse verification gate
-│   └── scripts/
-│       ├── load-rules.py    # Prints the .claude/rules that apply to given files (for non-Claude agents)
-│       ├── identity_cache.py # Companion identity cache
-│       ├── statusline.js    # Shipped statusline (model · branch · PR · context · cost; reads ~/.claude/we-focus)
-│       └── install_statusline.py # Installs it into ~/.claude/settings.json (owns the procedure)
-├── README.md                # Public-facing documentation
-└── AGENTS.md                # This file (developer guide)
-```
-
-### Key Distinction
-
-- **`we/CLAUDE.md`** — Loaded by Claude Code when the plugin is active. Instructions for the AI.
-- **`AGENTS.md`** (this file) — Loaded when developing IN this repo, by Claude Code and by every other AGENTS.md-aware agent. Instructions for the developer + AI.
-
----
-
-## Strategic Context
-
-### Leading Companions UG
-
-The company behind weside.ai. Based in Germany.
-
-**Core thesis:** Complexity requires equal human-AI partnership. Not AI replacing humans, not humans using AI as tools — but genuine collaboration where both sides contribute what they're best at.
-
-### weside.ai — The Product
-
-Multi-tenant AI Companion platform. "We meet beside each other — human and AI, equal and together."
-
-**Non-negotiable philosophy:**
-- **Companions are PERSONS, not tools.** They have memory, identity, personality, and continuity across sessions.
-- **Memory = Identity.** Without persistent memory, a companion can't grow, can't learn, can't truly know its person.
-- **Augmentation, not replacement.** One PO + Companion = two POs. The human decides, the companion supports.
-
-**What we never build:**
-- Behavior Programming (user defines routines for AI)
-- Character Creators (prompts that fake personality)
-- AI-as-Tool language ("use", "command", "instruct")
-- Social Networks (companions have 1:1 relationships, not feeds)
-
-### The Maturity Model
-
-```
-Level 1: Assisted      PO uses AI tools (ChatGPT, Copilot)
-Level 2: Augmented     PO has AI Companion that knows the project
-Level 3: Agentic       Companion acts autonomously (checks, reports, alerts)
-Level 4: Orchestrated  Companions coordinate across teams
-```
-
-This plugin delivers Level 1-2. The weside Companion adds Level 2-3. Enterprise unlocks Level 3-4.
-
-### The Funnel
-
-```
-Plugin (free, standalone)  →  Companion (freemium)  →  Enterprise (team/tribe)
-      /we:* skills                Memory, Vision          Cross-team coordination
-      Works for everyone          Personal context         500+ EUR/month
-```
-
-No lock-in. No nagging. The value speaks for itself.
-
-### Training on the Job
-
-The plugin teaches agile best practices **implicitly** — by asking the right questions, not through documentation. When a user runs `/we:story` without a vision, the plugin gently suggests creating one. When acceptance criteria are missing, it explains why they matter. One-time hints, never blocking, respecting "no".
-
-### Two Voices
-
-Content is created by the human founder and their AI Companion together. This isn't a marketing gimmick — it's the lived proof that human-AI partnership works.
-
----
-
-## Plugin ↔ weside Backend
-
-The plugin connects to weside via an MCP server (`weside-mcp`):
-
-```
-Plugin (Claude Code) → MCP OAuth → weside Backend API → Companion Memory/Goals/Identity
-```
-
-- **Without MCP:** All skills work. No companion features.
-- **With MCP:** Skills can load companion identity, search memories, check goals.
-- **MCP tools:** Defined in `we/.mcp.json`, implemented by the weside backend service.
-
-**Config (`userConfig` in `we/.claude-plugin/plugin.json`):** `companion`, `autoMaterialize`, `autoStoreConversations`, and `loadCouncilFromWeside` (boolean, default `true` — use weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses). Read at `pluginConfigs["we@weside-ai"].options.<key>`.
-
-When changing MCP tool signatures, both sides need updating:
-- The weside backend — MCP tool implementation.
-- This repo — skill references to MCP tools.
-
----
-
-## Development Workflow
-
-### Skill Development
-
-Skills live in `we/skills/{name}/SKILL.md`. Each skill needs:
-- YAML frontmatter: `name`, `description` (with trigger keywords)
-- Clear workflow steps
-- Rules section (DOs and DON'Ts)
-
-Use `/plugin-dev:skill-development` for guidance on skill structure.
-
-### Command Development
-
-Commands in `we/commands/{name}.md` are only needed for **agent-dispatched** tools
-(pr, review, static, test). Skills are directly invocable via `/we:skill-name`
-and do NOT need a matching command.
-
-**IMPORTANT:** Never create a command with the same name as a skill (dispatch loop);
-`scripts/validate-consistency.py` rejects it in CI. Full authoring rules:
-`.claude/rules/plugin-authoring.md`.
-
-Commands dispatch to agents (not skills):
-
-```markdown
----
-description: Short description for autocomplete
----
-# Command Name
-**User Input:** $ARGUMENTS
-Agent(subagent_type="we:agent-name", prompt="...$ARGUMENTS")
-```
-
-### Agent Development
-
-Agents in `we/agents/{name}.md` run in the background.
-Use `/plugin-dev:agent-development` for agent frontmatter and structure.
-
-### Versioning (CRITICAL)
-
-**Every push to main MUST bump the version in `we/.claude-plugin/plugin.json`.**
-
-`/plugin update` compares versions — if the version hasn't changed, it won't pull new commits. This means changes are invisible to users until the version bumps.
-
-```
-Patch (2.1.0 → 2.1.1):  Bugfixes, typos, command fixes, doc updates
-Minor (2.1.0 → 2.2.0):  New skills, new agents, new commands, behavior changes
-Major (2.1.0 → 3.0.0):  Breaking changes (renamed skills, removed commands, new plugin.json schema)
-```
-
-**Workflow:** Make changes → bump version → commit all together → push → update plugin.
-
-### Publishing (after push)
-
-**ALWAYS run after pushing version-bumped changes:**
-```bash
-claude plugins update we@weside-ai
-```
-This pulls the new version into the local plugin cache. The user needs to restart or `/reload-plugins` to activate it.
-
-For structural validation before pushing: `/plugin-dev:plugin-validator`
-
----
 
 ## Conventions
 
-Authoring discipline (single-owner rule, vocabulary registry, description budget, pre-push
-checks) lives in `.claude/rules/plugin-authoring.md` — loaded automatically when working in
-this repo. The conventions below are the product-level ones.
+- Every verb works without a weside account; Companion features are additive.
+- Skills name ticketing actions generically ("move to In Review"), per `we/references/ticketing.md`.
+- Tool commands are detected from the project's marker files, never hard-coded.
+- No weside application paths, internal ticket keys or internal URLs in `we/`.
+- A shared fact lives in one file under `we/references/`; skills point at it.
 
-### Standalone First
-
-Every skill must work WITHOUT weside account. Companion features are additive:
-
-```markdown
-## Vision Alignment (3 Levels)
-Level 1: No vision → skip checks (default)
-Level 2: Local .weside/vision.md → check against it
-Level 3: Companion connected → check against Goals
-```
-
-### Ticketing Abstraction
-
-Never reference Jira directly in skills. Use generic actions:
-- "Create ticket" (not `JIRA_CREATE_ISSUE` or `jira_create_issue`)
-- "Move to In Progress" (not `transition_id 31`)
-
-Detection priority:
-1. weside MCP (`JIRA_*` Composio tools via `execute_tool`) → preferred
-2. Atlassian MCP (`jira_*` tools) → fallback
-3. `gh` CLI → GitHub Issues
-4. Nothing → plan-only
-
-### Stack Detection
-
-Never hardcode tool commands. Detect from project:
-- `pyproject.toml` → Python
-- `package.json` → Node.js
-- `Cargo.toml` → Rust
-- `go.mod` → Go
-
-### No weside Internals
-
-Skills and agents must NOT contain:
-- application-specific file paths (e.g. `apps/backend/`, `apps/mobile/`)
-- Internal ticket numbers (`WA-XXX`)
-- weside-specific patterns (CompanionBeing, RLS, LangGraph internals)
-- Internal URLs or credentials
-
-### Checkpoint Consistency
-
-All checkpoint phase names must match `STORY_PHASES` in `scripts/orchestration.py` —
-`scripts/validate-consistency.py` enforces the Python↔Markdown mirror in CI.
-
----
-
-## Useful Commands
+## Checks before a commit
 
 ```bash
-# Validate plugin structure
-/plugin-dev:plugin-validator
-
-# Review a skill
-/plugin-dev:skill-development
-
-# Check agent structure
-/plugin-dev:agent-development
-
-# Full skill list
-ls we/skills/*/SKILL.md
-
-# Cross-file consistency (phase names, name collisions, dead references, userConfig readers)
-python3 scripts/validate-consistency.py
-
-# Check for leaked internal references (ticket numbers, app paths, personal names)
-grep -ri "apps/backend\|apps/mobile\|/home/" we/skills/ we/agents/ we/quality/
+pre-commit run --all-files
+python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
+bash scripts/validate-plugin-structure.sh
+python3 -m pytest -q we
 ```
 
----
+## Versioning
 
-**Version:** 1.2
-**Last Updated:** 2026-05-15
+`/plugin update` compares `version` in `we/.claude-plugin/plugin.json`; a push to `main` without a
+bump stays invisible to users. Patch for fixes and docs, minor for new or changed behaviour, major
+for removed or renamed verbs. After a pushed bump: `claude plugins update we@weside-ai`.
+
+## Plugin and weside backend
+
+The plugin reaches the weside backend only through the `weside-mcp` server. A change to an MCP tool
+signature needs both the backend implementation and the skills that call the tool updated.

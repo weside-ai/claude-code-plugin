@@ -25,8 +25,8 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
 
 - No topic: ask for one.
 - Roles, first hit wins: `--council=`; `--meeting=<type>` → `.weside/config.json` `council.meetings.<type>`;
-  `council.default`; the shipped defaults. A config with the pre-4-altitude keys (in leading-companions,
-  weside-cli, weside-infrastructure, weside-landing, measured 27.09.2026) maps `saga` → `initiative` and
+  `council.default`; the shipped defaults. A config with the pre-4-altitude keys (measured in four
+  repos, 27.09.2026) maps `saga` → `initiative` and
   `story` → `refinement`; say once that the key wants renaming. `epic` has no old key: use `council.default`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Spawn
   `we:council-orchestrator` as a member only when `--council=` names it.

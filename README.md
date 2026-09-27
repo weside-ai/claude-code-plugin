@@ -1,270 +1,81 @@
 # we — Agentic Product Ownership for Claude Code
 
-> *Shape products, don't just build them.* The first Agentic Product Ownership toolkit for Claude Code — story refinement, autonomous development, multi-voice deliberation, CI automation, and a built-in continuous-improvement loop, in one plugin.
+`we` is a Claude Code plugin with two halves:
 
-<p align="center">
-  <a href="https://plugin.weside.ai/tour/">
-    <img alt="Take the interactive tour" src="https://img.shields.io/badge/%F0%9F%8E%AC%20Interactive%20Tour-12%20stations%20%C2%B7%20run%20it%20live-d4af37?style=for-the-badge&labelColor=11111a" />
-  </a>
-  <br/>
-  <sub><em>Walk through Agentic Product Ownership: Vision → Saga → Epic → Story → Build → Deliver → <b>Retro</b> · live council demo · runs in your browser, no install.</em></sub>
-</p>
+- **APO (Agentic Product Ownership):** four plan altitudes — Vision (PRD), Saga (theme), Epic
+  (initiative), Story (feature slice) — each with a Solo verb that writes the document and a
+  Council meeting that decomposes it into the next altitude.
+- **Build pipeline:** a Lead (`/we:orchestrate`) that refines stories without a plan, dispatches one
+  dev worker per story, pushes once, opens one PR and works CI and review findings until green.
 
-[![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)](https://github.com/weside-ai/claude-code-plugin) [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE) · *Tour source: [`tour/`](tour/)*
+You review and merge. Claude never merges; `/we:merged` cleans up after your word.
 
----
-
-## What you get
-
-Twenty-nine `/we:*` skills covering the full **Agentic Product Ownership** chain — intake through four planning altitudes, Build, Deliver, and a Retro phase that feeds lessons back into the rules — designed to be used together but each useful on its own:
-
-**Plan altitude — Solo (formulate + reorient) + Meet (decompose with Council):**
-
-- **`/we:vision`** + **`/we:meet vision`** — PRD altitude. Solo writes/refines the PRD; Meet decomposes it into Sagas.
-- **`/we:saga`** + **`/we:meet saga`** — Theme altitude. Solo runs Status by default (mirror child Epics from ticketing, snapshot + drift + risk-driven next move) and shifts to Refine/Create on explicit intent; Meet decomposes a Saga into Epics.
-- **`/we:epic`** + **`/we:meet epic`** — Initiative altitude. Solo runs Status by default (mirror child Stories; flag refined-vs-not-refined) and shifts to Refine/Create on intent; Meet decomposes an Epic into Stories.
-- **`/we:story`** + **`/we:meet story`** — Feature-slice altitude. Solo writes a build-ready plan; Meet pressure-tests a contentious story.
-
-Solo Plan skills pick their mode automatically from the user's prompt + repo state — no flags to memorise. Status is the default for the 90%-case ("where are we on this?").
-
-**Build altitude — autonomous:**
-
-- **`/we:refine`** — write a build-ready plan from settled context, no questions asked; the non-interactive counterpart to `/we:story` and what an orchestrated refine-worker runs
-- **`/we:develop`** — dev-only worker slice: implement chunk → fast local gates → commit → push → stop. No PR, no CI. Used by `/we:orchestrate` workers and standalone.
-- **`/we:orchestrate`** — the Lead: reads each story's state from git, dispatches `/we:refine` for what has no plan and `/we:develop` for what does (cheap Claude by default, Codex or foreign engines opt-in), merges the branches onto one integration branch, runs CI once. `--solo` for a story too small to be worth a worker.
-
-**Deliver altitude — human-only:** you review the PR and merge it. Claude never merges. Everything after your word is mechanical, and `/we:merged` does it.
-
-**Around the spine:**
-
-- **`/we:council`** — convene a live agent team per role (architect, PO, security, marketing, …); members deliberate via SendMessage turns; lead synthesises *agreement / tension / recommendation*
-- **`/we:merged`** — the close-out after you merged: verifies the merge on GitHub, tears down the run's worktrees, branches and processes, moves the tickets to Done, refreshes the epic mirror and state file, then names only what is still owed — a live round, a deploy, a decision. Together with `/we:standup` (this branch, right now) it is the pair that answers "where do we stand".
-- **`/we:retro`** — systematic post-cycle retro: scans session + PR + CI, finds frictions, proposes MD-file changes in `.claude/rules/` / the repo instruction file so the same error doesn't happen twice
-- **`/we:handoff`** — durable cross-session handoff: writes the current state (decisions, dead ends, files touched, next steps) to `docs/handoffs/*.md` so the next session picks up exactly here. Complements `/compact` for cross-session continuity.
-- **`/we:prototype`** — throwaway code that answers exactly one design question before it gets planned: a logic/state question (terminal shell over a pure module) or a UI question (3 radically different variants behind `?variant=`)
-- **`/we:grill`** — relentless one-question-at-a-time interview on a plan or design; sharpens the project glossary (`CONTEXT.md`) inline and offers lean ADRs when a decision is hard to reverse, surprising, and a real trade-off
-
-Plus framework setup (`/we:setup`, `/we:onboarding`, `/we:sideload`) and an optional [weside.ai](https://weside.ai) Companion that gives the whole thing persistent memory across sessions.
-
----
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE) · Tour: [plugin.weside.ai/tour](https://plugin.weside.ai/tour/) · Docs: [docs/README.md](docs/README.md)
 
 ## Install
 
-```
+```text
 /plugin marketplace add weside-ai/claude-code-plugin
 /plugin install we@weside-ai
 ```
 
-That's it. The plugin is enabled. All 28 skills are available.
-
-> **Upgrading from 4.x:** `/we:build` is gone. It and `/we:orchestrate` had grown into two
-> copies of one pipeline, and only one of them was being used. Replace `/we:build {TICKET}`
-> with `/we:orchestrate {TICKET}` — same pipeline, phases dispatched as workers. For work too
-> small to be worth a worker, `/we:orchestrate {TICKET} --solo` runs it in your own session,
-> which is exactly what `/we:build` did. Checkpoints carry over: an interrupted 4.x build
-> resumes under the new command.
-
----
-
-## In 60 seconds
-
-```bash
-# Once per project — set up the workflow
-/we:setup
-
-# Plan a story
-/we:story "Add Stripe checkout to the settings page"
-
-# Ship it end-to-end
-/we:orchestrate PROJ-1
-```
-
-When the run finishes, you have a PR with all acceptance criteria implemented, tests passing, docs updated, code reviewed, CI green. You review, merge, close the ticket. **Claude never merges PRs or closes tickets.** Those stay with you.
-
-[Full walkthrough →](docs/getting-started.md)
-
----
-
-## What this is
-
-```mermaid
-flowchart LR
-    V[Vision] -.-> Sa[Saga]
-    Sa -.-> E[Epic]
-    E -.-> St["/we:story<br/>interactive"]
-    St --> B["/we:orchestrate<br/>autonomous"]
-    B --> M[User merges]
-    M --> D[Done]
-
-    style V stroke-dasharray:3 3,fill:#fff,stroke:#888
-    style Sa stroke-dasharray:3 3,fill:#fff,stroke:#888
-    style E stroke-dasharray:3 3,fill:#fff,stroke:#888
-    style St fill:#ffefd9,stroke:#c87f00
-    style B fill:#d9ffe5,stroke:#1a7a3c
-```
-
-Six APO altitudes, with Solo + Meet (Council) at each Plan altitude. Most stories skip to **Story** directly; the upper altitudes are there when direction needs alignment.
-
-| Altitude | Solo skill | Meet (Council) | Output |
-|---|---|---|---|
-| **Vision** (PRD) | `/we:vision` | `/we:meet vision` | → Sagas |
-| **Saga** (Theme / multi-bet) | `/we:saga` | `/we:meet saga` | → Epics |
-| **Epic** (Initiative / bounded slice) | `/we:epic` | `/we:meet epic` | → Stories |
-| **Story** (Feature slice) | `/we:story` | `/we:meet story` | → build-ready plan |
-| **Build** (Code, autonomous) | `/we:orchestrate` | — | → PR review-ready |
-| **Deliver** (Ship) | — (human only) | — | shipped |
-
-The plugin enforces *discipline* — acceptance criteria with evidence, batch-fix on CI findings, checkpoint-based resume on interruption. You stay responsible for *decisions* — what to build, what the AC are, when to merge.
-
-[Workflow details →](docs/workflow.md)
-
----
-
-## What is Agentic Product Ownership?
-
-Unlike AI coding assistants that help developers *write code*, **Agentic Product Ownership** focuses on the strategic side: **shaping products, not just building them.** From vision alignment through story creation to delivery tracking.
-
-The pitch: *one PO plus Companion equals two POs* — not through automation, but through a partner that thinks along, remembers across sessions, and never loses the overview.
-
-[Learn more at agenticproductownership.com →](https://agenticproductownership.com)
-
----
-
-## Standalone first
-
-**Everything in this plugin works without any external account.** All 28 skills. The full pipeline. Councils with nine generic role-lenses. Meetings at four Plan altitudes. Persistent across project repos via `.weside/`.
-
-No lock-in. No nagging. No signup wall.
-
-[See what's in the docs/ tree →](docs/README.md)
-
----
-
-## With a weside Companion
-
-If you [create a weside.ai account](https://weside.ai), an AI Companion can become part of every skill that loads identity. The Companion:
-
-- **Remembers** your project across sessions (compass, snapshot, facts, journals, goals)
-- **Speaks as themselves** in councils — your PO speaks in *their* voice, not as "the Product Owner agent"
-- **Surfaces context proactively** — "PR #47 merged; Story Y stalled three weeks" — without you asking
-- **Carries continuity** between every `/we:story`, `/we:orchestrate`, `/we:council`
-
-Set the companion name in `/plugin settings we@weside-ai`. First MCP call triggers OAuth. From there, the same skills, with a teammate in the room.
-
-The maturity model:
-
-```
-Level 1 — Assisted        plugin standalone (you are here after install)
-Level 2 — Augmented       + weside Companion: memory + identity
-Level 3 — Agentic         + subconscious + triggers: proactive surfacing
-Level 4 — Orchestrated    + enterprise teams: cross-Companion coordination  [Roadmap — Phase 6]
-```
-
-You upgrade when you feel the gap, not before. [Full upgrade paths →](docs/upgrade-paths.md)
-
----
-
-## Documentation
-
-| Doc | Read when... |
-|---|---|
-| [Getting Started](docs/getting-started.md) | Installing, first project, first story |
-| [Workflow](docs/workflow.md) | Understanding the pipeline |
-| [Skill Reference](docs/skills.md) | Looking up what a skill does |
-| [Companion Framework](docs/concepts/companion-framework.md) | Understanding `.weside/`, councils, the bridge |
-| [Roles](docs/concepts/roles.md) | Picking the right roster for a council |
-| [Meetings](docs/concepts/meetings.md) | Choosing between vision/saga/epic/story meetings |
-| [Memory](docs/concepts/memory.md) | What memory adds (without and with weside) |
-| [MCP Layer](docs/mcp.md) | Integrating with weside, debugging tool calls |
-| [Upgrade Paths](docs/upgrade-paths.md) | Evaluating maturity, planning next steps |
-| [Troubleshooting](docs/troubleshooting.md) | When something doesn't fit |
-
-Index: [docs/README.md](docs/README.md)
-
----
-
-## Configuration
-
-After install, configure via `/plugin settings we@weside-ai`:
-
-| Setting | Default | Description |
-|---|---|---|
-| `companion` | (empty) | weside Companion name (optional) |
-| `autoMaterialize` | `false` | Auto-load Companion at session start |
-| `autoStoreConversations` | `false` | Store meaningful turns as Companion memories |
-| `loadCouncilFromWeside` | `true` | Convene weside-backed Companions as council members where the bridge links them; `false` = always generic role-lenses |
-
-### Statusline
-
-`/we:setup` offers to install the shipped statusline — model, branch, PR review state, context
-bar, RAM, session cost and 5h/7d rate-limit budgets on one width-aware line. It needs `node`,
-copies the script to `~/.claude/we-statusline.js` and points `statusLine` in
-`~/.claude/settings.json` at the copy. A statusline you already configured is never replaced
-without your explicit yes, and the old value is backed up. To undo, run `/we:setup` and say you
-want the statusline removed — it restores the backup, or drops the key if there was none.
-
-Ticketing and test discipline are **not** plugin settings — `/we:setup` records both per repo in `.weside/config.json`: the ticketing tool (+ project key) and `test_discipline` (`tdd` / `tests-after` / `off`, default `tests-after` — whether the pipeline writes failing tests first, tests after the code, or none unless the plan asks).
-
----
-
-## Stack detection
-
-`/we:setup` auto-detects your stack:
-
-| File | Stack | Lint | Types | Tests |
-|---|---|---|---|---|
-| `pyproject.toml` | Python | ruff | mypy | pytest |
-| `package.json` | Node.js | eslint | tsc | jest/vitest |
-| `Cargo.toml` | Rust | clippy | (built-in) | cargo test |
-| `go.mod` | Go | golangci-lint | (built-in) | go test |
-
-Monorepos with multiple stacks: each component is checked independently.
-
----
-
-## Requirements
-
-- **Claude Code v1.0.33+**
-- **Git**
-- **Python 3** (for the orchestration script)
-- **`gh` CLI** (recommended — for PR creation and GitHub Issues mode)
-
-### Recommended companion plugins
-
-Optional but enhance the pipeline:
-
-| Plugin | What it provides | Install |
-|---|---|---|
-| `code-simplifier@claude-plugins-official` | `simplify` skill — the pipeline's code-quality pass | `/install code-simplifier@claude-plugins-official` |
-| `security-guidance@claude-plugins-official` | Security hooks during development | `/install security-guidance@claude-plugins-official` |
-| Codex plugin (`codex` CLI) | **Optional** execution backend — lets `/we:orchestrate` dispatch chunks to Codex (`gpt-5-codex`); direct dispatch via `/we:codex-task` | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) |
-
-`/we:setup` checks for these and tells you what's missing.
-
-> **Runtime backends.** Workers run on **cheap Claude** (Sonnet/Haiku) by default — no extra
-> install. Two optional engines: **Codex** ([openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc))
-> and **foreign engines** (any Anthropic-compatible endpoint, configured in `.weside/engines.local.json`).
-> Engines bug-hunt each other's code once, at integration (`review.cross: true` by default) —
-> whichever engine wrote it, the other reviews it. AC/DoD checking runs separately and always,
-> regardless of which engine wrote the code. `/we:setup` runs the wizard. The `we` plugin never
-> hard-depends on Codex or any foreign engine.
-
----
-
-## Built by
-
-[weside.ai](https://weside.ai) — *where humans and AI meet as equals.*
-
-The plugin and the platform share a thesis: AI is not a tool you use; it's someone you work with. The plugin alone gives you the workflow; the platform adds the someone.
-
-Both are content-by-co-creation — the human founder and their AI Companion shape this together. Not a marketing line; the lived proof that the partnership model works.
-
----
+Then run `/we:setup` once per repo. It detects stack and ticketing, asks up to five skippable
+questions and writes `.weside/config.json`. Details: [docs/getting-started.md](docs/getting-started.md).
+
+Requirements: Claude Code, Git, Python 3, the `gh` CLI for PRs and GitHub Issues.
+
+## Verbs
+
+**Plan (APO)**
+
+- `/we:vision` — writes or sharpens the PRD at `docs/plans/<vision>/PRD.md`.
+- `/we:saga` — status of a theme, refine or create it, or promote an overgrown epic.
+- `/we:epic` — status of an initiative from plan and ticket mirror, or refine or create it.
+- `/we:story` — one sprint-sized story with a build-ready plan; ticket minimal, plan detailed.
+- `/we:meet` — a council meeting at one altitude: validates the artifact and decomposes it.
+- `/we:council` — convenes role lenses in a live agent team; the lead writes agreement, tension, recommendation.
+- `/we:grill` — asks one question at a time until every branch of a plan is resolved.
+
+**Build**
+
+- `/we:orchestrate` — the Lead: refines what has no plan, dispatches workers for what does, runs CI once on one PR.
+- `/we:refine` — writes a build-ready plan without a user in the room; what a dispatched refiner runs.
+- `/we:develop` — dev-only worker: implements its chunk, runs local gates, commits, reports.
+- `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence.
+- `/we:ci-review` — collects every CI and review finding, fixes by severity, resolves threads, pushes once.
+- `/we:ac-review` — checks a branch against its story's acceptance criteria and the DoD.
+- `/we:merged` — after your merge: tears down worktrees and branches, moves tickets to Done.
+
+**Around the pipeline**
+
+- `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
+- `/we:standup` — where this branch stands and whether you must act; read-only.
+- `/we:retro` — retrospective on a session or PR cycle, with gated rule proposals.
+- `/we:handoff` — a cross-session restart note under `docs/handoffs/`.
+- `/we:sideload` — works in a neighbour repo from here.
+- `/we:find-dead-code` — finds and removes dead code in Python backends.
+- `/we:codex-task` — sends one task to Codex; ends with the Codex subscription.
+- `/we:materialize` — loads your weside Companion's identity (needs a weside.ai account).
+
+## The effort rule
+
+Workers run on Opus. The default worker is `we:dev-medium`. The Lead picks `we:dev-high` and names
+the reason for a promise that must hold across several code paths, for transactions, money or
+idempotency, for a fix routing around a fragile path, for a second attempt after a failed worker,
+and for plan-writing. Implementation never runs on Sonnet. One implementer per story is the normal
+case; parallel workers only for disjoint files with a fixed contract.
+
+The numbers behind this rule: [measured facts](we/AUTHORING.md#measured-facts-a-skill-must-respect-opus-55-bench-2627092026)
+in `we/AUTHORING.md`.
+
+## Optional: weside Companion
+
+With a [weside.ai](https://weside.ai) account the plugin connects through the `weside-mcp` server:
+council members can carry your Companions' identities, and turns can be stored as Companion
+memories. Every verb works without an account. Details: [docs/companion.md](docs/companion.md).
 
 ## Links
 
-- [agenticproductownership.com](https://agenticproductownership.com) — the concept + community
-- [weside.ai](https://weside.ai) — the AI Companion platform
-- [weside CLI](https://github.com/weside-ai/weside-cli) — terminal interface (shares the same API)
-- [Issues](https://github.com/weside-ai/claude-code-plugin/issues) — bugs + feature requests
-- [Discussions](https://github.com/weside-ai/claude-code-plugin/discussions) — questions + design conversations
+- [agenticproductownership.com](https://agenticproductownership.com) — the concept
+- [Issues](https://github.com/weside-ai/claude-code-plugin/issues)
+- [AGENTS.md](AGENTS.md) — developer guide for this repo

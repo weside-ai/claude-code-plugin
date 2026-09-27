@@ -37,5 +37,4 @@ Every verb that commits a planning document follows this section: `/we:story`, `
    `ALLOW_COMMIT_TO_MAIN=1`) only where the instruction files grant it for docs. A rejected push is
    reported with its message, never forced. A repo that takes docs only through a PR gets a branch
    and a PR instead; a plugin repo always does.
-6. **Clean up** `git worktree remove <scratch>`, and remove a refiner's worktree with the repo's verb
-   (weside-core: `a worktree remove`).
+6. **Clean up** `git worktree remove <scratch>`, and remove a refiner's worktree with the repo's own worktree verb when it has one.

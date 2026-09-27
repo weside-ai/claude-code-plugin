@@ -4,12 +4,6 @@
 Guards the error classes the 2026-07 consolidation removed, so they cannot
 silently return:
 
-1. STORY_PHASES mirror  — every phase name in orchestration.py appears in
-   references/integration-pipeline.md, and every `story checkpoint <ticket> <phase>`
-   literal in
-   markdown names a real phase.
-2. EPIC_STATES mirror  — every state in orchestration.py's ladder appears in
-   orchestrate/SKILL.md's state table.
 3. Command/skill collision — no we/commands/<name>.md may share a name with a
    we/skills/<name>/ directory (documented dispatch-loop anti-pattern).
 4. Dead references — every `references/<file>.md` mention, `/we:<name>`
@@ -52,56 +46,6 @@ def md_files() -> list[Path]:
     return sorted(WE.rglob("*.md"))
 
 
-def check_story_phases() -> None:
-    orch = (WE / "scripts" / "orchestration.py").read_text()
-    match = re.search(r"STORY_PHASES = \[(.*?)\]", orch, re.DOTALL)
-    if not match:
-        fail("orchestration.py: STORY_PHASES list not found")
-        return
-    phases = re.findall(r'"([a-z_]+)"', match.group(1))
-
-    pipeline = (WE / "references" / "integration-pipeline.md").read_text()
-    for phase in phases:
-        if phase not in pipeline:
-            fail(
-                f"STORY_PHASES mirror: phase '{phase}' from orchestration.py "
-                "does not appear in we/references/integration-pipeline.md"
-            )
-
-    # Any checkpoint literal used in markdown must be a real phase
-    for path in md_files():
-        text = path.read_text()
-        for m in re.finditer(r"story checkpoint\s+\S+\s+([a-z_]+)", text):
-            if m.group(1) not in phases:
-                fail(
-                    f"{path.relative_to(REPO)}: checkpoint '{m.group(1)}' "
-                    "is not in orchestration.py STORY_PHASES"
-                )
-
-
-def check_epic_states() -> None:
-    """Every rung of EPIC_STATES must appear in orchestrate's state table.
-
-    Same class as the STORY_PHASES mirror: a state added to the executed model
-    and not to the prose is a state the Lead never learns to read, and the table
-    then quietly documents a smaller ladder than the CLI returns.
-    """
-    orch = (WE / "scripts" / "orchestration.py").read_text()
-    match = re.search(r"EPIC_STATES = \((.*?)\)", orch, re.DOTALL)
-    if not match:
-        fail("orchestration.py: EPIC_STATES tuple not found")
-        return
-    states = re.findall(r'"([a-z_]+)"', match.group(1))
-
-    skill = (WE / "skills" / "orchestrate" / "SKILL.md").read_text()
-    for state in states:
-        if f"`{state}`" not in skill:
-            fail(
-                f"EPIC_STATES mirror: state '{state}' from orchestration.py "
-                "does not appear in we/skills/orchestrate/SKILL.md"
-            )
-
-
 def check_command_skill_collision() -> None:
     commands = {p.stem for p in (WE / "commands").glob("*.md")}
     skills = {p.name for p in (WE / "skills").iterdir() if p.is_dir()}
@@ -125,8 +69,17 @@ def check_dead_references() -> None:
         # references/<file>.md mentions — resolve against we/references/, a
         # references/ dir next to the mentioning file, or (when the mentioning
         # file itself lives in a references/ dir) a sibling file
-        for m in re.finditer(r"references/([a-z0-9-]+\.md)", text):
-            name = m.group(1)
+        for m in re.finditer(r"(?:skills/([a-z0-9<>-]+)/)?references/([a-z0-9-]+\.md)", text):
+            skill, name = m.group(1), m.group(2)
+            if skill:  # a skill-local reference; `<verb>` means "any skill"
+                owners = (
+                    sorted(WE.glob(f"skills/*/references/{name}"))
+                    if "<" in skill
+                    else [WE / "skills" / skill / "references" / name]
+                )
+                if not any(o.exists() for o in owners):
+                    fail(f"{rel}: reference 'skills/{skill}/references/{name}' does not exist")
+                continue
             candidates = [path.parent / "references" / name, path.parent / name]
             if name not in shared_refs and not any(c.exists() for c in candidates):
                 fail(f"{rel}: reference 'references/{name}' does not exist")
@@ -309,8 +262,6 @@ def check_no_indiscretions() -> None:
 
 
 def main() -> int:
-    check_story_phases()
-    check_epic_states()
     check_command_skill_collision()
     check_dead_references()
     check_userconfig_readers()

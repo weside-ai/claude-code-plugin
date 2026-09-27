@@ -8,8 +8,7 @@ description: The Agentic Product Ownership hierarchy — altitudes, artifact pat
 Solo (`/we:<altitude>`) improves one item at its own altitude and never decomposes it. Meet
 (`/we:meet <altitude>`) convenes a Council that validates the item and decomposes it into items one
 altitude down. Every verb hands off by printing the next verb; none invokes another one inline.
-Source of the product: `leading-companions/02-weside/2-produkt/AGENTIC_PO/` (Foxy 26.09.2026: APO
-stays in v7, even where Vision and Saga are rarely used).
+APO stays in v7, even where Vision and Saga are rarely used (Foxy 26.09.2026).
 
 ## Altitudes
 
@@ -22,7 +21,7 @@ stays in v7, even where Vision and Saga are rarely used).
 | Build | `/we:orchestrate` | — | branch + one PR | moved by the Lead |
 | Deliver | — (human merge; `/we:merged` closes out after it) | — | merge | closed after merge |
 
-- The APO documents name a `/we:build` verb and a nine-step pipeline. Neither exists in v7:
+- The APO documents name a separate build verb and a nine-step pipeline. Neither exists in v7:
   `/we:orchestrate` is the Build altitude and takes an approved story or an epic.
 - The APO documents also name `SAGA.md`, `05-epics/<epic>/CONCEPT.md` and `stories/<TICKET>-plan.md`.
   The flat names in the table replace them; the core repo and every v7 reader use the flat names.
@@ -46,7 +45,7 @@ stays in v7, even where Vision and Saga are rarely used).
   after `/we:story "<name>"` gave it a ticket or a plan.
 - Readers below the Epic (`/we:story`, `/we:refine`, `/we:orchestrate`) read the Epic's
   success section and `## Scope`. The success section is `## Success Criteria`, or
-  `## Success Metrics` in Epics written before v7 (12 in weside-core, 27.09.2026): readers accept
+  `## Success Metrics` in Epics written before v7 (measured in 12 Epics, 27.09.2026): readers accept
   both, writers write `## Success Criteria`.
 - Ticketing has no Saga level. A ticketing Epic under a Saga is titled `[<saga-slug>] <Epic Title>`
   (JQL `summary ~ "[<saga-slug>]"`). A ticket description carries the one-line purpose and the plan

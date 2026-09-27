@@ -1,6 +1,5 @@
-# we 7.0 (in Arbeit)
+# we 7.0
 
-Leer gestartet am 26.09.2026. Jede Datei kommt nur bewusst hinein: aus v6 übernommen (Ledger-Eintrag mit Grund)
-oder neu geschrieben. Charta: `weside-core/.weside/optimization/CHARTER.md`.
+The plugin root. Authoring contract: [AUTHORING.md](AUTHORING.md). User docs: [../README.md](../README.md).
 
-Nutzen neben v6: `claude --plugin-dir ~/weside/claude-code-plugin-v7/we --settings '{"enabledPlugins":{"we@weside-ai":false}}'`
+Run it beside an installed v6: `claude --plugin-dir <path>/we --settings '{"enabledPlugins":{"we@weside-ai":false}}'`.

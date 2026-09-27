@@ -65,7 +65,6 @@ approval, a risk-class call. Ask it once before the first build and then only at
 two to four plans per batch at most. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. Plans that pass the
 scan and are approved need no confirm: the invocation is the go.
-<!-- pending Foxy: no confirm gate for approved plans (recommended 27.09.2026) -->
 
 ## Refine lane
 
@@ -103,8 +102,6 @@ Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot p
 Report: worker-dispatch.md § Report fields, as your final message.
 ```
 
-<!-- pending Foxy: workers push only when the brief says `Push: yes` (recommended 27.09.2026) -->
-
 **While a worker runs:** refine the next story or draft the PR body; the Agent result brings the
 report. A steer is `SendMessage(to=<name>)`; it is read
 at the worker's next turn boundary (measured: not acted on after 140 s), so every steer names a file
@@ -140,7 +137,6 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    and review findings remain on a green run. Never from the shared main checkout:
    `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it. Its round cap
    (three) and terminal states end the run.
-   <!-- pending Foxy: automatic /we:ci-review after CI concludes, 3-round cap (recommended 27.09.2026) -->
 
 ## Close the run
 
@@ -152,7 +148,6 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 - The closing message is the last output; no `/we:standup` after it (it would repeat the message).
   After the human says "merged", `/we:merged` closes out: it finds the run's branches and worktrees
   by `<KEY>` in git and the PR by number.
-  <!-- pending Foxy: closing /we:standup call dropped (recommended 27.09.2026) -->
 
 ## `--solo`
 

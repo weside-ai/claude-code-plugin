@@ -89,7 +89,7 @@ and classify it from the log:
 - **Review runner:** `VERDICT:ERROR`, no verdict, or a checkout HTTP 429. Run `gh run rerun <id> --failed`, change no code,
   and do not count it as a round.
 - **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. This is about 40 % of the
-  red test jobs in weside-core (Phase 0). Re-run once. A re-run that fails on different tests confirms the noise. The same failure
+  red test jobs of a large monorepo (Phase 0). Re-run once. A re-run that fails on different tests confirms the noise. The same failure
   twice is either real or infrastructure: report it rather than inventing a fix. A gate that is still red after confirmed noise is
   terminal state 3 (blocked), with both run ids. Phase 0 found no red Core run that later went green on the same SHA, so the re-run
   diagnoses the failure and does not fix it.
