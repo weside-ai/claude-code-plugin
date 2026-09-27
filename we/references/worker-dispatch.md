@@ -49,9 +49,12 @@ mechanical/boilerplate chunks (a rename, a generated file, a pure gate run) that
 user's session effort never becomes the worker's by accident — `subagent_type="we:dev-medium"`
 or `"we:dev-high"` (both `model: opus`; the agent file's `effort:` overrides the session).
 **Default `we:dev-medium`.** The Lead picks `we:dev-high` on its own judgement and writes the
-reason as one line in the dispatch. Provisional criteria (Opus 5.5 bench, stage 2 confirms or
-refines them): money/auth/tenant-isolation/migration risk; a chunk with many coupled files or an
-unclear contract; the second attempt after a failed worker. **Refine/plan workers run
+reason as one line in the dispatch. Criteria (Opus 5.5 bench, stages 1–2, n = 27): a promise
+that must hold across several code paths ("always", "exactly once", "never twice") — medium built
+the main path and missed the side path that breaks it; transactions, money or idempotency —
+medium was likelier to slip in a risky commit; a fix that has to route around a fragile path;
+the second attempt after a failed worker. A clearly bounded single fix stays `we:dev-medium` —
+there the bench found no difference, and `high` costs ~⅓ more time and money. **Refine/plan workers run
 `we:dev-high`** until the control run on real stories shows otherwise. A mechanical chunk names
 its model explicitly (`haiku`/`sonnet`) and so is exempt.
 
