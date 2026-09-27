@@ -35,8 +35,8 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 | Worker isolation | `Agent` with `isolation: "worktree"` |
 | Worker effort | `subagent_type: "we:dev-medium"` (default) or `"we:dev-high"` (Lead states the reason) |
 | Waiting for CI or a background job | `Monitor` or a background command with a wait condition, never a sleep loop |
-| Task checklist inside a long run | the task tools (`TaskCreate`/`TaskUpdate`) |
-| Bug review before the first push | `/code-review` (effort `medium`), then `/simplify` |
+| Task checklist inside a long run | a checklist in the PR body or plan (the task tools are absent in `claude -p`) |
+| Bug review before the first push | Skill tool `code-review` (`medium`), then `simplify` — inside a subagent always via the Skill tool; a slash command in a prompt is not proven to run it |
 | Security-sensitive diff (money, auth, tenant) | `/security-review` in addition |
 | Cross-repo work that edits the other repo | a native session there (`claude --bg` in that directory) steered with `SendMessage` |
 | Cross-repo reading | `--add-dir` with `additionalDirectoriesForClaudeMd` |
