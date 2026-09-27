@@ -132,8 +132,8 @@ changes with their choice).
 Ask once: *"What default executor should workers use for `/we:develop` chunks?"*
 
 Options (show only available ones):
-+ **Cheap Claude (Sonnet/Haiku)** — always available, no extra setup. The default if
-  nothing else is configured.
++ **Claude (Opus)** — always available, no extra setup. The default if nothing else is
+  configured; Sonnet/Haiku only for mechanical chunks.
 + **Codex** — available if `tools.codex: true` from Step 1b. Workers dispatch to `gpt-5-codex`.
 + **A named engine profile** — available if `.weside/engines.local.json` already exists.
   Show the profile names. Or offer to create a new profile (see below).
@@ -197,7 +197,7 @@ Always write `.weside/config.json` with the choices from Step 2 — the ticketin
   "stack": ["<detected stacks>"],
   "tools": { "graphify": false, "turbovault": false, "superpowers": false, "codex": false },
   "engines": ["<profile-name-if-created>"],
-  "execution": { "default": "claude-sonnet" },
+  "execution": { "default": "claude-opus" },
   "review": { "available": ["claude"], "cross": true },
   "test_discipline": "tests-after",
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true }
@@ -208,7 +208,7 @@ The `tools` block carries the Step 1b detection results (idempotent: re-running 
 
 The `engines` block lists the profile names created/verified in the executor wizard.
 
-The `execution.default` block is the executor the user picked: `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
+The `execution.default` block is the executor the user picked: `"claude-opus"` / `"claude-sonnet"` / `"claude-haiku"` / `"codex"` / `"<engine-profile-name>"`.
 
 The `review.available` block is the reviewer list from Step 2 Q6 (order cosmetic — see Reviewer-id semantics). The `review.cross` field is the cross-review toggle from the executor wizard (default `true`). Consumed by `/we:develop` and `/we:orchestrate`. Absent block → skills fall back to Claude-only review (back-compat).
 
@@ -259,7 +259,7 @@ Stack:          Python + TypeScript (monorepo)
 Ticketing:      Jira (project: PROJ)
 Vision:         .weside/vision.md
 
-Workers:        Claude Code (Sonnet/Haiku) default
+Workers:        Claude Code (Opus) default
 Codex:          available  (or: not installed)
 Engine <name>:  configured  (or: none)
 Cross-review:   on  (or: off)  — per-chunk AC-check + bug-hunt cross-review

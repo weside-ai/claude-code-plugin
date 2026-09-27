@@ -23,17 +23,17 @@ one locally; never skip the AC-review at integration.
 
 | Backend | How dispatched | When to use |
 |---|---|---|
-| **Cheap Claude** (Sonnet / Haiku) | `Agent(model: "sonnet", prompt: "…")` inline | Default — always available, no extra config |
+| **Claude** (Opus; Haiku/Sonnet only for mechanical chunks) | `Agent(model: "opus", prompt: "…")` inline | Default — always available, no extra config |
 | **Codex** | `codex-companion.mjs task --write --cwd <worktree> "…"` | When `tools.codex` is `true` and user confirms; see [`codex-dispatch.md`](codex-dispatch.md) |
 | **Foreign engine** | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` | When `.weside/engines.local.json` has a profile for that engine; requires Anthropic-compatible endpoint |
 
 **Claude workers are the default; a non-Claude backend needs the user's word in this run.**
-`.weside/config.json` `execution.default` (`claude-sonnet` / `claude-haiku` / `codex` /
+`.weside/config.json` `execution.default` (`claude-opus` / `claude-sonnet` / `claude-haiku` / `codex` /
 `<engine-name>`) records what `/we:setup` wrote — for `codex` and for a named engine that is a
 *candidate*, never a standing licence. Dispatch to one only when the user names it for this run:
 in the invocation ("… mit codex"), at the per-chunk confirm, or as a mid-run steer; that pick
 then stands for the rest of the run. Every other case — key absent, unreadable, or naming a
-non-Claude backend with no user word — runs `claude-sonnet`. A Claude tier in `execution.default`
+non-Claude backend with no user word — runs `claude-opus`. A Claude tier in `execution.default`
 dispatches without asking: that choice is between Claude tiers, not between engines.
 
 Bug-hunt routing is untouched by this rule — the cross-engine table below keys on who *wrote*
@@ -42,8 +42,8 @@ the code, not on who was allowed to.
 **Model-tier rule (single owner):** plan-writing runs on **`opus`** — the refine lane
 (`/we:refine` workers, and an interactive `/we:story` session) produces the plan every
 downstream worker follows, so a weak plan is paid for N times over. **Dev** chunks default to
-`sonnet`; `haiku` only for mechanical/boilerplate chunks; `opus` for a dev chunk only when the
-Lead explicitly requests it for a hard one.
+`opus` too — implementation is not a place to save on the model; `haiku` or `sonnet` only for
+mechanical/boilerplate chunks (a rename, a generated file, a pure gate run) that the Lead names as such.
 
 ---
 

@@ -14,7 +14,7 @@ CI runs **once per repo the wave touches** — one PR for the story, plus one in
 to ship a verb for it. The Lead never merges; Deliver stays human.
 
 **Cost model:** refiners run on Opus (the plan is the artifact every later worker follows), dev
-workers on cheap-tier Claude, Codex, or a foreign engine; the Lead plans, integrates, reviews.
+workers on Claude (Opus), Codex, or a foreign engine; the Lead plans, integrates, reviews.
 N workers = N dev costs + one CI. A story too small for a worker runs `--solo`.
 
 **One pipeline, three dispatch shapes.** Every run ends the same way — implement → simplify →
@@ -274,7 +274,7 @@ wave is not In Progress.
 ```python
 Agent(name=f"refiner-{TICKET}", subagent_type="general-purpose", model="opus",
       description=f"Refine {TICKET}", prompt=<Refiner-Brief>)
-Agent(name=f"worker-{TICKET}", subagent_type="general-purpose", model="sonnet",
+Agent(name=f"worker-{TICKET}", subagent_type="general-purpose", model="opus",
       description=f"Build {TICKET}", prompt=<Worker-Brief>)
 ```
 
@@ -373,14 +373,14 @@ plugin context. When a rule changes, update the owner AND the brief.
 
 #### Executor selection (per chunk, at the confirm)
 
-Read `.weside/config.json` (`tools.codex`, `execution.default`; absent keys mean cheap Claude)
+Read `.weside/config.json` (`tools.codex`, `execution.default`; absent keys mean Claude Opus)
 and `.weside/engines.local.json` (absent means no foreign engine). **Claude workers are the
 default; Codex and foreign engines run only on the user's word in this run** — the config key is
 a candidate, not a licence (`references/worker-dispatch.md` § Three worker backends).
 
 | Backend | When | How |
 |---|---|---|
-| **Cheap Claude** | default, or `execution.default: claude-sonnet\|claude-haiku` | `Agent(model="sonnet", …)` with the brief above |
+| **Claude** | default, or `execution.default: claude-opus\|claude-sonnet\|claude-haiku` | `Agent(model="opus", …)` with the brief above; `sonnet`/`haiku` only for a chunk the Lead names mechanical |
 | **Codex** | `tools.codex: true` **and** the user named Codex this run (invocation, per-chunk confirm, or mid-run steer) — `execution.default: codex` alone does not arm it | `references/codex-dispatch.md` |
 | **Foreign engine** | profile in `engines.local.json` **and** the user named it this run | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` (brief: `references/worker-dispatch.md`) |
 
@@ -609,9 +609,8 @@ live.
   often more than one shared layer; the real parallelism appears late, in the per-unit wiring.
 - Chunks are `Agent(name=…)` teammates, Codex tasks, or Lead-owned, each in the worktree the
   Lead created on its `feat/{TICKET}-p{N}` branch off the integration branch, running
-  `/we:develop --phases N` with a brief scoped to one chunk; targeted tests only. A critical chunk (Step 5.2) starts at `opus` or the Lead;
-  builders default to `sonnet` only where the risk class is ordinary, `opus` also for a chunk the
-  Lead can name as hard (a contract freeze, a delicate teardown).
+  `/we:develop --phases N` with a brief scoped to one chunk; targeted tests only. Builders run on `opus`; a critical chunk (Step 5.2) is `opus`
+  or the Lead; `sonnet`/`haiku` only for a chunk the Lead names mechanical.
 - **Characterization as contract.** The first chunk pins current behaviour (green on unmodified
   code); a property the refactor newly *introduces* is flagged, never pinned. Later chunks keep
   the pins unchanged — moving a behaviour's locus is an explicit, reviewed pin rewrite, noted in

@@ -24,7 +24,7 @@ There is no `TeamCreate`/`TeamDelete` tool and no `team_name` parameter — ever
 has a single implicit team. Members join it just by being spawned:
 
 ```python
-Agent(name=<role-slug>, subagent_type=<...>, model="sonnet", description=<...>, prompt=<brief>)
+Agent(name=<role-slug>, subagent_type=<...>, model="opus", description=<...>, prompt=<brief>)
 ```
 
 - **Never pass `team_name`** — the parameter no longer exists; drop it from any spawn call or brief text that still carries it.
