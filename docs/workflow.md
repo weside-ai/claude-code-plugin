@@ -102,13 +102,13 @@ flowchart TB
 | Step | What | Notes |
 |---|---|---|
 | **1. Git prep** | Worktree, branch, ticket → In Progress | Worktree isolates the work; if you opt out (`no worktree`), uses a regular branch |
-| **2. Develop** | Implement plan phase by phase | Tests alongside code, per the repo's `test_discipline`. Lint runs once, at Step 3, via `we:static-analyzer`. |
+| **2. Develop** | Implement plan phase by phase | Tests alongside code, per the repo's `test_discipline`. The repo's static gates run before the push. |
 | **3. Simplify** | `simplify` skill (from `code-simplifier` plugin) | Removes dead code, simplifies expressions, reuses existing helpers. Runs *before* the AC gate on purpose — verifying against code that is about to be rewritten wastes the verification. |
 | **4. AC + DoD verify** | Every acceptance criterion checked with concrete evidence, plus the DoD Quick Check against the diff, plus a run against a live instance | **Blocking.** No AC passes without a citation (file:line, test name, commit); any DoD failure blocks too. Model-agnostic — the build session runs it, independent of which reviewer runs in Step 5. |
 | **5. Quality gates** | One bug-hunt engine + static analysis + tests, all in parallel | Single-message dispatch. **Exactly one bug-hunt engine runs, chosen by who wrote the code:** Claude wrote + codex available → `/codex:adversarial-review`; otherwise Claude's native `/code-review`. AC/DoD were already gated in Step 4 — no separate AC/DoD call here. |
 | **7. PR** | `/we:pr` verifies all 4 quality-gate checkpoints first | Will not create a PR with failing gates (`ac_verified`, `review_passed`, `static_analysis_passed`, `test_passed`). Any CI reviewers the repo lists in `review.available` run on GitHub if installed; other hosts use local quality gates. |
 | **8. CI fix** | Inline — collect findings, fix all, push once | One pass by default; an explicit user budget sets the cycle cap. Bot threads resolved when present (allowlist = `review.available`); otherwise local gates are authoritative. |
-| **9. Ticket** | Move ticket to In Review | Done by `pr-creator`; verified after. Never moves to Done — that's you. |
+| **9. Ticket** | Move ticket to In Review | Done by the Lead; verified after. Never moves to Done — that's you. |
 
 ### Robustness
 
@@ -137,7 +137,7 @@ Token pressure is not a legitimate reason — the runtime handles compaction; th
 
 You receive a PR with:
 
-- All acceptance criteria implemented (AC-reviewed and DoD-checked by `we:ac-reviewer`, gating)
+- All acceptance criteria implemented (each AC with evidence and the DoD rows checked by the Lead, gating)
 - Tests passing
 - Code bug-hunted (one engine chosen by writer — `/codex:adversarial-review` when Claude wrote and codex is configured, else Claude's native `/code-review` — plus Claude Review on GitHub CI; local gates are authoritative when no GitHub reviewer is present)
 - Docs proposed and applied

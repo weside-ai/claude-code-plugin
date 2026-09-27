@@ -133,7 +133,7 @@ output passed the gate.
 
 > *Dev-only worker slice — implement, gate, commit, push, stop.*
 
-Implements one chunk (a Story, or a `--phases N,M` subset), runs fast local gates (lint/type/affected tests for the touched stack), commits, pushes its branch, and **stops** — no PR, no CI loop, no ticket transition. It's the worker `/we:orchestrate` dispatches, and it works standalone for manual dev work when you want the implementation without the full solo pipeline. Runs an informational AC-check (`we:ac-reviewer`) against its own diff when `review.cross` is on; the bug-hunt runs once, at Lead integration, not per chunk. Branch shape: `feat/{TICKET}-work`.
+Implements one chunk (a Story, or a `--phases N,M` subset), runs fast local gates (lint/type/affected tests for the touched stack), commits, pushes its branch, and **stops** — no PR, no CI loop, no ticket transition. It's the worker `/we:orchestrate` dispatches, and it works standalone for manual dev work when you want the implementation without the full solo pipeline. Its report maps every AC to evidence; the Lead checks those lines. Branch shape: `feat/{TICKET}-work`.
 
 **When to use:**
 - Dispatched by `/we:orchestrate` per chunk (the common case)
@@ -217,10 +217,8 @@ These also run standalone for one-off checks.
 
 ### `/we:ac-review`
 
-AC-alignment and DoD check with verdict — dispatched as a background agent (`ac-reviewer`). Never
-hunts bugs. It runs per chunk in `/we:develop` (informational) and once at integration (gating). Bug-hunting is separate: Codex adversarial-review when
-Claude wrote the code, Claude's native `/code-review` otherwise — runs once, at integration, never
-per chunk. See `references/worker-dispatch.md`.
+AC-alignment and DoD check with a BLOCKING/PASS verdict, run in the session. Never hunts bugs;
+bug-hunting is Claude's native `/code-review` before the first push. See `references/worker-dispatch.md`.
 
 ### `/we:pr`
 
@@ -271,8 +269,6 @@ Wraps a council in a workflow tuned to the altitude. Each meeting validates the 
 **When to use:** when the topic deserves more than a flat council — when you want structure, sequencing, and a named hand-off. The roster defaults are tuned per altitude (widest at Vision, tightest at Story); override per repo in `.weside/config.json` or per call with `--council=role,role,…`. See [concepts/meetings.md](concepts/meetings.md).
 
 ---
-
-## Process skills
 
 ## Background agents
 
