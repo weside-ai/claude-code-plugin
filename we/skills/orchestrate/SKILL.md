@@ -272,11 +272,15 @@ repo's plan-approved status (`.weside/orchestrate.md`), and a story refined but 
 wave is not In Progress.
 
 ```python
-Agent(name=f"refiner-{TICKET}", subagent_type="general-purpose", model="opus",
+Agent(name=f"refiner-{TICKET}", subagent_type="we:dev-high",
       description=f"Refine {TICKET}", prompt=<Refiner-Brief>)
-Agent(name=f"worker-{TICKET}", subagent_type="general-purpose", model="opus",
+Agent(name=f"worker-{TICKET}", subagent_type="we:dev-medium",   # or we:dev-high + reason
       description=f"Build {TICKET}", prompt=<Worker-Brief>)
 ```
+
+**Every Claude worker carries an explicit effort** — `we:dev-medium` or `we:dev-high`, never
+`general-purpose` (that inherits the user's session effort). The effort rule lives in
+`references/worker-dispatch.md` § Effort rule.
 
 Chunk branches: `feat/{TICKET}-work` for a whole-story worker, `feat/{TICKET}-p{N}` for a Mode-B
 chunk of phase N (or `p{N}-{M}` for a group), `feat/{TICKET}-lead` for a Lead-owned chunk. The
@@ -380,7 +384,7 @@ a candidate, not a licence (`references/worker-dispatch.md` § Three worker back
 
 | Backend | When | How |
 |---|---|---|
-| **Claude** | default, or `execution.default: claude-opus\|claude-sonnet\|claude-haiku` | `Agent(model="opus", …)` with the brief above; `sonnet`/`haiku` only for a chunk the Lead names mechanical |
+| **Claude** | default, or `execution.default: claude-opus\|claude-sonnet\|claude-haiku` | `Agent(subagent_type="we:dev-medium"\|"we:dev-high", …)` with the brief above (§ Effort rule); `sonnet`/`haiku` only for a chunk the Lead names mechanical |
 | **Codex** | `tools.codex: true` **and** the user named Codex this run (invocation, per-chunk confirm, or mid-run steer) — `execution.default: codex` alone does not arm it | `references/codex-dispatch.md` |
 | **Foreign engine** | profile in `engines.local.json` **and** the user named it this run | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` (brief: `references/worker-dispatch.md`) |
 

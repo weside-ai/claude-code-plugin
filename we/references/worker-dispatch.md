@@ -23,7 +23,7 @@ one locally; never skip the AC-review at integration.
 
 | Backend | How dispatched | When to use |
 |---|---|---|
-| **Claude** (Opus; Haiku/Sonnet only for mechanical chunks) | `Agent(model: "opus", prompt: "…")` inline | Default — always available, no extra config |
+| **Claude** (Opus; Haiku/Sonnet only for mechanical chunks) | `Agent(subagent_type: "we:dev-medium", prompt: "…")` inline (or `we:dev-high`, § Effort rule) | Default — always available, no extra config |
 | **Codex** | `codex-companion.mjs task --write --cwd <worktree> "…"` | When `tools.codex` is `true` and user confirms; see [`codex-dispatch.md`](codex-dispatch.md) |
 | **Foreign engine** | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` | When `.weside/engines.local.json` has a profile for that engine; requires Anthropic-compatible endpoint |
 
@@ -44,6 +44,16 @@ the code, not on who was allowed to.
 downstream worker follows, so a weak plan is paid for N times over. **Dev** chunks default to
 `opus` too — implementation is not a place to save on the model; `haiku` or `sonnet` only for
 mechanical/boilerplate chunks (a rename, a generated file, a pure gate run) that the Lead names as such.
+
+**Effort rule (single owner):** every Claude worker is dispatched with an explicit effort, so the
+user's session effort never becomes the worker's by accident — `subagent_type="we:dev-medium"`
+or `"we:dev-high"` (both `model: opus`; the agent file's `effort:` overrides the session).
+**Default `we:dev-medium`.** The Lead picks `we:dev-high` on its own judgement and writes the
+reason as one line in the dispatch. Provisional criteria (Opus 5.5 bench, stage 2 confirms or
+refines them): money/auth/tenant-isolation/migration risk; a chunk with many coupled files or an
+unclear contract; the second attempt after a failed worker. **Refine/plan workers run
+`we:dev-high`** until the control run on real stories shows otherwise. A mechanical chunk names
+its model explicitly (`haiku`/`sonnet`) and so is exempt.
 
 ---
 
