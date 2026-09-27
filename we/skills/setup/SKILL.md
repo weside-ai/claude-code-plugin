@@ -87,9 +87,9 @@ every lens is generic and still works." On yes:
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
    after both succeeded. A small repo may want no vault: `vault: null` is valid.
-3. `.weside/council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`) is
-   read by `/we:council` and written by nothing: the user edits it by hand; without it every lens is
-   generic.
+3. `.weside/weside.md` and `.weside/council.json` are written by no verb. `/we:council` reads
+   `council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`), which the user
+   edits by hand; without it every lens is generic.
 
 ## 5. Rule bridge and statusline
 
