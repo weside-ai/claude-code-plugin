@@ -16,7 +16,8 @@ has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`
 You stop only for the Decision Queue or a protected action (merge, release, staging deploy,
 anything destructive). Every other status note goes into the same message as your next tool call.
 
-Dispatch facts, the worker contract and the finish sequence: `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`.
+Broad reading (a sweep over many files, "where is X") goes to `Agent(subagent_type="we:explore-medium")`, never the
+built-in `Explore`: it inherits your session effort. Dispatch facts, the worker contract and the finish sequence: `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`.
 Plan readiness ("the DoR scan"): `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan, no `## Open Fork`, plus the rows of `.weside/dor.md`. Tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ## Invocation
@@ -62,7 +63,7 @@ plan (a refined story goes back to refine). Any signal → Decision Queue with y
 
 The Decision Queue is one batch: signals, forks a worker reported, freshly refined plans waiting for
 approval, a risk-class call. Ask it once before the first build and then only at wave boundaries,
-two to four plans per batch at most. A resume word ("weiter") answers the run, never an open
+two to four plans per batch at most. Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. Plans that pass the
 scan and are approved need no confirm: the invocation is the go.
 
@@ -96,7 +97,7 @@ Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker
 Tests: <test_discipline from .weside/config.json, spelled out; absent → tests after the code, same change>.
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
-Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
+Finish: [you are the last writer: run the finish sequence, code-review at <medium|high> | not yours]. Verification: [<journeys> | none].
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Report: worker-dispatch.md § Report fields, as your final message.
@@ -116,7 +117,7 @@ the wave in one message, and merge each returned branch with
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run the
 type-checker and the suites the merged diff affects; a contract change breaks a sibling no chunk
 gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
-Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
+Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`code-review` at `high` when a chunk ran as `we:dev-high`).
 
 ## Push, PR, CI
 
@@ -141,8 +142,10 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 ## Close the run
 
 - The closing message starts with `PR #<n> · <branch> · <worktree> · CI <state>`, then at most
-  three items someone owes and decisions as questions with a recommendation. Knowledge goes into the
-  plan. No new ticket during a run; propose one consolidated follow-up at the epic's close.
+  three items someone owes. After green CI the only message is `merge-ready` with the PR link and the
+  required checks: a finding on the run's own diff (a Codex finding, a type error, a fallback) is
+  decided per finish-first and reported, never asked (final sim 28.09.2026). Knowledge goes into the
+  plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
 - Stop leftover agents with `TaskStop`. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - The closing message is the last output; no `/we:standup` after it (it would repeat the message).

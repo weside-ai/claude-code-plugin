@@ -71,10 +71,11 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 The session or worker that writes last on the PR branch runs this once over
 `git diff origin/<default-branch>...HEAD`, committing after each step:
 
-Invoke each through the Skill tool (`skill: "code-review"`, `args: "medium"`); a slash command
+Invoke each through the Skill tool (`skill: "code-review"`, `args: "<effort>"`); a slash command
 written into a subagent prompt is not proven to run the skill (probe 27.09.2026).
 
-1. `code-review` at `medium`, then fix what it finds.
+1. `code-review` at the build worker's effort (`high` when any chunk ran as `we:dev-high`, else
+   `medium`; final sim 28.09.2026: a medium review let two red Claude rounds through), then fix what it finds.
 2. `simplify`.
 3. `security-review` in addition when the diff touches money, auth or tenant isolation.
 4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV

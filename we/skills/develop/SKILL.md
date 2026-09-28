@@ -62,7 +62,7 @@ critical chunk. A gate failure: fix, commit, re-run. The same gate red three tim
 
 ## 5. Finish, when the brief makes you the last writer
 
-Run the finish sequence through the Skill tool (`code-review` at `medium`, `simplify`, `security-review` for money, auth or
+Run the finish sequence through the Skill tool (`code-review` at the effort the brief names, else your own, `simplify`, `security-review` for money, auth or
 tenant work, the ordered verification, the plan rewritten to what was built, the affected gates again) and commit after each step. The
 brief says "not yours": skip it and say so. Invoked by a human: run it.
 

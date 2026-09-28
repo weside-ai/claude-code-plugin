@@ -42,7 +42,7 @@ A skip is legitimate only when one of these holds:
   the gate stays red. In the report, say that the gate needs a human override.
 - **A small defect on the seam this PR touches is fixed here**, even when it is pre-existing. A finding that cannot ride along
   (a product decision, a money-path change, a foreign subsystem, a change that buries the diff) goes into
-  the report with its reason and a recommendation. It is not filed as a ticket unless the user asks.
+  the report with its reason and a recommendation. It is not filed as a ticket unless the user asks, and you never ask whether to file one.
 - **Human threads are surfaced to the user before fixing.** One may make a bot finding moot. They are never resolved by you.
 
 ## 1 · Collect
@@ -151,7 +151,8 @@ with `cancel-in-progress: true` the push cancels the stale run. Wait for the tes
 
 Terminal states. Report exactly one:
 
-1. **Green.** If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
+1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
+   decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
    when the user asked for the merge itself ("bis gemerged"), wait on `gh pr view $PR --json state,mergedAt`
    with `Monitor`, then report `MERGED` or green but not yet merged. You never run `gh pr merge` without the user's word.
 2. **Cap reached, still red.** Report what is open and what you tried.

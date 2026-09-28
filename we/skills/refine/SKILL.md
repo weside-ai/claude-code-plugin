@@ -23,6 +23,9 @@ Your final message is the report the dispatcher reads (step 5).
   subsystem the scope declares out, or contradicts a prior decision, and nothing you read settles it. An absent
   constraint is not a decision: "the epic didn't fund it, so I'll take the cheap one" is the rationalisation this
   rule catches.
+- **The ticket's "done when" and scope bound the plan.** Work beyond them never becomes a phase; it goes into
+  `## Out of scope` as a named follow-up. Splitting it off is not a fork, and creating a ticket or story for it is
+  never a question (Foxy 25.09.).
 - **Stopping is not writing nothing.** Write the plan as far as the fork allows, keep `status: draft`, and put
   `## Open Fork` directly after `## Context` (the format file says what goes in). Say in the section and in the
   report that the plan is not ready to dispatch; the refined scan passes such a plan mechanically.

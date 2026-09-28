@@ -105,7 +105,7 @@ the refiner from writing the file.
 
    - One comment only when the plan overrides a statement in the ticket or its comments, naming each override;
      set `comments_read_through:` to that comment's id.
-   - No other ticket. Side findings from the interview go into the output as a list (Foxy 25.09.).
+   - No other ticket, and no question whether to create one. Side findings from the interview go into the output as a list (Foxy 25.09.).
 3. Scan again, then commit, push and clean up per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 4–6: files
    `docs/plans/{TICKET}-story.md` plus the glossary file if changed, subject
    `docs({TICKET}): story plan — <title>`.

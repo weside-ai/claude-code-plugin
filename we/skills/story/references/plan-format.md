@@ -109,6 +109,11 @@ derived — code graph, or "grep-derived, no code graph".>
   routing around a fragile path, because the Lead picks `we:dev-high` from this line>
 - **Approach:** <how>
 
+## Out of scope
+
+- <Work beyond the ticket's "done when": one named follow-up per line, with the reason it is
+  outside. Never a phase; nobody files it during the run.>
+
 ## Constraints and Pins
 
 **Constraints:** <conventions and primitives the change composes>
