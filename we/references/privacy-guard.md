@@ -1,20 +1,11 @@
-# Privacy Guard
+# Privacy guard
 
-Skills that read session transcripts apply this guard at every step. Transcripts contain everything — including personal, relational, identity-laden content that has nothing to do with engineering.
+Applies to every skill that reads a session transcript (`retro`, `handoff`). What they write gets committed.
 
-> **The hard rule: if session content reads as personal, skip it — analyse/capture only engineering surfaces:** tool calls, tool results, file diffs, CI logs, PR comments, commit messages, decisions about code/architecture/process.
-
-Categorically out of scope:
-
-- Memory writes about the user (`mcp__*__save_memory`, `mcp__*__save_goal`) and companion-state equivalents (compass, snapshot)
-- Memory reads that returned personal content (don't quote, don't summarise)
-- Companion-mode conversational content (relationship, identity, body, mood)
-- Anything outside engineering tool calls — if in doubt, skip
-
-Safe:
-
-- `Bash`, `Edit`, `Write`, `Read` of code/doc files; `gh`/`git` operations and their outputs
-- CI logs, reviewer PR comments, file diffs, engineering commit messages
-- The user's *engineering* corrections ("no, that's wrong", "we should X instead") — substance, not framing
-
-The guard is what makes the artifact safe to commit into the user repo.
+- Read and quote only engineering surfaces: tool calls and results, diffs, CI logs, PR comments, commit
+  messages, and decisions about code, architecture or process. The user's engineering corrections count
+  ("no, do X instead"): keep the substance, drop the framing.
+- Skip personal content: memory reads and writes about the user (`save_memory`, `save_goal`, compass,
+  snapshot), companion conversation (relationship, identity, body, mood), anything that reads as private.
+  In doubt, skip.
+- Never quote or summarise a skipped passage, not even as "personal content omitted about X".

@@ -1,72 +1,41 @@
 ---
 name: standup
 description: >
-  Where this branch stands: ticket, PR, CI, a recap of its commits, what is left, and whether
-  you must act. Triggers: "/we:standup", "wo stehen wir", "where am I", "what's the state".
+  Where this branch stands: ticket, PR, CI, what changed, what comes next and whether you must
+  act — read-only, one screen. Triggers: "/we:standup", "where am I", "what's the state".
 ---
 
-# /we:standup — Where this branch stands
+# /we:standup
 
-Read-only: reads git, the plan, the ticketing mirror and `gh`; writes nothing, dispatches
-nobody, transitions no ticket. One screen, then out.
+Read-only: read git, the plan, the ticket and `gh`; write nothing, dispatch nobody, move no ticket.
+The reader comes back to this window after an hour elsewhere and needs three answers: what is now
+true that was not, which story comes next (by key), and what the human must do (often nothing).
+When the user's instruction files define a status form
+(for example a sentence cap), that form wins over the layout below.
 
-**Who reads this.** A person with ten Claude windows open, coming back to this one after an hour
-in the others, who has to re-learn what *this* window was doing. So the screen answers three
-questions in order, concretely and with names: **what was achieved** (not what ran — what is
-now true that was not), **which story or stories come next** (keys, not "the roster"), and
-**what the human must do** (a merge, a decision, a device round — or nothing, said as nothing).
-`/we:orchestrate` and `/we:ci-review` end by running this skill, so it is the last thing a
-window says before it goes quiet.
+## Gather
 
-**Neighbours, same landscape, different cut.** `/we:map` is wide and shallow across every plan ·
-`/we:saga` / `/we:epic` go deep on one artifact · `/we:handoff` writes a durable file for the
-*next* session · `/we:standup` is **this branch, right now**. `/we:orchestrate`'s `status`
-is a different thing: the Lead's spoken roll-up mid-wave, not this dashboard.
-
-## Steps
-
-1. **Tree** — `git status -sb`: branch, ahead/behind, dirty files.
-2. **Story** — key from the branch (`feat/{KEY}-…`) → `docs/plans/{KEY}-story.md` frontmatter and
-   its `### Phase` blocks (done vs open) + the ticket state
-   (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`). No key or no plan → say so in one line and
-   carry on; a branch without a story is a fact, not an error.
-3. **PR + CI** — `gh pr view --json number,state,statusCheckRollup,reviewDecision` and
-   `gh pr checks`. No `gh` → name the gap.
-4. **Recap** — `git log --oneline <base>..HEAD` (cap 10) plus the uncommitted diff, boiled to
-   ≤ 3 lines of *what changed and why*, never a commit dump.
-5. **In flight** — `ListAgents` for this session's teammates, plus `docs/plans/*-state.md` if the
-   branch has one. A running worker is the difference between "nothing to do" and "wait".
-6. **Verdict** — one move, and it may be *nothing*.
-7. **Name** — the session title should read the ticket key or the epic's one word
-   (`${CLAUDE_PLUGIN_ROOT}/references/session-name.md`); the tmux window follows it by hook. If it
-   does not, print the `/rename` line once. A window whose title still says the last job is the
-   reason the human has to ask.
+1. `git status -sb`: branch, ahead/behind, dirty files.
+2. Key from the branch (`<type>/<KEY>-…`) → `docs/plans/<KEY>-story.md`: frontmatter `status` and
+   its `### Phase N` blocks; the ticket state per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+   No key or no plan is a fact to state in one line, not an error.
+3. `gh pr view --json number,state,reviewDecision,mergeStateStatus` and
+   `gh pr checks --required`. Read them now; a status from before the last push is stale.
+4. `git log --oneline origin/<default>..HEAD` (at most 10) plus the uncommitted diff, boiled down to
+   what changed and why.
+5. Agents or background tasks this session still runs (`ListAgents` where available). A running
+   worker turns "nothing to do" into "wait for X".
 
 ## Output
 
 ```text
-STANDUP — {KEY} · {branch}
-  story     {title} · {ticket-state} · phases {done}/{total}
-  pr        #{n} {state} · checks {n green / n red / pending} · review {decision}
-  tree      {clean | n dirty} · {ahead/behind}
-  in flight {worker names, or —}
-
-  ACHIEVED  {≤3 lines: what is now true that was not — a number, a merged PR, a closed ticket}
-  NEXT      {story key(s) and the command that starts them — or: epic closed, nothing queued}
-  OPEN      {at most three items someone owes, each with an owner — or: nothing}
-
-  YOUR MOVE
-  → {the one action, with the command}          # or: nothing — {why}
+STANDUP — <KEY> · <branch> · PR #<n> <state> · CI <green|n red|pending> · tree <clean|n dirty>
+ACHIEVED  <≤ 3 lines: what is now true — a merged PR, a green gate, a closed phase>
+NEXT      <story key(s) and the command that starts them — or: nothing queued>
+YOUR MOVE <one action with its command — or: nothing, because …>
 ```
 
-`OPEN` is work, not knowledge: a thing worth knowing goes in the plan or the state file, never
-here. More than three items under `OPEN` means the story is not finished — say that instead.
-
-## Rules
-
-- **The verdict is one item, never a menu.** Two candidates → name the one that unblocks the
-  other, and put the second behind it.
-- **"Nothing to do" is a complete answer** — print it plainly instead of inventing a chore.
-- Report a missing source (no `gh`, no plan, no ticketing) as a named gap; never fill the hole
-  with an inference.
-- Never write, never dispatch, never transition. A status that changes state is not a status.
+- The move is one item. With two candidates, name the one that unblocks the other.
+- More than three things owed means the story is not finished: say that instead of a list.
+- A missing source (no `gh`, no plan, no ticketing) is named as a gap, never filled by inference.
+- The session title should carry the ticket key; if it does not, print `/rename <KEY>` once.

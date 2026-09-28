@@ -37,8 +37,8 @@ SOURCE = Path(__file__).resolve().parent / "statusline.js"
 # bake this machine's username into a file users mirror between machines.
 COMMAND = "node ~/.claude/we-statusline.js"
 
-# The three verdicts /we:setup Step 4b branches on. Keep them short and keep both
-# sides in sync — scripts/validate-consistency.py asserts the skill names each one.
+# The three verdicts /we:setup § 5 Statusline branches on. Keep them short and keep both
+# sides in sync with that section.
 VERDICT_OFFER = "offer to install"
 VERDICT_ACTIVE = "already active"
 VERDICT_KEEP = "keep theirs"

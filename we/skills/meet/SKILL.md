@@ -5,123 +5,64 @@ description: >
   Solo skill. Triggers: "/we:meet", "vision meeting", "epic meeting", "run a meeting".
 ---
 
-# /we:meet
+# /we:meet — a Council meeting at one altitude
 
-**Purpose:** Run one of four structured Council meetings, each at its own APO altitude:
+You run one meeting: load the item, convene `/we:council` if the user wants it, and decompose the item into the next altitude down.
+A meeting writes no file, creates no ticket and writes no code. It ends with the synthesis, the decomposition and the next verb printed.
+The Solo verb at the same altitude folds the result into the doc; the Solo verb one altitude down formulates each child.
+Wanted stops: the council offer, the prioritisation with the user, the end. Every other status note goes with the next tool call.
 
-| Meeting             | Altitude | Input              | Output (decomposes into) | Hand-off               |
-| ------------------- | -------- | ------------------ | ------------------------ | ---------------------- |
-| `vision`            | Vision   | a PRD / vision     | Sagas                    | `/we:vision` (refine PRD), then `/we:saga` per Saga |
-| `saga`              | Saga     | a Saga / theme     | Epics                    | `/we:saga` (refine Saga), then `/we:epic` per Epic |
-| `epic`              | Epic     | an Epic / one bet  | Stories                  | `/we:epic` (refine Epic), then `/we:story` per Story |
-| `story`             | Story    | a Story / ticket   | a build-ready plan       | hands off to `/we:story` (Solo) for the plan write |
+Altitudes, rosters and the synthesis headings: `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md`.
 
-A meeting is a *facilitated workflow*; the **council** (`/we:council`) is the deliberation engine each meeting convenes. The meeting produces synthesis + decomposition; the activity skills (`/we:vision`, `/we:saga`, `/we:epic`, `/we:story`) produce the artifact at each altitude. The Build pipeline (`/we:orchestrate`) is downstream of `/we:story` and is not a meeting type.
-
-For the methodology source of truth, see [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) (altitude map, meeting summaries, roster defaults) and [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) (council mechanic + role lenses).
-
-## Invocation
-
-```
-/we:meet vision [topic-or-prd]
-/we:meet saga   [saga-or-topic]
-/we:meet epic   [epic-or-ticket]
-/we:meet story  [ticket-or-topic]
-        [--council | --no-council]
-        [--council=role1,role2,…]   # explicit roster override
+```text
+/we:meet vision|saga|epic|story [target] [--council | --no-council | --council=role,role]
 ```
 
-If no meeting type is given, list the four and ask which one.
+No type given: list the four and ask which one.
 
 ## How every meeting runs
 
-1. **Resolve the meeting type** from the first argument (`vision` / `saga` / `epic` / `story`).
-2. **Council decision** — unless a flag forces it:
-   - `--council` → convene it. `--no-council` → run solo.
-   - Neither flag → **offer it**: *"Convene the council for this {type} meeting? [y/n]"*. No "complexity" guessing — always a plain offer.
-   - **Env-flag preflight (before offering council):** check `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (see `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`). Missing → **skip the council offer**, run the meeting solo, and name the loss explicitly with the remediation hint. Present → proceed with the offer.
-   - If convened → invoke the council via `Skill(skill="council", args="\"<framing question>\" --meeting=<type>")`. The topic and the `--meeting` flag are passed in the `args` string; the council skill parses them. Note: `/we:council` runs a live Agent Team — invoking it inline is correct, but it is not instantaneous; expect ~5 min wall-time per council convened. The roster for the type comes from `.weside/config.json` `council.meetings.<type>` (see "Council rosters" below). Feed the synthesis into the meeting workflow.
-3. **Run the meeting workflow** for the type (see the four sections below).
-4. **Close out** — vision/saga/epic produce a written summary artifact (the final step of each workflow) and offer to persist it; story instead hands off to `/we:story` (Solo) per its workflow. The APO convention for persisted artifacts is the flat `docs/plans/` directory (e.g. `docs/plans/<saga>-saga.md`, `docs/plans/<saga>-<epic>-epic.md`) for Saga-and-below, `docs/plans/<vision>/PRD.md` for the Vision.
+1. **Load** the target and its parent doc per the type below. Read the instruction files and ADRs the
+   topic touches before framing: a council framed on a wrong assumption argues about the wrong thing.
+2. **Council.** `--council` convenes, `--no-council` runs solo, `--council=…` convenes with that roster.
+   No flag: ask "Convene the council for this <type> meeting?" as a plain offer; never guess from
+   complexity. Convene with `Skill(skill: "we:council", args: "\"<framing question>\" --meeting=<type>")`,
+   or `--council=<roles>` in place of `--meeting` for an explicit roster. It takes a few minutes.
+   A council that aborts on its preflight leaves the meeting solo: say which lenses are missing.
+3. **Decompose** with the user, using the synthesis's Agreement and Tension. Name dependencies and the
+   first child to formulate.
+4. **Close** with one message: the synthesis's `## Recommendation`, the child table (name, one-line
+   purpose, acceptance shape or success signal, order, dependencies), the decisions the user made, and
+   the hand-off below. Run the Solo verb in the same session: its brief carries the synthesis and the
+   table verbatim.
 
-## Council rosters
+## vision → Sagas
 
-The per-meeting rosters come from `.weside/config.json` key `council.meetings.<type>`; the
-shipped defaults are the ones `/we:setup` Step 5.1 writes into that block (the single owner of
-the default values). Override per call with `--council=role,role,…`. Role resolution — including
-the legacy-key fallback (`saga`←`initiative`, `story`←`refinement`, pre-v2.28 configs) and the
-no-config fallback roster — is owned by `we/skills/council/SKILL.md` Step 2.
+Frame: "Why does this product exist, and who is it for? Which Sagas does that imply?" Load the PRD
+`docs/plans/<vision>/PRD.md`. The council pressure-tests the bets: is the audience real, is the change
+ambitious enough, what are we ignoring. Derive 3–5 candidate Sagas; the user marks which are active.
+Hand-off: `/we:vision` to fold the Saga bets into the PRD, then `/we:saga "<name>"` per Saga.
 
-**Member source is inherited.** A meeting convenes `/we:council`, so `loadCouncilFromWeside`
-applies here too (semantics: council Step 3, the single owner). No separate meeting-level switch.
+## saga → Epics
 
-## Meeting: vision
+Frame: "Does this Saga serve the PRD, and which 3–6 Epics deliver the bet, in what order?" Load
+`docs/plans/<saga>-saga.md` and the PRD. Each Epic is finishable and coherent, its slug starts with the
+Saga slug. Hand-off: `/we:saga <saga> refine` to fold the Epic set in, then `/we:epic "<name>"` per Epic.
 
-**Frame:** *"Why does this product exist, and who is it for? Which Sagas does that imply?"*
+## epic → Stories
 
-1. Load the inputs — the existing PRD (`docs/plans/<vision>/PRD.md`) if any, plus market / strategic context the user brings.
-2. (Council) — convene if chosen; pressure-test the bets ("is the audience real?", "is the change ambitious enough?", "what are we ignoring?").
-3. Identify candidate **Sagas** — coherent long-running bets implied by the Vision.
-4. Prioritise them with the user; mark which are active this year.
-5. Artifact: a vision-meeting summary — the Sagas, the priorities, the reasoning. Offer to persist as `docs/plans/<vision>-vision-meeting-<YYYY-MM-DD>.md` or fold the Sagas into the PRD via `/we:vision`.
+Frame: "What is the smallest version that delivers the win, and which Stories build it?" Load
+`docs/plans/<epic>-epic.md` (or the ticketing Epic) and its Saga. Worth it when the scope is
+contentious, seams compete or the order is unclear; for a well-formulated Epic with sketched Stories,
+go straight to `/we:story` instead. Each Story is a tracer bullet: end to end through every layer, one at
+a time, never one layer per Story. Before locking the cut, check for an enabling change that makes
+several Stories easy; it becomes the first Story. The meeting produces names and acceptance shape, never
+a build-ready plan. Hand-off: `/we:epic <epic> refine` to fold the cut into `## Sequencing`, then
+`/we:story "<name>"` per Story.
 
-**Hand-off prompt** (printed to the user at close): *"The Sagas are named. Run `/we:vision` to sharpen the PRD with the new Saga bets, then `/we:saga "<name>"` per Saga to formulate each one."*
+## story → a build-ready plan
 
-## Meeting: saga
-
-**Frame:** *"Where do we want to be in a meaningful while on this Saga? Which Epics does it break into, in what order?"* (Size by bet shape, not by calendar — see `/we:saga`.)
-
-1. Load the Saga (`docs/plans/<saga>-saga.md`) or the working draft.
-2. (Council) — convene if chosen; ask "does this Saga actually serve the PRD, or is it a side quest?" and "what are the 3-6 Epics that, in sequence, deliver the bet?".
-3. Decompose the Saga into **Epics** — each a finishable, coherent deliverable (size by bet shape, not time window).
-4. Sequence the Epics; name dependencies; identify the first one to commit to.
-5. Artifact: a saga-meeting summary — the Epic set, sequencing, dependencies, open questions. Offer to persist as `docs/plans/<saga>-saga-meeting-<YYYY-MM-DD>.md` or fold the Epics into the Saga doc via `/we:saga`.
-
-**Hand-off prompt:** *"The Epics are named and sequenced. Run `/we:saga` to lock the Saga doc, then `/we:epic "<name>"` per Epic to start formulating the first one."*
-
-## Meeting: epic
-
-**Frame:** *"What is the concrete thing we will deliver with this Epic, and what Stories does it break into?"*
-
-**When this meeting adds value:** the Epic scope is contentious or unclear; multiple architecture seams compete; you want multi-voice pressure-testing before committing to stories; the story sequencing is uncertain. **Skip it** when the Epic is well-formulated and stories are already sketched in the Epic doc — go directly to `/we:story <KEY>` per Story instead.
-
-1. Load the Epic — `docs/plans/<saga>-<epic>-epic.md`, or a ticketing-tool Epic, or the working topic.
-2. (Council) — convene if chosen; pressure the slice ("is this the smallest version that delivers the win?", "what's the risk-driven sequence?", "where do we cut if the work runs long?").
-3. Decompose the Epic into **Stories** — each a **tracer bullet** (see `${CLAUDE_PLUGIN_ROOT}/references/design-vocabulary.md`): a sprint-sized slice that runs end-to-end through every layer, never a layer-per-Story cut. Before locking the cut, run the prefactoring check: is there a small enabling change that would make several Stories easy? ("Make the change easy, then make the easy change") — if so, it becomes the first Story.
-4. Sequence the Stories; identify which one to refine first; flag any that need a Council pass via `/we:meet story`.
-5. Artifact: an epic-meeting summary — the Story list with acceptance shape, sequencing, dependencies. Offer to persist as `docs/plans/<saga>-<epic>-epic-meeting-<YYYY-MM-DD>.md` or fold the Story breakdown into the Epic doc via `/we:epic`.
-
-**What this meeting produces vs. what you still need:** The meeting produces Story names and acceptance *shape* (rough AC, sequencing). You still need `/we:story <KEY>` per Story to write the build-ready implementation plan — the Council never produces that.
-
-**Hand-off prompt:** *"The Stories are named. If the Epic doc already reflects them, go directly to `/we:story "<name>"` per Story to write the build-ready plan. If not, run `/we:epic` first to fold the story breakdown into the Epic doc, then `/we:story` per Story."*
-
-## Meeting: story
-
-**Frame:** *"Is this Story's scope clear, and what does the build-ready plan look like?"*
-
-1. Load the Story — a ticket key, a draft, or a concrete topic.
-2. (Council) — convene if chosen (default = offer); pressure-test scope and acceptance ("is the AC obvious?", "is there a defensible alternative implementation we should consider?", "what's the smallest version that still delivers user value?").
-3. Consolidate the scope with the user — what is in, what is out, the shape of the Story.
-4. **Hand off to `/we:story`:** print the instruction *"Scope is clear — now run `/we:story <ticket-or-topic>` to write the plan."*
-   Do **not** call `Skill(skill="story")` inline — `/we:story` (Solo) is a large interactive skill; invoking it inline inflates context. The hand-off is an explicit instruction to the user.
-
-The story meeting is the natural upgrade path for `/we:story` (Solo) when the Story is contentious enough to warrant two perspectives before the plan crystallises. For routine Stories, `/we:story` alone is fine.
-
-## Rules
-
-- **Always offer the council** (unless a flag decides) — never infer "complexity".
-- **story hands off by instruction**, not by inline `Skill()` call. Same rule for vision/saga/epic when they hand off to the corresponding Solo skill.
-- **Degrade gracefully** — no council configured, no weside: the council falls back to generic agents (handled by `/we:council`), or the meeting runs solo. If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is missing, skip the council offer and run the meeting solo, naming the loss explicitly (see Step 2 env-flag preflight).
-- A meeting produces **decomposition + a synthesis**, not code and not the artifact itself. The Solo skill at the same altitude writes the artifact; the Solo skill at the next altitude down picks up the decomposition.
-- Implementation is `/we:orchestrate`. Meetings never call it.
-
-## References
-
-- `we/skills/council/SKILL.md` — the deliberation engine a meeting convenes
-- `we/skills/vision/SKILL.md` — Vision-altitude Solo
-- `we/skills/saga/SKILL.md` — Saga-altitude Solo
-- `we/skills/epic/SKILL.md` — Epic-altitude Solo
-- `we/skills/story/SKILL.md` — Story-altitude Solo (what `/we:meet story` hands off to)
-- `we/skills/orchestrate/SKILL.md` — Build pipeline (downstream of Story; not a meeting type)
-- `we/skills/CLAUDE.md` — Activity-vs-Meeting design rationale
-- [`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md) + [`docs/concepts/companion-framework.md`](../../../docs/concepts/companion-framework.md) — methodology + council mechanic
+Frame: "Is the scope clear, and which of the defensible implementations do we take?" Load the ticket
+with its comments, or the topic. For a contentious Story: unclear ACs, a 50/50 implementation choice,
+repeated bounce-backs from Build. Settle in, out and the shape with the user. Hand-off:
+`/we:story <ticket-or-topic>`, which runs the interview with the synthesis as input and writes the plan.

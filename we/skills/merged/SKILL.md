@@ -1,116 +1,108 @@
 ---
 name: merged
 description: >
-  Close out a merged PR — verify the merge, tear down its worktrees, branches
-  and processes, tickets to Done, refresh the epic mirror and state file, then
-  name only what is still open. Use when the user says "/we:merged", "merged",
+  Close out a merged PR: verify the merge, tear down its worktrees, branches and processes, move
+  the landed tickets to Done, then name only what is still open. Triggers: "/we:merged", "merged",
   "gemergt".
 ---
 
-# /we:merged — the close-out after a human merged
+# /we:merged — close-out after a human merged
 
-The human merged; everything mechanical that follows is yours. This is `/we:orchestrate` Step 10
-as a standalone skill, so it also serves a `--solo` run, a `/we:pr` that landed, or a branch
-somebody merged from the GitHub UI while you were elsewhere.
-
-**The closing report is three lines, not a retrospective.** The user just merged — they want to
-know what is still owed, not what happened. Reach for `/we:retro` when the lesson is the point.
+1. Confirm `gh pr view <N> --json state` says `MERGED` before deleting anything; `OPEN` or `CLOSED` → report and stop.
+2. Tear down only this PR's worktrees, branches and processes; anything foreign or dirty stays and is named.
+3. Move every ticket whose work landed in this PR to Done and read the status back.
+4. The report is three to six lines of what someone still has to do. It is not a retrospective.
+5. Never merge, release, or file a ticket on your own. Follow-ups are named in the report, not created.
 
 ## Invocation
 
 ```
-/we:merged                 # the PR of the current branch, or the one this session opened
-/we:merged 3798            # a specific PR number
-/we:merged --keep-worktrees  # tickets + state only; leave the trees on disk
+/we:merged                   # the PR of the current branch, or the one this session opened
+/we:merged 3798              # a specific PR number
+/we:merged --keep-worktrees  # tickets and record only; the trees stay on disk
 ```
 
-Free text after the number is an instruction ("… lass den Integrationsbaum stehen", "… PROJ-2139
-bleibt offen") — honour it over the defaults below.
+Free text after the number is an instruction ("lass den Integrationsbaum stehen", "PROJ-139 bleibt
+offen"). It overrides the defaults below.
 
-## Step M1 — Verify the merge before touching anything
+## 1 · Verify the merge
 
 ```bash
-gh pr view <N> --json state,mergedAt,mergeCommit,headRefName,title
+gh pr view <N> --json state,mergedAt,mergeCommit,headRefName,title,body,commits
 ```
 
-**`state` must be `MERGED`.** `CLOSED` is not merged and `OPEN` means the user is ahead of
-GitHub — say which one you found and stop; deleting the branch of an unmerged PR destroys work
-that exists nowhere else. No `gh`, or no PR at all: fall back to `git branch --merged <default>`
-and say once that the merge is inferred from git rather than confirmed by GitHub.
+- `MERGED`: continue and note the merge commit for the report.
+- `OPEN`: the user is ahead of GitHub. `CLOSED`: the PR was closed without a merge. Say which and stop.
+  Deleting an unmerged branch destroys work that exists nowhere else.
+- No `gh` or no PR: fall back to `git branch --merged <default-branch>` and say once that the merge
+  is inferred from git, not confirmed by GitHub.
 
-Note the merge commit — the state file and the ticket both want it.
+## 2 · Find what this PR owns
 
-## Step M2 — Find what this run owns
-
-Read the state file (`docs/plans/<key>-state.md`) if there is one: it names the integration
-branch, the chunk branches and their worktrees. Without one, derive from git:
+The PR gives the ticket keys: its `headRefName`, its body and its commit subjects. The story plan
+`docs/plans/{KEY}-story.md` names the chunk branches, when there were any. Then list the trees and branches:
 
 ```bash
 git worktree list
-git branch --list 'feat/<KEY>-*'
+git branch --list '*<KEY>*'
 ```
 
-**Only the trees and branches of THIS run.** A worktree whose branch belongs to another key is
-another session's, live or not — never remove it, and say in the report that you left it.
-`otherrepo-PROJ-2136-p1` is not yours because it sits next to yours in the listing.
+A worktree or branch carrying another key belongs to another session, even when its name looks
+like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the report that you left it.
 
-## Step M3 — Tear down, in this order
+## 3 · Tear down, in this order
 
-1. **Processes first.** A worktree removed under a running server leaves an orphan holding a
-   port. `ss -ltnp` for the repo's ports, then `ls -l /proc/<pid>/cwd` per candidate: a cwd
-   marked `(deleted)` or pointing into a tree you are about to remove is yours to kill **by
-   PID**. A live cwd in a foreign tree belongs to another session — coordinate, never kill.
-   Never `pkill -f <pattern>`; it matches its own command line.
-2. **Check each tree is clean** — `git -C <path> status --porcelain`. A worker's untracked
-   `WORKER-REPORT.md` is expected and not a reason to keep the tree; anything else is unmerged
-   work, so leave that tree standing and name it in the report.
-3. **Remove the worktrees**, then `git worktree prune`.
-4. **Delete the branches, local and remote.** `git push origin --delete` answers
-   `remote ref does not exist` for a branch GitHub already deleted on merge — that is success,
-   not an error.
+1. **Processes.** Find the repo's listening ports with `ss -ltnp`, then check `ls -l /proc/<pid>/cwd` for each candidate.
+   A cwd inside a tree you are about to remove, or marked `(deleted)`, is yours: `kill <pid>`.
+   A cwd in a foreign tree belongs to another session and stays. Never `pkill -f <pattern>`,
+   which matches its own command line and exits 144.
+2. **Check each tree:** `git -C <path> status --porcelain`. An untracked `WORKER-REPORT.md` is
+   expected. Anything else is unmerged work: leave that tree and name it.
+3. **Remove the worktrees**, then `git worktree prune`. A repo with its own worktree-removal verb (one that also
+   drops the tree's database fork) uses that verb. That verb also kills a running agent-browser Chrome. If another session is
+   driving agent-browser, use `git worktree remove` and name the leftover database fork in the report.
+4. **Delete the branches**, local (`git branch -D`) and remote (`git push origin --delete <branch>`).
+   `remote ref does not exist` means GitHub already deleted the branch on merge. That counts as success.
 
-## Step M4 — Tickets to Done
+`--keep-worktrees` skips this whole teardown section.
 
-Every story that landed in this PR, not just the one in the branch name — the state file's
-roster is the list. Transition, then **verify** by reading the status back; a transition that
-silently failed is the failure mode this step exists for (`references/ticketing.md`).
+## 4 · Tickets to Done
 
-Done is legitimate here because the human's "merged" is the word the DoD asks for. A story whose
-work did **not** land in this PR stays where it is.
+Move every story whose work landed in this PR. The branch name alone can miss some, so take the
+full list from step 2. A story whose work did not land stays where it is. The human's "merged"
+is the word the DoD asks for, so Done is legitimate here.
 
-## Step M5 — Refresh the record
+Ticketing tool, in priority order: weside MCP (`execute_tool` with `JIRA_*`), then Atlassian MCP
+(`jira_*`), then `gh issue` (no status, so skip the move), then none (skip silently).
 
-- **State file:** one row — merged, the merge commit, what teardown did. Then move anything the
-  run still owes into an *Open after the merge* section, because the state file outlives the
-  session.
-- **Epic mirror:** when the story has an `epic:`, refresh that epic's mirror table with the
-  merged PR (`/we:epic`), so the next wave's roster does not re-offer a shipped story.
-- **Plan:** if it still describes an intention rather than what was built, correct it now —
-  the next agent reads the plan, not the diff.
+- Find the matching transition. Names vary ("Done", "Fertig", "Erledigt").
+- Transition first, comment second, in two calls. A transition's `comment` field wants
+  Atlassian Document Format, so prose in it fails the whole transition.
+- Read the status back. On a silent failure, retry once with a different transition name. If
+  the workflow rejects the move, report it and continue.
+- Jira comments are Wiki Markup, not Markdown.
 
-**Where these commits land is a repo fact** (`.weside/orchestrate.md`), and the main worktree is
-shared: `git -C <main-worktree> branch --show-current` immediately before committing there.
-Another session may have switched it to its own branch, and a plan commit on a stranger's feature
-branch is invisible until their PR merges. Equally, do not push a shared worktree that carries
-another session's unpushed commits — commit yours, say it is unpushed, and let them push.
+## 5 · Refresh the record
 
-## Step M6 — Say what is still open, briefly
+- **Plan:** if `docs/plans/{KEY}-story.md` still describes an intention rather than what was built, correct it.
+  The next agent reads the plan, not the diff.
+- **Epic mirror:** if the story has an `epic:`, update that story's row in the epic's mirror block
+  per `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block (status bucket, `Plan` column,
+  `updated:`, one `## Updates Log` line), so the next roster does not offer a shipped story again.
+- **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
+  the report (owner decision 2026-09-25).
+- **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
+- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Never push a tree that carries another session's unpushed commits.
 
-Three to six lines. Only what someone has to **do**:
+## 6 · Report what is still open
 
-- rounds a receipt named as owed (a live round, a device round) — these are the usual ones;
-- a deploy or release the merge does not perform by itself;
+Three to six lines, and only what someone has to do:
+
+- rounds a receipt names as owed, such as a live round, a staging round or a device round;
+- a deploy or release that the merge does not trigger on its own (`a release <env> <bump>` is the user's word);
 - a decision the PR put to the user;
-- a follow-up ticket the run created.
+- follow-ups found along the way, named with a recommendation. They are never filed without the user asking;
+- trees, branches or processes left standing, and why.
 
-Cut anything that is merely true: what the PR contained, which gates were green, how many tests
-ran. If nothing is open, say that in one line — that is the best possible answer and it should
-read like one.
-
-## Rules
-
-- **Verify, then delete.** Every teardown step follows a confirmed `MERGED`.
-- **Never touch another run's worktree, branch or process**, however similar the name.
-- **Never merge, never release.** The human merged; a deploy is their next word, not your
-  initiative — offer it in the report if the repo needs one.
-- Tickets move only for stories that actually landed in this PR.
+Leave out anything that is merely true: what the PR contained, which gates were green, how many
+tests ran. If nothing is open, say so in one line.

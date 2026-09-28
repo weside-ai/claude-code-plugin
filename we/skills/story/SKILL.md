@@ -5,354 +5,114 @@ description: >
   Triggers: "/we:story", "new story", "refine story", "acceptance criteria".
 ---
 
+# /we:story — Story (Solo) at the Feature-slice altitude
 
-# Story (Solo) — Product Owner at the Story altitude
+You turn one sprint-sized change into an approved plan `docs/plans/{TICKET}-story.md` plus a minimal ticket.
+Read the repo's instruction files and decision records before the first question; ask the user only what they cannot answer.
+The interview runs in this session; a `we:dev-high` agent running `/we:refine` writes the plan.
+Wanted stops: one interview question at a time, and the approval. Every other status note goes with the next tool call.
+After the approval you run step 5 straight through, print the next verb and stop: no branch, no build.
 
-You produce or sharpen one Story — a sprint-sized feature slice with a build-ready plan. This is
-the Solo half of the Story altitude; the Council half is `/we:meet story`, which hands off here.
-Upstream `/we:meet epic` decomposes Epics into Stories; downstream the plan goes to
-`/we:orchestrate {TICKET}`, which reads it as a dispatch contract. Altitude map:
-[`docs/concepts/meetings.md`](../../../docs/concepts/meetings.md).
+Plan contract (frontmatter, sections, the refined scan): `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md`.
+Epic work belongs to `/we:epic` or `/we:meet epic`. A contentious story goes through `/we:meet story`, which hands
+off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
-**Epic-altitude work** (formulating or refining an Epic) belongs to `/we:epic` (Solo) or
-`/we:meet epic` (Council), never here.
-
----
-
-## Prerequisites
-
-```
-Read("${CLAUDE_PLUGIN_ROOT}/quality/dor.md")
-Read("${CLAUDE_PLUGIN_ROOT}/references/verification.md")
-Read("${CLAUDE_PLUGIN_ROOT}/references/long-running.md")
-```
-
-**Repo-local DoR (additive):** resolve the repo root (`git rev-parse --show-toplevel`) and read
-`<repo-root>/.weside/dor.md` if it exists — its rows apply *on top of* the plugin DoR, never
-instead of it. Each repo-local row gets its own labelled line (`**<Row name>:** …`) appended to
-the plan's `## Constraints and Pins`, because `/we:orchestrate` gates on it and names the failing
-row — one fixed home, so the gate knows where to look.
-
-**Glossary:** read `CONTEXT.md` at the repo root if it exists, and use its canonical vocabulary in
-the **ticket and the plan** (never its `_Avoid_` terms).
-
----
-
-## Your Output
-
-| What | Where | Detail Level |
-|---|---|---|
-| User Story | Ticket (minimal) | "As X I want Y so that Z" |
-| **Plan** | `docs/plans/{TICKET}-story.md` | Acceptance Criteria, Technical Approach, Phases, Tests |
-
-`{TICKET}` is the ticketing key — for GitHub Issues the bare issue number, so `gh issue view
-{TICKET}` keeps working; with no ticketing tool, a kebab-case slug of the story title. The same
-token names the plan file, the frontmatter `story:`, the checkpoint and the branch: pick it at
-the first step that names it (Step 1 when refining, the ticket creation when creating) and never
-vary it. Detection: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
-
-## Modes
-
-| Invocation | What changes |
+| Invocation | Mode |
 |---|---|
-| `/we:story {TICKET}` | refine an existing Story — all steps below |
-| `/we:story "description"` | create: run Step 2 first, then create the minimal ticket (Step 5.3's body), then Steps 3–5 |
-| `/we:story` (no argument) | ask what the user wants to build, then as above; if several Stories emerge, work them one at a time — establish the parent Epic first via `/we:epic` |
+| `/we:story {TICKET}` | Refine an existing story: steps 1–5. |
+| `/we:story "description"` | Create: steps 1–5; the ticket is created in step 5. |
+| `/we:story` | Ask what the user wants to build, then create. Several stories → one at a time, the parent epic first via `/we:epic`. |
 
----
+## 1. Load — before the first question
 
-## Step 1: Load
+- **Key.** `{TICKET}` is the Jira key, the bare GitHub issue number, or a kebab-case slug without ticketing; it
+  never varies. Tool detection, reading and moving tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+  Print `/rename {TICKET}` once when the session title is not already the key.
+- **Ticket with all comments.** Comments carry the later corrections. Note the newest comment's id for
+  `comments_read_through`. `epic:` is the ticket's parent key; plan-only, the slug of the
+  `docs/plans/*-epic.md` that lists the story.
+- **Existing plan.** Read it in full; the refiner edits it in place and keeps its Design Decisions rows.
+- **Decision records.** The instruction file chain (`AGENTS.md`, else `CLAUDE.md`), the repo rules for the paths
+  the story touches, the ADR directory, the epic plan, `.weside/dor.md`, the vision (the PRD
+  `docs/plans/*/PRD.md` that `/we:vision` writes; none → `.weside/vision.md`; neither → no vision check), and the
+  glossary the instruction file names (else `CONTEXT.md`). The most frequent correction in past sessions was a
+  wrong assumption about the environment or an earlier decision; these files hold both.
+- **Code.** The seam the story names: the code graph where `.weside/config.json` → `tools.graphify` is true,
+  else `rg` on the identifiers.
 
-**Name the window first** — `${CLAUDE_PLUGIN_ROOT}/references/session-name.md`: the ticket key
-— the `/rename {TICKET}` line printed once; the tmux window follows the title by hook. The
-window's purpose just changed; its name follows.
+## 2. Understand — the interview
 
-Fetch the ticket from the ticketing tool — **including its comments** (they carry corrections and
-agreed edge cases the description doesn't; newest statement wins on conflict):
-`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`. Note the newest comment's id or timestamp; it
-becomes the plan's `comments_read_through:`, which is how a later Lead tells "the comments have
-overtaken this plan" from "this plan already answered them". Take `epic:` from the ticket's parent
-key — with no ticketing tool, from the slug of the `-epic.md` plan that lists this story.
+- The discipline of `/we:grill`: one question per turn, each with your recommended answer; what the repo
+  answers is looked up, not asked.
+- A decision already on record is stated with its source ("ADR-0065 settles this: …"), not asked again. Ask
+  when two records disagree, or when the record predates the change the ticket describes.
+- A vague "why": the first question is what success looks like. ACs come after the goal is clear.
+- A tension with the vision (step 1) or the epic's `## Success Criteria` (older epics: `## Success Metrics`) is named.
+- A resolved term becomes a glossary line (`${CLAUDE_PLUGIN_ROOT}/skills/grill/references/context-format.md`); collect
+  the lines and write them in step 5's commit.
+- **Too big — which kind?** Independent slices with separate user value and separate PRs are epic-sized: write
+  the slice cut, the sequencing and the alternative the user rejected as one comment on the existing ticket,
+  print `/we:epic {TICKET}` and stop. One coherent change with several phases (a refactor, a multi-layer fix,
+  a migration) stays one story with a phased plan.
+- The interview ends when every branch that shapes an AC has an answer or a recorded default.
 
-If `docs/plans/{TICKET}-story.md` exists, read it in full and refine **in place**, preserving its
-Design Decisions rows; otherwise you are writing a new one.
+## 3. Write the plan — `we:dev-high`
 
-## Step 2: Understand (INTERACTIVE)
+Open the scratch worktree `<scratch>/plan-{TICKET}` per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 1–2 (repo fact first).
 
-Clarify scope, requirements and edge cases **grill-style**: one question at a time, each with your
-recommended answer, and read the codebase for anything discoverable there. When a fuzzy or
-conflicting term gets resolved, offer to record it in the project glossary (`CONTEXT.md`, see
-`/we:grill`) — offer to create the file if it does not exist, and write it in Step 5.1's commit.
+Dispatch `Agent(subagent_type: "we:dev-high", description: "refine {TICKET}", prompt: <brief>)`. Plan-writing
+is a named `dev-high` case (Foxy 27.09.); the session's own `medium` default would otherwise write it. The brief:
 
-If `.weside/vision.md` exists, or a Companion is connected via weside MCP, check the story against
-it and name any tension you find. No vision configured → skip silently.
+- first line: `Read ${CLAUDE_PLUGIN_ROOT}/skills/refine/SKILL.md and follow it.` (the path as it resolves here);
+- the absolute target path inside the scratch worktree, `{TICKET}`, `epic`, `depends_on`, `comments_read_through`;
+- every decision from the interview with the alternative rejected and who decided, the user's answers verbatim,
+  what the user cares about most;
+- the records and files you read, with the one line each settled;
+- create mode: "no ticket yet — work from this brief; step 5 replaces the slug with the new key".
 
-**Brainstorming first if requirements are vague.** When the summary is vague or the "why" is
-unclear, establish intent BEFORE scoping ACs. With the `superpowers` plugin available, invoke its
-`brainstorming` skill; otherwise ask targeted questions — "What does success look like?", "What
-are you actually trying to enable?", "What's the simplest version of this?". Scope ACs only once
-you understand the goal.
+A `blocked` report carries a fork: ask the user that one question with the refiner's recommendation, then
+`SendMessage` the answer to the same agent; it keeps its context.
 
-**When the work feels too big for one build pass, ask *which* kind of big.** Two shapes hide
-under "too big":
+## 4. Approval
 
-- **Many independent slices** (separate features, separate user value, separate PRs) → genuinely
-  Epic-sized. Do not research further: write the slice cut, the sequencing constraint and the
-  decision (including the alternative the user rejected, and why) as a ticket comment, print —
-  never invoke — `/we:epic {TICKET}`, and STOP. If no parent Saga exists, say so in the same
-  line; `/we:epic` will ask for one.
-- **One coherent change with several phases** (a refactor, a multi-layer fix, a migration) → this
-  stays a **single Story** with a phased plan, run by `/we:orchestrate {TICKET}`. Splitting a
-  coherent change into N stories just to dispatch it multiplies overhead the work does not need;
-  the phase decomposition and `parallel_groups` carry the structure instead.
+1. Run the refined scan (`${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan) with `rg` on
+   the file, and check for `## Open Fork`.
+   A failure goes back to the refiner via `SendMessage`, not to the user.
+2. Present in one message: the absolute plan path, the refiner's digest (ACs one line each, phases with their
+   risk, decisions the user did not state), and what step 5 will do (ticket created or updated, where the
+   commit lands).
+3. Feedback → `SendMessage` to the refiner, scan again, present again.
 
-## Step 3: Create Plan (EnterPlanMode)
+Plan mode is not used: the Agent tool gives a subagent the parent's permission mode, and plan mode would stop
+the refiner from writing the file.
 
-**Architecture context.** With TurboVault MCP:
+## 5. After approval — straight through
 
-```
-mcp__turbovault__semantic_search("topic of this story")
-mcp__turbovault__advanced_search(query, frontmatter_filters=[{key:"domain", value:"<relevant-domain>"}])
-```
+1. Set `status: approved`. Write the collected glossary lines.
+2. **Ticket** (skip without ticketing):
+   - Create mode: create exactly this one ticket. Rename the file to the new key and set `story:`.
+   - Move it to the repo's plan-approved state (`.weside/orchestrate.md` § Ticket states; else the state meaning
+     refined, not started; ask once when the names are ambiguous): `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+   - Description is the minimal body:
 
-Without it, say once — "⚠️ TurboVault unavailable — using grep fallback; architecture context may
-be incomplete. Check the MCP config." — then `Grep(pattern="<topic keyword>", include="*.md")` and
-`Glob(pattern="docs/architecture/**/*.md")`. Reference what you find in the plan's Technical
-Approach.
+     ```markdown
+     ## User Story
+     As <role> I want <feature> so that <benefit>.
 
-**Blast radius.** When `.weside/config.json` → `tools.graphify` is true — or the file is absent
-and `graphify --version` answers, which is the un-set-up repo's case — ground the per-phase
-`Files:` lists and the `parallel_groups` decision in the code graph — identifier-style terms
-(`ChannelAdapter`, `DispatchService`), not prose:
+     ## Plan
+     Implementation Plan: docs/plans/{TICKET}-story.md
+     ```
 
-```bash
-graphify affected "<identifier>" --relation calls --depth 2
-```
+   - One comment only when the plan overrides a statement in the ticket or its comments, naming each override;
+     set `comments_read_through:` to that comment's id.
+   - No other ticket, and no question whether to create one. Side findings from the interview go into the output as a list (Foxy 25.09.).
+3. Scan again, then commit, push and clean up per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 4–6: files
+   `docs/plans/{TICKET}-story.md` plus the glossary file if changed, subject
+   `docs({TICKET}): story plan — <title>`.
+4. Output, then stop:
 
-When neither holds, derive the lists with `rg` on the same identifiers and write
-"`Files:` lists are grep-derived — no code graph" into the plan's Technical Approach, so the Lead
-knows how much the disjointness guard is worth.
-
-**Session context → plan.** Distil the conversation into the Context section (a narrative brief
-for a colleague who wasn't in the room — the most important section for the implementing agent)
-and into the Design Decisions table (every alternative discussed and why it was rejected).
-
-The frontmatter parser is hand-rolled and strips no `#` comment — a trailing comment becomes part
-of the value, and `depends_on: []  # optional` parses as a dependency key nothing can satisfy.
-Emit these lines **bare**; the meanings are below, not beside them.
-
-- `epic:` — REQUIRED when the story belongs to an Epic. `/we:orchestrate`'s ready-set filters on
-  it, and a missing value makes the story invisible. Omit the line entirely for standalone stories.
-- `depends_on:` — story keys that must merge first; `[]` when none.
-- `comments_read_through:` — the newest comment you read, or `none`.
-- `parallel_groups:` — `[[N, M], …]`; see the independence check below.
-
-```markdown
----
-type: story-plan
-story: {TICKET}
-epic: {EPIC-SLUG-OR-KEY}
-depends_on: []
-comments_read_through: {newest comment id or timestamp, or none}
-created: YYYY-MM-DD
-status: draft
-parallel_groups: []
----
-
-# Plan: [Story Title]
-
-## Context
-
-[Narrative brief, 3-8 sentences, no bullets: what problem, why NOW, what the user cares about
-most, constraints that aren't obvious from the code, what the design discussion settled.]
-
-## Acceptance Criteria
-1. **Given** [context] **When** [action] **Then** [result]
-
-## User Journey
-> **This story is only DONE when the user can experience the journey end-to-end.**
-
-1. [Starting point] 2. [Action] 3. [Result] 4. [Close]
-
-## Testing Requirements
-- Unit tests for [X]
-- Integration tests for [Y] — name the runnable suite and the database, not just the type, and
-  say which phase each belongs to when they differ (the Lead interpolates them per chunk)
-
-## Verification
-> How this will be observed running — not inferred from green tests. The build turns this into
-> the PR's `## Verification` receipt. See `references/verification.md`; commands live in
-> `<repo>/.weside/verify.md` — absent → say so once and propose it under Documentation Impact.
-
-- **Oracle:** the highest rung the ACs demand, plus every lower rung you also assert
-  (`ui + cli`, `cli`, `substitute`, `not-applicable`) — *why each*
-- **Seed:** [the command that puts the system in the state to observe]
-- **Asserted:** [what has to be true — endpoint + field, or route + label]
-- **Not proven:** [what this oracle cannot show, and who owes it]
-- **Exit criterion:** [what someone else could run to decide "done"]
-- **Missing CLI verb:** [name it if the seed or the assert needs a verb the repo lacks — and say
-  which phase ships it, as early as that phase's own dependencies allow; if it cannot be first,
-  say why]
-
-Audit the verbs `.weside/verify.md` already lists against the ACs before you conclude none is
-missing: **a verb that cannot go red is as absent as one that does not exist.** Name it under
-*Missing CLI verb* when the existing verb observes a different thing than the AC claims.
-
-## Technical Approach
-**Patterns:** [relevant patterns]
-
-## Implementation Phases
-
-### Phase 1: [Name]
-- **Goal:** [achieved outcome]
-- **Files:** [affected files — including what the change *causes* to change: generated artifacts
-  (OpenAPI spec, generated clients, snapshots) and the existing test files whose call sites it
-  breaks (`rg` the symbol under the test trees)]
-- **Risk:** ordinary | migration | money | auth | tenant-isolation — [why, and on *what*: the
-  table, the money path or the isolation boundary the chunk touches]
-- **Approach:** [how]
-
-### Phase 2: [Name]
-...
-
-## Constraints and Pins
-**Constraints:** [conventions and primitives this change must compose]
-**Pins:** [existing behaviour that must not change, named precisely enough to conflict against]
-
-## Design Decisions
-
-| Decision | Alternatives Considered | Why This |
-|----------|------------------------|----------|
-| [what we chose] | [what we didn't choose] | [reasoning] |
-
-## Code Guidance
-**DO:** [pattern to follow]
-**DON'T:** [anti-pattern to avoid]
-
-## Security Review Required
-[Yes/No] — [reason]
-
-## Documentation Impact
-> Where does the knowledge land? A cascade — most stories stop at the first line, and
-> "the code carries it" is a complete answer. Full contract: `quality/dod.md` § Documentation.
-
-- **Docstrings** — [which files/symbols hold the reasoning once this lands — the default]
-- **Architecture doc** — [only if interplay across modules changes: which doc, what changes]
-- **ADR** — [only if hard to reverse ∧ surprising ∧ a real trade-off]
-- **Generated** — [API spec/types, CLI reference, registers to regenerate]
-- **New doc** — [name it only with the reason the code cannot hold it]
-```
-
-> **Always decompose into real phases — even for a small story.** A phase is a self-contained,
-> independently-committable chunk with its own `**Files:**` list; the phases ARE the structure
-> both downstream skills read. Don't collapse a multi-step change into one mega-phase.
->
-> **Independence check (fill `parallel_groups`):** phases with **disjoint files** and **no
-> ordering dependency** may share a group — e.g. `parallel_groups: [[2,3]]`. `/we:orchestrate`
-> reads a group as: every phase outside a group runs serially in plan order, a group starts only
-> after every lower-numbered phase has **merged**, and at most 2 chunks run concurrently inside
-> it. Size groups accordingly, and when in doubt keep the list empty — prose like "these can run
-> in parallel" is invisible to the consumer.
-
-## Step 4: User Approval (ExitPlanMode)
-
-Feedback → adjust and present again, as often as it takes.
-
-## Step 5: Post-Approval — EXECUTE IMMEDIATELY
-
-⛔ **ExitPlanMode approval means "run Step 5", not "stop and summarize".** Run these in order.
-
-0. **Resolve the main worktree** — the plan belongs where `main` is checked out, not in the
-   feature worktree you may be standing in. Shell state does not survive between tool calls, so
-   **print the path and use it literally** in every step below:
-   ```bash
-   git worktree list --porcelain | awk '/^worktree /{p=$2} /^branch refs\/heads\/main$/{print p; exit}'
+   ```text
+   Plan: docs/plans/{TICKET}-story.md (<sha> on <branch>). Ticket: <state>.
+   Next: /we:orchestrate {TICKET}
+   Not filed: <one line per side finding, only when there are any>
    ```
-   Empty output means no worktree is on `main`: say so, skip step 4, and keep going.
-1. **Save plan:** write the approved plan to `<main-worktree>/docs/plans/{TICKET}-story.md` with
-   `status: approved` and `story: {TICKET}` in the frontmatter. (`~/.claude/plans/` is temporary;
-   `docs/plans/` is permanent.) Write the accepted `CONTEXT.md` glossary entry, if any, now.
-2. **Scan what you wrote:** run the 3-item check in
-   `${CLAUDE_PLUGIN_ROOT}/references/dor-scan.md` against the file. A failure means fix the plan
-   — never skip ahead to the checkpoint.
-3. **Ticket, in one pass** (`references/ticketing.md`): transition it to the repo's ready state —
-   the state named in `.weside/orchestrate.md` if that file exists, otherwise the one meaning
-   *refined, not yet started*; ask once when the board's names are ambiguous — verify the move,
-   then set the description to the minimal body below and add ONE comment naming each
-   contradiction you resolved and each question you parked. Set the summary too when it carries a
-   glossary `_Avoid_` term — it is the field every board and roll-up shows — and say in the
-   comment that you rewrote it. No ticketing tool → skip silently.
-   ```markdown
-   ## User Story
-   As [role] I want [feature] so that [benefit].
-
-   ## Plan
-   Implementation Plan: docs/plans/{TICKET}-story.md
-   ```
-   Anything beyond this template follows `${CLAUDE_PLUGIN_ROOT}/references/ticket-briefs.md`.
-3b. **Re-open `<main-worktree>/docs/plans/{TICKET}-story.md`** and set `comments_read_through:` to the id of the comment you just
-   posted — it is the newest now, and the marker means "everything through my answer". A
-   frontmatter value; the step-2 scan still holds.
-4. **Commit the plan** — one failure mode per message, so a wrong diagnosis never sends the
-   reader to the wrong place:
-   ```bash
-   cd <main-worktree> || exit
-   git add docs/plans/{TICKET}-story.md && git add CONTEXT.md 2>/dev/null
-   git commit -m "docs: add {TICKET} plan — {Story Title}" || \
-     { echo "WARN: commit failed (hook rewrite?) — re-add and commit by hand."; exit; }
-   git push || echo "WARN: committed locally, push failed (branch protection?) — push by hand."
-   ```
-5. **Checkpoint:** `WE_ROOT=${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/*/we/[0-9]* 2>/dev/null | sort -V | tail -1)}; python3 "$WE_ROOT/scripts/orchestration.py" story checkpoint {TICKET} refined`
-   — the line derives the plugin root itself; in a checkout of the plugin repo set `WE_ROOT`
-   to that checkout first, or the installed copy's checkpoint DB is written instead.
-6. **Vault links (TurboVault only):** run `mcp__turbovault__suggest_links` on the new plan doc and
-   offer each suggestion `[y/n]`. Skip silently without TurboVault.
-7. **Output + execution-surface recommendation** — decide dispatched vs. `--solo` per the
-   *Execution Surface* heuristic below, put the **recommended** shape on the `Recommended next:`
-   line and the other one in the parenthetical, then emit:
-   ```
-   Plan saved to docs/plans/{TICKET}-story.md. /we:story DONE.
-   State file: docs/plans/{TICKET}-state.md (the Lead creates it on the first run).
-
-   Recommended next: /we:orchestrate {TICKET} [--solo]   ← <one-line why: phases N, parallel waves {…}, context-hygiene, or Agent Teams off>
-   (or <the other shape> if you'd rather run it the other way — with Agent Teams off, say what
-    enabling it would unlock instead, because dispatch cannot run.)
-   ```
-   Print the `/loop` invocation when `references/long-running.md`'s trigger fires, and **add** its
-   `/goal` line below when the story also meets the critical bar — printed, never invoked. When
-   the plan's `## Verification` does not yet name a
-   scriptable oracle, print it anyway with the blocker named on the line above it, and make the
-   first round's job to make the oracle scriptable.
-
-⛔ **STOP after Step 5.** Story + Plan is the whole job — no implementation, no branch, no
-auto-continue to `/we:orchestrate`. The user invokes the next surface.
-
----
-
-## Execution Surface — recommend dispatched vs. `--solo`
-
-Both run the same plan through the same pipeline; they differ in *who holds the work*.
-
-| | `/we:orchestrate {TICKET} --solo` | `/we:orchestrate {TICKET}` (phase dispatch, Mode B) |
-|---|---|---|
-| **Shape** | one autonomous pass in the caller's session | Lead dispatches each phase as a work-chunk, integrates onto one branch, runs CI once → one PR |
-| **Best for** | trivially straight-line work — one phase, small diff | anything worth splitting into phases; parallelisable phases; a coherent change big enough that inline would bloat the caller's context |
-
-**Recommend `/we:orchestrate`** when ANY holds: the plan has 2+ real phases; `parallel_groups` is
-non-empty; it is a coherent multi-layer/refactor/migration change; or the caller benefits from
-context-hygiene plus neutral review (true even for a *small monolith*). **Recommend `--solo`**
-for a genuinely trivial, straight-line single-phase story — a typo, a one-function fix, a config
-tweak — where dispatch overhead buys nothing, **and whenever Agent Teams is disabled** (the env
-flag in `${CLAUDE_PLUGIN_ROOT}/references/agent-teams.md`; ask when you cannot read it): dispatch
-aborts on orchestrate's own prerequisites there, so `--solo` is the only shape that runs. Say so,
-and say that enabling Agent Teams unlocks the other one.
-
----
-
-## Rules
-
-- **Plans are living.** When the story belongs to a multi-wave programme, its DoD includes
-  rewriting this plan to match what was actually BUILT before the PR merges, and updating
-  `docs/plans/<epic>-state.md` in the same PR — the next agent reads the plan, not the diff, and
-  after a compact that agent is you. See
-  `${CLAUDE_PLUGIN_ROOT}/references/programme-discipline.md`.

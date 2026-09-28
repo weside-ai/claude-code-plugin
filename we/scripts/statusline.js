@@ -148,7 +148,7 @@ process.stdin.on('end', () => {
 
     // Git branch
     // A Lead runs from the main worktree while the work lives elsewhere. If the
-    // session declared a focus (written by /we:orchestrate at Step 5.6), show
+    // session declared a focus (written by /we:orchestrate § Push, PR, CI), show
     // that — cwd would name a branch nobody in this session is working on.
     let focus = null;
     try {

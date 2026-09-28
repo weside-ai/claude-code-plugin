@@ -1,11 +1,10 @@
-# CONTEXT.md Format
+# Glossary format (`CONTEXT.md`)
 
-The project glossary at the repo root. A pure glossary — never a spec, scratch pad, or home for implementation decisions.
-
-## Structure
+Used only when a repo has no glossary yet. A pure glossary at the repo root: never a spec, a scratch pad or a home
+for implementation decisions.
 
 ```md
-# {Context Name}
+# {Context name}
 
 {One or two sentences: what this context is and why it exists.}
 
@@ -14,23 +13,14 @@ The project glossary at the repo root. A pure glossary — never a spec, scratch
 **Order**:
 A request to purchase, from placement to fulfilment.
 _Avoid_: Purchase, transaction
-
-**Customer**:
-A person or organization that places orders.
-_Avoid_: Client, buyer, account
 ```
 
-## Rules
-
-- **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others under `_Avoid_`.
-- **Keep definitions tight.** One or two sentences max. Define what it IS, not what it does.
-- **Only project-specific terms.** General programming concepts (timeouts, error types, utility patterns) don't belong, even if used extensively.
-- **Group under subheadings** when natural clusters emerge; a flat list is fine otherwise.
-- **Create lazily.** No `CONTEXT.md` yet → create it when the first term is resolved.
-
-## Multi-context repos (rare)
-
-A repo with several bounded contexts puts a `CONTEXT-MAP.md` at the root listing each context's `CONTEXT.md` location and the relationships between them. Infer which context the current topic belongs to; ask if unclear.
+- **Be opinionated.** Several words for one concept → pick the best, list the others under `_Avoid_`.
+- **Tight definitions.** One or two sentences; what the term IS, not what it does.
+- **Project terms only.** General programming concepts stay out, however often they are used.
+- **Group under subheadings** when clusters emerge; a flat list is fine otherwise.
+- **Several bounded contexts** (rare): a `CONTEXT-MAP.md` at the root lists each context's `CONTEXT.md` and how
+  they relate. Infer which context the topic belongs to; ask when unclear.
 
 ---
 

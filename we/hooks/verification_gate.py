@@ -18,7 +18,8 @@ Deliberately narrow:
     `--web` types its body in a browser we cannot read — the gate is armed against
     one spelling of the action.
 
-Contract: `references/verification.md`. Repo recipes: `.weside/verify.md`.
+Contract: `skills/story/references/plan-format.md` § Verification (the four labels) and
+`references/worker-dispatch.md` § Finish sequence. Repo recipes: `.weside/verify.md`.
 """
 
 from __future__ import annotations
@@ -119,7 +120,8 @@ _WHERE = (
     "`**Asserted:**` and `**Not proven:**`.\n\n"
     "If the plan carries no such block, verification did not happen. Say so and stop; do not "
     "write a receipt for a run that did not take place.\n\n"
-    "Contract: the `we` plugin's references/verification.md. Repo recipes: .weside/verify.md."
+    "Contract: the `we` plugin's skills/story/references/plan-format.md § Verification. "
+    "Repo recipes: .weside/verify.md."
 )
 
 

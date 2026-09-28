@@ -1,170 +1,104 @@
 ---
-name: worker-dispatch-reference
-description: Worker contract, engine backends, the AC-review rule, the bug-hunt dispatch matrix, integration-branch pattern, and verify-before-integrate discipline. Referenced by /we:orchestrate and /we:develop. Loaded on demand.
+name: worker-dispatch
+description: How the Lead picks and dispatches a dev worker, the dev-only worker contract, the finish sequence before the first push, and the report. Shared by /we:orchestrate and /we:develop.
 ---
 
-# Worker Dispatch Reference
+# Worker dispatch
 
-This document defines the three worker backends, the dev-only worker contract,
-the AC-review rule, the bug-hunt dispatch matrix, and the integration-branch /
-single-CI pattern. For Codex-specific dispatch mechanics (the single-detach
-rule), see [`codex-dispatch.md`](codex-dispatch.md).
+The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
+worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
 
-**Two separate checks, two separate owners.** AC-review (`we:ac-reviewer`) asks
-"does this satisfy the Story's acceptance criteria and our DoD?" — the Lead runs it
-once, gating, at integration (and per chunk only where `review.cross` asks for it).
-Bug-hunt asks "does this diff actually work?" — and that question belongs to the repo's
-CI review gates on the PR, not to a local pass. Never run a bug-hunt per chunk, never run
-one locally; never skip the AC-review at integration.
+## Choosing the worker
 
----
+- Dispatch shape: `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
+  Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
+  `effort:` overrides it (red arm, 27.09.2026).
+- Default `we:dev-medium`. `we:dev-high` for: a promise that must hold across several code paths
+  ("always", "exactly once"); transactions, money or idempotency; a fix routing around a fragile
+  path; the second attempt after a failed worker; plan-writing (Foxy 27.09.2026). The Lead writes
+  the reason as one line in `description`. A clearly bounded single fix stays medium: the bench
+  (n = 27) found no difference there, and high costs about a third more time and money.
+- Implementation never runs on Sonnet (Foxy 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
+  chunk the Lead names mechanical (a rename, a generated file, a gate run).
+- Codex is not a dispatch backend: its subscription ends by 11.10.2026 and it reviews only
+  advisory (Foxy 27.09.2026).
+- One implementer per story is the normal case. Parallel workers saved no net time in 48 of 54
+  measured runs, because waves ran in series and integration ate the gain. Run two in parallel
+  only when the union of their plan `**Files:**` lists does not intersect and the contract between
+  them already exists on the base branch. Migrations, lockfiles, generated artifacts
+  (`openapi.json`, typed clients) and gate baselines always serialize.
+- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches.
 
-## Three worker backends
+### What `isolation: "worktree"` does (Claude Code 2.1.283)
 
-| Backend | How dispatched | When to use |
-|---|---|---|
-| **Claude** (Opus; Haiku/Sonnet only for mechanical chunks) | `Agent(subagent_type: "we:dev-medium", prompt: "…")` inline (or `we:dev-high`, § Effort rule) | Default — always available, no extra config |
-| **Codex** | `codex-companion.mjs task --write --cwd <worktree> "…"` | When `tools.codex` is `true` and user confirms; see [`codex-dispatch.md`](codex-dispatch.md) |
-| **Foreign engine** | `we/scripts/worker-launch.sh --engine <name> --cwd <worktree> -- <brief>` | When `.weside/engines.local.json` has a profile for that engine; requires Anthropic-compatible endpoint |
-
-**Claude workers are the default; a non-Claude backend needs the user's word in this run.**
-`.weside/config.json` `execution.default` (`claude-opus` / `claude-sonnet` / `claude-haiku` / `codex` /
-`<engine-name>`) records what `/we:setup` wrote — for `codex` and for a named engine that is a
-*candidate*, never a standing licence. Dispatch to one only when the user names it for this run:
-in the invocation ("… mit codex"), at the per-chunk confirm, or as a mid-run steer; that pick
-then stands for the rest of the run. Every other case — key absent, unreadable, or naming a
-non-Claude backend with no user word — runs `claude-opus`. A Claude tier in `execution.default`
-dispatches without asking: that choice is between Claude tiers, not between engines.
-
-Bug-hunt routing is untouched by this rule — the cross-engine table below keys on who *wrote*
-the code, not on who was allowed to.
-
-**Model-tier rule (single owner):** plan-writing runs on **`opus`** — the refine lane
-(`/we:refine` workers, and an interactive `/we:story` session) produces the plan every
-downstream worker follows, so a weak plan is paid for N times over. **Dev** chunks default to
-`opus` too — implementation is not a place to save on the model; `haiku` or `sonnet` only for
-mechanical/boilerplate chunks (a rename, a generated file, a pure gate run) that the Lead names as such.
-
-**Effort rule (single owner):** every Claude worker is dispatched with an explicit effort, so the
-user's session effort never becomes the worker's by accident — `subagent_type="we:dev-medium"`
-or `"we:dev-high"` (both `model: opus`; the agent file's `effort:` overrides the session).
-**Default `we:dev-medium`.** The Lead picks `we:dev-high` on its own judgement and writes the
-reason as one line in the dispatch. Criteria (Opus 5.5 bench, stages 1–2, n = 27): a promise
-that must hold across several code paths ("always", "exactly once", "never twice") — medium built
-the main path and missed the side path that breaks it; transactions, money or idempotency —
-medium was likelier to slip in a risky commit; a fix that has to route around a fragile path;
-the second attempt after a failed worker. A clearly bounded single fix stays `we:dev-medium` —
-there the bench found no difference, and `high` costs ~⅓ more time and money. **Refine/plan workers run
-`we:dev-high`** until the control run on real stories shows otherwise. A mechanical chunk names
-its model explicitly (`haiku`/`sonnet`) and so is exempt.
-
----
+- The worktree branches from `origin/<default-branch>` (setting `worktree.baseRef`, default
+  `fresh`). Run `git fetch origin` before the dispatch, or the worker starts from a stale base.
+- The branch is named `worktree-<name>` with `/` rewritten to `+`. The worker renames it to the
+  branch the brief names before its first commit.
+- `isolation` and `cwd` are mutually exclusive. A worker for an existing tree (the integration
+  worktree) gets `cwd=<path>` instead.
+- The result returns the worktree path and branch. A worktree without changes is removed.
+- All worktrees share one `.git`: a worker's local branch is visible to the Lead without a push.
+- The repo's `post-checkout` bootstrap may not have fired. The worker runs the bootstrap from
+  `.weside/orchestrate.md` itself and checks it before the first gate.
 
 ## Dev-only worker contract
 
-Workers run one chunk of a Story. They stop at commit + push — no PR, no CI, no
-ticket work. That is the Lead's responsibility after integrating.
+- The brief outranks every default in `/we:develop`. The worker names each override in its report.
+- A brief never overrides a stop. The worker stops and reports `blocked` when the plan carries an
+  unanswered `## Open Fork`, when a ticket comment changes the scope after the plan, when the same
+  gate fails three times, or when the work needs a product decision, a money-path redesign or a
+  foreign subsystem's redesign.
+- The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges a branch, or
+  edits files outside its chunk. It pushes only when the brief says `Push: yes`.
+- The worker implements the plan's phases in order, inline, and never fans implementation out to
+  sub-agents: one worktree has one git index, and a second committer races `.git/index.lock`.
+- The worker commits per phase and stages by path, never `git add -A`. Every commit carries
+  `Co-Authored-By: <Model> <noreply@anthropic.com>` for the model actually running; the Lead never
+  re-signs a worker's commit.
+- Local gates: the repo's linter, formatter and type-checker on the changed files, plus only the
+  tests the change affects (importers of the touched code, its callers' tests, the contract suites
+  when a route or boundary changed). Never the whole suite; CI runs it. A test needing a database or
+  a network service is skipped and listed, unless the brief names an integration suite for a
+  critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
+  last 20 lines in the report.
+- Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
+  branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
+  question, so the Lead can revert it. The worker never creates tickets.
 
-**What every worker does (regardless of backend):**
+## Finish sequence (the last writer, before the first push)
 
-1. **Locate plan** — read `docs/plans/<story>/` (or chunk brief if dispatched headlessly)
-2. **Implement** — the assigned phases/files, respecting the plan's Constraints and Pins,
-   and the test discipline the brief states (the Lead reads `test_discipline` from
-   `.weside/config.json` and spells the level out in every brief so a detached worker
-   needs no reference; level semantics: `test-discipline.md`)
-3. **Commit per phase** — atomic commits with a clear message referencing the Story/chunk
-4. **Local gates** — lint, type-check, affected tests; fix gate failures before pushing
-5. **AC-check own diff** (when `review.cross: true`, Agent teammates only) — see below
-6. **Push** branch
-7. **Report** — structured summary: what changed, gate results, any fork decisions, blockers
+The session or worker that writes last on the PR branch runs this once over
+`git diff origin/<default-branch>...HEAD`, committing after each step:
 
-Workers **must not**: open PRs, run CI, transition tickets, merge branches, or modify
-files outside their assigned chunk scope.
+Invoke each through the Skill tool (`skill: "code-review"`, `args: "<effort>"`); a slash command
+written into a subagent prompt is not proven to run the skill (probe 27.09.2026).
 
----
+1. `code-review` at the build worker's effort (`high` when any chunk ran as `we:dev-high`, else
+   `medium`; final sim 28.09.2026: a medium review let two red Claude rounds through), then fix what it finds.
+2. `simplify`.
+3. `security-review` in addition when the diff touches money, auth or tenant isolation.
+4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
+   only (staging is a question to the human). The receipt goes into the plan's `## Verification`
+   with the four literal labels `**Oracle:**`, `**Seed:**`, `**Asserted:**`, `**Not proven:**`.
+   `not-applicable` is a valid receipt only with its reason.
+5. The plan rewritten to what was actually built (`skills/story/references/plan-format.md` § Lifecycle).
+6. The affected gates again, because steps 1–3 moved code.
 
-## AC-review rule
+Before starting a server, check who owns the single-owner ports (`ss -ltnp`, then
+`ls -l /proc/<pid>/cwd`): `(deleted)` is an orphan and yours to clear; a live cwd in your worktree
+is yours; a live cwd in another worktree belongs to another session, and you ask instead of
+killing. PPID 1 is normal for a detached dev server and proves nothing. Stop your server by PID,
+children included, the moment verification ends.
 
-`we:ac-reviewer` checks a diff against the Story's acceptance criteria and the DoD —
-never bugs. It runs at two points, same agent both times:
+## Report
 
-- **Per chunk** — against the worker's own diff, after the gates and before the push.
-  Informational, not a gate: the worker reads the findings and decides whether to fix;
-  findings go into the report either way. Agent teammates only — a Codex or foreign worker
-  cannot spawn `we:ac-reviewer`, and its findings would land in a branch-keyed `.reviews/`
-  the integration never reads.
-- **At integration** — against the full merged diff, once, gating. See
-  [`orchestrate/SKILL.md`](../skills/orchestrate/SKILL.md) Step 8.
-
-To disable the per-chunk pass (integration still gates): `review.cross: false` in
-`.weside/config.json`. `review.cross` governs only this per-chunk pass; the bug-hunt below
-always runs once at integration.
-
-## Bug-hunt
-
-**The bug-hunt is the repo's CI review gates.** Every reviewer in `.weside/config.json`
-`review.available` runs as a required check on the PR, over the full diff, independently of who
-wrote the code — so "the engine that did not write it hunts" is satisfied by construction
-wherever two engines are configured, and a single configured engine is what the repo chose. The
-Lead writes `review_passed` in the ci-review pass once every configured gate has concluded with
-no BLOCKING/WARNING left unfixed (`integration-pipeline.md` § One ci-review pass).
-
-There is no local pass before the PR. One used to run here — `/codex:adversarial-review` or
-Claude's native `/code-review`, picked by writer — and it asked the identical question a third
-time, on the scarcer engine's quota, before a PR existed to review; the only thing it bought was
-finding a defect one CI round earlier, for the same fix. Removed 2026-09-07 (downstream retro,
-council-tested).
-
-**The one residue, named so nobody inherits it silently:** a PR the review gates skip by their
-own rules — a dependency-bot PR, an author without write access, a reviewer whose repo variable is
-unset — gets no adversarial LLM review at all. That was true before the local pass was removed,
-because the local pass ran only inside an orchestrated story, but the gap is now the whole story:
-a Lead whose PR falls into that class says so in the PR body and does not write `review_passed`.
-
-Test anti-patterns (implementation-coupled, tautological, horizontal-slicing —
-[`test-discipline.md`](test-discipline.md)) are the CI reviewers' concern too; a repo's review
-prompt names them, and `we:ac-reviewer` does not hunt them.
-
----
-
-## Integration-branch pattern (Lead's responsibility)
-
-`/we:orchestrate` coordinates N workers on N chunk branches. After all workers report:
-
-1. **Verify each worktree actually changed** before integrating — `git -C <worktree> status` / `git log`.
-   A worker that reports success without commits or a dirty tree signals a lost dispatch.
-   Re-dispatch before integrating; never integrate an empty worktree.
-
-2. **Merge onto one integration branch** — `feat/<story>-integration` (created from the Story branch).
-   Resolve conflicts with the plan's Constraints and Pins as the source of truth.
-
-3. **Run CI once** on the integration branch — one PR, not N. The Lead reviews the
-   aggregated diff before creating the PR; workers never open PRs.
-
-4. **CI-fix loop** — if CI fails, the Lead fixes inline (or re-dispatches the owning
-   worker's chunk); no new PRs per fix.
-
----
-
-## Foreign-engine brief format
-
-When dispatching to a foreign engine via `worker-launch.sh`, the brief is a
-self-contained task description (the foreign model has no plugin context):
+The worker's final message is the report; the Agent result delivers it to the Lead. Fields:
 
 ```
-Story: <ticket or plan path>
-Chunk: <phase number(s) / coherent slice> — what "done" means
-Files: <the files this chunk owns; do NOT touch anything outside>
-Constraints: <conventions, primitives to compose, anti-patterns to avoid>
-Pins: <existing behaviour to preserve exactly>
-Tests: <the test_discipline level, spelled out — e.g. "write the failing test before the
-  code at each seam" (tdd) / "write tests after the code, same change" (tests-after) /
-  "no new tests unless stated in Chunk" (off). Always add: no implementation-coupled
-  tests, no tautological assertions, mock at system boundaries only.>
-Local gates: run lint + type-check + affected tests; fix failures before committing
-Done = <concrete checkable outcome — tests green / file:line exists / command exits 0>
-Report: diff summary + any fork decisions + gate results; do NOT open a PR.
+branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
+gates: <gate> ✓|✗|skipped(<why>) …
+ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
+finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
+overrides: … · skipped: … · questions: … · blockers: none|<reason>
 ```
-
-This is the same shape as the Codex chunk brief in [`codex-dispatch.md`](codex-dispatch.md),
-adapted for the direct `claude -p` invocation path.

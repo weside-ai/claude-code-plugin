@@ -44,7 +44,7 @@ jobs:
           done
 
       - name: Validate frontmatter
-        run: python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/commands/*.md we/agents/*.md
+        run: python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
 
       - name: Validate plugin structure
         run: bash scripts/validate-plugin-structure.sh
@@ -53,18 +53,16 @@ jobs:
         run: python3 scripts/validate-consistency.py
 
   tests:
-    name: Orchestration Tests
+    name: Plugin Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      # Tests import `orchestration` by module name — run from we/scripts so it
-      # resolves without packaging. No third-party deps (stdlib unittest only).
-      - name: Run unittest suite
-        working-directory: we/scripts
-        run: python3 -m unittest discover -p 'test_*.py' -v
+      - run: pip install pytest
+      - name: Run pytest over we/ (hooks and scripts)
+        run: python3 -m pytest -q we
 
   markdown-lint:
     name: Markdown Lint

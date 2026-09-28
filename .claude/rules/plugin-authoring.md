@@ -81,7 +81,7 @@ Every skill pays one of two costs: model-invocable skills pay **context load** (
 description sits in every session), user-only skills (`disable-model-invocation: true`) pay
 **cognitive load** (the user must remember they exist). Decision note (v3.5.0 audit): we keep
 nearly all skills model-invocable — the plugin leans on natural-language triggers ("retro",
-"where am I", "diagnose this") and on skill-to-skill dispatch (meet→council, setup→onboarding,
+"where am I", "diagnose this") and on skill-to-skill dispatch (meet→council, setup→council,
 orchestrate→develop), both of which require model invocation. Revisit per skill only when a
 skill gains a description with no trigger phrases.
 

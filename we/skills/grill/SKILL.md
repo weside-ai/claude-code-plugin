@@ -1,46 +1,50 @@
 ---
 name: grill
 description: >
-  One question at a time until every branch of a plan is resolved; sharpens CONTEXT.md, offers
+  One question at a time until every branch of a plan is resolved; sharpens the glossary, offers
   lean ADRs. Triggers: "/we:grill", "grill me", "stress-test this plan".
 ---
 
 # /we:grill
 
-Interview the user relentlessly about every aspect of the plan until you reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one by one.
+Interview the user about the plan until every branch of the design tree is resolved, dependencies first.
+One question per turn, each with your recommended answer: "I'd go with X because Y — agree?"
+Before each question, check whether the repo already answers it: code, instruction files, ADRs, plans, ticket comments.
+Questions are for judgement calls the repo cannot settle; a fact you can read is never a question.
+The grill ends when the user says so or no branch is left; then summarise the decisions in at most five lines.
 
-## The discipline
+## Discipline
 
-- **One question at a time.** Wait for the answer before the next question. Never present four options when one question with a recommendation does the job.
-- **Every question carries your recommended answer.** "I'd go with X because Y — agree?"
-- **Explore the codebase instead of asking** whenever the answer is discoverable there. Questions are for judgment calls, not for facts you can grep.
-- **Stress-test with concrete scenarios.** When domain relationships are discussed, invent edge-case scenarios that force precision about the boundaries between concepts.
-- **Cross-reference with code.** When the user states how something works, check whether the code agrees. Surface contradictions: "The code does X, but you just said Y — which is right?"
+- **Wait for the answer** before the next question. One question with a recommendation beats four options.
+- **A decision on record is cited, not asked.** "ADR-0065 decided X — I build on that." Ask only when two records
+  disagree or the record predates the change under discussion. A wrong assumption about the environment or an
+  earlier decision is the most frequent correction in past sessions.
+- **Stress-test with concrete scenarios.** Invent the edge case that forces a precise boundary between two
+  concepts.
+- **Cross-check what the user says against the code.** "The code does X, you said Y — which is right?"
 
-## Glossary discipline (CONTEXT.md)
+## Glossary
 
-The project glossary lives at the repo root as `CONTEXT.md` — a pure glossary, devoid of implementation details. Format: [references/context-format.md](references/context-format.md).
+The glossary is the file the repo's instruction file names (for example `GLOSSARY.md`); only when none exists,
+`CONTEXT.md` at the repo root, created with the first resolved term. Format for a new file:
+`${CLAUDE_PLUGIN_ROOT}/skills/grill/references/context-format.md`; an existing glossary keeps its own format.
 
-- **Challenge against the glossary.** When the user uses a term that conflicts with `CONTEXT.md`, call it out immediately: "Your glossary defines 'X' as A, but you seem to mean B — which is it?"
-- **Sharpen fuzzy language.** When a term is vague or overloaded, propose a precise canonical term and what to avoid.
-- **Update inline.** When a term is resolved, write it into `CONTEXT.md` right there — don't batch. Create the file lazily on the first resolved term if it doesn't exist.
+- A term that conflicts with the glossary is called out at once: "The glossary defines X as A; you mean B?"
+- A vague or overloaded term gets a proposed canonical term and the words to avoid.
+- A resolved term is written as soon as it is resolved, with a one-line note to the user. When you run inside
+  `/we:story`, hand the lines to its step 5 commit instead.
+- The glossary holds definitions only: no implementation detail, no spec, no scratch notes.
 
 ## ADRs — offer sparingly
 
-Only offer to record an ADR when **all three** are true:
+Offer an ADR only when all three hold: hard to reverse, surprising without the context, a real trade-off between
+genuine alternatives. Follow the repo's ADR directory: the newest ADR's file naming and its `TEMPLATE.md` if one
+exists. Without either, one paragraph (context, decision, why) in `docs/adr/NNNN-slug.md`.
 
-1. **Hard to reverse** — changing your mind later has meaningful cost.
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **A real trade-off** — there were genuine alternatives and one was picked for specific reasons.
+## The summary
 
-If any of the three is missing, skip the ADR. Use the project's own format (`docs/adr/TEMPLATE.md` if present); otherwise a single paragraph — context, decision, why — in `docs/adr/NNNN-slug.md` is enough. The value is recording *that* and *why*, not filling out sections.
-
-## Rules
-
-- ⛔ One question per turn — never a battery.
-- ⛔ Never write implementation details, specs, or scratch notes into `CONTEXT.md` — glossary only.
-- Glossary and ADR updates happen inline as decisions crystallise, with a one-line note to the user.
-- The grill ends when the user says so or when no unresolved branch remains — then summarise the resolved decisions in ≤5 lines.
+At most five lines, one decision each, with who decided. Inside `/we:story` the summary becomes part of the
+refiner's brief.
 
 ---
 
