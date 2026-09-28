@@ -29,6 +29,7 @@
       "matchUpdateTypes": ["patch", "minor", "major", "digest", "pin"],
       "groupName": "github actions",
       "automerge": true,
+      "recreateWhen": "always",
       "automergeType": "pr",
       "labels": ["automerge", "ci"]
     },
@@ -38,6 +39,7 @@
       "matchUpdateTypes": ["patch", "minor"],
       "groupName": "python tooling",
       "automerge": true,
+      "recreateWhen": "always",
       "automergeType": "pr",
       "labels": ["python", "automerge"]
     },
@@ -58,7 +60,8 @@
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "labels": ["security"],
-    "automerge": true
+    "automerge": true,
+    "recreateWhen": "always"
   },
   "commitMessagePrefix": "chore(deps):",
   "commitMessageAction": "update",

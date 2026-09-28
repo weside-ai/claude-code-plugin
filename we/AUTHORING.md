@@ -68,3 +68,8 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 For each v6 file: list its units, decide per unit (keep · shorten · replace by built-in · drop) with
 a reason, write the v7 file from those decisions. Record the decisions in the port note the Lead
 asks for. Do not copy a v6 file and trim it; start from the decisions.
+
+## Testing a revised skill
+
+Table-top first: two or three Opus agents trace every tool call of the skill against concrete world states
+(no execution) and list defects adversarially; repeat until the verdict stops moving. Then one live run.
