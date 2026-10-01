@@ -66,6 +66,14 @@ def _starts_a_command(argv: list[str], i: int) -> bool:
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s*verification\b", re.IGNORECASE | re.MULTILINE)
 _ORACLES = ("cli", "ui", "substitute", "not-applicable")
 _PLACEHOLDERS = frozenset({"", "-", "tbd", "todo", "n/a", "na", "none", "…", "..."})
+# The receipt's own field labels (plan-format.md § Verification). Only one of them ends
+# the value of the field before it: a nested `- AC 2 and 3: …` bullet is that value,
+# not a field. Pinned by test_nested_bullets_with_a_colon_belong_to_the_field.
+_FIELDS = ("oracle", "seed", "asserted", "not proven", "exit criterion", "missing cli verb")
+_NEXT_FIELD = re.compile(
+    rf"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*(?:{'|'.join(map(re.escape, _FIELDS))})\**[ \t]*:",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _line(body: str, name: str) -> str | None:
@@ -91,9 +99,7 @@ def _filled(body: str, name: str) -> bool:
             maxsplit=1,
             flags=re.IGNORECASE | re.MULTILINE,
         )[-1]
-        nxt = re.search(
-            r"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*\w[\w \-]*\**[ \t]*:", after[1:], re.MULTILINE
-        )
+        nxt = _NEXT_FIELD.search(after[1:])
         value = after[1 : nxt.start() + 1] if nxt else after[1:]
         value = re.sub(r"```+|~~~+", "", value).strip().strip("*_`| ").strip()
     if re.fullmatch(r"<[^<>]*>", value):
