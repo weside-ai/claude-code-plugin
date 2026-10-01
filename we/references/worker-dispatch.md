@@ -14,19 +14,22 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
   `effort:` overrides it (red arm, 27.09.2026).
 - Default `we:dev-medium`. `we:dev-high` for: a promise that must hold across several code paths
-  ("always", "exactly once"); transactions, money or idempotency; a fix routing around a fragile
-  path; the second attempt after a failed worker; plan-writing (Foxy 27.09.2026). The Lead writes
-  the reason as one line in `description`. A clearly bounded single fix stays medium: the bench
+  ("always", "exactly once"); transactions, money or idempotency; auth or tenant isolation; a fix
+  routing around a fragile path; the second attempt after a failed worker; plan-writing (Foxy
+  27.09.2026). The Lead writes the reason as one line in `description`; no reason, no `dev-high`
+  (01.10.2026: 9 of 121 dispatches named none). A clearly bounded single fix stays medium: the bench
   (n = 27) found no difference there, and high costs about a third more time and money.
 - Implementation never runs on Sonnet (Foxy 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
   chunk the Lead names mechanical (a rename, a generated file, a gate run).
-- Codex is not a dispatch backend: its subscription ends by 11.10.2026 and it reviews only
-  advisory (Foxy 27.09.2026).
-- One implementer per story is the normal case. Parallel workers saved no net time in 48 of 54
-  measured runs, because waves ran in series and integration ate the gain. Run two in parallel
-  only when the union of their plan `**Files:**` lists does not intersect and the contract between
-  them already exists on the base branch. Migrations, lockfiles, generated artifacts
-  (`openapi.json`, typed clients) and gate baselines always serialize.
+- Codex is not a dispatch backend; it reviews advisory only (Foxy 30.09.2026).
+- One implementer per phase group. Parallel workers saved no net time in 48 of 54 v6 runs, because
+  waves ran in series and integration ate the gain; a lone worker then ran 93–317 min serially over
+  phases with disjoint files (27.–30.09.2026). Run chunks in parallel when the plan's
+  `parallel_groups` say so, or when their `**Files:**` lists do not intersect and the contract
+  between them exists on the base branch. Contract first, then fan out: the chunk that lays down
+  schema, API and types merges into the integration branch, and the disjoint chunks start with
+  `Base: git merge <int>`. Migrations, lockfiles, generated artifacts (`openapi.json`, typed
+  clients) and gate baselines always serialize.
 - Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches.
 
 ### What `isolation: "worktree"` does (Claude Code 2.1.283)
@@ -76,8 +79,8 @@ written into a subagent prompt is not proven to run the skill (probe 27.09.2026)
 
 1. `code-review` at the build worker's effort (`high` when any chunk ran as `we:dev-high`, else
    `medium`; final sim 28.09.2026: a medium review let two red Claude rounds through), then fix what it finds.
-2. `simplify`.
-3. `security-review` in addition when the diff touches money, auth or tenant isolation.
+2. `security-review` in addition when the diff touches money, auth or tenant isolation.
+3. `simplify`.
 4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
    only (staging is a question to the human). The receipt goes into the plan's `## Verification`
    with the four literal labels `**Oracle:**`, `**Seed:**`, `**Asserted:**`, `**Not proven:**`.
@@ -85,11 +88,47 @@ written into a subagent prompt is not proven to run the skill (probe 27.09.2026)
 5. The plan rewritten to what was actually built (`skills/story/references/plan-format.md` § Lifecycle).
 6. The affected gates again, because steps 1–3 moved code.
 
+No step's output is the final message: its summary looks like a closing report, and two workers
+ended their turn there (30.09.2026). The turn ends with § Report.
+
 Before starting a server, check who owns the single-owner ports (`ss -ltnp`, then
 `ls -l /proc/<pid>/cwd`): `(deleted)` is an orphan and yours to clear; a live cwd in your worktree
 is yours; a live cwd in another worktree belongs to another session, and you ask instead of
 killing. PPID 1 is normal for a detached dev server and proves nothing. Stop your server by PID,
 children included, the moment verification ends.
+
+## Lead checks around a worker
+
+### Watchdog
+
+Armed at dispatch, one per worker: a background command (`run_in_background`) that exits on
+the first event, so the Lead reports and re-arms; 25 min stays under its default 30-min timeout:
+
+```bash
+H0=$(git -C <wt> rev-parse HEAD); S0=$(git -C <wt> status --porcelain | md5sum); T=$(date +%s)
+while :; do sleep 60; H=$(git -C <wt> rev-parse HEAD); S=$(git -C <wt> status --porcelain | md5sum)
+  [ "$H" != "$H0" ] && { git -C <wt> log --oneline -1; exit 0; }
+  [ "$S" != "$S0" ] && { S0=$S; T=$(date +%s); }
+  [ $(( $(date +%s) - T )) -gt 1500 ] && { echo "STALL 25 min: <name>"; exit 0; }; done
+```
+
+A commit becomes one status line to the human (phase done). A stall gets evidence (`git log -3`,
+`git status`, the agent's state) before any word about it. Three runs with it had 0 idle nudges
+by the human (#4308, #4326, #4328); without it a worker sat idle 7 h 47 min (#4299).
+
+### Independent review
+
+After the report, before the push. The worker's own `code-review` runs in the context that wrote
+the code. A fresh read-only `we:dev-<effort of the build>` with
+`cwd=<wt>` runs `code-review` over `git diff origin/<default>...HEAD` plus the plan's ACs and
+reports findings only; the Lead sends them to the original worker, which keeps one committer per
+worktree. On #4321 the fresh reviewer found 7 WARNING after the worker's own review (30.09.2026).
+
+### After each lane merge
+
+In the integration tree: the repo's type-checker on the files the merge changed (`git -C <int> diff --name-only HEAD^1 HEAD`) and the tests that import them (`rg -l` over
+the changed module names in the test trees). Red → fix before the next merge. Skipping it cost 14
+red tests at the finisher on #4310.
 
 ## Report
 

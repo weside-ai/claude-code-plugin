@@ -165,7 +165,7 @@ process.stdin.on('end', () => {
       ).trim();
     } catch (e) {}
 
-    const worktree = data.worktree?.name;
+    const worktree = data.worktree?.name || (focus?.dir ? path.basename(focus.dir) : undefined);
     const branchPlainFull = worktree ? `${branch || '(detached)'} (${worktree})` : branch;
 
     // PR — the host's own association first (it is authoritative when present),

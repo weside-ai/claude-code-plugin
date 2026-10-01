@@ -1,16 +1,16 @@
 ---
 name: codex-task
 description: >
-  Sends one task to Codex via the Codex plugin runtime; --background detaches it. Ends with the
-  Codex subscription (at the latest 11.10.2026). Trigger: "/we:codex-task".
+  Sends one task to Codex via the Codex plugin runtime; --background detaches it. Lives as long
+  as the Codex subscription. Trigger: "/we:codex-task".
 argument-hint: '[--background] <task text>'
 allowed-tools: Bash(node:*), Bash(ls:*)
 ---
 
 # /we:codex-task
 
-Ends with the Codex subscription: cancelled 27.09.2026, runs until 11.10.2026 at the latest; delete
-this skill then. Codex is no dispatch backend for `/we:orchestrate` (decision 27.09.2026).
+Lives as long as the Codex subscription; Foxy decides its renewal (30.09.2026), delete this skill
+when it ends. Codex is no dispatch backend for `/we:orchestrate` (decision 27.09.2026).
 
 1. Resolve the runtime:
    `CODEX_COMPANION=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)`.

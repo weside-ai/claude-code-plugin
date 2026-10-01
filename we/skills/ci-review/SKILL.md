@@ -11,7 +11,7 @@ Longer than 150 lines because the thread query and the gate checks are load-bear
 
 1. The gate is every required check (`gh pr checks $PR --required`, read live) concluded non-red, plus zero unresolved bot threads.
 2. A required reviewer's BLOCKING or WARNING is fixed. A skip needs cited evidence posted on the PR.
-3. Codex has been advisory since 2026-09-27 and runs only until the subscription ends (at the latest 2026-10-11). Only a Codex BLOCKING turns its check red. Fix a real defect it names, skip the rest with a cited line, and never spend a round on it alone.
+3. Codex is advisory, with no end date (Foxy 30.09.2026). Only a Codex BLOCKING turns its check red. Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; Foxy decides the subscription on these numbers.
 4. One round means collect, fix, validate locally, commit once, resolve the threads, and push once. Wait with `Monitor` or a background `gh pr checks --watch`, never a sleep loop.
 5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (merge, force-push, rebase). Every other status note goes in the same message as the next tool call.
 
@@ -148,13 +148,16 @@ with `cancel-in-progress: true` the push cancels the stale run. Wait for the tes
 - The default is at most three rounds. A budget the user states replaces that default, and you never raise it yourself.
 - **A repeat** is the same finding text on the same `file:line` after a fix aimed at it. It means the fix
   does not land where the reviewer looks: stop and report it. A new finding caused by your fix is a new row.
+- **A chain**: a second fix in a row that produces a new finding in the same function means the
+  contract is wrong. Change it (the verb, the signature, a parser instead of a regex) instead of
+  patching again, and say so in the report.
 
 Terminal states. Report exactly one:
 
 1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
    decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
    when the user asked for the merge itself ("bis gemerged"), wait on `gh pr view $PR --json state,mergedAt`
-   with `Monitor`, then report `MERGED` or green but not yet merged. You never run `gh pr merge` without the user's word.
+   with `Monitor`, then report `MERGED` or green but not yet merged. You never run `gh pr merge` without the user's word; `/we:orchestrate` arming `--auto` after green is that word, standing.
 2. **Cap reached, still red.** Report what is open and what you tried.
 3. **Blocked.** Infrastructure is red after a re-run, a required BLOCKING was skipped as wrong, or there are two migration heads.
    The PR needs a human.
@@ -163,7 +166,7 @@ When the user is away, take the safest branch, record the open question in the r
 
 ## 5 · Report
 
-- the findings table with the Action column (Fixed · Skipped with evidence · Re-run · Advisory skipped);
+- the findings table with the Action column (Fixed · Skipped with evidence · Re-run · Advisory skipped), and the Codex line from rule 3;
 - the push SHA, each required check's status, the terminal state, and the run ids you read. A status from before the push is not current;
 - the merge state in one line: `CLEAN`, `BEHIND`, `DIRTY` with the conflicting files, `BLOCKED`, or a lasting `UNKNOWN`;
 - 0 unresolved bot threads, and every human thread quoted verbatim;

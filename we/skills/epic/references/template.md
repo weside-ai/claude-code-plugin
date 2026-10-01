@@ -56,6 +56,18 @@ change. The decomposition meeting reads this first.>
 
 - <What Solo could not settle; fodder for /we:meet epic.>
 
+## Orchestration contract
+
+<Binding for every `/we:orchestrate` run on this Epic; the Lead asks only what it leaves open.>
+
+- **Rebuilding the context**, in this order: this file; git, PRs and tickets for the Epic's keys;
+  the state table per `/we:orchestrate` § State per story; the next Story's plan only.
+- **Upkeep after each event**, committed before the next Story: plan approved → mirror row +
+  Updates Log; PR merged → mirror, Updates Log, Learnings forward into the next plan; question
+  answered → answer where it applies, with who and when; Story re-cut → `## Sequencing` + mirror.
+- **Standing permissions:** <auto-merge, staging RC after one question, delegations to other sessions, secrets>.
+- **Stops for the owner:** <destructive operations with a count, product questions, money beyond the plan, uncertainty>.
+
 ## Updates Log
 
 - YYYY-MM-DD — created
