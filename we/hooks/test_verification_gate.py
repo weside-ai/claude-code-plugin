@@ -492,3 +492,29 @@ def test_a_not_applicable_reason_may_name_the_surfaces_it_lacks(armed: Path) -> 
     # M3
     text = "## Verification\n\n**Oracle:** not-applicable — docs only, no CLI and no UI surface.\n"
     assert refuse_body(armed, text) is None
+
+
+# --- a field's value ends only at the next receipt label ------------------------
+
+NESTED_ASSERTED = """## Verification
+
+- **Oracle:** cli
+- **Seed:** `weside widgets create --json`
+- **Asserted:**
+  - AC 1: 201 and a widget id
+  - AC 2 and 3: the list shows the widget, the count is 1
+- **Not proven:** device geometry
+"""
+
+
+def test_nested_bullets_with_a_colon_belong_to_the_field(armed: Path) -> None:
+    """`- AC 2 and 3: …` under `**Asserted:**` is its value, not the next field."""
+    filled = [gate._filled(NESTED_ASSERTED, n) for n in ("seed", "asserted", "not proven")]
+    assert filled == [True, True, True]
+    assert refuse_body(armed, NESTED_ASSERTED) is None
+
+
+def test_an_empty_asserted_before_the_next_label_does_not_pass(armed: Path) -> None:
+    text = "## Verification\n\n**Oracle:** cli\n**Seed:** `x`\n**Asserted:**\n**Not proven:** y\n"
+    assert not gate._filled(text, "asserted")
+    assert refuse_body(armed, text) is not None
