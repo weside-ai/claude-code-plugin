@@ -63,6 +63,8 @@ like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the
    driving agent-browser, use `git worktree remove` and name the leftover database fork in the report.
 4. **Delete the branches**, local (`git branch -D`) and remote (`git push origin --delete <branch>`).
    `remote ref does not exist` means GitHub already deleted the branch on merge. That counts as success.
+5. **Clear the statusline focus** when it names this PR: `rm -f ~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json`;
+   a stale file keeps a merged PR's number in the statusline.
 
 `--keep-worktrees` skips this whole teardown section.
 

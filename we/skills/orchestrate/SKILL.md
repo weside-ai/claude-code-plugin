@@ -43,7 +43,8 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
    Run state lives in that checklist, git and the ticket (Foxy 25.09.2026: no `docs/plans/*-state.md`).
    The task tools are not available in every session (absent in `claude -p`, measured 27.09.2026).
 5. An epic plan with `## Orchestration contract` binds the run: its rebuild order, upkeep table,
-   permissions and stops replace the defaults here. Ask only what it leaves open.
+   permissions and stops replace the defaults here. Ask only what it leaves open. A contract may
+   add stops; it never arms auto-merge earlier than § Close the run.
 
 ## State per story (first match wins)
 
@@ -154,7 +155,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`co
 ## Close the run
 
 - **Auto-merge is the default** (Foxy 30.09.2026): when `/we:ci-review` ends green, with every Codex
-  finding read, run `gh pr merge <PR> --auto` with the repo's merge method. Not before: Codex is no
+  finding read, run `gh pr merge <PR> --auto --merge` (`--squash`/`--rebase` when `.weside/orchestrate.md`
+  names it; gh refuses `--auto` without a method outside a terminal). Not before: Codex is no
   required check, and an early arm merges its finding unread. No auto-merge when the invocation
   says `--user-merge`, the diff touches a money path or a destructive migration, it adds a
   migration while another open PR adds one too, a follow-up still runs on the branch, or a

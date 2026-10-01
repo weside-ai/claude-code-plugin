@@ -65,7 +65,7 @@ change. The decomposition meeting reads this first.>
 - **Upkeep after each event**, committed before the next Story: plan approved → mirror row +
   Updates Log; PR merged → mirror, Updates Log, Learnings forward into the next plan; question
   answered → answer where it applies, with who and when; Story re-cut → `## Sequencing` + mirror.
-- **Standing permissions:** <auto-merge, staging RC after one question, delegations to other sessions, secrets>.
+- **Standing permissions:** <auto-merge (armed after `/we:ci-review` green), staging RC after one question, delegations to other sessions, secrets>.
 - **Stops for the owner:** <destructive operations with a count, product questions, money beyond the plan, uncertainty>.
 
 ## Updates Log
