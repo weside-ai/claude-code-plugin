@@ -22,7 +22,7 @@ You review and merge. Claude never merges; `/we:merged` cleans up after your wor
 Then run `/we:setup` once per repo. It detects stack and ticketing, asks up to five skippable
 questions and writes `.weside/config.json`. Details: [docs/getting-started.md](docs/getting-started.md).
 
-Requirements: Claude Code, Git, Python 3, the `gh` CLI for PRs and GitHub Issues.
+Requirements: Claude Code, Git, Python 3.9 or later (the `/usr/bin/python3` that the Xcode Command Line Tools install on macOS is 3.9.6), the `gh` CLI for PRs and GitHub Issues.
 
 ## Verbs
 

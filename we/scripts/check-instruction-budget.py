@@ -17,11 +17,9 @@ PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import re
-import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -40,24 +38,15 @@ DEFAULT_BUDGET = {
     "agent_description_tokens": 15000,  # sub-agents.md: combined description warning
     "contents_threshold": 100,  # skill best practices: ToC for files over 100 lines
 }
-SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__"}
 SKIP_PREFIXES = (".claude/worktrees/",)
 INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md"}
 CONTENTS_RE = re.compile(r"^#{2,3} +(contents|table of contents)\b", re.IGNORECASE | re.MULTILINE)
 LINK_RE = re.compile(r"\]\(([^)#\s]+\.md)\)|`([^`\s]+\.md)`")
 
 
-def _load_rules_module():
-    spec = importlib.util.spec_from_file_location(
-        "we_load_rules", Path(__file__).with_name("load-rules.py")
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["we_load_rules"] = module
-    spec.loader.exec_module(module)
-    return module
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-
-load_rules = _load_rules_module()
+import rule_loading  # noqa: E402 - the sibling module, found via the line above
 
 
 @dataclass(frozen=True)
@@ -84,7 +73,7 @@ class Repo:
 
     def excluded(self, rel: str) -> bool:
         parts = rel.split("/")
-        if SKIP_DIRS.intersection(parts[:-1]) or rel.startswith(SKIP_PREFIXES):
+        if rule_loading.SKIP_DIRS.intersection(parts[:-1]) or rel.startswith(SKIP_PREFIXES):
             return True
         return any(
             item in parts[:-1] or rel.startswith(item.rstrip("/") + "/") for item in self.exclude
@@ -106,26 +95,6 @@ def load_config(root: Path) -> tuple[dict, list[str]]:
         budget.update(section.get("budget") or {})
         exclude = list(section.get("exclude") or [])
     return budget, exclude
-
-
-def list_files(root: Path) -> list[str]:
-    """Tracked plus untracked-not-ignored files; a plain walk outside git."""
-    result = subprocess.run(
-        ["git", "ls-files", "-co", "--exclude-standard"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        listed = {line for line in result.stdout.splitlines() if line}
-        return sorted(rel for rel in listed if (root / rel).is_file())
-    found = []
-    for directory, dirs, names in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        rel_dir = Path(directory).relative_to(root).as_posix()
-        found.extend(name if rel_dir == "." else f"{rel_dir}/{name}" for name in names)
-    return sorted(found)
 
 
 def line_count(text: str) -> int:
@@ -183,18 +152,20 @@ def check_rules(repo: Repo) -> None:
     for rel in rules:
         text = repo.text(rel)
         block = split_frontmatter(text)
-        rule = load_rules._load_rule(repo.root / rel)
-        broken = None
-        if rule.defect and "unterminated" in rule.defect:
-            broken = "frontmatter never closes"
+        rule = rule_loading.parse_rule(text, repo.root / rel)
+        if rule.unconditional or (block is None and text.startswith("---")):
+            repo.error("rule-yaml", rel, f"{rule.defect}")
         elif block is not None and (err := strict_yaml_error(block)):
-            broken = f"frontmatter is not valid YAML ({err})"
-        if broken:
-            repo.error("rule-yaml", rel, f"{broken} — the rule loads unconditionally")
+            repo.warn(
+                "rule-yaml",
+                rel,
+                f"frontmatter is not valid YAML ({err}); Claude Code quotes the values and retries"
+                " — quote them yourself",
+            )
         if block is not None and re.search(r"^globs\s*:", block, re.MULTILINE):
             repo.error("rule-globs", rel, "`globs:` is ignored by Claude Code — use `paths:`")
         lines = line_count(text)
-        if rule.is_always_on or broken:  # Claude Code drops broken frontmatter: always loaded
+        if rule.is_always_on:
             unconditional_total += lines
             if lines > repo.budget["rule_lines"]:
                 repo.error(
@@ -224,7 +195,9 @@ def check_rules(repo: Repo) -> None:
 
 def check_paths_match(repo: Repo, rel: str, patterns: tuple[str, ...]) -> None:
     dead = [
-        p for p in patterns if not any(load_rules._matches(p, f, patterns) for f in repo.files)
+        p
+        for p in patterns
+        if not any(rule_loading.pattern_matches(p, f, patterns) for f in repo.files)
     ]
     if dead and len(dead) == len(patterns):
         repo.error(
@@ -384,7 +357,7 @@ def check_agents(repo: Repo) -> None:
 
 def run(root: Path) -> Repo:
     budget, exclude = load_config(root)
-    repo = Repo(root=root, budget=budget, exclude=exclude, files=list_files(root))
+    repo = Repo(root=root, budget=budget, exclude=exclude, files=rule_loading.list_files(root))
     check_rules(repo)
     check_instruction_files(repo)
     check_skills(repo)
@@ -397,7 +370,7 @@ def main() -> int:
     parser.add_argument("--root", help="repo root (default: the git toplevel, else cwd)")
     parser.add_argument("--json", action="store_true", help="one JSON list of findings")
     args = parser.parse_args()
-    repo = run(load_rules._repo_root(args.root))
+    repo = run(rule_loading.repo_root(args.root))
     errors = [f for f in repo.findings if f.severity == "error"]
     if args.json:
         print(json.dumps([asdict(f) for f in repo.findings], indent=2))

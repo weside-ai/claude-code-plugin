@@ -99,13 +99,25 @@ class GateTest(unittest.TestCase):
         self.assert_red("rule-globs", "`globs:` is ignored by Claude Code")
 
     @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
-    def test_rule_with_broken_yaml_is_an_error(self):
-        self.write(".claude/rules/y.md", "---\npaths: [src/**\n---\n# Y\n")
-        self.assert_red("rule-yaml", "the rule loads unconditionally")
+    def test_rule_with_unfixable_yaml_is_an_error(self):
+        # probe fixture `unfixable-yaml-unrelated`: quoting cannot repair a list item
+        self.write(".claude/rules/y.md", '---\npaths:\n  - "src/**"\n  - *.md\n---\n# Y\n')
+        self.assert_red("rule-yaml", "the rule always loads")
 
     @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
-    def test_rule_with_broken_yaml_counts_as_unconditional(self):
-        self.write(".claude/rules/y.md", "---\npaths: [src/**\n---\n" + lines(205))
+    def test_rule_with_quotable_yaml_is_a_warning(self):
+        # probe fixture `colon-value-scoped`: Claude Code quotes the value and the rule still scopes
+        self.write("src/a.py", "x\n")
+        self.write(
+            ".claude/rules/y.md", '---\ndescription: a: b\npaths:\n  - "src/**"\n---\n# Y\n'
+        )
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("Claude Code quotes the values and retries", out)
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
+    def test_rule_with_unfixable_yaml_counts_as_unconditional(self):
+        self.write(".claude/rules/y.md", "---\npaths:\n  - *.md\n---\n" + lines(205))
         self.assert_red("rule-lines", "unconditional rule max 200")
 
     def test_pointer_match_is_path_anchored(self):
@@ -142,7 +154,7 @@ class GateTest(unittest.TestCase):
 
     def test_rule_with_unclosed_frontmatter_is_an_error(self):
         self.write(".claude/rules/u.md", '---\npaths:\n  - "src/**"\n# U\n')
-        self.assert_red("rule-yaml", "frontmatter never closes")
+        self.assert_red("rule-yaml", "unterminated frontmatter")
 
     @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
     def test_skill_with_lenient_yaml_is_only_a_warning(self):

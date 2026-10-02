@@ -5,6 +5,8 @@ The option lives in ~/.claude/settings.json → pluginConfigs["we@weside-ai"].op
 Off, absent or unreadable → the hook prints nothing.
 """
 
+from __future__ import annotations
+
 import json
 import os
 

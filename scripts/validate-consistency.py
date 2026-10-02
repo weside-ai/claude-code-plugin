@@ -23,6 +23,8 @@ Usage:
     python3 scripts/validate-consistency.py
 """
 
+from __future__ import annotations
+
 import json
 import re
 import subprocess

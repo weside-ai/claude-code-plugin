@@ -8,6 +8,8 @@ Usage:
     python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/commands/*.md we/agents/*.md
 """
 
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path

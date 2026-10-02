@@ -1,0 +1,280 @@
+{
+  "claude_code": "2.1.287 (Claude Code)",
+  "model": "haiku",
+  "recorded": "2026-10-02",
+  "cases": [
+    {
+      "id": "always-on",
+      "rule": "# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "star-same-dir",
+      "rule": "---\npaths:\n  - \"src/*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/mod.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "star-not-deeper",
+      "rule": "---\npaths:\n  - \"src/*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/deep/mod.py",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "root-star-not-nested",
+      "rule": "---\npaths:\n  - \"*.md\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "docs/a.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "root-star-root",
+      "rule": "---\npaths:\n  - \"*.md\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "README.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "dstar-zero-dirs",
+      "rule": "---\npaths:\n  - \"dir/**/*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "dir/x.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "dstar-leading-root",
+      "rule": "---\npaths:\n  - \"**/*.ts\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "a.ts",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "dstar-leading-deep",
+      "rule": "---\npaths:\n  - \"**/*.ts\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "x/y/a.ts",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "question-mark",
+      "rule": "---\npaths:\n  - \"src/?.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "comma-string-hit",
+      "rule": "---\npaths: \"src/*.ts, lib/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "lib/x/y.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "comma-string-miss",
+      "rule": "---\npaths: \"src/*.ts, lib/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/z.ts",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "inline-list",
+      "rule": "---\npaths: [\"src/**\", \"lib/*.py\"]\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "lib/a.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "brace-hit",
+      "rule": "---\npaths:\n  - \"src/**/*.{ts,tsx}\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a/b.tsx",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "brace-miss",
+      "rule": "---\npaths:\n  - \"src/**/*.{ts,tsx}\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.js",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "brace-nested",
+      "rule": "---\npaths:\n  - \"{a,b}/{c,d}/*.{ts,tsx}\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "b/d/x.ts",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "brace-over-budget",
+      "rule": "---\npaths:\n  - \"{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}/{x,y}\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "a/b/c/x",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "invalid-bracket",
+      "rule": "---\npaths:\n  - \"src/[z-a].py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "unclosed-bracket",
+      "rule": "---\npaths:\n  - \"photos [2024/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "photos [2024/a.png",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "globs-key",
+      "rule": "---\nglobs:\n  - \"src/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "broken-yaml-unrelated",
+      "rule": "---\npaths: [src/**\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "unquoted-star-unrelated",
+      "rule": "---\npaths:\n  - **/*.py\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "unquoted-star-hit",
+      "rule": "---\npaths:\n  - **/*.py\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "x/y.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "unterminated-unrelated",
+      "rule": "---\npaths:\n  - \"src/**\"\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "broken-yaml-scoped",
+      "rule": "---\npaths: [src/**\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "broken-yaml-elsewhere",
+      "rule": "---\ndescription: a: b: c\npaths:\n  - \"src/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "unquoted-plain-scalar",
+      "rule": "---\npaths: src/*.py\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/deep/mod.py",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "unquoted-star-scalar",
+      "rule": "---\npaths: *.md\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "docs/x.txt",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "basename-deep",
+      "rule": "---\npaths:\n  - \"*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "a/b/c.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "bare-name-dir",
+      "rule": "---\npaths:\n  - \"docs\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "docs/a.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "slash-anchored",
+      "rule": "---\npaths:\n  - \"src/a.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "x/src/a.py",
+      "loaded": false,
+      "answer": "NONE"
+    },
+    {
+      "id": "trailing-slash-dir",
+      "rule": "---\npaths:\n  - \"src/\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "leading-slash",
+      "rule": "---\npaths:\n  - \"/src/*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "negation",
+      "rule": "---\npaths:\n  - \"src/**\"\n  - \"!src/gen/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/gen/x.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "unquoted-star-scalar-hit",
+      "rule": "---\npaths: *.md\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "docs/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "colon-value-scoped",
+      "rule": "---\ndescription: a: b: c\npaths:\n  - \"src/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "unfixable-yaml-unrelated",
+      "rule": "---\npaths:\n  - \"src/**\"\n  - *.md\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.txt",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "empty-list",
+      "rule": "---\npaths: []\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "empty-string",
+      "rule": "---\npaths: \"\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "other/x.md",
+      "loaded": true,
+      "answer": "<word>"
+    },
+    {
+      "id": "negation-keeps-rest",
+      "rule": "---\npaths:\n  - \"src/**\"\n  - \"!src/gen/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/app/x.py",
+      "loaded": true,
+      "answer": "<word>"
+    }
+  ]
+}

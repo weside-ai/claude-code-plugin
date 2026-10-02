@@ -22,6 +22,8 @@ Exit codes: 0 = done / nothing to do, 1 = blocked (reason on stdout), 2 = usage.
 Python stdlib only.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import shutil

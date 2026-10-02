@@ -86,8 +86,12 @@ that explains how the rule came about goes to the commit message or the ticket.
 
 ## Frontmatter
 
-- A rule reads only `paths:`: a YAML list or a comma-separated string, globs root-anchored,
-  brace expansion allowed (`src/**/*.{ts,tsx}`). `globs:` is ignored. Frontmatter that does not
-  parse as YAML makes the rule load unconditionally.
+- A rule reads only `paths:`: a YAML list or a comma-separated string; `globs:` is ignored. Globs
+  follow gitignore semantics after brace expansion: without a `/` a pattern matches at any depth
+  (`*.md` loads for `docs/a.md`), with one it is anchored at the root, and `!` excludes nothing.
+  Quote every glob: Claude Code repairs an unquoted `key: value` line, but frontmatter that still
+  fails to parse (an unquoted `- **/*.py` item) makes the rule load for every file. The measured
+  semantics and the importable matcher live in `scripts/rule_loading.py` of the `we` plugin; call
+  it instead of writing another matcher.
 - A skill `description` names what it does first, then the trigger phrases. Claude Code parses
   skill frontmatter leniently, so an unquoted `Triggers: "…"` still loads; the gate only warns.
