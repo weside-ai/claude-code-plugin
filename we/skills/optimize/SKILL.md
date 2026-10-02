@@ -53,12 +53,16 @@ inbox as it is.
   `optimization.review_days` (default 30), unless its change was a removal (`—`).
 - **Sunset.** An `applied` row whose `review_by` has passed becomes a `remove` candidate
   (`source: sunset`) when its `after` shows no improvement over `before`, when its failure recurred
-  after the apply date (an evidence line for its key), when the failure never recurred and nothing
-  measures the change, or when a gate now enforces the same thing.
-- **Ablation.** Of the `applied` instruction changes past `review_by` that sunset did not pick, the
-  two oldest go through the adapter's ablation command (the change reverted in a bench copy, probes
-  run); no difference → a `remove` candidate (`source: ablation`). No adapter or no ablation
-  command → skip it and say so in one line.
+  after the apply date (an evidence line for its key), or when a gate now enforces the same thing.
+- **Unmeasured.** A row past `review_by` whose failure never recurred and that nothing measures is
+  no `remove` candidate: the change may be why the failure stopped. With an ablation command it goes
+  to ablation first; without one it becomes a `flag` entry (`source: sunset`), deferred with the
+  evidence line `- <date> deferred: unmeasurable, recommend keep`, for the user to decide with
+  "keep" as the recommendation.
+- **Ablation.** Of the `applied` instruction changes past `review_by` that sunset did not pick, two
+  per run, the unmeasured ones first, then the oldest, go through the adapter's ablation command
+  (the change reverted in a bench copy, probes run); no difference → a `remove` candidate
+  (`source: ablation`). No adapter or no ablation command → skip it and say so in one line.
 - Keys, the row a removal retires, and what a rejection moves:
   `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Ledger row. Order them into the step-3
   list with one evidence line each, confidence Medium.

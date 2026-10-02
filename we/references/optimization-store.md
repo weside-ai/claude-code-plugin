@@ -72,7 +72,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   `G2-recency`, `G2-volatile`, `G2-conflict`, `G2-time`, `G2-history`, `G2-triggers`, then `G3`,
   `G4`. Five ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
   changed source, `gap` for a missing instruction (action `add`), `sunset` and `ablation` for a
-  `remove` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
+  `remove` or `flag` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
   `sunset--<row key>` or `ablation--<row key>`.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
