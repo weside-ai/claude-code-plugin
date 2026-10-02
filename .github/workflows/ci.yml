@@ -66,8 +66,8 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install pytest pyyaml
-      - name: Run pytest over we/ (hooks and scripts)
-        run: python3 -m pytest -q we
+      - name: Run pytest over we/ and scripts/
+        run: python3 -m pytest -q we scripts
 
   tests-floor:
     # The plugin's Python floor (README § Requirements): macOS ships 3.9.6 as /usr/bin/python3,
@@ -82,7 +82,7 @@ jobs:
           python-version: "3.14"
       - run: pip install uv
       - name: Run pytest over we/ on Python 3.9
-        run: uv run --no-project --python 3.9 --with pytest --with pyyaml python -m pytest -q we
+        run: uv run --no-project --python 3.9 --with pytest --with pyyaml python -m pytest -q we scripts
 
   markdown-lint:
     name: Markdown Lint
