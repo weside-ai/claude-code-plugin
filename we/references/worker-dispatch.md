@@ -7,8 +7,8 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 
 ## Contents
 
-Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker ·
-Report.
+Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker
+(premise check, watchdog, independent review, lane merge) · Report.
 
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
@@ -73,17 +73,25 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 - Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
   branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
   question, so the Lead can revert it. The worker never creates tickets.
+- Self-review before the report, every worker: the Skill tool's `code-review` with
+  `args: "high <worktree path>"`. The skill forks into a fresh context; when the session's
+  directory is not the worktree, it reviews the session's directory unless `args` names the path
+  (2026-10-02: a review without it covered another repo). A report that names no
+  file from `git diff --name-only origin/<default-branch>...HEAD` is that failure: run it again. Fix
+  every real finding, commit, and report the counts. Green tests are not this review: on two PRs
+  whose authors' own tests and red arms were green, a later review found 10 real defects each
+  (2026-10-02).
 
 ## Finish sequence (the last writer, before the first push)
 
 The session or worker that writes last on the PR branch runs this once over
 `git diff origin/<default-branch>...HEAD`, committing after each step:
 
-Invoke each through the Skill tool (`skill: "code-review"`, `args: "<effort>"`); a slash command
+Invoke each through the Skill tool (`skill: "code-review"`, `args: "high <worktree path>"`); a slash command
 written into a subagent prompt is not proven to run the skill (probe 27.09.2026).
 
-1. `code-review` at the build worker's effort (`high` when any chunk ran as `we:dev-high`, else
-   `medium`; final sim 28.09.2026: a medium review let two red Claude rounds through), then fix what it finds.
+1. The contract's self-review (`code-review` at `high`) over the whole branch, then fix what it
+   finds (final sim 28.09.2026: a medium review let two red Claude rounds through).
 2. `security-review` in addition when the diff touches money, auth or tenant isolation.
 3. `simplify`.
 4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
@@ -104,6 +112,15 @@ children included, the moment verification ends.
 
 ## Lead checks around a worker
 
+### Premise check
+
+Before dispatch, the Lead verifies every factual premise of the brief against
+`origin/<default-branch>` (a file still says X, N rules lack Y, a function exists) and keeps the
+command that showed it. A count from a heuristic script goes into the brief as an estimate
+(`~19, heuristic`) for the worker to confirm before acting on it. 2026-10-02: a brief's "~19 rules
+lack nested globs" was 2, and a "still names the old model" was already fixed on main; the worker
+spent its time disproving the brief.
+
 ### Watchdog
 
 Armed at dispatch, one per worker: a background command (`run_in_background`) that exits on
@@ -123,11 +140,12 @@ by the human (#4308, #4326, #4328); without it a worker sat idle 7 h 47 min (#42
 
 ### Independent review
 
-After the report, before the push. The worker's own `code-review` runs in the context that wrote
-the code. A fresh read-only `we:dev-<effort of the build>` with
-`cwd=<wt>` runs `code-review` over `git diff origin/<default>...HEAD` plus the plan's ACs and
-reports findings only; the Lead sends them to the original worker, which keeps one committer per
-worktree. On #4321 the fresh reviewer found 7 WARNING after the worker's own review (30.09.2026).
+After the report, before the push. A report without a `self-review` line, or whose findings name
+no file of the diff, goes back to the worker (`SendMessage`). Then a fresh read-only `we:dev-medium`
+with `cwd=<wt>` runs `code-review` (`args: "high <worktree path>"`) over the branch and checks the
+plan's ACs, which the self-review does not; it reports findings only, and the Lead sends them to the
+original worker, which keeps one committer per worktree. On #4321 a fresh reviewer found 7 WARNING
+after the worker's own review (30.09.2026).
 
 ### After each lane merge
 
@@ -143,6 +161,7 @@ The worker's final message is the report; the Agent result delivers it to the Le
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
 gates: <gate> ✓|✗|skipped(<why>) …
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
+self-review: <found> found · <fixed> fixed · <skipped> skipped (<why>)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
 overrides: … · skipped: … · questions: … · blockers: none|<reason>
 ```

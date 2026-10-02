@@ -34,6 +34,8 @@ Exit codes: ``path`` → 0 fresh, 1 stale, 2 missing. ``store`` → 0 written,
 1 unreadable source, 2 usage. Python stdlib only.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os

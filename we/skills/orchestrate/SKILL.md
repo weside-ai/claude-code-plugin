@@ -92,7 +92,8 @@ refiner's worktree (step 6) and move the ticket to the plan-approved status.
 ## Build
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
-move the ticket to In Progress and verify. Choose the effort per
+move the ticket to In Progress and verify, check the brief's premises (`worker-dispatch.md`
+§ Premise check). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
 into `description`.
@@ -108,7 +109,7 @@ Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker
 Tests: <test_discipline from .weside/config.json, spelled out; absent → tests after the code, same change>.
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
-Finish: [you are the last writer: run the finish sequence, code-review at <medium|high> | not yours]. Verification: [<journeys> | none].
+Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
@@ -129,7 +130,7 @@ the wave in one message, and merge each returned branch with
 `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`. A result without
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run
 `worker-dispatch.md` § After each lane merge; a contract change breaks a sibling no chunk gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
-Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`code-review` at `high` when a chunk ran as `we:dev-high`).
+Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 
 ## Push, PR, CI
 

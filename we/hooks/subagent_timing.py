@@ -1,6 +1,8 @@
 """SubagentStart/SubagentStop hook: append one JSON line per event to
 ~/.claude/we-timing/<session_id>.jsonl. Silent; never blocks (always exit 0)."""
 
+from __future__ import annotations
+
 import contextlib
 import json
 import re

@@ -66,8 +66,24 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install pytest pyyaml
-      - name: Run pytest over we/ (hooks and scripts)
-        run: python3 -m pytest -q we
+      - name: Run pytest over we/ and scripts/
+        run: python3 -m pytest -q we scripts
+
+  tests-floor:
+    # The plugin's Python floor (README § Requirements): macOS ships 3.9.6 as /usr/bin/python3,
+    # and the hooks run on whatever `python3` the user has. uv fetches 3.9, which setup-python
+    # no longer guarantees on current runners.
+    name: Plugin Tests (Python 3.9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: pip install uv
+      - name: Run pytest over we/ on Python 3.9
+        # No PyYAML: macOS /usr/bin/python3 lacks it, so this lane runs the lenient parser.
+        run: uv run --no-project --python 3.9 --with pytest python -m pytest -q we scripts
 
   markdown-lint:
     name: Markdown Lint

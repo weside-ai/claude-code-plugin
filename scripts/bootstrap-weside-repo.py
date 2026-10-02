@@ -37,7 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
@@ -282,7 +282,7 @@ def render_config_json(
         "vault": vault,
         "framework_version": 1,
         "onboarded": True,
-        "onboarded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "onboarded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "repo_flavor": flavor,
         "roles_enabled": roles_enabled,
         "ticketing": {

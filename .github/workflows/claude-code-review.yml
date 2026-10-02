@@ -1,0 +1,204 @@
+# Claude Code Review — one Claude agent with a custom prompt reviews every pull request and
+# posts ONE summary comment, updated in place on every push.
+#
+# Output contract (read by the gate below and by /we:ci-review):
+#   - the comment's first line is the marker <!-- claude-code-review -->, then "## Code Review"
+#   - each finding carries <!-- SEV:BLOCKING|WARNING|SUGGESTION -->
+#   - the verdict marker <!-- VERDICT:BLOCKING|WARNING|PASS --> closes the review
+# The decisions (secret present, verdict) live in scripts/claude_review_gate.py, pinned by
+# scripts/test_claude_review_gate.py.
+#
+# Setup (repository admin): store CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) as an Actions
+# secret; after a first green run, add the `Claude Review` context to main's required checks.
+
+name: "Review: Claude"
+
+# One run per PR, newest head wins: the gate's "newer than the snapshot" check relies on it.
+concurrency:
+  group: claude-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    # No path filter: a required check whose workflow does not trigger never reports, and the PR
+    # waits for it forever. A job that runs and skips reports `skipped`, which satisfies it.
+
+jobs:
+  claude-review:
+    name: Claude Review (Analyze)
+    # Fork PRs receive no secrets and are reviewed by a maintainer; Renovate needs no review.
+    # Both skip, and the gate reports `skipped` as green.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && !(startsWith(github.head_ref, 'renovate/') && github.event.pull_request.user.login == 'renovate[bot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write # the review posts via `gh pr comment`
+      issues: read
+      id-token: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      # The gate's decisions run from the BASE branch's copy: a PR that edits the script must not
+      # be able to pass its own review. Only the PR that adds the script uses its own copy.
+      - name: Load the gate script from the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE_REF"
+          if git cat-file -e FETCH_HEAD:scripts/claude_review_gate.py 2>/dev/null; then
+            git show FETCH_HEAD:scripts/claude_review_gate.py > "$RUNNER_TEMP/review_gate.py"
+          else
+            echo "::warning::${BASE_REF} has no scripts/claude_review_gate.py yet; using this PR's copy."
+            cp scripts/claude_review_gate.py "$RUNNER_TEMP/review_gate.py"
+          fi
+
+      # `secrets.*` cannot appear in `if:`; the script turns a missing secret into a red check
+      # with the admin step, instead of an action that exits 0 and posts nothing.
+      - name: Require the review token
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: python3 "$RUNNER_TEMP/review_gate.py" require-token
+
+      # The gate must tell THIS run's comment from the previous run's. No clock: snapshot the
+      # newest review comment now and require the gate's comment to be strictly newer.
+      - name: Snapshot the review comment this run must supersede
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate \
+            | jq -s -r 'add | [.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")
+                                   | select(.body | startswith("<!-- claude-code-review -->"))]
+                        | sort_by(.updated_at) | last | .updated_at // ""')
+          echo "REVIEW_SINCE=${PREV:-1970-01-01T00:00:00Z}" >> "$GITHUB_ENV"
+
+      - name: Run Claude Code Review
+        id: claude-review
+        continue-on-error: true # a crash must say so in the gate step, not end the job here
+        uses: anthropics/claude-code-action@97c53473391bff1901034d4b454b5bac7ab7a029 # v1.0.239
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Model pinned: a moving default once fell back to a retired model. Read-only tools plus
+          # `gh pr comment`; Task/Agent so a large diff can be split across blocking subagents.
+          claude_args: '--model claude-opus-5-5 --effort medium --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep,Task,Agent"'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ env.PR_NUMBER }}
+            EVENT: ${{ github.event.action }}
+            RUN URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            You review a pull request of a public Claude Code plugin. The branch is checked out.
+            Work in one pass and post exactly one PR comment; never a line comment or a formal
+            GitHub review.
+
+            ## Read the change once
+            - `gh pr diff $PR_NUMBER` is the scope on every event, including synchronize. Code
+              merged in from main is not this PR's change.
+            - The head SHA for permalinks: `gh pr view $PR_NUMBER --json headRefOid -q .headRefOid`.
+            - Open a file with Read only when a finding depends on surrounding context.
+            - On a large diff you may hand disjoint file slices to subagents. Every subagent runs
+              in the foreground and returns inside this turn: a headless run ends with the turn,
+              and a background subagent's findings are lost.
+
+            ## What to flag
+            Real problems introduced by this PR:
+            - 🔴 BLOCKING — wrong behaviour, a crash, data loss, a security hole, a leaked secret
+              or internal detail in this public repo.
+            - 🟡 WARNING — missing error handling, a contract or consistency break between skills,
+              references and scripts, a doc that now contradicts the code, a rule stated in two
+              files, a violation of AGENTS.md or we/AUTHORING.md.
+            - 🟢 SUGGESTION — naming, optional cleanups.
+            Do not flag what already existed before this PR, what a linter or the test suite
+            catches, or a hypothetical edge case with no reachable path. Surface a genuine WARNING
+            even when you are not certain, and say how sure you are.
+
+            ## Output — one comment, kept current
+            - EVENT opened/reopened/ready_for_review: `gh pr comment $PR_NUMBER --body "..."`.
+            - EVENT synchronize: read your previous review (`gh pr view $PR_NUMBER --json comments`)
+              and edit it in place with
+              `gh pr comment $PR_NUMBER --edit-last --create-if-none --body "..."`,
+              in sections ✅ Fixed, ⏳ Still open, 🆕 New (omit empty ones).
+            The first line is `<!-- claude-code-review -->`, then `## Code Review`. Per finding,
+            BLOCKING first:
+
+            ### <n>. <emoji> <LEVEL>: <short title>
+            <!-- SEV:BLOCKING -->   (SEV:WARNING or SEV:SUGGESTION to match the level)
+            https://github.com/${{ github.repository }}/blob/<40-char HEAD SHA>/<path>#L<start>-L<end>
+            <1–3 sentences: what is wrong, why it matters, the fix.>
+
+            A clean PR gets "No issues found."
+
+            ## Verdict — required, both lines, in this order
+                **Verdict: <emoji> <LEVEL>**
+                <!-- VERDICT:LEVEL -->
+            LEVEL is BLOCKING (any 🔴), WARNING (🟡, no 🔴) or PASS. Then, as the last lines, a
+            `<details><summary>Review history</summary>` block: on synchronize copy the earlier
+            lines unchanged and append one for this run
+            (`- <UTC time> · commit <9-char SHA> · <verdict> · [run](<RUN URL>)`).
+
+            Do not edit the PR description and do not post a second review comment.
+
+      - name: Gate on the Claude review verdict
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLAUDE_OUTCOME: ${{ steps.claude-review.outcome }}
+        run: |
+          # claude-code-action runs only the default branch's copy of this workflow: a PR that adds
+          # or changes it gets no review until the change is on main, whatever else is right.
+          if gh pr view "$PR_NUMBER" --json files -q '.files[].path' \
+              | grep -qx '.github/workflows/claude-code-review.yml'; then
+            WORKFLOW_HINT=" This PR changes .github/workflows/claude-code-review.yml; claude-code-action refuses to run a workflow that differs from the default branch, so this PR cannot get a Claude review — a human reviews it, and the check passes again once the change is on main."
+          else
+            WORKFLOW_HINT=""
+          fi
+          if [ "$CLAUDE_OUTCOME" = "failure" ]; then
+            echo "::error::The review action failed before producing a verdict.${WORKFLOW_HINT:- Re-run the job; if it fails twice, regenerate CLAUDE_CODE_OAUTH_TOKEN (claude setup-token).}"
+            exit 1
+          fi
+          # Comments API lags a few seconds after the review posts: poll for THIS run's comment.
+          # Every marker comment newer than the snapshot is gated together, so a second comment
+          # posting a PASS (any workflow can post as github-actions[bot]) cannot hide a red one.
+          export SINCE="${REVIEW_SINCE}"
+          BODY=""
+          for attempt in 1 2 3 4 5 6; do
+            BODY=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate \
+              | jq -s -r 'add | [.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")
+                                     | select(.body | startswith("<!-- claude-code-review -->"))
+                                     | select(.updated_at > env.SINCE)]
+                          | map(.body) | join("\n")')
+            [ -n "$BODY" ] && break
+            echo "Waiting for this run's review comment (attempt ${attempt}/6)…"
+            sleep 10
+          done
+          if [ -z "$BODY" ]; then
+            echo "::error::No review comment newer than ${SINCE} — the review did not post for this run.${WORKFLOW_HINT:- Re-run the job, then check CLAUDE_CODE_OAUTH_TOKEN.}"
+            exit 1
+          fi
+          printf '%s' "$BODY" | python3 "$RUNNER_TEMP/review_gate.py" verdict
+
+  # The required context. `always()` makes it report on every PR, including those the analyze
+  # job skips (Renovate); without it the skip propagates and a required check never reports.
+  gate:
+    name: Claude Review
+    needs: claude-review
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Mirror the analyze job's result
+        env:
+          RESULT: ${{ needs.claude-review.result }}
+        run: |
+          case "$RESULT" in
+            success) echo "Claude review ran and found no blocking or warning verdict." ;;
+            skipped) echo "Claude review skipped (fork or Renovate pull request): a maintainer reviews it." ;;
+            *) echo "::error::Claude review concluded '${RESULT}' — see 'Claude Review (Analyze)'."; exit 1 ;;
+          esac

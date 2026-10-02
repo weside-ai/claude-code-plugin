@@ -54,7 +54,7 @@ target: AGENTS.md           # repo-relative path; `plugin:<path>` for a plugin f
 target_repo: this           # this · plugin
 action: rewrite             # remove · rewrite · move · replace-with-API-feature · add · flag
 confidence: High            # High · Medium · Low
-source: audit               # audit · gate · retro · guideline
+source: audit               # audit · gate · retro · guideline · sunset · ablation
 ---
 
 The quoted line, why it no longer fits, and the proposed replacement text.
@@ -70,10 +70,12 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 - **Pattern ids** reuse the prompt-audit taxonomy that ships with Claude Code (`claude-api` skill,
   `shared/prompt-audit.md`): `G1a`–`G1f`, the Group 2 rows as `G2-verbose`, `G2-freedom`,
   `G2-recency`, `G2-volatile`, `G2-conflict`, `G2-time`, `G2-history`, `G2-triggers`, then `G3`,
-  `G4`. Three ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
-  changed source, `gap` for a missing instruction (action `add`).
-- `.gitattributes` line `.weside/optimization/inbox/*.md merge=union` lets two branches that
-  appended evidence to one entry merge without a conflict.
+  `G4`. Five ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
+  changed source, `gap` for a missing instruction (action `add`), `sunset` and `ablation` for a
+  `remove` or `flag` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
+  `sunset--<row key>` or `ablation--<row key>`.
+- No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
+  YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
 - **Lifecycle:** `/we:optimize` decides an entry, writes its ledger row and deletes the inbox file
   in the same commit. A deferred entry stays and gains an evidence line `- <date> deferred: <reason>`.
 
@@ -81,12 +83,21 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 
 `LEDGER.md` is one table, newest row first:
 
-`| date | key | target | decision | evidence | before → after | change |`
+`| date | key | target | decision | evidence | metric | before → after | review_by | change |`
 
 - `decision`: `applied` · `rejected` · `deferred` · `upstream` (reported to the plugin's
-  maintainers).
-- `before → after`: the adapter's numbers, or `unmeasured` when the repo has no adapter.
+  maintainers) · `removed` (a later sunset or ablation removal took the change out).
+- `metric`: what shows the effect (the adapter command, or the re-check of a repo fact); every
+  applied row that adds or rewords text has one. An applied removal has `—` here and in `review_by`.
+- `before → after`: the metric's numbers; `after` is `pending` until step 4 of `/we:optimize`
+  measures it.
+- `review_by`: applied rows that add or reword text, the date plus `optimization.review_days`;
+  after it, `/we:optimize` step 4 proposes the removal of a change that did not pay off.
+- An applied `sunset--`/`ablation--` row sets the row it names to `removed` with `review_by` `—`,
+  in the same commit. A rejected one moves that row's `review_by` forward by `review_days`.
 - `change`: the commit SHA or PR that carries it.
+- A ledger written before `metric` and `review_by` existed keeps its rows; `/we:optimize` fills
+  `review_by` for applied rows and writes `—` where a column does not apply.
 
 ## Source lock
 
@@ -105,8 +116,9 @@ diff a changed source against the copy it last hashed.
 ## Measurement adapter
 
 `measure/README.md` names the commands that put a number on a candidate before and after a change
-(a KPI script, a bench arm, a transcript query) and what each number means. Without it every
-decision is recorded as `unmeasured`. A plugin skill is measured with `claude plugin eval` (or
+(a KPI script, a bench arm, a transcript query) and what each number means, plus optionally an
+ablation command: the probes run in a bench copy with one change reverted. Without an adapter, a
+candidate whose metric needs it is deferred, not applied. A plugin skill is measured with `claude plugin eval` (or
 the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill-doctor`.
 
 ## Config keys
@@ -120,6 +132,7 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
     "target_effort": "medium",
     "reminder": true,
     "reminder_days": 14,
+    "review_days": 30,
     "budget": {"rules_total_lines": 600},
     "exclude": ["content", "archive"]
   },
@@ -130,6 +143,7 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
 - `target_model` / `target_effort`: the model the audit runs as; absent → the session's model.
 - `reminder`: `false` silences the SessionStart reminder (open inbox count, days since
   `last_optimize`); `reminder_days` is the age that triggers it.
+- `review_days`: days from applying a change to its `review_by` (default 30).
 - `budget`, `exclude`: overrides for `scripts/check-instruction-budget.py` (keys in its
   `DEFAULT_BUDGET`); `exclude` takes directory names or repo-relative prefixes. Exclude every tree
   whose `SKILL.md` or `AGENTS.md` files are product content or archives rather than instructions

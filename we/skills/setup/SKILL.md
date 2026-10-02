@@ -112,10 +112,18 @@ every lens is generic and still works." On yes:
 
 1. **Store skeleton**: `.weside/optimization/` with `CHARTER.md` (frontmatter `last_optimize:`
    empty; sections Goal, Decisions, Findings, Next steps), `LEDGER.md` (the ledger table header),
-   `inbox/.gitkeep`, and the `merge=union` line in `.gitattributes`. Never in the plugin's own checkout.
-2. **Authoring rule**: copy `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` unchanged to
-   `.claude/rules/instruction-authoring.md`; its `paths:` scope it to instruction files. A re-run
-   refreshes the copy after asking.
+   and `inbox/.gitkeep`. Never in the plugin's own checkout. A re-run removes an
+   `.weside/optimization/inbox/*.md merge=union` line from `.gitattributes` and says so (why:
+   `optimization-store.md` § Inbox entry).
+2. **Authoring rule**: copy `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` to
+   `.claude/rules/instruction-authoring.md`, body unchanged, with `paths:` derived from what the
+   repo holds. Candidates: `.claude/rules/**`, `.claude/skills/**/SKILL.md`, `.claude/agents/*.md`,
+   `**/AGENTS.md`, `**/CLAUDE.md`, and `<dir>/skills/**/SKILL.md` plus `<dir>/agents/*.md` for each
+   plugin directory (one holding `.claude-plugin/`). List each candidate's matches with
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-rules.py --files-matching '<glob>'`. Keep a candidate
+   that matches a file outside `optimization.exclude`; drop one that matches none. A candidate that
+   also matches files under `exclude` is replaced by narrower globs over the kept files' directories,
+   because `paths:` has no negation. A re-run refreshes the body after asking and keeps the `paths:`.
 3. **Gate as pre-commit hook**, when `.pre-commit-config.yaml` exists: add this local hook. It resolves
    the gate from the plugin cache and passes with a notice where the plugin is absent (CI).
 

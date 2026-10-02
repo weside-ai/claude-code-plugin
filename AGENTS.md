@@ -25,11 +25,13 @@ we/                               plugin root
                                   optimization-store, instruction-sources, instruction-authoring)
   hooks/                          hooks.json + SessionStart materialize and optimization reminder, Stop store-conversation,
                                   PreToolUse verification gate, SubagentStart/Stop timing
-  scripts/                        load-rules.py, check-instruction-budget.py, identity cache, statusline
+  scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
+                                  from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
+                                  identity cache, statusline
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
-scripts/                          repo validators (frontmatter, structure)
+scripts/                          repo validators (frontmatter, structure, consistency), claude_review_gate.py
 ```
 
 ## Conventions
@@ -46,9 +48,14 @@ scripts/                          repo validators (frontmatter, structure)
 pre-commit run --all-files
 python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
 bash scripts/validate-plugin-structure.sh
-python3 -m pytest -q we
+python3 scripts/validate-consistency.py
+python3 -m pytest -q we scripts
 python3 we/scripts/check-instruction-budget.py
 ```
+
+Python floor 3.9 (macOS `/usr/bin/python3`): CI runs the tests on 3.9 and on the latest release.
+Re-record `we/scripts/fixtures/rule-loading.json` with `probe-rule-loading.py` after a Claude Code
+release that touches rule loading; a fixture the matcher disagrees with means the matcher is wrong.
 
 ## Versioning
 
