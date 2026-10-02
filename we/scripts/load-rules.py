@@ -18,11 +18,12 @@ Modes:
 from __future__ import annotations
 
 import argparse
-import fnmatch
+import functools
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,14 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, object], str | None]:
             key, value = line.split(":", 1)
             current_key = key.strip()
             value = value.strip()
-            frontmatter[current_key] = value.strip("\"'") if value else []
+            if not value:
+                frontmatter[current_key] = []
+            elif value.startswith("[") and value.endswith("]"):
+                frontmatter[current_key] = [
+                    item.strip().strip("\"'") for item in _split_top_level(value[1:-1])
+                ]
+            else:
+                frontmatter[current_key] = value.strip("\"'")
             continue
 
         if current_key and isinstance(frontmatter.get(current_key), list):
@@ -98,7 +106,9 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, object], str | None]:
 def _load_rule(path: Path) -> Rule:
     frontmatter, defect = _parse_frontmatter(path.read_text(encoding="utf-8"))
     raw_paths = frontmatter.get("paths", [])
-    patterns = tuple(str(item) for item in raw_paths) if isinstance(raw_paths, list) else ()
+    if isinstance(raw_paths, str):  # the documented comma-separated form
+        raw_paths = [item.strip().strip("\"'") for item in _split_top_level(raw_paths)]
+    patterns = tuple(str(item) for item in raw_paths if str(item))
     description = frontmatter.get("description")
     if "globs" in frontmatter and "paths" not in frontmatter:
         defect = defect or "`globs:` is not `paths:` — this rule loads always"
@@ -145,19 +155,103 @@ def _normalize_path(path: str, root: Path) -> str:
         return candidate.as_posix().lstrip("./")
 
 
-def _match_reason(pattern: str, path: str) -> str | None:
-    posix_path = PurePosixPath(path)
-    if posix_path.match(pattern):
-        return "glob"
-    if fnmatch.fnmatchcase(path, pattern):
-        return "fnmatch"
+BRACE_BUDGET = 1000  # Claude Code: a rule's `paths` list shares 1,000 expanded patterns
 
-    # `dir/**/*.ext` means "zero or more directories below dir" — a flat file
-    # directly in `dir` matches too, which neither matcher above grants.
-    if "/**/" in pattern:
-        flat = pattern.replace("/**/", "/")
-        if posix_path.match(flat) or fnmatch.fnmatchcase(path, flat):
-            return "globstar-zero-dirs"
+
+def _split_top_level(text: str) -> list[str]:
+    """Split on commas outside braces: `a/*.{ts,tsx}, b/**` is two patterns."""
+    return [part.strip() for part in _split_braces(text) if part.strip()]
+
+
+def expand_braces(pattern: str, budget: int = BRACE_BUDGET) -> list[str]:
+    """`src/*.{ts,tsx}` → two patterns. Over budget → the pattern unexpanded,
+    whose literal braces then match nothing (Claude Code's documented behaviour)."""
+    depth, start = 0, -1
+    for index, char in enumerate(pattern):
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth:
+            depth -= 1
+            if depth == 0:
+                options = _split_braces(pattern[start + 1 : index])
+                if len(options) < 2:
+                    continue
+                head, tail = pattern[:start], pattern[index + 1 :]
+                expanded: list[str] = []
+                for option in options:
+                    expanded.extend(expand_braces(head + option + tail, budget))
+                    if len(expanded) > budget:
+                        return [pattern]
+                return expanded
+    return [pattern]
+
+
+def _split_braces(body: str) -> list[str]:
+    parts, depth, current = [], 0, ""
+    for char in body:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += char
+    parts.append(current)
+    return parts
+
+
+@functools.lru_cache(maxsize=4096)
+def _glob_regex(pattern: str) -> re.Pattern[str] | None:
+    """Root-anchored glob: `*` stays inside one segment, `**` spans directories,
+    `**/` also matches zero directories. An unterminated `[` is invalid → None."""
+    out, index = "", 0
+    while index < len(pattern):
+        char = pattern[index]
+        if pattern.startswith("**/", index):
+            out += "(?:.*/)?"
+            index += 3
+            continue
+        if pattern.startswith("**", index):
+            out += ".*"
+            index += 2
+            continue
+        if char == "*":
+            out += "[^/]*"
+        elif char == "?":
+            out += "[^/]"
+        elif char == "\\" and index + 1 < len(pattern):
+            index += 1
+            out += re.escape(pattern[index])
+        elif char == "[":
+            close = pattern.find("]", index + 2)
+            if close == -1:
+                return None
+            body = pattern[index + 1 : close]
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            out += f"[{body}]"
+            index = close
+        else:
+            out += re.escape(char)
+        index += 1
+    return re.compile(out + r"\Z")
+
+
+@functools.lru_cache(maxsize=4096)
+def _expanded(pattern: str) -> tuple[str, ...]:
+    return tuple(expand_braces(pattern))
+
+
+def _match_reason(pattern: str, path: str) -> str | None:
+    path = path.removeprefix("./")
+    for expanded in _expanded(pattern.removeprefix("./")):
+        regex = _glob_regex(expanded)
+        if regex is not None and regex.match(path):
+            return "glob" if expanded == pattern else f"glob via `{expanded}`"
     return None
 
 

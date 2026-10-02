@@ -1,5 +1,12 @@
 # Story plan format
 
+## Contents
+
+Frontmatter · The refined scan · Lifecycle · Sections, in this order (Context, Open Fork, Acceptance
+Criteria, User Journey, Testing Requirements, Verification, Technical Approach, Implementation
+Phases, Out of scope, Constraints and Pins, Design Decisions, Code Guidance, Security Review
+Required, Documentation Impact).
+
 The contract between the writers (`/we:story`, `/we:refine`) and the readers (`/we:orchestrate`,
 `/we:develop`). Change a field here only together with every reader.
 

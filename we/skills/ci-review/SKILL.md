@@ -24,7 +24,7 @@ It needs a real PR. This skill does not call it.
 
 | Severity | Source | Policy |
 |---|---|---|
-| BLOCKING | a red required check · a required reviewer's BLOCKING | fix |
+| BLOCKING | a red required check · a required reviewer's BLOCKING · a direct instruction contradiction (§ 1) | fix |
 | WARNING | a required reviewer's WARNING (it turns Claude Review red since 2026-09-27) | fix |
 | SUGGESTION · NITPICK | any reviewer | fix or skip, with a one-line reason in the report |
 | advisory | any finding from a non-required reviewer (Codex, `chatgpt-codex-connector[bot]`) | fix a real defect; skip a rewrite of prose, a rename, a defensive branch for an input the code cannot receive, or a test the PR's red arm already covers |
@@ -94,6 +94,19 @@ and classify it from the log:
   terminal state 3 (blocked), with both run ids. Phase 0 found no red Core run that later went green on the same SHA, so the re-run
   diagnoses the failure and does not fix it.
 - **Never started:** check the merge state before waiting.
+
+**Instruction files in the diff.** Only when `git diff --name-only origin/$BASE...HEAD` lists a
+`.claude/rules/**` file, a `SKILL.md` or a file beside it, an `agents/*.md`, an `AGENTS.md` or a `CLAUDE.md`:
+
+1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-instruction-budget.py`. A violation on a changed file is a
+   SUGGESTION row, source `instruction-gate`.
+2. List what loads beside the changed text: the `AGENTS.md` / `CLAUDE.md` chain from the repo root,
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-rules.py --list <changed files>`, and for a changed
+   path-scoped rule the same list for one file its `paths:` match. Compare each changed passage with them.
+3. A **direct contradiction** (the changed text and a loaded instruction prescribe opposite actions
+   in the same situation, and neither scopes itself as the override) is a BLOCKING row quoting both
+   places. Fix it in this PR by aligning the side the PR did not mean to change. Overlap,
+   duplication or tone is a SUGGESTION row.
 
 Findings table: `| # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |`.
 

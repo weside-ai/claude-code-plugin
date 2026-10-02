@@ -96,7 +96,20 @@ Ticketing tool, in priority order: weside MCP (`execute_tool` with `JIRA_*`), th
 - **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
 - **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Never push a tree that carries another session's unpushed commits.
 
-## 6 · Report what is still open
+## 6 · Auto retro
+
+Run one in the background when the PR needed many review rounds and no retro covered it yet:
+
+- rounds: two or more `fix: address CI and review findings` commits on the PR, or three or more
+  completed runs of its required review check (`gh pr view <N> --json commits,statusCheckRollup`);
+- covered: an evidence line naming `PR #<N>` in `.weside/optimization/inbox/` or the staging
+  directory (`${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md`).
+
+Dispatch `Agent(subagent_type="we:dev-medium", name="retro-<N>")` with the brief "Use the Skill tool
+with skill `we:retro` and args `--auto --pr <N>`" and continue without waiting. Otherwise skip it
+silently.
+
+## 7 · Report what is still open
 
 Three to six lines, and only what someone has to do:
 

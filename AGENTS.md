@@ -21,10 +21,11 @@ we/                               plugin root
   AUTHORING.md                    authoring contract
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   agents/                         dev-medium, dev-high, council-<role> lenses
-  references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard)
-  hooks/                          hooks.json + SessionStart materialize, Stop store-conversation,
+  references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
+                                  optimization-store, instruction-sources, instruction-authoring)
+  hooks/                          hooks.json + SessionStart materialize and optimization reminder, Stop store-conversation,
                                   PreToolUse verification gate, SubagentStart/Stop timing
-  scripts/                        load-rules.py, identity cache, statusline
+  scripts/                        load-rules.py, check-instruction-budget.py, identity cache, statusline
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
@@ -46,6 +47,7 @@ pre-commit run --all-files
 python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
 bash scripts/validate-plugin-structure.sh
 python3 -m pytest -q we
+python3 we/scripts/check-instruction-budget.py
 ```
 
 ## Versioning

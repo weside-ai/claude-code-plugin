@@ -173,6 +173,12 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`co
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default
   branch is the backup; no extra documentation pass (Foxy 01.10.2026).
+- **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
+  empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report
+  said green and was not; or a Decision-Queue item was answered by a fact the instruction files should hold.
+  Then dispatch `Agent(subagent_type="we:dev-medium", name="retro-<KEY>")` with the brief "Use the Skill tool
+  with skill `we:retro` and args `--auto --pr <PR> --session $CLAUDE_CODE_SESSION_ID`" and do not wait for it.
+  A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
 - After the merge, `/we:merged` closes out: it finds the run's branches and worktrees by `<KEY>` in
   git and the PR by number.
 

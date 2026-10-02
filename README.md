@@ -50,7 +50,9 @@ Requirements: Claude Code, Git, Python 3, the `gh` CLI for PRs and GitHub Issues
 
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
 - `/we:standup` — where this branch stands and whether you must act; read-only.
-- `/we:retro` — retrospective on a session or PR cycle, with gated rule proposals.
+- `/we:retro` — retrospective on a session or PR cycle; findings go to the optimization inbox.
+- `/we:instruction-audit` — audits rules, skills and AGENTS.md against fresh Anthropic sources and a budget gate.
+- `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.
 - `/we:handoff` — a cross-session restart note under `docs/handoffs/`.
 - `/we:sideload` — works in a neighbour repo from here.
 - `/we:find-dead-code` — finds and removes dead code in Python backends.
