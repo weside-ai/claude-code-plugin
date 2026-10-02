@@ -72,7 +72,8 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   `G2-recency`, `G2-volatile`, `G2-conflict`, `G2-time`, `G2-history`, `G2-triggers`, then `G3`,
   `G4`. Five ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
   changed source, `gap` for a missing instruction (action `add`), `sunset` and `ablation` for a
-  `remove` candidate `/we:optimize` step 4 writes against an applied ledger row.
+  `remove` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
+  `sunset--<row key>` or `ablation--<row key>`.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
 - **Lifecycle:** `/we:optimize` decides an entry, writes its ledger row and deletes the inbox file
@@ -85,13 +86,15 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 `| date | key | target | decision | evidence | metric | before → after | review_by | change |`
 
 - `decision`: `applied` · `rejected` · `deferred` · `upstream` (reported to the plugin's
-  maintainers).
-- `metric`: what shows the effect (the adapter command, or the re-check of a repo fact); an applied
-  row always has one.
+  maintainers) · `removed` (a later sunset or ablation removal took the change out).
+- `metric`: what shows the effect (the adapter command, or the re-check of a repo fact); every
+  applied row that adds or rewords text has one. An applied removal has `—` here and in `review_by`.
 - `before → after`: the metric's numbers; `after` is `pending` until step 4 of `/we:optimize`
   measures it.
-- `review_by`: `applied` rows only, the date plus `optimization.review_days`; after it,
-  `/we:optimize` step 4 proposes the removal of a change that did not pay off.
+- `review_by`: applied rows that add or reword text, the date plus `optimization.review_days`;
+  after it, `/we:optimize` step 4 proposes the removal of a change that did not pay off.
+- An applied `sunset--`/`ablation--` row sets the row it names to `removed` with `review_by` `—`,
+  in the same commit. A rejected one moves that row's `review_by` forward by `review_days`.
 - `change`: the commit SHA or PR that carries it.
 - A ledger written before `metric` and `review_by` existed keeps its rows; `/we:optimize` fills
   `review_by` for applied rows and writes `—` where a column does not apply.

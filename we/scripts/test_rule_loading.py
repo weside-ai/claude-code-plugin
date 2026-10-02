@@ -34,8 +34,11 @@ class GoldenFixtureTest(unittest.TestCase):
                 rule = rl.parse_rule(case["rule"])
                 self.assertEqual(rule.applies_to(case["read"]), case["loaded"], case["rule"])
 
-    def test_fixtures_name_the_claude_code_version(self):
-        self.assertIn("Claude Code", FIXTURES["claude_code"])
+    def test_every_fixture_names_its_claude_code_version(self):
+        for case in FIXTURES["cases"]:
+            with self.subTest(case=case["id"]):
+                self.assertIn("Claude Code", case["claude_code"])
+                self.assertRegex(case["recorded"], r"^\d{4}-\d{2}-\d{2}$")
 
 
 class MatcherTest(unittest.TestCase):

@@ -31,7 +31,7 @@ CASES: list[tuple[str, str | None, str]] = [
     ("always-on", None, "other/x.md"),
     ("star-same-dir", 'paths:\n  - "src/*.py"', "src/mod.py"),
     ("star-not-deeper", 'paths:\n  - "src/*.py"', "src/deep/mod.py"),
-    ("root-star-not-nested", 'paths:\n  - "*.md"', "docs/a.md"),
+    ("root-star-nested", 'paths:\n  - "*.md"', "docs/a.md"),
     ("root-star-root", 'paths:\n  - "*.md"', "README.md"),
     ("dstar-zero-dirs", 'paths:\n  - "dir/**/*.py"', "dir/x.py"),
     ("dstar-leading-root", 'paths:\n  - "**/*.ts"', "a.ts"),
@@ -152,21 +152,18 @@ def main() -> int:
         print(f"{len(failed)} case(s) failed to run; nothing written", file=sys.stderr)
         return 1
 
+    version = subprocess.run(
+        ["claude", "--version"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+    today = dt.datetime.now(dt.timezone.utc).date().isoformat()
     existing = {}
     if args.only and args.out.exists():
         existing = {c["id"]: c for c in json.loads(args.out.read_text())["cases"]}
     for record in results:
         record.pop("exit")
+        record.update(claude_code=version, recorded=today)  # per case: --only mixes versions
         existing[record["id"]] = record
-    version = subprocess.run(
-        ["claude", "--version"], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    payload = {
-        "claude_code": version,
-        "model": MODEL,
-        "recorded": dt.datetime.now(dt.UTC).date().isoformat(),
-        "cases": [existing[c[0]] for c in CASES if c[0] in existing],
-    }
+    payload = {"model": MODEL, "cases": [existing[c[0]] for c in CASES if c[0] in existing]}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(payload['cases'])} cases to {args.out}")

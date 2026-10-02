@@ -112,7 +112,9 @@ every lens is generic and still works." On yes:
 
 1. **Store skeleton**: `.weside/optimization/` with `CHARTER.md` (frontmatter `last_optimize:`
    empty; sections Goal, Decisions, Findings, Next steps), `LEDGER.md` (the ledger table header),
-   and `inbox/.gitkeep`. Never in the plugin's own checkout.
+   and `inbox/.gitkeep`. Never in the plugin's own checkout. A re-run removes an
+   `.weside/optimization/inbox/*.md merge=union` line from `.gitattributes` and says so (why:
+   `optimization-store.md` § Inbox entry).
 2. **Authoring rule**: copy `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` to
    `.claude/rules/instruction-authoring.md`, body unchanged, with `paths:` derived from what the
    repo holds. Candidates: `.claude/rules/**`, `.claude/skills/**/SKILL.md`, `.claude/agents/*.md`,

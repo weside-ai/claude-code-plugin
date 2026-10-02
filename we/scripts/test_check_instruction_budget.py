@@ -104,6 +104,13 @@ class GateTest(unittest.TestCase):
         self.write(".claude/rules/y.md", '---\npaths:\n  - "src/**"\n  - *.md\n---\n# Y\n')
         self.assert_red("rule-yaml", "the rule always loads")
 
+    def test_opening_fence_with_trailing_space_is_valid_frontmatter(self):
+        self.write("src/a.py", "x\n")
+        self.write(".claude/rules/t.md", '--- \npaths:\n  - "src/**"\n---\n# T\n')
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("None", out)
+
     @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
     def test_rule_with_quotable_yaml_is_a_warning(self):
         # probe fixture `colon-value-scoped`: Claude Code quotes the value and the rule still scopes

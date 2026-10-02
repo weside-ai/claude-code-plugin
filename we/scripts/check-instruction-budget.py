@@ -101,16 +101,6 @@ def line_count(text: str) -> int:
     return len(text.splitlines())
 
 
-def split_frontmatter(text: str) -> str | None:
-    lines = text.splitlines()
-    if not lines or lines[0] != "---":
-        return None
-    for index, line in enumerate(lines[1:], start=1):
-        if line == "---":
-            return "\n".join(lines[1:index])
-    return None
-
-
 def strict_yaml_error(block: str) -> str | None:
     if yaml is None:
         return None
@@ -151,10 +141,10 @@ def check_rules(repo: Repo) -> None:
     unconditional_total = 0
     for rel in rules:
         text = repo.text(rel)
-        block = split_frontmatter(text)
+        block = rule_loading.frontmatter_block(text)
         rule = rule_loading.parse_rule(text, repo.root / rel)
-        if rule.unconditional or (block is None and text.startswith("---")):
-            repo.error("rule-yaml", rel, f"{rule.defect}")
+        if rule.unconditional or (rule.defect or "").startswith("unterminated"):
+            repo.error("rule-yaml", rel, str(rule.defect))
         elif block is not None and (err := strict_yaml_error(block)):
             repo.warn(
                 "rule-yaml",
@@ -238,7 +228,7 @@ def lenient_fields(block: str) -> dict[str, str]:
 def check_skills(repo: Repo) -> None:
     for rel in repo.instruction_paths(lambda r: r.endswith("SKILL.md")):
         text = repo.text(rel)
-        block = split_frontmatter(text) or ""
+        block = rule_loading.frontmatter_block(text) or ""
         if block and (err := strict_yaml_error(block)):
             repo.warn(
                 "skill-yaml",
@@ -339,7 +329,7 @@ def check_agents(repo: Repo) -> None:
     total_chars = 0
     agents = repo.instruction_paths(is_agent_definition(repo))
     for rel in agents:
-        fields = lenient_fields(split_frontmatter(repo.text(rel)) or "")
+        fields = lenient_fields(rule_loading.frontmatter_block(repo.text(rel)) or "")
         if not fields.get("name") or not fields.get("description"):
             repo.error(
                 "agent-frontmatter", rel, "a subagent definition needs `name` and `description`"

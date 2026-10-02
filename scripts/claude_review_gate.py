@@ -19,8 +19,7 @@ TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 MISSING_TOKEN = (
     "::error::The repository secret CLAUDE_CODE_OAUTH_TOKEN is not set, so no Claude review ran. "
     "A maintainer creates it with `claude setup-token` and stores it under Settings → Secrets "
-    "and variables → Actions. Pull requests from forks never receive secrets: there a "
-    "maintainer reviews by hand."
+    "and variables → Actions."
 )
 VERDICT_RE = re.compile(r"<!--\s*VERDICT:(BLOCKING|WARNING|PASS)\s*-->")
 

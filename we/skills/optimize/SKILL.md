@@ -52,15 +52,16 @@ inbox as it is.
   and `/plugin update`). An `applied` row without `review_by` gets its date plus
   `optimization.review_days` (default 30).
 - **Sunset.** An `applied` row whose `review_by` has passed becomes a `remove` candidate
-  (`source: sunset`, key `sunset--<row key>`) when its `after` shows no improvement over `before`,
-  or when no evidence line for its key appeared since it was applied and nothing measures it, or
-  when a gate now enforces the same thing.
-- **Ablation.** The two oldest `applied` instruction changes with no evidence line in the last
-  `review_days` go through the adapter's ablation command (the change reverted in a bench copy,
-  probes run); no difference → a `remove` candidate (`source: ablation`, key `ablation--<row key>`).
-  No adapter or no ablation command → skip it and say so in one line.
-- Sunset and ablation candidates join the step-3 order as confidence Medium. A rejected one moves
-  its row's `review_by` forward by `review_days`.
+  (`source: sunset`) when its `after` shows no improvement over `before`, when its failure recurred
+  after the apply date (an evidence line for its key), when the failure never recurred and nothing
+  measures the change, or when a gate now enforces the same thing.
+- **Ablation.** Of the `applied` instruction changes past `review_by` that sunset did not pick, the
+  two oldest go through the adapter's ablation command (the change reverted in a bench copy, probes
+  run); no difference → a `remove` candidate (`source: ablation`). No adapter or no ablation
+  command → skip it and say so in one line.
+- Keys, the row a removal retires, and what a rejection moves:
+  `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Ledger row. Order them into the step-3
+  list with one evidence line each, confidence Medium.
 
 ## 5 · Decide
 
@@ -100,8 +101,8 @@ Per candidate, top down, until the user stops or the inbox is empty:
 
 Before the turn ends, each fact once:
 
-- every decided candidate → a `LEDGER.md` row (`applied` with metric and `review_by`), and its
-  inbox file deleted in the same commit;
+- every decided candidate → a `LEDGER.md` row per the store's § Ledger row, and its inbox file
+  deleted in the same commit;
   a deferred one keeps its file with a `deferred:` evidence line;
 - a new decision → replace the charter's line on that topic, old wording in parentheses
   ("replaces <date>: …");
