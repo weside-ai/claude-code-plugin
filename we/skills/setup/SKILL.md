@@ -105,7 +105,39 @@ every lens is generic and still works." On yes:
   mention `--apply --force` (backed up, `--revert` restores it). This and the council agents are the only
   user-scope files setup touches.
 
-## 6. Next
+## 6. Instruction loop (optional, ask once)
 
-`/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR) → the human merges →
-`/we:merged`.
+"Keep this repo's rules, skills and AGENTS.md fit for the current model?" Store and keys:
+`${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md`. On yes, offer each item on its own:
+
+1. **Store skeleton**: `.weside/optimization/` with `CHARTER.md` (frontmatter `last_optimize:`
+   empty; sections Goal, Decisions, Findings, Next steps), `LEDGER.md` (the ledger table header),
+   `inbox/.gitkeep`, and the `merge=union` line in `.gitattributes`. Never in the plugin's own checkout.
+2. **Authoring rule**: copy `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` unchanged to
+   `.claude/rules/instruction-authoring.md`; its `paths:` scope it to instruction files. A re-run
+   refreshes the copy after asking.
+3. **Gate as pre-commit hook**, when `.pre-commit-config.yaml` exists: add this local hook. It resolves
+   the gate from the plugin cache and passes with a notice where the plugin is absent (CI).
+
+   ```yaml
+   - repo: local
+     hooks:
+       - id: instruction-budget
+         name: Instruction budget (we plugin)
+         entry: bash -c 'g=$(ls -d ~/.claude/plugins/cache/weside-ai/we/*/scripts/check-instruction-budget.py 2>/dev/null | sort -V | tail -1); if [ -z "$g" ]; then echo "we plugin absent - instruction budget not checked"; exit 0; fi; python3 "$g"'
+         language: system
+         pass_filenames: false
+         files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|\.weside/config\.json)$'
+   ```
+
+   Run it once (`pre-commit run instruction-budget --all-files`) and report the count; a red first
+   run is the repo's backlog for `/we:optimize`, not a setup failure.
+4. **Config keys**: `optimization.target_model` and `target_effort` (default: this session's model at
+   `medium`), `exclude` for trees that hold content rather than instructions, and `workspace`: the
+   sibling git repos of this one, one per remote URL, each the main checkout
+   (`git rev-parse --git-dir` equals `--git-common-dir`). Ask which siblings to include.
+
+## 7. Next
+
+`/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR; auto-merge unless a stop
+applies) → `/we:merged`.

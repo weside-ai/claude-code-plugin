@@ -24,7 +24,7 @@ It needs a real PR. This skill does not call it.
 
 | Severity | Source | Policy |
 |---|---|---|
-| BLOCKING | a red required check · a required reviewer's BLOCKING | fix |
+| BLOCKING | a red required check · a required reviewer's BLOCKING · a direct instruction contradiction (§ 1) | fix |
 | WARNING | a required reviewer's WARNING (it turns Claude Review red since 2026-09-27) | fix |
 | SUGGESTION · NITPICK | any reviewer | fix or skip, with a one-line reason in the report |
 | advisory | any finding from a non-required reviewer (Codex, `chatgpt-codex-connector[bot]`) | fix a real defect; skip a rewrite of prose, a rename, a defensive branch for an input the code cannot receive, or a test the PR's red arm already covers |
@@ -88,19 +88,32 @@ and classify it from the log:
   including a pre-existing failure that blocks this PR.
 - **Review runner:** `VERDICT:ERROR`, no verdict, or a checkout HTTP 429. Run `gh run rerun <id> --failed`, change no code,
   and do not count it as a round.
-- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. This is about 40 % of the
-  red test jobs of a large monorepo (Phase 0). Re-run once. A re-run that fails on different tests confirms the noise. The same failure
+- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. In a large monorepo this is a
+  big share of red test jobs. Re-run once. A re-run that fails on different tests confirms the noise. The same failure
   twice is either real or infrastructure: report it rather than inventing a fix. A gate that is still red after confirmed noise is
-  terminal state 3 (blocked), with both run ids. Phase 0 found no red Core run that later went green on the same SHA, so the re-run
+  terminal state 3 (blocked), with both run ids. A red run rarely turns green on the same SHA, so the re-run
   diagnoses the failure and does not fix it.
 - **Never started:** check the merge state before waiting.
+
+**Instruction files in the diff.** Only when `git diff --name-only origin/$BASE...HEAD` lists a
+`.claude/rules/**` file, a `SKILL.md` or a file beside it, an `agents/*.md`, an `AGENTS.md` or a `CLAUDE.md`:
+
+1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-instruction-budget.py`. A violation on a changed file is a
+   SUGGESTION row, source `instruction-gate`.
+2. List what loads beside the changed text: the `AGENTS.md` / `CLAUDE.md` chain from the repo root,
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/load-rules.py --list <changed files>`, and for a changed
+   path-scoped rule the same list for one file its `paths:` match. Compare each changed passage with them.
+3. A **direct contradiction** (the changed text and a loaded instruction prescribe opposite actions
+   in the same situation, and neither scopes itself as the override) is a BLOCKING row quoting both
+   places. Fix it in this PR by aligning the side the PR did not mean to change. Overlap,
+   duplication or tone is a SUGGESTION row.
 
 Findings table: `| # | Source | Bot? | Severity | File:Line | Issue | Thread ID | Action |`.
 
 - A summary comment splits into one row per `SEV:` marker, with Thread ID `—`.
 - A `—` row cannot be resolved. It clears when the next review posts PASS, or when your evidence comment for a skip is on the PR.
 
-**Reviews before tests.** A review posts in about 2 to 7 minutes, while Backend Test-Affected takes 24 to 28 minutes.
+**Reviews before tests.** A review posts within minutes; the slowest test job often takes several times as long.
 Fix and push a review finding without waiting for the test job. Check the CI workflow's `concurrency:` once:
 with `cancel-in-progress: true` the push cancels the stale run. Wait for the test job only when it is the last thing open.
 

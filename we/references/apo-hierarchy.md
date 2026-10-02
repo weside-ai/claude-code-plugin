@@ -5,6 +5,11 @@ description: The Agentic Product Ownership hierarchy — altitudes, artifact pat
 
 # APO hierarchy
 
+## Contents
+
+Altitudes · Links between altitudes · Mirror block · Target and mode (Saga and Epic) · Drafting a
+doc · Writer contract · Council rosters and synthesis.
+
 Solo (`/we:<altitude>`) improves one item at its own altitude and never decomposes it. Meet
 (`/we:meet <altitude>`) convenes a Council that validates the item and decomposes it into items one
 altitude down. Every verb hands off by printing the next verb; none invokes another one inline.

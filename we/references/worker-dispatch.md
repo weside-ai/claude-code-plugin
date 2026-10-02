@@ -5,6 +5,11 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 
 # Worker dispatch
 
+## Contents
+
+Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker ·
+Report.
+
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
 

@@ -178,6 +178,22 @@ def check_statusline_verdicts() -> None:
             )
 
 
+def check_instruction_hook_files() -> None:
+    """/we:setup installs the gate's pre-commit hook into user repos; this repo runs the same
+    hook. Their `files:` filters are one contract: a file that triggers the gate here must
+    trigger it there."""
+    pattern = re.compile(r"id: instruction-budget\n(?:.*\n){0,6}?\s*files: (.+)")
+    ours = pattern.search((REPO / ".pre-commit-config.yaml").read_text())
+    theirs = pattern.search((WE / "skills" / "setup" / "SKILL.md").read_text())
+    if not ours or not theirs:
+        fail("instruction-budget hook: `files:` not found in .pre-commit-config.yaml or setup")
+    elif ours.group(1).strip() != theirs.group(1).strip():
+        fail(
+            "instruction-budget hook: `files:` differs between .pre-commit-config.yaml and "
+            "we/skills/setup/SKILL.md — keep them identical"
+        )
+
+
 # --- Indiscretion guard -------------------------------------------------------
 # One credential leak (a password hardcoded as an os.environ.get default) reached
 # this public repo and had to be rotated. These patterns are the classes that must
@@ -266,6 +282,7 @@ def main() -> int:
     check_dead_references()
     check_userconfig_readers()
     check_listing_budget()
+    check_instruction_hook_files()
     check_statusline_verdicts()
     check_no_indiscretions()
 
