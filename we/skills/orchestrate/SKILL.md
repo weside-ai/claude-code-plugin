@@ -165,9 +165,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`co
 - **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
   empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report
   said green and was not; or a Decision-Queue item was answered by a fact the instruction files should hold.
-  Then dispatch `Agent(subagent_type="we:dev-medium", name="retro-<KEY>")` with the brief "Use the Skill tool
-  with skill `we:retro` and args `--auto --pr <PR> --session $CLAUDE_CODE_SESSION_ID`" and do not wait for it;
-  it is the one agent that keeps running after the run closes.
+  Then dispatch it per `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode; it is the one agent
+  that keeps running after the run closes.
   A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
 - The closing message starts with `PR #<n> · <branch> · <worktree> · CI <state> · auto-merge|user merge`,
   then at most three items someone owes. For a user merge it is the `/we:standup` output. While a

@@ -163,29 +163,88 @@ def _split_top_level(text: str) -> list[str]:
     return [part.strip() for part in _split_braces(text) if part.strip()]
 
 
-def expand_braces(pattern: str, budget: int = BRACE_BUDGET) -> list[str]:
-    """`src/*.{ts,tsx}` → two patterns. Over budget → the pattern unexpanded,
-    whose literal braces then match nothing (Claude Code's documented behaviour)."""
-    depth, start = 0, -1
-    for index, char in enumerate(pattern):
+def _parse_braces(text: str) -> list[str | list]:
+    """A sequence of literal strings and brace groups; a group is a list of option sequences.
+
+    `{a}` (one option) and an unmatched `{` stay literal, as in bash.
+    """
+    sequence: list[str | list] = []
+    literal, index = "", 0
+    while index < len(text):
+        char = text[index]
         if char == "{":
-            if depth == 0:
-                start = index
-            depth += 1
-        elif char == "}" and depth:
-            depth -= 1
-            if depth == 0:
-                options = _split_braces(pattern[start + 1 : index])
-                if len(options) < 2:
-                    continue
-                head, tail = pattern[:start], pattern[index + 1 :]
-                expanded: list[str] = []
-                for option in options:
-                    expanded.extend(expand_braces(head + option + tail, budget))
-                    if len(expanded) > budget:
-                        return [pattern]
-                return expanded
-    return [pattern]
+            depth, close = 0, -1
+            for probe in range(index, len(text)):
+                if text[probe] == "{":
+                    depth += 1
+                elif text[probe] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        close = probe
+                        break
+            options = _split_braces(text[index + 1 : close]) if close != -1 else []
+            if len(options) >= 2:
+                if literal:
+                    sequence.append(literal)
+                    literal = ""
+                sequence.append([_parse_braces(option) for option in options])
+                index = close + 1
+                continue
+        literal += char
+        index += 1
+    if literal:
+        sequence.append(literal)
+    return sequence
+
+
+def _count(sequence: list[str | list]) -> int:
+    total = 1
+    for part in sequence:
+        if isinstance(part, list):
+            total *= sum(_count(option) for option in part)
+    return total
+
+
+def _expand(sequence: list[str | list]) -> list[str]:
+    results = [""]
+    for part in sequence:
+        if isinstance(part, str):
+            results = [prefix + part for prefix in results]
+        else:
+            options = [text for option in part for text in _expand(option)]
+            results = [prefix + option for prefix in results for option in options]
+    return results
+
+
+@functools.lru_cache(maxsize=1024)
+def expand_paths(
+    patterns: tuple[str, ...], budget: int = BRACE_BUDGET
+) -> dict[str, tuple[str, ...]]:
+    """Every pattern of one rule's `paths:` with its brace expansion.
+
+    The list shares one budget of expanded patterns; patterns without braces cost nothing. A
+    pattern whose expansion would exceed what is left stays whole and unexpanded, so its literal
+    braces match nothing (memory.md § Path-specific rules). Counting happens before expanding.
+    """
+    result: dict[str, tuple[str, ...]] = {}
+    used = 0
+    for pattern in patterns:
+        sequence = _parse_braces(pattern)
+        if all(isinstance(part, str) for part in sequence):
+            result[pattern] = (pattern,)
+            continue
+        count = _count(sequence)
+        if used + count > budget:
+            result[pattern] = (pattern,)
+            continue
+        used += count
+        result[pattern] = tuple(_expand(sequence))
+    return result
+
+
+def expand_braces(pattern: str, budget: int = BRACE_BUDGET) -> list[str]:
+    """One pattern's expansion: `src/*.{ts,tsx}` → two patterns."""
+    return list(expand_paths((pattern,), budget)[pattern])
 
 
 def _split_braces(body: str) -> list[str]:
@@ -238,25 +297,25 @@ def _glob_regex(pattern: str) -> re.Pattern[str] | None:
         else:
             out += re.escape(char)
         index += 1
-    return re.compile(out + r"\Z")
+    try:
+        return re.compile(out + r"\Z")
+    except re.error:  # `[z-a]`: an invalid bracket expression matches nothing
+        return None
 
 
-@functools.lru_cache(maxsize=4096)
-def _expanded(pattern: str) -> tuple[str, ...]:
-    return tuple(expand_braces(pattern))
-
-
-def _match_reason(pattern: str, path: str) -> str | None:
+def _match_reason(pattern: str, path: str, rule_patterns: tuple[str, ...] = ()) -> str | None:
+    """`rule_patterns` is the whole `paths:` list the pattern belongs to (shared brace budget)."""
     path = path.removeprefix("./")
-    for expanded in _expanded(pattern.removeprefix("./")):
+    patterns = tuple(p.removeprefix("./") for p in rule_patterns) or (pattern.removeprefix("./"),)
+    for expanded in expand_paths(patterns)[pattern.removeprefix("./")]:
         regex = _glob_regex(expanded)
         if regex is not None and regex.match(path):
             return "glob" if expanded == pattern else f"glob via `{expanded}`"
     return None
 
 
-def _matches(pattern: str, path: str) -> bool:
-    return _match_reason(pattern, path) is not None
+def _matches(pattern: str, path: str, rule_patterns: tuple[str, ...] = ()) -> bool:
+    return _match_reason(pattern, path, rule_patterns) is not None
 
 
 def _split(rules: list[Rule], files: list[str]) -> tuple[list[Rule], list[Rule]]:
@@ -265,7 +324,11 @@ def _split(rules: list[Rule], files: list[str]) -> tuple[list[Rule], list[Rule]]
         rule
         for rule in rules
         if not rule.is_always_on
-        and any(_matches(pattern, file_path) for pattern in rule.patterns for file_path in files)
+        and any(
+            _matches(pattern, file_path, rule.patterns)
+            for pattern in rule.patterns
+            for file_path in files
+        )
     ]
     return always_on, path_matched
 
@@ -309,7 +372,7 @@ def _print_explain(root: Path, rules: list[Rule], target: str) -> None:
         hits = [
             f"`{pattern}` ({reason})"
             for pattern in rule.patterns
-            if (reason := _match_reason(pattern, target)) is not None
+            if (reason := _match_reason(pattern, target, rule.patterns)) is not None
         ]
         if hits:
             print(f"- `{rel_path}` — **matched** by {', '.join(hits)}")

@@ -152,7 +152,7 @@ def strict_yaml_error(block: str) -> str | None:
     return None
 
 
-def referenced_by_instructions(repo: Repo) -> str:
+def instruction_texts(repo: Repo) -> dict[str, str]:
     sources = repo.instruction_paths(
         lambda rel: (
             (
@@ -163,33 +163,38 @@ def referenced_by_instructions(repo: Repo) -> str:
             and rel.endswith(".md")
         )
     )
-    return "\n".join(repo.text(rel) for rel in sources)
+    return {rel: repo.text(rel) for rel in sources}
+
+
+def pointed_at(rel: str, texts: dict[str, str]) -> bool:
+    """Another instruction file names this rule by its path: `.claude/rules/<key>`, or `<key>`
+    not preceded by another path segment (`docs/core/x.md` does not point at `core/x.md`)."""
+    key = re.escape(rel.removeprefix(".claude/rules/"))
+    pattern = re.compile(rf"(?:(?<=\.claude/rules/)|(?<![\w./-])){key}(?![\w-])")
+    return any(pattern.search(text) for other, text in texts.items() if other != rel)
 
 
 def check_rules(repo: Repo) -> None:
     rules = repo.instruction_paths(
         lambda rel: rel.startswith(".claude/rules/") and rel.endswith(".md")
     )
-    corpus = referenced_by_instructions(repo)
+    texts = instruction_texts(repo)
     unconditional_total = 0
     for rel in rules:
         text = repo.text(rel)
         block = split_frontmatter(text)
         rule = load_rules._load_rule(repo.root / rel)
+        broken = None
         if rule.defect and "unterminated" in rule.defect:
-            repo.error(
-                "rule-yaml", rel, "frontmatter never closes — the rule loads unconditionally"
-            )
+            broken = "frontmatter never closes"
         elif block is not None and (err := strict_yaml_error(block)):
-            repo.error(
-                "rule-yaml",
-                rel,
-                f"frontmatter is not valid YAML ({err}) — the rule loads unconditionally",
-            )
+            broken = f"frontmatter is not valid YAML ({err})"
+        if broken:
+            repo.error("rule-yaml", rel, f"{broken} — the rule loads unconditionally")
         if block is not None and re.search(r"^globs\s*:", block, re.MULTILINE):
             repo.error("rule-globs", rel, "`globs:` is ignored by Claude Code — use `paths:`")
         lines = line_count(text)
-        if rule.is_always_on:
+        if rule.is_always_on or broken:  # Claude Code drops broken frontmatter: always loaded
             unconditional_total += lines
             if lines > repo.budget["rule_lines"]:
                 repo.error(
@@ -199,10 +204,9 @@ def check_rules(repo: Repo) -> None:
                 )
         else:
             check_paths_match(repo, rel, rule.patterns)
-        key = rel.removeprefix(".claude/rules/")
         if (
             lines > repo.budget["contents_threshold"]
-            and key in corpus
+            and pointed_at(rel, texts)
             and not CONTENTS_RE.search(text)
         ):
             repo.error(
@@ -219,7 +223,9 @@ def check_rules(repo: Repo) -> None:
 
 
 def check_paths_match(repo: Repo, rel: str, patterns: tuple[str, ...]) -> None:
-    dead = [p for p in patterns if not any(load_rules._matches(p, f) for f in repo.files)]
+    dead = [
+        p for p in patterns if not any(load_rules._matches(p, f, patterns) for f in repo.files)
+    ]
     if dead and len(dead) == len(patterns):
         repo.error(
             "rule-paths-unmatched",
@@ -388,10 +394,10 @@ def run(root: Path) -> Repo:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--root", default=".", help="repo root (default: cwd)")
+    parser.add_argument("--root", help="repo root (default: the git toplevel, else cwd)")
     parser.add_argument("--json", action="store_true", help="one JSON list of findings")
     args = parser.parse_args()
-    repo = run(Path(args.root).resolve())
+    repo = run(load_rules._repo_root(args.root))
     errors = [f for f in repo.findings if f.severity == "error"]
     if args.json:
         print(json.dumps([asdict(f) for f in repo.findings], indent=2))
@@ -402,6 +408,12 @@ def main() -> int:
     if yaml is None:
         print("! PyYAML not installed: strict-YAML checks skipped (pip install pyyaml)")
     print(f"{len(errors)} error(s), {len(repo.findings) - len(errors)} warning(s)")
+    if errors and not repo.exclude:
+        print(
+            "Trees of product content or archives (their own SKILL.md or AGENTS.md, not Claude "
+            'Code instructions)? Exclude them: .weside/config.json → {"optimization": '
+            '{"exclude": ["<dir>"]}}'
+        )
     return 1 if errors else 0
 
 

@@ -89,7 +89,7 @@ def main() -> int:
     if payload.get("source", "startup") != "startup":
         return 0
     root = repo_root(payload.get("cwd") or ".")
-    today = dt.datetime.now(dt.UTC).astimezone().date()
+    today = dt.datetime.now().astimezone().date()
     text = message(root, today, staging_dir(root)) if root else None
     if text:
         print(json.dumps({"systemMessage": text}))

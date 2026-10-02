@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class MatcherTest(unittest.TestCase):
             ("{a,b}/{c,d}/*.{ts,tsx}", "b/d/x.ts", True),
             ("photos [2024/**", "photos [2024/a.png", False),
             ("photos \\[2024/**", "photos [2024/a.png", True),
+            ("src/[z-a].py", "src/a.py", False),  # invalid range: matches nothing, never raises
         ]
         for pattern, path, expected in cases:
             with self.subTest(pattern=pattern, path=path):
@@ -45,9 +47,25 @@ class MatcherTest(unittest.TestCase):
     def test_brace_expansion_count(self):
         self.assertEqual(len(lr.expand_braces("{a,b}/{c,d}/*.{ts,tsx}")), 8)
 
-    def test_brace_budget_leaves_pattern_unexpanded(self):
+    def test_brace_budget_leaves_pattern_whole(self):
         pattern = "{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}/{x,y}"
         self.assertEqual(lr.expand_braces(pattern), [pattern])
+        self.assertFalse(lr._matches(pattern, "a/b/c/x"))
+
+    def test_brace_budget_is_shared_across_a_rules_paths(self):
+        first = "{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}/{a,b,c,d,e,f,g,h,i,j}"  # 1,000
+        second = "src/*.{ts,tsx}"
+        expanded = lr.expand_paths((first, second))
+        self.assertEqual(len(expanded[first]), 1000)
+        self.assertEqual(expanded[second], (second,))  # over the shared budget: whole
+        self.assertFalse(lr._matches(second, "src/a.ts", (first, second)))
+        self.assertTrue(lr._matches(second, "src/a.ts"))
+
+    def test_many_brace_groups_count_before_expanding(self):
+        pattern = "/".join(["{a,b}"] * 24)  # 16.7 million expansions if built
+        start = time.perf_counter()
+        self.assertEqual(lr.expand_braces(pattern), [pattern])
+        self.assertLess(time.perf_counter() - start, 1.0)
 
     def test_comma_separated_paths_string_is_scoped_not_always_on(self):
         with tempfile.TemporaryDirectory() as tmp:

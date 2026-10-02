@@ -14,8 +14,7 @@ description: >
 3. Create no ticket unless the user asks.
 
 Invocation: `/we:retro` (this branch and its last PR) · `--pr <N>` · `--session <id>` (read that
-session's transcript instead of this one) · `--auto` (run by `/we:orchestrate` or `/we:merged` in the
-background: asks nothing, writes entries only).
+session's transcript instead of this one) · `--auto` (§ Auto mode: asks nothing, writes entries only).
 
 ## Where entries go
 
@@ -23,8 +22,19 @@ background: asks nothing, writes entries only).
 - No store: manual → ask once whether to create it (`/we:setup` § Instruction loop), declined →
   print the findings only; `--auto` → write nothing and end with one line saying so.
 - The plugin's own checkout (`origin` matches `repository` in `plugin.json`): print the findings, write nothing.
-- `--auto` in a repo whose instruction files grant no direct docs commit → the staging directory
-  from the store reference.
+- `--auto`: where the store reference's § Staging says.
+
+## Auto mode
+
+`/we:orchestrate` and `/we:merged` each decide by their own criteria whether a cycle earns a retro,
+then dispatch it here the same way:
+
+1. Skip when PR `<N>` is already covered: a claim file `claims/pr-<N>` in the staging directory
+   (`${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Staging), or an evidence line naming
+   `PR #<N>` in the inbox or the staging directory.
+2. `touch` the claim file, then dispatch `Agent(subagent_type="we:dev-medium", name="retro-<N>")`
+   with the brief "Use the Skill tool with skill `we:retro` and args `--auto --pr <N> --session
+   $CLAUDE_CODE_SESSION_ID`. Work from <main checkout path>." The caller does not wait for it.
 
 ## Gather (parallel)
 

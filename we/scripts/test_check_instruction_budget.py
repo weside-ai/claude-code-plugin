@@ -103,6 +103,43 @@ class GateTest(unittest.TestCase):
         self.write(".claude/rules/y.md", "---\npaths: [src/**\n---\n# Y\n")
         self.assert_red("rule-yaml", "the rule loads unconditionally")
 
+    @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
+    def test_rule_with_broken_yaml_counts_as_unconditional(self):
+        self.write(".claude/rules/y.md", "---\npaths: [src/**\n---\n" + lines(205))
+        self.assert_red("rule-lines", "unconditional rule max 200")
+
+    def test_pointer_match_is_path_anchored(self):
+        self.write(".claude/rules/core/x.md", '---\npaths:\n  - "src/**"\n---\n' + lines(120))
+        self.write("AGENTS.md", "# Repo\n\nSee `docs/core/x.md`.\n")
+        self.write(".claude/rules/core/y.md", "# Y\n\nThis rule is `core/x.md`'s sibling.\n")
+        code, out = self.run_gate()
+        self.assertIn("[contents-missing]", out)  # y.md names core/x.md bare: a pointer
+        self.write(".claude/rules/core/y.md", "# Y\n")
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)  # docs/core/x.md is not core/x.md
+
+    def test_a_rule_naming_itself_is_no_pointer(self):
+        self.write(
+            ".claude/rules/self.md",
+            '---\npaths:\n  - "src/**"\n---\n# Self (`self.md`)\n' + lines(120),
+        )
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)
+
+    def test_default_root_is_the_git_toplevel(self):
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        self.write("AGENTS.md", lines(201))
+        (self.root / "src").mkdir(exist_ok=True)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            cwd=self.root / "src",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("AGENTS.md: 201 lines > 200", result.stdout)
+
     def test_rule_with_unclosed_frontmatter_is_an_error(self):
         self.write(".claude/rules/u.md", '---\npaths:\n  - "src/**"\n# U\n')
         self.assert_red("rule-yaml", "frontmatter never closes")

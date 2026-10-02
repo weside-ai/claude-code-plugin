@@ -34,7 +34,7 @@ repos:
         entry: python3 we/scripts/check-instruction-budget.py
         language: system
         pass_filenames: false
-        files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md)$'
+        files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|\.weside/config\.json)$'
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.0.0

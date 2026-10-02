@@ -37,6 +37,7 @@ here: a manual verb asks once, `--auto` stages.
 grant no direct docs commit, it writes its entries to `~/.claude/we-inbox/<repo>/` instead, in the
 inbox format below; `/we:optimize` moves them into `inbox/`. `<repo>` is the `origin` URL's
 `<owner>-<name>` (`org-app` for `github.com/org/app.git`), so every worktree copy stages to one place.
+Its `claims/pr-<N>` file marks an auto retro dispatched for that PR, so a second caller skips it.
 
 ## Inbox entry
 
@@ -120,7 +121,7 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
     "reminder": true,
     "reminder_days": 14,
     "budget": {"rules_total_lines": 600},
-    "exclude": ["vendor"]
+    "exclude": ["content", "archive"]
   },
   "workspace": [{"path": "../other-repo", "remote": "https://github.com/org/other-repo"}]
 }
@@ -130,7 +131,10 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
 - `reminder`: `false` silences the SessionStart reminder (open inbox count, days since
   `last_optimize`); `reminder_days` is the age that triggers it.
 - `budget`, `exclude`: overrides for `scripts/check-instruction-budget.py` (keys in its
-  `DEFAULT_BUDGET`); `exclude` takes directory names or repo-relative prefixes.
+  `DEFAULT_BUDGET`); `exclude` takes directory names or repo-relative prefixes. Exclude every tree
+  whose `SKILL.md` or `AGENTS.md` files are product content or archives rather than instructions
+  Claude Code loads (a product's own skill library, a history folder); otherwise they count
+  against the limits. The gate prints this hint when it fails without any exclude.
 - `workspace`: sibling repos the loop may offer to work on, one entry per remote URL.
 
 ## Plugin checkout and workspace

@@ -26,8 +26,10 @@ source's previous lock entry. The lock format: `references/optimization-store.md
 
 ```bash
 mkdir -p ~/.cache/we/sources
-curl -sL -o /tmp/src.md -w '%{http_code} %{content_type}\n' "$URL"
-SHA=$(sha256sum /tmp/src.md | cut -d' ' -f1) && cp /tmp/src.md ~/.cache/we/sources/$SHA.md
+SRC=$(mktemp)   # one per source: parallel fetches never share a file
+curl -sL -o "$SRC" -w '%{http_code} %{content_type}\n' "$URL"
+SHA=$( (sha256sum "$SRC" 2>/dev/null || shasum -a 256 "$SRC") | cut -d' ' -f1)
+mv "$SRC" ~/.cache/we/sources/"$SHA".md
 ```
 
 Two fetches of one page returned the same hash for every source above (2026-10-02), so a changed

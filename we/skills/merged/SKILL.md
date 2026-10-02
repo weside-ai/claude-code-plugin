@@ -52,16 +52,15 @@ like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the
 
 ## 3 · Auto retro
 
-Run one in the background when the PR needed many review rounds and no retro covered it yet:
+Run one in the background when the PR needed many review rounds:
 
 - rounds: two or more `fix: address CI and review findings` commits on the PR, or three or more
   completed runs of its required review check (`gh pr view <N> --json commits,statusCheckRollup`);
-- covered: an evidence line naming `PR #<N>` in `.weside/optimization/inbox/` or the staging
-  directory (`${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md`).
+- covered, and dispatched when not: `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode. A retro
+  `/we:orchestrate` dispatched for this PR has claimed it, even while it still runs.
 
-Dispatch `Agent(subagent_type="we:dev-medium", name="retro-<N>")` with the brief "Use the Skill tool
-with skill `we:retro` and args `--auto --pr <N>`" and continue without waiting. The brief names the main checkout as its working directory,
-never a tree that step 4 removes. Otherwise skip it silently.
+Its working directory is the main checkout, never a tree that step 4 removes. Otherwise skip it
+silently.
 
 ## 4 · Tear down, in this order
 
