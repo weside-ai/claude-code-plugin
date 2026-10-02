@@ -50,7 +50,7 @@ inbox as it is.
 - **After.** Ledger rows with an `after` still pending get their number now via the adapter; a row
   that cannot be measured yet keeps `pending` and names when it can (a plugin change: after release
   and `/plugin update`). An `applied` row without `review_by` gets its date plus
-  `optimization.review_days` (default 30).
+  `optimization.review_days` (default 30), unless its change was a removal (`—`).
 - **Sunset.** An `applied` row whose `review_by` has passed becomes a `remove` candidate
   (`source: sunset`) when its `after` shows no improvement over `before`, when its failure recurred
   after the apply date (an evidence line for its key), when the failure never recurred and nothing
@@ -70,10 +70,12 @@ Per candidate, top down, until the user stops or the inbox is empty:
 - **Admission.** A candidate that adds or rewords instruction text is proposed for apply only when
   all four hold; otherwise recommend reject or defer, and name the condition that failed:
   1. it names the observed failure;
-  2. the failure occurred at least twice (evidence lines), or once in a high-damage area (money,
-     security, data loss);
-  3. where an instruction on the topic already exists, the remedy is a gate, a hook or a deletion
-     (`${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` § What earns a line);
+  2. the failure occurred at least twice (evidence lines), once in a high-damage area (money,
+     security, data loss), or it is a repository fact (a contradicted claim, a gate violation);
+  3. when the failure recurred while an instruction on the topic stood, the remedy is a gate, a
+     hook or a deletion, not a second wording
+     (`${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` § What earns a line); a model-fit
+     rewrite of a line that did not fail is not such a case;
   4. it states the expected effect, the metric that will show it, and the `review_by` date. The
      adapter in `.weside/optimization/measure/README.md` gives the before number; a correction
      toward a contradicted repo fact uses the re-check of that fact as its metric. No metric →

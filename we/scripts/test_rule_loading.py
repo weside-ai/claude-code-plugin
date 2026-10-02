@@ -34,6 +34,17 @@ class GoldenFixtureTest(unittest.TestCase):
                 rule = rl.parse_rule(case["rule"])
                 self.assertEqual(rule.applies_to(case["read"]), case["loaded"], case["rule"])
 
+    def test_lenient_parser_without_pyyaml_agrees_too(self):
+        # macOS /usr/bin/python3 ships without PyYAML: the lenient path is what most users run
+        saved, rl.yaml = rl.yaml, None
+        try:
+            for case in FIXTURES["cases"]:
+                with self.subTest(case=case["id"]):
+                    rule = rl.parse_rule(case["rule"])
+                    self.assertEqual(rule.applies_to(case["read"]), case["loaded"], case["rule"])
+        finally:
+            rl.yaml = saved
+
     def test_every_fixture_names_its_claude_code_version(self):
         for case in FIXTURES["cases"]:
             with self.subTest(case=case["id"]):
@@ -92,6 +103,15 @@ class MatcherTest(unittest.TestCase):
             rl.yaml = saved
         self.assertEqual(rule.patterns, ("src/**",))
         self.assertFalse(rule.yaml_checked)
+
+
+class ListFilesTest(unittest.TestCase):
+    def test_non_ascii_paths_are_listed_unquoted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            (Path(tmp) / "docs").mkdir()
+            (Path(tmp) / "docs" / "\u00e4.md").write_text("x\n")
+            self.assertEqual(rl.list_files(Path(tmp)), ["docs/\u00e4.md"])
 
 
 class CliTest(unittest.TestCase):

@@ -70,6 +70,7 @@ CASES: list[tuple[str, str | None, str]] = [
     ("unfixable-yaml-unrelated", 'paths:\n  - "src/**"\n  - *.md', "other/x.txt"),
     ("empty-list", "paths: []", "other/x.md"),
     ("empty-string", 'paths: ""', "other/x.md"),
+    ("dot-slash-prefix", 'paths:\n  - "./src/*.py"', "src/a.py"),
     ("negation-keeps-rest", 'paths:\n  - "src/**"\n  - "!src/gen/**"', "src/app/x.py"),
 ]
 
@@ -122,14 +123,16 @@ def run_case(case: tuple[str, str | None, str], timeout: int) -> dict:
             timeout=timeout,
             check=False,
         )
-    answer = result.stdout.strip()
+    answer = result.stdout.strip().strip("`.* \n")
+    # Only the exact word or NONE is a verdict; any other reply would record a guess as truth.
+    valid = answer in (word, "NONE")
     return {
         "id": case_id,
         "rule": text.replace(word, "PROBE-<word>"),
         "read": target,
-        "loaded": word in answer,
-        "answer": "<word>" if word in answer else answer[:80],
-        "exit": result.returncode,
+        "loaded": answer == word,
+        "answer": "<word>" if answer == word else answer[:80],
+        "exit": result.returncode if valid else 2,
     }
 
 
@@ -149,7 +152,10 @@ def main() -> int:
     for record in results:
         print(f"{record['id']:28} loaded={record['loaded']!s:5} answer={record['answer']}")
     if failed:
-        print(f"{len(failed)} case(s) failed to run; nothing written", file=sys.stderr)
+        print(
+            f"{len(failed)} case(s) failed or answered neither the word nor NONE; nothing written",
+            file=sys.stderr,
+        )
         return 1
 
     version = subprocess.run(

@@ -29,7 +29,7 @@ jobs:
     name: Claude Review (Analyze)
     # Fork PRs receive no secrets and are reviewed by a maintainer; Renovate needs no review.
     # Both skip, and the gate reports `skipped` as green.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.head_ref, 'renovate/') }}
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && !(startsWith(github.head_ref, 'renovate/') && github.event.pull_request.user.login == 'renovate[bot]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -162,6 +162,8 @@ jobs:
             exit 1
           fi
           # Comments API lags a few seconds after the review posts: poll for THIS run's comment.
+          # Every marker comment newer than the snapshot is gated together, so a second comment
+          # posting a PASS (any workflow can post as github-actions[bot]) cannot hide a red one.
           export SINCE="${REVIEW_SINCE}"
           BODY=""
           for attempt in 1 2 3 4 5 6; do
@@ -169,7 +171,7 @@ jobs:
               | jq -s -r 'add | [.[] | select(.user.login == "claude[bot]" or .user.login == "github-actions[bot]")
                                      | select(.body | startswith("<!-- claude-code-review -->"))
                                      | select(.updated_at > env.SINCE)]
-                          | sort_by(.updated_at) | last | .body // ""')
+                          | map(.body) | join("\n")')
             [ -n "$BODY" ] && break
             echo "Waiting for this run's review comment (attempt ${attempt}/6)…"
             sleep 10

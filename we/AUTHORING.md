@@ -37,7 +37,7 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 | Broad read-only search | `subagent_type: "we:explore-medium"`; the built-in `Explore` inherits the caller's effort |
 | Waiting for CI or a background job | `Monitor` or a background command with a wait condition, never a sleep loop |
 | Task checklist inside a long run | a checklist in the PR body or plan (the task tools are absent in `claude -p`) |
-| Bug review before the first push | Skill tool `code-review` with `args: "high <branch>"`, then `simplify` — inside a subagent always via the Skill tool; a slash command in a prompt is not proven to run it |
+| Bug review before the first push | Skill tool `code-review` with `args: "high <worktree path>"`, then `simplify` — inside a subagent always via the Skill tool; a slash command in a prompt is not proven to run it |
 | Security-sensitive diff (money, auth, tenant) | `/security-review` in addition |
 | Cross-repo work that edits the other repo | a native session there (`claude --bg` in that directory) steered with `SendMessage` |
 | Cross-repo reading | `--add-dir` with `additionalDirectoriesForClaudeMd` |

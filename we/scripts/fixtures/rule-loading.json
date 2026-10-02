@@ -344,6 +344,15 @@
       "recorded": "2026-10-02"
     },
     {
+      "id": "dot-slash-prefix",
+      "rule": "---\npaths:\n  - \"./src/*.py\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
+      "read": "src/a.py",
+      "loaded": false,
+      "answer": "NONE",
+      "claude_code": "2.1.287 (Claude Code)",
+      "recorded": "2026-10-02"
+    },
+    {
       "id": "negation-keeps-rest",
       "rule": "---\npaths:\n  - \"src/**\"\n  - \"!src/gen/**\"\n---\n# Probe rule\n\nThe code word is PROBE-<word>.\n",
       "read": "src/app/x.py",

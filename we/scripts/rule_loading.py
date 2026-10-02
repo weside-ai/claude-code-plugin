@@ -139,7 +139,10 @@ def _lenient_mapping(block: str) -> dict[str, object]:
             continue
         stripped = line.strip()
         if current and isinstance(data.get(current), list) and stripped.startswith("- "):
-            data[current].append(stripped[2:].strip().strip("\"'"))
+            item = stripped[2:].strip()
+            if item and item[0] in "*&!|>%@`":
+                raise ValueError(item)  # YAML rejects it, and quoting repairs only `key: value`
+            data[current].append(item.strip("\"'"))
     return data
 
 
@@ -167,7 +170,12 @@ def parse_rule(text: str, path: Path | None = None) -> Rule:
     unconditional = False
     yaml_checked = yaml is not None
     if yaml is None:
-        data: dict = _lenient_mapping(block)
+        try:
+            data: dict = _lenient_mapping(block)
+        except ValueError:
+            data = {}
+            unconditional = True
+            defect = "an unquoted list item YAML cannot read — the rule always loads"
     else:
         data = _yaml_mapping(block)
         if data is None:
@@ -430,14 +438,14 @@ def repo_root(explicit: str | None = None) -> Path:
 def list_files(root: Path) -> list[str]:
     """Tracked plus untracked-not-ignored files (`git ls-files -co`); a plain walk outside git."""
     result = subprocess.run(
-        ["git", "ls-files", "-co", "--exclude-standard"],
+        ["git", "ls-files", "-z", "-co", "--exclude-standard"],  # -z: no C-quoted paths
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode == 0:
-        listed = {line for line in result.stdout.splitlines() if line}
+        listed = {name for name in result.stdout.split("\0") if name}
         return sorted(rel for rel in listed if (root / rel).is_file())
     found = []
     for directory, dirs, names in os.walk(root):

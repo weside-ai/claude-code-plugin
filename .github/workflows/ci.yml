@@ -82,7 +82,8 @@ jobs:
           python-version: "3.14"
       - run: pip install uv
       - name: Run pytest over we/ on Python 3.9
-        run: uv run --no-project --python 3.9 --with pytest --with pyyaml python -m pytest -q we scripts
+        # No PyYAML: macOS /usr/bin/python3 lacks it, so this lane runs the lenient parser.
+        run: uv run --no-project --python 3.9 --with pytest python -m pytest -q we scripts
 
   markdown-lint:
     name: Markdown Lint
