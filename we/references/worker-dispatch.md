@@ -7,8 +7,8 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 
 ## Contents
 
-Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker ·
-Report.
+Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker
+(premise check, watchdog, independent review, lane merge) · Report.
 
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
@@ -73,6 +73,12 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 - Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
   branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
   question, so the Lead can revert it. The worker never creates tickets.
+- Self-review before the report, every worker: the Skill tool's `code-review` at `high` over
+  `git diff origin/<default-branch>...HEAD`, in a fresh context where the worker can open one (a
+  read-only subagent with `cwd=<worktree>`; a worker that is itself a subagent cannot spawn one and
+  runs the skill inline). Fix every real finding, commit, and report the counts. Green tests are not
+  this review: on two PRs whose authors' own tests and red arms were green, a later review found
+  10 real defects each (2026-10-02).
 
 ## Finish sequence (the last writer, before the first push)
 
@@ -82,8 +88,8 @@ The session or worker that writes last on the PR branch runs this once over
 Invoke each through the Skill tool (`skill: "code-review"`, `args: "<effort>"`); a slash command
 written into a subagent prompt is not proven to run the skill (probe 27.09.2026).
 
-1. `code-review` at the build worker's effort (`high` when any chunk ran as `we:dev-high`, else
-   `medium`; final sim 28.09.2026: a medium review let two red Claude rounds through), then fix what it finds.
+1. The contract's self-review (`code-review` at `high`) over the whole branch, then fix what it
+   finds (final sim 28.09.2026: a medium review let two red Claude rounds through).
 2. `security-review` in addition when the diff touches money, auth or tenant isolation.
 3. `simplify`.
 4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
@@ -103,6 +109,15 @@ killing. PPID 1 is normal for a detached dev server and proves nothing. Stop you
 children included, the moment verification ends.
 
 ## Lead checks around a worker
+
+### Premise check
+
+Before dispatch, the Lead verifies every factual premise of the brief against
+`origin/<default-branch>` (a file still says X, N rules lack Y, a function exists) and keeps the
+command that showed it. A count from a heuristic script goes into the brief as an estimate
+(`~19, heuristic`) for the worker to confirm before acting on it. 2026-10-02: a brief's "~19 rules
+lack nested globs" was 2, and a "still names the old model" was already fixed on main; the worker
+spent its time disproving the brief.
 
 ### Watchdog
 
@@ -143,6 +158,7 @@ The worker's final message is the report; the Agent result delivers it to the Le
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
 gates: <gate> ✓|✗|skipped(<why>) …
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
+self-review: <found> found · <fixed> fixed · <skipped> skipped (<why>)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
 overrides: … · skipped: … · questions: … · blockers: none|<reason>
 ```

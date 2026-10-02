@@ -49,6 +49,9 @@ A line stays when a session would act worse without it: a fact the model cannot 
 repo, a decision someone made, a measured trap stated as fact and fix, or a pointer to the gate
 or script that enforces it. Generic engineering advice and restated Claude Code behaviour go.
 
+A second wording of an instruction that already exists earns nothing. When a rule failed to fire,
+the remedy is a gate, a hook or deleting the rule; a new line names the rule that failed and why.
+
 ## Model-fit patterns
 
 Current models follow instructions closely and literally. Text written to push an older model now
