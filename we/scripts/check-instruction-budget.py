@@ -118,7 +118,8 @@ def list_files(root: Path) -> list[str]:
         check=False,
     )
     if result.returncode == 0:
-        return sorted({line for line in result.stdout.splitlines() if line})
+        listed = {line for line in result.stdout.splitlines() if line}
+        return sorted(rel for rel in listed if (root / rel).is_file())
     found = []
     for directory, dirs, names in os.walk(root):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
@@ -174,13 +175,17 @@ def check_rules(repo: Repo) -> None:
     for rel in rules:
         text = repo.text(rel)
         block = split_frontmatter(text)
-        if block is not None and (err := strict_yaml_error(block)):
+        rule = load_rules._load_rule(repo.root / rel)
+        if rule.defect and "unterminated" in rule.defect:
+            repo.error(
+                "rule-yaml", rel, "frontmatter never closes — the rule loads unconditionally"
+            )
+        elif block is not None and (err := strict_yaml_error(block)):
             repo.error(
                 "rule-yaml",
                 rel,
                 f"frontmatter is not valid YAML ({err}) — the rule loads unconditionally",
             )
-        rule = load_rules._load_rule(repo.root / rel)
         if block is not None and re.search(r"^globs\s*:", block, re.MULTILINE):
             repo.error("rule-globs", rel, "`globs:` is ignored by Claude Code — use `paths:`")
         lines = line_count(text)

@@ -103,6 +103,10 @@ class GateTest(unittest.TestCase):
         self.write(".claude/rules/y.md", "---\npaths: [src/**\n---\n# Y\n")
         self.assert_red("rule-yaml", "the rule loads unconditionally")
 
+    def test_rule_with_unclosed_frontmatter_is_an_error(self):
+        self.write(".claude/rules/u.md", '---\npaths:\n  - "src/**"\n# U\n')
+        self.assert_red("rule-yaml", "frontmatter never closes")
+
     @unittest.skipUnless(HAS_YAML, "PyYAML not installed")
     def test_skill_with_lenient_yaml_is_only_a_warning(self):
         self.write(

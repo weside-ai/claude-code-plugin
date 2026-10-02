@@ -65,6 +65,12 @@ class ReminderTest(unittest.TestCase):
         )
         self.assertIsNone(rem.message(self.root, TODAY))
 
+    def test_staged_entries_count(self):
+        staged = self.root / "staged"
+        staged.mkdir()
+        (staged / "2026-09-01-gap--readme-md.md").write_text("---\nkey: y\n---\n")
+        self.assertIn("1 open instruction finding(s)", rem.message(self.root, TODAY, staged))
+
     def test_no_store_is_silent(self):
         self.assertIsNone(rem.message(self.root / "elsewhere", TODAY))
 

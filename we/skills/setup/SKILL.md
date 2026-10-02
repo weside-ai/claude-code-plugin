@@ -139,5 +139,5 @@ every lens is generic and still works." On yes:
 
 ## 7. Next
 
-`/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR) → the human merges →
-`/we:merged`.
+`/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR; auto-merge unless a stop
+applies) → `/we:merged`.

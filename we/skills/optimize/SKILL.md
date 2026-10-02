@@ -25,15 +25,17 @@ git fetch -q origin && git show origin/<default>:.weside/optimization/CHARTER.md
 
 Read the charter (goal, decisions, findings, next steps), then `LEDGER.md`, then every file in
 `inbox/`, plus entries staged under `~/.claude/we-inbox/<repo>/` by an auto retro: move those into
-`inbox/` now. No store → offer `/we:setup` § Instruction loop and stop. Tell the user in at most three
-sentences where things stand, what you do now, and whether you need anything.
+`inbox/` now. No store → offer `/we:setup` § Instruction loop and stop. Tell the user briefly where
+things stand, what you do now, and whether you need anything.
 
 ## 2 · Audit first?
 
-Read `sources.lock` → `audit`. Recommend `/we:instruction-audit` before deciding anything when the
-target model or effort differs from `.weside/config.json`, `claude --version` differs, the audit is
-30 days old or older, or no audit ran yet. A changed source hash surfaces there too. One question;
-on "no", continue with the inbox as it is.
+Read `sources.lock`. Fetch and hash the sources per
+`${CLAUDE_PLUGIN_ROOT}/references/instruction-sources.md` and compare; the lock itself stays the
+audit's to write. Recommend `/we:instruction-audit` before deciding anything when a source hash
+changed, the target model or effort differs from `.weside/config.json`, `claude --version` differs,
+the audit is 30 days old or older, or no audit ran yet. One question; on "no", continue with the
+inbox as it is.
 
 ## 3 · Consolidate
 
@@ -81,6 +83,6 @@ Before the turn ends, each fact once:
 - a changed finding → replace its row; next steps updated; `last_optimize:` set to today;
 - the charter stays within 200 lines.
 
-Commit per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Close with one line: candidates applied /
+Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land). Close with one line: candidates applied /
 rejected / deferred, inbox left, the next step. Then offer each `workspace` repo whose inbox is not
 empty.

@@ -88,10 +88,10 @@ and classify it from the log:
   including a pre-existing failure that blocks this PR.
 - **Review runner:** `VERDICT:ERROR`, no verdict, or a checkout HTTP 429. Run `gh run rerun <id> --failed`, change no code,
   and do not count it as a round.
-- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. This is about 40 % of the
-  red test jobs of a large monorepo (Phase 0). Re-run once. A re-run that fails on different tests confirms the noise. The same failure
+- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. In a large monorepo this is a
+  big share of red test jobs. Re-run once. A re-run that fails on different tests confirms the noise. The same failure
   twice is either real or infrastructure: report it rather than inventing a fix. A gate that is still red after confirmed noise is
-  terminal state 3 (blocked), with both run ids. Phase 0 found no red Core run that later went green on the same SHA, so the re-run
+  terminal state 3 (blocked), with both run ids. A red run rarely turns green on the same SHA, so the re-run
   diagnoses the failure and does not fix it.
 - **Never started:** check the merge state before waiting.
 
@@ -113,7 +113,7 @@ Findings table: `| # | Source | Bot? | Severity | File:Line | Issue | Thread ID 
 - A summary comment splits into one row per `SEV:` marker, with Thread ID `—`.
 - A `—` row cannot be resolved. It clears when the next review posts PASS, or when your evidence comment for a skip is on the PR.
 
-**Reviews before tests.** A review posts in about 2 to 7 minutes, while Backend Test-Affected takes 24 to 28 minutes.
+**Reviews before tests.** A review posts within minutes; the slowest test job often takes several times as long.
 Fix and push a review finding without waiting for the test job. Check the CI workflow's `concurrency:` once:
 with `cancel-in-progress: true` the push cancels the stale run. Wait for the test job only when it is the last thing open.
 

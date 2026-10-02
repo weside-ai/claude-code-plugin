@@ -42,8 +42,9 @@ Invocation: `/we:instruction-audit` (this repo) · `--no-doctor` (sources and ga
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-instruction-budget.py --root <repo> --json
 ```
 
-Each finding becomes an entry with pattern `gate:<check>`, source `gate`, confidence `High` for an
-error and `Medium` for a warning, action `rewrite` (`move` for a line or budget overflow).
+Each error becomes an entry with pattern `gate:<check>`, source `gate`, confidence `High`, action
+`rewrite` (`move` for a line or budget overflow). Warnings go into the report only: a lenient-YAML
+skill or one dead glob among live ones is no candidate on its own.
 
 ## 4 · Built-in prompt audit
 
@@ -70,7 +71,7 @@ Rows on files outside this repo get `action: flag`; rows on plugin files get `ta
    and **resolved** (in the old report, gone now).
 3. Write `sources.lock`: every source's hash and fetch date, and the `audit` block (date, target
    model and effort, `claude --version`).
-4. Commit the store files per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`.
+4. Commit the store files per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land).
 
 ## 6 · Report
 

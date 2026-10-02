@@ -31,6 +31,21 @@ def repo_root(cwd: str) -> Path | None:
     return Path(result.stdout.strip()) if result.returncode == 0 else None
 
 
+def staging_dir(root: Path) -> Path | None:
+    """`~/.claude/we-inbox/<owner>-<name>/`, named after the origin URL."""
+    result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    match = re.search(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?/?$", result.stdout.strip())
+    if result.returncode != 0 or not match:
+        return None
+    return Path.home() / ".claude" / "we-inbox" / f"{match.group(1)}-{match.group(2)}"
+
+
 def last_optimize(charter: Path) -> dt.date | None:
     try:
         text = charter.read_text(encoding="utf-8")
@@ -40,7 +55,7 @@ def last_optimize(charter: Path) -> dt.date | None:
     return dt.date.fromisoformat(match.group(1)) if match else None
 
 
-def message(root: Path, today: dt.date) -> str | None:
+def message(root: Path, today: dt.date, staged: Path | None = None) -> str | None:
     store = root / ".weside" / "optimization"
     if not store.is_dir():
         return None
@@ -51,7 +66,8 @@ def message(root: Path, today: dt.date) -> str | None:
     section = config.get("optimization") or {}
     if section.get("reminder") is False:
         return None
-    keys = {re.sub(r"^\d{4}-\d{2}-\d{2}-", "", p.stem) for p in (store / "inbox").glob("*.md")}
+    entries = [*(store / "inbox").glob("*.md"), *(staged.glob("*.md") if staged else [])]
+    keys = {re.sub(r"^\d{4}-\d{2}-\d{2}-", "", p.stem) for p in entries}
     if not keys:
         return None
     last = last_optimize(store / "CHARTER.md")
@@ -74,7 +90,7 @@ def main() -> int:
         return 0
     root = repo_root(payload.get("cwd") or ".")
     today = dt.datetime.now(dt.UTC).astimezone().date()
-    text = message(root, today) if root else None
+    text = message(root, today, staging_dir(root)) if root else None
     if text:
         print(json.dumps({"systemMessage": text}))
     return 0

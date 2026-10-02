@@ -16,9 +16,8 @@ number, or a kebab-case slug when there is no ticketing tool. The same token nam
 
 ## Frontmatter
 
-The reader is a stdlib parser (`_parse_frontmatter` in v6 `orchestration.py`). It reads
-`key: value` lines and inline lists `[a, b]`. It keeps a trailing `# comment` as part of the
-value, so every line is emitted bare.
+Every line is a bare `key: value`, lists inline as `[a, b]`, no trailing `# comment`: a reader
+takes the rest of the line as the value.
 
 ```yaml
 ---
@@ -45,7 +44,7 @@ parallel_groups: []
 
 ## The refined scan
 
-A plan counts as refined when all three hold (`_body_is_refined`):
+A plan counts as refined when all three hold:
 
 1. The tokens `Given`, `When` and `Then` appear. The test is case-sensitive and file-wide, so it
    cannot catch one lowercase keyword in one AC: capitalise all three in every AC.

@@ -29,9 +29,14 @@ checkout and workspace.
 A store exists only where a human created it (`/we:setup` asks). A verb that finds no
 `.weside/optimization/` writes nothing there and says so in one line.
 
+**Where store commits land.** `references/plan-commit.md` step 1 decides from the repo's own
+instruction files. When they say nothing, its default (a push to the default branch) does not apply
+here: a manual verb asks once, `--auto` stages.
+
 **Staging.** An automatic retro cannot ask and cannot open a PR. Where the repo's instruction files
 grant no direct docs commit, it writes its entries to `~/.claude/we-inbox/<repo>/` instead, in the
-inbox format below; `/we:optimize` moves them into `inbox/`.
+inbox format below; `/we:optimize` moves them into `inbox/`. `<repo>` is the `origin` URL's
+`<owner>-<name>` (`org-app` for `github.com/org/app.git`), so every worktree copy stages to one place.
 
 ## Inbox entry
 

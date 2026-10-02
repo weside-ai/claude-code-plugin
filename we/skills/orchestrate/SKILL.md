@@ -162,23 +162,24 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence (`co
   migration while another open PR adds one too, a follow-up still runs on the branch, or a
   question to the human is open; the closing message then says `user merge: <reason>`. A fix round
   on an armed PR starts with `gh pr merge <PR> --disable-auto`.
+- **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
+  empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report
+  said green and was not; or a Decision-Queue item was answered by a fact the instruction files should hold.
+  Then dispatch `Agent(subagent_type="we:dev-medium", name="retro-<KEY>")` with the brief "Use the Skill tool
+  with skill `we:retro` and args `--auto --pr <PR> --session $CLAUDE_CODE_SESSION_ID`" and do not wait for it;
+  it is the one agent that keeps running after the run closes.
+  A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
 - The closing message starts with `PR #<n> · <branch> · <worktree> · CI <state> · auto-merge|user merge`,
   then at most three items someone owes. For a user merge it is the `/we:standup` output. While a
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
   decided per finish-first and reported, never asked (final sim 28.09.2026). Knowledge goes into the
   plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
-- Stop leftover agents with `TaskStop`. Keep the PR branch's worktree until the merge. Release
+- Stop leftover agents with `TaskStop`, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default
   branch is the backup; no extra documentation pass (Foxy 01.10.2026).
-- **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
-  empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report
-  said green and was not; or a Decision-Queue item was answered by a fact the instruction files should hold.
-  Then dispatch `Agent(subagent_type="we:dev-medium", name="retro-<KEY>")` with the brief "Use the Skill tool
-  with skill `we:retro` and args `--auto --pr <PR> --session $CLAUDE_CODE_SESSION_ID`" and do not wait for it.
-  A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
 - After the merge, `/we:merged` closes out: it finds the run's branches and worktrees by `<KEY>` in
   git and the PR by number.
 

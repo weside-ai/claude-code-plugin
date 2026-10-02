@@ -54,5 +54,5 @@ carries the proposed lines. Evidence line: `- <date> retro PR #<N> | session <id
 
 1. Per finding, `ls .weside/optimization/inbox/*-<key>.md`: a hit gains an evidence line, none
    gets a new file.
-2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`, except `--auto` in staging.
+2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land), except `--auto` in staging.
 3. Close with one line: entries created, entries repeated (with their new counts), where they are.
