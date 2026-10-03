@@ -2,7 +2,7 @@
 """SessionStart hook: remind the user of open instruction-loop work.
 
 Shows one `systemMessage` line (user-visible, no model context) when the repo has a
-`.weside/optimization/` store with open inbox entries and either one of them is `confidence: High`
+`.weside/optimization/` store with open inbox entries and either one not yet deferred is `confidence: High`
 or the last `/we:optimize` is `optimization.reminder_days` (default 14) or more days old, or never
 ran. Silent on resume,
 clear and compact, without a store, and when `.weside/config.json` sets
@@ -61,7 +61,10 @@ def is_high(entry: Path) -> bool:
         text = entry.read_text(encoding="utf-8")
     except OSError:
         return False
-    return re.search(r"^confidence:\s*High\b", text, re.MULTILINE) is not None
+    if re.search(r"^- \d{4}-\d{2}-\d{2} deferred:", text, re.MULTILINE):
+        return False
+    front = re.match(r"---\n(.*?)\n---", text, re.DOTALL)
+    return bool(front and re.search(r"^confidence:\s*high\b", front.group(1), re.M | re.I))
 
 
 def message(root: Path, today: dt.date, staged: Path | None = None) -> str | None:

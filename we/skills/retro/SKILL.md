@@ -62,7 +62,8 @@ carries the proposed lines. Evidence line: `- <date> retro PR #<N> | session <id
 
 ## Write
 
-1. Per finding, `ls .weside/optimization/inbox/*-<key>.md`: a hit gains an evidence line. Before a
+1. Per finding, `ls .weside/optimization/inbox/????-??-??-<key>.md` (and staging): a hit gains an evidence
+   line. Before a
    new file, read the inbox, staging and `LEDGER.md` entries on the same target file; one that
    describes the same failure gains the evidence line under its key (store reference § Inbox entry,
    stable keys). Only then a new file. A target outside the repo is written as `target: ~/<path>`.

@@ -47,7 +47,8 @@ inbox as it is.
 
 ## 4 · Measure "after", sunset, ablation
 
-- **After.** Ledger rows with an `after` still pending get their number now via the adapter; a row
+- **After.** Ledger rows with an `after` still pending get their number now via the adapter, or
+  without one from recurrence (store reference § Measurement adapter); a row
   that cannot be measured yet keeps `pending` and names when it can (a plugin change: after release
   and `/plugin update`). An `applied` row without `review_by` gets its date plus
   `optimization.review_days` (default 30), unless its change was a removal (`—`).

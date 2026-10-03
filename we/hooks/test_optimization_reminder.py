@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The reminder speaks only when the store has open entries and /we:optimize is overdue.
+"""The reminder speaks only when the store has open entries and one is High or /we:optimize is overdue.
 
 Run with: python3 -m pytest -q we/hooks/test_optimization_reminder.py
 """
@@ -59,6 +59,13 @@ class ReminderTest(unittest.TestCase):
         self.entry("2026-09-30-gap--agents-md.md", confidence="High")
         self.charter("2026-09-28")
         self.assertIn("last /we:optimize 4 days ago", rem.message(self.root, TODAY))
+
+    def test_deferred_high_entry_is_silent_when_recent(self):
+        self.entry("2026-09-20-gap--agents-md.md", confidence="High")
+        with open(self.store / "inbox" / "2026-09-20-gap--agents-md.md", "a") as f:
+            f.write("## Evidence\n\n- 2026-09-28 deferred: unmeasurable\n")
+        self.charter("2026-09-28")
+        self.assertIsNone(rem.message(self.root, TODAY))
 
     def test_exactly_fourteen_days_reminds(self):
         self.entry("2026-09-30-gap--agents-md.md")
