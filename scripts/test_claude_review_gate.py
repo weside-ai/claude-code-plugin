@@ -64,16 +64,65 @@ QUOTA_SAMPLE = [  # run 37133981476, 2026-10-03: the account was out of quota
 ]
 
 
+BAD_TOKEN_SAMPLE = [  # `claude -p` with an invalid OAuth token, 2026-10-03
+    {"type": "system", "subtype": "init"},
+    {
+        "type": "assistant",
+        "error": "authentication_failed",
+        "message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Failed to authenticate. API Error: 401 Invalid bearer token",
+                }
+            ]
+        },
+    },
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": True,
+        "duration_ms": 2461,
+        "num_turns": 1,
+        "total_cost_usd": 0,
+        "modelUsage": {},
+        "api_error_status": 401,
+        "result": "Failed to authenticate. API Error: 401 Invalid bearer token",
+    },
+]
+
+
 class ClassifyTest(unittest.TestCase):
-    def test_observed_quota_failure_is_quota(self):
-        self.assertEqual(gate.classify(QUOTA_SAMPLE), "quota")
+    def test_shape_alone_is_refused_not_quota(self):
+        self.assertEqual(gate.classify(QUOTA_SAMPLE), "refused")
+
+    def test_probed_bad_token_is_auth(self):
+        self.assertEqual(gate.classify(BAD_TOKEN_SAMPLE), "auth")
+
+    def test_review_prose_about_oauth_is_not_auth(self):
+        prose = {"type": "assistant", "message": {"content": "this diff touches OAuth /login"}}
+        sample = [
+            prose,
+            {
+                "type": "result",
+                "is_error": True,
+                "duration_ms": 90000,
+                "total_cost_usd": 0.8,
+                "modelUsage": {"m": {}},
+                "result": "crashed",
+            },
+        ]
+        self.assertEqual(gate.classify(sample), "other")
+
+    def test_status_429_is_quota(self):
+        self.assertEqual(gate.classify([{"type": "result", "api_error_status": 429}]), "quota")
 
     def test_auth_error_field_or_text_is_auth(self):
         by_field = [{"type": "assistant", "error": "authentication_failed", "message": {}}]
         by_text = [
             {"type": "result", "is_error": True, "result": "Invalid API key · Please run /login"}
         ]
-        for sample in (by_field, by_text, by_text + QUOTA_SAMPLE):
+        for sample in (by_field, by_text, by_text + QUOTA_SAMPLE):  # text beats shape
             with self.subTest(sample=sample):
                 self.assertEqual(gate.classify(sample), "auth")
 

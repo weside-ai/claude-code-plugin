@@ -49,44 +49,52 @@ def verdict(body: str) -> tuple[int, str]:
     return 0, "Claude review: PASS."
 
 
-AUTH_RE = re.compile(r"\b401\b|invalid (api key|bearer|x-api-key)|oauth|/login|authenticat", re.I)
-QUOTA_RE = re.compile(r"\b429\b|usage limit|rate.?limit|quota|overloaded|credit balance", re.I)
+AUTH_RE = re.compile(r"\b401\b|invalid (api key|bearer)|failed to authenticate|oauth token", re.I)
+QUOTA_RE = re.compile(r"\b429\b|usage limit|rate.?limit|quota|credit balance", re.I)
 REASONS = {
     "auth": "token invalid: regenerate with `claude setup-token` and update CLAUDE_CODE_OAUTH_TOKEN",
     "quota": "subscription quota/rate limit: re-run later, nothing to fix",
+    "refused": (
+        "refused before the model ran, cause not stated (quota or token): re-run after the "
+        "quota resets; if it still fails, regenerate the token"
+    ),
     "other": "action error: see the run log",
 }
 
 
 def classify(messages: object) -> str:
-    """`auth`, `quota` or `other` for a run that produced no verdict.
+    """`auth`, `quota`, `refused` or `other` for a run that produced no verdict.
 
-    The SDK marks an API failure on the assistant message (`error`); the CLI puts its text in
-    the result. A run that ended in under 5 s with zero cost and no model usage never reached
-    the model: the subscription refused it (run 37133981476: 540 ms, $0, `modelUsage: {}`).
+    Only an explicit signal names auth or quota: the assistant message's `error`, the result's
+    `api_error_status`, or the error text. A bad token and an exhausted quota share the shape
+    "is_error, $0, empty modelUsage, a few seconds" (bad token probed 2026-10-03: `error:
+    authentication_failed`, `api_error_status: 401`, 2.5 s; quota run 37133981476: 540 ms), so
+    that shape alone is `refused`. Text is read only from the result and from assistant messages
+    that carry `error`, never from the review's own prose.
     """
     if not isinstance(messages, list):
         return "other"
     dicts = [m for m in messages if isinstance(m, dict)]
-    errors = {str(m.get("error", "")) for m in dicts if m.get("type") == "assistant"}
+    flagged = [m for m in dicts if m.get("type") == "assistant" and m.get("error")]
+    results = [m for m in dicts if m.get("type") == "result"]
+    errors = {str(m["error"]) for m in flagged}
+    statuses = {m.get("api_error_status") for m in results}
     text = " ".join(
-        json.dumps(m.get("result", "")) + json.dumps(m.get("message", ""))
-        for m in dicts
-        if m.get("type") in ("result", "assistant")
+        [str(m.get("result", "")) for m in results]
+        + [json.dumps(m.get("message", "")) for m in flagged]
     )
-    if "authentication_failed" in errors or AUTH_RE.search(text):
+    if "authentication_failed" in errors or statuses & {401, 403} or AUTH_RE.search(text):
         return "auth"
-    if errors & {"rate_limit", "billing_error"} or QUOTA_RE.search(text):
+    if errors & {"rate_limit", "billing_error"} or 429 in statuses or QUOTA_RE.search(text):
         return "quota"
-    result = next((m for m in reversed(dicts) if m.get("type") == "result"), None)
+    result = results[-1] if results else None
     if (
         result
         and result.get("is_error")
         and not result.get("total_cost_usd")
         and not result.get("modelUsage")
-        and int(result.get("duration_ms") or 0) < 5000
     ):
-        return "quota"
+        return "refused"
     return "other"
 
 

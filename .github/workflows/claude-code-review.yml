@@ -5,7 +5,7 @@
 #   - the comment's first line is the marker <!-- claude-code-review -->, then "## Code Review"
 #   - each finding carries <!-- SEV:BLOCKING|WARNING|SUGGESTION -->
 #   - the verdict marker <!-- VERDICT:BLOCKING|WARNING|PASS --> closes the review
-#   - a run that ends without a verdict posts <!-- VERDICT:ERROR --> and its cause (auth, quota, other)
+#   - a run that ends without a verdict posts <!-- VERDICT:ERROR --> and its cause (auth, quota, refused, other)
 # The decisions (secret present, verdict, failure cause) live in scripts/claude_review_gate.py, pinned by
 # scripts/test_claude_review_gate.py.
 #
@@ -159,16 +159,6 @@ jobs:
           else
             WORKFLOW_HINT=""
           fi
-          if [ "$CLAUDE_OUTCOME" = "failure" ]; then
-            # Name the cause (auth · quota · other) on the PR and in the summary; the check stays red.
-            REASON=$(python3 "$RUNNER_TEMP/review_gate.py" classify "${EXECUTION_FILE:-}" || true)
-            [ -n "$WORKFLOW_HINT" ] && REASON="Claude review produced no verdict:${WORKFLOW_HINT}"
-            printf '<!-- claude-code-review -->\n<!-- VERDICT:ERROR -->\n%s\n' "$REASON" \
-              | gh pr comment "$PR_NUMBER" --body-file - || true
-            echo "$REASON" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::$REASON"
-            exit 1
-          fi
           # Comments API lags a few seconds after the review posts: poll for THIS run's comment.
           # Every marker comment newer than the snapshot is gated together, so a second comment
           # posting a PASS (any workflow can post as github-actions[bot]) cannot hide a red one.
@@ -184,6 +174,17 @@ jobs:
             echo "Waiting for this run's review comment (attempt ${attempt}/6)…"
             sleep 10
           done
+          if [ -z "$BODY" ] && [ "$CLAUDE_OUTCOME" = "failure" ]; then
+            # A verdict posted before a late tool error still counts; only a run without one is classified.
+            # Name the cause (auth · quota · refused · other) on the PR and in the summary; the check stays red.
+            REASON=$(python3 "$RUNNER_TEMP/review_gate.py" classify "${EXECUTION_FILE:-}" || true)
+            [ -n "$WORKFLOW_HINT" ] && REASON="Claude review produced no verdict:${WORKFLOW_HINT}"
+            printf '<!-- claude-code-review -->\n<!-- VERDICT:ERROR -->\n%s\n' "$REASON" \
+              | gh pr comment "$PR_NUMBER" --body-file - || true
+            echo "$REASON" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$REASON"
+            exit 1
+          fi
           if [ -z "$BODY" ]; then
             echo "::error::No review comment newer than ${SINCE} — the review did not post for this run.${WORKFLOW_HINT:- Re-run the job, then check CLAUDE_CODE_OAUTH_TOKEN.}"
             exit 1
