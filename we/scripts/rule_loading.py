@@ -225,7 +225,7 @@ def _split_commas(text: str) -> list[str]:
         if char == "{":
             depth += 1
         elif char == "}":
-            depth -= 1
+            depth = max(0, depth - 1)  # a stray `}` must not swallow later commas
         if char == "," and depth == 0:
             parts.append(current)
             current = ""
