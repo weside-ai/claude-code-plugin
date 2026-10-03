@@ -50,5 +50,63 @@ class VerdictTest(unittest.TestCase):
         self.assertEqual(gate.verdict(body)[0], 1)
 
 
+QUOTA_SAMPLE = [  # run 37133981476, 2026-10-03: the account was out of quota
+    {"type": "system", "subtype": "init"},
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": True,
+        "duration_ms": 540,
+        "num_turns": 1,
+        "total_cost_usd": 0,
+        "modelUsage": {},
+    },
+]
+
+
+class ClassifyTest(unittest.TestCase):
+    def test_observed_quota_failure_is_quota(self):
+        self.assertEqual(gate.classify(QUOTA_SAMPLE), "quota")
+
+    def test_auth_error_field_or_text_is_auth(self):
+        by_field = [{"type": "assistant", "error": "authentication_failed", "message": {}}]
+        by_text = [
+            {"type": "result", "is_error": True, "result": "Invalid API key · Please run /login"}
+        ]
+        for sample in (by_field, by_text, by_text + QUOTA_SAMPLE):
+            with self.subTest(sample=sample):
+                self.assertEqual(gate.classify(sample), "auth")
+
+    def test_rate_limit_text_is_quota(self):
+        sample = [
+            {
+                "type": "result",
+                "is_error": True,
+                "total_cost_usd": 1.2,
+                "modelUsage": {"m": {}},
+                "result": "Claude AI usage limit reached",
+            }
+        ]
+        self.assertEqual(gate.classify(sample), "quota")
+
+    def test_long_costly_failure_is_other(self):
+        sample = [
+            {
+                "type": "result",
+                "is_error": True,
+                "duration_ms": 90000,
+                "total_cost_usd": 0.8,
+                "modelUsage": {"m": {}},
+                "result": "tool crashed",
+            }
+        ]
+        self.assertEqual(gate.classify(sample), "other")
+
+    def test_missing_file_is_red_other(self):
+        code, message = gate.classify_file("/nonexistent")
+        self.assertEqual(code, 1)
+        self.assertIn("(other): action error", message)
+
+
 if __name__ == "__main__":
     unittest.main()
