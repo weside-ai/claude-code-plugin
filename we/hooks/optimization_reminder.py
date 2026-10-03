@@ -2,8 +2,9 @@
 """SessionStart hook: remind the user of open instruction-loop work.
 
 Shows one `systemMessage` line (user-visible, no model context) when the repo has a
-`.weside/optimization/` store with open inbox entries and the last `/we:optimize` is
-older than `optimization.reminder_days` (default 14) or never ran. Silent on resume,
+`.weside/optimization/` store with open inbox entries and either one of them is `confidence: High`
+or the last `/we:optimize` is `optimization.reminder_days` (default 14) or more days old, or never
+ran. Silent on resume,
 clear and compact, without a store, and when `.weside/config.json` sets
 `optimization.reminder: false`. Store format: references/optimization-store.md.
 """
@@ -55,6 +56,14 @@ def last_optimize(charter: Path) -> dt.date | None:
     return dt.date.fromisoformat(match.group(1)) if match else None
 
 
+def is_high(entry: Path) -> bool:
+    try:
+        text = entry.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return re.search(r"^confidence:\s*High\b", text, re.MULTILINE) is not None
+
+
 def message(root: Path, today: dt.date, staged: Path | None = None) -> str | None:
     store = root / ".weside" / "optimization"
     if not store.is_dir():
@@ -72,7 +81,8 @@ def message(root: Path, today: dt.date, staged: Path | None = None) -> str | Non
         return None
     last = last_optimize(store / "CHARTER.md")
     days = (today - last).days if last else None
-    if days is not None and days < int(section.get("reminder_days", DEFAULT_DAYS)):
+    overdue = days is None or days >= int(section.get("reminder_days", DEFAULT_DAYS))
+    if not overdue and not any(is_high(p) for p in entries):
         return None
     age = f"{days} days ago" if days is not None else "never"
     return (

@@ -29,8 +29,8 @@ class ReminderTest(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def entry(self, name: str) -> None:
-        (self.store / "inbox" / name).write_text("---\nkey: x\n---\n")
+    def entry(self, name: str, confidence: str = "Medium") -> None:
+        (self.store / "inbox" / name).write_text(f"---\nkey: x\nconfidence: {confidence}\n---\n")
 
     def charter(self, date: str) -> None:
         (self.store / "CHARTER.md").write_text(f"---\nlast_optimize: {date}\n---\n# Charter\n")
@@ -54,6 +54,16 @@ class ReminderTest(unittest.TestCase):
         self.entry("2026-09-30-gap--agents-md.md")
         self.charter("2026-09-28")
         self.assertIsNone(rem.message(self.root, TODAY))
+
+    def test_recent_optimize_with_high_entry_reminds(self):
+        self.entry("2026-09-30-gap--agents-md.md", confidence="High")
+        self.charter("2026-09-28")
+        self.assertIn("last /we:optimize 4 days ago", rem.message(self.root, TODAY))
+
+    def test_exactly_fourteen_days_reminds(self):
+        self.entry("2026-09-30-gap--agents-md.md")
+        self.charter("2026-09-18")
+        self.assertIn("14 days ago", rem.message(self.root, TODAY))
 
     def test_empty_inbox_is_silent(self):
         self.assertIsNone(rem.message(self.root, TODAY))

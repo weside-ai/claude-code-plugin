@@ -50,7 +50,7 @@ date is the day the key was first seen.
 ---
 key: g2-volatile--agents-md
 pattern: G2-volatile        # see Pattern ids below
-target: AGENTS.md           # repo-relative path; `plugin:<path>` for a plugin file
+target: AGENTS.md           # repo-relative path; `plugin:<path>` for a plugin file; `~/<path>` outside the repo
 target_repo: this           # this · plugin
 action: rewrite             # remove · rewrite · move · replace-with-API-feature · add · flag
 confidence: High            # High · Medium · Low
@@ -64,6 +64,12 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 - 2026-10-02 audit `audits/2026-10-02-core.md` #4: "toolchain 1.26.x" vs `go.mod` 1.27.1
 ```
 
+- **Stable keys.** Before minting a new key, a writer reads the entries and `LEDGER.md` rows on
+  the same target file (inbox, staging, ledger); when one describes the same failure, the finding
+  is a repeat of that key, whatever pattern id it would have drawn.
+- **A target outside the repo** (an ancestor instruction file such as `~/AGENTS.md`) goes into the
+  inbox of the repo where the finding was made, with `target: ~/<path>`. The `/we:optimize` run that
+  applies it edits that file and follows this repo's instruction files for anything around the edit.
 - **A repeat** of a key appends one `- <date> <source> <pointer>: <fact>` line under `## Evidence`
   of the existing file (`ls inbox/*-<key>.md`); it never creates a second file. The repeat count is
   the number of evidence lines across every file carrying the key; it is the entry's weight.
@@ -117,8 +123,12 @@ diff a changed source against the copy it last hashed.
 
 `measure/README.md` names the commands that put a number on a candidate before and after a change
 (a KPI script, a bench arm, a transcript query) and what each number means, plus optionally an
-ablation command: the probes run in a bench copy with one change reverted. Without an adapter, a
-candidate whose metric needs it is deferred, not applied. A plugin skill is measured with `claude plugin eval` (or
+ablation command: the probes run in a bench copy with one change reverted.
+
+**Without an adapter the metric is recurrence**: the evidence lines under the change's key dated
+after its apply date, counted from retro entries (inbox, staging, and any later file carrying the
+key). `before` is the evidence count up to the apply date, `after` the count since; zero after
+`review_by` means it held. `/we:optimize` admission and sunset both read it. A plugin skill is measured with `claude plugin eval` (or
 the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill-doctor`.
 
 ## Config keys
