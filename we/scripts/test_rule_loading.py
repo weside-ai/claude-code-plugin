@@ -137,3 +137,8 @@ class CliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_stray_closing_brace_does_not_swallow_later_commas():
+    """`a}, b/**` is two patterns; a negative depth used to merge them into one."""
+    assert rl.split_paths("a}, b/**") == ("a}", "b/**")
