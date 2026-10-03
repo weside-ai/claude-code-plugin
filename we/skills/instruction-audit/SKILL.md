@@ -61,7 +61,8 @@ A run that prints no report path is a failure: name it, keep the gate and source
 
 Each row of its findings table becomes an entry: its pattern id (`G1a` … `G4`, Group 2 rows as in
 the store reference), its confidence and action, the quoted line and its proposed replacement.
-Rows on files outside this repo get `action: flag`; rows on plugin files get `target_repo: plugin`.
+Rows on ancestor instruction files outside this repo get `target: ~/<path>` and their real action
+(store reference § Inbox entry); other rows outside it get `action: flag`; rows on plugin files get `target_repo: plugin`.
 
 ## 5 · Inbox and lock
 
