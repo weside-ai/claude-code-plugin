@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The reminder speaks only when the store has open entries and /we:optimize is overdue.
+"""The reminder speaks only when the store has open entries and one is High or /we:optimize is overdue.
 
 Run with: python3 -m pytest -q we/hooks/test_optimization_reminder.py
 """
@@ -29,8 +29,8 @@ class ReminderTest(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def entry(self, name: str) -> None:
-        (self.store / "inbox" / name).write_text("---\nkey: x\n---\n")
+    def entry(self, name: str, confidence: str = "Medium") -> None:
+        (self.store / "inbox" / name).write_text(f"---\nkey: x\nconfidence: {confidence}\n---\n")
 
     def charter(self, date: str) -> None:
         (self.store / "CHARTER.md").write_text(f"---\nlast_optimize: {date}\n---\n# Charter\n")
@@ -54,6 +54,23 @@ class ReminderTest(unittest.TestCase):
         self.entry("2026-09-30-gap--agents-md.md")
         self.charter("2026-09-28")
         self.assertIsNone(rem.message(self.root, TODAY))
+
+    def test_recent_optimize_with_high_entry_reminds(self):
+        self.entry("2026-09-30-gap--agents-md.md", confidence="High")
+        self.charter("2026-09-28")
+        self.assertIn("a High finding is open", rem.message(self.root, TODAY))
+
+    def test_deferred_high_entry_is_silent_when_recent(self):
+        self.entry("2026-09-20-gap--agents-md.md", confidence="High")
+        with open(self.store / "inbox" / "2026-09-20-gap--agents-md.md", "a") as f:
+            f.write("## Evidence\n\n- 2026-09-28 deferred: unmeasurable\n")
+        self.charter("2026-09-28")
+        self.assertIsNone(rem.message(self.root, TODAY))
+
+    def test_exactly_fourteen_days_reminds(self):
+        self.entry("2026-09-30-gap--agents-md.md")
+        self.charter("2026-09-18")
+        self.assertIn("14 days ago", rem.message(self.root, TODAY))
 
     def test_empty_inbox_is_silent(self):
         self.assertIsNone(rem.message(self.root, TODAY))

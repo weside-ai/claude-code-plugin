@@ -125,7 +125,8 @@ every lens is generic and still works." On yes:
    also matches files under `exclude` is replaced by narrower globs over the kept files' directories,
    because `paths:` has no negation. A re-run refreshes the body after asking and keeps the `paths:`.
 3. **Gate as pre-commit hook**, when `.pre-commit-config.yaml` exists: add this local hook. It resolves
-   the gate from the plugin cache and passes with a notice where the plugin is absent (CI).
+   the gate from the plugin cache and passes with a notice where the plugin is absent. The gate is a
+   local hook and a `/we:optimize` step, not a CI job: the repo vendors no copy of the plugin's scripts.
 
    ```yaml
    - repo: local

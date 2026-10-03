@@ -47,7 +47,8 @@ inbox as it is.
 
 ## 4 · Measure "after", sunset, ablation
 
-- **After.** Ledger rows with an `after` still pending get their number now via the adapter; a row
+- **After.** Ledger rows with an `after` still pending get their number now via the adapter, or
+  without one from recurrence (store reference § Measurement adapter); a row
   that cannot be measured yet keeps `pending` and names when it can (a plugin change: after release
   and `/plugin update`). An `applied` row without `review_by` gets its date plus
   `optimization.review_days` (default 30), unless its change was a removal (`—`).
@@ -81,7 +82,8 @@ Per candidate, top down, until the user stops or the inbox is empty:
      (`${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` § What earns a line); a model-fit
      rewrite of a line that did not fail is not such a case;
   4. it states the expected effect, the metric that will show it, and the `review_by` date. The
-     adapter in `.weside/optimization/measure/README.md` gives the before number; a correction
+     adapter in `.weside/optimization/measure/README.md` gives the before number, or without one
+     the recurrence metric (store reference § Measurement adapter); a correction
      toward a contradicted repo fact uses the re-check of that fact as its metric. No metric →
      defer or reject, never apply.
 
