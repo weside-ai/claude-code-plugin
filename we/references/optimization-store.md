@@ -69,7 +69,9 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   is a repeat of that key, whatever pattern id it would have drawn.
 - **A target outside the repo** (an ancestor instruction file such as `~/AGENTS.md`) goes into the
   inbox of the repo where the finding was made, with `target: ~/<path>`; any other file outside the
-  repo keeps `action: flag`. The `/we:optimize` run that
+  repo keeps `action: flag`. An entry on a file outside the repo quotes its lines only when
+  `gh repo view --json visibility` says `PRIVATE`; public or unknown → line number and pattern id,
+  no text. The `/we:optimize` run that
   applies it edits that file and follows this repo's instruction files for anything around the edit.
 - **A repeat** of a key appends one `- <date> <source> <pointer>: <fact>` line under `## Evidence`
   of the existing file (`ls inbox/*-<key>.md`); it never creates a second file. The repeat count is

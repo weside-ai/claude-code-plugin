@@ -58,7 +58,7 @@ class ReminderTest(unittest.TestCase):
     def test_recent_optimize_with_high_entry_reminds(self):
         self.entry("2026-09-30-gap--agents-md.md", confidence="High")
         self.charter("2026-09-28")
-        self.assertIn("last /we:optimize 4 days ago", rem.message(self.root, TODAY))
+        self.assertIn("a High finding is open", rem.message(self.root, TODAY))
 
     def test_deferred_high_entry_is_silent_when_recent(self):
         self.entry("2026-09-20-gap--agents-md.md", confidence="High")

@@ -85,11 +85,13 @@ def message(root: Path, today: dt.date, staged: Path | None = None) -> str | Non
     last = last_optimize(store / "CHARTER.md")
     days = (today - last).days if last else None
     overdue = days is None or days >= int(section.get("reminder_days", DEFAULT_DAYS))
-    if not overdue and not any(is_high(p) for p in entries):
+    high = any(is_high(p) for p in entries)
+    if not overdue and not high:
         return None
     age = f"{days} days ago" if days is not None else "never"
+    why = "a High finding is open" if high and not overdue else f"last /we:optimize {age}"
     return (
-        f"we: {len(keys)} open instruction finding(s), last /we:optimize {age}. "
+        f"we: {len(keys)} open instruction finding(s), {why}. "
         "Run /we:optimize, or set optimization.reminder to false in .weside/config.json."
     )
 
