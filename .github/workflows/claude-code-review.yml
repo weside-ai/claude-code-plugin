@@ -5,7 +5,8 @@
 #   - the comment's first line is the marker <!-- claude-code-review -->, then "## Code Review"
 #   - each finding carries <!-- SEV:BLOCKING|WARNING|SUGGESTION -->
 #   - the verdict marker <!-- VERDICT:BLOCKING|WARNING|PASS --> closes the review
-# The decisions (secret present, verdict) live in scripts/claude_review_gate.py, pinned by
+#   - a run that ends without a verdict posts <!-- VERDICT:ERROR --> and its cause (auth, quota, refused, other)
+# The decisions (secret present, verdict, failure cause) live in scripts/claude_review_gate.py, pinned by
 # scripts/test_claude_review_gate.py.
 #
 # Setup (repository admin): store CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) as an Actions
@@ -148,6 +149,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CLAUDE_OUTCOME: ${{ steps.claude-review.outcome }}
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
         run: |
           # claude-code-action runs only the default branch's copy of this workflow: a PR that adds
           # or changes it gets no review until the change is on main, whatever else is right.
@@ -156,10 +158,6 @@ jobs:
             WORKFLOW_HINT=" This PR changes .github/workflows/claude-code-review.yml; claude-code-action refuses to run a workflow that differs from the default branch, so this PR cannot get a Claude review — a human reviews it, and the check passes again once the change is on main."
           else
             WORKFLOW_HINT=""
-          fi
-          if [ "$CLAUDE_OUTCOME" = "failure" ]; then
-            echo "::error::The review action failed before producing a verdict.${WORKFLOW_HINT:- Re-run the job; if it fails twice, regenerate CLAUDE_CODE_OAUTH_TOKEN (claude setup-token).}"
-            exit 1
           fi
           # Comments API lags a few seconds after the review posts: poll for THIS run's comment.
           # Every marker comment newer than the snapshot is gated together, so a second comment
@@ -176,6 +174,17 @@ jobs:
             echo "Waiting for this run's review comment (attempt ${attempt}/6)…"
             sleep 10
           done
+          if [ -z "$BODY" ] && [ "$CLAUDE_OUTCOME" = "failure" ]; then
+            # A verdict posted before a late tool error still counts; only a run without one is classified.
+            # Name the cause (auth · quota · refused · other) on the PR and in the summary; the check stays red.
+            REASON=$(python3 "$RUNNER_TEMP/review_gate.py" classify "${EXECUTION_FILE:-}" || true)
+            [ -n "$WORKFLOW_HINT" ] && REASON="Claude review produced no verdict:${WORKFLOW_HINT}"
+            printf '<!-- claude-code-review -->\n<!-- VERDICT:ERROR -->\n%s\n' "$REASON" \
+              | gh pr comment "$PR_NUMBER" --body-file - || true
+            echo "$REASON" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$REASON"
+            exit 1
+          fi
           if [ -z "$BODY" ]; then
             echo "::error::No review comment newer than ${SINCE} — the review did not post for this run.${WORKFLOW_HINT:- Re-run the job, then check CLAUDE_CODE_OAUTH_TOKEN.}"
             exit 1
