@@ -35,7 +35,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   schema, API and types merges into the integration branch, and the disjoint chunks start with
   `Base: git merge <int>`. Migrations, lockfiles, generated artifacts (`openapi.json`, typed
   clients) and gate baselines always serialize.
-- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches.
+- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches; the same file gets `InstructionsLoaded` and skill-run lines for `/we:retro` and `/we:instruction-audit`.
 
 ### What `isolation: "worktree"` does (Claude Code 2.1.283)
 

@@ -117,8 +117,9 @@ Report: worker-dispatch.md § Report fields, as your final message; a skill's ou
 ```
 
 **While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog); refine the
-next story or draft the PR body; the Agent result brings the report. A result without the Report
-fields is an early turn end: `SendMessage` the worker to continue at the step it stopped. A steer is `SendMessage(to=<name>)`; it is read
+next story or draft the PR body; the Agent result brings the report. The plugin's `SubagentStop` hook
+sends a worker that stopped before its report back to work; a result still without the Report fields
+(the hook's block cap hit) gets `SendMessage` to continue at the step it stopped. A steer is `SendMessage(to=<name>)`; it is read
 at the worker's next turn boundary (measured: not acted on after 140 s), so every steer names a file
 to write, and you check that file before assuming it landed. A liveness question gets evidence
 (`git -C <worktree> log --oneline -3`, `git status`), never a status roll-up. Never spawn a

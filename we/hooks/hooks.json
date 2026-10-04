@@ -33,6 +33,16 @@
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "async": true
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -47,6 +57,39 @@
       }
     ],
     "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "^we:dev-(medium|high)$",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "You judge whether a dev worker subagent ended its turn with its final message or stopped early. The hook input JSON is: $ARGUMENTS\n\nRead only its last_assistant_message. The worker runs many kinds of briefs (implementing code, writing a plan, a retrospective, a CI review round, a finish sequence), so a final message can be long or a single line.\n\nAnswer {\"ok\": false, \"reason\": \"<the block text below, verbatim>\"} ONLY when the message is clearly unfinished, which means one of:\n1. A review's raw output standing alone: security-review, code-review or simplify findings (headings like \"Findings\", numbered issues with severities, \"no other issues found\") with no report around them, meaning no branch, commits or gates lines and no statement of what the worker did about the findings. Such a findings list is never a worker's final message, however complete it looks.\n2. An announcement of a next step: \"next I will ...\", \"now running ...\", \"let me ...\", \"I'll now ...\", with no result after it.\n3. A stop that says work of the brief is still open (\"still need to\", \"remaining: commit\", \"not yet run\") without a blocker or question that explains why it stops.\n\nAnswer {\"ok\": true} in every other case: a report with branch, commits or gates; a plan path with a summary; a one-line closing of a retro or review round; a message saying it handed the report back; an empty or very short closing message; a report that names blockers or asks the Lead a question. When uncertain, answer {\"ok\": true}. Never set \"impossible\".\n\nBlock text: Your turn ended before your final report. Finish the remaining steps of your brief, then write the report your brief asks for (worker-dispatch.md § Report fields) as your final message.",
+            "model": "claude-haiku-4-5",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
       {
         "hooks": [
           {
