@@ -18,7 +18,7 @@ SCRIPT = HERE / "watch-pr-checks.sh"
 REAL = json.loads((HERE / "fixtures" / "pr-checks-rollup.json").read_text())
 SHA = REAL["headRefOid"]
 
-pytestmark = pytest.mark.skipif(not shutil.which("jq"), reason="jq not installed")
+pytestmark = pytest.mark.skipif(not shutil.which("jq"), reason="the stub gh delegates --jq to jq")
 
 
 def _green():
@@ -34,16 +34,19 @@ def _pending(d):
     return d
 
 
-def run(tmp_path, answers, *args, timeout_s="900"):
+def run(tmp_path, answers, *args, timeout_s="900", max_errors="10"):
     replay = tmp_path / "answers"
     replay.mkdir()
     for i, a in enumerate(answers):
-        (replay / f"{i}.json").write_text(json.dumps(a))
+        (replay / f"{i}.json").write_text(a if a == "FAIL" else json.dumps(a))
     gh = tmp_path / "gh"
     gh.write_text(
         "#!/usr/bin/env bash\n"
         f'n=$(cat "{tmp_path}/count" 2>/dev/null || echo 0); echo $((n+1)) > "{tmp_path}/count"\n'
-        f'f="{replay}/$n.json"; [ -f "$f" ] || f="{replay}/{len(answers) - 1}.json"; cat "$f"\n'
+        f'f="{replay}/$n.json"; [ -f "$f" ] || f="{replay}/{len(answers) - 1}.json"\n'
+        '[ "$(cat "$f")" = FAIL ] && { echo "GraphQL: Could not resolve to a PullRequest" >&2; exit 1; }\n'
+        # gh's --jq is jq; the stub delegates to the jq binary.
+        'while [ $# -gt 0 ]; do [ "$1" = --jq ] && q=$2; shift; done; jq -r "$q" "$f"\n'
     )
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     env = {
@@ -51,6 +54,7 @@ def run(tmp_path, answers, *args, timeout_s="900"):
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "WATCH_INTERVAL": "0",
         "WATCH_REGISTER_TIMEOUT": timeout_s,
+        "WATCH_MAX_ERRORS": max_errors,
     }
     res = subprocess.run(
         ["bash", str(SCRIPT), "57", *args],
@@ -117,3 +121,16 @@ def test_no_checks_ever_registered_times_out(tmp_path):
     empty = {"headRefOid": SHA, "statusCheckRollup": []}
     code, out = run(tmp_path, [empty], timeout_s="0")
     assert (code, out) == (4, [f"no checks on {SHA} after 0s"])
+
+
+def test_gh_failing_every_time_ends_with_its_error(tmp_path):
+    code, out = run(tmp_path, ["FAIL"], max_errors="3")
+    assert (code, out) == (
+        2,
+        ["gh failed 3 times in a row: GraphQL: Could not resolve to a PullRequest"],
+    )
+
+
+def test_a_transient_gh_error_is_retried(tmp_path):
+    code, out = run(tmp_path, ["FAIL", _green(), "FAIL", _green()], max_errors="2")
+    assert (code, out) == (0, [f"final {SHA}: green"])

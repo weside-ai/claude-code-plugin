@@ -57,8 +57,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   unanswered `## Open Fork`, when a ticket comment changes the scope after the plan, when the same
   gate fails three times, or when the work needs a product decision, a money-path redesign or a
   foreign subsystem's redesign.
-- The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges a branch, or
-  edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
+- The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges into the
+  default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by `git merge origin/<default-branch>` and the after-merge check (`/we:ci-review` § 3).
 - The worker implements the plan's phases in order, inline, and never fans implementation out to
