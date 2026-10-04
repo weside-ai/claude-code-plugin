@@ -8,7 +8,7 @@ description: >
 # /we:ac-review
 
 An AC/DoD check, not a bug gate: the bench (27.09.2026) measured 12 false blockers when this check
-also hunted bugs. Bugs belong to `code-review` before the push and to the CI review on the PR.
+also hunted bugs. Bugs belong to the CI review on the PR (and a local `code-review` for money, auth, tenant or migration work).
 Report a suspected bug in one line outside the verdict; it never blocks here.
 
 1. Key from the branch (`<type>/<KEY>-…`) → `docs/plans/<KEY>-story.md` (`## Acceptance Criteria`,

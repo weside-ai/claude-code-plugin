@@ -1,0 +1,77 @@
+{
+ "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "statusCheckRollup": [
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:38:31Z",
+   "conclusion": "FAILURE",
+   "name": "Claude Review (Analyze)",
+   "startedAt": "2026-10-04T02:37:15Z",
+   "status": "COMPLETED",
+   "workflowName": "Review: Claude"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:24Z",
+   "conclusion": "SUCCESS",
+   "name": "Python Lint & Format",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:38:38Z",
+   "conclusion": "FAILURE",
+   "name": "Claude Review",
+   "startedAt": "2026-10-04T02:38:34Z",
+   "status": "COMPLETED",
+   "workflowName": "Review: Claude"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:20Z",
+   "conclusion": "SUCCESS",
+   "name": "Plugin Validation",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:28Z",
+   "conclusion": "SUCCESS",
+   "name": "Plugin Tests",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:23Z",
+   "conclusion": "SUCCESS",
+   "name": "Plugin Tests (Python 3.9)",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:27Z",
+   "conclusion": "SUCCESS",
+   "name": "Markdown Lint",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-10-04T02:37:17Z",
+   "conclusion": "SUCCESS",
+   "name": "Version Bump Check",
+   "startedAt": "2026-10-04T02:37:14Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  }
+ ]
+}

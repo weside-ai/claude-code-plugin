@@ -56,8 +56,8 @@ every reader checks for it by hand.
 
 ## Lifecycle
 
-The builder rewrites the plan to match what was built before the PR merges; the next agent reads
-the plan, not the diff.
+Before the PR merges, the builder records in the plan only where the build deviated from it; the
+next agent reads the plan, not the diff.
 
 ## Sections, in this order
 
@@ -137,7 +137,7 @@ derived — code graph, or "grep-derived, no code graph".>
 
 ## Security Review Required
 
-<Yes | No> — <reason; Yes means the build runs `/security-review` on the diff>
+<Yes | No> — <reason; Yes (money, auth, tenant isolation, migration) means the finish runs `code-review` at `high` on the diff>
 
 ## Documentation Impact
 

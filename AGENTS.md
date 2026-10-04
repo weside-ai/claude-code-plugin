@@ -24,10 +24,11 @@ we/                               plugin root
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring)
   hooks/                          hooks.json + SessionStart materialize and optimization reminder, Stop store-conversation,
-                                  PreToolUse verification gate, SubagentStart/Stop timing
+                                  PreToolUse verification gate, SubagentStart/Stop timing,
+                                  SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
   scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
-                                  identity cache, statusline
+                                  identity cache, statusline, watch-pr-checks.sh (CI watch bound to the PR head)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
