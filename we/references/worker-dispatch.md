@@ -8,7 +8,7 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 ## Contents
 
 Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker
-(premise check, watchdog, independent review, lane merge) · Report.
+(premise check, watchdog, lane merge) · Report.
 
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
@@ -58,7 +58,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   gate fails three times, or when the work needs a product decision, a money-path redesign or a
   foreign subsystem's redesign.
 - The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges a branch, or
-  edits files outside its chunk. It pushes only when the brief says `Push: yes`.
+  edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
+  says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`.
 - The worker implements the plan's phases in order, inline, and never fans implementation out to
   sub-agents: one worktree has one git index, and a second committer races `.git/index.lock`.
 - The worker commits per phase and stages by path, never `git add -A`. Every commit carries
@@ -73,36 +74,32 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 - Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
   branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
   question, so the Lead can revert it. The worker never creates tickets.
-- Self-review before the report, every worker: the Skill tool's `code-review` with
-  `args: "high <worktree path>"`. The skill forks into a fresh context; when the session's
-  directory is not the worktree, it reviews the session's directory unless `args` names the path
-  (2026-10-02: a review without it covered another repo). A report that names no
-  file from `git diff --name-only origin/<default-branch>...HEAD` is that failure: run it again. Fix
-  every real finding, commit, and report the counts. Green tests are not this review: on two PRs
-  whose authors' own tests and red arms were green, a later review found 10 real defects each
-  (2026-10-02).
+- No local LLM review (no `code-review`, `simplify`, `security-review`, no reviewer agent): CI runs
+  the Claude and Codex reviews on the PR, and on 01.10.2026 local QA cost 5.3M tokens against 4.4M
+  for building, for few real findings. The one exception is a critical chunk: the Skill tool's
+  `code-review` with `args: "high <worktree path>"` once over the branch (the skill forks into a
+  fresh context and reviews the session's directory unless `args` names the path). A review whose
+  findings name no file from `git diff --name-only origin/<default-branch>...HEAD` ran on the wrong
+  tree: run it again. Fix BLOCKING and WARNING, commit, report the counts.
 
 ## Finish sequence (the last writer, before the first push)
 
 The session or worker that writes last on the PR branch runs this once over
 `git diff origin/<default-branch>...HEAD`, committing after each step:
 
-Invoke each through the Skill tool (`skill: "code-review"`, `args: "high <worktree path>"`); a slash command
-written into a subagent prompt is not proven to run the skill (probe 27.09.2026).
-
-1. The contract's self-review (`code-review` at `high`) over the whole branch, then fix what it
-   finds (final sim 28.09.2026: a medium review let two red Claude rounds through).
-2. `security-review` in addition when the diff touches money, auth or tenant isolation.
-3. `simplify`.
-4. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
+1. The deterministic gates over the whole branch: the pre-push hooks and the affected tests by name.
+2. Only when the diff touches money, auth, tenant isolation or a migration: the contract's
+   `code-review` at `high` through the Skill tool, never as a slash command written into a subagent
+   prompt (not proven to run the skill, probe 27.09.2026). No other LLM review.
+3. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
    only (staging is a question to the human). The receipt goes into the plan's `## Verification`
    with the four literal labels `**Oracle:**`, `**Seed:**`, `**Asserted:**`, `**Not proven:**`.
    `not-applicable` is a valid receipt only with its reason.
-5. The plan rewritten to what was actually built (`skills/story/references/plan-format.md` § Lifecycle).
-6. The affected gates again, because steps 1–3 moved code.
+4. Only the deviations from the plan recorded in the plan (`skills/story/references/plan-format.md` § Lifecycle).
+5. The affected gates again when step 2 or 3 moved code.
 
-No step's output is the final message: its summary looks like a closing report, and two workers
-ended their turn there (30.09.2026). The turn ends with § Report.
+No step's output is the final message; the turn ends with § Report (the plugin's `SubagentStop`
+hook sends a dev worker that stopped early back to work).
 
 Before starting a server, check who owns the single-owner ports (`ss -ltnp`, then
 `ls -l /proc/<pid>/cwd`): `(deleted)` is an orphan and yours to clear; a live cwd in your worktree
@@ -138,15 +135,6 @@ A commit becomes one status line to the human (phase done). A stall gets evidenc
 `git status`, the agent's state) before any word about it. Three runs with it had 0 idle nudges
 by the human (#4308, #4326, #4328); without it a worker sat idle 7 h 47 min (#4299).
 
-### Independent review
-
-After the report, before the push. A report without a `self-review` line, or whose findings name
-no file of the diff, goes back to the worker (`SendMessage`). Then a fresh read-only `we:dev-medium`
-with `cwd=<wt>` runs `code-review` (`args: "high <worktree path>"`) over the branch and checks the
-plan's ACs, which the self-review does not; it reports findings only, and the Lead sends them to the
-original worker, which keeps one committer per worktree. On #4321 a fresh reviewer found 7 WARNING
-after the worker's own review (30.09.2026).
-
 ### After each lane merge
 
 In the integration tree: the repo's type-checker on the files the merge changed (`git -C <int> diff --name-only HEAD^1 HEAD`) and the tests that import them (`rg -l` over
@@ -161,7 +149,7 @@ The worker's final message is the report; the Agent result delivers it to the Le
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
 gates: <gate> ✓|✗|skipped(<why>) …
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
-self-review: <found> found · <fixed> fixed · <skipped> skipped (<why>)
+review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>) | none (not critical)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
 overrides: … · skipped: … · questions: … · blockers: none|<reason>
 ```

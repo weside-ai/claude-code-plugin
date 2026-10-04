@@ -28,7 +28,7 @@ we/                               plugin root
                                   SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
   scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
-                                  identity cache, statusline
+                                  identity cache, statusline, watch-pr-checks.sh (CI watch bound to the PR head)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/

@@ -12,10 +12,10 @@ Longer than 150 lines: the Lead's contract spans refine, build, finish, PR and C
 
 You are the Lead. You read each story's state from git, `gh`, the plan and the ticket; refine what
 has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`, `isolation:
-"worktree"`) for what has one; push once, open one PR, watch CI with `Monitor`. You never merge by hand; arming auto-merge per
-§ Close the run is the human's standing permission (Foxy 30.09.2026). You stop only for the
-Decision Queue or a protected action (release, staging deploy, anything destructive). Every other
-status note goes into the same message as your next tool call. While a worker, refiner or `Monitor`
+"worktree"`) for what has one; push once, open one PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
+§ Close the run is the human's standing permission (Foxy 30.09.2026). You stop only for a protected
+action (release, staging deploy, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
+status note goes into the same message as your next tool call. While a worker, refiner or watch
 runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
 "(Recommended)": plain text scrolls away under notifications (Foxy 30.09.2026). An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
@@ -69,8 +69,11 @@ consume (then it runs first, and dependents get `depends_on: [KEY]`); comments c
 plan (a refined story goes back to refine). Any signal → Decision Queue with your recommendation.
 
 The Decision Queue is one batch: signals, forks a worker reported, freshly refined plans waiting for
-approval, a risk-class call. Ask it once before the first build and then only at wave boundaries,
-two to four plans per batch at most. Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
+approval, a risk-class call. A question never stops independent work: first dispatch everything that
+does not depend on an answer, then ask early and batched (at the start and at wave boundaries, two to
+four plans per batch at most), and park only the chunk an answer blocks. An important question is
+still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase
+and push it to `wip/<KEY>-<slug>`. Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. Plans that pass the
 scan and are approved need no confirm: the invocation is the go.
 
@@ -114,10 +117,12 @@ Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot p
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
 Report: worker-dispatch.md § Report fields, as your final message; a skill's output is never it.
+  Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
 ```
 
-**While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog); refine the
-next story or draft the PR body; the Agent result brings the report. The plugin's `SubagentStop` hook
+**While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog), never a
+`Monitor` on worker progress: the report arrives as a notification. Refine the next story or draft
+the PR body. The plugin's `SubagentStop` hook
 sends a worker that stopped before its report back to work; a result still without the Report fields
 (the hook let it pass, or hit its block cap) gets `SendMessage` to continue at the step it stopped. A steer is `SendMessage(to=<name>)`; it is read
 at the worker's next turn boundary (measured: not acted on after 140 s), so every steer names a file
@@ -136,19 +141,22 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 ## Push, PR, CI
 
 1. Read the report. Run the tests it names yourself in the worker's worktree. Check the AC →
-   evidence lines and the rows of `.weside/dod.md` against the named files and tests. Then dispatch
-   the independent review (`worker-dispatch.md` § Independent review). A missing AC, a DoD `Fail`,
-   a red gate or a review finding goes back to the same worker by `SendMessage`.
+   evidence lines and the rows of `.weside/dod.md` against the named files and tests. No local LLM
+   review: CI runs the Claude and Codex reviews (`worker-dispatch.md` § Finish sequence). A missing
+   AC, a DoD `Fail` or a red gate goes back to the same worker by `SendMessage`.
 2. A migration gets `upgrade → downgrade → upgrade` on a real database. Run
    `git -C <wt> merge origin/<default>`, then push once from the PR branch's worktree
    (`git -C <wt> push -u origin <branch>`); the pre-push hooks run once over the whole diff.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
-3. `gh pr create --body-file <file>`: ticket link, AC → evidence, the `## Verification` receipt
+3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
+   relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the `## Verification` receipt
    from the plan, and one line naming money, auth or tenant work when the diff has it. Move every
    landed story to In Review and verify.
-4. Arm `Monitor` on `gh pr checks <PR> --json name,bucket`, emitting only a failed or cancelled
-   check and the final state, never each green check, and exiting when none is pending. Meanwhile refine or prepare the next story.
+4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command: it binds
+   to the PR's current head, prints only failed or cancelled checks and the final state, and exits
+   when none is pending. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
+   the watch and you arm none. Meanwhile refine or prepare the next story.
 5. Once no check is pending, green or red, run `/we:ci-review <PR>` without asking: open bot threads
    and review findings remain on a green run. Never from the shared main checkout:
    `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it. Its round cap
@@ -160,9 +168,11 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   finding read, run `gh pr merge <PR> --auto --merge` (`--squash`/`--rebase` when `.weside/orchestrate.md`
   names it; gh refuses `--auto` without a method outside a terminal). Not before: Codex is no
   required check, and an early arm merges its finding unread. No auto-merge when the invocation
-  says `--user-merge`, the diff touches a money path or a destructive migration, it adds a
-  migration while another open PR adds one too, a follow-up still runs on the branch, or a
-  question to the human is open; the closing message then says `user merge: <reason>`. A fix round
+  says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
+  runs on the branch, or a question to the human is open; the closing message then says
+  `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
+  second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
+  head, and pushing first. A fix round
   on an armed PR starts with `gh pr merge <PR> --disable-auto`.
 - **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
   empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report

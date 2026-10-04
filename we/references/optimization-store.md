@@ -83,7 +83,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   changed source, `gap` for a missing instruction (action `add`), `sunset` and `ablation` for a
   `remove` or `flag` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
   `sunset--<row key>` or `ablation--<row key>`. `/we:instruction-audit` § 3 also writes `sunset`
-  for a rule or skill with no recorded use; its key is `sunset--<target-slug>`.
+  (source `audit`, no ledger row) for a rule or skill with no recorded use; its key is `sunset--<target-slug>`.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
 - **Lifecycle:** `/we:optimize` decides an entry, writes its ledger row and deletes the inbox file

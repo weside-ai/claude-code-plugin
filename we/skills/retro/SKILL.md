@@ -46,8 +46,8 @@ then dispatch it here the same way:
   `gh`: `git log --oneline origin/<default>..HEAD` and say that PR/CI data is missing.
 - The instruction files that loaded: `AGENTS.md` / `CLAUDE.md`, `.claude/rules/**` (frontmatter and
   first lines), the skills the cycle ran.
-- `~/.claude/we-timing/<session>.jsonl`: its `InstructionsLoaded` lines name the rule files that
-  loaded and why, its `PreToolUse` (`skill`) and `UserPromptExpansion` lines the skills that ran;
+- `~/.claude/we-timing/<session>.jsonl` for the cycle's session (the `--session` id, else this one;
+  missing → say so): its `InstructionsLoaded` lines name the rule files that loaded and why, its `PreToolUse` (`skill`) and `UserPromptExpansion` lines the skills that ran;
   cite them as evidence instead of inferring from `paths:` frontmatter.
 
 ## Findings
