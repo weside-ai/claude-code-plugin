@@ -47,9 +47,10 @@ Each error becomes an entry with pattern `gate:<check>`, source `gate`, confiden
 skill or one dead glob among live ones is no candidate on its own.
 
 Usage: when `~/.claude/we-timing/*.jsonl` spans 30 days, a `.claude/rules/**` file of this repo with
-no `InstructionsLoaded` line and a skill with no `PreToolUse` `skill` or `UserPromptExpansion`
-`command_name` line in that window becomes a `sunset` entry, action `flag`, confidence `Medium`.
-`AGENTS.md` read as project instructions fires no `InstructionsLoaded`; never flag it.
+no `InstructionsLoaded` `file_path` ending in its `.claude/rules/<path>` (worktrees load it under
+other roots) and a skill whose name after the last `:` matches no `PreToolUse` `skill` or
+`UserPromptExpansion` `command_name` in that window becomes a `sunset` entry, action `flag`,
+confidence `Medium`. `AGENTS.md` read as project instructions fires no `InstructionsLoaded`.
 
 ## 4 · Built-in prompt audit
 

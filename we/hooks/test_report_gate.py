@@ -45,4 +45,4 @@ def test_measurement_hooks_never_block():
     groups += [g for g in HOOKS["PreToolUse"] if g.get("matcher") == "Skill"]
     for g in groups:
         (h,) = g["hooks"]
-        assert h["async"] is True and h["command"].endswith("hooks/subagent_timing.py")
+        assert h["async"] is True and h["command"].endswith('hooks/subagent_timing.py"')

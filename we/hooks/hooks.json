@@ -5,11 +5,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/materialize_on_start.py"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/materialize_on_start.py\""
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/optimization_reminder.py"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/optimization_reminder.py\""
           }
         ]
       }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/store_conversation_hook.py"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/store_conversation_hook.py\""
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py\""
           }
         ]
       },
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
           }
         ]
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
           }
         ]
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
           }
         ]
