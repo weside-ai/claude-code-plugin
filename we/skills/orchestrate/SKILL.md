@@ -34,7 +34,7 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 ## Boot
 
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
-   states, where plans land, host resources). Absent → derive them from `AGENTS.md`, say so once.
+   states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
    section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
@@ -145,7 +145,7 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    review: CI runs the Claude and Codex reviews (`worker-dispatch.md` § Finish sequence). A missing
    AC, a DoD `Fail` or a red gate goes back to the same worker by `SendMessage`.
 2. A migration gets `upgrade → downgrade → upgrade` on a real database. Run
-   `git -C <wt> merge origin/<default>`, then push once from the PR branch's worktree
+   `git -C <wt> merge origin/<default>` and the after-merge check (`/we:ci-review` § 3), then push once from the PR branch's worktree
    (`git -C <wt> push -u origin <branch>`); the pre-push hooks run once over the whole diff.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).

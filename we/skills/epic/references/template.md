@@ -65,7 +65,11 @@ change. The decomposition meeting reads this first.>
 - **Upkeep after each event**, committed before the next Story: plan approved → mirror row +
   Updates Log; PR merged → mirror, Updates Log, Learnings forward into the next plan; question
   answered → answer where it applies, with who and when; Story re-cut → `## Sequencing` + mirror.
-- **Standing permissions:** <auto-merge (armed after `/we:ci-review` green; a non-destructive migration auto-merges serially: the second PR merges `origin/<default>` after the first lands, then arms; money paths and destructive migrations stay user merge), staging RC after one question, delegations to other sessions, secrets>.
+- **Standing permissions:** <auto-merge (armed after `/we:ci-review` green; a non-destructive migration auto-merges serially: the second PR merges `origin/<default>` after the first lands, then arms; money paths and destructive migrations stay user merge), delegations to other sessions, secrets>.
+- **Staging RCs:** the Lead tags one with <the repo's release verb> without asking once a merged batch
+  needs staging verification, at most one RC per batch, and says so in its status line. Prod releases stay with the owner.
+- **Staging verification:** as soon as the RC is live, an agent runs every step a test account can observe
+  (API, logs, DB reads); the owner gets only what needs eyes (the look of a surface, a device).
 - **Stops for the owner:** <destructive operations with a count, product questions, money beyond the plan, uncertainty>.
 
 ## Updates Log

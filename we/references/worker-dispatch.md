@@ -59,7 +59,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   foreign subsystem's redesign.
 - The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges a branch, or
   edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
-  says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`.
+  says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
+  is preceded by `git merge origin/<default-branch>` and the after-merge check (`/we:ci-review` § 3).
 - The worker implements the plan's phases in order, inline, and never fans implementation out to
   sub-agents: one worktree has one git index, and a second committer races `.git/index.lock`.
 - The worker commits per phase and stages by path, never `git add -A`. Every commit carries

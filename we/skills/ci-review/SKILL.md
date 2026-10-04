@@ -147,9 +147,9 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 
    The count covers threads only. Check the Action column for open `—` rows.
 3. **Merge `origin/$BASE` before every push**, never rebase: CI tests the merge with the base, so a gate the base gained
-   since your last merge fails there and not here. A rebase of pushed commits needs a force-push, the user's call. Then,
-   when the repo has a manual pre-commit stage, run it over the branch diff:
-   `pre-commit run --hook-stage manual --from-ref origin/$BASE --to-ref HEAD`; red → fix, commit, run it again.
+   since your last merge fails there and not here. A rebase of pushed commits needs a force-push, the user's call. Then
+   the after-merge check: the post-merge command `.weside/orchestrate.md` names, else, when the repo has a manual
+   pre-commit stage, `pre-commit run --hook-stage manual --from-ref origin/$BASE --to-ref HEAD`; red → fix, commit, run it again.
    A merge that changed the diff means collecting again.
    On a migration branch, `alembic heads` must show exactly one head. If the second head came in from the base,
    the merge-heads migration belongs on the base branch: keep your fixes unpushed, report it, and stop as blocked.
