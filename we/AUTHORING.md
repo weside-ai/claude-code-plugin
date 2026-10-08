@@ -40,7 +40,7 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 | Bug review before the first push | the CI review on the PR; locally only for money, auth, tenant isolation or a migration: Skill tool `code-review` with `args: "high <worktree path>"` (inside a subagent always via the Skill tool; a slash command in a prompt is not proven to run it) |
 | Cross-repo work that edits the other repo | a native session there (`claude --bg` in that directory) steered with `SendMessage` |
 | Cross-repo reading | `--add-dir` with `additionalDirectoriesForClaudeMd` |
-| Session continuation | `/resume`, `/fork`, `/recap` — `handoff` only for a cross-session restart |
+| Session continuation | `/resume`, `/fork`, `/recap` — `/we:resume` restarts work after a usage-limit stop, `handoff` only for a cross-session restart |
 
 ## Measured facts a skill must respect (Opus 5.5 bench, 26.–27.09.2026)
 
