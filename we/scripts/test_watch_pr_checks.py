@@ -170,17 +170,18 @@ def test_early_skipped_checks_are_not_green_while_more_register(tmp_path):
     later = _green()
     later["statusCheckRollup"][-1].update(status="IN_PROGRESS", conclusion="")
     code, out = run(tmp_path, [_skipped_only(), _skipped_only(), later, _green()])
+    # Checked first: the old watcher said green on the second read, with two skipped checks.
+    assert int((tmp_path / "views" / "count").read_text()) >= 4, out
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
-    assert int((tmp_path / "views" / "count").read_text()) >= 4
 
 
 def test_green_needs_the_quiet_period_without_change(tmp_path):
     code, out = run(
         tmp_path, [_skipped_only(), _skipped_only(), _pending(_green()), _green()], quiet="1"
     )
+    # A second of 0-interval reads: far more than the four scripted answers.
+    assert int((tmp_path / "views" / "count").read_text()) > 4, out
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
-    # Two seconds of 0-interval reads at least: far more than the four scripted answers.
-    assert int((tmp_path / "views" / "count").read_text()) > 4
 
 
 def test_a_queued_run_without_check_runs_is_pending(tmp_path):
