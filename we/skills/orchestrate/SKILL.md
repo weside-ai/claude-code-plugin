@@ -154,13 +154,15 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    from the plan, and one line naming money, auth or tenant work when the diff has it. Move every
    landed story to In Review and verify.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command: it binds
-   to the PR's current head, prints only failed or cancelled checks and the final state, and exits
-   when none is pending. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
+   to the PR's current head, prints only failed or cancelled checks and the final state with the merge
+   state, and exits once the head's check set has stayed complete and unchanged for 60 s. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
    the watch and you arm none. Meanwhile refine or prepare the next story.
 5. Once no check is pending, green or red, run `/we:ci-review <PR>` without asking: open bot threads
    and review findings remain on a green run. Never from the shared main checkout:
    `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it. Its round cap
    (three) and terminal states end the run.
+6. While any run PR is open, every `main` advance you see is followed by `gh pr view <N> --json mergeStateStatus,mergeable`
+   for each; `DIRTY`/`CONFLICTING` goes back to its worker (merge the default branch, after-merge check, push) without asking.
 
 ## Close the run
 

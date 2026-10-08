@@ -88,7 +88,9 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 The session or worker that writes last on the PR branch runs this once over
 `git diff origin/<default-branch>...HEAD`, committing after each step:
 
-1. The deterministic gates over the whole branch: the pre-push hooks and the affected tests by name.
+1. The deterministic gates over the finished branch, not after an intermediate commit: the full local gate script the
+   repo's instruction files name (it runs the pre-push and manual stages), else `pre-commit run --hook-stage pre-push
+   --all-files` plus `pre-commit run --hook-stage manual <id>` per manual hook marked as a CI mirror; and the affected tests by name.
 2. Only when the diff touches money, auth, tenant isolation or a migration: the contract's
    `code-review` at `high` through the Skill tool, never as a slash command written into a subagent
    prompt (not proven to run the skill, probe 27.09.2026). No other LLM review.
