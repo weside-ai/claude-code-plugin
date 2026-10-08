@@ -1,7 +1,7 @@
 ---
 name: explore-medium
 description: >
-  Read-only Opus explorer at medium effort — for broad reading a Lead or dev-high worker delegates: sweeps over many files, "where is X", "who calls Y". Returns conclusions with file:line, not file dumps.
+  Read-only Opus explorer at medium effort for delegated broad reading: sweeps over many files, "where is X", "who calls Y". Returns conclusions with file:line.
 model: opus
 effort: medium
 tools: Read, Glob, Grep, Bash

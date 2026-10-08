@@ -1,7 +1,7 @@
 ---
 name: dev-high
 description: >
-  Opus dev worker at high effort — for a chunk the Lead flags: a promise that must hold across several code paths, transactions/money/idempotency, a fix routing around a fragile path, a second attempt after a failed worker, or plan-writing.
+  Opus dev worker at high effort — for a chunk the Lead flags with a reason from worker-dispatch.md § Choosing the worker (money, multi-path promises, retries, plans).
 model: opus
 effort: high
 ---
