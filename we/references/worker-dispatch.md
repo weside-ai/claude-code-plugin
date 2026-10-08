@@ -8,7 +8,7 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 ## Contents
 
 Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker
-(premise check, watchdog, lane merge) · Report.
+(premise check, code graph in the brief, watchdog, lane merge) · Report.
 
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
@@ -120,6 +120,19 @@ command that showed it. A count from a heuristic script goes into the brief as a
 (`~19, heuristic`) for the worker to confirm before acting on it. 2026-10-02: a brief's "~19 rules
 lack nested globs" was 2, and a "still names the old model" was already fixed on main; the worker
 spent its time disproving the brief.
+
+### Code graph in the brief
+
+Where `.weside/config.json` → `tools.graphify` is true, the brief decides the code-graph question per
+chunk and names the symbols, because workers act on the brief, not on the repo rule: in a 10-day sweep
+(10/2026) workers whose brief named the graph used it in 33 of 55 runs, the others in 26 of 399.
+
+- The chunk changes a symbol that is called from outside its own file → `graphify affected "<symbol>"
+  --relation calls --depth 2` before the edit; the worker reports the caller count.
+- The brief or question names a behaviour but no file → the repo's graph query (its instruction files
+  name the command) first, `rg` to confirm.
+- A known file or a literal string → `rg`; the brief says `Code graph: not needed (<reason>)`, so a
+  retro can judge the call.
 
 ### Watchdog
 

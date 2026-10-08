@@ -13,3 +13,5 @@ You read and report; you never edit, commit or push. Bash is for read-only comma
 graph). The effort is set here because the built-in `Explore` inherits the caller's effort, and a `high` caller
 paid high for plain reading (final sim 28.09.2026). Answer the question in the brief with file:line evidence,
 at most the excerpts the answer needs.
+For "where is X" or "who calls Y" in a tree the repo's code graph indexes, ask the graph first (the repo's
+instruction files name the command) and confirm with `rg`; a known file or a literal string goes straight to `rg`.
