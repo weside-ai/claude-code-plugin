@@ -231,3 +231,9 @@ def test_final_line_names_the_merge_state(tmp_path, mss, mergeable, note):
     d = {**_green(), "mergeStateStatus": mss, "mergeable": mergeable}
     code, out = run(tmp_path, [d])
     assert (code, out) == (0, [f"final {SHA}: green · {note}"])
+
+
+def test_a_run_waiting_for_approval_does_not_hold_the_watcher(tmp_path):
+    waiting = [{"databaseId": 8, "attempt": 1, "status": "waiting"}]
+    code, out = run(tmp_path, [_green(), _green(), _green()], runs=[waiting, waiting, waiting])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])

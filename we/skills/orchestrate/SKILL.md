@@ -155,7 +155,7 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    landed story to In Review and verify.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command: it binds
    to the PR's current head, prints only failed or cancelled checks and the final state with the merge
-   state, and exits once the head's check set has stayed complete and unchanged for 60 s. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
+   state, and exits once the head's check set has stayed complete and unchanged for the watcher's quiet period. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
    the watch and you arm none. Meanwhile refine or prepare the next story.
 5. Once no check is pending, green or red, run `/we:ci-review <PR>` without asking: open bot threads
    and review findings remain on a green run. Never from the shared main checkout:

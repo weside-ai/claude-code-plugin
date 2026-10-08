@@ -80,8 +80,9 @@ while :; do
     if [ "$NOW_SHA" != "$SHA" ]; then echo "head moved $SHA -> $NOW_SHA"; exit 3; fi
     MERGE=$(sed -n 2p <<<"$OUT")
     ROWS=$(tail -n +3 <<<"$OUT")
-    # Runs still queued or in progress (a fresh push, a `gh run rerun` not yet started).
-    OPEN_RUNS=$(awk -F'\t' '$3 != "completed" && $3 != "" { print $1 }' <<<"$RUNROWS")
+    # Runs still queued or in progress (a fresh push, a `gh run rerun` not yet started). A run
+    # parked in `waiting`/`action_required` waits for a human and does not hold the watcher.
+    OPEN_RUNS=$(awk -F'\t' '$3 ~ /^(queued|in_progress|requested|pending)$/ { print $1 }' <<<"$RUNROWS")
     PENDING=""
     [ -n "$OPEN_RUNS" ] && PENDING=1
     FAILED=""
