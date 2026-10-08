@@ -96,7 +96,7 @@ refiner's worktree (step 6) and move the ticket to the plan-approved status.
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
 move the ticket to In Progress and verify, check the brief's premises (`worker-dispatch.md`
-§ Premise check). Choose the effort per
+§ Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
 into `description`.
@@ -111,6 +111,7 @@ Bootstrap: <commands from .weside/orchestrate.md>.
 Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker contract.
 Tests: <test_discipline from .weside/config.json, spelled out; absent → tests after the code, same change>.
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
+[Code graph: graphify affected "<symbol>" … | graph query "<question>" | not needed (<reason>)]   (only when tools.graphify is true)
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
 Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
