@@ -165,6 +165,7 @@ The worker's final message is the report; the Agent result delivers it to the Le
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
 gates: <gate> ✓|✗|skipped(<why>) …
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
+code graph: <symbol> → <n> callers … | not needed (<reason>)   (when the brief has a Code graph line)
 review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>) | none (not critical)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
 overrides: … · skipped: … · questions: … · blockers: none|<reason>
