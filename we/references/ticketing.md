@@ -5,15 +5,16 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
 
 # Ticketing
 
-- Tool, in this order: the weside MCP (`execute_tool` with `JIRA_*`), the Atlassian Rovo
-  MCP (plugin `atlassian`, `cloudId` from `getAccessibleAtlassianResources` on every call), `gh issue`, else plan-only (no ticket, say so once). `.weside/config.json`
-  `ticketing` names the project.
-- A ticket is read with its comments (Atlassian: `getJiraIssue` reports only the comment count, so read
-  them with `executeRead` → `listJiraIssueComments`;
-  GitHub: `gh issue view <n> --comments`). When a comment contradicts the description or the plan,
-  the newest statement wins and the conflict is named, never picked silently.
+- Tool, in this order: the weside MCP (`execute_tool` with `JIRA_*`), the Atlassian Rovo MCP
+  (plugin `atlassian`, `cloudId` from `getAccessibleAtlassianResources` on every call),
+  `gh issue`, else plan-only (no ticket, say so once). `.weside/config.json` `ticketing` names
+  the project.
+- A ticket is read with its comments (Atlassian: `getJiraIssue` reports only the comment count,
+  so read them with `executeRead` → `listJiraIssueComments`; GitHub: `gh issue view <n>
+  --comments`). When a comment contradicts the description or the plan, the newest statement
+  wins and the conflict is named, never picked silently.
 - A transition is verified by re-reading the status; retry once with another transition name, then
   warn and continue. Transition and comment are separate calls (`transitionJiraIssue`, then
   `addOrEditJiraIssueComment` with `commentBody`): a comment inside the transition's `update` can be
-  dropped silently.
+  dropped silently. `commentBody` is Markdown, not Wiki Markup.
 - Status names per repo live in `.weside/orchestrate.md` § Ticket states.
