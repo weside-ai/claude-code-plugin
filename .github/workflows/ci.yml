@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       # Pin ruff. An unpinned install silently changed the gate and turned
       # main red: a newer ruff formats Markdown by default (previously
       # preview-only) and moved PLR0917 out of preview. Worse, its Markdown
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Validate JSON files
         run: |
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: pip install pytest pyyaml
       - name: Run pytest over we/ and scripts/
         run: python3 -m pytest -q we scripts
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: pip install uv
       - name: Run pytest over we/ on Python 3.9
         # No PyYAML: macOS /usr/bin/python3 lacks it, so this lane runs the lenient parser.
