@@ -86,15 +86,10 @@ Move every story whose work landed in this PR. The branch name alone can miss so
 full list from step 2. A story whose work did not land stays where it is. The human's "merged"
 is the word the DoD asks for, so Done is legitimate here.
 
-Ticketing tool, in priority order: weside MCP (`execute_tool` with `JIRA_*`), then Atlassian MCP
-(`jira_*`), then `gh issue` (no status, so skip the move), then none (skip silently).
-
-- Find the matching transition. Names vary ("Done", "Fertig", "Erledigt").
-- Transition first, comment second, in two calls. A transition's `comment` field wants
-  Atlassian Document Format, so prose in it fails the whole transition.
-- Read the status back. On a silent failure, retry once with a different transition name. If
-  the workflow rejects the move, report it and continue.
-- Jira comments are Wiki Markup, not Markdown.
+Ticketing follows `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (tool order, body format, transition before comment,
+read-back and retry). Specific to this step: the target is the Done state, whose name varies
+("Done", "Fertig", "Erledigt"); `gh issue` has no status, so skip the move; without a ticketing
+tool, skip silently. If the workflow rejects the move, report it and continue.
 
 ## 6 · Refresh the record
 
