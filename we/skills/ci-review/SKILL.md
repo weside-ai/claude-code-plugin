@@ -13,7 +13,7 @@ Longer than 150 lines because the thread query and the gate checks are load-bear
 2. A required reviewer's BLOCKING or WARNING is fixed. A skip needs cited evidence posted on the PR.
 3. Codex is advisory, with no end date (Foxy 30.09.2026). Only a Codex BLOCKING turns its check red. Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; Foxy decides the subscription on these numbers.
 4. One round means collect, fix, validate locally, commit once, resolve the threads, merge the base, and push once. Wait with a background `gh pr checks --watch` or `gh run watch`, never a sleep loop and never a `Monitor` for a CI job (30-min cap, shorter than a backend test job).
-5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (merge, force-push, rebase). Every other status note goes in the same message as the next tool call.
+5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (a merge without `--auto`, a force-push, a rebase). Every other status note goes in the same message as the next tool call.
 
 The built-in `/autofix-pr` covers the same job and is the benchmark this skill is measured against.
 It needs a real PR. This skill does not call it.
@@ -174,7 +174,7 @@ Terminal states. Report exactly one:
 1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
    decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
    when the user asked for the merge itself ("bis gemerged"), wait on `gh pr view $PR --json state,mergedAt`
-   in a background command, then report `MERGED` or green but not yet merged. You never run `gh pr merge` without the user's word; `/we:orchestrate` arming `--auto` after green is that word, standing.
+   in a background command, then report `MERGED` or green but not yet merged. On a green end the main session arms auto-merge as `/we:orchestrate` § Close the run says (method, exceptions, `user merge: <reason>`). Run as a subagent, you report `merge-ready` and leave the arm to the Lead: `automerge_gate.py` refuses every merge from a subagent. A plain `gh pr merge` without `--auto` still needs the user's word.
 2. **Cap reached, still red.** Report what is open and what you tried.
 3. **Blocked.** Infrastructure is red after a re-run, a required BLOCKING was skipped as wrong, or there are two migration heads.
    The PR needs a human.

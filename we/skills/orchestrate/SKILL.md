@@ -173,7 +173,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   order changes who merges, not when: the hook `automerge_gate.py` refuses the arm until Codex has a
   verdict on the head, and refuses any merge from a worker. No auto-merge when the invocation
   says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
-  runs on the branch, or a question to the human is open; the closing message then says
+  runs on the branch, a question to the human is open, or a repo-specific exception from the workspace
+  or repo instruction files applies (e.g. Terraform, secrets); the closing message then says
   `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round
