@@ -44,6 +44,9 @@ inbox as it is.
 - Group by target file. Two entries on one file that pull in opposite directions are decided together.
 - Order: evidence count × confidence (High 3, Medium 2, Low 1); `gap` and `G2-conflict` entries
   with a user correction among their evidence go first.
+- **A rejected key again.** An entry whose key has a `rejected` ledger row goes on only when its new
+  evidence answers that row's reason (the count adds the row's evidence: a second occurrence answers
+  "seen once"). Otherwise delete the file in the store commit; the rejection stands.
 
 ## 4 · Measure "after", sunset, ablation
 
@@ -57,9 +60,7 @@ inbox as it is.
   after the apply date (an evidence line for its key), or when a gate now enforces the same thing.
 - **Unmeasured.** A row past `review_by` whose failure never recurred and that nothing measures is
   no `remove` candidate: the change may be why the failure stopped. With an ablation command it goes
-  to ablation first; without one it becomes a `flag` entry (`source: sunset`), deferred with the
-  evidence line `- <date> deferred: unmeasurable, recommend keep`, for the user to decide with
-  "keep" as the recommendation.
+  to ablation first; without one its `review_by` moves forward by `review_days`, nothing else.
 - **Ablation.** Of the `applied` instruction changes past `review_by` that sunset did not pick, two
   per run, the unmeasured ones first, then the oldest, go through the adapter's ablation command
   (the change reverted in a bench copy, probes run); no difference → a `remove` candidate
@@ -70,10 +71,14 @@ inbox as it is.
 
 ## 5 · Decide
 
-Per candidate, top down, until the user stops or the inbox is empty:
+Per candidate, top down, until the user stops or the inbox is empty. Every decided candidate ends
+`applied` or `rejected`; nothing is put off, because a put-off entry comes back every run.
 
-- **Admission.** A candidate that adds or rewords instruction text is proposed for apply only when
-  all four hold; otherwise recommend reject or defer, and name the condition that failed:
+- **Only what lasts goes to the user:** a gate, a hook, a script, a deletion, a fix of a contradicted
+  repo fact, or instruction text that passes admission. Everything else is `rejected` with its
+  reason, unasked.
+- **Admission.** A candidate that adds or rewords instruction text goes to the user only when all
+  four hold; otherwise it is rejected with the condition that failed:
   1. it names the observed failure;
   2. the failure occurred at least twice (evidence lines), once in a high-damage area (money,
      security, data loss), or it is a repository fact (a contradicted claim, a gate violation);
@@ -85,15 +90,16 @@ Per candidate, top down, until the user stops or the inbox is empty:
      adapter in `.weside/optimization/measure/README.md` gives the before number, or without one
      the recurrence metric (store reference § Measurement adapter); a correction
      toward a contradicted repo fact uses the re-check of that fact as its metric. No metric →
-     defer or reject, never apply.
+     reject.
 
   A `remove` candidate needs only the reason. A plugin skill is measured with `claude plugin eval`
   (or the `skill-creator` plugin's evals); a skill nobody invokes shows up in `/skill-doctor`.
 - **Proposal.** The exact lines (NEW or EDIT) against `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md`,
   the number of lines it adds to always-loaded context (rules without `paths:`, `AGENTS.md`,
   `CLAUDE.md`), and the gate result after the edit.
-- **Batch the questions** with `AskUserQuestion`, two to four candidates per call, each with
-  apply · reject · defer, the recommendation first and marked "(Recommended)".
+- **Batch the questions** with `AskUserQuestion`, `multiSelect: true`, two to four candidates per
+  call: the label names the change, the description its benefit in one sentence. Chosen → applied;
+  not chosen → `rejected` ("not chosen"). Say so in the question.
 
 ## 6 · Apply
 
@@ -111,12 +117,11 @@ Before the turn ends, each fact once:
 
 - every decided candidate → a `LEDGER.md` row per the store's § Ledger row, and its inbox file
   deleted in the same commit;
-  a deferred one keeps its file with a `deferred:` evidence line;
 - a new decision → replace the charter's line on that topic, old wording in parentheses
   ("replaces <date>: …");
 - a changed finding → replace its row; next steps updated; `last_optimize:` set to today;
 - the charter stays within 200 lines.
 
 Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land). Close with one line: candidates applied /
-rejected / deferred, inbox left, the next step. Then offer each `workspace` repo whose inbox is not
+rejected, inbox left, the next step. Then offer each `workspace` repo whose inbox is not
 empty.

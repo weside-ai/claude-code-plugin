@@ -60,13 +60,6 @@ class ReminderTest(unittest.TestCase):
         self.charter("2026-09-28")
         self.assertIn("a High finding is open", rem.message(self.root, TODAY))
 
-    def test_deferred_high_entry_is_silent_when_recent(self):
-        self.entry("2026-09-20-gap--agents-md.md", confidence="High")
-        with open(self.store / "inbox" / "2026-09-20-gap--agents-md.md", "a") as f:
-            f.write("## Evidence\n\n- 2026-09-28 deferred: unmeasurable\n")
-        self.charter("2026-09-28")
-        self.assertIsNone(rem.message(self.root, TODAY))
-
     def test_exactly_fourteen_days_reminds(self):
         self.entry("2026-09-30-gap--agents-md.md")
         self.charter("2026-09-18")
