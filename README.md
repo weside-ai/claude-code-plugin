@@ -8,7 +8,7 @@
 - **Build pipeline:** a Lead (`/we:orchestrate`) that refines stories without a plan, dispatches one
   dev worker per story, pushes once, opens one PR and works CI and review findings until green.
 
-You review and merge. Claude never merges; `/we:merged` cleans up after your word.
+Claude arms auto-merge once CI and the Codex review are through, unless an exception applies (money path, destructive migration, open question); you review before it lands and merge the exceptions. `/we:merged` cleans up afterwards.
 
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE) · Tour: [plugin.weside.ai/tour](https://plugin.weside.ai/tour/) · Docs: [docs/README.md](docs/README.md)
 
