@@ -90,6 +90,18 @@ def test_verdict_error_is_refused(repo: Path, monkeypatch) -> None:
     assert reason is not None and "VERDICT:ERROR" in reason
 
 
+def test_another_reviewers_verdict_is_not_codexs(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(
+        [run(conclusion="failure")],
+        [
+            "<!-- codex-review -->\n<!-- VERDICT:ERROR -->",
+            "<!-- claude-code-review -->\nCodex aside.\n<!-- VERDICT:PASS -->",
+        ],
+    )
+    reason = refuse(repo, ARM, fake, monkeypatch)
+    assert reason is not None and "VERDICT:ERROR" in reason
+
+
 def test_blocking_is_a_verdict_and_passes(repo: Path, monkeypatch) -> None:
     fake = FakeGh(
         [run(conclusion="failure")], ["<!-- codex-review -->\n<!-- VERDICT:BLOCKING -->"]
@@ -156,7 +168,7 @@ def test_not_an_arm_passes(repo: Path, monkeypatch, command: str) -> None:
 def test_a_subagent_never_merges(repo: Path, monkeypatch, command: str) -> None:
     fake = FakeGh([run()])
     reason = refuse(repo, command, fake, monkeypatch, agent_id="a1", agent_type="we:dev-medium")
-    assert reason is not None and "A worker never merges" in reason
+    assert reason is not None and "A subagent never merges" in reason
     assert fake.calls == []
 
 

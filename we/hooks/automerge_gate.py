@@ -4,15 +4,16 @@
 Codex is no required check, so GitHub merges past it: an arm before its verdict merges the
 finding unread. The hook refuses `gh pr merge … --auto` while the Codex check on the PR's
 `headRefOid` is missing, queued, running, cancelled, or ended with `VERDICT:ERROR` (the runner,
-not a review). A BLOCKING or WARNING verdict lets it through: reading the finding is
+not a review) in the comment carrying `<!-- codex-review -->`. A BLOCKING or WARNING verdict lets it through: reading the finding is
 `/we:ci-review`'s job, the hook only makes sure there is one to read.
 
   * The check name is `.weside/config.json` → `review.codex_check`, default `Codex Review`.
   * A repo whose `.github/workflows/` names no job by that name has no Codex review: allowed,
     decided offline before any `gh` call. With `-R <other repo>` the local tree says nothing about
     that repo, so a missing check there is allowed too.
-  * In a subagent (`agent_id` in the payload) every `gh pr merge` except `--disable-auto` is
-    refused: a worker never merges (`references/worker-dispatch.md` § Dev-only worker contract).
+  * In any subagent (`agent_id` in the payload) every `gh pr merge` except `--disable-auto` is
+    refused: merging is the Lead's call in the main session (`references/worker-dispatch.md`
+    § Dev-only worker contract).
   * Fail-open on a `gh` or network error: Codex is advisory, an arm is reversible with
     `--disable-auto`, and a hook that blocks every merge during a GitHub outage costs more than
     the race it closes.
@@ -50,6 +51,8 @@ _VALUED = frozenset(
 )
 _NO_VERDICT = frozenset({"cancelled", "timed_out", "action_required", "stale", "startup_failure"})
 _VERDICT = re.compile(r"VERDICT:([A-Z]+)")
+# The Codex workflow's own comment marker: other reviewers post `VERDICT:` markers too.
+_MARKER = "<!-- codex-review -->"
 
 
 def _gh(args: list[str], cwd: str | None) -> str | None:
@@ -162,9 +165,7 @@ def _codex_state(selector: str | None, repo: str | None, name: str, cwd: str | N
             comments = json.loads(raw or "")["comments"]
         except Exception:
             return None
-        bodies = [
-            c.get("body") or "" for c in comments if "codex" in (c.get("body") or "").lower()
-        ]
+        bodies = [c.get("body") or "" for c in comments if _MARKER in (c.get("body") or "")]
         verdicts = [m.group(1) for b in bodies for m in _VERDICT.finditer(b)]
         if verdicts and verdicts[-1] == "ERROR":
             return f"`{name}` on {head} says VERDICT:ERROR (the runner, not a review)"
@@ -186,8 +187,9 @@ def _refusal(payload: dict) -> str | None:
         return None
     if payload.get("agent_id"):
         return (
-            "A worker never merges and never arms auto-merge (worker-dispatch.md § Dev-only worker "
-            "contract). Report the PR; the Lead arms auto-merge after `/we:ci-review`."
+            "A subagent never merges and never arms auto-merge; that is the main session's call "
+            "(worker-dispatch.md § Dev-only worker contract). Report the PR; the Lead arms "
+            "auto-merge after `/we:ci-review`."
         )
     if "--auto" not in args:
         return None
