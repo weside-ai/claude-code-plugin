@@ -86,8 +86,9 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   (source `audit`, no ledger row) for a rule or skill with no recorded use; its key is `sunset--<target-slug>`.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
-- **Lifecycle:** `/we:optimize` decides an entry, writes its ledger row and deletes the inbox file
-  in the same commit. A deferred entry stays and gains an evidence line `- <date> deferred: <reason>`.
+- **Lifecycle:** `/we:optimize` decides an entry `applied` or `rejected`, writes its ledger row and
+  deletes the inbox file in the same commit. A later finding on a rejected key is a fresh file under
+  that key; `/we:optimize` § 3 puts it to the user only when it answers the rejection's reason.
 
 ## Ledger row
 
@@ -95,7 +96,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 
 `| date | key | target | decision | evidence | metric | before → after | review_by | change |`
 
-- `decision`: `applied` · `rejected` · `deferred` · `upstream` (reported to the plugin's
+- `decision`: `applied` · `rejected` · `upstream` (reported to the plugin's
   maintainers) · `removed` (a later sunset or ablation removal took the change out).
 - `metric`: what shows the effect (the adapter command, or the re-check of a repo fact); every
   applied row that adds or rewords text has one. An applied removal has `—` here and in `review_by`.
@@ -134,7 +135,7 @@ line: `before` is its count of `retro` evidence lines at apply (the ledger row k
 `after` the `retro` lines under the same key dated after the apply date. Since applying deletes the
 inbox file, a retro that sees the failure again writes a fresh file under the old key (the ledger
 row is the stable-key match); `/we:optimize` step 4 reads that file as the row's `after` before it
-decides it as a candidate. `deferred:` lines never count. Zero after `review_by` means it held. An
+decides it as a candidate. Zero after `review_by` means it held. An
 audit or gate entry without retro evidence has no recurrence metric. A plugin skill is measured with `claude plugin eval` (or
 the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill-doctor`.
 
@@ -159,7 +160,7 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
 
 - `target_model` / `target_effort`: the model the audit runs as; absent → the session's model.
 - `reminder`: `false` silences the SessionStart reminder (open inbox count, days since
-  `last_optimize`); it speaks when an open, not deferred entry is `confidence: High` or
+  `last_optimize`); it speaks when an open entry is `confidence: High` or
   `last_optimize` is `reminder_days` (default 14) or more days old.
 - `review_days`: days from applying a change to its `review_by` (default 30).
 - `budget`, `exclude`: overrides for `scripts/check-instruction-budget.py` (keys in its

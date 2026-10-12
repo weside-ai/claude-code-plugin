@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Splice the plan's `## Verification` block into a PR body, verbatim.
+
+    pr-body-receipt.py <KEY> <body-in> <body-out>
+
+Reads `docs/plans/<KEY>-story.md` from the git top level of the current directory, takes its
+`## Verification` block with the verification gate's own section finder, and writes <body-in>
+with that block to <body-out>: a receipt <body-in> already carries is replaced, otherwise the
+block is appended. The result is checked with the gate's own rules; exit 1 names the problem.
+
+A retyped receipt is what the gate refuses; this script is the one way the block is copied.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+_GATE = Path(__file__).resolve().parent.parent / "hooks" / "verification_gate.py"
+_spec = importlib.util.spec_from_file_location("verification_gate", _GATE)
+gate = importlib.util.module_from_spec(_spec)
+assert _spec.loader is not None
+_spec.loader.exec_module(gate)
+
+
+def _top_level() -> Path:
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False
+    )
+    return Path(out.stdout.strip() or os.getcwd())
+
+
+def splice(plan: str, body: str) -> str:
+    """`body` carrying the plan's Verification block. ValueError when the plan has none."""
+    span = gate._section_span(plan)
+    if span is None:
+        raise ValueError(
+            "the plan carries no `## Verification` block, so verification did not happen: "
+            "say so and stop, do not write a receipt"
+        )
+    block = plan[span[0] : span[2]].strip("\n")
+    old = gate._section_span(body)
+    if old is not None:
+        head, tail = body[: old[0]], body[old[2] :]
+        return head + block + "\n" + ("\n" + tail.lstrip("\n") if tail.strip() else "")
+    return body.rstrip("\n") + ("\n\n" if body.strip() else "") + block + "\n"
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 4:
+        print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
+        return 2
+    key, body_in, body_out = argv[1:]
+    plan_path = _top_level() / "docs" / "plans" / f"{key}-story.md"
+    try:
+        plan = plan_path.read_text(encoding="utf-8")
+        body = Path(body_in).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"pr-body-receipt: {exc}", file=sys.stderr)
+        return 1
+    try:
+        out = splice(plan, body)
+    except ValueError as exc:
+        print(f"pr-body-receipt: {plan_path}: {exc}", file=sys.stderr)
+        return 1
+    problem = gate._receipt_problem(out)
+    if problem:
+        print(
+            f"pr-body-receipt: {plan_path} § Verification fails the gate: {problem}",
+            file=sys.stderr,
+        )
+        return 1
+    Path(body_out).write_text(out, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

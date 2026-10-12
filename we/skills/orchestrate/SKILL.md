@@ -151,8 +151,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
 3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
-   relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the `## Verification` receipt
-   from the plan, and one line naming money, auth or tenant work when the diff has it. Move every
+   relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
+   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body> <file>` (never retyped), and one line naming money, auth or tenant work when the diff has it. Move every
    landed story to In Review and verify.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command: it binds
    to the PR's current head, prints only failed or cancelled checks and the final state with the merge
@@ -169,8 +169,9 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 
 - **Auto-merge is the default** (Foxy 30.09.2026): when `/we:ci-review` ends green, with every Codex
   finding read, run `gh pr merge <PR> --auto --merge` (`--squash`/`--rebase` when `.weside/orchestrate.md`
-  names it; gh refuses `--auto` without a method outside a terminal). Not before: Codex is no
-  required check, and an early arm merges its finding unread. No auto-merge when the invocation
+  names it; gh refuses `--auto` without a method outside a terminal). A human "automerge" or a standing
+  order changes who merges, not when: the hook `automerge_gate.py` refuses the arm until Codex has a
+  verdict on the head, and refuses any merge from a worker. No auto-merge when the invocation
   says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
   runs on the branch, or a question to the human is open; the closing message then says
   `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the

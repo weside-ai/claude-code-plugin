@@ -56,6 +56,7 @@ def _starts_a_command(argv: list[str], i: int) -> bool:
         or prev[-1:] in (";", "&", "|")
         or prev in _PREFIXES
         or ("=" in prev and not prev.startswith("-"))
+        or (i >= 2 and argv[i - 2] == "timeout")  # `timeout 30 gh …`: the duration is no command
     )
 
 
@@ -107,21 +108,35 @@ def _filled(body: str, name: str) -> bool:
     return value.strip("_ ").lower() not in _PLACEHOLDERS
 
 
+def _named(value: str) -> set[str]:
+    """The oracle words in the choice part — before the reason (`not-applicable — docs only`)."""
+    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
+    return {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
+
+
+def _names_no_oracle(body: str) -> bool:
+    """An Oracle line exists, but its choice part names none of the four words."""
+    value = _line(body, "oracle")
+    return value is not None and not _named(value)
+
+
 def _oracles(body: str) -> set[str] | None:
     """The oracles named on the Oracle line — None when the line is a menu of all of them."""
     value = _line(body, "oracle")
     if value is None:
         return None
-    # The choice is the part before the reason (`not-applicable — docs only, no CLI`).
-    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
-    named = {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
+    named = _named(value)
     return None if len(named) == len(_ORACLES) or not named else named
 
 
+_RECEIPT_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "pr-body-receipt.py"
+)
 _WHERE = (
     "The receipt is not authored here: copy the `## Verification` block verbatim from the story "
     "plan (`docs/plans/<TICKET>-story.md` § Verification) into the PR body, and pass the body as "
-    "`--body-file` so it can be read. It needs one `**Oracle:**` — cli | ui | substitute | "
+    "`--body-file` so it can be read. `python3 " + _RECEIPT_SCRIPT + " <TICKET> <body-in> "
+    "<body-out>` does the splice and checks the result. It needs one `**Oracle:**` — cli | ui | substitute | "
     "not-applicable — and, unless that oracle is not-applicable, a filled `**Seed:**`, "
     "`**Asserted:**` and `**Not proven:**`.\n\n"
     "If the plan carries no such block, verification did not happen. Say so and stop; do not "
@@ -155,6 +170,19 @@ def _same_command(argv: list[str], i: int) -> list[str]:
     ):
         hi += 1
     return argv[lo : hi + 1]
+
+
+def _args_from(argv: list[str], k: int) -> list[str]:
+    """argv[k:] up to the end of that simple command — a prefix before `gh` (`GH_REPO=x gh …`,
+    `timeout 30 gh …`) does not shift it. Pinned by test_automerge_gate.py::test_auto_in_any_position_is_seen."""
+    out: list[str] = []
+    for tok in argv[k:]:
+        if tok in _SEPARATORS:
+            break
+        out.append(tok)
+        if tok[-1:] in (";", "&", "|"):
+            break
+    return out
 
 
 def _written_here(argv: list[str], path: str, bodies: list[str]) -> str | None:
@@ -253,8 +281,7 @@ def _pr_verb(argv: list[str]) -> tuple[int, str, list[str]] | None:
         if argv[j : j + 2] in (["pr", "create"], ["pr", "edit"]):
             # Only this simple command's own args: a later `gh pr comment --body` is not
             # this PR's body, and a `create` after an `edit` is the one that claims.
-            own = _same_command(argv, i)
-            hit = (i, argv[j + 1], own[j - i + 2 :])
+            hit = (i, argv[j + 1], _args_from(argv, j + 2))
             if argv[j + 1] == "create":
                 return hit
             if first is None:
@@ -319,26 +346,46 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
 
 
 _FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1", re.MULTILINE | re.DOTALL)
+_ANY_HEADING = re.compile(r"^\s{0,3}#{1,6}\s", re.MULTILINE)
+
+
+def _masked(body: str) -> str:
+    r"""`body` with every fenced block blanked to the same length, newlines kept.
+
+    A heading inside a fence is a quotation (a template) or a shell comment in a fenced seed
+    (`  # measurements: …`), never the start or the end of the receipt. The mask character is
+    not whitespace, so `^\s{0,3}` cannot reach across a blanked line. Pinned by
+    test_fenced_shell_comment_does_not_end_the_section.
+    """
+    return _FENCE.sub(lambda m: re.sub(r"[^\n]", "x", m.group(0)), body)
+
+
+def _section_span(body: str) -> tuple[int, int, int] | None:
+    """(heading start, heading end, section end) of the `## Verification` block in `body`."""
+    masked = _masked(body)
+    found = _HEADING.search(masked)
+    if not found:
+        return None
+    nxt = _ANY_HEADING.search(masked, found.end())
+    return (found.start(), found.end(), nxt.start() if nxt else len(body))
 
 
 def _section(body: str) -> str | None:
-    """The `## Verification` block itself — a template quoted elsewhere is not a receipt.
-
-    Only a fence that carries the heading is a quotation; a fenced seed inside the real block stays.
-    """
-    body = _FENCE.sub(lambda m: "" if _HEADING.search(m.group(0)) else m.group(0), body)
-    found = _HEADING.search(body)
-    if not found:
-        return None
-    rest = body[found.end() :]
-    nxt = re.search(r"^\s{0,3}#{1,6}\s", rest, re.MULTILINE)
-    return rest[: nxt.start()] if nxt else rest
+    """The `## Verification` block itself — a template quoted in a fence is not a receipt."""
+    span = _section_span(body)
+    return body[span[1] : span[2]] if span else None
 
 
 def _receipt_problem(full: str) -> str | None:
     """What is wrong with this PR body, in the words the author needs."""
     body = _section(full)
     named = _oracles(body) if body else None
+    if body is not None and named is None and _names_no_oracle(body):
+        return (
+            "The `**Oracle:**` line names no oracle the gate can read. Its value has to start with "
+            "one of cli | ui | substitute | not-applicable: the gate reads only the text before "
+            "the first ` — `, `:` or `(` (`**Oracle:** substitute — the worktree's DEV fork`)."
+        )
     if body is None or named is None:
         return (
             "This PR claims work is done without saying how that was observed. Unit tests "

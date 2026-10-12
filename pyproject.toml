@@ -38,6 +38,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"we/hooks/automerge_gate.py" = [
+    "PLR0911", # a guard ladder: each early return is one cheaper exit before the network
+]
 "we/scripts/orchestration.py" = [
     "PLR0912", # too many branches — CLI dispatcher
     "PLR0915", # too many statements — argparse setup
