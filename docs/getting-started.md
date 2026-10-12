@@ -27,7 +27,8 @@ shipped statusline (model, branch, PR, context, cost).
 2. `/we:orchestrate <KEY>` — the Lead dispatches one `we:dev-medium` worker in its own worktree,
    checks the report against the acceptance criteria and the DoD, pushes once, opens the PR and
    runs `/we:ci-review` when CI concludes.
-3. You review and merge the PR.
+3. Once CI and the reviews are green, auto-merge is armed (unless a money path or another exception
+   applies; then you merge). Review the PR before it lands if you want to.
 4. `/we:merged` — removes the worktrees and branches and moves the ticket to Done.
 
 For a change too small for a worker, `/we:orchestrate --solo` builds it in the current session.

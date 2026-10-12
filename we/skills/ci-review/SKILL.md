@@ -174,7 +174,7 @@ Terminal states. Report exactly one:
 1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
    decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
    when the user asked for the merge itself ("bis gemerged"), wait on `gh pr view $PR --json state,mergedAt`
-   in a background command, then report `MERGED` or green but not yet merged. You never run `gh pr merge` without the user's word; `/we:orchestrate` arming `--auto` after green is that word, standing.
+   in a background command, then report `MERGED` or green but not yet merged. On a green end you arm auto-merge yourself: `gh pr merge $PR --auto` with the method from `/we:orchestrate` § Close the run, unless an exception listed there applies; then the report says `user merge: <reason>`. A plain `gh pr merge` without `--auto` still needs the user's word.
 2. **Cap reached, still red.** Report what is open and what you tried.
 3. **Blocked.** Infrastructure is red after a re-run, a required BLOCKING was skipped as wrong, or there are two migration heads.
    The PR needs a human.

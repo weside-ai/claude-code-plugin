@@ -20,4 +20,4 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    unreadable file is fixed once; a second refusal is reported verbatim.
 4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`. Ticket: link the PR, move it to In
    Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
-5. Report the URL. Red CI or review findings → `/we:ci-review <PR>`. Merging is the user's.
+5. Report the URL. CI and review findings → `/we:ci-review <PR>`, which arms auto-merge once green (orchestrate § Close the run).
