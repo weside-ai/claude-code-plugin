@@ -120,10 +120,14 @@ def test_latest_rerun_decides(repo: Path, monkeypatch) -> None:
         "gh pr merge --auto --squash",
         "gh pr merge --squash --auto 7",
         "cd . && gh pr merge https://github.com/o/r/pull/7 --merge --auto",
+        "GH_DEBUG=0 gh pr merge 7 --auto --merge",
+        "timeout 30 gh pr merge 7 --auto --merge && echo done",
     ],
 )
 def test_auto_in_any_position_is_seen(repo: Path, monkeypatch, command: str) -> None:
-    assert refuse(repo, command, FakeGh(runs=[]), monkeypatch) is not None
+    fake = FakeGh(runs=[])
+    assert refuse(repo, command, fake, monkeypatch) is not None
+    assert all("merge" not in call for call in fake.calls), fake.calls
 
 
 def test_success_passes(repo: Path, monkeypatch) -> None:

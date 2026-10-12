@@ -84,8 +84,7 @@ def _merge_call(argv: list[str]) -> tuple[int, str | None, list[str]] | None:
                     repo = argv[j].split("=", 1)[1]
                 j += 1
         if argv[j : j + 2] == ["pr", "merge"]:
-            own = vg._same_command(argv, i)
-            return i, repo, [a.rstrip(";&|") for a in own[j - i + 2 :]]
+            return i, repo, [a.rstrip(";&|") for a in vg._args_from(argv, j + 2)]
     return None
 
 

@@ -56,6 +56,7 @@ def _starts_a_command(argv: list[str], i: int) -> bool:
         or prev[-1:] in (";", "&", "|")
         or prev in _PREFIXES
         or ("=" in prev and not prev.startswith("-"))
+        or (i >= 2 and argv[i - 2] == "timeout")  # `timeout 30 gh …`: the duration is no command
     )
 
 
@@ -171,6 +172,19 @@ def _same_command(argv: list[str], i: int) -> list[str]:
     return argv[lo : hi + 1]
 
 
+def _args_from(argv: list[str], k: int) -> list[str]:
+    """argv[k:] up to the end of that simple command — a prefix before `gh` (`GH_REPO=x gh …`,
+    `timeout 30 gh …`) does not shift it. Pinned by test_automerge_gate.py::test_auto_in_any_position_is_seen."""
+    out: list[str] = []
+    for tok in argv[k:]:
+        if tok in _SEPARATORS:
+            break
+        out.append(tok)
+        if tok[-1:] in (";", "&", "|"):
+            break
+    return out
+
+
 def _written_here(argv: list[str], path: str, bodies: list[str]) -> str | None:
     """The heredoc this command redirects into `path` — a body written and used in one call.
 
@@ -267,8 +281,7 @@ def _pr_verb(argv: list[str]) -> tuple[int, str, list[str]] | None:
         if argv[j : j + 2] in (["pr", "create"], ["pr", "edit"]):
             # Only this simple command's own args: a later `gh pr comment --body` is not
             # this PR's body, and a `create` after an `edit` is the one that claims.
-            own = _same_command(argv, i)
-            hit = (i, argv[j + 1], own[j - i + 2 :])
+            hit = (i, argv[j + 1], _args_from(argv, j + 2))
             if argv[j + 1] == "create":
                 return hit
             if first is None:
