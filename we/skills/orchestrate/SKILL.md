@@ -169,8 +169,9 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 
 - **Auto-merge is the default** (Foxy 30.09.2026): when `/we:ci-review` ends green, with every Codex
   finding read, run `gh pr merge <PR> --auto --merge` (`--squash`/`--rebase` when `.weside/orchestrate.md`
-  names it; gh refuses `--auto` without a method outside a terminal). Not before: Codex is no
-  required check, and an early arm merges its finding unread. No auto-merge when the invocation
+  names it; gh refuses `--auto` without a method outside a terminal). A human "automerge" or a standing
+  order changes who merges, not when: the hook `automerge_gate.py` refuses the arm until Codex has a
+  verdict on the head, and refuses any merge from a worker. No auto-merge when the invocation
   says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
   runs on the branch, or a question to the human is open; the closing message then says
   `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
