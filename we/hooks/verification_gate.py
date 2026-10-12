@@ -107,21 +107,35 @@ def _filled(body: str, name: str) -> bool:
     return value.strip("_ ").lower() not in _PLACEHOLDERS
 
 
+def _named(value: str) -> set[str]:
+    """The oracle words in the choice part — before the reason (`not-applicable — docs only`)."""
+    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
+    return {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
+
+
+def _names_no_oracle(body: str) -> bool:
+    """An Oracle line exists, but its choice part names none of the four words."""
+    value = _line(body, "oracle")
+    return value is not None and not _named(value)
+
+
 def _oracles(body: str) -> set[str] | None:
     """The oracles named on the Oracle line — None when the line is a menu of all of them."""
     value = _line(body, "oracle")
     if value is None:
         return None
-    # The choice is the part before the reason (`not-applicable — docs only, no CLI`).
-    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
-    named = {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
+    named = _named(value)
     return None if len(named) == len(_ORACLES) or not named else named
 
 
+_RECEIPT_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "pr-body-receipt.py"
+)
 _WHERE = (
     "The receipt is not authored here: copy the `## Verification` block verbatim from the story "
     "plan (`docs/plans/<TICKET>-story.md` § Verification) into the PR body, and pass the body as "
-    "`--body-file` so it can be read. It needs one `**Oracle:**` — cli | ui | substitute | "
+    "`--body-file` so it can be read. `python3 " + _RECEIPT_SCRIPT + " <TICKET> <body-in> "
+    "<body-out>` does the splice and checks the result. It needs one `**Oracle:**` — cli | ui | substitute | "
     "not-applicable — and, unless that oracle is not-applicable, a filled `**Seed:**`, "
     "`**Asserted:**` and `**Not proven:**`.\n\n"
     "If the plan carries no such block, verification did not happen. Say so and stop; do not "
@@ -319,26 +333,46 @@ def _body_of(command: str, cwd: str | None) -> tuple[str | None, str | None, boo
 
 
 _FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1", re.MULTILINE | re.DOTALL)
+_ANY_HEADING = re.compile(r"^\s{0,3}#{1,6}\s", re.MULTILINE)
+
+
+def _masked(body: str) -> str:
+    r"""`body` with every fenced block blanked to the same length, newlines kept.
+
+    A heading inside a fence is a quotation (a template) or a shell comment in a fenced seed
+    (`  # measurements: …`), never the start or the end of the receipt. The mask character is
+    not whitespace, so `^\s{0,3}` cannot reach across a blanked line. Pinned by
+    test_fenced_shell_comment_does_not_end_the_section.
+    """
+    return _FENCE.sub(lambda m: re.sub(r"[^\n]", "x", m.group(0)), body)
+
+
+def _section_span(body: str) -> tuple[int, int, int] | None:
+    """(heading start, heading end, section end) of the `## Verification` block in `body`."""
+    masked = _masked(body)
+    found = _HEADING.search(masked)
+    if not found:
+        return None
+    nxt = _ANY_HEADING.search(masked, found.end())
+    return (found.start(), found.end(), nxt.start() if nxt else len(body))
 
 
 def _section(body: str) -> str | None:
-    """The `## Verification` block itself — a template quoted elsewhere is not a receipt.
-
-    Only a fence that carries the heading is a quotation; a fenced seed inside the real block stays.
-    """
-    body = _FENCE.sub(lambda m: "" if _HEADING.search(m.group(0)) else m.group(0), body)
-    found = _HEADING.search(body)
-    if not found:
-        return None
-    rest = body[found.end() :]
-    nxt = re.search(r"^\s{0,3}#{1,6}\s", rest, re.MULTILINE)
-    return rest[: nxt.start()] if nxt else rest
+    """The `## Verification` block itself — a template quoted in a fence is not a receipt."""
+    span = _section_span(body)
+    return body[span[1] : span[2]] if span else None
 
 
 def _receipt_problem(full: str) -> str | None:
     """What is wrong with this PR body, in the words the author needs."""
     body = _section(full)
     named = _oracles(body) if body else None
+    if body is not None and named is None and _names_no_oracle(body):
+        return (
+            "The `**Oracle:**` line names no oracle the gate can read. Its value has to start with "
+            "one of cli | ui | substitute | not-applicable: the gate reads only the text before "
+            "the first ` — `, `:` or `(` (`**Oracle:** substitute — the worktree's DEV fork`)."
+        )
     if body is None or named is None:
         return (
             "This PR claims work is done without saying how that was observed. Unit tests "

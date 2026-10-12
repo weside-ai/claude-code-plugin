@@ -398,6 +398,49 @@ def test_the_section_rule_does_not_break_a_receipt_that_ends_the_body(armed: Pat
     assert refuse_body(armed, text) is None
 
 
+# A receipt shaped like a real plan's: the seed is a fence inside a list item, and one of its
+# lines is an indented shell comment. That comment is not a heading.
+FENCED_SEED = """## Summary
+
+Grid.
+
+## Verification
+
+- **Oracle:** ui — the browser on the dev web build
+- **Seed:**
+
+  ```bash
+  app start && app web start          # from the worktree
+  # measurements: `browser batch < file.json`
+  ```
+
+- **Asserted:**
+  - 375 by 812: five columns, every cell 59
+- **Not proven:** the device round
+
+## Technical notes
+
+Nothing.
+"""
+
+
+def test_fenced_shell_comment_does_not_end_the_section(armed: Path) -> None:
+    section = gate._section(FENCED_SEED)
+    assert section is not None and "**Not proven:**" in section
+    assert "Technical notes" not in section
+    assert refuse_body(armed, FENCED_SEED) is None
+
+
+def test_oracle_line_without_a_leading_word_says_so(armed: Path) -> None:
+    text = RECEIPT.replace(
+        "**Oracle:** cli", "**Oracle:** the worktree's own DEV fork (substitute)"
+    )
+    reason = refuse_body(armed, text)
+    assert reason is not None
+    assert "has to start with one of cli | ui | substitute | not-applicable" in reason
+    assert "pr-body-receipt.py" in reason
+
+
 # --- SIM-1 bug-hunt pins ------------------------------------------------------
 
 
