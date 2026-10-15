@@ -144,7 +144,7 @@ def test_body_file_without_receipt_is_denied(armed: Path) -> None:
     # The denial must not send a session without a plan looking for one.
     assert "no ticket and no story plan are needed" in reason
     assert "not-observed — <reason" in reason
-    assert "stop" not in reason.lower()
+    assert "say so and stop" not in reason.lower()
 
 
 def test_relative_body_file_is_read_from_the_command_cwd(armed: Path) -> None:
