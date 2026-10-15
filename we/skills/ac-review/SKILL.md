@@ -20,7 +20,7 @@ Report a suspected bug in one line outside the verdict; it never blocks here.
    reachable from the UI or CLI entry point the AC names?
 4. One row per applicable item of `.weside/dod.md` when the repo has one; without it, only these
    rows: every planned phase's files changed; verification receipt present (the four labels filled,
-   or `not-applicable` with its reason); no new TODO/FIXME. An item whose evidence cannot exist yet
-   (PR, CI, ticket move) is `N/A` naming the stage that owes it.
+   or `not-applicable`/`not-observed` with its reason, quoted as evidence); no new TODO/FIXME. An
+   item whose evidence cannot exist yet (PR, CI, ticket move) is `N/A` naming the stage that owes it.
 5. Output a table `| Item | Pass/Fail/N/A | Evidence |`, then `VERDICT: BLOCKING` when an AC is unmet
    or a DoD row fails, else `VERDICT: PASS`. Write no file.

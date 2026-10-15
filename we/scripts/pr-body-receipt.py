@@ -8,7 +8,8 @@ Reads `docs/plans/<KEY>-story.md` from the git top level of the current director
 with that block to <body-out>: a receipt <body-in> already carries is replaced, otherwise the
 block is appended. The result is checked with the gate's own rules; exit 1 names the problem.
 
-A retyped receipt is what the gate refuses; this script is the one way the block is copied.
+Optional: without a plan, or without a block in it, the author writes the block into the body
+directly. When the plan has one, this script copies it instead of retyping it.
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ def splice(plan: str, body: str) -> str:
     span = gate._section_span(plan)
     if span is None:
         raise ValueError(
-            "the plan carries no `## Verification` block, so verification did not happen: "
-            "say so and stop, do not write a receipt"
+            "the plan carries no `## Verification` block: write it into the PR body yourself, "
+            "`**Oracle:** not-observed — <reason>` when nothing was observed beyond tests"
         )
     block = plan[span[0] : span[2]].strip("\n")
     old = gate._section_span(body)
