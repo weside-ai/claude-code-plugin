@@ -72,6 +72,8 @@ _OBSERVED = ("cli", "ui", "substitute")
 _DECLINES = ("not-applicable", "not-observed")
 _ORACLES = _OBSERVED + _DECLINES
 _MENU = " | ".join(_ORACLES)
+# A reason that is still the template's: `<reason>`, `tbd`. The denial's own example is one.
+_PLACEHOLDER_REASON = re.compile(r"<[^<>]*>|tbd|todo|n/?a|none|\?+|\u2026|\.\.\.", re.IGNORECASE)
 
 
 def _line(body: str, name: str) -> str | None:
@@ -374,7 +376,8 @@ def _receipt_problem(full: str) -> str | None:
         reason = value
         for word in _DECLINES:
             reason = re.sub(_word(word), "", reason, flags=re.IGNORECASE)
-        if len(reason.strip(" *_`\u2014\u2013-:")) < 3:
+        reason = reason.strip(" *_`\u2014\u2013-:.")
+        if len(reason) < 3 or _PLACEHOLDER_REASON.fullmatch(reason):
             return f"`{decline.pop()}` is a legitimate answer and it carries its reason."
     return None
 

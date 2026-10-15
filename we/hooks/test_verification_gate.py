@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -323,12 +324,29 @@ def test_not_observed_spellings_pass(armed: Path, oracle: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "oracle", ["not-observed", "not-observed —", "**not-observed**", "not-observed: -"]
+    "oracle",
+    [
+        "not-observed",
+        "not-observed —",
+        "**not-observed**",
+        "not-observed: -",
+        "not-observed — <reason>",
+        "not-observed — <reason, e.g. unit tests only, staging RC follows>",
+        "not-observed — TBD",
+        "not-observed: n/a",
+    ],
 )
 def test_bare_not_observed_carries_no_reason(armed: Path, oracle: str) -> None:
     reason = refuse_body(armed, f"## Verification\n\n**Oracle:** {oracle}\n")
     assert reason is not None
     assert "`not-observed` is a legitimate answer and it carries its reason" in reason
+
+
+def test_the_denials_own_example_does_not_pass(armed: Path) -> None:
+    """Pasting the hook's own template line back is no reason."""
+    example = re.search(r"`(\*\*Oracle:\*\* not-observed — <[^`]*>)`", gate._WHERE)
+    assert example is not None
+    assert refuse_body(armed, f"## Verification\n\n{example.group(1)}\n") is not None
 
 
 def test_a_heading_with_no_oracle_line_is_denied(armed: Path) -> None:
