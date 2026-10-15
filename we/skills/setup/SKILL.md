@@ -42,8 +42,8 @@ never commit yourself.
    same change) · `off`. It decides when tests are written, not what a good test is.
 5. **Verification**: must a story be observed running before its PR opens? `yes` (recommended) ·
    `advisory`. Green tests share the author's blind spots; with `yes` the plugin's PreToolUse hook
-   refuses `gh pr create` without a filled `## Verification` block (oracle, seed, asserted, not
-   proven). On `yes`, offer to scaffold `.weside/verify.md` from what step 1 found: the repo's CLI,
+   refuses `gh pr create` without a `## Verification` block whose `**Oracle:**` line says how the
+   change was observed, or `not-observed — <reason>`. On `yes`, offer to scaffold `.weside/verify.md` from what step 1 found: the repo's CLI,
    its dev bring-up command, whether a browser driver exists.
 
 Review gates are detected, not asked: a Claude or Codex review workflow in `.github/workflows/`, a

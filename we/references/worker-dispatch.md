@@ -97,7 +97,8 @@ The session or worker that writes last on the PR branch runs this once over
 3. Verification against a running instance when the brief orders it, per `.weside/verify.md`: DEV
    only (staging is a question to the human). The receipt goes into the plan's `## Verification`
    with the four literal labels `**Oracle:**`, `**Seed:**`, `**Asserted:**`, `**Not proven:**`.
-   `not-applicable` is a valid receipt only with its reason.
+   `not-applicable` (no runtime behaviour) and `not-observed` (ordered but not achieved) are valid
+   only with their reason; a run that did not happen is `not-observed`, never a filled receipt.
 4. Only the deviations from the plan recorded in the plan (`skills/story/references/plan-format.md` § Lifecycle).
 5. The affected gates again when step 2 or 3 moved code.
 

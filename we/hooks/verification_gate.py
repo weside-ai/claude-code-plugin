@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """PreToolUse hook: a PR may not be opened without a verification receipt.
 
-Green tests share the blind spots of whoever wrote the code. The receipt is the
-one artefact that says something other than the author's own model confirmed the
-behaviour — so it gates the moment the claim becomes public: `gh pr create`.
+Green tests share the blind spots of whoever wrote the code. The receipt says how
+the behaviour was observed, or that it was not — so it gates the moment the claim
+becomes public: `gh pr create`.
 
 Deliberately narrow:
   * Fires only on a `gh pr create` / `gh pr edit` in **command position**, after
@@ -18,7 +18,11 @@ Deliberately narrow:
     `--web` types its body in a browser we cannot read — the gate is armed against
     one spelling of the action.
 
-Contract: `skills/story/references/plan-format.md` § Verification (the four labels) and
+The gate checks a declaration, not an observation: a `## Verification` heading and an
+`**Oracle:**` line that picks cli | ui | substitute, or declines with a reason (`not-applicable`,
+`not-observed`). Its worth is that every PR says in public how — or whether — it was observed.
+
+Contract: `skills/story/references/plan-format.md` § Verification and
 `references/worker-dispatch.md` § Finish sequence. Repo recipes: `.weside/verify.md`.
 """
 
@@ -60,21 +64,14 @@ def _starts_a_command(argv: list[str], i: int) -> bool:
     )
 
 
-# The receipt: a heading, an oracle line naming what was driven (the four-way menu
-# from a template is not a choice), and — unless the oracle is `not-applicable` — a
-# seed and an assertion that are filled in. A heading over a template is the same
-# silence the gate exists to catch.
+# The receipt: a heading and an oracle line that says how the change was observed — or, with a
+# reason, that it was not. The gate reads that declaration, it cannot check the observation; what
+# it catches is the silent PR: no heading, no choice (a template menu), no reason for a decline.
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s*verification\b", re.IGNORECASE | re.MULTILINE)
-_ORACLES = ("cli", "ui", "substitute", "not-applicable")
-_PLACEHOLDERS = frozenset({"", "-", "tbd", "todo", "n/a", "na", "none", "…", "..."})
-# The receipt's own field labels (plan-format.md § Verification). Only one of them ends
-# the value of the field before it: a nested `- AC 2 and 3: …` bullet is that value,
-# not a field. Pinned by test_nested_bullets_with_a_colon_belong_to_the_field.
-_FIELDS = ("oracle", "seed", "asserted", "not proven", "exit criterion", "missing cli verb")
-_NEXT_FIELD = re.compile(
-    rf"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*(?:{'|'.join(map(re.escape, _FIELDS))})\**[ \t]*:",
-    re.IGNORECASE | re.MULTILINE,
-)
+_OBSERVED = ("cli", "ui", "substitute")
+_DECLINES = ("not-applicable", "not-observed")
+_ORACLES = _OBSERVED + _DECLINES
+_MENU = " | ".join(_ORACLES)
 
 
 def _line(body: str, name: str) -> str | None:
@@ -87,62 +84,40 @@ def _line(body: str, name: str) -> str | None:
     return found.group("v") if found else None
 
 
-def _filled(body: str, name: str) -> bool:
-    value = _line(body, name)
-    if value is None:
-        return False
-    value = value.strip().strip("*_`| ").strip()
-    if not value:
-        # `**Seed:**` followed by a fenced block or a paragraph on the next lines.
-        after = re.split(
-            rf"^[ \t]*(?:[-*+|][ \t]*)?\**[ \t]*{name}\**[ \t]*:",
-            body,
-            maxsplit=1,
-            flags=re.IGNORECASE | re.MULTILINE,
-        )[-1]
-        nxt = _NEXT_FIELD.search(after[1:])
-        value = after[1 : nxt.start() + 1] if nxt else after[1:]
-        value = re.sub(r"```+|~~~+", "", value).strip().strip("*_`| ").strip()
-    if re.fullmatch(r"<[^<>]*>", value):
-        return False
-    return value.strip("_ ").lower() not in _PLACEHOLDERS
+def _word(oracle: str) -> str:
+    """`not-observed` also as `not observed`."""
+    return r"\b" + oracle.replace("-", r"[-\s]") + r"\b"
 
 
 def _named(value: str) -> set[str]:
-    """The oracle words in the choice part — before the reason (`not-applicable — docs only`)."""
-    choice = re.split(r"\s[\u2014\u2013-]\s|:|\(", value, maxsplit=1)[0]
-    return {o for o in _ORACLES if re.search(rf"\b{o}\b", choice, re.IGNORECASE)}
+    """The oracle words in the choice part — before the reason (`not-observed — unit tests only`).
+    A comma ends the choice too: `not-observed, no UI here` names one oracle, not two."""
+    choice = re.split(r"\s[\u2014\u2013-]\s|[:(,;]", value, maxsplit=1)[0]
+    return {o for o in _ORACLES if re.search(_word(o), choice, re.IGNORECASE)}
 
 
-def _names_no_oracle(body: str) -> bool:
-    """An Oracle line exists, but its choice part names none of the four words."""
-    value = _line(body, "oracle")
-    return value is not None and not _named(value)
-
-
-def _oracles(body: str) -> set[str] | None:
-    """The oracles named on the Oracle line — None when the line is a menu of all of them."""
-    value = _line(body, "oracle")
-    if value is None:
-        return None
-    named = _named(value)
-    return None if len(named) == len(_ORACLES) or not named else named
+def _is_menu(named: set[str]) -> bool:
+    """A template line lists the options; a decline next to any other word is no choice either.
+    `cli | ui` is a choice (both driven); the old four-word menu still counts as a menu."""
+    return bool(named & set(_DECLINES)) and len(named) > 1
 
 
 _RECEIPT_SCRIPT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "pr-body-receipt.py"
 )
 _WHERE = (
-    "The receipt is not authored here: copy the `## Verification` block verbatim from the story "
-    "plan (`docs/plans/<TICKET>-story.md` § Verification) into the PR body, and pass the body as "
-    "`--body-file` so it can be read. `python3 " + _RECEIPT_SCRIPT + " <TICKET> <body-in> "
-    "<body-out>` does the splice and checks the result. It needs one `**Oracle:**` — cli | ui | substitute | "
-    "not-applicable — and, unless that oracle is not-applicable, a filled `**Seed:**`, "
-    "`**Asserted:**` and `**Not proven:**`.\n\n"
-    "If the plan carries no such block, verification did not happen. Say so and stop; do not "
-    "write a receipt for a run that did not take place.\n\n"
-    "Contract: the `we` plugin's skills/story/references/plan-format.md § Verification. "
-    "Repo recipes: .weside/verify.md."
+    "Write the block into the PR body yourself; no ticket and no story plan are needed. Pass the "
+    "body as `--body-file` so the gate can read it:\n\n"
+    "    ## Verification\n\n"
+    "    **Oracle:** <one of " + _MENU + ">\n\n"
+    "cli | ui | substitute: name what you drove and what you saw (`**Seed:**`, `**Asserted:**`, "
+    "`**Not proven:**` are recommended, not checked). Nothing observed beyond tests: "
+    "`**Oracle:** not-observed — <reason, e.g. unit tests only, staging RC follows>`. No runtime "
+    "behaviour at all: `**Oracle:** not-applicable — <reason>`.\n\n"
+    "A story plan with a `## Verification` block can be spliced in instead: `python3 "
+    + _RECEIPT_SCRIPT
+    + " <TICKET> <body-in> <body-out>`. Contract: the `we` plugin's "
+    "skills/story/references/plan-format.md § Verification."
 )
 
 
@@ -379,33 +354,28 @@ def _section(body: str) -> str | None:
 def _receipt_problem(full: str) -> str | None:
     """What is wrong with this PR body, in the words the author needs."""
     body = _section(full)
-    named = _oracles(body) if body else None
-    if body is not None and named is None and _names_no_oracle(body):
+    value = _line(body, "oracle") if body is not None else None
+    if value is None:
+        return (
+            "This PR does not say how the change was observed: its body has no `## Verification` "
+            "block with an `**Oracle:**` line."
+        )
+    named = _named(value)
+    if not named:
         return (
             "The `**Oracle:**` line names no oracle the gate can read. Its value has to start with "
-            "one of cli | ui | substitute | not-applicable: the gate reads only the text before "
-            "the first ` — `, `:` or `(` (`**Oracle:** substitute — the worktree's DEV fork`)."
+            f"one of {_MENU}: the gate reads only the text before the first ` — `, `:`, `,` or `(` "
+            "(`**Oracle:** not-observed — unit tests only`)."
         )
-    if body is None or named is None:
-        return (
-            "This PR claims work is done without saying how that was observed. Unit tests "
-            "do not count — they share the blind spots of whoever wrote the code."
-        )
-    if named == {"not-applicable"}:
-        reason = re.sub(
-            r"not[-\s]applicable", "", _line(body, "oracle") or "", flags=re.IGNORECASE
-        )
-        if len(reason.strip(" *_`—-:")) >= 3:
-            return None
-        return (
-            "`not-applicable` is a legitimate answer and it carries its reason — say what "
-            "about this change has no runtime behaviour to observe."
-        )
-    if not (_filled(body, "seed") and _filled(body, "asserted") and _filled(body, "not proven")):
-        return (
-            "This PR carries a `## Verification` heading over an unfilled receipt — the "
-            "seed, the assertion or the `Not proven` line are still the template's placeholders."
-        )
+    if _is_menu(named):
+        return "The `**Oracle:**` line lists the options instead of picking one."
+    decline = named & set(_DECLINES)
+    if decline:
+        reason = value
+        for word in _DECLINES:
+            reason = re.sub(_word(word), "", reason, flags=re.IGNORECASE)
+        if len(reason.strip(" *_`\u2014\u2013-:")) < 3:
+            return f"`{decline.pop()}` is a legitimate answer and it carries its reason."
     return None
 
 

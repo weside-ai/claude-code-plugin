@@ -104,7 +104,8 @@ def test_a_plan_without_the_block_stops(repo: Path) -> None:
     (repo / "docs" / "plans" / "KEY-2-story.md").write_text("# Story\n\n## Technical Approach\n")
     result = run(repo, BODY, key="KEY-2")
     assert result.returncode == 1
-    assert "verification did not happen" in result.stderr
+    assert "write it into the PR body yourself" in result.stderr
+    assert "say so and stop" not in result.stderr
     assert not (repo / "out.md").exists()
 
 

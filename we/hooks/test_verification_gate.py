@@ -1,10 +1,10 @@
 """Matrix for the PR verification gate.
 
 Two failure directions cost differently and both are pinned here: a **false
-positive** (a command that opens no PR, denied — the class that made the hook
-expensive: a heredoc writing a document that quotes `gh pr create`), and a
-**false negative** (a claim that ships with no earned receipt — `--fill`, or the
-denial message pasted back as its own answer).
+positive** (a command that opens no PR, or a PR that honestly declares how it was
+observed, denied — a heredoc quoting `gh pr create`, a self-written block with no
+plan behind it), and a **false negative** (a PR that says nothing about how it was
+observed — `--fill`, or a template menu pasted back as its own answer).
 
 Run: `python3 -m pytest we/hooks/test_verification_gate.py`
 """
@@ -41,7 +41,7 @@ Widgets.
 
 NO_RECEIPT = "## Summary\n\nWidgets.\n\n## Test Plan\n\nUnit tests pass.\n"
 
-# The hint the gate itself used to print. Pasted back verbatim it must NOT pass.
+# The plan template before 7.10 (four oracles). Pasted back verbatim it must NOT pass.
 UNFILLED = """## Verification
 
 **Oracle:** cli | ui | substitute | not-applicable
@@ -141,7 +141,10 @@ def test_non_bash_tool_is_ignored(armed: Path) -> None:
 def test_body_file_without_receipt_is_denied(armed: Path) -> None:
     reason = refuse_body(armed, NO_RECEIPT)
     assert reason is not None
-    assert "docs/plans/<TICKET>-story.md" in reason
+    # The denial must not send a session without a plan looking for one.
+    assert "no ticket and no story plan are needed" in reason
+    assert "not-observed — <reason" in reason
+    assert "stop" not in reason.lower()
 
 
 def test_relative_body_file_is_read_from_the_command_cwd(armed: Path) -> None:
@@ -163,11 +166,28 @@ def test_the_unfilled_template_does_not_pass(armed: Path) -> None:
     assert refuse_body(armed, UNFILLED) is not None
 
 
-def test_a_chosen_oracle_over_placeholders_does_not_pass(armed: Path) -> None:
+def test_a_chosen_oracle_over_placeholders_passes(armed: Path) -> None:
+    """Seed, Asserted and Not proven are recommended in the plan, not checked by the gate."""
     half = UNFILLED.replace("cli | ui | substitute | not-applicable", "cli")
-    reason = refuse_body(armed, half)
-    assert reason is not None
-    assert "placeholders" in reason
+    assert refuse_body(armed, half) is None
+
+
+def test_the_old_four_word_menu_is_named_as_a_menu(armed: Path) -> None:
+    reason = refuse_body(armed, UNFILLED)
+    assert reason is not None and "instead of picking one" in reason
+
+
+def test_the_five_word_menu_does_not_pass(armed: Path) -> None:
+    text = (
+        "## Verification\n\n**Oracle:** <cli | ui | substitute | not-applicable | not-observed>\n"
+    )
+    reason = refuse_body(armed, text)
+    assert reason is not None and "instead of picking one" in reason
+
+
+def test_a_decline_next_to_an_oracle_is_no_choice(armed: Path) -> None:
+    text = "## Verification\n\n**Oracle:** cli | not-observed — half of it\n"
+    assert refuse_body(armed, text) is not None
 
 
 def test_heading_over_nothing_does_not_pass(armed: Path) -> None:
@@ -283,14 +303,38 @@ def test_a_missing_cwd_does_not_crash() -> None:
 # --- receipts that are only receipt-shaped -------------------------------------
 
 
-def test_an_empty_seed_does_not_pass(armed: Path) -> None:
-    text = "## Verification\n\n**Oracle:** cli\n**Seed:**\n**Asserted:** 201\n"
-    assert refuse_body(armed, text) is not None
+def test_a_self_written_block_without_seed_or_asserted_passes(armed: Path) -> None:
+    """No plan, no ticket: the author writes the block and names what was driven."""
+    text = "## Summary\n\nFix.\n\n## Verification\n\n**Oracle:** cli — ran `tool sync` twice, no dupes\n"
+    assert refuse_body(armed, text) is None
 
 
-def test_a_tbd_seed_does_not_pass(armed: Path) -> None:
-    text = "## Verification\n\n**Oracle:** cli\n**Seed:** _TBD_\n**Asserted:** 201 ok\n"
-    assert refuse_body(armed, text) is not None
+def test_not_observed_with_a_reason_passes(armed: Path) -> None:
+    text = "## Verification\n\n**Oracle:** not-observed — unit tests only, staging RC follows\n"
+    assert refuse_body(armed, text) is None
+
+
+@pytest.mark.parametrize(
+    "oracle",
+    ["not observed: no dev server here", "Not-Observed (unit tests only)", "not-observed, no UI"],
+)
+def test_not_observed_spellings_pass(armed: Path, oracle: str) -> None:
+    assert refuse_body(armed, f"## Verification\n\n- **Oracle:** {oracle}\n") is None
+
+
+@pytest.mark.parametrize(
+    "oracle", ["not-observed", "not-observed —", "**not-observed**", "not-observed: -"]
+)
+def test_bare_not_observed_carries_no_reason(armed: Path, oracle: str) -> None:
+    reason = refuse_body(armed, f"## Verification\n\n**Oracle:** {oracle}\n")
+    assert reason is not None
+    assert "`not-observed` is a legitimate answer and it carries its reason" in reason
+
+
+def test_a_heading_with_no_oracle_line_is_denied(armed: Path) -> None:
+    text = "## Verification\n\n**Seed:** `x`\n**Asserted:** 201\n"
+    reason = refuse_body(armed, text)
+    assert reason is not None and "no `## Verification` block with an `**Oracle:**` line" in reason
 
 
 def test_bare_not_applicable_carries_no_reason(armed: Path) -> None:
@@ -437,7 +481,9 @@ def test_oracle_line_without_a_leading_word_says_so(armed: Path) -> None:
     )
     reason = refuse_body(armed, text)
     assert reason is not None
-    assert "has to start with one of cli | ui | substitute | not-applicable" in reason
+    assert (
+        "has to start with one of cli | ui | substitute | not-applicable | not-observed" in reason
+    )
     assert "pr-body-receipt.py" in reason
 
 
@@ -461,10 +507,10 @@ def test_heredoc_after_the_redirect_is_the_body_too(armed: Path) -> None:
     assert _run(armed, cmd) == 0
 
 
-def test_not_proven_is_required(armed: Path) -> None:
-    # M2
+def test_not_proven_is_not_checked(armed: Path) -> None:
+    # M2, inverted in 7.10: the gate reads the Oracle line only.
     body = RECEIPT.replace("**Not proven:** device geometry\n", "")
-    assert gate._receipt_problem(body) is not None
+    assert gate._receipt_problem(body) is None
 
 
 def test_a_fenced_seed_inside_the_receipt_survives(armed: Path) -> None:
@@ -537,7 +583,7 @@ def test_a_not_applicable_reason_may_name_the_surfaces_it_lacks(armed: Path) -> 
     assert refuse_body(armed, text) is None
 
 
-# --- a field's value ends only at the next receipt label ------------------------
+# --- a receipt shaped like a real plan's still passes ---------------------------
 
 NESTED_ASSERTED = """## Verification
 
@@ -550,14 +596,5 @@ NESTED_ASSERTED = """## Verification
 """
 
 
-def test_nested_bullets_with_a_colon_belong_to_the_field(armed: Path) -> None:
-    """`- AC 2 and 3: …` under `**Asserted:**` is its value, not the next field."""
-    filled = [gate._filled(NESTED_ASSERTED, n) for n in ("seed", "asserted", "not proven")]
-    assert filled == [True, True, True]
+def test_nested_bullets_with_a_colon_pass(armed: Path) -> None:
     assert refuse_body(armed, NESTED_ASSERTED) is None
-
-
-def test_an_empty_asserted_before_the_next_label_does_not_pass(armed: Path) -> None:
-    text = "## Verification\n\n**Oracle:** cli\n**Seed:** `x`\n**Asserted:**\n**Not proven:** y\n"
-    assert not gate._filled(text, "asserted")
-    assert refuse_body(armed, text) is not None

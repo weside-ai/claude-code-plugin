@@ -91,7 +91,7 @@ Answering the fork deletes the section.>
 
 ## Verification
 
-- **Oracle:** <cli | ui | substitute | not-applicable — the highest rung the ACs demand, and why>
+- **Oracle:** <cli | ui | substitute | not-applicable | not-observed — the highest rung the ACs demand, and why>
 - **Seed:** <the command that puts the system into the state to observe>
 - **Asserted:** <what must be true: endpoint + field, or route + label>
 - **Not proven:** <what this oracle cannot show, and who owes it>
@@ -148,5 +148,7 @@ derived — code graph, or "grep-derived, no code graph".>
 - **New doc** — <only with the reason the code cannot hold it>
 ```
 
-The four labels `**Oracle:**`, `**Seed:**`, `**Asserted:**` and `**Not proven:**` are copied into
-the PR body, where a hook reads them literally: keep them undecorated.
+The block is copied into the PR body, where a hook reads the `**Oracle:**` line literally: keep it
+undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and `not-observed`
+(behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
+and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
