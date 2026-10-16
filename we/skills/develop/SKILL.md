@@ -54,6 +54,9 @@ phase:
 4. Commit the phase by path: `<KEY>: phase <N> — <what>` with the `Co-Authored-By:` trailer of the
    model running you.
 
+A refactor chunk's last step deletes the characterization tests that a test on the new seam now
+asserts; the report names each retired test and the test that replaces it.
+
 ## 4. Local gates
 
 Run the commands yourself; they are deterministic. Scope and exceptions are in the contract:

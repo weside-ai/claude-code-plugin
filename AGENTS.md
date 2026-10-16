@@ -30,7 +30,8 @@ we/                               plugin root
   scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, statusline, watch-pr-checks.sh (CI watch bound to the PR head),
-                                  pr-body-receipt.py (splices the plan's Verification block)
+                                  pr-body-receipt.py (splices the plan's Verification block),
+                                  test-delta.py (the PR body's test line)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/

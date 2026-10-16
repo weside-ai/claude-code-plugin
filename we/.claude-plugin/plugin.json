@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.10.1",
+  "version": "7.11.0",
   "skills": "./skills",
   "userConfig": {
     "companion": {
