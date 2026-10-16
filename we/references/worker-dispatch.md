@@ -92,7 +92,10 @@ The session or worker that writes last on the PR branch runs this once over
 
 1. The deterministic gates over the finished branch, not after an intermediate commit: the full local gate script the
    repo's instruction files name (it runs the pre-push and manual stages), else `pre-commit run --hook-stage pre-push
-   --all-files` plus `pre-commit run --hook-stage manual <id>` per manual hook marked as a CI mirror; and the affected tests by name.
+   --from-ref origin/<default-branch> --to-ref HEAD` plus `pre-commit run --hook-stage manual <id> --from-ref
+   origin/<default-branch> --to-ref HEAD` per manual hook marked as a CI mirror (the diff range, because `--all-files`
+   runs every hook past its path filter over the whole tree); and the affected tests by name, except a test whose
+   last green run in this session was on the current HEAD.
 2. Only when the diff touches money, auth, tenant isolation or a migration: the contract's
    `code-review` at `high` through the Skill tool, never as a slash command written into a subagent
    prompt (not proven to run the skill, probe 27.09.2026). No other LLM review.
@@ -167,7 +170,7 @@ The worker's final message is the report; the Agent result delivers it to the Le
 
 ```
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
-gates: <gate> ✓|✗|skipped(<why>) …
+gates: <command> → <its result line> | skipped(<why>) …   (the receipt the Lead reads instead of re-running)
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
 code graph: <symbol> → <n> callers … | not needed (<reason>)   (when the brief has a Code graph line)
 review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>) | none (not critical)

@@ -141,8 +141,10 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 
 ## Push, PR, CI
 
-1. Read the report. Run the tests it names yourself in the worker's worktree. Check the AC →
-   evidence lines and the rows of `.weside/dod.md` against the named files and tests. No local LLM
+1. Read the report. Re-run a test it names, in the worker's worktree, only when its `gates:` line
+   lacks a receipt (the command plus its result line) or you changed the tree after the report (a
+   lane merge, your own fix); CI runs the suite again, and § After each lane merge covers integration.
+   Check the AC → evidence lines and the rows of `.weside/dod.md` against the named files and tests. No local LLM
    review: CI runs the Claude and Codex reviews (`worker-dispatch.md` § Finish sequence). A missing
    AC, a DoD `Fail` or a red gate goes back to the same worker by `SendMessage`.
 2. A migration gets `upgrade → downgrade → upgrade` on a real database. Run
