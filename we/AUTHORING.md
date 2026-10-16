@@ -48,9 +48,10 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   paths, for transactions, money or idempotency, for a fix routing around a fragile path, and for a
   second attempt after a failed worker. A clearly bounded single fix gains nothing from `high`.
 - Implementation never runs on Sonnet; Haiku or Sonnet only for mechanical chunks the Lead names.
-- Parallel workers saved no net time in 48 of 54 past orchestrate runs: waves ran in series and
-  integration ate the gain. One implementer is the normal case; parallel only for disjoint files
-  with a fixed contract.
+- Parallel work costs most after the push (main merges, a second migration head, regenerated
+  artifacts), not in the integrate merge; disjoint stories on separate PRs paid off, stacked
+  branches did not (18 runs, 16.10.2026). One implementer is the normal case; parallel only for
+  disjoint files with a fixed contract.
 - The Lead produced more output tokens than all workers together. Keep the Lead's own reading and
   re-checking small; delegate reading.
 - The most frequent loss of autonomy is ending a turn with an announcement instead of the next

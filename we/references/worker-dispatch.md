@@ -27,9 +27,11 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 - Implementation never runs on Sonnet (Foxy 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
   chunk the Lead names mechanical (a rename, a generated file, a gate run).
 - Codex is not a dispatch backend; it reviews advisory only (Foxy 30.09.2026).
-- One implementer per phase group. Parallel workers saved no net time in 48 of 54 v6 runs, because
-  waves ran in series and integration ate the gain; a lone worker then ran 93–317 min serially over
-  phases with disjoint files (27.–30.09.2026). Run chunks in parallel when the plan's
+- One implementer per phase group by default. Measured over 18 runs (16.10.2026): an integrate merge
+  costs ~15–20 min; the real cost of parallel work is the loop after the push (main merges, a second
+  migration head, regenerated artifacts), and stacked branches netted about zero. Disjoint stories
+  on separate PRs paid off. Most run time is waiting on CI and the human, which more workers do not
+  shorten. Run chunks in parallel when the plan's
   `parallel_groups` say so, or when their `**Files:**` lists do not intersect and the contract
   between them exists on the base branch. Contract first, then fan out: the chunk that lays down
   schema, API and types merges into the integration branch, and the disjoint chunks start with
