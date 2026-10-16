@@ -55,7 +55,7 @@ phase:
    model running you.
 
 A refactor chunk's last step deletes the characterization tests that a test on the new seam now
-asserts; the report names each retired test and the test that replaces it.
+asserts; the report's `retired:` field names each one and the test that replaces it.
 
 ## 4. Local gates
 
