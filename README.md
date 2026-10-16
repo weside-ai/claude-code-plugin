@@ -41,7 +41,7 @@ Requirements: Claude Code, Git, Python 3.9 or later (the `/usr/bin/python3` that
 - `/we:orchestrate` — the Lead: refines what has no plan, dispatches workers for what does, runs CI once on one PR.
 - `/we:refine` — writes a build-ready plan without a user in the room; what a dispatched refiner runs.
 - `/we:develop` — dev-only worker: implements its chunk, runs local gates, commits, reports.
-- `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence.
+- `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence and the net test delta.
 - `/we:ci-review` — collects every CI and review finding, fixes by severity, resolves threads, pushes once.
 - `/we:ac-review` — checks a branch against its story's acceptance criteria and the DoD.
 - `/we:merged` — after your merge: tears down worktrees and branches, moves tickets to Done.

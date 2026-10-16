@@ -18,6 +18,9 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    No ticket, no plan or no block: write it yourself, `**Oracle:**` cli | ui | substitute with what you
    drove and saw, or `not-observed — <reason>` when nothing beyond tests was observed. A hook refusal for
    a wrong flag or an unreadable file is fixed once; a second refusal is reported verbatim.
+   One line `Tests: +N / -M (net ±K)` from `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/test-delta.py origin/<base>`
+   (what it counts and skips: its docstring). A refactor (branch `refactor/…`, a Conventional Commit of type
+   `refactor`, or a plan that says so) with a positive net appends `— <reason>`. Visibility only, it blocks nothing.
 4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`. Ticket: link the PR, move it to In
    Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
 5. Report the URL. CI and review findings → `/we:ci-review <PR>`, which arms auto-merge once green (orchestrate § Close the run).

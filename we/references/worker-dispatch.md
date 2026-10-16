@@ -172,5 +172,6 @@ ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claim
 code graph: <symbol> → <n> callers … | not needed (<reason>)   (when the brief has a Code graph line)
 review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>) | none (not critical)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
+retired: <old test> → <new-seam test> …   (refactor chunks; none|<reason> when nothing retired)
 overrides: … · skipped: … · questions: … · blockers: none|<reason>
 ```
