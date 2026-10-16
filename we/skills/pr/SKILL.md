@@ -9,7 +9,8 @@ description: >
 
 For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does the same inside a run.
 
-1. Run the repo's static gates and the affected tests by name first; red → stop and report.
+1. Run the repo's static gates and the affected tests by name first, unless this session already ran them green on
+   the current HEAD; red → stop and report.
 2. `git fetch && git merge origin/<base>` (never rebase: that needs a force-push, the user's call).
    A conflict goes to the user. Then `git push -u origin <branch>` once.
 3. Body in a file, passed as `--body-file` (a `--body "$(…)"` cannot be read by the verification

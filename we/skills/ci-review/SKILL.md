@@ -124,8 +124,9 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 ## 2 · Fix and validate
 
 - Collect every fix before the one commit.
-- Validate the changed surface only: the repo's static gates, the affected tests by name, and the pre-push hooks.
-  Never run a full sweep. CI runs the full suite on main. No local LLM review; the CI review re-reviews the fix.
+- Validate the changed surface only: the repo's static gates and the affected tests by name. The push in § 3 runs the
+  pre-push hooks, so they are not run by hand first, unless the clone has none installed
+  (`test -x "$(git rev-parse --git-path hooks/pre-push)"` fails): then run the pre-push stage over the diff range. Never run a full sweep. CI runs the full suite on main. No local LLM review; the CI review re-reviews the fix.
 
 ## 3 · Commit, resolve, merge the base, push
 
