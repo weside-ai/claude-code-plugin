@@ -23,7 +23,9 @@ we/                               plugin root
   agents/                         dev-medium, dev-high, council-<role> lenses
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring)
-  hooks/                          hooks.json + SessionStart materialize and optimization reminder, Stop store-conversation,
+  types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
+  hooks/                          hooks.json + flow/ (function-hooks module: the /flow pane, phase.ts logic, *.test.ts)
+                                  + SessionStart materialize and optimization reminder, Stop store-conversation,
                                   PreToolUse verification gate and auto-merge gate (Codex verdict
                                   on the head first), SubagentStart/Stop timing,
                                   SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
@@ -55,7 +57,12 @@ bash scripts/validate-plugin-structure.sh
 python3 scripts/validate-consistency.py
 python3 -m pytest -q we scripts
 python3 we/scripts/check-instruction-budget.py
+claude plugin validate we && claude plugin test we   # the /flow hooks module
 ```
+
+`claude plugin test` runs the `*.test.ts` files under `we/hooks/flow/` against Claude Code's own
+engine; CI does not run it, so a change to the hooks module runs it locally before the push.
+The module's types come from Claude Code: `claude plugin validate` prints what it hooks and calls.
 
 Python floor 3.9 (macOS `/usr/bin/python3`): CI runs the tests on 3.9 and on the latest release.
 Re-record `we/scripts/fixtures/rule-loading.json` with `probe-rule-loading.py` after a Claude Code

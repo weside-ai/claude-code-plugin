@@ -7,7 +7,7 @@
 /plugin install we@weside-ai
 ```
 
-Requirements: Claude Code, Git, Python 3, and the `gh` CLI for PRs and GitHub Issues.
+Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3.9 or later, and the `gh` CLI for PRs and GitHub Issues.
 
 ## Configure the repo
 
@@ -27,9 +27,11 @@ shipped statusline (model, branch, PR, context, cost).
 2. `/we:orchestrate <KEY>` — the Lead dispatches one `we:dev-medium` worker in its own worktree,
    checks the report against the acceptance criteria and the DoD, pushes once, opens the PR and
    runs `/we:ci-review` when CI concludes.
-3. Once CI and the reviews are green, auto-merge is armed (unless a money path or another exception
+3. `/flow <KEY>` — watch it: a pane with one light per step (plan, approval, build, PR, CI,
+   review, merge), refreshed from git and GitHub. Its **Standup** button runs `/we:standup`.
+4. Once CI and the reviews are green, auto-merge is armed (unless a money path or another exception
    applies; then you merge). Review the PR before it lands if you want to.
-4. `/we:merged` — removes the worktrees and branches and moves the ticket to Done.
+5. `/we:merged` — removes the worktrees and branches and moves the ticket to Done.
 
 For a change too small for a worker, `/we:orchestrate --solo` builds it in the current session.
 
