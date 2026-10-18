@@ -118,6 +118,14 @@ The dispatch contract: [we/references/worker-dispatch.md](../we/references/worke
 The measurements behind these rules: [we/AUTHORING.md](../we/AUTHORING.md), section *Measured facts
 a skill must respect*.
 
+## Watch: `/flow`
+
+`/flow <KEY>` opens a pane that maps each story onto the loop above: Plan and Approval are the
+*Plan* box, Build the dev worker, PR, CI and Review the *GitHub* box, Merge the *Close* box. It
+reads git and `gh` on its own every two minutes, so it shows the same state whether the Lead, a
+worker or you moved the story. Its buttons start the verb the state calls for (`/we:standup`,
+`/we:orchestrate`, `/we:ci-review`, `/we:epic`). Details: [flow.md](flow.md).
+
 ## Deliver
 
 Claude arms auto-merge once the checks and the Codex verdict are in (exceptions: `/we:orchestrate` § Close the run); you review and merge the exceptions. `/we:merged` closes out: worktrees, branches, processes, tickets to Done.

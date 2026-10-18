@@ -4,39 +4,69 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>we plugin tour</title>
-<meta name="description" content="The we plugin for Claude Code in one page: four plan altitudes, one Lead that builds one PR, and the effort rule behind it.">
+<meta name="description" content="The we plugin for Claude Code in one page: four plan altitudes, one Lead that builds one PR, a pane that shows every story's step, and the effort rule behind it.">
 <style>
   :root {
     --bg: #07070c; --card: #14141e; --line: #2a2a3a;
     --fg: #ececf2; --muted: #9a9aae; --gold: #d4af37;
+    --ok: #4cc38a; --warn: #e5b83f; --bad: #ef6461; --off: #4a4a5c; --merged: #a78bfa;
   }
   @media (prefers-color-scheme: light) {
-    :root { --bg: #fafaf7; --card: #ffffff; --line: #e2e2dc; --fg: #16161d; --muted: #5c5c6a; --gold: #8a6d12; }
+    :root {
+      --bg: #fafaf7; --card: #ffffff; --line: #e2e2dc; --fg: #16161d; --muted: #5c5c6a; --gold: #8a6d12;
+      --ok: #1f8a57; --warn: #a57a00; --bad: #c7362f; --off: #b9b9c4; --merged: #6d4fd1;
+    }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
     font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
-  h1 { font-size: 2rem; margin: 0 0 8px; }
-  h2 { font-size: 1.25rem; margin: 40px 0 12px; color: var(--gold); }
+  main { max-width: 900px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 8px; }
+  h2 { font-size: 1.25rem; margin: 44px 0 12px; color: var(--gold); }
   p { margin: 0 0 12px; }
   .lede { color: var(--muted); font-size: 1.1rem; }
   code { font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; }
   pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
     padding: 12px 16px; overflow-x: auto; }
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
   .step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
   .step b { display: block; margin-bottom: 4px; }
   .step span { color: var(--muted); font-size: 0.95rem; }
+  .flowline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 14px; }
+  .flowline span { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    padding: 2px 12px; font-size: 0.9rem; }
+  .flowline i { color: var(--muted); font-style: normal; }
   ul { padding-left: 20px; }
   li { margin-bottom: 6px; }
   a { color: var(--gold); }
+
+  /* The /flow pane, drawn as the terminal draws it. */
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+    font: 0.85rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+  .pane .head { font-weight: 700; }
+  .bar { letter-spacing: -1px; }
+  .bar .f { color: var(--ok); } .bar .e { color: var(--off); }
+  .card { border: 1px solid var(--bad); border-radius: 10px; padding: 8px 12px; margin: 10px 0; min-width: 520px; }
+  .card.warn { border-color: var(--warn); }
+  .lamps { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 6px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .off { color: var(--off); } .dim { color: var(--muted); } .merged { color: var(--merged); }
+  .btn { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 8px; margin-right: 6px; }
+  .legend { margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
 </style>
 </head>
 <body>
 <main>
   <h1>we — Agentic Product Ownership for Claude Code</h1>
-  <p class="lede">Plan at four altitudes, build with one Lead, deliver one PR that auto-merges once CI and review are through.</p>
+  <p class="lede">Plan at four altitudes, build with one Lead, watch every story's step in one pane, deliver one PR that auto-merges once CI and review are through.</p>
+
+  <div class="flowline">
+    <span>Plan</span><i>→</i><span>Approval</span><i>→</i><span>Build</span><i>→</i><span>PR</span><i>→</i><span>CI</span><i>→</i><span>Review</span><i>→</i><span>Merge</span>
+  </div>
 
   <h2>1 · Plan</h2>
   <div class="steps">
@@ -45,13 +75,57 @@
     <div class="step"><b><code>/we:epic</code></b><span>a bounded initiative with named stories</span></div>
     <div class="step"><b><code>/we:story</code></b><span>one sprint-sized story with a build-ready plan</span></div>
   </div>
-  <p style="margin-top:12px"><code>/we:meet &lt;altitude&gt;</code> decomposes an artifact one altitude down, with a council of role lenses (<code>/we:council</code>) when you want one. <code>/we:grill</code> stress-tests a plan one question at a time.</p>
+  <p style="margin-top:12px"><code>/we:meet &lt;altitude&gt;</code> decomposes an artifact one altitude down, with a council of role lenses (<code>/we:council</code>) when you want one. <code>/we:grill</code> stress-tests a plan one question at a time. A story plan lands on the default branch; once you approve it (<code>status: approved</code>) it is ready to build.</p>
 
   <h2>2 · Build</h2>
-  <p><code>/we:orchestrate</code> is the Lead. It refines a story without a plan (<code>/we:refine</code>), dispatches one dev worker per approved plan (<code>/we:develop</code>, in its own worktree), checks the report against the acceptance criteria and the DoD, pushes once, opens one PR and runs <code>/we:ci-review</code> when CI concludes.</p>
+  <p><code>/we:orchestrate</code> is the Lead. It refines a story without a plan (<code>/we:refine</code>), dispatches one dev worker per approved plan (<code>/we:develop</code>, in its own worktree), checks the report against the acceptance criteria and the DoD, pushes once, opens one PR and runs <code>/we:ci-review</code> when CI concludes, up to three rounds.</p>
 
-  <h2>3 · Deliver</h2>
+  <h2>3 · Watch: <code>/flow</code></h2>
+  <p>A pane beside the transcript with one traffic light per step, for a story, every story of an epic, or whatever this session works on. It reads git and GitHub on its own every two minutes; no agent feeds it. Buttons run the verb the state calls for.</p>
+  <div class="pane" role="img" aria-label="The flow pane: an epic with one story red in CI and its traffic lights">
+    <div class="head">◆ PROJ-10</div>
+    <div><span class="bar"><span class="f">██████████████████████</span><span class="e">░░░░</span></span> <b>13/15 merged · 1 open · 1 red</b></div>
+    <div style="margin-top:8px"><b class="merged">Epic PROJ-10</b> <span class="dim">Channels everywhere</span></div>
+    <div><span class="btn">Epic status</span><span class="btn">Orchestrate</span></div>
+    <div class="card">
+      <div><b>PROJ-14</b> <b class="bad">CI red</b> <span class="dim">#5090</span></div>
+      <div>One bot identity per guild</div>
+      <div class="lamps">
+        <span><b class="ok">●</b> Plan</span><span><b class="ok">●</b> Approval</span><span><b class="ok">●</b> Build</span>
+        <span><b class="ok">●</b> PR</span><span><b class="bad">◉</b> CI</span><span><b class="warn">◉</b> Review</span><span class="off">○ Merge</span>
+      </div>
+      <div><span class="ok">● Build&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="dim">14 commits</span></div>
+      <div><span class="bad">◉ CI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>✗ CI Summary · 2 running · 11/14 ✓</div>
+      <div><span class="warn">◉ Review&nbsp;&nbsp;&nbsp;</span>Claude running · Codex ✓</div>
+      <div style="margin-top:6px"><span class="btn">Standup</span><span class="btn">Fix CI</span></div>
+    </div>
+    <div><span class="ok">✓</span> <span class="dim">PROJ-12 Discord groups like Telegram #5072</span></div>
+    <div><span class="ok">✓</span> <span class="dim">PROJ-11 Thin channel adapters #5045</span></div>
+    <div class="legend dim"><span class="ok">●</span> done &nbsp;<span class="warn">◉</span> current &nbsp;<span class="bad">◉</span> stuck &nbsp;<span class="off">○</span> open &nbsp;– skipped</div>
+  </div>
+  <div class="scroll" style="margin-top:12px">
+    <table>
+      <tr><th>Lamp</th><th>Green when</th><th>Its button</th></tr>
+      <tr><td>Plan · Approval</td><td>the story plan is on the default branch and says <code>status: approved</code></td><td>Refine → <code>/we:orchestrate</code></td></tr>
+      <tr><td>Build · PR</td><td>a worker's commits are on a branch and a PR is open</td><td>Build → <code>/we:orchestrate</code></td></tr>
+      <tr><td>CI · Review</td><td>the required checks and the Claude Review passed (Codex is advisory)</td><td>Fix CI → <code>/we:ci-review</code></td></tr>
+      <tr><td>Merge</td><td>merged; yellow while auto-merge is armed, red on a conflict</td><td>Standup → <code>/we:standup</code></td></tr>
+    </table>
+  </div>
+  <p style="margin-top:12px"><code>/flow</code> without a key takes the session's focus, its branch, or the keys you named. Details: <a href="https://github.com/weside-ai/claude-code-plugin/blob/main/docs/flow.md">docs/flow.md</a>.</p>
+
+  <h2>4 · Deliver</h2>
   <p>Claude arms auto-merge when CI and the Codex review are through; you merge the exceptions (money path, destructive migration, open question). <code>/we:merged</code> removes the worktrees and branches and moves the tickets to Done.</p>
+
+  <h2>Around the pipeline</h2>
+  <div class="steps">
+    <div class="step"><b><code>/we:standup</code></b><span>where this branch stands and whether you must act</span></div>
+    <div class="step"><b><code>/we:ac-review</code></b><span>a branch against its acceptance criteria and the DoD</span></div>
+    <div class="step"><b><code>/we:retro</code> · <code>/we:optimize</code></b><span>frictions become inbox candidates; you decide, the ledger keeps them</span></div>
+    <div class="step"><b><code>/we:resume</code></b><span>after a usage-limit stop: open items, workers, CI watches</span></div>
+    <div class="step"><b><code>/we:handoff</code></b><span>a restart note for the next session</span></div>
+    <div class="step"><b><code>/we:setup</code></b><span>per repo: stack, ticketing, rosters, statusline</span></div>
+  </div>
 
   <h2>The effort rule</h2>
   <ul>
@@ -65,7 +139,7 @@
 <pre><code>/plugin marketplace add weside-ai/claude-code-plugin
 /plugin install we@weside-ai
 /we:setup</code></pre>
-  <p><a href="https://github.com/weside-ai/claude-code-plugin">Source and docs on GitHub</a></p>
+  <p>Needs Claude Code (2.1.302 or later for <code>/flow</code>), Git, Python 3.9+ and the <code>gh</code> CLI. <a href="https://github.com/weside-ai/claude-code-plugin">Source and docs on GitHub</a></p>
 </main>
 </body>
 </html>

@@ -1,4 +1,7 @@
 {
+  "modules": [
+    "./flow/register.tsx"
+  ],
   "hooks": {
     "SessionStart": [
       {

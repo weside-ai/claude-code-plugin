@@ -10,6 +10,9 @@
 
 Claude arms auto-merge once CI and the Codex review are through, unless an exception applies (money path, destructive migration, open question); you review before it lands and merge the exceptions. `/we:merged` cleans up afterwards.
 
+`/flow` shows where each story stands while this runs: a pane with one traffic light per pipeline
+step, refreshed from git and GitHub, with buttons for the next command.
+
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE) · Tour: [plugin.weside.ai/tour](https://plugin.weside.ai/tour/) · Docs: [docs/README.md](docs/README.md)
 
 ## Install
@@ -22,7 +25,7 @@ Claude arms auto-merge once CI and the Codex review are through, unless an excep
 Then run `/we:setup` once per repo. It detects stack and ticketing, asks up to five skippable
 questions and writes `.weside/config.json`. Details: [docs/getting-started.md](docs/getting-started.md).
 
-Requirements: Claude Code, Git, Python 3.9 or later (the `/usr/bin/python3` that the Xcode Command Line Tools install on macOS is 3.9.6), the `gh` CLI for PRs and GitHub Issues.
+Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3.9 or later (the `/usr/bin/python3` that the Xcode Command Line Tools install on macOS is 3.9.6), the `gh` CLI for PRs and GitHub Issues.
 
 ## Verbs
 
@@ -48,6 +51,7 @@ Requirements: Claude Code, Git, Python 3.9 or later (the `/usr/bin/python3` that
 
 **Around the pipeline**
 
+- `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
 - `/we:standup` — where this branch stands and whether you must act; read-only.
 - `/we:retro` — retrospective on a session or PR cycle; findings go to the optimization inbox.
