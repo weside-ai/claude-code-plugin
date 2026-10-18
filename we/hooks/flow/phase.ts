@@ -43,10 +43,11 @@ export const checksPhase = (checks: Check[]): 'ci' | 'ci-red' | 'ready' => {
 }
 
 // First match wins, as in /we:orchestrate § State per story, with the PR state split into CI steps.
+// An open PR outranks a merged one: a story's follow-up PR is work in flight.
 export const phaseOf = (ev: Evidence): FlowPhase => {
-  if (ev.prs.some(pr => pr.state === 'MERGED')) return 'merged'
   const open = ev.prs.find(pr => pr.state === 'OPEN')
   if (open) return checksPhase(open.statusCheckRollup ?? [])
+  if (ev.prs.some(pr => pr.state === 'MERGED')) return 'merged'
   if (ev.aheadBranches.length > 0) return 'dev'
   if (ev.prs.length > 0) return 'closed'
   if (ev.plan?.status === 'approved') return 'refined'
@@ -116,8 +117,11 @@ const noteOf = (t: Tally, total: number): string =>
 
 // The steps /we:orchestrate walks a story through, each with what the evidence says about it.
 export const stagesOf = (ev: Evidence & { ahead: number; branch?: string }): Stage[] => {
-  const merged = ev.prs.find(pr => pr.state === 'MERGED')
   const open = ev.prs.find(pr => pr.state === 'OPEN')
+  const mergedPrs = ev.prs.filter(pr => pr.state === 'MERGED')
+  // With an open PR the story is not done, whatever merged before it.
+  const merged = open ? undefined : mergedPrs[0]
+  const earlier = open && mergedPrs.length ? ` · earlier ${mergedPrs.map(pr => `#${pr.number} ✓`).join(' ')}` : ''
   const closed = !merged && !open && ev.prs.length > 0
   const built = Boolean(merged || open || ev.ahead > 0)
   const isApproved = ev.plan?.status === 'approved'
@@ -140,9 +144,9 @@ export const stagesOf = (ev: Evidence & { ahead: number; branch?: string }): Sta
       ? { name: 'Build', light: closed ? 'red' : 'active', note: `${ev.ahead} commits on ${ev.branch ?? 'a branch'}, no PR yet` }
       : { name: 'Build', light: 'todo', note: isApproved ? 'ready; no worker started yet' : '' }
   const pr: Stage = merged
-    ? { name: 'PR', light: 'done', note: `#${merged.number} merged` }
+    ? { name: 'PR', light: 'done', note: mergedPrs.map(pr => `#${pr.number}`).join(' ') + ' merged' }
     : open
-      ? { name: 'PR', light: open.isDraft ? 'active' : 'done', note: `#${open.number}${open.isDraft ? ' (Draft)' : ''}` }
+      ? { name: 'PR', light: open.isDraft ? 'active' : 'done', note: `#${open.number}${open.isDraft ? ' (draft)' : ''}${earlier}` }
       : closed
         ? { name: 'PR', light: 'red', note: 'closed without a merge' }
         : { name: 'PR', light: 'todo', note: '' }

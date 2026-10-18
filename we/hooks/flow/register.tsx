@@ -163,6 +163,7 @@ const gather = async ($: $, keys: string[]): Promise<FlowGroup[]> => {
       phase: phaseOf(evidence),
       stages: stagesOf({ ...evidence, ahead, branch }),
       pr: pr?.number,
+      epic: plan?.epic,
       branch,
       worktree: branch ? worktrees.get(branch) : undefined,
     }
@@ -311,6 +312,7 @@ export const register: Register = on => {
     const actionsOf = (row: FlowRow) => {
       const stages = row.stages ?? []
       const lit = (name: string) => stages.find(s => s.name === name)?.light
+      if (row.phase === 'merged') return []
       const out = [action(`${row.key}-standup`, 'Standup', 'we:standup', row.key)]
       if (lit('Plan') === 'active' || lit('Approval') === 'active') out.push(action(`${row.key}-refine`, 'Refine', 'we:orchestrate', row.key))
       else if (lit('Build') === 'todo' && lit('Approval') === 'done') out.push(action(`${row.key}-build`, 'Build', 'we:orchestrate', row.key))
@@ -338,12 +340,13 @@ export const register: Register = on => {
           </Text>
         ))
 
-    const openCard = (row: FlowRow) => (
+    const card = (row: FlowRow, isSolo: boolean) => (
       <Box flexDirection="column" borderStyle="round" borderColor={COLOR[row.phase]} paddingX={1}>
         <Text>
           <Text bold>{row.key}</Text>
           <Text color={COLOR[row.phase]} bold>{`  ${LABEL[row.phase]}`}</Text>
           {row.pr && <Text dimColor>{`  #${row.pr}`}</Text>}
+          {isSolo && row.epic && <Text dimColor>{`  · epic ${row.epic}`}</Text>}
         </Text>
         {row.title && <Text>{clip(row.title, width - 6)}</Text>}
         <Box flexDirection="row" flexWrap="wrap">{lamps(row)}</Box>
@@ -378,8 +381,10 @@ export const register: Register = on => {
         </Box>
 
         {v.groups.map(group => {
-          const open = group.rows.filter(r => r.phase !== 'merged')
-          const done = group.rows.filter(r => r.phase === 'merged')
+          // A story asked for on its own is always a card, merged or not; in an epic merged ones fold to a line.
+          const isSolo = group.epicTitle === undefined
+          const open = group.rows.filter(r => isSolo || r.phase !== 'merged')
+          const done = group.rows.filter(r => !isSolo && r.phase === 'merged')
           return (
             <Box flexDirection="column">
               {group.epicTitle !== undefined && (
@@ -395,7 +400,7 @@ export const register: Register = on => {
                 </Box>
               )}
               {group.rows.length === 0 && !v.isLoading && <Text dimColor>No story plans on the default branch.</Text>}
-              {open.map(openCard)}
+              {open.map(row => card(row, isSolo))}
               {done.length > 0 && (
                 <Box flexDirection="column" marginTop={open.length ? 1 : 0}>
                   {done.map(doneLine)}

@@ -17,6 +17,14 @@ test('phase follows the orchestrate state table, first match wins', async () => 
   expect(phaseOf({ prs: [pr('CLOSED'), pr('MERGED')], aheadBranches: ['feat/PROJ-1-x'] })).toBe('merged')
 })
 
+test('an open follow-up PR outranks the merged ones before it', async () => {
+  const prs = [pr('MERGED'), { ...pr('OPEN', [{ name: 'CI Summary', status: 'IN_PROGRESS', conclusion: null }]), number: 3 }]
+  expect(phaseOf({ prs, aheadBranches: [] })).toBe('ci')
+  const stages = phaseModule.stagesOf({ prs, aheadBranches: [], ahead: 2 })
+  expect(stages.find(s => s.name === 'PR')?.note).toBe('#3 · earlier #1 ✓')
+  expect(stages.find(s => s.name === 'Merge')?.light).toBe('todo')
+})
+
 test('a red Codex Review is advisory, any other red check is not', async () => {
   expect(checksPhase([{ name: 'Codex Review', status: 'COMPLETED', conclusion: 'FAILURE' }, { name: 'CI Summary', status: 'COMPLETED', conclusion: 'SUCCESS' }])).toBe('ready')
   expect(checksPhase([{ name: 'Claude Review', status: 'COMPLETED', conclusion: 'FAILURE' }])).toBe('ci-red')

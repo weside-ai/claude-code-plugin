@@ -13,6 +13,8 @@ export type FlowRow = {
   phase: FlowPhase
   stages: FlowStage[]
   pr?: number
+  // The plan's `epic:`, shown when the story is asked for on its own.
+  epic?: string
   worktree?: string
   branch?: string
 }
