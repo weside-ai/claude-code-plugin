@@ -9,10 +9,9 @@ not a review) in the comment carrying `<!-- codex-review -->`. A BLOCKING or WAR
 `/we:ci-review`'s job, the hook only makes sure there is one to read.
 
   * The check name is `.weside/config.json` → `review.codex_check`, default `Codex Review`.
-  * When the PR's base branch requires the verdict status (`review.codex_verdict_check`, default
-    `codex-verdict`: success on PASS/WARNING or cited skips, failure on BLOCKING, pending without a
-    verdict) in its rulesets (`rules/branches/<base>`) or its classic protection, GitHub waits for
-    Codex and the arm is allowed at PR open. A failed lookup falls back to the wait below.
+  * When the PR's base branch requires that check in its rulesets (`rules/branches/<base>`) or its
+    classic protection, GitHub waits for Codex itself and the arm is allowed at PR open. A failed
+    lookup falls back to the wait below.
   * A repo whose `.github/workflows/` names no job by that name has no Codex review: allowed,
     decided offline before any `gh` call. With `-R <other repo>` the local tree says nothing about
     that repo, so a missing check there is allowed too.
@@ -38,7 +37,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_gate as vg
 
 DEFAULT_CHECK = "Codex Review"
-DEFAULT_VERDICT_STATUS = "codex-verdict"
 # `gh pr merge` flags that take a value — their value is not the PR selector.
 _VALUED = frozenset(
     {
@@ -137,8 +135,8 @@ def _workflow_names(root: str, name: str) -> bool:
     return False
 
 
-def _verdict_required(slug: str, base: str, status: str, cwd: str | None) -> bool:
-    """The base branch's rulesets or classic protection require the `status` context."""
+def _check_required(slug: str, base: str, name: str, cwd: str | None) -> bool:
+    """The base branch's rulesets or classic protection require the `name` context."""
     branch = quote(base, safe="")
     try:
         rules = json.loads(_gh(["api", f"repos/{slug}/rules/branches/{branch}"], cwd) or "")
@@ -146,7 +144,7 @@ def _verdict_required(slug: str, base: str, status: str, cwd: str | None) -> boo
             if rule.get("type") != "required_status_checks":
                 continue
             checks = (rule.get("parameters") or {}).get("required_status_checks") or []
-            if any(c.get("context") == status for c in checks):
+            if any(c.get("context") == name for c in checks):
                 return True
     except Exception:
         pass
@@ -155,16 +153,14 @@ def _verdict_required(slug: str, base: str, status: str, cwd: str | None) -> boo
         required = (info.get("protection") or {}).get("required_status_checks") or {}
         contexts = required.get("contexts") or []
         contexts += [c.get("context") for c in required.get("checks") or []]
-        return status in contexts
+        return name in contexts
     except Exception:
         return False
 
 
-def _codex_state(
-    selector: str | None, repo: str | None, name: str, status: str, cwd: str | None
-) -> str | None:
+def _codex_state(selector: str | None, repo: str | None, name: str, cwd: str | None) -> str | None:
     """Why the arm must wait, or None when Codex has a verdict on the head, the base branch
-    requires the verdict status, or gh failed."""
+    requires the check, or gh failed."""
     view = ["pr", "view", *([selector] if selector else []), *(["-R", repo] if repo else [])]
     raw = _gh([*view, "--json", "headRefOid,number,url,baseRefName"], cwd)
     try:
@@ -173,7 +169,7 @@ def _codex_state(
         slug = re.search(r"github\.com/([^/]+/[^/]+)/pull/", pr["url"]).group(1)
     except Exception:
         return None
-    if pr.get("baseRefName") and _verdict_required(slug, pr["baseRefName"], status, cwd):
+    if pr.get("baseRefName") and _check_required(slug, pr["baseRefName"], name, cwd):
         return None
     raw = _gh(
         ["api", f"repos/{slug}/commits/{sha}/check-runs?check_name={quote(name)}&per_page=100"],
@@ -234,13 +230,12 @@ def _refusal(payload: dict) -> str | None:
     name = _review_name(root, "codex_check", DEFAULT_CHECK)
     if not repo and not _workflow_names(root, name):
         return None
-    status = _review_name(root, "codex_verdict_check", DEFAULT_VERDICT_STATUS)
-    why = _codex_state(selector, repo, name, status, cwd)
+    why = _codex_state(selector, repo, name, cwd)
     if why is None:
         return None
     return (
         f"Auto-merge waits for the Codex verdict: {why}. The base branch does not require "
-        f"`{status}`, so an arm now merges its finding unread. Arm once the check on this head "
+        f"`{name}`, so an arm now merges its finding unread. Arm once the check on this head "
         "has a verdict (not pending, not ERROR; rerun an ERROR run), after `/we:ci-review` read it."
     )
 

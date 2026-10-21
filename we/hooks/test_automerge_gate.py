@@ -174,28 +174,29 @@ def test_configured_check_name_is_used(repo: Path, monkeypatch) -> None:
     assert reason is not None and "no `AI Rev` check" in reason
 
 
-def test_required_verdict_status_allows_the_arm_at_open(repo: Path, monkeypatch) -> None:
-    fake = FakeGh(runs=[], rules=ruleset("CI Summary", "codex-verdict"))
+def test_required_codex_check_allows_the_arm_at_open(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(runs=[], rules=ruleset("CI Summary", "Codex Review"))
     assert refuse(repo, ARM, fake, monkeypatch) is None
     assert not any("check-runs" in " ".join(c) for c in fake.calls), fake.calls
 
 
-def test_verdict_status_in_classic_protection_allows_the_arm(repo: Path, monkeypatch) -> None:
-    fake = FakeGh(runs=[], rules=ruleset("CI Summary"), protection=["codex-verdict"])
+def test_codex_check_in_classic_protection_allows_the_arm(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(runs=[], rules=ruleset("CI Summary"), protection=["Codex Review"])
     assert refuse(repo, ARM, fake, monkeypatch) is None
 
 
-def test_configured_verdict_status_name_is_used(repo: Path, monkeypatch) -> None:
+def test_configured_check_name_decides_the_requirement(repo: Path, monkeypatch) -> None:
     (repo / ".weside").mkdir()
     (repo / ".weside" / "config.json").write_text(
-        json.dumps({"review": {"codex_verdict_check": "ai-verdict"}})
+        json.dumps({"review": {"codex_check": "AI Rev"}})
     )
-    assert refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("ai-verdict")), monkeypatch) is None
-    reason = refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("codex-verdict")), monkeypatch)
-    assert reason is not None and "no `Codex Review` check" in reason
+    (repo / ".github" / "workflows" / "codex.yml").write_text("jobs:\n  a:\n    name: AI Rev\n")
+    assert refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("AI Rev")), monkeypatch) is None
+    reason = refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("Codex Review")), monkeypatch)
+    assert reason is not None and "no `AI Rev` check" in reason
 
 
-def test_verdict_status_not_required_waits_as_before(repo: Path, monkeypatch) -> None:
+def test_codex_check_not_required_waits_as_before(repo: Path, monkeypatch) -> None:
     fake = FakeGh(runs=[], rules=ruleset("CI Summary"), protection=["CI Summary"])
     reason = refuse(repo, ARM, fake, monkeypatch)
     assert reason is not None and "no `Codex Review` check on head abc123def" in reason
