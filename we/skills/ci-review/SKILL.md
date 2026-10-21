@@ -38,7 +38,9 @@ A skip is legitimate only when one of these holds:
 "The framework handles this", with no citation, is not a skip.
 
 - **Every skipped BLOCKING or WARNING needs the evidence on the PR.** Reply in the thread, or post
-  `gh pr comment $PR --body …` for a summary finding. Otherwise the re-review posts the same verdict and
+  `gh pr comment $PR --body …` for a summary finding. A Codex skip is one line per finding,
+  `Codex #<n> skipped: <path:line or sha> <reason>` (`<n>` = its number in the review); any other shape
+  is dropped and Codex re-posts the finding. Otherwise the re-review posts the same verdict and
   the gate stays red. In the report, say that the gate needs a human override.
 - **A small defect on the seam this PR touches is fixed here**, even when it is pre-existing. A finding that cannot ride along
   (a product decision, a money-path change, a foreign subsystem, a change that buries the diff) goes into
@@ -134,7 +136,7 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
    Chain `&& git log --oneline -1`, because a pre-commit auto-fixer can abort the commit silently.
    If nothing changed (everything was skipped or re-run), skip the commit.
 2. **Reply, then resolve** only the bot threads in your findings table, fixed or skipped. A skip gets its evidence as a reply first:
-   `gh api repos/$REPO/pulls/$PR/comments/<databaseId>/replies -f body="Skipped: <evidence>"`.
+   `gh api repos/$REPO/pulls/$PR/comments/<databaseId>/replies -f body="Skipped: <evidence>"` (Codex: the line above).
    A thread that arrived after collection is a new finding, not something to resolve unread (Codex posts about 2 min after Claude).
 
    ```bash
