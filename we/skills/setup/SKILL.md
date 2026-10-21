@@ -50,7 +50,8 @@ never commit yourself.
 Review gates are detected, not asked: a Claude or Codex review workflow in `.github/workflows/`, a
 CodeRabbit or Greptile app. The ids go to `review.available`; `/we:ci-review` collects threads from
 exactly these. Default `["claude"]`. A Codex job named other than `Codex Review` goes to
-`review.codex_check`: the auto-merge hook waits for that check's verdict.
+`review.codex_check`: the auto-merge hook waits for that check's verdict, unless the base branch
+requires it.
 
 Offer once: additive repo checks on top of the plugin's → `.weside/dor.md` and/or `.weside/dod.md`,
 seeded with the user's concrete check. `/we:story` reads the DoR file, `/we:orchestrate` the DoD

@@ -24,4 +24,5 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    `refactor`, or a plan that says so) with a positive net appends `— <reason>`. Visibility only, it blocks nothing.
 4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`. Ticket: link the PR, move it to In
    Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
-5. Report the URL. CI and review findings → `/we:ci-review <PR>`, which arms auto-merge once green (orchestrate § Close the run).
+5. Report the URL. When the base branch requires the Codex check, arm auto-merge right after
+   create, exceptions per orchestrate § Close the run; otherwise `/we:ci-review <PR>` arms it once green.

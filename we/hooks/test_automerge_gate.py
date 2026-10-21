@@ -34,9 +34,26 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def ruleset(*contexts: str) -> list[dict]:
+    checks = [{"context": c, "integration_id": 15368} for c in contexts]
+    return [
+        {"type": "pull_request", "parameters": {}},
+        {"type": "required_status_checks", "parameters": {"required_status_checks": checks}},
+    ]
+
+
 class FakeGh:
-    def __init__(self, runs: list[dict] | None, comments: list[str] = (), fail: bool = False):
+    def __init__(
+        self,
+        runs: list[dict] | None,
+        comments: list[str] = (),
+        fail: bool = False,
+        rules: list[dict] | None = None,
+        protection: list[str] | None = None,
+        rules_fail: bool = False,
+    ):
         self.runs, self.comments, self.fail, self.calls = runs, list(comments), fail, []
+        self.rules, self.protection, self.rules_fail = rules or [], protection, rules_fail
 
     def __call__(self, args: list[str], _cwd: str | None) -> str | None:
         self.calls.append(args)
@@ -46,7 +63,13 @@ class FakeGh:
             return json.dumps({"comments": [{"body": b} for b in self.comments]})
         if args[:2] == ["pr", "view"]:
             url = "https://github.com/o/r/pull/7"
-            return json.dumps({"headRefOid": SHA, "number": 7, "url": url})
+            pr = {"headRefOid": SHA, "number": 7, "url": url, "baseRefName": "main"}
+            return json.dumps(pr)
+        if args[0] == "api" and args[1].endswith("branches/main"):
+            checks = {"contexts": self.protection or []}
+            protection = {"protection": {"required_status_checks": checks}}
+            body = self.rules if "/rules/" in args[1] else protection
+            return None if self.rules_fail else json.dumps(body)
         if args[0] == "api":
             assert f"commits/{SHA}/check-runs" in args[1]
             return json.dumps({"check_runs": self.runs})
@@ -149,6 +172,40 @@ def test_configured_check_name_is_used(repo: Path, monkeypatch) -> None:
     (repo / ".github" / "workflows" / "codex.yml").write_text("jobs:\n  a:\n    name: AI Rev\n")
     reason = refuse(repo, ARM, FakeGh(runs=[]), monkeypatch)
     assert reason is not None and "no `AI Rev` check" in reason
+
+
+def test_required_codex_check_allows_the_arm_at_open(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(runs=[], rules=ruleset("CI Summary", "Codex Review"))
+    assert refuse(repo, ARM, fake, monkeypatch) is None
+    assert not any("check-runs" in " ".join(c) for c in fake.calls), fake.calls
+
+
+def test_codex_check_in_classic_protection_allows_the_arm(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(runs=[], rules=ruleset("CI Summary"), protection=["Codex Review"])
+    assert refuse(repo, ARM, fake, monkeypatch) is None
+
+
+def test_configured_check_name_decides_the_requirement(repo: Path, monkeypatch) -> None:
+    (repo / ".weside").mkdir()
+    (repo / ".weside" / "config.json").write_text(
+        json.dumps({"review": {"codex_check": "AI Rev"}})
+    )
+    (repo / ".github" / "workflows" / "codex.yml").write_text("jobs:\n  a:\n    name: AI Rev\n")
+    assert refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("AI Rev")), monkeypatch) is None
+    reason = refuse(repo, ARM, FakeGh(runs=[], rules=ruleset("Codex Review")), monkeypatch)
+    assert reason is not None and "no `AI Rev` check" in reason
+
+
+def test_codex_check_not_required_waits_as_before(repo: Path, monkeypatch) -> None:
+    fake = FakeGh(runs=[], rules=ruleset("CI Summary"), protection=["CI Summary"])
+    reason = refuse(repo, ARM, fake, monkeypatch)
+    assert reason is not None and "no `Codex Review` check on head abc123def" in reason
+
+
+def test_rules_lookup_failure_keeps_todays_gate(repo: Path, monkeypatch) -> None:
+    reason = refuse(repo, ARM, FakeGh(runs=[], rules_fail=True), monkeypatch)
+    assert reason is not None and "no `Codex Review` check" in reason
+    assert refuse(repo, ARM, FakeGh([run()], rules_fail=True), monkeypatch) is None
 
 
 def test_gh_failure_fails_open(repo: Path, monkeypatch) -> None:
