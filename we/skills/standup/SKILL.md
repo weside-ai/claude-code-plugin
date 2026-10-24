@@ -53,22 +53,40 @@ A missing source (no `gh`, no plan, no ticketing) is one named gap line, never f
 
 ## 3 · Output
 
-```text
-WORKING ON  <Saga> › <Epic KEY title> — <one line: what this slice delivers, why now>
-            current: <Story KEY title> — <one line goal>
-WHERE       <per story in scope: KEY · plan|build|PR #n CI <state>|merged|staging <tag>|live <tag> · next step>
-JUST DONE   <≤ 3 lines from the last 24 h: merged, released, decided>
-RUNNING     <workers, CI watches, releases in flight — "wait for X" — or: nothing>
-YOUR MOVES  1. <action> — <where: command, URL, file path, screen> (<why it unblocks>)
-            2. …  (≤ 5, most-blocking first: a go, an upload, a test step, a decision)
-MINE NEXT   <≤ 3: what this session does next; omit the line in a session that started nothing>
-LATER       <≤ 3: parked, other owners, waiting on outside — one line each with the owner>
+Markdown, rendered as tables: the product owner found the text-block layout hard to read (24.10.2026).
+Headings and column names follow the user's language; keys, tags and commands stay verbatim.
+
+```markdown
+**Working on:** <Saga> › <Epic KEY title> — <what this slice delivers, why now>.
+**Current:** <Story KEY title> — <one-line goal>.
+
+| Story | Where | Next step |
+|---|---|---|
+| <KEY title> | <plan · build · PR #n, CI <state> · merged · staging <tag> · live <tag>> | <one action> |
+
+**Just done (24 h):** <≤ 3 items, comma-separated>.
+**Running:** <workers, CI watches, releases in flight — or: nothing>.
+
+**Your moves**
+
+| # | What | Where | Why |
+|---|---|---|---|
+| 1 | <a go, an upload, a test step, a decision + recommendation> | <command, URL, file path, screen> | <what it unblocks> |
+
+**Mine next:** <≤ 3, comma-separated; omit in a session that started nothing>.
+
+**Later / others**
+
+| What | Owner |
+|---|---|
+| <parked, waiting on outside> | <owner> |
 ```
 
-- WORKING ON comes first even when everything is green: the reader needs the context first.
-- A decision in YOUR MOVES carries the recommendation (`decide X — I recommend A because …`).
-- More than five moves: show the five that block the most and say how many more there are.
-- Keys, tags and commands stay verbatim; prose follows the user's language.
+- "Working on" comes first even when everything is green: the reader needs the context first.
+- Your moves: at most five, most-blocking first; a decision carries the recommendation
+  (`decide X — I recommend A because …`). More than five: show five and say how many more.
+- Later / others: at most three rows; omit the table when empty.
+- A cell holds one short phrase; detail that does not fit belongs in the plan, not the standup.
 
 ## 4 · Branch view (`--branch`, a key without an epic, or no scope)
 
