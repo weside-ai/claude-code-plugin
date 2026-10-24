@@ -53,7 +53,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 
 - `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
-- `/we:standup` — where this branch stands and whether you must act; read-only.
+- `/we:standup` — picks you back up: what we work on, where it stands, what you must do next; read-only (`--branch` for the branch view).
 - `/we:retro` — retrospective on a session or PR cycle; findings go to the optimization inbox.
 - `/we:instruction-audit` — audits rules, skills and AGENTS.md against fresh Anthropic sources and a budget gate.
 - `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.

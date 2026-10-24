@@ -190,7 +190,7 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   that keeps running after the run closes.
   A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
 - The closing message starts with `PR #<n> · <branch> · <worktree> · CI <state> · auto-merge|user merge`,
-  then at most three items someone owes. For a user merge it is the `/we:standup` output. While a
+  then at most three items someone owes. For a user merge it is the `/we:standup --branch` output. While a
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
   decided per finish-first and reported, never asked (final sim 28.09.2026). Knowledge goes into the
   plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
