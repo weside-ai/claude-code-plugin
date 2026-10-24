@@ -35,7 +35,7 @@ plus those this conversation touched. Backlog, blocked and parked children go to
 
 - PRs: one `gh pr list --search "<K1> OR <K2> … in:title" --state all --limit 30
   --json number,title,state,headRefName,mergedAt,mergeCommit,mergeStateStatus`, matched to a story
-  by its key in `headRefName` or `title`; `gh pr checks <n> --required` only for open PRs, read now
+  by its key in the title (a PR whose title lacks the key is not found; name that gap); `gh pr checks <n> --required` only for open PRs, read now
   (a status from before the last push is stale).
 - Live: for PRs merged in the last 24 h, `git tag --contains <mergeCommit.oid>`. A prod tag (the
   repo's release pattern from its instruction files) means live; a pre-release tag (`-rc`, `-beta`)
@@ -46,7 +46,7 @@ plus those this conversation touched. Backlog, blocked and parked children go to
 - Running: this session's agents and background tasks (the harness roster, where present); a
   worker's state is its last message. `git status -sb` when a story in scope is the checked-out branch.
 - Owed by the human: this conversation's unanswered asks to the user, the mirror rows'
-  `owed:`/`open:` notes, each plan's `## Open Fork`, the epic's unanswered open questions that name
+  Notes column, each plan's `## Open Fork`, the epic's unanswered open questions that name
   the user, and due items in the repo's due-items file when its instruction files name one.
 
 A missing source (no `gh`, no plan, no ticketing) is one named gap line, never filled by inference.
@@ -81,6 +81,7 @@ NEXT      <story key(s) and the command that starts them — or: nothing queued>
 YOUR MOVE <one action with its command — or: nothing, because …>
 ```
 
-Gather: `git status -sb`, the branch's plan and ticket, its PR and required checks,
-`git log --oneline origin/<default>..HEAD` (at most 10). The session title should carry the ticket
+Gather for the argument key when one is given (its plan, ticket and PR found by key), else for the
+current branch: `git status -sb`, the plan and ticket, the PR and its required checks,
+`git log --oneline origin/<default>..HEAD` (at most 10, current branch only). The session title should carry the ticket
 key; if it does not, print `/rename <KEY>` once.
