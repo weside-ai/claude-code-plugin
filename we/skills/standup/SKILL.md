@@ -15,8 +15,8 @@ files define a status form (a sentence cap, a language), that form wins over the
 
 ## 1 · Scope (first hit wins)
 
-1. A key or slug in the arguments (`/we:standup PROJ-123`). A story key narrows WHERE, RUNNING and
-   YOUR MOVES to that story; its epic and saga appear only in WORKING ON. `--branch` → § 4.
+1. A key or slug in the arguments (`/we:standup PROJ-123`). A story key narrows the story table, Running and
+   Your moves to that story; its epic and saga appear only in Working on. `--branch` → § 4.
 2. The ticket key of the current branch (`<type>/<KEY>-…`).
 3. Story keys this conversation dispatched or opened PRs for (only from its own context; a fresh
    session or a subagent skips this step).
@@ -28,7 +28,7 @@ Walk up from a story: its `epic:` → the epic plan → its `saga:` (omit the sa
 with no epic above it → § 4. Children of an epic: its mirror rows
 (`${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block) ∪ `docs/plans/*-story.md` whose
 `epic:` names it (one `rg`) ∪ the keys from step 3. In scope: stories that are Active or In Review
-plus those this conversation touched. Backlog, blocked and parked children go to LATER as one line.
+plus those this conversation touched. Backlog, blocked and parked children go into one row of Later / others.
 **current** = the story with an open PR or a running worker; with several, the one touched last.
 
 ## 2 · Gather (bounded: one call per source, not per story)
@@ -71,7 +71,7 @@ Headings and column names follow the user's language; keys, tags and commands st
 
 | # | What | Where | Why |
 |---|---|---|---|
-| 1 | <a go, an upload, a test step, a decision + recommendation> | <command, URL, file path, screen> | <what it unblocks> |
+| 1 | <a go, an upload, a test step, or a decision with the recommended option> | <command, URL, file path, screen> | <what it unblocks; for a decision the reason for the recommendation> |
 
 **Mine next:** <≤ 3, comma-separated; omit in a session that started nothing>.
 
@@ -83,8 +83,8 @@ Headings and column names follow the user's language; keys, tags and commands st
 ```
 
 - "Working on" comes first even when everything is green: the reader needs the context first.
-- Your moves: at most five, most-blocking first; a decision carries the recommendation
-  (`decide X — I recommend A because …`). More than five: show five and say how many more.
+- Your moves: at most five, most-blocking first; a decision names the recommended option in What
+  and its reason in Why. More than five: show five and say how many more.
 - Later / others: at most three rows; omit the table when empty.
 - A cell holds one short phrase; detail that does not fit belongs in the plan, not the standup.
 
