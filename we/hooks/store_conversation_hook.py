@@ -20,7 +20,8 @@ Flow:
   3. Read the session's binding; unbound → return silently
   4. Extract the turn's prompt from the transcript JSONL, system reminders stripped;
      a harness-started turn (goal Stop-hook feedback, task notification, idle notice,
-     system reminders only) stores nothing. Teammate and cross-session messages count,
+     compact summary, system reminders only) stores nothing; a slash command's
+     expansion (skill body) is stored as the command the human typed. Teammate and cross-session messages count,
      stored with their sender named (``attribute_prompt``), never as the owner's words.
   5. Filter: skip short messages, commands, tool-only turns
   6. Resolve token (Claude Code MCP OAuth)
@@ -257,6 +258,10 @@ _SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?(?:</system-reminder>|\Z)", 
 _TEAMMATE_MESSAGE = re.compile(r"<teammate-message\b[^>]*>(.*?)</teammate-message>", re.S)
 _TASK_NOTIFICATION = re.compile(r"<task-notification>.*?</task-notification>", re.S)
 _CROSS_SESSION_PREFIX = "Another Claude session sent a message:"
+_COMPACT_SUMMARY_PREFIX = "This session is being continued from a previous conversation"
+_SKILL_BODY_PREFIX = "Base directory for this skill:"
+_COMMAND_NAME = re.compile(r"<command-name>(.*?)</command-name>", re.S)
+_COMMAND_ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 
 
 def strip_system_reminders(text: str) -> str:
@@ -276,14 +281,21 @@ def _is_noise_prompt(text: str) -> bool:
     """A turn started by the harness, not by a person or another session's message.
 
     ``text`` has its system reminders stripped already. Noise: empty (the prompt was
-    system reminders only), a goal Stop hook's feedback or check-in, a background task's
-    ``<task-notification>``, and an idle notice (``idle_notification`` JSON, bare or in
+    system reminders only), a goal Stop hook's feedback or check-in, the compact
+    continuation summary, a background task's ``<task-notification>``, and an idle notice (``idle_notification`` JSON, bare or in
     ``<teammate-message>`` blocks, or a ``[Cross-session idle notice]``). A teammate or
     cross-session message with content is real progress and is kept.
     """
     if not text:
         return True
-    if text.startswith(("Stop hook feedback:", "Goal check-in:", "[Cross-session idle notice]")):
+    if text.startswith(
+        (
+            "Stop hook feedback:",
+            "Goal check-in:",
+            "[Cross-session idle notice]",
+            _COMPACT_SUMMARY_PREFIX,
+        )
+    ):
         return True
     if not _TASK_NOTIFICATION.sub("", text).strip():
         return True
@@ -338,12 +350,65 @@ def _is_context_entry(text: str) -> bool:
     )
 
 
+def _entry_text(line: str) -> tuple[dict, str] | None:
+    """A user entry with text and its reminder-stripped text; None for anything else.
+
+    Tool results, image-only entries and non-user lines are None: the walk skips them.
+    """
+    try:
+        entry = json.loads(line.strip())
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(entry, dict) or entry.get("type") != "user" or entry.get("toolUseResult"):
+        return None
+    msg = entry.get("message", {})
+    content = msg.get("content", "") if isinstance(msg, dict) else ""
+    if isinstance(content, str):
+        raw = content
+    elif isinstance(content, list):
+        texts = [
+            c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"
+        ]
+        if not texts:
+            return None  # tool_result or image blocks only
+        raw = " ".join(texts)
+    else:
+        return None
+    return entry, strip_system_reminders(raw)
+
+
+def _typed_command(echo: str) -> str | None:
+    """``/name args`` as the human typed it, from a ``<command-name>`` echo; None without one."""
+    name = _COMMAND_NAME.search(echo)
+    if not name or not name.group(1).strip():
+        return None
+    args = _COMMAND_ARGS.search(echo)
+    typed = name.group(1).strip()
+    if args and args.group(1).strip():
+        typed += " " + args.group(1).strip()
+    return html.unescape(typed)
+
+
+def _is_command_expansion(entry: dict, text: str) -> bool:
+    """A meta entry that is neither harness noise nor a message envelope: a command's body."""
+    return bool(
+        entry.get("isMeta")
+        and not _is_noise_prompt(text)
+        and not text.startswith(_CROSS_SESSION_PREFIX)
+        and not _ENVELOPE.search(text)
+    )
+
+
 def get_last_user_message(transcript_path: str) -> str | None:
     """The prompt that started the last turn, system reminders stripped; None for a noise turn.
 
     Walks backwards through the transcript past tool results and command echoes. The
     first remaining user entry is the turn's prompt: a noise prompt (``_is_noise_prompt``)
-    skips the whole turn instead of pairing the reply with an older message.
+    skips the whole turn instead of pairing the reply with an older message. A slash
+    command's expansion (a skill body or a meta entry right after a ``<command-name>``
+    echo) is replaced by the command the human typed (``/we:materialize Nox``); a skill
+    body without an echo (the model invoked the skill mid-turn) is walked past to the
+    turn's prompt.
     """
     try:
         with open(transcript_path) as f:
@@ -351,35 +416,20 @@ def get_last_user_message(transcript_path: str) -> str | None:
     except Exception:
         return None
 
-    for line in reversed(lines):
-        try:
-            entry = json.loads(line.strip())
-        except (json.JSONDecodeError, ValueError):
-            continue
-
-        if entry.get("type") != "user" or entry.get("toolUseResult"):
-            continue
-
-        msg = entry.get("message", {})
-        content = msg.get("content", "") if isinstance(msg, dict) else ""
-
-        if isinstance(content, str):
-            raw = content
-        elif isinstance(content, list):
-            texts = [
-                c.get("text", "")
-                for c in content
-                if isinstance(c, dict) and c.get("type") == "text"
-            ]
-            if not texts:
-                continue  # tool_result or image blocks only
-            raw = " ".join(texts)
-        else:
-            continue
-
-        text = strip_system_reminders(raw)
+    entries = [e for e in (_entry_text(line) for line in lines) if e is not None]
+    for i in range(len(entries) - 1, -1, -1):
+        entry, text = entries[i]
         if text and _is_context_entry(text):
             continue
+        if entry.get("isCompactSummary"):
+            return None
+        is_skill_body = text.startswith(_SKILL_BODY_PREFIX)
+        if is_skill_body or _is_command_expansion(entry, text):
+            echo = entries[i - 1][1] if i > 0 else ""
+            if echo.startswith(("<command-name>", "<command-message>")):
+                return _typed_command(echo)
+            if is_skill_body:
+                continue
         return None if _is_noise_prompt(text) else text
 
     return None
@@ -387,10 +437,15 @@ def get_last_user_message(transcript_path: str) -> str | None:
 
 def is_worth_storing(user_msg: str, assistant_msg: str) -> bool:
     """Filter out exchanges that aren't worth storing."""
-    if len(user_msg) < MIN_USER_MSG_LENGTH:
+    # A typed slash command (recovered from its expansion) is short by nature: it counts
+    # as a full-length prompt, so only the reply's length decides.
+    user_len = len(user_msg)
+    if user_msg.startswith("/"):
+        user_len = max(user_len, MIN_USER_MSG_LENGTH)
+    if user_len < MIN_USER_MSG_LENGTH:
         return False
 
-    if len(user_msg) + len(assistant_msg) < MIN_TOTAL_LENGTH:
+    if user_len + len(assistant_msg) < MIN_TOTAL_LENGTH:
         return False
 
     # Skip CLI commands and slash commands
