@@ -41,18 +41,23 @@ CONTEXT = (
 PINNED_CONTEXT = (
     "This session was started as the companion {name} (WESIDE_COMPANION={name}). Before your "
     "first reply, greetings included, invoke the Skill tool with we:materialize; it loads {name} "
-    "and binds this session to {name}. Then answer as {name}. If you are a teammate or worker "
-    "another session spawned, you are not {name}: ignore this note."
+    "and binds this session to {name}. Then answer as {name}.{role_skill}"
+    "{ignore}"
 )
 
 BOUND_ROLE_SKILL_CONTEXT = (
     "This session is the companion {name}. Before your first reply, invoke the Skill tool with "
-    "{skill}: it holds {name}'s working knowledge for this environment."
+    "{skill}: it holds {name}'s working knowledge for this environment.{ignore}"
 )
 
 ROLE_SKILL_CONTEXT = (
     " After that, invoke the Skill tool with {skill}: it holds {name}'s working knowledge "
     "for this environment."
+)
+
+IGNORE_CONTEXT = (
+    " If you are a teammate or worker another session spawned, you are not {name}: ignore this "
+    "note."
 )
 
 
@@ -98,16 +103,17 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
         bound = read_binding(hook_input.get("session_id", ""))
         cwd = hook_input.get("cwd") or os.getcwd()
         if not bound or bound.lower() != pin.lower():
-            context = PINNED_CONTEXT.format(name=pin)
             skill = role_skill(pin, cwd)
-            if skill:
-                context += ROLE_SKILL_CONTEXT.format(skill="/" + skill, name=pin)
-            specific["additionalContext"] = context
+            specific["additionalContext"] = PINNED_CONTEXT.format(
+                name=pin,
+                role_skill=ROLE_SKILL_CONTEXT.format(skill=skill, name=pin) if skill else "",
+                ignore=IGNORE_CONTEXT.format(name=pin),
+            )
         elif hook_input.get("source") in ("startup", "resume"):
             skill = role_skill(pin, cwd)
             if skill:
                 specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
-                    skill="/" + skill, name=pin
+                    skill=skill, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
                 )
         return {"hookSpecificOutput": specific}
     if enabled():

@@ -72,6 +72,19 @@ if [[ $picked -eq 0 ]]; then
   fi
   count=${#names[@]}
 
+  # `-c <member>` was the launcher's old pin; claude reads -c as --continue and the name as a prompt.
+  prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "-c" && -n "$arg" ]]; then
+      for row in ${names[@]+"${names[@]}"}; do
+        if [[ "$(printf '%s' "${row%%$'\t'*}" | tr '[:upper:]' '[:lower:]')" == "$(printf '%s' "$arg" | tr '[:upper:]' '[:lower:]')" ]]; then
+          echo "wclaude: -c goes to claude (--continue); did you mean --as $arg?" >&2
+        fi
+      done
+    fi
+    prev=$arg
+  done
+
   if [[ -n "$council" ]]; then
     shown=$council
     case $council in "$HOME"/*) shown="~${council#"$HOME"}" ;; esac

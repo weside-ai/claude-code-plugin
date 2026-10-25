@@ -34,7 +34,7 @@ session is asked to invoke it right after materializing. Contract:
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
 (name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.
 `wclaude --as <Name>` skips the menu; every other argument goes to `claude` unchanged (`wclaude
--c` continues, `wclaude --resume` resumes), after `--name <Name>` so `claude agents` lists the session as `<Name>` (left out when you
+-c` continues and warns when a council member's name follows, `wclaude --resume` resumes), after `--name <Name>` so `claude agents` lists the session as `<Name>` (left out when you
 pass `--name` yourself). `/we:setup` offers to install it to `~/.local/bin/wclaude`; by hand:
 `python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
 `python3`.

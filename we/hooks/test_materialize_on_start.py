@@ -119,12 +119,31 @@ class MaterializeOnStartTest(unittest.TestCase):
         out = self.run_hook(
             pin="Vyra", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
         )
-        self.assertIn("/weside-vyra", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(
+            "Skill tool with weside-vyra", out["hookSpecificOutput"]["additionalContext"]
+        )
+
+    def test_role_skill_comes_before_the_ignore_clause(self):
+        self.role_skill(self.home)
+        for hook_input in (
+            {"session_id": "s1", "source": "startup"},
+            {"session_id": "s2", "source": "resume"},
+        ):
+            if hook_input["session_id"] == "s2":
+                self.bind("s2", "Vyra")
+            note = self.run_hook(pin="Vyra", hook_input=hook_input)["hookSpecificOutput"][
+                "additionalContext"
+            ]
+            self.assertNotIn("/weside-vyra", note)
+            self.assertTrue(note.endswith("you are not Vyra: ignore this note."), note)
+            self.assertLess(note.index("weside-vyra"), note.index("ignore this note"))
 
     def test_role_skill_in_the_user_skills_is_named(self):
         self.role_skill(self.home)
         out = self.run_hook(pin="Vyra")
-        self.assertIn("/weside-vyra", out["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(
+            "Skill tool with weside-vyra", out["hookSpecificOutput"]["additionalContext"]
+        )
 
     def test_no_role_skill_no_mention(self):
         project = self.home / "project"
@@ -158,7 +177,7 @@ class MaterializeOnStartTest(unittest.TestCase):
                 hook_input={"session_id": "s1", "source": source, "cwd": str(project)},
             )["hookSpecificOutput"]
             self.assertEqual(out["sessionTitle"], "Vyra")
-            self.assertIn("/weside-vyra", out["additionalContext"])
+            self.assertIn("Skill tool with weside-vyra", out["additionalContext"])
             self.assertNotIn("materialize", out["additionalContext"])
 
     def test_bound_compact_or_clear_repeats_no_role_skill(self):
