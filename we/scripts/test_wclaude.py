@@ -137,3 +137,54 @@ def test_broken_council_still_offers_menu(tmp_path):
     proc, result = run(tmp_path, council=None, stdin="Gus\n")
     assert "cannot read" in proc.stderr
     assert result["companion"] == "Gus"
+
+
+def write_profile(tmp_path, filename):
+    profiles = tmp_path / ".claude" / "we" / "profiles"
+    path = profiles / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"permissions": {"deny": ["Bash(gh pr merge*)"]}}))
+    return path
+
+
+def test_profile_passed_as_settings_before_user_args(tmp_path):
+    path = write_profile(tmp_path, "ada.json")
+    proc, result = run(tmp_path, args=["--resume"], stdin="1\n")
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": "Ada", "argv": ["--settings", str(path), "--resume"]}
+    assert "--settings " + str(path) in proc.stderr
+
+
+def test_profile_for_dash_c_and_typed_name(tmp_path):
+    path = write_profile(tmp_path, "eve.json")
+    _, result = run(tmp_path, args=["-c", "EVE", "-p", "hi"])
+    assert result["argv"] == ["--settings", str(path), "-p", "hi"]
+    _, result = run(tmp_path, stdin="Eve\n")
+    assert result["argv"] == ["--settings", str(path)]
+
+
+def test_no_profile_file_leaves_argv_unchanged(tmp_path):
+    write_profile(tmp_path, "bo.json")
+    proc, result = run(tmp_path, args=["--resume"], stdin="1\n")
+    assert result == {"companion": "Ada", "argv": ["--resume"]}
+    assert "--settings" not in proc.stderr
+
+
+def test_choice_zero_never_takes_a_profile(tmp_path):
+    write_profile(tmp_path, ".json")
+    write_profile(tmp_path, "0.json")
+    _, result = run(tmp_path, stdin="0\n")
+    assert result == {"companion": "", "argv": []}
+
+
+@pytest.mark.parametrize("name", ["../escape", "sub/ada", ".hidden", ".."])
+def test_traversal_name_starts_without_profile(tmp_path, name):
+    write_profile(tmp_path, "ada.json")
+    write_profile(tmp_path, ".hidden.json")
+    write_profile(tmp_path, "sub/ada.json")
+    write_profile(tmp_path, "../escape.json")
+    write_profile(tmp_path, "..json")
+    proc, result = run(tmp_path, args=["-c", name])
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": name, "argv": []}
+    assert "--settings" not in proc.stderr

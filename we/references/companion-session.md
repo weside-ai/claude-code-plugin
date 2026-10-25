@@ -17,6 +17,15 @@ second companion takes a second session. An unknown name answers HTTP 422.
 pin; every other argument goes to `claude`. `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`.
 
+## Per-companion permissions
+
+`wclaude` passes `~/.claude/we/profiles/<name lowercased>.json`, when it exists, as
+`claude --settings <file>`; Claude Code merges it over the user's settings, so its
+`permissions.deny`/`ask` rules bind only that companion's session, e.g.
+`{"permissions":{"deny":["Bash(gh pr merge*)"]}}`. A name containing `/` or starting with `.` gets
+no profile, nor does choice `0`. The profile is a guard rail, not a boundary: it covers Claude Code
+tools only and only a session started through `wclaude`.
+
 ## Name and binding
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
