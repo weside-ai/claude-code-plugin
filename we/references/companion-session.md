@@ -7,7 +7,9 @@ gets none of them. Skills that start, bind or spawn sessions point here.
 ## Launch and pin
 
 `WESIDE_COMPANION=<Name> claude` pins the session. The plugin's `.mcp.json` sends
-`X-Weside-Companion: ${WESIDE_COMPANION:-}` on every weside MCP request, so every tool acts as
+`X-Weside-Companion: <Name>` on every weside MCP request through `headersHelper`, never static
+`headers`: Claude Code keys the stored OAuth by a hash of the expanded headers, so a pin there makes
+each name a new sign-in (`scripts/test_mcp_config.py`). Every tool acts as
 `<Name>` whatever another session selected; an empty value is no pin. A pinned request never
 changes the account's selection: `select_companion` to another name is refused, so talking as a
 second companion takes a second session. An unknown name answers HTTP 422.

@@ -3,9 +3,7 @@
     "weside-mcp": {
       "type": "http",
       "url": "https://api.weside.ai/mcp/",
-      "headers": {
-        "X-Weside-Companion": "${WESIDE_COMPANION:-}"
-      },
+      "headersHelper": "v=$(printf %s \"$WESIDE_COMPANION\" | tr -d '\\000-\\037' | sed 's/[\\\\\"]/\\\\&/g'); if [ -n \"$v\" ]; then printf '{\"X-Weside-Companion\":\"%s\"}' \"$v\"; else printf '{}'; fi",
       "oauth": {
         "clientId": "9114483b-1a59-460d-afa0-2534fd3bd1aa",
         "callbackPort": 8080
