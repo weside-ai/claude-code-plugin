@@ -205,9 +205,9 @@ class StoredAttributionTest(_HookRunCase):
         args = json.loads(op.call_args[0][0].data)["params"]["arguments"]
         return json.loads(args["conversations"])[0]["user_message"]
 
-    def test_owner_prompt_is_unchanged_behind_the_surface_prefix(self):
+    def test_owner_prompt_is_unchanged_before_the_surface_line(self):
         stored = self.stored_prompt(self.USER)
-        self.assertEqual(stored, f"[Claude Code · example-repo · Session 3f9a21c4]\n{self.USER}")
+        self.assertEqual(stored, f"{self.USER}\n[Claude Code · example-repo · Session 3f9a21c4]")
 
     def test_cross_session_message_is_attributed_to_its_sender(self):
         stored = self.stored_prompt(
@@ -217,9 +217,9 @@ class StoredAttributionTest(_HookRunCase):
         )
         self.assertEqual(
             stored,
-            "[Claude Code · example-repo · Session 3f9a21c4]\n"
             "Message from Nox (another Claude Code session, not the owner):\n"
-            "Maintenance done, the staging cluster is back.",
+            "Maintenance done, the staging cluster is back.\n"
+            "[Claude Code · example-repo · Session 3f9a21c4]",
         )
         self.assertNotIn("<cross-session-message", stored)
         self.assertNotIn("Another Claude session", stored)
@@ -241,13 +241,13 @@ class StoredAttributionTest(_HookRunCase):
         )
         self.assertEqual(
             stored,
-            "[Claude Code · example-repo · Session 3f9a21c4]\n"
             "Message from team-lead (an agent of this session's team, not the owner):\n"
-            "Verify the two merged stories on staging, read-only.",
+            "Verify the two merged stories on staging, read-only.\n"
+            "[Claude Code · example-repo · Session 3f9a21c4]",
         )
 
-    def test_surface_prefix_without_session_tag(self):
-        self.assertEqual(hook.surface_prefix("repo", None), "[Claude Code · repo]")
+    def test_surface_line_without_session_tag(self):
+        self.assertEqual(hook.surface_line("repo", None), "[Claude Code · repo]")
 
 
 REAL = "Please check why the staging deploy failed and what the next step for the release is."

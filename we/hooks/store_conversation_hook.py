@@ -24,7 +24,7 @@ Flow:
      stored with their sender named (``attribute_prompt``), never as the owner's words.
   5. Filter: skip short messages, commands, tool-only turns
   6. Resolve token (Claude Code MCP OAuth)
-  7. Prefix the stored prompt with ``[Claude Code · <repo> · Session <tag>]``, call weside
+  7. End the stored prompt with ``[Claude Code · <repo> · Session <tag>]``, call weside
      MCP store_conversations via HTTP (JSON-RPC over SSE),
      ``?companion=<bound name>`` and the session's ``repo_id``
 
@@ -325,8 +325,8 @@ def attribute_prompt(text: str) -> str:
     return _ENVELOPE.sub(_attributed, text).strip()
 
 
-def surface_prefix(project: str, tag: str | None) -> str:
-    """The stored turn's visible origin: a WESIDE reader tells a Claude Code turn from app chat."""
+def surface_line(project: str, tag: str | None) -> str:
+    """The stored turn's visible origin, last line of the prompt so the memory title keeps the content."""
     session = f" · Session {tag}" if tag else ""
     return f"[Claude Code · {project}{session}]"
 
@@ -491,7 +491,7 @@ def main() -> None:
     prompt = condense(redact(attribute_prompt(user_msg)))
     exchange = [
         {
-            "user_message": f"{surface_prefix(project, tag)}\n{prompt}",
+            "user_message": f"{prompt}\n{surface_line(project, tag)}",
             "assistant_response": condense(redact(strip_system_reminders(assistant_msg))),
         }
     ]
