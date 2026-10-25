@@ -17,8 +17,9 @@ Issues through `gh`, or none), then asks up to five skippable questions: vision,
 verification, review gates, council. The answers go to `.weside/config.json`. A re-run shows the
 current value and asks before replacing it.
 
-Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`) and the
-shipped statusline (model, branch, PR, context, cost).
+Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`), the
+shipped statusline (model, branch, PR, context, cost) and the companion launcher `wclaude`
+([companion.md](companion.md#a-companion-session)).
 
 ## First story
 

@@ -12,6 +12,11 @@ gets none of them. Skills that start, bind or spawn sessions point here.
 changes the account's selection: `select_companion` to another name is refused, so talking as a
 second companion takes a second session. An unknown name answers HTTP 422.
 
+`scripts/wclaude` is the launcher: a menu over the members of the nearest `.weside/council.json`
+(optional `title` per member, the council ignores it), `-c <Name>` without a menu, `0` clears the
+pin; every other argument goes to `claude`. `/we:setup` § 5 installs it through
+`scripts/install_launcher.py`.
+
 ## Name and binding
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks

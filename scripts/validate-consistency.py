@@ -154,30 +154,33 @@ def check_listing_budget() -> None:
         )
 
 
-def check_statusline_verdicts() -> None:
-    """The installer prints a `VERDICT:` line; /we:setup branches on its wording.
+def check_installer_verdicts() -> None:
+    """Each installer prints a `VERDICT:` line; /we:setup § 5 branches on its wording.
 
-    Two files, one contract, and no compiler between them: rename a verdict in the
-    script and Step 4b's branching stops matching without any test going red.
+    Two files, one contract, and no compiler between them: rename a verdict in a
+    script and the setup branching stops matching without any test going red.
     """
-    script = WE / "scripts" / "install_statusline.py"
     skill = WE / "skills" / "setup" / "SKILL.md"
-    if not script.exists():
-        fail("we/scripts/install_statusline.py missing — /we:setup Step 4b calls it")
-        return
-    verdicts = set(re.findall(r'^VERDICT_[A-Z]+ = "([^"]+)"', script.read_text(), re.MULTILINE))
-    if not verdicts:
-        fail(
-            "install_statusline.py defines no VERDICT_* constants — Step 4b has nothing to branch on"
-        )
-        return
     text = skill.read_text()
-    for verdict in sorted(verdicts):
-        if verdict not in text:
-            fail(
-                f"install_statusline.py prints VERDICT '{verdict}' which "
-                "we/skills/setup/SKILL.md does not branch on"
-            )
+    for name in ("install_statusline.py", "install_launcher.py"):
+        script = WE / "scripts" / name
+        if not script.exists():
+            fail(f"we/scripts/{name} missing — /we:setup § 5 calls it")
+            continue
+        verdicts = set(
+            re.findall(r'^VERDICT_[A-Z]+ = "([^"]+)"', script.read_text(), re.MULTILINE)
+        )
+        if not verdicts:
+            fail(f"{name} defines no VERDICT_* constants — /we:setup has nothing to branch on")
+            continue
+        if f"scripts/{name}" not in text:
+            fail(f"we/skills/setup/SKILL.md does not call scripts/{name}")
+        for verdict in sorted(verdicts):
+            if verdict not in text:
+                fail(
+                    f"{name} prints VERDICT '{verdict}' which "
+                    "we/skills/setup/SKILL.md does not branch on"
+                )
 
 
 def check_instruction_hook_files() -> None:
@@ -285,7 +288,7 @@ def main() -> int:
     check_userconfig_readers()
     check_listing_budget()
     check_instruction_hook_files()
-    check_statusline_verdicts()
+    check_installer_verdicts()
     check_no_indiscretions()
 
     if errors:

@@ -22,8 +22,12 @@ in `~/.claude/settings.json`.
 ## Members: `.weside/council.json`
 
 `/we:council` reads `.weside/council.json`; no verb writes it, you edit it by hand. Each entry under
-`members.<slug>` names a `role`, optionally a Companion `name` and a `lens` string the member's brief
-carries.
+`members.<slug>` names a `role`, optionally a Companion `name`, a `lens` string the member's brief
+carries, and a `title` that only the companion launcher `wclaude` shows ([companion.md](companion.md)).
+
+```json
+{"members": {"po": {"role": "product_owner", "name": "Ada", "title": "Product Owner", "lens": "..."}}}
+```
 
 With `loadCouncilFromWeside: true` and the weside MCP connected, a member with a Companion name
 carries that Companion's council identity: [companion.md](companion.md). Without the file, the lead
