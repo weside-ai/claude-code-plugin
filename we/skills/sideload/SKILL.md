@@ -20,7 +20,9 @@ rules the task touches.
 
 **Editing** (a change lands in the other repo): never edit it from this session, because its
 path-bound rules, hooks and worktree conventions do not apply here. Start a native session there:
-`cd <repo> && claude --bg "<task, with the context a human would give>"`. It prints an id;
+`cd <repo> && WESIDE_COMPANION= claude --bg "<task, with the context a human would give>"`. The
+cleared pin keeps a worker of a companion session from becoming that companion
+(`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Workers). It prints an id;
 `claude agents` lists it. Steer it with `SendMessage` to its name from `ListAgents`, and pass
 `notify_when_idle: true` to hear when it finishes instead of polling. A session in a different
 permission mode holds cross-session messages for its user's approval, so a send is not proof it

@@ -8,13 +8,21 @@ Auth: Claude Code's own MCP OAuth token from ~/.claude/.credentials.json
 (auto-refreshed by Claude Code at session start — always fresh while
 a session with the we plugin is active).
 
+Only a session bound to a companion stores, under that companion: ``/we:materialize``
+binds the session (``scripts/identity_cache.py bind``), and the binding file keyed by
+the hook's ``session_id`` names the companion. A session that never materialized
+(a worker, a topic session) stores nothing and prints nothing; the ``companion``
+option alone no longer stores. Contract: ``references/companion-session.md``.
+
 Flow:
   1. Check if autoStoreConversations is enabled
-  2. Read hook stdin (last_assistant_message, transcript_path, etc.)
-  3. Extract last real user message from transcript JSONL
-  4. Filter: skip short messages, commands, tool-only turns
-  5. Resolve token (Claude Code MCP OAuth)
-  6. Call weside MCP store_conversations directly via HTTP (JSON-RPC over SSE)
+  2. Read hook stdin (session_id, last_assistant_message, transcript_path, etc.)
+  3. Read the session's binding; unbound → return silently
+  4. Extract last real user message from transcript JSONL
+  5. Filter: skip short messages, commands, tool-only turns
+  6. Resolve token (Claude Code MCP OAuth)
+  7. Call weside MCP store_conversations via HTTP (JSON-RPC over SSE),
+     ``?companion=<bound name>`` and the session's ``repo_id``
 
 Warnings on auth failure are emitted to stderr so Silent-Fails become visible.
 """
@@ -31,6 +39,11 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+
+from identity_cache import read_binding
 
 MIN_USER_MSG_LENGTH = 50
 MIN_TOTAL_LENGTH = 100
@@ -176,8 +189,7 @@ def _call_store_conversations(
 ) -> bool:
     """Call store_conversations via MCP JSON-RPC endpoint.
 
-    companion_name pins memory writes to the configured companion for this
-    session. Without it, routing falls back to backend defaults.
+    companion_name pins memory writes to the companion the session is bound to.
     """
     url = MCP_URL
     if companion_name:
@@ -376,7 +388,12 @@ def main() -> None:
     except Exception:
         return
 
-    # 3. Get the exchange
+    # 3. Only a session bound by /we:materialize stores, under its companion
+    companion_name = read_binding(hook_input.get("session_id", ""))
+    if not companion_name:
+        return
+
+    # 4. Get the exchange
     assistant_msg = hook_input.get("last_assistant_message", "")
     transcript_path = hook_input.get("transcript_path", "")
     user_msg = get_last_user_message(transcript_path) if transcript_path else None
@@ -384,11 +401,11 @@ def main() -> None:
     if not user_msg or not assistant_msg:
         return
 
-    # 4. Filter
+    # 5. Filter
     if not is_worth_storing(user_msg, assistant_msg):
         return
 
-    # 5. Resolve token (Claude Code MCP OAuth, auto-refreshed by Claude Code)
+    # 6. Resolve token (Claude Code MCP OAuth, auto-refreshed by Claude Code)
     token = _get_valid_token()
     if not token:
         _warn(
@@ -398,9 +415,7 @@ def main() -> None:
         )
         return
 
-    # 6. Store directly via MCP
-    # Pass companion_name to pin routing to the configured companion.
-    companion_name = config.get("companion") or None
+    # 7. Store via MCP under the bound companion
     cwd = hook_input.get("cwd", os.getcwd())
     project = os.path.basename(cwd)
     source_detail = _build_source_detail(project, _derive_session_tag(transcript_path))

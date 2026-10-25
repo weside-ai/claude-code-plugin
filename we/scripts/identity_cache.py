@@ -30,8 +30,29 @@ Modes::
 ``store`` accepts the harness tool-result shape (JSON ``{"result": "..."}``) and
 plain text, so it also works on a payload written by hand.
 
+Session binding: ``/we:materialize`` binds the Claude Code session it runs in
+to the companion it loaded, so the Stop hook stores that session's turns under
+that companion and the statusline names it. One file per session id::
+
+    ~/.claude/we/sessions/<session_id>.json        (mode 600)
+    {"companion": "<name>", "bound_at": "<iso timestamp>"}
+
+Override the directory with ``WE_SESSION_DIR``. A session id is a plain token
+(letters, digits, ``-``, ``_``); anything else is refused, so a crafted id
+cannot write outside the directory. Every ``bind`` prunes bindings older than
+30 days. When ``WESIDE_COMPANION`` pins the session, ``bind`` refuses another
+name: the MCP header, the title and the binding must name one companion.
+
+Modes::
+
+    store   --companion NAME --from PATH   extract a tool-result file into cache
+    path    --companion NAME               report cache path + age
+    bind    --session ID --companion NAME  bind a session to a companion
+    binding --session ID                   print the bound companion
+
 Exit codes: ``path`` → 0 fresh, 1 stale, 2 missing. ``store`` → 0 written,
-1 unreadable source, 2 usage. Python stdlib only.
+1 unreadable source, 2 usage. ``bind`` → 0 bound, 1 refused. ``binding`` →
+0 bound (name on stdout), 2 unbound. Python stdlib only.
 """
 
 from __future__ import annotations
@@ -41,6 +62,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -138,6 +160,89 @@ def path(companion: str) -> int:
     return 1
 
 
+SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+BINDING_MAX_AGE_S = 30 * 24 * 3600
+
+
+def session_dir() -> Path:
+    override = os.environ.get("WE_SESSION_DIR")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".claude" / "we" / "sessions"
+
+
+def binding_path(session_id: str) -> Path | None:
+    """The binding file of a session, or None for an id that is not a plain token."""
+    if not isinstance(session_id, str) or not SESSION_ID_RE.match(session_id):
+        return None
+    return session_dir() / f"{session_id}.json"
+
+
+def read_binding(session_id: str) -> str | None:
+    """The companion a session is bound to, or None (unbound, unreadable, bad id)."""
+    target = binding_path(session_id)
+    if target is None:
+        return None
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    name = data.get("companion") if isinstance(data, dict) else None
+    return name.strip() if isinstance(name, str) and name.strip() else None
+
+
+def prune_bindings(now: float | None = None) -> None:
+    cutoff = (now if now is not None else time.time()) - BINDING_MAX_AGE_S
+    try:
+        entries = list(session_dir().glob("*.json"))
+    except OSError:
+        return
+    for entry in entries:
+        try:
+            if entry.stat().st_mtime < cutoff:
+                entry.unlink()
+        except OSError:
+            continue
+
+
+def bind(session_id: str, companion: str) -> int:
+    target = binding_path(session_id)
+    if target is None:
+        print(f"REFUSED session id {session_id!r} is not a plain token")
+        return 1
+    name = companion.strip()
+    if not name:
+        print("REFUSED empty companion name")
+        return 1
+    pin = os.environ.get("WESIDE_COMPANION", "").strip()
+    if pin and pin.lower() != name.lower():
+        print(
+            f"REFUSED this session is pinned to {pin} (WESIDE_COMPANION); start a new session to bind {name}"
+        )
+        return 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    prune_bindings()
+    bound_at = datetime.now().astimezone().replace(microsecond=0).isoformat()
+    payload = json.dumps({"companion": name, "bound_at": bound_at})
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(payload)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, target)
+    print(f"BOUND {session_id} → {name}")
+    return 0
+
+
+def binding(session_id: str) -> int:
+    name = read_binding(session_id)
+    if name is None:
+        print("UNBOUND")
+        return 2
+    print(name)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="mode", required=True)
@@ -149,7 +254,18 @@ def main(argv: list[str] | None = None) -> int:
     p_path = sub.add_parser("path", help="report cache path and freshness")
     p_path.add_argument("--companion", required=True)
 
+    p_bind = sub.add_parser("bind", help="bind a session to a companion")
+    p_bind.add_argument("--session", required=True)
+    p_bind.add_argument("--companion", required=True)
+
+    p_binding = sub.add_parser("binding", help="print the companion a session is bound to")
+    p_binding.add_argument("--session", required=True)
+
     args = parser.parse_args(argv)
+    if args.mode == "bind":
+        return bind(args.session, args.companion)
+    if args.mode == "binding":
+        return binding(args.session)
     if args.mode == "store":
         return store(args.companion, Path(args.source).expanduser())
     return path(args.companion)
