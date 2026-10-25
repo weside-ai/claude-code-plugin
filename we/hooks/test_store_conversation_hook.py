@@ -190,5 +190,98 @@ class BoundSessionOnlyTest(unittest.TestCase):
         self.assertEqual(op.call_count, 0)
 
 
+REAL = "Please check why the staging deploy failed and what the next step for the release is."
+REMINDER = '<system-reminder>\nThe user named this session "Nox".\n</system-reminder>'
+IDLE_JSON = json.dumps(
+    {"type": "idle_notification", "from": "w-1", "idleReason": "available", "result": "done"}
+)
+
+
+def _user(content, **extra):
+    return json.dumps({"type": "user", "message": {"role": "user", "content": content}, **extra})
+
+
+class TurnPromptFilterTest(unittest.TestCase):
+    """The turn's prompt decides: harness-started turns store nothing, real ones are kept."""
+
+    def prompt(self, *entries):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "t.jsonl"
+            path.write_text("\n".join([_user(REAL), *entries]) + "\n")
+            return hook.get_last_user_message(str(path))
+
+    def assert_skipped(self, *entries):
+        # Skipped means None, never the older real prompt paired with this turn's reply.
+        self.assertIsNone(self.prompt(*entries))
+
+    def test_goal_stop_hook_feedback_is_skipped(self):
+        self.assert_skipped(
+            _user("Stop hook feedback:\n[finish the epic]: not met yet", isMeta=True)
+        )
+
+    def test_goal_check_in_is_skipped(self):
+        self.assert_skipped(_user("Goal check-in: «finish the epic» is still open", isMeta=True))
+
+    def test_task_notification_is_skipped(self):
+        note = (
+            "<task-notification>\n<task-id>abc</task-id>\n<status>completed</status>\n"
+            "<summary>Background command completed</summary>\n</task-notification>"
+        )
+        self.assert_skipped(_user(note))
+        self.assert_skipped(_user(note + "\n" + REMINDER))
+
+    def test_idle_notification_json_is_skipped(self):
+        self.assert_skipped(_user(IDLE_JSON))
+        wrapped = (
+            "Another Claude session sent a message:\n"
+            f'<teammate-message teammate_id="w-1" color="blue">\n{IDLE_JSON}\n</teammate-message>'
+        )
+        self.assert_skipped(_user(wrapped))
+        self.assert_skipped(_user('[Cross-session idle notice] "infra" is idle now.', isMeta=True))
+
+    def test_system_reminder_only_is_skipped(self):
+        self.assert_skipped(_user(REMINDER, isMeta=True))
+        self.assert_skipped(_user([{"type": "text", "text": REMINDER + "\n" + REMINDER}]))
+
+    def test_real_user_turn_is_kept_with_reminders_stripped(self):
+        latest = "Now open the PR for the hook fix and tell me its number."
+        got = self.prompt(_user(REMINDER + "\n" + latest + "\n" + REMINDER))
+        self.assertEqual(got, latest)
+
+    def test_real_prompt_survives_tool_results_after_it(self):
+        tool = json.dumps(
+            {
+                "type": "user",
+                "toolUseResult": {"stdout": "x"},
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x"}]
+                },
+            }
+        )
+        self.assertEqual(self.prompt(tool), REAL)
+
+    def test_cross_session_message_is_kept(self):
+        msg = (
+            "Another Claude session sent a message:\n"
+            '<cross-session-message from="uds:/tmp/s.sock" from-name="infra">\n'
+            "Maintenance done, the staging cluster is back.\n</cross-session-message>"
+        )
+        self.assertEqual(self.prompt(_user(msg, isMeta=True)), msg)
+
+    def test_teammate_message_with_content_is_kept(self):
+        msg = (
+            '<teammate-message teammate_id="team-lead">\n'
+            "Verify the two merged stories on staging, read-only.\n</teammate-message>"
+        )
+        self.assertEqual(self.prompt(_user(msg)), msg)
+
+    def test_command_echo_is_walked_past_as_before(self):
+        echo = _user("<local-command-stdout>Login successful</local-command-stdout>")
+        self.assertEqual(self.prompt(echo), REAL)
+
+    def test_stored_reply_has_reminders_stripped(self):
+        self.assertEqual(hook.strip_system_reminders(REMINDER + "\nAnswer."), "Answer.")
+
+
 if __name__ == "__main__":
     unittest.main()

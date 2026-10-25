@@ -18,7 +18,9 @@ Flow:
   1. Check if autoStoreConversations is enabled
   2. Read hook stdin (session_id, last_assistant_message, transcript_path, etc.)
   3. Read the session's binding; unbound → return silently
-  4. Extract last real user message from transcript JSONL
+  4. Extract the turn's prompt from the transcript JSONL, system reminders stripped;
+     a harness-started turn (goal Stop-hook feedback, task notification, idle notice,
+     system reminders only) stores nothing. Teammate and cross-session messages count.
   5. Filter: skip short messages, commands, tool-only turns
   6. Resolve token (Claude Code MCP OAuth)
   7. Call weside MCP store_conversations via HTTP (JSON-RPC over SSE),
@@ -248,34 +250,60 @@ def get_plugin_config() -> dict:
         return {}
 
 
-def _is_human_message(text: str) -> bool:
-    """Check if a user message is actual human input (not system/command noise).
+_SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?(?:</system-reminder>|\Z)", re.S)
+_TEAMMATE_MESSAGE = re.compile(r"<teammate-message\b[^>]*>(.*?)</teammate-message>", re.S)
+_TASK_NOTIFICATION = re.compile(r"<task-notification>.*?</task-notification>", re.S)
+_CROSS_SESSION_PREFIX = "Another Claude session sent a message:"
 
-    Claude Code injects many non-human messages as type="user" in the transcript:
-    - <command-name> — slash command invocations (/reload-plugins, /exit, etc.)
-    - <local-command-caveat> — warnings about local command output
-    - <local-command-stdout> — command stdout captures
-    - <system-reminder> — system context injections (skills list, rules, etc.)
-    - [Request interrupted — user cancelled mid-response
 
-    Only actual human-typed messages should be stored as conversation memories.
+def strip_system_reminders(text: str) -> str:
+    """Remove ``<system-reminder>`` blocks (an unclosed one up to the end) and trim."""
+    return _SYSTEM_REMINDER.sub("", text).strip()
+
+
+def _is_idle_notification(body: str) -> bool:
+    try:
+        data = json.loads(body.strip())
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and data.get("type") == "idle_notification"
+
+
+def _is_noise_prompt(text: str) -> bool:
+    """A turn started by the harness, not by a person or another session's message.
+
+    ``text`` has its system reminders stripped already. Noise: empty (the prompt was
+    system reminders only), a goal Stop hook's feedback or check-in, a background task's
+    ``<task-notification>``, and an idle notice (``idle_notification`` JSON, bare or in
+    ``<teammate-message>`` blocks, or a ``[Cross-session idle notice]``). A teammate or
+    cross-session message with content is real progress and is kept.
     """
-    noise_prefixes = (
-        "<command-name>",
-        "<local-command-",
-        "<system-reminder>",
-        "[Request interrupted",
+    if not text:
+        return True
+    if text.startswith(("Stop hook feedback:", "Goal check-in:", "[Cross-session idle notice]")):
+        return True
+    if not _TASK_NOTIFICATION.sub("", text).strip():
+        return True
+    body = text[len(_CROSS_SESSION_PREFIX) :] if text.startswith(_CROSS_SESSION_PREFIX) else text
+    blocks = _TEAMMATE_MESSAGE.findall(body)
+    if blocks and not _TEAMMATE_MESSAGE.sub("", body).strip():
+        return all(_is_idle_notification(b) for b in blocks)
+    return _is_idle_notification(body)
+
+
+def _is_context_entry(text: str) -> bool:
+    """Slash-command echoes, local command output and interrupts: walked past, not the prompt."""
+    return text.startswith(
+        ("<command-name>", "<command-message>", "<local-command-", "[Request interrupted")
     )
-    return not any(text.startswith(p) for p in noise_prefixes)
 
 
 def get_last_user_message(transcript_path: str) -> str | None:
-    """Extract the last real human message from the transcript JSONL.
+    """The prompt that started the last turn, system reminders stripped; None for a noise turn.
 
-    Walks backwards through the transcript, skipping:
-    - Tool results (toolUseResult entries)
-    - System injections (<system-reminder>, <command-name>, etc.)
-    - Interrupts ([Request interrupted])
+    Walks backwards through the transcript past tool results and command echoes. The
+    first remaining user entry is the turn's prompt: a noise prompt (``_is_noise_prompt``)
+    skips the whole turn instead of pairing the reply with an older message.
     """
     try:
         with open(transcript_path) as f:
@@ -289,31 +317,30 @@ def get_last_user_message(transcript_path: str) -> str | None:
         except (json.JSONDecodeError, ValueError):
             continue
 
-        if entry.get("type") != "user":
-            continue
-
-        # Skip tool results
-        if entry.get("toolUseResult"):
+        if entry.get("type") != "user" or entry.get("toolUseResult"):
             continue
 
         msg = entry.get("message", {})
-        content = msg.get("content", "")
+        content = msg.get("content", "") if isinstance(msg, dict) else ""
 
-        text = None
         if isinstance(content, str):
-            text = content.strip()
+            raw = content
         elif isinstance(content, list):
             texts = [
                 c.get("text", "")
                 for c in content
                 if isinstance(c, dict) and c.get("type") == "text"
             ]
-            if texts:
-                text = " ".join(texts).strip()
+            if not texts:
+                continue  # tool_result or image blocks only
+            raw = " ".join(texts)
+        else:
+            continue
 
-        # Skip system/command noise — only store real human input
-        if text and _is_human_message(text):
-            return text
+        text = strip_system_reminders(raw)
+        if text and _is_context_entry(text):
+            continue
+        return None if _is_noise_prompt(text) else text
 
     return None
 
@@ -423,7 +450,7 @@ def main() -> None:
     exchange = [
         {
             "user_message": condense(redact(user_msg)),
-            "assistant_response": condense(redact(assistant_msg)),
+            "assistant_response": condense(redact(strip_system_reminders(assistant_msg))),
         }
     ]
 

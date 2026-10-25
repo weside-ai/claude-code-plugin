@@ -68,7 +68,7 @@ def test_menu_lists_title_else_role_and_skips_nameless(tmp_path):
     assert "scrum_master" not in proc.stderr
     assert " 3) other name..." in proc.stderr
     assert "~/project/.weside/council.json" in proc.stderr
-    assert result == {"companion": "Ada", "argv": []}
+    assert result == {"companion": "Ada", "argv": ["--name", "Ada"]}
 
 
 def test_menu_pick_second(tmp_path):
@@ -83,14 +83,14 @@ def test_other_name_prompt(tmp_path):
 
 def test_typed_name(tmp_path):
     _, result = run(tmp_path, args=["--resume"], stdin="Dana\n")
-    assert result == {"companion": "Dana", "argv": ["--resume"]}
+    assert result == {"companion": "Dana", "argv": ["--name", "Dana", "--resume"]}
 
 
 def test_dash_c_skips_menu(tmp_path):
     proc, result = run(tmp_path, args=["-c", "Eve", "-p", "hi"])
     assert proc.returncode == 0, proc.stderr
     assert "other name" not in proc.stderr
-    assert result == {"companion": "Eve", "argv": ["-p", "hi"]}
+    assert result == {"companion": "Eve", "argv": ["--name", "Eve", "-p", "hi"]}
 
 
 def test_dash_c_without_name_is_usage_error(tmp_path):
@@ -109,7 +109,7 @@ def test_zero_clears_the_pin(tmp_path):
 def test_arguments_with_spaces_pass_unchanged(tmp_path):
     args = ["-p", "two words", "", "a'quote", "--model", "x y"]
     _, result = run(tmp_path, args=args, stdin="1\n")
-    assert result["argv"] == args
+    assert result["argv"] == ["--name", "Ada", *args]
 
 
 @pytest.mark.parametrize("choice", ["4\n", "99\n", "\n"])
@@ -137,3 +137,14 @@ def test_broken_council_still_offers_menu(tmp_path):
     proc, result = run(tmp_path, council=None, stdin="Gus\n")
     assert "cannot read" in proc.stderr
     assert result["companion"] == "Gus"
+
+
+@pytest.mark.parametrize("given", [["-n", "mine"], ["--name", "mine"], ["--name=mine"]])
+def test_own_name_is_kept(tmp_path, given):
+    _, result = run(tmp_path, args=["-c", "Eve", *given])
+    assert result == {"companion": "Eve", "argv": given}
+
+
+def test_no_companion_gets_no_name(tmp_path):
+    _, result = run(tmp_path, stdin="0\n")
+    assert result == {"companion": "", "argv": []}
