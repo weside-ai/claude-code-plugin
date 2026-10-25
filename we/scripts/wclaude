@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # wclaude — start Claude Code as a weside Companion (references/companion-session.md).
 # Lists the members of the nearest .weside/council.json (searched upwards from the cwd),
-# then runs `WESIDE_COMPANION=<Name> claude <your args>`.
+# then runs `WESIDE_COMPANION=<Name> claude --name <Name> <your args>` (no --name if you pass one).
 #   wclaude                 menu, then claude
 #   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
 #   wclaude -c <Name> ...   no menu; the rest goes to claude (claude's own -c: use --continue)
@@ -115,8 +115,17 @@ if [[ $picked -eq 0 ]]; then
 fi
 
 if [[ -n "$pick" ]]; then
+  # --name, not only the SessionStart hook's sessionTitle: the hook titles the prompt bar and
+  # transcript, but the session list (`claude agents`) keeps its derived name (`<dir>-<hex>`).
+  named=0
+  for arg in "$@"; do
+    case $arg in -n | --name | --name=*) named=1 ;; esac
+  done
+  if [[ $named -eq 0 ]]; then
+    set -- --name "$pick" "$@"
+  fi
   printf '%s WESIDE_COMPANION=%q claude' '->' "$pick" >&2
-  [[ $# -gt 0 ]] && printf ' %q' "$@" >&2
+  printf ' %q' "$@" >&2
   printf '\n' >&2
   WESIDE_COMPANION="$pick" exec claude "$@"
 else

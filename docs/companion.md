@@ -10,7 +10,9 @@ With an account:
   session start.
 - `autoStoreConversations` stores meaningful turns as Companion memories (the plugin's `Stop` hook),
   only for a session that loaded its Companion with `/we:materialize` and under that Companion. A
-  session that never materialized, a worker included, stores nothing.
+  session that never materialized, a worker included, stores nothing. A turn the harness started
+  (a `/goal` check, a background task's notification, an idle notice, system reminders only) is not
+  stored; a message from a teammate or another session is. System reminders are stripped.
 - `/we:council` gives a member with a linked Companion that Companion's council identity. The server
   strips private context from it; a member that cannot be reached joins with the generic lens.
 
@@ -28,7 +30,8 @@ writes a `worklog` memory the Companion reads on its other surfaces. Contract:
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
 (name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.
 `wclaude -c <Name>` skips the menu; every other argument goes to `claude` unchanged (`wclaude
---resume`). `/we:setup` offers to install it to `~/.local/bin/wclaude`; by hand:
+--resume`), after `--name <Name>` so `claude agents` lists the session as `<Name>` (left out when you
+pass `--name` yourself). `/we:setup` offers to install it to `~/.local/bin/wclaude`; by hand:
 `python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
 `python3`.
 

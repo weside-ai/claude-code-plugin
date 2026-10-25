@@ -14,7 +14,8 @@ second companion takes a second session. An unknown name answers HTTP 422.
 
 `scripts/wclaude` is the launcher: a menu over the members of the nearest `.weside/council.json`
 (optional `title` per member, the council ignores it), `-c <Name>` without a menu, `0` clears the
-pin; every other argument goes to `claude`. `/we:setup` § 5 installs it through
+pin; every other argument goes to `claude`. It passes `--name <Name>` unless you pass a name: the
+hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`.
 
 A companion session is a normal Claude Code session; what binds it to its companion is the pin

@@ -86,6 +86,17 @@ class MaterializeOnStartTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["sessionTitle"], "Vyra")
         self.assertNotIn("additionalContext", out["hookSpecificOutput"])
 
+    def test_title_output_has_the_documented_shape(self):
+        # Claude Code reads hookSpecificOutput.sessionTitle with hookEventName "SessionStart"
+        # (hooks docs, SessionStart decision control); it applies on startup, resume and fork.
+        self.bind("s1", "Vyra")
+        for source in ("startup", "resume", "fork"):
+            out = self.run_hook(pin="Vyra", hook_input={"session_id": "s1", "source": source})
+            self.assertEqual(
+                out,
+                {"hookSpecificOutput": {"hookEventName": "SessionStart", "sessionTitle": "Vyra"}},
+            )
+
     def test_pin_after_clear_asks_again(self):
         self.bind("s1", "Vyra")
         out = self.run_hook(pin="Vyra", hook_input={"session_id": "s2", "source": "clear"})

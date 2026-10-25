@@ -2,7 +2,8 @@
 """SessionStart hook: start a session as its companion.
 
 Pinned (``WESIDE_COMPANION=<Name> claude``): the session is titled ``<Name>``
-(``sessionTitle``, same effect as ``/rename``) and asked to run
+(``sessionTitle``: prompt bar, transcript, ``/resume`` picker; the session list of
+``claude agents`` keeps its derived name, so ``wclaude`` also passes ``--name``) and asked to run
 ``/we:materialize``, which loads that companion even when the ``companion``
 option names another one and binds the session to it. A session the binding
 file already ties to the pin (a resume) gets the title only. A session started
