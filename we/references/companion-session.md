@@ -27,7 +27,9 @@ account's selected companion).
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
   it to run `/we:materialize`, then the role skill `weside-<name lowercased>` when its `SKILL.md`
   exists under `<cwd>/.claude/skills/` or `~/.claude/skills/` (the companion's working knowledge
-  for that environment). It skips a session started with `--agent`.
+  for that environment). A session already bound to the pin gets the skill line alone on
+  `startup` and `resume` (`-c` included), not on `compact` or `clear`. It skips a session started
+  with `--agent`.
 - `/we:materialize` binds the session (its step 5 owns the call). The script's docstring owns the
   binding file (one per session id, mode 600, 30-day prune) and
   refuses a name other than the pin.

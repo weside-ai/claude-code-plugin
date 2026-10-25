@@ -148,6 +148,33 @@ class MaterializeOnStartTest(unittest.TestCase):
         )
         self.assertIsNone(out)
 
+    def test_bound_resume_gets_the_role_skill_line_alone(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        self.bind("s1", "Vyra")
+        for source in ("startup", "resume"):
+            out = self.run_hook(
+                pin="Vyra",
+                hook_input={"session_id": "s1", "source": source, "cwd": str(project)},
+            )["hookSpecificOutput"]
+            self.assertEqual(out["sessionTitle"], "Vyra")
+            self.assertIn("/weside-vyra", out["additionalContext"])
+            self.assertNotIn("materialize", out["additionalContext"])
+
+    def test_bound_compact_or_clear_repeats_no_role_skill(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        self.bind("s1", "Vyra")
+        for source in ("compact", "clear"):
+            out = self.run_hook(
+                pin="Vyra",
+                hook_input={"session_id": "s1", "source": source, "cwd": str(project)},
+            )
+            self.assertEqual(
+                out,
+                {"hookSpecificOutput": {"hookEventName": "SessionStart", "sessionTitle": "Vyra"}},
+            )
+
     def test_unpinned_gets_no_role_skill(self):
         self.settings({"companion": "Vyra", "autoMaterialize": True})
         project = self.home / "project"
