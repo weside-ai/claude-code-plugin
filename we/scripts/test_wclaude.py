@@ -86,17 +86,36 @@ def test_typed_name(tmp_path):
     assert result == {"companion": "Dana", "argv": ["--name", "Dana", "--resume"]}
 
 
-def test_dash_c_skips_menu(tmp_path):
-    proc, result = run(tmp_path, args=["-c", "Eve", "-p", "hi"])
+def test_as_skips_menu(tmp_path):
+    proc, result = run(tmp_path, args=["--as", "Eve", "-p", "hi"])
     assert proc.returncode == 0, proc.stderr
     assert "other name" not in proc.stderr
     assert result == {"companion": "Eve", "argv": ["--name", "Eve", "-p", "hi"]}
 
 
-def test_dash_c_without_name_is_usage_error(tmp_path):
-    proc, result = run(tmp_path, args=["-c"])
+def test_as_without_name_is_usage_error(tmp_path):
+    proc, result = run(tmp_path, args=["--as"])
     assert proc.returncode == 2
     assert result is None
+
+
+def test_dash_c_passes_through_after_the_menu(tmp_path):
+    proc, result = run(tmp_path, args=["-c"], stdin="1\n")
+    assert proc.returncode == 0, proc.stderr
+    assert "other name" in proc.stderr
+    assert result == {"companion": "Ada", "argv": ["--name", "Ada", "-c"]}
+
+
+def test_dash_c_with_a_member_name_warns_and_goes_on(tmp_path):
+    proc, result = run(tmp_path, args=["-c", "bo"], stdin="1\n")
+    assert proc.returncode == 0, proc.stderr
+    assert "did you mean --as bo?" in proc.stderr
+    assert result == {"companion": "Ada", "argv": ["--name", "Ada", "-c", "bo"]}
+
+
+def test_dash_c_with_a_prompt_does_not_warn(tmp_path):
+    proc, _ = run(tmp_path, args=["-c", "fix the tests"], stdin="1\n")
+    assert "did you mean" not in proc.stderr
 
 
 def test_zero_clears_the_pin(tmp_path):
@@ -141,7 +160,7 @@ def test_broken_council_still_offers_menu(tmp_path):
 
 @pytest.mark.parametrize("given", [["-n", "mine"], ["--name", "mine"], ["--name=mine"]])
 def test_own_name_is_kept(tmp_path, given):
-    _, result = run(tmp_path, args=["-c", "Eve", *given])
+    _, result = run(tmp_path, args=["--as", "Eve", *given])
     assert result == {"companion": "Eve", "argv": given}
 
 

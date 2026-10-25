@@ -108,6 +108,101 @@ class MaterializeOnStartTest(unittest.TestCase):
         )
         self.assertIsNone(out)
 
+    def role_skill(self, root, name="weside-vyra"):
+        skill = root / ".claude" / "skills" / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+
+    def test_role_skill_in_the_project_is_named(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            pin="Vyra", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertIn(
+            "Skill tool with weside-vyra", out["hookSpecificOutput"]["additionalContext"]
+        )
+
+    def test_role_skill_comes_before_the_ignore_clause(self):
+        self.role_skill(self.home)
+        for hook_input in (
+            {"session_id": "s1", "source": "startup"},
+            {"session_id": "s2", "source": "resume"},
+        ):
+            if hook_input["session_id"] == "s2":
+                self.bind("s2", "Vyra")
+            note = self.run_hook(pin="Vyra", hook_input=hook_input)["hookSpecificOutput"][
+                "additionalContext"
+            ]
+            self.assertNotIn("/weside-vyra", note)
+            self.assertTrue(note.endswith("you are not Vyra: ignore this note."), note)
+            self.assertLess(note.index("weside-vyra"), note.index("ignore this note"))
+
+    def test_role_skill_in_the_user_skills_is_named(self):
+        self.role_skill(self.home)
+        out = self.run_hook(pin="Vyra")
+        self.assertIn(
+            "Skill tool with weside-vyra", out["hookSpecificOutput"]["additionalContext"]
+        )
+
+    def test_no_role_skill_no_mention(self):
+        project = self.home / "project"
+        self.role_skill(project, name="weside-other")
+        out = self.run_hook(
+            pin="Vyra", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertNotIn("weside-", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_worker_gets_no_role_skill(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            pin="Vyra",
+            hook_input={
+                "session_id": "s1",
+                "source": "startup",
+                "cwd": str(project),
+                "agent_type": "w",
+            },
+        )
+        self.assertIsNone(out)
+
+    def test_bound_resume_gets_the_role_skill_line_alone(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        self.bind("s1", "Vyra")
+        for source in ("startup", "resume"):
+            out = self.run_hook(
+                pin="Vyra",
+                hook_input={"session_id": "s1", "source": source, "cwd": str(project)},
+            )["hookSpecificOutput"]
+            self.assertEqual(out["sessionTitle"], "Vyra")
+            self.assertIn("Skill tool with weside-vyra", out["additionalContext"])
+            self.assertNotIn("materialize", out["additionalContext"])
+
+    def test_bound_compact_or_clear_repeats_no_role_skill(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        self.bind("s1", "Vyra")
+        for source in ("compact", "clear"):
+            out = self.run_hook(
+                pin="Vyra",
+                hook_input={"session_id": "s1", "source": source, "cwd": str(project)},
+            )
+            self.assertEqual(
+                out,
+                {"hookSpecificOutput": {"hookEventName": "SessionStart", "sessionTitle": "Vyra"}},
+            )
+
+    def test_unpinned_gets_no_role_skill(self):
+        self.settings({"companion": "Vyra", "autoMaterialize": True})
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertNotIn("weside-", out["hookSpecificOutput"]["additionalContext"])
+
     def test_empty_pin_is_no_pin(self):
         self.settings({"autoMaterialize": False})
         self.assertIsNone(self.run_hook(pin="  "))

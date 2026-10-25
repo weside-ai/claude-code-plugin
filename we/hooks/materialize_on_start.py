@@ -8,7 +8,13 @@ Pinned (``WESIDE_COMPANION=<Name> claude``): the session is titled ``<Name>``
 option names another one and binds the session to it. A session the binding
 file already ties to the pin (a resume) gets the title only. A session started
 with ``--agent`` (``agent_type`` in the input) is a worker, never the companion:
-it gets nothing. Contract: ``references/companion-session.md``.
+it gets nothing. When a role skill ``weside-<name lowercased>`` exists in the
+project (``<cwd>/.claude/skills/``) or in ``~/.claude/skills/``, the note also
+asks the session to invoke it after materializing; a session already bound to
+the pin gets that skill line alone, but only on ``startup`` and ``resume``
+(``--continue`` too): after ``compact`` or ``clear`` the skill is still in
+context or the unbound note names it. Contract:
+``references/companion-session.md``.
 
 Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
@@ -35,9 +41,37 @@ CONTEXT = (
 PINNED_CONTEXT = (
     "This session was started as the companion {name} (WESIDE_COMPANION={name}). Before your "
     "first reply, greetings included, invoke the Skill tool with we:materialize; it loads {name} "
-    "and binds this session to {name}. Then answer as {name}. If you are a teammate or worker "
-    "another session spawned, you are not {name}: ignore this note."
+    "and binds this session to {name}. Then answer as {name}.{role_skill}"
+    "{ignore}"
 )
+
+BOUND_ROLE_SKILL_CONTEXT = (
+    "This session is the companion {name}. Before your first reply, invoke the Skill tool with "
+    "{skill}: it holds {name}'s working knowledge for this environment.{ignore}"
+)
+
+ROLE_SKILL_CONTEXT = (
+    " After that, invoke the Skill tool with {skill}: it holds {name}'s working knowledge "
+    "for this environment."
+)
+
+IGNORE_CONTEXT = (
+    " If you are a teammate or worker another session spawned, you are not {name}: ignore this "
+    "note."
+)
+
+
+def role_skill(name: str, cwd: str) -> str | None:
+    """``weside-<name lowercased>`` when its SKILL.md exists in the project or the user's skills."""
+    skill = "weside-" + name.lower()
+    if os.sep in skill or (os.altsep and os.altsep in skill) or ".." in skill:
+        return None
+    roots = [Path(cwd) / ".claude" / "skills"] if cwd else []
+    roots.append(Path.home() / ".claude" / "skills")
+    for root in roots:
+        if (root / skill / "SKILL.md").is_file():
+            return skill
+    return None
 
 
 def enabled() -> bool:
@@ -67,8 +101,20 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
             return None
         specific: dict = {"hookEventName": "SessionStart", "sessionTitle": pin}
         bound = read_binding(hook_input.get("session_id", ""))
+        cwd = hook_input.get("cwd") or os.getcwd()
         if not bound or bound.lower() != pin.lower():
-            specific["additionalContext"] = PINNED_CONTEXT.format(name=pin)
+            skill = role_skill(pin, cwd)
+            specific["additionalContext"] = PINNED_CONTEXT.format(
+                name=pin,
+                role_skill=ROLE_SKILL_CONTEXT.format(skill=skill, name=pin) if skill else "",
+                ignore=IGNORE_CONTEXT.format(name=pin),
+            )
+        elif hook_input.get("source") in ("startup", "resume"):
+            skill = role_skill(pin, cwd)
+            if skill:
+                specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
+                    skill=skill, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
+                )
         return {"hookSpecificOutput": specific}
     if enabled():
         return {

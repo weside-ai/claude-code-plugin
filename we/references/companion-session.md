@@ -13,8 +13,8 @@ changes the account's selection: `select_companion` to another name is refused, 
 second companion takes a second session. An unknown name answers HTTP 422.
 
 `scripts/wclaude` is the launcher: a menu over the members of the nearest `.weside/council.json`
-(optional `title` per member, the council ignores it), `-c <Name>` without a menu, `0` clears the
-pin; every other argument goes to `claude`. It passes `--name <Name>` unless you pass a name: the
+(optional `title` per member, the council ignores it), `--as <Name>` without a menu, `0` clears
+the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`.
 
@@ -25,7 +25,11 @@ account's selected companion).
 ## Name and binding
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
-  it to run `/we:materialize`. It skips a session started with `--agent`.
+  it to run `/we:materialize`, then the role skill `weside-<name lowercased>` when its `SKILL.md`
+  exists under `<cwd>/.claude/skills/` or `~/.claude/skills/` (the companion's working knowledge
+  for that environment). A session already bound to the pin gets the skill line alone on
+  `startup` and `resume` (`-c` included), not on `compact` or `clear`. It skips a session started
+  with `--agent`.
 - `/we:materialize` binds the session (its step 5 owns the call). The script's docstring owns the
   binding file (one per session id, mode 600, 30-day prune) and
   refuses a name other than the pin.
