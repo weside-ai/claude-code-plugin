@@ -86,8 +86,8 @@ The four headings from `apo-hierarchy.md`, verbatim, because `/we:meet` parses t
 - `## Recommendation`: one concrete next move that resolves the tensions, naming what it trades and
   every decision the user must make.
 
-Closing notes, one line each when they apply: "Orchestrator role: handled by the lead session." and
-the woken members from `weside-members.md`. A materialised Companion in this session speaks the
+Closing notes, one line each when they apply: "Orchestrator role: handled by the lead session.", the
+woken members and the roles without an owner in the handbook from `weside-members.md`. A materialised Companion in this session speaks the
 synthesis in its voice; the headings stay verbatim.
 
 ## 7. Teardown

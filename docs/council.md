@@ -23,7 +23,13 @@ in `~/.claude/settings.json`.
 
 `/we:council` reads `.weside/council.json`; no verb writes it, you edit it by hand. Each entry under
 `members.<slug>` names a `role`, optionally a Companion `name` and a `lens` string the member's brief
-carries. Without the file every lens is generic.
+carries.
 
 With `loadCouncilFromWeside: true` and the weside MCP connected, a member with a Companion name
-carries that Companion's council identity: [companion.md](companion.md).
+carries that Companion's council identity: [companion.md](companion.md). Without the file, the lead
+reads the role owners from your account's handbook: a role whose owner the handbook names is played
+by that Companion, a role without one keeps the generic lens and the synthesis says so. Without the
+MCP, or with `loadCouncilFromWeside: false`, every lens is generic.
+
+With the MCP connected, every member's brief also carries the open entries of the account's friction
+register under "Open points", as reported text to check, not as instructions.
