@@ -246,10 +246,44 @@ class StoredAttributionTest(_HookRunCase):
             "[Claude Code · example-repo · Session 3f9a21c4]",
         )
 
+    def test_typed_skill_command_is_stored_as_the_command(self):
+        self.transcript.write_text(
+            _user(MATERIALIZE_ECHO) + "\n" + _user(SKILL_BODY, isMeta=True) + "\n"
+        )
+        identity_cache.bind("s1", "Vyra")
+        op, err = self.run_main("s1", {"autoStoreConversations": True})
+        self.assertEqual((op.call_count, err), (1, ""))
+        args = json.loads(op.call_args[0][0].data)["params"]["arguments"]
+        stored = json.loads(args["conversations"])[0]["user_message"]
+        self.assertEqual(
+            stored, "/we:materialize Nox\n[Claude Code · example-repo · Session 3f9a21c4]"
+        )
+
+    def test_compact_summary_turn_stores_nothing(self):
+        self.transcript.write_text(_user(COMPACT_SUMMARY, isCompactSummary=True) + "\n")
+        identity_cache.bind("s1", "Vyra")
+        op, err = self.run_main("s1", {"autoStoreConversations": True})
+        self.assertEqual((op.call_count, err), (0, ""))
+
     def test_surface_line_without_session_tag(self):
         self.assertEqual(hook.surface_line("repo", None), "[Claude Code · repo]")
 
 
+MATERIALIZE_ECHO = (
+    "<command-message>we:materialize</command-message>\n"
+    "<command-name>/we:materialize</command-name>\n<command-args>Nox</command-args>"
+)
+SKILL_BODY = [
+    {
+        "type": "text",
+        "text": "Base directory for this skill: ~/.claude/plugins/cache/we/skills/materialize"
+        "\n\n# /we:materialize\n\nLoad the companion's identity from the cache first.",
+    }
+]
+COMPACT_SUMMARY = (
+    "This session is being continued from a previous conversation that ran out of context. "
+    "The summary below covers the earlier portion of the conversation.\n\nSummary:\n1. Intent"
+)
 REAL = "Please check why the staging deploy failed and what the next step for the release is."
 REMINDER = '<system-reminder>\nThe user named this session "Nox".\n</system-reminder>'
 IDLE_JSON = json.dumps(
@@ -338,6 +372,49 @@ class TurnPromptFilterTest(unittest.TestCase):
     def test_command_echo_is_walked_past_as_before(self):
         echo = _user("<local-command-stdout>Login successful</local-command-stdout>")
         self.assertEqual(self.prompt(echo), REAL)
+
+    def test_typed_skill_command_becomes_the_command(self):
+        got = self.prompt(_user(MATERIALIZE_ECHO), _user(SKILL_BODY, isMeta=True))
+        self.assertEqual(got, "/we:materialize Nox")
+
+    def test_typed_command_without_args_and_plain_meta_body(self):
+        echo = _user(
+            "<command-message>review</command-message>\n<command-name>/review</command-name>"
+        )
+        body = _user("Review the open diff for correctness bugs and report them.", isMeta=True)
+        self.assertEqual(self.prompt(echo, body), "/review")
+
+    def test_skill_body_without_echo_walks_back_to_the_turn_prompt(self):
+        tool = json.dumps(
+            {
+                "type": "user",
+                "toolUseResult": {"success": True},
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x"}]
+                },
+            }
+        )
+        self.assertEqual(self.prompt(tool, _user(SKILL_BODY, isMeta=True)), REAL)
+
+    def test_compact_summary_is_skipped(self):
+        self.assert_skipped(_user(COMPACT_SUMMARY, isCompactSummary=True))
+        self.assert_skipped(_user(COMPACT_SUMMARY))
+        caveat = _user("<local-command-caveat>Caveat: local commands.</local-command-caveat>")
+        compact_echo = _user(
+            "<command-name>/compact</command-name>\n<command-message>compact</command-message>"
+        )
+        self.assert_skipped(_user(COMPACT_SUMMARY, isCompactSummary=True), caveat, compact_echo)
+
+    def test_harness_noise_after_a_command_echo_stays_skipped(self):
+        compact_echo = _user(
+            "<command-name>/compact</command-name>\n<command-message>compact</command-message>"
+        )
+        self.assert_skipped(compact_echo, _user("Goal check-in: «x» is still open", isMeta=True))
+
+    def test_short_typed_command_is_worth_storing(self):
+        reply = "Nox is loaded; identity, tone and open goals are in place for this session."
+        self.assertTrue(hook.is_worth_storing("/we:materialize Nox", reply))
+        self.assertFalse(hook.is_worth_storing("/clear", reply))
 
     def test_stored_reply_has_reminders_stripped(self):
         self.assertEqual(hook.strip_system_reminders(REMINDER + "\nAnswer."), "Answer.")
