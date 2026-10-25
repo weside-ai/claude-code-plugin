@@ -4,19 +4,20 @@
 # then runs `WESIDE_COMPANION=<Name> claude --name <Name> <your args>` (no --name if you pass one).
 #   wclaude                 menu, then claude
 #   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
-#   wclaude -c <Name> ...   no menu; the rest goes to claude (claude's own -c: use --continue)
+#   wclaude -c              menu, then claude -c (claude's own --continue)
+#   wclaude --as <Name> ... no menu; the rest goes to claude
 # Choice 0 starts claude with the pin cleared (WESIDE_COMPANION empty = no companion).
 # Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
 set -euo pipefail
 
 usage() {
-  echo "usage: wclaude [-c <Name>] [claude arguments...]" >&2
+  echo "usage: wclaude [--as <Name>] [claude arguments...]" >&2
   exit 2
 }
 
 pick=""
 picked=0
-if [[ "${1:-}" == "-c" ]]; then
+if [[ "${1:-}" == "--as" ]]; then
   [[ $# -ge 2 && -n "$2" ]] || usage
   pick=$2
   picked=1

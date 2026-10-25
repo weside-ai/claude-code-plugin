@@ -108,6 +108,55 @@ class MaterializeOnStartTest(unittest.TestCase):
         )
         self.assertIsNone(out)
 
+    def role_skill(self, root, name="weside-vyra"):
+        skill = root / ".claude" / "skills" / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+
+    def test_role_skill_in_the_project_is_named(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            pin="Vyra", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertIn("/weside-vyra", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_role_skill_in_the_user_skills_is_named(self):
+        self.role_skill(self.home)
+        out = self.run_hook(pin="Vyra")
+        self.assertIn("/weside-vyra", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_no_role_skill_no_mention(self):
+        project = self.home / "project"
+        self.role_skill(project, name="weside-other")
+        out = self.run_hook(
+            pin="Vyra", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertNotIn("weside-", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_worker_gets_no_role_skill(self):
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            pin="Vyra",
+            hook_input={
+                "session_id": "s1",
+                "source": "startup",
+                "cwd": str(project),
+                "agent_type": "w",
+            },
+        )
+        self.assertIsNone(out)
+
+    def test_unpinned_gets_no_role_skill(self):
+        self.settings({"companion": "Vyra", "autoMaterialize": True})
+        project = self.home / "project"
+        self.role_skill(project)
+        out = self.run_hook(
+            hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )
+        self.assertNotIn("weside-", out["hookSpecificOutput"]["additionalContext"])
+
     def test_empty_pin_is_no_pin(self):
         self.settings({"autoMaterialize": False})
         self.assertIsNone(self.run_hook(pin="  "))

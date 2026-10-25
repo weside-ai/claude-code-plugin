@@ -8,7 +8,10 @@ Pinned (``WESIDE_COMPANION=<Name> claude``): the session is titled ``<Name>``
 option names another one and binds the session to it. A session the binding
 file already ties to the pin (a resume) gets the title only. A session started
 with ``--agent`` (``agent_type`` in the input) is a worker, never the companion:
-it gets nothing. Contract: ``references/companion-session.md``.
+it gets nothing. When a role skill ``weside-<name lowercased>`` exists in the
+project (``<cwd>/.claude/skills/``) or in ``~/.claude/skills/``, the note also
+asks the session to invoke it after materializing. Contract:
+``references/companion-session.md``.
 
 Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
@@ -39,6 +42,24 @@ PINNED_CONTEXT = (
     "another session spawned, you are not {name}: ignore this note."
 )
 
+ROLE_SKILL_CONTEXT = (
+    " After that, invoke the Skill tool with {skill}: it holds {name}'s working knowledge "
+    "for this environment."
+)
+
+
+def role_skill(name: str, cwd: str) -> str | None:
+    """``weside-<name lowercased>`` when its SKILL.md exists in the project or the user's skills."""
+    skill = "weside-" + name.lower()
+    if os.sep in skill or (os.altsep and os.altsep in skill) or ".." in skill:
+        return None
+    roots = [Path(cwd) / ".claude" / "skills"] if cwd else []
+    roots.append(Path.home() / ".claude" / "skills")
+    for root in roots:
+        if (root / skill / "SKILL.md").is_file():
+            return skill
+    return None
+
 
 def enabled() -> bool:
     try:
@@ -68,7 +89,11 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
         specific: dict = {"hookEventName": "SessionStart", "sessionTitle": pin}
         bound = read_binding(hook_input.get("session_id", ""))
         if not bound or bound.lower() != pin.lower():
-            specific["additionalContext"] = PINNED_CONTEXT.format(name=pin)
+            context = PINNED_CONTEXT.format(name=pin)
+            skill = role_skill(pin, hook_input.get("cwd") or os.getcwd())
+            if skill:
+                context += ROLE_SKILL_CONTEXT.format(skill="/" + skill, name=pin)
+            specific["additionalContext"] = context
         return {"hookSpecificOutput": specific}
     if enabled():
         return {

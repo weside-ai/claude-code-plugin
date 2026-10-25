@@ -26,13 +26,15 @@ and catches up on what `<Name>` lived since yesterday. Every weside MCP request 
 `<Name>`, so two sessions as two Companions run side by side without steering each other; switching
 companions inside a pinned session is refused. The statusline shows the bound Companion. Workers the
 session starts are not the Companion: `/we:sideload` clears the pin for them. At milestones the session
-writes a `worklog` memory the Companion reads on its other surfaces. Contract:
+writes a `worklog` memory the Companion reads on its other surfaces. A project skill named `weside-<name>` (lower case, in
+`.claude/skills/` of the repo or of your home) is the Companion's working knowledge there: a pinned
+session is asked to invoke it right after materializing. Contract:
 `we/references/companion-session.md`.
 
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
 (name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.
-`wclaude -c <Name>` skips the menu; every other argument goes to `claude` unchanged (`wclaude
---resume`), after `--name <Name>` so `claude agents` lists the session as `<Name>` (left out when you
+`wclaude --as <Name>` skips the menu; every other argument goes to `claude` unchanged (`wclaude
+-c` continues, `wclaude --resume` resumes), after `--name <Name>` so `claude agents` lists the session as `<Name>` (left out when you
 pass `--name` yourself). `/we:setup` offers to install it to `~/.local/bin/wclaude`; by hand:
 `python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
 `python3`.
