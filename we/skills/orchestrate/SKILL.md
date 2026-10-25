@@ -36,8 +36,7 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
-   Skip it when `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py binding --session "$CLAUDE_CODE_SESSION_ID"`
-   exits 0: a companion session keeps its companion's name, and the run shows through the focus file.
+   A bound companion session skips it (`references/companion-session.md` § Name and binding).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
    section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first

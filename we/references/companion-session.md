@@ -16,14 +16,15 @@ second companion takes a second session. An unknown name answers HTTP 422.
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
   it to run `/we:materialize`. It skips a session started with `--agent`.
-- `/we:materialize` binds the session:
-  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py bind --session "$CLAUDE_CODE_SESSION_ID" --companion <Name>`.
-  The script's docstring owns the binding file (one per session id, mode 600, 30-day prune) and
+- `/we:materialize` binds the session (its step 5 owns the call). The script's docstring owns the
+  binding file (one per session id, mode 600, 30-day prune) and
   refuses a name other than the pin.
 - The binding is the one record the Stop hook and the statusline read. `/clear` starts a new session
   id, so the session is unbound until it materializes again; with a pin the hook asks for that.
-- A bound session keeps its companion's name as its title; skills that would `/rename` it to a
-  run key skip that step (the run key reaches the statusline through `~/.claude/we-focus/`).
+- A bound session keeps its companion's name as its title. Every skill that would print
+  `/rename <KEY>` skips it when
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py binding --session "$CLAUDE_CODE_SESSION_ID"`
+  exits 0 (the run key reaches the statusline through `~/.claude/we-focus/`).
 
 ## Workers
 
@@ -53,9 +54,8 @@ must know also goes to the shared room through `execute_tool(name="send_to_other
 
 ## Catch-up
 
-`/we:materialize` ends with one `execute_tool(name="read_timeline", arguments='{"include":
-["messages","memories"], "since": "<yesterday, ISO date>"}')`, so the session starts from what the
-companion lived elsewhere. A missing tool or an error is named once; the session goes on.
+`/we:materialize` ends with one `read_timeline` call (its step 6 owns the call and the error
+handling), so the session starts from what the companion lived elsewhere.
 
 ## Role owners
 

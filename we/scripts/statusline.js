@@ -141,12 +141,16 @@ process.stdin.on('end', () => {
     // ---- gather raw values ----
 
     // Companion — only for a session /we:materialize bound (scripts/identity_cache.py
-    // bind owns the file); an unbound session shows no segment.
+    // bind owns the file and its WE_SESSION_DIR override); an unbound session shows no segment.
     let companionName = '';
     if (/^[A-Za-z0-9_-]{1,128}$/.test(String(data.session_id || ''))) {
       try {
+        const override = process.env.WE_SESSION_DIR || '';
+        const sessionDir = override
+          ? override.replace(/^~(?=$|\/)/, os.homedir())
+          : path.join(os.homedir(), '.claude', 'we', 'sessions');
         const bound = JSON.parse(fs.readFileSync(
-          path.join(os.homedir(), '.claude', 'we', 'sessions', `${data.session_id}.json`), 'utf8'));
+          path.join(sessionDir, `${data.session_id}.json`), 'utf8'));
         if (typeof bound.companion === 'string') companionName = bound.companion.trim();
       } catch {}
     }
