@@ -12,7 +12,9 @@ With an account:
   only for a session that loaded its Companion with `/we:materialize` and under that Companion. A
   session that never materialized, a worker included, stores nothing. A turn the harness started
   (a `/goal` check, a background task's notification, an idle notice, system reminders only) is not
-  stored; a message from a teammate or another session is. System reminders are stripped.
+  stored; a message from a teammate or another session is, under its sender's name and marked as
+  not the owner's. Each stored turn starts with `[Claude Code · <repo> · Session <id>]`. System
+  reminders are stripped.
 - `/we:council` gives a member with a linked Companion that Companion's council identity. The server
   strips private context from it; a member that cannot be reached joins with the generic lens.
 
