@@ -103,8 +103,8 @@ class _FakeResponse:
         return b'event: message\ndata: {"result": {"isError": false}}\n'
 
 
-class BoundSessionOnlyTest(unittest.TestCase):
-    """A session stores only when /we:materialize bound it, and under the bound companion."""
+class _HookRunCase(unittest.TestCase):
+    """Runs the hook's main() against a temp transcript, a repo dir and a mocked MCP call."""
 
     USER = "Please explain how the session binding decides which companion stores this turn."
     ASSISTANT = "The Stop hook reads the binding file of this session id and stores under it."
@@ -153,6 +153,10 @@ class BoundSessionOnlyTest(unittest.TestCase):
             hook.main()
         return op, stderr.getvalue()
 
+
+class BoundSessionOnlyTest(_HookRunCase):
+    """A session stores only when /we:materialize bound it, and under the bound companion."""
+
     def test_bound_session_stores_under_the_bound_name(self):
         self.assertEqual(identity_cache.bind("s1", "Vyra"), 0)
         op, err = self.run_main("s1", {"autoStoreConversations": True, "companion": "Nox"})
@@ -188,6 +192,62 @@ class BoundSessionOnlyTest(unittest.TestCase):
         identity_cache.bind("s1", "Vyra")
         op, _ = self.run_main("s1", {"autoStoreConversations": False})
         self.assertEqual(op.call_count, 0)
+
+
+class StoredAttributionTest(_HookRunCase):
+    """The stored prompt names its surface; a message from another session never reads as the owner's."""
+
+    def stored_prompt(self, content):
+        self.transcript.write_text(_user(content) + "\n")
+        identity_cache.bind("s1", "Vyra")
+        op, err = self.run_main("s1", {"autoStoreConversations": True})
+        self.assertEqual((op.call_count, err), (1, ""))
+        args = json.loads(op.call_args[0][0].data)["params"]["arguments"]
+        return json.loads(args["conversations"])[0]["user_message"]
+
+    def test_owner_prompt_is_unchanged_before_the_surface_line(self):
+        stored = self.stored_prompt(self.USER)
+        self.assertEqual(stored, f"{self.USER}\n[Claude Code · example-repo · Session 3f9a21c4]")
+
+    def test_cross_session_message_is_attributed_to_its_sender(self):
+        stored = self.stored_prompt(
+            "Another Claude session sent a message:\n"
+            '<cross-session-message from="uds:/tmp/s.sock" from-name="Nox">\n'
+            "Maintenance done, the staging cluster is back.\n</cross-session-message>"
+        )
+        self.assertEqual(
+            stored,
+            "Message from Nox (another Claude Code session, not the owner):\n"
+            "Maintenance done, the staging cluster is back.\n"
+            "[Claude Code · example-repo · Session 3f9a21c4]",
+        )
+        self.assertNotIn("<cross-session-message", stored)
+        self.assertNotIn("Another Claude session", stored)
+
+    def test_cross_session_message_without_name_falls_back_to_its_address(self):
+        got = hook.attribute_prompt(
+            '<cross-session-message from="uds:/tmp/s.sock">Hello there.</cross-session-message>'
+        )
+        self.assertEqual(
+            got,
+            "Message from uds:/tmp/s.sock (another Claude Code session, not the owner):\n"
+            "Hello there.",
+        )
+
+    def test_teammate_message_is_attributed_to_the_agent(self):
+        stored = self.stored_prompt(
+            '<teammate-message teammate_id="team-lead" color="blue">\n'
+            "Verify the two merged stories on staging, read-only.\n</teammate-message>"
+        )
+        self.assertEqual(
+            stored,
+            "Message from team-lead (an agent of this session's team, not the owner):\n"
+            "Verify the two merged stories on staging, read-only.\n"
+            "[Claude Code · example-repo · Session 3f9a21c4]",
+        )
+
+    def test_surface_line_without_session_tag(self):
+        self.assertEqual(hook.surface_line("repo", None), "[Claude Code · repo]")
 
 
 REAL = "Please check why the staging deploy failed and what the next step for the release is."

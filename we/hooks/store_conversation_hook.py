@@ -20,10 +20,12 @@ Flow:
   3. Read the session's binding; unbound → return silently
   4. Extract the turn's prompt from the transcript JSONL, system reminders stripped;
      a harness-started turn (goal Stop-hook feedback, task notification, idle notice,
-     system reminders only) stores nothing. Teammate and cross-session messages count.
+     system reminders only) stores nothing. Teammate and cross-session messages count,
+     stored with their sender named (``attribute_prompt``), never as the owner's words.
   5. Filter: skip short messages, commands, tool-only turns
   6. Resolve token (Claude Code MCP OAuth)
-  7. Call weside MCP store_conversations via HTTP (JSON-RPC over SSE),
+  7. End the stored prompt with ``[Claude Code · <repo> · Session <tag>]``, call weside
+     MCP store_conversations via HTTP (JSON-RPC over SSE),
      ``?companion=<bound name>`` and the session's ``repo_id``
 
 Warnings on auth failure are emitted to stderr so Silent-Fails become visible.
@@ -33,6 +35,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import html
 import json
 import os
 import re
@@ -291,6 +294,43 @@ def _is_noise_prompt(text: str) -> bool:
     return _is_idle_notification(body)
 
 
+_ENVELOPE = re.compile(r"<(cross-session-message|teammate-message)\b([^>]*)>(.*?)</\1>", re.S)
+_ATTR = re.compile(r'([\w-]+)="([^"]*)"')
+_ENVELOPE_SPEAKER = {
+    # tag: (attributes naming the sender, first non-empty wins; who the sender is)
+    "cross-session-message": (("from-name", "from"), "another Claude Code session"),
+    "teammate-message": (("teammate_id",), "an agent of this session's team"),
+}
+
+
+def attribute_prompt(text: str) -> str:
+    """Replace each message envelope by its inner text under an explicit sender line.
+
+    A cross-session or teammate message started the turn, not the owner: stored raw,
+    the companion would recall another session's words as the owner's. The
+    ``store_conversations`` exchange has no speaker field, so the sender goes into the
+    text. A prompt without an envelope comes back unchanged.
+    """
+    if not _ENVELOPE.search(text):
+        return text
+    if text.startswith(_CROSS_SESSION_PREFIX):
+        text = text[len(_CROSS_SESSION_PREFIX) :]
+
+    def _attributed(match: re.Match) -> str:
+        tag, attrs, inner = match.group(1), dict(_ATTR.findall(match.group(2))), match.group(3)
+        keys, kind = _ENVELOPE_SPEAKER[tag]
+        name = next((attrs[k] for k in keys if attrs.get(k)), "unknown")
+        return f"Message from {html.unescape(name)} ({kind}, not the owner):\n{inner.strip()}"
+
+    return _ENVELOPE.sub(_attributed, text).strip()
+
+
+def surface_line(project: str, tag: str | None) -> str:
+    """The stored turn's visible origin, last line of the prompt so the memory title keeps the content."""
+    session = f" · Session {tag}" if tag else ""
+    return f"[Claude Code · {project}{session}]"
+
+
 def _is_context_entry(text: str) -> bool:
     """Slash-command echoes, local command output and interrupts: walked past, not the prompt."""
     return text.startswith(
@@ -445,11 +485,13 @@ def main() -> None:
     # 7. Store via MCP under the bound companion
     cwd = hook_input.get("cwd", os.getcwd())
     project = os.path.basename(cwd)
-    source_detail = _build_source_detail(project, _derive_session_tag(transcript_path))
+    tag = _derive_session_tag(transcript_path)
+    source_detail = _build_source_detail(project, tag)
     repo_id = _derive_repo_id(cwd)
+    prompt = condense(redact(attribute_prompt(user_msg)))
     exchange = [
         {
-            "user_message": condense(redact(user_msg)),
+            "user_message": f"{prompt}\n{surface_line(project, tag)}",
             "assistant_response": condense(redact(strip_system_reminders(assistant_msg))),
         }
     ]
