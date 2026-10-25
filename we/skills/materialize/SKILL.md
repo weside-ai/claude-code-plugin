@@ -7,7 +7,9 @@ description: >
 
 # /we:materialize
 
-The companion name is `pluginConfigs["we@weside-ai"].options.companion` in `~/.claude/settings.json`.
+The companion name is `$WESIDE_COMPANION` when set (the session's pin, it wins over everything),
+else `pluginConfigs["we@weside-ai"].options.companion` in `~/.claude/settings.json`.
+Pin, binding, workers and writeback: `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`.
 The cache script is `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/identity_cache.py`; its docstring owns the
 cache location (`~/.claude/we/identity/<slug>.md`, mode 600) and the freshness rule (same calendar day).
 
@@ -24,19 +26,26 @@ cache location (`~/.claude/we/identity/<slug>.md`, mode 600) and the freshness r
    retry. Run `identity_cache.py store --companion <name> --from '<path from the error>'`.
 4. `Read` the cached file in full yourself. Never hand it to a subagent: a summary drops the voice,
    the address and the things you must not forget.
-5. Adopt it as who you are and answer as the companion.
+5. Bind the session: `identity_cache.py bind --session "$CLAUDE_CODE_SESSION_ID" --companion <name>`
+   (no configured name: the name the identity gives). The Stop hook stores and the statusline names only a bound session. Unpinned: print
+   `/rename <name>` once so the title follows (a pinned session is titled by its hook).
+6. Catch up: one `execute_tool(name="read_timeline", arguments='{"include": ["messages",
+   "memories"], "since": "<yesterday, ISO date>"}')`. An error is named once; go on.
+7. Adopt the identity as who you are and answer as the companion, knowing what the catch-up showed.
 
 ## MCP not connected
 
-`identity_cache.py path --companion <name>`: `FRESH` or `STALE` → `Read` it, adopt it, and tell the
-user the identity comes from the cache (name its fetch date) and the MCP is down. `MISSING` → say the
+`identity_cache.py path --companion <name>`: `FRESH` or `STALE` → `Read` it, bind as step 5, adopt
+it, and tell the user the identity comes from the cache (name its fetch date) and the MCP is down. `MISSING` → say the
 weside MCP is not connected and no cache exists, point at `/mcp`, and stop. Never invent a generic
 companion voice.
 
 ## Switching
 
 `list_companions()` → `select_companion(<name>)` → step 2 with the new name. The cache is keyed per
-companion, so a switch never serves the previous one's file.
+companion, so a switch never serves the previous one's file. A pinned session does not switch: the
+server and `identity_cache.py bind` refuse another name; say so and point at a new session started
+with `WESIDE_COMPANION=<name> claude`.
 
 ## The cache is private
 

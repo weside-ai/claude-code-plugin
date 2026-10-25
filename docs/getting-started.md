@@ -43,7 +43,8 @@ For a change too small for a worker, `/we:orchestrate --solo` builds it in the c
 |---|---|---|
 | `companion` | empty | weside Companion name |
 | `autoMaterialize` | `false` | loads the Companion at session start |
-| `autoStoreConversations` | `false` | stores meaningful turns as Companion memories |
+| `autoStoreConversations` | `false` | stores meaningful turns as Companion memories, only in a session that ran `/we:materialize` |
 | `loadCouncilFromWeside` | `true` | council members carry linked Companions' identities; `false` keeps every lens generic |
 
-The last three need a weside.ai account: [companion.md](companion.md).
+The last three need a weside.ai account: [companion.md](companion.md), which also shows how to start
+a session as one Companion (`WESIDE_COMPANION=<Name> claude`).

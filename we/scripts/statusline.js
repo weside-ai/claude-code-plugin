@@ -2,7 +2,7 @@
 // Claude Code Statusline — shipped by the "we" plugin (weside.ai).
 // Installed by /we:setup via scripts/install_statusline.py, which copies this
 // file to ~/.claude/we-statusline.js and points settings.json at the copy.
-// Shows: model | branch (+ PR) | dirname | context bar | RAM | cost | rate limits
+// Shows: companion | model | branch (+ PR) | dirname | context bar | RAM | cost | rate limits
 // Single line, width-aware: segments are built as {plain, colorize} pairs so
 // truncation always cuts the plain text (never mid-escape-sequence), and the
 // whole line is fit against the terminal width before ANSI colors are applied.
@@ -140,6 +140,21 @@ process.stdin.on('end', () => {
 
     // ---- gather raw values ----
 
+    // Companion — only for a session /we:materialize bound (scripts/identity_cache.py
+    // bind owns the file and its WE_SESSION_DIR override); an unbound session shows no segment.
+    let companionName = '';
+    if (/^[A-Za-z0-9_-]{1,128}$/.test(String(data.session_id || ''))) {
+      try {
+        const override = process.env.WE_SESSION_DIR || '';
+        const sessionDir = override
+          ? override.replace(/^~(?=$|\/)/, os.homedir())
+          : path.join(os.homedir(), '.claude', 'we', 'sessions');
+        const bound = JSON.parse(fs.readFileSync(
+          path.join(sessionDir, `${data.session_id}.json`), 'utf8'));
+        if (typeof bound.companion === 'string') companionName = bound.companion.trim();
+      } catch {}
+    }
+
     // Model (from actual runtime, not config)
     const modelName = data.model?.display_name || 'Claude';
     const modelId = data.model?.id || '';
@@ -242,6 +257,9 @@ process.stdin.on('end', () => {
     // Variable-length segments, each with a floor it may be truncated down
     // to. Branch and PR are never dropped whole — they're the whole point.
     const model = { plain: modelPlain, floor: 10, color: (s) => `\x1b[2m${s}\x1b[0m` };
+    const companionSeg = companionName
+      ? { plain: companionName, floor: Math.min(companionName.length, 12), color: (s) => `\x1b[1;35m${s}\x1b[0m`, dir: 'right' }
+      : null;
     const branchSeg = (branch || worktree)
       ? { plain: branchPlainFull, floor: 14, color: (s) => `\x1b[36m${s}\x1b[0m`, dir: 'right' }
       : null;
@@ -260,7 +278,7 @@ process.stdin.on('end', () => {
       return sum + Math.max(0, visible.length - 1) * SEP.length;
     }
 
-    let required = [model, branchSeg, prSeg, dirSeg, ctxSeg];
+    let required = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg];
 
     // Drop optional segments (lowest priority first) while over budget.
     while (widthOf(required.concat(opts)) > budget && opts.some(Boolean)) {
@@ -274,7 +292,7 @@ process.stdin.on('end', () => {
     let guard = 0;
     while (widthOf(required.concat(opts)) > budget && guard < 400) {
       guard++;
-      const shrinkable = [model, branchSeg, dirSeg].filter((s) => s && s.plain.length > s.floor);
+      const shrinkable = [companionSeg, model, branchSeg, dirSeg].filter((s) => s && s.plain.length > s.floor);
       if (shrinkable.length === 0) break;
       shrinkable.sort((a, b) => b.plain.length - a.plain.length);
       const s = shrinkable[0];
@@ -283,7 +301,7 @@ process.stdin.on('end', () => {
     }
 
     // ---- assemble ----
-    const parts = [model, branchSeg, prSeg, dirSeg, ctxSeg, ...opts]
+    const parts = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg, ...opts]
       .filter(Boolean)
       .map((s) => s.color(s.plain));
 

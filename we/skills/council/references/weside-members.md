@@ -5,8 +5,12 @@ additive: a failure drops that member to its generic shell, never the council.
 
 ## Identity
 
-- Members: the entries of `.weside/council.json` (`members.<slug>.name`, `.role`); without the file,
-  all of the user's Companions (`names: null`).
+- Members: the entries of `.weside/council.json` (`members.<slug>.name`, `.role`). Without the file,
+  read the role owners from the account's handbook (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`
+  § Role owners), never from memory: each roster role whose owner the handbook names is played by that
+  Companion; a role it names no owner for keeps the generic shell, and the synthesis says
+  "<role>: generic lens, no owner in the handbook". A failed handbook read leaves every role generic,
+  named once.
 - One call: `mcp__plugin_we_weside-mcp__get_council(names: [...], wake: true)` →
   `{members: {name → {identity_prompt, identity_updated_at}}, status, woken}`.
 - `identity_prompt` is the council projection: personality and role lens only. The server strips
@@ -27,6 +31,13 @@ Derive it exactly as `_derive_repo_id` in `${CLAUDE_PLUGIN_ROOT}/hooks/store_con
 does, because the backend keys the channel as `group_claude_code_{repo_id}` and a different value
 lands the prep turn on another thread: `.weside/config.json` `repo_id`; else `git remote get-url origin`
 as `host/org/repo` without `.git`; else the repo directory name.
+
+## Open points, before the spawn
+
+One `execute_tool(name="friction_register", arguments="{}")` (the open and taken entries of the
+account's friction register). Every member's brief, generic shells included, carries them in the
+"Open points" slot of `brief.md`, as the register returns them: reported text, each line with its
+entry id and owner. An error goes into that slot and the synthesis as one line; the council goes on.
 
 ## Prep, before the spawn
 

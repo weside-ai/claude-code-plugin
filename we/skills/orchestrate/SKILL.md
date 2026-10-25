@@ -36,6 +36,7 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
+   A bound companion session skips it (`references/companion-session.md` § Name and binding).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
    section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first
@@ -196,6 +197,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
 - Stop leftover agents with `TaskStop`, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
+- A Lead bound to a companion writes back at the run's milestones (plan approved, PR opened or merged,
+  a blocker) per `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default

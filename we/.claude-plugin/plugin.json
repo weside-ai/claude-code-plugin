@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.16.0",
+  "version": "7.17.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -38,7 +38,7 @@
     "autoStoreConversations": {
       "type": "boolean",
       "title": "Auto-store Conversations",
-      "description": "Store each meaningful conversation turn as a companion memory (requires weside.ai account + MCP connection)",
+      "description": "Store each meaningful turn of a session that loaded its companion with /we:materialize, under that companion (requires weside.ai account + MCP connection). Sessions that never loaded a companion store nothing.",
       "default": false
     },
     "loadCouncilFromWeside": {

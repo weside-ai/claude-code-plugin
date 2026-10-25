@@ -27,7 +27,8 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
 - **Key.** `{TICKET}` is the Jira key, the bare GitHub issue number, or a kebab-case slug without ticketing; it
   never varies. Tool detection, reading and moving tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
-  Print `/rename {TICKET}` once when the session title is not already the key.
+  Print `/rename {TICKET}` once when the session title is not already the key; a bound companion
+  session skips it (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Name and binding).
 - **Ticket with all comments.** Comments carry the later corrections. Note the newest comment's id for
   `comments_read_through`. `epic:` is the ticket's parent key; plan-only, the slug of the
   `docs/plans/*-epic.md` that lists the story.

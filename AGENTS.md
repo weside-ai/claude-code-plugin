@@ -22,7 +22,7 @@ we/                               plugin root
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   agents/                         dev-medium, dev-high, council-<role> lenses
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
-                                  optimization-store, instruction-sources, instruction-authoring)
+                                  optimization-store, instruction-sources, instruction-authoring, companion-session)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   hooks/                          hooks.json + flow/ (function-hooks module: the /flow pane, phase.ts logic, *.test.ts)
                                   + SessionStart materialize and optimization reminder, Stop store-conversation,

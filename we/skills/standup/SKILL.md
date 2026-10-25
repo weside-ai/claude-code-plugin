@@ -102,4 +102,5 @@ YOUR MOVE <one action with its command — or: nothing, because …>
 Gather for the argument key when one is given (its plan, ticket and PR found by key), else for the
 current branch: `git status -sb`, the plan and ticket, the PR and its required checks,
 `git log --oneline origin/<default>..HEAD` (at most 10, current branch only). The session title should carry the ticket
-key; if it does not, print `/rename <KEY>` once.
+key; if it does not, print `/rename <KEY>` once, unless the session is a bound companion session
+(`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Name and binding).
