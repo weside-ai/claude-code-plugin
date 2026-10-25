@@ -25,4 +25,11 @@ session starts are not the Companion: `/we:sideload` clears the pin for them. At
 writes a `worklog` memory the Companion reads on its other surfaces. Contract:
 `we/references/companion-session.md`.
 
+`wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
+(name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.
+`wclaude -c <Name>` skips the menu; every other argument goes to `claude` unchanged (`wclaude
+--resume`). `/we:setup` offers to install it to `~/.local/bin/wclaude`; by hand:
+`python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
+`python3`.
+
 Settings: [getting-started.md](getting-started.md#plugin-settings).

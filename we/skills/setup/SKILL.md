@@ -91,8 +91,9 @@ every lens is generic and still works." On yes:
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
    after both succeeded. A small repo may want no vault: `vault: null` is valid.
 3. `.weside/weside.md` and `.weside/council.json` are written by no verb. `/we:council` reads
-   `council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`), which the user
-   edits by hand; without it every lens is generic.
+   `council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`; an optional
+   `title` only labels the member in the companion launcher's menu), which the user edits by hand;
+   without it every lens is generic.
 
 ## 5. Rule bridge and statusline
 
@@ -105,8 +106,14 @@ every lens is generic and still works." On yes:
   `~/.claude/we-focus/<session>.json`): run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py --status`.
   `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`
   refreshes `~/.claude/we-statusline.js`. `keep theirs` → keep the user's statusline and
-  mention `--apply --force` (backed up, `--revert` restores it). This and the council agents are the only
-  user-scope files setup touches.
+  mention `--apply --force` (backed up, `--revert` restores it).
+- **Companion launcher** `wclaude` (menu over `.weside/council.json`, then
+  `WESIDE_COMPANION=<Name> claude`; `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`): run
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_launcher.py --status`. `offer the launcher` → ask once,
+  on yes `--apply` into `~/.local/bin/wclaude`. `launcher installed` with a `NOTE` that the copy differs →
+  `--apply` refreshes it. `foreign wclaude` → keep the user's file and mention `--apply --force` (backed up,
+  `--revert` restores it). Relay a `NOTE` that `~/.local/bin` is not on PATH.
+- The statusline, the launcher and the council agents are the only user-scope files setup touches.
 
 ## 6. Instruction loop (optional, ask once)
 

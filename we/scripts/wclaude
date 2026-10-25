@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# wclaude — start Claude Code as a weside Companion (references/companion-session.md).
+# Lists the members of the nearest .weside/council.json (searched upwards from the cwd),
+# then runs `WESIDE_COMPANION=<Name> claude <your args>`.
+#   wclaude                 menu, then claude
+#   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
+#   wclaude -c <Name> ...   no menu; the rest goes to claude (claude's own -c: use --continue)
+# Choice 0 starts claude with the pin cleared (WESIDE_COMPANION empty = no companion).
+# Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
+set -euo pipefail
+
+usage() {
+  echo "usage: wclaude [-c <Name>] [claude arguments...]" >&2
+  exit 2
+}
+
+pick=""
+picked=0
+if [[ "${1:-}" == "-c" ]]; then
+  [[ $# -ge 2 && -n "$2" ]] || usage
+  pick=$2
+  picked=1
+  shift 2
+fi
+
+find_council() {
+  local d=$PWD
+  while :; do
+    if [[ -f "$d/.weside/council.json" ]]; then
+      echo "$d/.weside/council.json"
+      return 0
+    fi
+    [[ "$d" == "/" || -z "$d" ]] && return 1
+    d=$(dirname "$d")
+  done
+}
+
+# One line per member: "<name>\t<title, else role>". Members without a name are skipped.
+list_members() {
+  python3 - "$1" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1]) as fh:
+        members = json.load(fh).get("members") or {}
+except (OSError, ValueError, AttributeError) as exc:
+    sys.stderr.write("wclaude: cannot read %s: %s\n" % (sys.argv[1], exc))
+    sys.exit(0)
+if not isinstance(members, dict):
+    sys.exit(0)
+for member in members.values():
+    if not isinstance(member, dict):
+        continue
+    name = str(member.get("name") or "").strip()
+    if name:
+        label = member.get("title") or member.get("role") or ""
+        print(name + "\t" + " ".join(str(label).split()))
+PY
+}
+
+if [[ $picked -eq 0 ]]; then
+  council=$(find_council || true)
+  names=()
+  if [[ -n "$council" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      while IFS= read -r row; do
+        [[ -n "$row" ]] && names+=("$row")
+      done < <(list_members "$council")
+    else
+      echo "wclaude: python3 not found; council members not listed" >&2
+    fi
+  fi
+  count=${#names[@]}
+
+  if [[ -n "$council" ]]; then
+    shown=$council
+    case $council in "$HOME"/*) shown="~${council#"$HOME"}" ;; esac
+    echo "Companion for this session (from $shown):" >&2
+  else
+    echo "Companion for this session (no .weside/council.json found):" >&2
+  fi
+  i=1
+  for row in ${names[@]+"${names[@]}"}; do
+    printf '  %2d) %-12s %s\n' "$i" "${row%%$'\t'*}" "${row#*$'\t'}" >&2
+    i=$((i + 1))
+  done
+  other=$i
+  printf '  %2d) %s\n' "$other" "other name..." >&2
+  printf '  %2d) %s\n' 0 "no companion (worker / neutral)" >&2
+
+  printf '> ' >&2
+  IFS= read -r choice || { echo "wclaude: no choice read" >&2; exit 1; }
+  choice=$(printf '%s' "$choice" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  if [[ -z "$choice" ]]; then
+    echo "wclaude: no choice; type a number or a name" >&2
+    exit 1
+  elif [[ "$choice" == "0" ]]; then
+    pick=""
+  elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+    n=$((10#$choice))
+    if ((n >= 1 && n <= count)); then
+      row=${names[$((n - 1))]}
+      pick=${row%%$'\t'*}
+    elif ((n == other)); then
+      printf 'Name: ' >&2
+      IFS= read -r pick || pick=""
+      pick=$(printf '%s' "$pick" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      [[ -n "$pick" ]] || { echo "wclaude: no name given" >&2; exit 1; }
+    else
+      echo "wclaude: no entry $choice" >&2
+      exit 1
+    fi
+  else
+    pick=$choice # a typed name works too
+  fi
+fi
+
+if [[ -n "$pick" ]]; then
+  printf '%s WESIDE_COMPANION=%q claude' '->' "$pick" >&2
+  [[ $# -gt 0 ]] && printf ' %q' "$@" >&2
+  printf '\n' >&2
+  WESIDE_COMPANION="$pick" exec claude "$@"
+else
+  printf '%s claude' '->' >&2
+  [[ $# -gt 0 ]] && printf ' %q' "$@" >&2
+  printf ' (no companion)\n' >&2
+  WESIDE_COMPANION="" exec claude "$@"
+fi
