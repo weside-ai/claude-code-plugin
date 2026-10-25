@@ -32,17 +32,4 @@ writes a `worklog` memory the Companion reads on its other surfaces. Contract:
 `python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
 `python3`.
 
-### Per-companion permissions
-
-Put a settings file at `~/.claude/we/profiles/<name>.json` (name lowercased, e.g. `ada.json`) and
-`wclaude` starts that Companion with `claude --settings <file>`, shown in its `->` line. Claude Code
-merges the file over your settings, so it can forbid or gate tools for that Companion only:
-
-```json
-{"permissions": {"deny": ["Bash(gh pr merge*)"]}}
-```
-
-It is a guard rail: it applies to Claude Code's own tools, and only when the session was started
-through `wclaude`. A name with `/` or a leading `.` gets no profile, nor does `0`.
-
 Settings: [getting-started.md](getting-started.md#plugin-settings).

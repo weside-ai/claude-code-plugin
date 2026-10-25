@@ -6,8 +6,6 @@
 #   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
 #   wclaude -c <Name> ...   no menu; the rest goes to claude (claude's own -c: use --continue)
 # Choice 0 starts claude with the pin cleared (WESIDE_COMPANION empty = no companion).
-# A profile ~/.claude/we/profiles/<name lowercased>.json, if present, is passed as
-# `claude --settings <file>` (merged over the user's settings: per-companion permissions).
 # Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
 set -euo pipefail
 
@@ -116,23 +114,10 @@ if [[ $picked -eq 0 ]]; then
   fi
 fi
 
-# Profile lookup: names containing "/" or starting with "." never map to a file.
-profile=""
-if [[ -n "$pick" && "$pick" != */* && "$pick" != .* ]]; then
-  lower=$(printf '%s' "$pick" | tr '[:upper:]' '[:lower:]')
-  if [[ -f "$HOME/.claude/we/profiles/$lower.json" ]]; then
-    profile="$HOME/.claude/we/profiles/$lower.json"
-  fi
-fi
-
 if [[ -n "$pick" ]]; then
   printf '%s WESIDE_COMPANION=%q claude' '->' "$pick" >&2
-  [[ -n "$profile" ]] && printf ' --settings %q' "$profile" >&2
   [[ $# -gt 0 ]] && printf ' %q' "$@" >&2
   printf '\n' >&2
-  if [[ -n "$profile" ]]; then
-    WESIDE_COMPANION="$pick" exec claude --settings "$profile" "$@"
-  fi
   WESIDE_COMPANION="$pick" exec claude "$@"
 else
   printf '%s claude' '->' >&2
