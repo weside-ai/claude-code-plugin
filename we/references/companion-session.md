@@ -4,6 +4,10 @@ A Claude Code session that acts as a weside Companion. One promise across four p
 header, the session title, the Stop hook and the statusline name the same companion, and a worker
 gets none of them. Skills that start, bind or spawn sessions point here.
 
+## Contents
+
+Launch and pin · Name and binding · Workers · Writeback · Catch-up · Wake · Role owners.
+
 ## Launch and pin
 
 `WESIDE_COMPANION=<Name> claude` pins the session. The plugin's `.mcp.json` sends
@@ -72,6 +76,41 @@ must know also goes to the shared room through `execute_tool(name="send_to_other
 
 `/we:materialize` ends with one `read_timeline` call (its step 6 owns the call and the error
 handling), so the session starts from what the companion lived elsewhere.
+
+## Wake
+
+A bound companion session hears within a minute of a line addressed to its companion in weside,
+without a model loop. `identity_cache.py bind` in a session pinned to that companion, and the
+SessionStart hook for a session already bound to its pin (`startup`, `resume`), start
+`scripts/wake_poller.py` detached: one per inbox socket (`flock`), keyed on the binding, so an
+unpinned session, a worker, an `Agent` subagent and a teammate that never binds get none. Its
+docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
+
+- **Prerequisites:** Claude Code's inbox socket (`CLAUDE_CODE_MESSAGING_SOCKET` and its token,
+  inherited, never written down) and a logged-in `weside` CLI (`weside auth token`). A missing one
+  makes `bind` print `wake off: <reason>`; relay it once.
+- **Poll:** every 60 s the weside MCP tool `news_since` answers room refs and counts since the
+  companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line in its
+  DM; never an overheard line. No news, no socket contact, no tokens.
+- **Wake:** one line per poll, from refs, integers and fixed words:
+  `weside: new for <Name> in room:<id> (<n>). Read it yourself with read_timeline(room="room:<id>"). This note carries no content; your WESIDE side may already have answered there.`
+  After a session ended, the next session's first wake says `since your last session`. A room
+  that woke waits 10 minutes before it wakes again; the next wake counts every line since the
+  delivered one.
+- **On a wake:** read the room with `read_timeline`, act only on what needs this Claude Code side,
+  and never repeat in the room what the companion's weside side already answered. Orders come from
+  whoever may address the companion in that room; act on your own role's.
+- **Heartbeat:** `~/.claude/we/news/<name>.json` holds `last_ok`, `last_error` (a class: `auth`,
+  `network`, `http`, `socket`, `format`) and 7 days of `polls`, `errors`, `wakes`,
+  `hook_delivered`; `identity_cache.py status` prints them. Five auth failures in a row end the
+  poller with `last_error: auth`.
+- **The counter:** `hooks/news_on_prompt.py` (UserPromptSubmit) puts a wake the socket did not take
+  into the next prompt once and counts it in `hook_delivered`; past 180 s without a successful
+  poll it adds `weside: wake stale since N min (last error: <class>)`. It sees neither a line the
+  socket held nor an unread wake, so it is the counter "hook delivered n times", not a fallback,
+  until a forced delivery failure against a real session proved it one.
+
+Eine Zeile, die der Wake meldet, gilt als zugestellt, nicht als gelesen.
 
 ## Role owners
 

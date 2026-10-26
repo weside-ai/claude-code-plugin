@@ -17,6 +17,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/news_on_prompt.py\""
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
