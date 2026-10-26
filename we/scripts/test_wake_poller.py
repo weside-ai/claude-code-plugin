@@ -99,7 +99,7 @@ class FakeMcp:
             def log_message(self, *args):
                 pass
 
-            def do_POST(self):  # noqa: N802 (BaseHTTPRequestHandler API)
+            def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 outer.requests.append({"headers": dict(self.headers), "body": body})
                 answer = outer.answers.pop(0) if outer.answers else {"cursor": 0, "rooms": []}

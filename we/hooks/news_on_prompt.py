@@ -8,7 +8,9 @@ Two lines it may add as context, nothing else, and no network call:
   hook claims it atomically (rename), prints the wake line once, deletes it, and adds 1 to the
   companion's ``hook_delivered`` counter for the UTC day. The line is rendered again from room
   refs and integers, so a note carries no text into the session.
-- For a session bound to its pin: when the companion's ``last_ok`` (or, before the first success,
+- For a session bound to its pin whose socket had a poller (its lock file
+  ``<news dir>/poller-<socket basename>.lock`` exists; a ``wake off`` bind never creates it):
+  when the companion's ``last_ok`` (or, before the first success,
   the poller's ``started``) is older than three poll intervals (180 s),
   ``weside: wake stale since N min (last error: <class>)``.
 
@@ -79,7 +81,8 @@ def pending_line(socket_path: str, now: float) -> str | None:
 
 def stale_line(hook_input: dict, environ: dict, now: float) -> str | None:
     pin = environ.get("WESIDE_COMPANION", "").strip()
-    if not pin:
+    sock = environ.get("CLAUDE_CODE_MESSAGING_SOCKET", "")
+    if not pin or not sock or not wake_poller.poller_lock_path(sock).exists():
         return None
     bound = read_binding(hook_input.get("session_id", ""))
     if not bound or bound.lower() != pin.lower():

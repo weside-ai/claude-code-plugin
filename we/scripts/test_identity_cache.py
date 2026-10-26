@@ -20,6 +20,7 @@ import time
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 import identity_cache as ic
 import wake_poller as wp
@@ -257,6 +258,18 @@ class WakeBindTest(unittest.TestCase):
         os.environ["PATH"] = "/nonexistent"
         self.assertEqual(self.bind(), ["wake off: the weside CLI is not installed"])
         self.assertFalse(wp.lock_held(self.inbox.path))
+
+    def test_a_spawn_that_fails_keeps_the_bind_and_names_the_class(self):
+        real_popen = wp.subprocess.Popen
+
+        def popen(args, **kwargs):
+            if str(args[1]).endswith("wake_poller.py"):
+                raise PermissionError("denied")
+            return real_popen(args, **kwargs)
+
+        with mock.patch.object(wp.subprocess, "Popen", side_effect=popen):
+            self.assertEqual(self.bind(), ["wake off: PermissionError"])
+        self.assertEqual(ic.read_binding("s-1"), "Nox")
 
     # AC 17
     def test_status_prints_the_heartbeat_of_the_bound_companion(self):

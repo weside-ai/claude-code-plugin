@@ -72,6 +72,11 @@ class NewsOnPromptTest(unittest.TestCase):
         self.assertEqual(out["hookEventName"], "UserPromptSubmit")
         return out["additionalContext"]
 
+    def poller_ran(self, socket_path=SOCKET):
+        """The lock file a poller (or its spawn probe) leaves for this session's socket."""
+        self.news.mkdir(parents=True, exist_ok=True)
+        wp.poller_lock_path(socket_path).touch()
+
     def set_state(self, **fields):
         with wp.locked_state("Nox") as state:
             state.update(fields)
@@ -132,6 +137,7 @@ class NewsOnPromptTest(unittest.TestCase):
     # AC 18
     def test_a_stale_poller_is_named_with_its_error_class(self):
         self.bind()
+        self.poller_ran()
         now = time.time()
         self.set_state(
             last_ok=wp.iso(now - 600), last_error={"class": "auth", "at": wp.iso(now - 60)}
@@ -140,16 +146,19 @@ class NewsOnPromptTest(unittest.TestCase):
 
     def test_a_fresh_poller_adds_nothing(self):
         self.bind()
+        self.poller_ran()
         self.set_state(last_ok=wp.iso(time.time() - 30))
         self.assertIsNone(self.run_hook())
 
     def test_a_poller_that_never_succeeded_is_stale_from_its_start(self):
         self.bind()
+        self.poller_ran()
         self.set_state(started=wp.iso(time.time() - 400))
         self.assertEqual(self.run_hook(), "weside: wake stale since 6 min (last error: none)")
 
     def test_unpinned_unbound_or_without_a_cursor_file_adds_nothing(self):
         self.bind()
+        self.poller_ran()
         self.assertIsNone(self.run_hook(), "no cursor file")
         self.set_state(last_ok=wp.iso(time.time() - 3600))
         self.assertIsNone(self.run_hook(pin=None))
@@ -157,8 +166,18 @@ class NewsOnPromptTest(unittest.TestCase):
         self.bind("s3", "Vyra")
         self.assertIsNone(self.run_hook(session="s3"))
 
+    def test_a_session_whose_poller_never_started_hears_no_stale_line(self):
+        """Another session of the companion left its cursor file; this one printed `wake off`."""
+        self.bind()
+        self.set_state(last_ok=wp.iso(time.time() - 3600))
+        self.assertIsNone(self.run_hook(), "no poller lock for this socket")
+        self.assertIsNone(self.run_hook(socket_path=""), "no inbox socket at all")
+        self.poller_ran("/tmp/cc-socks-test/9999.sock")
+        self.assertIsNone(self.run_hook(), "another socket's poller is not this session's")
+
     def test_pending_and_stale_together(self):
         self.bind()
+        self.poller_ran()
         self.refused_wake()
         self.set_state(last_ok=wp.iso(time.time() - 300))
         lines = self.run_hook().splitlines()

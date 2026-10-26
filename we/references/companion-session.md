@@ -89,28 +89,25 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 - **Prerequisites:** Claude Code's inbox socket (`CLAUDE_CODE_MESSAGING_SOCKET` and its token,
   inherited, never written down) and a logged-in `weside` CLI (`weside auth token`). A missing one
   makes `bind` print `wake off: <reason>`; relay it once.
-- **Poll:** every 60 s the weside MCP tool `news_since` answers room refs and counts since the
-  companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line in its
-  DM; never an overheard line. No news, no socket contact, no tokens.
+- **Poll:** about once a minute the weside MCP tool `news_since` answers room refs and counts
+  since the companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line
+  in its DM; never an overheard line. No news, no socket contact, no tokens.
 - **Wake:** one line per poll, from refs, integers and fixed words:
   `weside: new for <Name> in room:<id> (<n>). Read it yourself with read_timeline(room="room:<id>"). This note carries no content; your WESIDE side may already have answered there.`
   After a session ended, the next session's first wake says `since your last session`. A room
-  that woke waits 10 minutes before it wakes again; the next wake counts every line since the
-  delivered one.
+  that woke holds off before it wakes again; the next wake counts every line since the delivered
+  one. A line the wake reports counts as delivered, not as read.
 - **On a wake:** read the room with `read_timeline`, act only on what needs this Claude Code side,
   and never repeat in the room what the companion's weside side already answered. Orders come from
   whoever may address the companion in that room; act on your own role's.
-- **Heartbeat:** `~/.claude/we/news/<name>.json` holds `last_ok`, `last_error` (a class: `auth`,
-  `network`, `http`, `socket`, `format`) and 7 days of `polls`, `errors`, `wakes`,
-  `hook_delivered`; `identity_cache.py status` prints them. Five auth failures in a row end the
+- **Heartbeat:** `identity_cache.py status` prints the companion's last success, last error class
+  and the daily counters (polls, errors, wakes, hook deliveries). Repeated auth failures end the
   poller with `last_error: auth`.
 - **The counter:** `hooks/news_on_prompt.py` (UserPromptSubmit) puts a wake the socket did not take
-  into the next prompt once and counts it in `hook_delivered`; past 180 s without a successful
-  poll it adds `weside: wake stale since N min (last error: <class>)`. It sees neither a line the
-  socket held nor an unread wake, so it is the counter "hook delivered n times", not a fallback,
-  until a forced delivery failure against a real session proved it one.
-
-Eine Zeile, die der Wake meldet, gilt als zugestellt, nicht als gelesen.
+  into the next prompt once and counts it; in a session whose socket had a poller it names a poller
+  gone stale with its error class. It sees neither a line the socket held nor an unread wake, so it
+  is the counter "hook delivered n times", not a fallback, until a forced delivery failure against
+  a real session proved it one. Thresholds: that hook's docstring.
 
 ## Role owners
 

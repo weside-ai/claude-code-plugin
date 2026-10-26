@@ -244,7 +244,10 @@ def bind(session_id: str, companion: str) -> int:
     os.replace(tmp, target)
     print(f"BOUND {session_id} → {name}")
     if pin:
-        print(wake_poller.spawn(name))
+        try:
+            print(wake_poller.spawn(name))
+        except OSError as exc:
+            print(f"wake off: {type(exc).__name__}")
     return 0
 
 
