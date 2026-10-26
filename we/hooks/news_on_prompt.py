@@ -9,7 +9,7 @@ Two lines it may add as context, nothing else, and no network call:
   companion's ``hook_delivered`` counter for the UTC day. The line is rendered again from room
   refs and integers, so a note carries no text into the session.
 - For a session bound to its pin whose socket had a poller (its lock file
-  ``<news dir>/poller-<socket basename>.lock`` exists; a ``wake off`` bind never creates it):
+  ``<news dir>/poller-<socket basename>.lock`` exists; only a started poller creates it):
   when the companion's ``last_ok`` (or, before the first success,
   the poller's ``started``) is older than three poll intervals (180 s),
   ``weside: wake stale since N min (last error: <class>)``.

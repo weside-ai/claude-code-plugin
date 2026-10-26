@@ -615,12 +615,16 @@ class Poller:
 
 
 def lock_held(socket_path: str) -> bool:
-    """Whether a poller holds this socket's lock (probe: take it and release at once)."""
+    """Whether a poller holds this socket's lock (probe: take it and release at once).
+
+    Never creates the file: only ``main`` does, so its existence means a poller started on this
+    socket (``hooks/news_on_prompt.py`` gates the stale line on it).
+    """
     if fcntl is None:
         return False
     target = poller_lock_path(socket_path)
     try:
-        fd = os.open(str(target), os.O_RDWR | os.O_CREAT, 0o600)
+        fd = os.open(str(target), os.O_RDWR)
     except OSError:
         return False
     try:

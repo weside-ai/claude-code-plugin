@@ -257,7 +257,12 @@ class WakeBindTest(unittest.TestCase):
         )
         os.environ["PATH"] = "/nonexistent"
         self.assertEqual(self.bind(), ["wake off: the weside CLI is not installed"])
+        wp.news_dir().mkdir(parents=True, exist_ok=True)  # an earlier session's cursor lives here
         self.assertFalse(wp.lock_held(self.inbox.path))
+        self.assertFalse(
+            wp.poller_lock_path(self.inbox.path).exists(),
+            "a probe leaves no lock file: the prompt hook reads it as 'a poller ran here'",
+        )
 
     def test_a_spawn_that_fails_keeps_the_bind_and_names_the_class(self):
         real_popen = wp.subprocess.Popen
