@@ -20,10 +20,14 @@ Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
 ask the session to load the companion first. Off, absent or unreadable → the
 hook prints nothing.
+
+Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
+``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -31,6 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import wake_poller
 from identity_cache import read_binding
 
 CONTEXT = (
@@ -123,7 +128,31 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     return None
 
 
+def wake_companion(hook_input: dict, environ: dict | None = None) -> str | None:
+    """The companion whose wake poller this start spawns, or None.
+
+    Keyed on the binding, never on the environment alone: only a session already bound to its
+    pin (a resume, ``-c``) on ``startup``/``resume``; a fresh session spawns at its bind, a
+    worker (``--agent``) and an unpinned or unbound session never.
+    """
+    env = os.environ if environ is None else environ
+    pin = env.get("WESIDE_COMPANION", "").strip()
+    if not pin or hook_input.get("agent_type"):
+        return None
+    if hook_input.get("source") not in ("startup", "resume"):
+        return None
+    bound = read_binding(hook_input.get("session_id", ""))
+    if not bound or bound.lower() != pin.lower():
+        return None
+    return bound
+
+
 if __name__ == "__main__":
-    answer = output(read_input())
+    hook_input = read_input()
+    answer = output(hook_input)
     if answer is not None:
         print(json.dumps(answer))
+    companion = wake_companion(hook_input)
+    if companion:
+        with contextlib.suppress(Exception):
+            wake_poller.spawn(companion, check_login=False)

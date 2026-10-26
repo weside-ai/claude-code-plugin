@@ -12,11 +12,18 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HOOK = Path(__file__).resolve().parent / "materialize_on_start.py"
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+import materialize_on_start as mos  # noqa: E402
+import wake_poller  # noqa: E402
+from test_wake_poller import TOKEN, FakeInbox, FakeMcp, fake_weside, wait_for  # noqa: E402
 
 
 class MaterializeOnStartTest(unittest.TestCase):
@@ -24,6 +31,7 @@ class MaterializeOnStartTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.home = Path(self._tmp.name)
         (self.home / ".claude").mkdir()
+        self.extra_env = {}
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -34,9 +42,14 @@ class MaterializeOnStartTest(unittest.TestCase):
 
     def run_hook(self, pin=None, hook_input=None):
         env = {
-            k: v for k, v in os.environ.items() if k not in ("WESIDE_COMPANION", "WE_SESSION_DIR")
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("WESIDE_COMPANION", "WE_SESSION_DIR", "WE_NEWS_DIR")
+            # never reach the real session's inbox socket from a test
+            and not k.startswith("CLAUDE_CODE_MESSAGING_")
         }
         env["HOME"] = str(self.home)
+        env.update(self.extra_env)
         if pin is not None:
             env["WESIDE_COMPANION"] = pin
         stdin = json.dumps(hook_input or {"session_id": "s1", "source": "startup"})
@@ -219,6 +232,115 @@ class MaterializeOnStartTest(unittest.TestCase):
 
     def test_unpinned_without_settings_prints_nothing(self):
         self.assertIsNone(self.run_hook())
+
+
+class WakeSpawnTest(unittest.TestCase):
+    """The SessionStart hook starts the wake poller only for a session bound to its pin."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._env = mock.patch.dict(os.environ, {"WE_SESSION_DIR": self._tmp.name})
+        self._env.start()
+
+    def tearDown(self):
+        self._env.stop()
+        self._tmp.cleanup()
+
+    def bind(self, session, name):
+        target = Path(self._tmp.name) / f"{session}.json"
+        target.write_text(json.dumps({"companion": name, "bound_at": "2026-10-26T12:00:00"}))
+
+    def wake(self, hook_input, pin="Nox"):
+        env = {"WESIDE_COMPANION": pin} if pin is not None else {}
+        return mos.wake_companion(hook_input, env)
+
+    # AC 8 (resume half)
+    def test_a_bound_pinned_session_spawns_on_startup_and_resume(self):
+        self.bind("s1", "Nox")
+        for source in ("startup", "resume"):
+            self.assertEqual(self.wake({"session_id": "s1", "source": source}), "Nox")
+
+    def test_compact_and_clear_spawn_nothing(self):
+        self.bind("s1", "Nox")
+        for source in ("compact", "clear"):
+            self.assertIsNone(self.wake({"session_id": "s1", "source": source}))
+
+    # AC 9
+    def test_unpinned_agent_and_unbound_teammate_spawn_nothing(self):
+        self.bind("s1", "Nox")
+        self.assertIsNone(self.wake({"session_id": "s1", "source": "startup"}, pin=None))
+        self.assertIsNone(self.wake({"session_id": "s1", "source": "startup"}, pin=""))
+        self.assertIsNone(
+            self.wake({"session_id": "s1", "source": "startup", "agent_type": "dev-high"})
+        )
+        # a teammate pane that inherited the pin but never bound
+        self.assertIsNone(self.wake({"session_id": "s2", "source": "startup"}))
+        # a session bound to another companion than its pin
+        self.bind("s3", "Vyra")
+        self.assertIsNone(self.wake({"session_id": "s3", "source": "resume"}))
+
+
+class WakeSpawnProcessTest(unittest.TestCase):
+    """The hook process itself starts one poller against fakes, and none on compact."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(dir="/tmp", prefix="ws")
+        self.root = Path(self._tmp.name)
+        self.home = self.root / "home"
+        (self.home / ".claude").mkdir(parents=True)
+        self.bin = self.root / "bin"
+        fake_weside(self.bin)
+        self.mcp = FakeMcp()
+        self.inbox = FakeInbox(self.root / f"{os.getpid()}.sock")
+        self.news = self.home / ".claude" / "we" / "news"
+
+    def tearDown(self):
+        self.inbox.close()
+        self.assertTrue(wait_for(lambda: not self.lock_held(), timeout=4))
+        self.mcp.close()
+        self._tmp.cleanup()
+
+    def lock_held(self):
+        with mock.patch.dict(os.environ, {"WE_NEWS_DIR": str(self.news)}):
+            return wake_poller.lock_held(self.inbox.path)
+
+    def run_hook(self, source):
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("CLAUDE_CODE_", "WESIDE_", "WE_"))
+        }
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.bin}{os.pathsep}{env.get('PATH', '')}",
+                "WESIDE_COMPANION": "Nox",
+                "WESIDE_MCP_URL": self.mcp.url,
+                "WE_WAKE_INTERVAL_S": "1",
+                "CLAUDE_CODE_MESSAGING_SOCKET": self.inbox.path,
+                "CLAUDE_CODE_MESSAGING_TOKEN": TOKEN,
+            }
+        )
+        sessions = self.home / ".claude" / "we" / "sessions"
+        sessions.mkdir(parents=True, exist_ok=True)
+        (sessions / "s1.json").write_text(json.dumps({"companion": "Nox", "bound_at": "x"}))
+        subprocess.run(
+            [sys.executable, str(HOOK)],
+            input=json.dumps({"session_id": "s1", "source": source}),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    def test_resume_spawns_one_poller_and_compact_none(self):
+        self.run_hook("compact")
+        time.sleep(0.5)
+        self.assertFalse(self.lock_held())
+        self.run_hook("resume")
+        self.assertTrue(wait_for(self.lock_held))
+        self.assertTrue(wait_for(lambda: len(self.mcp.requests) >= 1))
+        self.assertEqual(self.mcp.requests[0]["headers"]["X-Weside-Companion"], "Nox")
 
 
 if __name__ == "__main__":
