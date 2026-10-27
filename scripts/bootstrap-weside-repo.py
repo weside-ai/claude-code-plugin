@@ -50,8 +50,8 @@ from pathlib import Path
 # shape `{"crew": [...]}` mirroring the records below).
 #
 # Each entry's `slug` is the bridge-file key; `role` maps to the plugin's
-# shipped `council-<role>` shell (or "<custom>" → unknown role, skipped
-# per `we/skills/council/SKILL.md` Step 3).
+# shipped `council-<role>` shell (a custom role sits on the generic
+# `council-member` shell per `we/skills/council/SKILL.md` step 1).
 DEFAULT_CREW: list[dict] = [
     {
         "slug": "orchestrator",

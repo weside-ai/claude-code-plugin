@@ -22,7 +22,8 @@ additive: a failure drops that member to its generic shell, never the council.
 - `status` is `"OK"` or buckets `"asleep: A, B | unavailable: C | not_found: D"`. `asleep` then means the
   wake failed and `unavailable` means inactive: both join with the generic lens, named in one line.
   `not_found`: name them and point at `.weside/council.json` (the user edits it); never create a Companion.
-- The member keeps its `we:council-<role>` shell; the identity goes into the brief.
+- The member keeps its shell from step 1 of the skill, `we:council-member` for a role without one;
+  the identity goes into the brief.
 - `resolved` = the keys of `members`. Only they get prep and writeback.
 
 ## repo_id

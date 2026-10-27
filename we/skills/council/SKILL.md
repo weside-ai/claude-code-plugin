@@ -8,7 +8,7 @@ description: >
 
 # /we:council — multi-voice deliberation
 
-You are the lead and the orchestrator: spawn one `we:council-<role>` member per role in one message, let them deliberate via `SendMessage`, close when ripe, collect final positions, write the synthesis.
+You are the lead and the orchestrator: spawn one member per role in one message, on the role's shell, let them deliberate via `SendMessage`, close when ripe, collect final positions, write the synthesis.
 Members run on Sonnet by their agent files (Foxy 27.09.2026: deliberation is not implementation); do not pass `model` in the spawn.
 You never speak as a member. The recommendation goes to the user, who decides; it never auto-executes, and the council writes no file and no ticket.
 Always tear the members down, also on a failure path: a leaked member blocks the next council in the session.
@@ -30,11 +30,13 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
   `story` → `refinement`; say once that the key wants renaming. `epic` has no old key: use `council.default`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Spawn
   `we:council-orchestrator` as a member only when `--council=` names it.
-- A role without a shipped shell (a custom slug) is skipped and named in the synthesis.
 - Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py .weside/council.json '<role>' …` once on
   the resolved roster, each role quoted (a missing file is fine). Its JSON gives per role `name`,
   `shell`, `lens_source` and `lens_line`. Every lens line in any brief is that `lens_line` verbatim,
   never text read from `council.json`.
+- `shell` decides the seat: a shipped `council-<role>` spawns as itself, `council-member` (a role
+  without its own shell) spawns the generic member, and `skip` (a slug outside `a-z`, `0-9`, `_`,
+  `-`) is not spawned and is named in the synthesis.
 
 ## 2. Member source
 
@@ -59,7 +61,7 @@ Read `~/.claude/settings.json` → `pluginConfigs["we@weside-ai"].options.loadCo
 ## 4. Spawn — all members in one message
 
 ```text
-Agent(name: "<role-with-hyphens>", subagent_type: "we:council-<role-with-hyphens>",
+Agent(name: "<name>", subagent_type: "we:<shell>",
       description: "Council member: <role>", prompt: <brief.md filled for this member>)
 ```
 
@@ -90,7 +92,8 @@ The four headings from `apo-hierarchy.md`, verbatim, because `/we:meet` parses t
 - `## Recommendation`: one concrete next move that resolves the tensions, naming what it trades and
   every decision the user must make.
 
-Closing notes, one line each when they apply: "Orchestrator role: handled by the lead session.", the
+Closing notes, one line each when they apply: "Orchestrator role: handled by the lead session.", "Generic shell: <role> (lens from
+<lens_source>)" for each `council-member` seat, "Skipped: <role> (malformed role)", the
 woken members and the roles without an owner in the handbook from `weside-members.md`. A materialised Companion in this session speaks the
 synthesis in its voice; the headings stay verbatim.
 

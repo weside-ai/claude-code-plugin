@@ -9,7 +9,9 @@ plan altitude.
 The plugin ships one agent per lens: `council-architect`, `council-product-owner`,
 `council-scrum-master`, `council-security`, `council-ux-researcher`, `council-marketing`,
 `council-legal`, `council-sales`, and `council-orchestrator` (the lead session plays this role unless
-a roster names it).
+a roster names it). Any other role (`--council=people_ops`, or a `council.json` member's `role`) sits
+on the generic `council-member`, its lens from the member's `lens`, else its `title`, else the role
+name; `we/scripts/council_lens.py` derives it.
 
 Live deliberation needs Agent Teams: `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
 in `~/.claude/settings.json`.

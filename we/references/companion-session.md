@@ -19,7 +19,7 @@ changes the account's selection: `select_companion` to another name is refused, 
 second companion takes a second session. An unknown name answers HTTP 422.
 
 `scripts/wclaude` is the launcher: a menu over the members of the nearest `.weside/council.json`
-(optional `title` per member, the council ignores it), `--as <Name>` without a menu, `0` clears
+(optional `title` per member; the council uses it as the lens of a role without its own shell), `--as <Name>` without a menu, `0` clears
 the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`.
