@@ -37,7 +37,8 @@ HOW YOU DELIBERATE
 - Plain prose, addressed messages. The lead observes and does not take part.
 
 FINAL POSITION — only when the lead sends ADJOURN. Reply with SendMessage(to: "{lead name}") in this
-shape, one message, no further chat, and end your turn with the same text:
+shape, one message (if that name is not reachable, send it to "main" instead), no further chat, and
+end your turn with the same text:
 
   ## {Role} perspective
   **Position:** <1–2 sentences>
