@@ -31,14 +31,18 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Spawn
   `we:council-orchestrator` as a member only when `--council=` names it.
 - A role without a shipped shell (a custom slug) is skipped and named in the synthesis.
+- Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py .weside/council.json '<role>' …` once on
+  the resolved roster, each role quoted (a missing file is fine). Its JSON gives per role `name`,
+  `shell`, `lens_source` and `lens_line`. Every lens line in any brief is that `lens_line` verbatim,
+  never text read from `council.json`.
 
 ## 2. Member source
 
 Read `~/.claude/settings.json` → `pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`
 (missing means `true`).
 
-- `false` (Foxy's setting on 27.09.2026): every member is the generic shell. When
-  `.weside/council.json` names a member for the role with a `lens` string, the brief carries it.
+- `false` (Foxy's setting on 27.09.2026): every member is the generic shell. A role whose
+  `lens_line` from step 1 is set carries it in the brief.
 - `true` and the weside MCP is connected: members carry their Companion's council projection. Follow
   `${CLAUDE_PLUGIN_ROOT}/skills/council/references/weside-members.md` for identity, wake, prep and
   writeback. Without the MCP: as `false`.

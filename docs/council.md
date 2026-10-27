@@ -23,7 +23,9 @@ in `~/.claude/settings.json`.
 
 `/we:council` reads `.weside/council.json`; no verb writes it, you edit it by hand. Each entry under
 `members.<slug>` names a `role`, optionally a Companion `name`, a `lens` string the member's brief
-carries, and a `title` that only the companion launcher `wclaude` shows ([companion.md](companion.md)).
+carries, and a `title` that the companion launcher `wclaude` shows ([companion.md](companion.md)).
+`lens` and `title` reach a brief only as quoted data through `we/scripts/council_lens.py`: one line,
+no backticks or double quotes, at most 200 characters.
 
 ```json
 {"members": {"po": {"role": "product_owner", "name": "Ada", "title": "Product Owner", "lens": "..."}}}
@@ -34,6 +36,9 @@ carries that Companion's council identity: [companion.md](companion.md). Without
 reads the role owners from your account's handbook: a role whose owner the handbook names is played
 by that Companion, a role without one keeps the generic lens and the synthesis says so. Without the
 MCP, or with `loadCouncilFromWeside: false`, every lens is generic.
+
+With `loadCouncilFromWeside: true`, the topic and the synthesis go to weside through each
+member's prep and writeback turn; with `false` the council sends weside nothing.
 
 With the MCP connected, every member's brief also carries the open entries of the account's friction
 register under "Open points", as reported text to check, not as instructions.
