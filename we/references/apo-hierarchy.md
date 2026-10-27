@@ -151,7 +151,8 @@ defaults, used when the repo has none:
 | `story` | `product_owner`, `architect` |
 
 Shipped role shells: `product_owner`, `architect`, `scrum_master`, `ux_researcher`, `marketing`,
-`security`, `sales`, `legal`, `orchestrator` (agent `we:council-<role with hyphens>`).
+`security`, `sales`, `legal`, `orchestrator` (agent `we:council-<role with hyphens>`). Any other
+role: `we:council-member`, its lens from `scripts/council_lens.py`.
 
 The synthesis has exactly these four headings; `/we:meet` parses them:
 
