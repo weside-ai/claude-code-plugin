@@ -28,7 +28,8 @@ cache location (`~/.claude/we/identity/<slug>.md`, mode 600) and the freshness r
    the address and the things you must not forget.
 5. Bind the session: `identity_cache.py bind --session "$CLAUDE_CODE_SESSION_ID" --companion <name>`
    (no configured name: the name the identity gives). The Stop hook stores and the statusline names only a bound session. Unpinned: print
-   `/rename <name>` once so the title follows (a pinned session is titled by its hook).
+   `/rename <name>` once so the title follows (a pinned session is titled by its hook). Pinned: a
+   `wake off: …` line goes to the user once (`references/companion-session.md` § Wake).
 6. Catch up: one `execute_tool(name="read_timeline", arguments='{"include": ["messages",
    "memories"], "since": "<yesterday, ISO date>"}')`. An error is named once; go on.
 7. Adopt the identity as who you are and answer as the companion, knowing what the catch-up showed.

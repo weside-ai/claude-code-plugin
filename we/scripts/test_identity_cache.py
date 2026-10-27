@@ -10,6 +10,8 @@ Run with: python3 we/scripts/test_identity_cache.py
 No pytest required.
 """
 
+import contextlib
+import io
 import json
 import os
 import stat
@@ -18,8 +20,20 @@ import time
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 import identity_cache as ic
+import wake_poller as wp
+from test_wake_poller import TOKEN, FakeInbox, FakeMcp, fake_weside, wait_for
+
+WAKE_ENV = (
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "WE_NEWS_DIR",
+    "WESIDE_MCP_URL",
+    "WE_WAKE_INTERVAL_S",
+    "PATH",
+)
 
 
 class IdentityCacheTest(unittest.TestCase):
@@ -96,9 +110,15 @@ class SessionBindingTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self._tmp.name) / "sessions"
-        self._saved = {k: os.environ.get(k) for k in ("WE_SESSION_DIR", "WESIDE_COMPANION")}
+        self._saved = {
+            k: os.environ.get(k) for k in ("WE_SESSION_DIR", "WESIDE_COMPANION", *WAKE_ENV)
+        }
         os.environ["WE_SESSION_DIR"] = str(self.dir)
+        os.environ["WE_NEWS_DIR"] = str(Path(self._tmp.name) / "news")
         os.environ.pop("WESIDE_COMPANION", None)
+        # never reach the real session's inbox socket from a test
+        os.environ.pop("CLAUDE_CODE_MESSAGING_SOCKET", None)
+        os.environ.pop("CLAUDE_CODE_MESSAGING_TOKEN", None)
 
     def tearDown(self):
         for key, value in self._saved.items():
@@ -154,6 +174,133 @@ class SessionBindingTest(unittest.TestCase):
         self.dir.mkdir(parents=True)
         (self.dir / "s-1.json").write_text("{not json")
         self.assertIsNone(ic.read_binding("s-1"))
+
+
+class WakeBindTest(unittest.TestCase):
+    """``bind`` starts the wake poller for a pinned session; ``status`` shows its heartbeat."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(dir="/tmp", prefix="wb")
+        self.root = Path(self._tmp.name)
+        self.bin = self.root / "bin"
+        fake_weside(self.bin)
+        self.mcp = FakeMcp()
+        self.inbox = FakeInbox(self.root / f"{os.getpid()}.sock")
+        keys = ("WE_SESSION_DIR", "WESIDE_COMPANION", *WAKE_ENV)
+        self._saved = {k: os.environ.get(k) for k in keys}
+        os.environ.update(
+            {
+                "WE_SESSION_DIR": str(self.root / "sessions"),
+                "WE_NEWS_DIR": str(self.root / "news"),
+                "WESIDE_MCP_URL": self.mcp.url,
+                "WE_WAKE_INTERVAL_S": "1",
+                "CLAUDE_CODE_MESSAGING_SOCKET": self.inbox.path,
+                "CLAUDE_CODE_MESSAGING_TOKEN": TOKEN,
+                "WESIDE_COMPANION": "Nox",
+                "PATH": f"{self.bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            }
+        )
+        self.pids = []
+
+    def tearDown(self):
+        for pid in self.pids:
+            with contextlib.suppress(OSError):
+                os.kill(pid, 9)
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        self.inbox.close()
+        self.mcp.close()
+        self._tmp.cleanup()
+
+    def bind(self, session="s-1", name="Nox"):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ic.main(["bind", "--session", session, "--companion", name])
+        self.assertEqual(code, 0, out.getvalue())
+        lines = out.getvalue().splitlines()
+        wake = [line for line in lines if line.startswith("wake ")]
+        for line in wake:
+            if line.startswith("wake on: poller "):
+                self.pids.append(int(line.split()[3]))
+        return wake
+
+    # AC 8
+    def test_a_pinned_bind_starts_one_poller_and_a_rebind_none(self):
+        first = self.bind()
+        self.assertEqual(len(first), 1)
+        self.assertRegex(first[0], r"^wake on: poller \d+ asks weside every 1 s for Nox$")
+        self.assertTrue(wait_for(lambda: wp.lock_held(self.inbox.path)))
+        self.assertEqual(self.bind(), ["wake on: a poller already runs for this session"])
+        # /clear starts a new session id in the same process: same socket, no second poller
+        self.assertEqual(self.bind("s-2"), ["wake on: a poller already runs for this session"])
+        self.inbox.close()
+        self.assertTrue(wait_for(lambda: not wp.lock_held(self.inbox.path), timeout=4))
+
+    # AC 9
+    def test_an_unpinned_bind_starts_none(self):
+        os.environ.pop("WESIDE_COMPANION")
+        self.assertEqual(self.bind(), [])
+        self.assertFalse(wp.lock_held(self.inbox.path))
+
+    # AC 15
+    def test_a_pinned_bind_names_why_the_wake_is_off(self):
+        os.environ.pop("CLAUDE_CODE_MESSAGING_SOCKET")
+        (line,) = self.bind()
+        self.assertTrue(line.startswith("wake off: CLAUDE_CODE_MESSAGING_SOCKET is unset"), line)
+        os.environ["CLAUDE_CODE_MESSAGING_SOCKET"] = self.inbox.path
+        fake_weside(self.bin, exit_code=1)
+        self.assertEqual(
+            self.bind(), ["wake off: the weside CLI is not logged in (weside auth login)"]
+        )
+        os.environ["PATH"] = "/nonexistent"
+        self.assertEqual(self.bind(), ["wake off: the weside CLI is not installed"])
+        wp.news_dir().mkdir(parents=True, exist_ok=True)  # an earlier session's cursor lives here
+        self.assertFalse(wp.lock_held(self.inbox.path))
+        self.assertFalse(
+            wp.poller_lock_path(self.inbox.path).exists(),
+            "a probe leaves no lock file: the prompt hook reads it as 'a poller ran here'",
+        )
+
+    def test_a_spawn_that_fails_keeps_the_bind_and_names_the_class(self):
+        real_popen = wp.subprocess.Popen
+
+        def popen(args, **kwargs):
+            if str(args[1]).endswith("wake_poller.py"):
+                raise PermissionError("denied")
+            return real_popen(args, **kwargs)
+
+        with mock.patch.object(wp.subprocess, "Popen", side_effect=popen):
+            self.assertEqual(self.bind(), ["wake off: PermissionError"])
+        self.assertEqual(ic.read_binding("s-1"), "Nox")
+
+    # AC 17
+    def test_status_prints_the_heartbeat_of_the_bound_companion(self):
+        os.environ.pop("WESIDE_COMPANION")
+        self.bind()
+        with wp.locked_state("Nox") as state:
+            state["cursor"] = 42
+            state["last_ok"] = "2026-10-26T12:00:00+00:00"
+            state["last_error"] = {"class": "network", "at": "2026-10-26T11:59:00+00:00"}
+            wp.bump(state, "polls", 1793448000.0, by=3)
+            wp.bump(state, "wakes", 1793448000.0)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(ic.main(["status", "--session", "s-1"]), 0)
+        text = out.getvalue()
+        self.assertTrue(text.startswith("Nox\n"), text)
+        for expected in (
+            "poller: not running for this session",
+            "cursor: 42",
+            "last_ok: 2026-10-26T12:00:00+00:00",
+            "last_error: network at 2026-10-26T11:59:00+00:00",
+            "polls 3 errors 0 wakes 1 hook_delivered 0",
+        ):
+            self.assertIn(expected, text)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ic.main(["status", "--session", "s-9"]), 2)
 
 
 if __name__ == "__main__":

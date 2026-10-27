@@ -49,10 +49,18 @@ Modes::
     path    --companion NAME               report cache path + age
     bind    --session ID --companion NAME  bind a session to a companion
     binding --session ID                   print the bound companion
+    status  [--session ID]                 the bound companion's wake heartbeat
+
+Wake: a ``bind`` in a session pinned to that companion starts the wake poller
+(``wake_poller.py``) for the session's inbox socket and prints one ``wake on: …``
+or ``wake off: <reason>`` line; an unpinned bind starts none. ``status`` prints
+the companion's cursor file (cursor, ``last_ok``, ``last_error``, hold-offs, the
+day counters) and whether a poller runs for this session's socket; the session
+id defaults to ``CLAUDE_CODE_SESSION_ID``.
 
 Exit codes: ``path`` → 0 fresh, 1 stale, 2 missing. ``store`` → 0 written,
-1 unreadable source, 2 usage. ``bind`` → 0 bound, 1 refused. ``binding`` →
-0 bound (name on stdout), 2 unbound. Python stdlib only.
+1 unreadable source, 2 usage. ``bind`` → 0 bound, 1 refused. ``binding`` and
+``status`` → 0 bound (name on stdout), 2 unbound. Python stdlib only.
 """
 
 from __future__ import annotations
@@ -65,6 +73,10 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import wake_poller
 
 HEADER_RE = re.compile(
     r"^<!-- weside identity cache · companion: (?P<name>.*?) · fetched: (?P<fetched>\S+) -->$"
@@ -231,6 +243,11 @@ def bind(session_id: str, companion: str) -> int:
     os.chmod(tmp, 0o600)
     os.replace(tmp, target)
     print(f"BOUND {session_id} → {name}")
+    if pin:
+        try:
+            print(wake_poller.spawn(name))
+        except OSError as exc:
+            print(f"wake off: {type(exc).__name__}")
     return 0
 
 
@@ -240,6 +257,29 @@ def binding(session_id: str) -> int:
         print("UNBOUND")
         return 2
     print(name)
+    return 0
+
+
+def status(session_id: str) -> int:
+    name = read_binding(session_id)
+    if name is None:
+        print("UNBOUND")
+        return 2
+    state = wake_poller.read_state(name)
+    sock = os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET", "")
+    running = bool(sock) and wake_poller.lock_held(sock)
+    err = state["last_error"]
+    print(name)
+    print(f"poller: {'running' if running else 'not running'} for this session")
+    print(f"cursor: {state['cursor'] if state['cursor'] is not None else 'none'}")
+    print(f"last_ok: {state['last_ok'] or 'never'}")
+    print(f"last_error: {err['class'] + ' at ' + err['at'] if err else 'none'}")
+    for room, until in sorted(state["holdoff"].items()):
+        if until > time.time():
+            print(f"holdoff: {room} until {wake_poller.iso(until)}")
+    for day in sorted(state["days"], reverse=True):
+        counts = state["days"][day]
+        print(f"{day}: " + " ".join(f"{c} {counts.get(c, 0)}" for c in wake_poller.COUNTERS))
     return 0
 
 
@@ -261,7 +301,12 @@ def main(argv: list[str] | None = None) -> int:
     p_binding = sub.add_parser("binding", help="print the companion a session is bound to")
     p_binding.add_argument("--session", required=True)
 
+    p_status = sub.add_parser("status", help="print the bound companion's wake heartbeat")
+    p_status.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+
     args = parser.parse_args(argv)
+    if args.mode == "status":
+        return status(args.session)
     if args.mode == "bind":
         return bind(args.session, args.companion)
     if args.mode == "binding":

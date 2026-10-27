@@ -41,6 +41,9 @@ ignore = [
 "we/hooks/automerge_gate.py" = [
     "PLR0911", # a guard ladder: each early return is one cheaper exit before the network
 ]
+"we/scripts/wake_poller.py" = [
+    "PLR0911", # prerequisite_gap: a guard ladder, one reason per missing prerequisite
+]
 "we/scripts/orchestration.py" = [
     "PLR0912", # too many branches — CLI dispatcher
     "PLR0915", # too many statements — argparse setup

@@ -1,0 +1,746 @@
+#!/usr/bin/env python3
+"""Wake poller: tells a running companion session that something is addressed to it in weside.
+
+One poller per Claude Code session (keyed by the session's inbox socket), started detached by
+``identity_cache.py bind`` and by the SessionStart hook for a session already bound to its pin.
+It runs no model: once a minute it asks the weside MCP tool ``news_since`` "what is addressed to
+this companion since my cursor?" and, on news, writes one content-free line into the session's
+inbox socket; the session then reads the room itself with ``read_timeline``. Contract:
+``references/companion-session.md`` § Wake.
+
+Lifecycle
+    Start: a non-blocking ``flock`` on ``<dir>/poller-<socket basename>.lock`` (one poller per
+    socket; a second start exits at once). Every cycle first checks that the session lives: the
+    socket file exists and, when its name is a process id, that process exists; otherwise exit.
+    The wait between cycles is sliced to the poll interval, so a poller in back-off still exits
+    within two intervals after its session ended.
+
+Per cycle
+    ``weside auth token`` (stdout kept in memory only) → JSON-RPC ``tools/call news_since`` at
+    ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with ``X-Weside-Companion: <companion>``.
+    No news, or only rooms in their hold-off → no socket contact. Otherwise one connection:
+    ``{"type":"auth","token":…}`` then ``{"type":"user","message":{"role":"user","content":…}}``.
+    The wake text is built from room refs (``room:<digits>``), integers and fixed words only.
+    ``ECONNREFUSED``/``ENOENT`` on the socket = the session is gone: exit, cursor kept. Any other
+    delivery failure → a pending note ``<dir>/pending-<socket basename>.json`` for the prompt hook
+    (``hooks/news_on_prompt.py``), cursor kept.
+
+Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
+``<file>.lock``, atomic replace), shared by every session of that companion:
+    ``cursor``     int or null — every addressed row up to it is handed off; it advances only when
+                   no room in the answer still holds a line not yet delivered
+    ``delivered``  room → count already delivered against ``cursor`` (reset when it advances)
+    ``holdoff``    room → epoch seconds; no second wake for that room before then (10 min)
+    ``started``    ISO time the newest poller started
+    ``last_ok``    ISO time of the last successful ``news_since``
+    ``last_error`` ``{"class": auth|network|http|socket|format, "at": ISO}`` — a class, never a text
+    ``days``       UTC date → ``polls``, ``errors``, ``wakes``, ``hook_delivered`` (7 days kept)
+
+Back-off and exit
+    A failed cycle doubles the wait (60 s → … ≤ 900 s), a success resets it. Five consecutive auth
+    failures (``weside auth token`` non-zero or missing, HTTP 401 from ``/mcp``) write
+    ``last_error: auth`` and exit.
+
+Secrets
+    The inbox token comes from ``CLAUDE_CODE_MESSAGING_TOKEN`` in the inherited environment and
+    is removed from it at start; it never reaches argv, a file or the log. The bearer lives only
+    in memory. The log (``<dir>/poller-<socket basename>.log``) holds event classes and counts.
+
+Override the directory with ``WE_NEWS_DIR``; ``WE_WAKE_INTERVAL_S`` shortens the interval (tests).
+Usage: ``wake_poller.py --companion NAME [--once]``. Python stdlib only, ≥ 3.9, POSIX.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import errno
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no flock
+    fcntl = None  # type: ignore[assignment]
+
+DEFAULT_MCP_URL = "https://api.weside.ai/mcp/"
+INTERVAL_S = 60
+MAX_INTERVAL_S = 900
+HOLDOFF_S = 600
+AUTH_EXIT_AFTER = 5
+DAYS_KEPT = 7
+TOKEN_TIMEOUT_S = 30
+HTTP_TIMEOUT_S = 30
+LOG_MAX_BYTES = 256 * 1024
+
+ERROR_CLASSES = ("auth", "network", "http", "socket", "format")
+COUNTERS = ("polls", "errors", "wakes", "hook_delivered")
+ROOM_RE = re.compile(r"room:[0-9]{1,18}")
+NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}")
+
+TEXT_TAIL = "This note carries no content; your WESIDE side may already have answered there."
+
+
+class PollError(Exception):
+    """A failed cycle, carrying one class from ``ERROR_CLASSES``."""
+
+    def __init__(self, cls: str):
+        super().__init__(cls)
+        self.cls = cls
+
+
+class SessionGoneError(Exception):
+    """The session's socket refused or vanished."""
+
+
+# --- paths and the cursor file -------------------------------------------------------------
+
+
+def news_dir() -> Path:
+    override = os.environ.get("WE_NEWS_DIR")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".claude" / "we" / "news"
+
+
+def slug(companion: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", companion.strip().lower()).strip("-")
+    return s or "companion"
+
+
+def state_path(companion: str) -> Path:
+    return news_dir() / f"{slug(companion)}.json"
+
+
+def socket_key(socket_path: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(socket_path)) or "socket"
+
+
+def pending_path(socket_path: str) -> Path:
+    return news_dir() / f"pending-{socket_key(socket_path)}.json"
+
+
+def poller_lock_path(socket_path: str) -> Path:
+    return news_dir() / f"poller-{socket_key(socket_path)}.lock"
+
+
+def log_path(socket_path: str) -> Path:
+    return news_dir() / f"poller-{socket_key(socket_path)}.log"
+
+
+def iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).replace(microsecond=0).isoformat()
+
+
+def parse_iso(value: Any) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        return None
+
+
+def utc_day(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).date().isoformat()
+
+
+def empty_state() -> dict:
+    return {
+        "cursor": None,
+        "delivered": {},
+        "holdoff": {},
+        "started": None,
+        "last_ok": None,
+        "last_error": None,
+        "days": {},
+    }
+
+
+def read_state(companion: str) -> dict:
+    """The cursor file, normalised; a missing or broken file reads as empty."""
+    state = empty_state()
+    try:
+        data = json.loads(state_path(companion).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return state
+    if not isinstance(data, dict):
+        return state
+    cursor = data.get("cursor")
+    if isinstance(cursor, int) and not isinstance(cursor, bool) and cursor >= 0:
+        state["cursor"] = cursor
+    for key in ("delivered", "holdoff"):
+        value = data.get(key)
+        if isinstance(value, dict):
+            state[key] = {
+                k: v
+                for k, v in value.items()
+                if isinstance(k, str)
+                and ROOM_RE.fullmatch(k)
+                and isinstance(v, (int, float))
+                and not isinstance(v, bool)
+            }
+    for key in ("started", "last_ok"):
+        if parse_iso(data.get(key)) is not None:
+            state[key] = data[key]
+    err = data.get("last_error")
+    if isinstance(err, dict) and err.get("class") in ERROR_CLASSES and parse_iso(err.get("at")):
+        state["last_error"] = {"class": err["class"], "at": err["at"]}
+    days = data.get("days")
+    if isinstance(days, dict):
+        for day, counts in days.items():
+            if isinstance(day, str) and isinstance(counts, dict):
+                state["days"][day] = {
+                    c: int(counts.get(c, 0))
+                    if isinstance(counts.get(c, 0), int) and not isinstance(counts.get(c), bool)
+                    else 0
+                    for c in COUNTERS
+                }
+    return state
+
+
+def _write_atomic(target: Path, payload: str) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(payload)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, target)
+
+
+def write_state(companion: str, state: dict) -> None:
+    days = state.get("days", {})
+    for day in sorted(days)[:-DAYS_KEPT]:
+        del days[day]
+    _write_atomic(state_path(companion), json.dumps(state, sort_keys=True))
+
+
+@contextlib.contextmanager
+def locked_state(companion: str):
+    """Yield the cursor file's state under its lock; the state is written back on exit."""
+    target = state_path(companion)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock = target.with_name(target.name + ".lock")
+    fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        state = read_state(companion)
+        yield state
+        write_state(companion, state)
+    finally:
+        os.close(fd)
+
+
+def bump(state: dict, counter: str, now: float, by: int = 1) -> None:
+    day = state["days"].setdefault(utc_day(now), dict.fromkeys(COUNTERS, 0))
+    day[counter] = day.get(counter, 0) + by
+
+
+# --- the wake text -------------------------------------------------------------------------
+
+
+def render(companion: str, rooms: list[dict], since_last_session: bool = False) -> str:
+    """The wake line from room refs, integers and fixed words; anything else is refused."""
+    if not NAME_RE.fullmatch(companion):
+        raise ValueError("companion name is not plain")
+    parts, reads = [], []
+    for item in rooms:
+        room, count = item["room"], item["count"]
+        if not ROOM_RE.fullmatch(room) or not isinstance(count, int) or count < 0:
+            raise ValueError("room ref or count is not plain")
+        parts.append(f"{room} ({count}{'+' if item.get('saturated') else ''})")
+        reads.append(f'read_timeline(room="{room}")')
+    since = " since your last session" if since_last_session else ""
+    return (
+        f"weside: new for {companion}{since} in {', '.join(parts)}. "
+        f"Read it yourself with {', '.join(reads)}. {TEXT_TAIL}"
+    )
+
+
+# --- the three outside calls ---------------------------------------------------------------
+
+
+def child_env() -> dict:
+    """The environment for ``weside``: everything but the inbox token."""
+    return {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_MESSAGING_TOKEN"}
+
+
+def weside_token() -> str:
+    """``weside auth token``'s stdout; any failure is an auth failure."""
+    exe = shutil.which("weside")
+    if not exe:
+        raise PollError("auth")
+    try:
+        done = subprocess.run(
+            [exe, "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=TOKEN_TIMEOUT_S,
+            env=child_env(),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise PollError("auth") from None
+    token = done.stdout.strip()
+    if done.returncode != 0 or not token or any(c.isspace() for c in token):
+        raise PollError("auth")
+    return token
+
+
+def _rpc_payload(body: bytes, content_type: str) -> dict:
+    text = body.decode("utf-8")
+    if "text/event-stream" in content_type:
+        datas = [line[5:].strip() for line in text.splitlines() if line.startswith("data:")]
+        for data in reversed(datas):
+            if data:
+                text = data
+                break
+        else:
+            raise PollError("format")
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        raise PollError("format") from None
+    if not isinstance(payload, dict):
+        raise PollError("format")
+    return payload
+
+
+def parse_news(payload: dict) -> dict:
+    """Validate a ``news_since`` JSON-RPC answer down to cursor, rooms, counts, saturation."""
+    if "error" in payload:
+        raise PollError("http")
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise PollError("format")
+    if result.get("isError"):
+        raise PollError("http")
+    content = result.get("content")
+    if not isinstance(content, list) or not content or not isinstance(content[0], dict):
+        raise PollError("format")
+    try:
+        news = json.loads(content[0].get("text", ""))
+    except (TypeError, ValueError):
+        raise PollError("format") from None
+    if not isinstance(news, dict):
+        raise PollError("format")
+    cursor = news.get("cursor")
+    rooms = news.get("rooms")
+    if not isinstance(cursor, int) or isinstance(cursor, bool) or cursor < 0:
+        raise PollError("format")
+    if not isinstance(rooms, list):
+        raise PollError("format")
+    return {"cursor": cursor, "rooms": [_clean_room(item) for item in rooms]}
+
+
+def _clean_room(item: Any) -> dict:
+    if not isinstance(item, dict):
+        raise PollError("format")
+    room, count, sat = item.get("room"), item.get("count"), item.get("saturated", False)
+    if not isinstance(room, str) or not ROOM_RE.fullmatch(room):
+        raise PollError("format")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+        raise PollError("format")
+    if not isinstance(sat, bool):
+        raise PollError("format")
+    return {"room": room, "count": count, "saturated": sat}
+
+
+def call_news_since(url: str, bearer: str, companion: str, after: int | None) -> dict:
+    arguments = {} if after is None else {"after": after}
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "news_since", "arguments": arguments},
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {bearer}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "X-Weside-Companion": companion,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as resp:
+            raw = resp.read()
+            ctype = resp.headers.get("Content-Type", "")
+    except urllib.error.HTTPError as exc:
+        raise PollError("auth" if exc.code == 401 else "http") from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise PollError("network") from None
+    try:
+        return parse_news(_rpc_payload(raw, ctype))
+    except UnicodeDecodeError:
+        raise PollError("format") from None
+
+
+def deliver(socket_path: str, token: str, text: str) -> None:
+    """Write auth + one user line into the inbox socket. Gone → ``SessionGoneError``."""
+    lines = (
+        json.dumps({"type": "auth", "token": token})
+        + "\n"
+        + json.dumps({"type": "user", "message": {"role": "user", "content": text}})
+        + "\n"
+    ).encode("utf-8")
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(10)
+    try:
+        try:
+            sock.connect(socket_path)
+        except OSError as exc:
+            if exc.errno in (errno.ENOENT, errno.ECONNREFUSED):
+                raise SessionGoneError() from None
+            raise PollError("socket") from None
+        try:
+            sock.sendall(lines)
+            sock.shutdown(socket.SHUT_WR)
+        except OSError:
+            raise PollError("socket") from None
+    finally:
+        sock.close()
+
+
+def session_alive(socket_path: str) -> bool:
+    """The socket file exists and, when its name is a process id, that process exists."""
+    try:
+        if not os.path.exists(socket_path):
+            return False
+    except OSError:
+        return False
+    stem = os.path.basename(socket_path).split(".")[0]
+    if stem.isdigit():
+        try:
+            os.kill(int(stem), 0)
+        except ProcessLookupError:
+            return False
+        except (PermissionError, OverflowError, OSError):
+            return True
+    return True
+
+
+def write_pending(socket_path: str, companion: str, rooms: list[dict], since: bool, now: float):
+    payload = {
+        "companion": companion,
+        "rooms": rooms,
+        "since_last_session": since,
+        "at": iso(now),
+    }
+    _write_atomic(pending_path(socket_path), json.dumps(payload, sort_keys=True))
+
+
+# --- the poller ----------------------------------------------------------------------------
+
+
+def wake_interval(environ: dict | None = None) -> int:
+    raw = (os.environ if environ is None else environ).get("WE_WAKE_INTERVAL_S", "")
+    if raw.isdigit() and int(raw) >= 1:
+        return int(raw)
+    return INTERVAL_S
+
+
+class Poller:
+    """One poller; every outside effect is injectable so the suite runs on a fake clock."""
+
+    def __init__(
+        self,
+        companion: str,
+        socket_path: str,
+        token: str,
+        *,
+        mcp_url: str = DEFAULT_MCP_URL,
+        clock: Callable[[], float] = time.time,
+        sleep: Callable[[float], None] = time.sleep,
+        get_bearer: Callable[[], str] = weside_token,
+        news: Callable[[str, str, str, Any], dict] = call_news_since,
+        send: Callable[[str, str, str], None] = deliver,
+        alive: Callable[[str], bool] = session_alive,
+        log: Callable[[str], None] = lambda _line: None,
+        interval: int = INTERVAL_S,
+    ):
+        self.companion = companion
+        self.socket_path = socket_path
+        self._token = token
+        self.mcp_url = mcp_url
+        self.clock = clock
+        self.sleep = sleep
+        self.get_bearer = get_bearer
+        self.news = news
+        self.send = send
+        self.alive = alive
+        self.log = log
+        self.interval = interval
+        self.max_interval = max(interval, MAX_INTERVAL_S * interval // INTERVAL_S)
+        self.auth_failures = 0
+        self.first = True
+        self.resumed = False
+
+    def start(self) -> None:
+        with locked_state(self.companion) as state:
+            self.resumed = state["cursor"] is not None
+            state["started"] = iso(self.clock())
+
+    def _fail(self, cls: str) -> str:
+        now = self.clock()
+        with locked_state(self.companion) as state:
+            state["last_error"] = {"class": cls, "at": iso(now)}
+            bump(state, "errors", now)
+        self.log(f"error {cls}")
+        if cls == "auth":
+            self.auth_failures += 1
+            if self.auth_failures >= AUTH_EXIT_AFTER:
+                self.log("exit auth")
+                return "auth-exit"
+        else:
+            self.auth_failures = 0
+        return f"error:{cls}"
+
+    def poll_once(self) -> str:
+        """One cycle; returns ``ok``, ``error:<class>``, ``auth-exit`` or ``gone``."""
+        now = self.clock()
+        with locked_state(self.companion) as state:
+            base = state["cursor"]
+            bump(state, "polls", now)
+        try:
+            bearer = self.get_bearer()
+            answer = self.news(self.mcp_url, bearer, self.companion, base)
+        except PollError as exc:
+            return self._fail(exc.cls)
+        self.auth_failures = 0
+        since = self.first and self.resumed
+        self.first = False
+        return self._apply(base, answer, since)
+
+    def _apply(self, base: int | None, answer: dict, since: bool) -> str:
+        now = self.clock()
+        with locked_state(self.companion) as state:
+            state["last_ok"] = iso(now)
+            if state["cursor"] != base:
+                self.log("ok skipped (cursor moved by another poller)")
+                return "ok"
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            delivered = state["delivered"]
+            fresh = []
+            for item in answer["rooms"]:
+                new = item["count"] - int(delivered.get(item["room"], 0))
+                if new > 0:
+                    fresh.append(dict(item, new=new))
+            wakeable = [f for f in fresh if state["holdoff"].get(f["room"], 0) <= now]
+            if not wakeable:
+                if not fresh:
+                    self._advance(state, base, answer["cursor"])
+                self.log(f"ok rooms={len(answer['rooms'])} held={len(fresh)}")
+                return "ok"
+            rooms = [
+                {"room": f["room"], "count": f["new"], "saturated": f["saturated"]}
+                for f in wakeable
+            ]
+            text = render(self.companion, rooms, since)
+            try:
+                self.send(self.socket_path, self._token, text)
+            except SessionGoneError:
+                self.log("exit session gone")
+                return "gone"
+            except PollError:
+                write_pending(self.socket_path, self.companion, rooms, since, now)
+                for f in wakeable:
+                    state["holdoff"][f["room"]] = now + HOLDOFF_S
+                state["last_error"] = {"class": "socket", "at": iso(now)}
+                bump(state, "errors", now)
+                self.log(f"pending note rooms={len(rooms)}")
+                return "error:socket"
+            for f in wakeable:
+                delivered[f["room"]] = f["count"]
+                state["holdoff"][f["room"]] = now + HOLDOFF_S
+            bump(state, "wakes", now)
+            if len(wakeable) == len(fresh):
+                self._advance(state, base, answer["cursor"])
+            self.log(f"wake delivered rooms={len(rooms)}")
+            return "ok"
+
+    @staticmethod
+    def _advance(state: dict, base: int | None, cursor: int) -> None:
+        state["cursor"] = cursor if base is None else max(base, cursor)
+        state["delivered"] = {}
+
+    def run(self, max_cycles: int | None = None) -> str:
+        """Poll until the session ends or auth gives up; returns the exit reason."""
+        self.start()
+        wait = self.interval
+        cycles = 0
+        while True:
+            if not self.alive(self.socket_path):
+                self.log("exit session gone")
+                return "gone"
+            outcome = self.poll_once()
+            cycles += 1
+            if outcome in ("gone", "auth-exit"):
+                return outcome
+            if outcome.startswith("error:") and outcome != "error:socket":
+                wait = min(wait * 2, self.max_interval)
+            else:
+                wait = self.interval
+            if max_cycles is not None and cycles >= max_cycles:
+                return "max-cycles"
+            remaining = wait
+            while remaining > 0:
+                step = min(remaining, self.interval)
+                self.sleep(step)
+                remaining -= step
+                if not self.alive(self.socket_path):
+                    self.log("exit session gone")
+                    return "gone"
+
+
+# --- spawn (bind, SessionStart) ------------------------------------------------------------
+
+
+def lock_held(socket_path: str) -> bool:
+    """Whether a poller holds this socket's lock (probe: take it and release at once).
+
+    Never creates the file: only ``main`` does, so its existence means a poller started on this
+    socket (``hooks/news_on_prompt.py`` gates the stale line on it).
+    """
+    if fcntl is None:
+        return False
+    target = poller_lock_path(socket_path)
+    try:
+        fd = os.open(str(target), os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+    return False
+
+
+def prerequisite_gap(companion: str, environ: dict, check_login: bool) -> str | None:
+    """The reason the wake cannot run, or None."""
+    if fcntl is None:
+        return "no file lock on this platform"
+    if not NAME_RE.fullmatch(companion):
+        return "the companion name is not plain (letters, digits, space, . _ -)"
+    sock = environ.get("CLAUDE_CODE_MESSAGING_SOCKET", "")
+    if not sock:
+        return "CLAUDE_CODE_MESSAGING_SOCKET is unset (this Claude Code has no inbox socket)"
+    if not environ.get("CLAUDE_CODE_MESSAGING_TOKEN"):
+        return "CLAUDE_CODE_MESSAGING_TOKEN is unset"
+    if not os.path.exists(sock):
+        return "the inbox socket does not exist"
+    exe = shutil.which("weside", path=environ.get("PATH"))
+    if not exe:
+        return "the weside CLI is not installed"
+    if check_login:
+        try:
+            done = subprocess.run(
+                [exe, "auth", "token"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=TOKEN_TIMEOUT_S,
+                env={k: v for k, v in environ.items() if k != "CLAUDE_CODE_MESSAGING_TOKEN"},
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return "the weside CLI is not logged in (weside auth login)"
+        if done.returncode != 0:
+            return "the weside CLI is not logged in (weside auth login)"
+    return None
+
+
+def spawn(companion: str, environ: dict | None = None, check_login: bool = True) -> str:
+    """Start the detached poller for this session's socket; returns one ``wake …`` line."""
+    env = dict(os.environ if environ is None else environ)
+    gap = prerequisite_gap(companion, env, check_login)
+    if gap:
+        return f"wake off: {gap}"
+    sock = env["CLAUDE_CODE_MESSAGING_SOCKET"]
+    news_dir().mkdir(parents=True, exist_ok=True)
+    if lock_held(sock):
+        return "wake on: a poller already runs for this session"
+    proc = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "--companion", companion],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+        env=env,
+    )
+    return f"wake on: poller {proc.pid} asks weside every {wake_interval(env)} s for {companion}"
+
+
+# --- entry point ---------------------------------------------------------------------------
+
+
+def _open_log(socket_path: str) -> Callable[[str], None]:
+    target = log_path(socket_path)
+    with contextlib.suppress(OSError):
+        if target.stat().st_size > LOG_MAX_BYTES:
+            target.unlink()
+
+    def log(line: str) -> None:
+        with contextlib.suppress(OSError):
+            fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as fh:
+                fh.write(f"{iso(time.time())} {line}\n")
+
+    return log
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--companion", required=True)
+    parser.add_argument("--once", action="store_true", help="one cycle, then exit (tests)")
+    args = parser.parse_args(argv)
+
+    token = os.environ.pop("CLAUDE_CODE_MESSAGING_TOKEN", "")
+    sock = os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET", "")
+    if fcntl is None or not sock or not token or not NAME_RE.fullmatch(args.companion):
+        return 2
+    news_dir().mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(poller_lock_path(sock)), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(lock_fd)
+        return 0
+    log = _open_log(sock)
+    interval = wake_interval()
+    poller = Poller(
+        args.companion,
+        sock,
+        token,
+        mcp_url=os.environ.get("WESIDE_MCP_URL") or DEFAULT_MCP_URL,
+        log=log,
+        interval=interval,
+    )
+    log(f"start companion={slug(args.companion)} interval={interval}")
+    reason = poller.run(max_cycles=1 if args.once else None)
+    log(f"stop {reason}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
