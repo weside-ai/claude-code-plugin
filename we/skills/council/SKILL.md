@@ -30,21 +30,30 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
   `story` → `refinement`; say once that the key wants renaming. `epic` has no old key: use `council.default`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Spawn
   `we:council-orchestrator` as a member only when `--council=` names it.
-- Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py .weside/council.json '<role>' …` once on
-  the resolved roster, each role quoted (a missing file is fine). Its JSON gives per role `name`,
-  `shell`, `lens_source` and `lens_line`. Every lens line in any brief is that `lens_line` verbatim,
-  never text read from `council.json`.
+- Run the lens helper once on the resolved roster, the roles one per line on stdin, never inside
+  the command (a role is user text); a missing `council.json` is fine:
+
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py" .weside/council.json <<'ROLES'
+  <role>
+  <role>
+  ROLES
+  ```
+
+  Its JSON gives per role `name`, `shell`, `skip_reason`, `companion`, `lens_source` and
+  `lens_line`. Every lens line and Companion name in any brief is the helper's value verbatim, never
+  text read from `council.json`.
 - `shell` decides the seat: a shipped `council-<role>` spawns as itself, `council-member` (a role
-  without its own shell) spawns the generic member, and `skip` (a slug outside `a-z`, `0-9`, `_`,
-  `-`) is not spawned and is named in the synthesis.
+  without its own shell) spawns the generic member, and `skip` is not spawned and is named in the
+  synthesis with its `skip_reason`.
 
 ## 2. Member source
 
 Read `~/.claude/settings.json` → `pluginConfigs["we@weside-ai"].options.loadCouncilFromWeside`
 (missing means `true`).
 
-- `false` (Foxy's setting on 27.09.2026): every member is the generic shell. A role whose
-  `lens_line` from step 1 is set carries it in the brief.
+- `false`: no Companion identity; every member keeps its step-1 shell, and a role whose
+  `lens_line` is set carries it in the brief.
 - `true` and the weside MCP is connected: members carry their Companion's council projection. Follow
   `${CLAUDE_PLUGIN_ROOT}/skills/council/references/weside-members.md` for identity, wake, prep and
   writeback. Without the MCP: as `false`.
@@ -93,7 +102,7 @@ The four headings from `apo-hierarchy.md`, verbatim, because `/we:meet` parses t
   every decision the user must make.
 
 Closing notes, one line each when they apply: "Orchestrator role: handled by the lead session.", "Generic shell: <role> (lens from
-<lens_source>)" for each `council-member` seat, "Skipped: <role> (malformed role)", the
+<lens_source>)" for each `council-member` seat, "Skipped: <role> (<skip_reason>)", the
 woken members and the roles without an owner in the handbook from `weside-members.md`. A materialised Companion in this session speaks the
 synthesis in its voice; the headings stay verbatim.
 
