@@ -25,7 +25,8 @@ Why every lens line is framed and capped: ``lens`` and ``title`` are free text f
 user edits, and each line goes into the prompt of a spawned agent and into every peer's brief. A
 newline, a backtick or a quote could otherwise break out of the slot and read as an instruction.
 So the text becomes one line of at most ``CAP`` characters, without control characters,
-backticks, quotes of any kind, backslashes or angle brackets, inside a frame that names it data.
+backticks, double quotes of any kind, backslashes or angle brackets, inside a frame that names
+it data.
 
 Stdlib only, Python 3.9.
 """

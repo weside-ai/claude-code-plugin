@@ -41,8 +41,9 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
   ```
 
   Its JSON gives per role `name`, `shell`, `skip_reason`, `companion`, `lens_source` and
-  `lens_line`. Every lens line and Companion name in any brief is the helper's value verbatim, never
-  text read from `council.json`.
+  `lens_line`. Every lens line in any brief is the helper's value verbatim, never text read from
+  `council.json`; a Companion name is the helper's `companion`, else the handbook owner that
+  `references/weside-members.md` § Identity resolves without `council.json`.
 - `shell` decides the seat: a shipped `council-<role>` spawns as itself, `council-member` (a role
   without its own shell) spawns the generic member, and `skip` is not spawned and is named in the
   synthesis with its `skip_reason`.
