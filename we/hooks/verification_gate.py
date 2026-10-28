@@ -118,7 +118,7 @@ _WHERE = (
     "behaviour at all: `**Oracle:** not-applicable — <reason>`.\n\n"
     "A story plan with a `## Verification` block can be spliced in instead: `python3 "
     + _RECEIPT_SCRIPT
-    + " <TICKET> <body-in> <body-out>`. Contract: the `we` plugin's "
+    + " <KEY> <body-in> <body-out>`. Contract: the `we` plugin's "
     "skills/story/references/plan-format.md § Verification."
 )
 
@@ -382,6 +382,14 @@ def _receipt_problem(full: str) -> str | None:
     return None
 
 
+# A denied call runs none of its chain; read as "the PR step failed", the commit and push before
+# it were assumed done and retried piecemeal (4 cases in the retro of 18.10.2026).
+_BLOCKED = (
+    "Blocked before anything ran: no part of this Bash command executed (commits and pushes "
+    "included). Re-run it whole, or run `gh pr create` alone.\n\n"
+)
+
+
 def _refusal(payload: dict) -> str | None:
     """The denial reason, or None when this call may proceed."""
     if payload.get("tool_name") != "Bash":
@@ -408,7 +416,7 @@ def _refusal(payload: dict) -> str | None:
         )
     else:
         problem = _receipt_problem(body)
-    return problem + "\n\n" + _WHERE if problem else None
+    return _BLOCKED + problem + "\n\n" + _WHERE if problem else None
 
 
 def main() -> None:
