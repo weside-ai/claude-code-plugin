@@ -252,8 +252,13 @@ class WakeBindTest(unittest.TestCase):
         self.assertTrue(line.startswith("wake off: CLAUDE_CODE_MESSAGING_SOCKET is unset"), line)
         os.environ["CLAUDE_CODE_MESSAGING_SOCKET"] = self.inbox.path
         fake_weside(self.bin, exit_code=1)
+        origin = wp.api_origin(wp.mcp_url(os.environ))
         self.assertEqual(
-            self.bind(), ["wake off: the weside CLI is not logged in (weside auth login)"]
+            self.bind(),
+            [
+                f"wake off: the weside CLI is not logged in for {origin}"
+                f" (weside auth login --api-url {origin})"
+            ],
         )
         os.environ["PATH"] = "/nonexistent"
         self.assertEqual(self.bind(), ["wake off: the weside CLI is not installed"])
@@ -283,7 +288,11 @@ class WakeBindTest(unittest.TestCase):
         with wp.locked_state("Nox") as state:
             state["cursor"] = 42
             state["last_ok"] = "2026-10-26T12:00:00+00:00"
-            state["last_error"] = {"class": "network", "at": "2026-10-26T11:59:00+00:00"}
+            state["last_error"] = {
+                "class": "auth",
+                "detail": "token",
+                "at": "2026-10-26T11:59:00+00:00",
+            }
             wp.bump(state, "polls", 1793448000.0, by=3)
             wp.bump(state, "wakes", 1793448000.0)
         out = io.StringIO()
@@ -295,7 +304,7 @@ class WakeBindTest(unittest.TestCase):
             "poller: not running for this session",
             "cursor: 42",
             "last_ok: 2026-10-26T12:00:00+00:00",
-            "last_error: network at 2026-10-26T11:59:00+00:00",
+            "last_error: auth (token command failed) at 2026-10-26T11:59:00+00:00",
             "polls 3 errors 0 wakes 1 hook_delivered 0",
         ):
             self.assertIn(expected, text)
