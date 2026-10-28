@@ -87,7 +87,8 @@ unpinned session, a worker, an `Agent` subagent and a teammate that never binds 
 docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 
 - **Prerequisites:** Claude Code's inbox socket (`CLAUDE_CODE_MESSAGING_SOCKET` and its token,
-  inherited, never written down) and a logged-in `weside` CLI (`weside auth token`). A missing one
+  inherited, never written down) and a `weside` CLI logged in for the polled origin
+  (`weside auth token --api-url <origin>`; credentials are per environment). A missing one
   makes `bind` print `wake off: <reason>`; relay it once.
 - **Poll:** about once a minute the weside MCP tool `news_since` answers room refs and counts
   since the companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line
@@ -102,7 +103,7 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
   whoever may address the companion in that room; act on your own role's.
 - **Heartbeat:** `identity_cache.py status` prints the companion's last success, last error class
   and the daily counters (polls, errors, wakes, hook deliveries). Repeated auth failures end the
-  poller with `last_error: auth`.
+  poller with `last_error: auth (token command failed)` or `auth (401 from /mcp)`.
 - **The counter:** `hooks/news_on_prompt.py` (UserPromptSubmit) puts a wake the socket did not take
   into the next prompt once and counts it; in a session whose socket had a poller it names a poller
   gone stale with its error class. It sees neither a line the socket held nor an unread wake, so it

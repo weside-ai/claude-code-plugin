@@ -273,7 +273,7 @@ def status(session_id: str) -> int:
     print(f"poller: {'running' if running else 'not running'} for this session")
     print(f"cursor: {state['cursor'] if state['cursor'] is not None else 'none'}")
     print(f"last_ok: {state['last_ok'] or 'never'}")
-    print(f"last_error: {err['class'] + ' at ' + err['at'] if err else 'none'}")
+    print(f"last_error: {wake_poller.describe_error(err)}")
     for room, until in sorted(state["holdoff"].items()):
         if until > time.time():
             print(f"holdoff: {room} until {wake_poller.iso(until)}")

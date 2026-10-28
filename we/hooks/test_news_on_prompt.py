@@ -92,7 +92,7 @@ class NewsOnPromptTest(unittest.TestCase):
             "Nox",
             SOCKET,
             "inbox-token",
-            get_bearer=lambda: "bearer",
+            get_bearer=lambda _origin: "bearer",
             news=lambda *_a: {
                 "cursor": 102,
                 "rooms": [{"room": "room:384", "count": 2, "saturated": False}],

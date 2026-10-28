@@ -135,11 +135,16 @@ class FakeMcp:
 
 
 def fake_weside(bin_dir: Path, exit_code: int = 0) -> None:
-    """A ``weside`` whose ``auth token`` prints BEARER (or fails with ``exit_code``)."""
+    """A ``weside`` whose ``auth token`` prints BEARER (or fails with ``exit_code``).
+
+    Every call appends its argv, one line, to ``<bin_dir>/weside.argv``.
+    """
     bin_dir.mkdir(parents=True, exist_ok=True)
     script = bin_dir / "weside"
+    argv_log = bin_dir / "weside.argv"
     script.write_text(
         "#!/bin/sh\n"
+        f'echo "$*" >> "{argv_log}"\n'
         f'if [ "$1 $2" = "auth token" ]; then\n'
         f"  [ {exit_code} -eq 0 ] && echo {BEARER}\n"
         f"  exit {exit_code}\n"
@@ -184,6 +189,7 @@ class PollerTest(unittest.TestCase):
         self.sent: list[str] = []
         self.send_error = None
         self.bearer_error = None
+        self.bearer_origins: list[str] = []
         self.alive = True
 
     def tearDown(self):
@@ -198,7 +204,8 @@ class PollerTest(unittest.TestCase):
             raise answer
         return answer
 
-    def bearer(self):
+    def bearer(self, api_url):
+        self.bearer_origins.append(api_url)
         if self.bearer_error:
             raise self.bearer_error
         return BEARER
@@ -465,6 +472,25 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(len(self.afters), 5)
         self.assertEqual(self.state()["last_error"]["class"], "auth")
 
+    def test_the_bearer_is_asked_for_the_origin_of_the_polled_mcp_url(self):
+        self.poller().poll_once()
+        self.assertEqual(self.bearer_origins, ["https://api.weside.ai"])
+
+    def test_an_auth_error_names_its_source_in_the_heartbeat(self):
+        p = self.poller()
+        self.answers = [wp.PollError("auth", "401")]
+        p.poll_once()
+        err = self.state()["last_error"]
+        self.assertEqual(err["detail"], "401")
+        self.assertEqual(
+            wp.describe_error(wp.read_state("Nox")["last_error"]),
+            f"auth (401 from /mcp) at {err['at']}",
+        )
+        self.bearer_error = wp.PollError("auth", "token")
+        p.poll_once()
+        self.assertEqual(wp.read_state("Nox")["last_error"]["detail"], "token")
+        self.assertEqual(wp.describe_error(None), "none")
+
     def test_auth_failures_must_be_consecutive(self):
         p = self.poller()
         self.answers = (
@@ -604,14 +630,29 @@ class PollerProcessTest(unittest.TestCase):
         self.assertNotIn(BEARER, text)
         self.assertIn("wake delivered", text)
 
+    def argv_lines(self) -> list[str]:
+        return (self.bin / "weside.argv").read_text().splitlines()
+
+    def test_the_token_is_asked_for_the_polled_origin_not_the_cli_default(self):
+        origin = self.mcp.url.rsplit("/mcp/", 1)[0]
+        self.assertTrue(origin.startswith("http://127.0.0.1:"), origin)
+        done = self.run_once()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.argv_lines(), [f"auth token --api-url {origin}"])
+
     def test_http_401_records_auth_and_a_failing_cli_too(self):
         self.mcp.answers = [401]
         self.run_once()
         state = json.loads((self.news / "nox.json").read_text())
         self.assertEqual(state["last_error"]["class"], "auth")
+        self.assertEqual(state["last_error"]["detail"], "401")
         fake_weside(self.bin, exit_code=1)
         self.run_once()
         self.assertEqual(len(self.mcp.requests), 1, "no MCP call without a bearer")
+        state = json.loads((self.news / "nox.json").read_text())
+        self.assertEqual(state["last_error"]["detail"], "token")
+        self.assertIn("error auth 401", self.files_text())
+        self.assertIn("error auth token", self.files_text())
 
     # AC 8
     def test_spawn_runs_one_poller_per_socket_and_it_exits_when_the_session_ends(self):
@@ -654,6 +695,8 @@ class PollerProcessTest(unittest.TestCase):
                 wp.spawn("Nox", self.env()),
                 "wake off: the weside CLI is not logged in (weside auth login)",
             )
+        origin = self.mcp.url.rsplit("/mcp/", 1)[0]
+        self.assertEqual(self.argv_lines(), [f"auth token --api-url {origin}"])
         self.assertFalse(wp.lock_held(self.inbox.path))
 
 

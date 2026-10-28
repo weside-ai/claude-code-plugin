@@ -16,8 +16,10 @@ Lifecycle
     within two intervals after its session ended.
 
 Per cycle
-    ``weside auth token`` (stdout kept in memory only) → JSON-RPC ``tools/call news_since`` at
-    ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with ``X-Weside-Companion: <companion>``.
+    ``weside auth token --api-url <origin of the MCP URL>`` (stdout kept in memory only) →
+    JSON-RPC ``tools/call news_since`` at ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with
+    ``X-Weside-Companion: <companion>``. The CLI keeps credentials per environment, so the token
+    always comes for the origin the poller calls, never for the CLI config's default ``api_url``.
     No news, or only rooms in their hold-off → no socket contact. Otherwise one connection:
     ``{"type":"auth","token":…}`` then ``{"type":"user","message":{"role":"user","content":…}}``.
     The wake text is built from room refs (``room:<digits>``), integers and fixed words only.
@@ -33,7 +35,9 @@ Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under `
     ``holdoff``    room → epoch seconds; no second wake for that room before then (10 min)
     ``started``    ISO time the newest poller started
     ``last_ok``    ISO time of the last successful ``news_since``
-    ``last_error`` ``{"class": auth|network|http|socket|format, "at": ISO}`` — a class, never a text
+    ``last_error`` ``{"class": auth|network|http|socket|format, "at": ISO}`` — a class, never a text;
+                   an auth error adds ``"detail": token`` (the token command failed) or ``401``
+                   (``/mcp`` refused the bearer)
     ``days``       UTC date → ``polls``, ``errors``, ``wakes``, ``hook_delivered`` (7 days kept)
 
 Back-off and exit
@@ -64,6 +68,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +90,7 @@ HTTP_TIMEOUT_S = 30
 LOG_MAX_BYTES = 256 * 1024
 
 ERROR_CLASSES = ("auth", "network", "http", "socket", "format")
+AUTH_DETAILS = {"token": "token command failed", "401": "401 from /mcp"}
 COUNTERS = ("polls", "errors", "wakes", "hook_delivered")
 ROOM_RE = re.compile(r"room:[0-9]{1,18}")
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}")
@@ -93,11 +99,12 @@ TEXT_TAIL = "This note carries no content; your WESIDE side may already have ans
 
 
 class PollError(Exception):
-    """A failed cycle, carrying one class from ``ERROR_CLASSES``."""
+    """A failed cycle, carrying one class from ``ERROR_CLASSES`` (auth: a key of ``AUTH_DETAILS``)."""
 
-    def __init__(self, cls: str):
+    def __init__(self, cls: str, detail: str | None = None):
         super().__init__(cls)
         self.cls = cls
+        self.detail = detail
 
 
 class SessionGoneError(Exception):
@@ -197,6 +204,8 @@ def read_state(companion: str) -> dict:
     err = data.get("last_error")
     if isinstance(err, dict) and err.get("class") in ERROR_CLASSES and parse_iso(err.get("at")):
         state["last_error"] = {"class": err["class"], "at": err["at"]}
+        if err["class"] == "auth" and err.get("detail") in AUTH_DETAILS:
+            state["last_error"]["detail"] = err["detail"]
     days = data.get("days")
     if isinstance(days, dict):
         for day, counts in days.items():
@@ -278,14 +287,28 @@ def child_env() -> dict:
     return {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_MESSAGING_TOKEN"}
 
 
-def weside_token() -> str:
-    """``weside auth token``'s stdout; any failure is an auth failure."""
+def api_origin(mcp_url: str) -> str:
+    """``https://api.weside.ai/mcp/`` → ``https://api.weside.ai``: the CLI's ``--api-url``."""
+    parts = urllib.parse.urlsplit(mcp_url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def describe_error(err: dict | None) -> str:
+    """``last_error`` for a person: ``auth (401 from /mcp) at <ISO>``, ``none``."""
+    if not err:
+        return "none"
+    detail = AUTH_DETAILS.get(err.get("detail", ""))
+    return f"{err['class']}{f' ({detail})' if detail else ''} at {err['at']}"
+
+
+def weside_token(api_url: str) -> str:
+    """``weside auth token --api-url <api_url>``'s stdout; any failure is an auth failure."""
     exe = shutil.which("weside")
     if not exe:
-        raise PollError("auth")
+        raise PollError("auth", "token")
     try:
         done = subprocess.run(
-            [exe, "auth", "token"],
+            [exe, "auth", "token", "--api-url", api_url],
             capture_output=True,
             text=True,
             timeout=TOKEN_TIMEOUT_S,
@@ -293,10 +316,10 @@ def weside_token() -> str:
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        raise PollError("auth") from None
+        raise PollError("auth", "token") from None
     token = done.stdout.strip()
     if done.returncode != 0 or not token or any(c.isspace() for c in token):
-        raise PollError("auth")
+        raise PollError("auth", "token")
     return token
 
 
@@ -385,7 +408,9 @@ def call_news_since(url: str, bearer: str, companion: str, after: int | None) ->
             raw = resp.read()
             ctype = resp.headers.get("Content-Type", "")
     except urllib.error.HTTPError as exc:
-        raise PollError("auth" if exc.code == 401 else "http") from None
+        if exc.code == 401:
+            raise PollError("auth", "401") from None
+        raise PollError("http") from None
     except (urllib.error.URLError, OSError, ValueError):
         raise PollError("network") from None
     try:
@@ -470,7 +495,7 @@ class Poller:
         mcp_url: str = DEFAULT_MCP_URL,
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
-        get_bearer: Callable[[], str] = weside_token,
+        get_bearer: Callable[[str], str] = weside_token,
         news: Callable[[str, str, str, Any], dict] = call_news_since,
         send: Callable[[str, str, str], None] = deliver,
         alive: Callable[[str], bool] = session_alive,
@@ -499,12 +524,14 @@ class Poller:
             self.resumed = state["cursor"] is not None
             state["started"] = iso(self.clock())
 
-    def _fail(self, cls: str) -> str:
+    def _fail(self, cls: str, detail: str | None = None) -> str:
         now = self.clock()
         with locked_state(self.companion) as state:
             state["last_error"] = {"class": cls, "at": iso(now)}
+            if detail:
+                state["last_error"]["detail"] = detail
             bump(state, "errors", now)
-        self.log(f"error {cls}")
+        self.log(f"error {cls}{f' {detail}' if detail else ''}")
         if cls == "auth":
             self.auth_failures += 1
             if self.auth_failures >= AUTH_EXIT_AFTER:
@@ -521,10 +548,10 @@ class Poller:
             base = state["cursor"]
             bump(state, "polls", now)
         try:
-            bearer = self.get_bearer()
+            bearer = self.get_bearer(api_origin(self.mcp_url))
             answer = self.news(self.mcp_url, bearer, self.companion, base)
         except PollError as exc:
-            return self._fail(exc.cls)
+            return self._fail(exc.cls, exc.detail)
         self.auth_failures = 0
         since = self.first and self.resumed
         self.first = False
@@ -636,6 +663,10 @@ def lock_held(socket_path: str) -> bool:
     return False
 
 
+def mcp_url(environ: dict) -> str:
+    return environ.get("WESIDE_MCP_URL") or DEFAULT_MCP_URL
+
+
 def prerequisite_gap(companion: str, environ: dict, check_login: bool) -> str | None:
     """The reason the wake cannot run, or None."""
     if fcntl is None:
@@ -655,7 +686,7 @@ def prerequisite_gap(companion: str, environ: dict, check_login: bool) -> str | 
     if check_login:
         try:
             done = subprocess.run(
-                [exe, "auth", "token"],
+                [exe, "auth", "token", "--api-url", api_origin(mcp_url(environ))],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=TOKEN_TIMEOUT_S,
@@ -732,7 +763,7 @@ def main(argv: list[str] | None = None) -> int:
         args.companion,
         sock,
         token,
-        mcp_url=os.environ.get("WESIDE_MCP_URL") or DEFAULT_MCP_URL,
+        mcp_url=mcp_url(dict(os.environ)),
         log=log,
         interval=interval,
     )
