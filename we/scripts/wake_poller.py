@@ -20,7 +20,13 @@ Per cycle
     JSON-RPC ``tools/call news_since`` at ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with
     ``X-Weside-Companion: <companion>``. The CLI keeps credentials per environment, so the token
     always comes for the origin the poller calls, never for the CLI config's default ``api_url``.
-    No news, or only rooms in their hold-off → no socket contact. Otherwise one connection:
+    A room whose lines the companion's WESIDE side already took up wakes nobody: a server that
+    answers ``unanswered`` per room (with ``unanswered_newest``, a row id, and
+    ``unanswered_age_s``) wakes a room only for an unanswered line newer than the one last
+    delivered there, and only once the newest unanswered line is ``GRACE_S`` (10 min) old; the
+    WESIDE side usually answers within that. A server without the field gets the count rule
+    (server compatibility until every environment runs the field).
+    No news, or only rooms in their hold-off or grace → no socket contact. Otherwise one connection:
     ``{"type":"auth","token":…}`` then ``{"type":"user","message":{"role":"user","content":…}}``.
     The wake text is built from room refs (``room:<digits>``), integers and fixed words only.
     ``ECONNREFUSED``/``ENOENT`` on the socket = the session is gone: exit, cursor kept. Any other
@@ -31,7 +37,9 @@ Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under `
 ``<file>.lock``, atomic replace), shared by every session of that companion:
     ``cursor``     int or null — every addressed row up to it is handed off; it advances only when
                    no room in the answer still holds a line not yet delivered
-    ``delivered``  room → count already delivered against ``cursor`` (reset when it advances)
+    ``delivered``  room → count already delivered against ``cursor`` (reset when it advances;
+                   a server without ``unanswered``)
+    ``delivered_row`` room → newest unanswered row id already delivered (reset with ``cursor``)
     ``holdoff``    room → epoch seconds; no second wake for that room before then (10 min)
     ``started``    ISO time the newest poller started
     ``last_ok``    ISO time of the last successful ``news_since``
@@ -83,6 +91,7 @@ DEFAULT_MCP_URL = "https://api.weside.ai/mcp/"
 INTERVAL_S = 60
 MAX_INTERVAL_S = 900
 HOLDOFF_S = 600
+GRACE_S = 600
 AUTH_EXIT_AFTER = 5
 DAYS_KEPT = 7
 TOKEN_TIMEOUT_S = 30
@@ -167,6 +176,7 @@ def empty_state() -> dict:
     return {
         "cursor": None,
         "delivered": {},
+        "delivered_row": {},
         "holdoff": {},
         "started": None,
         "last_ok": None,
@@ -187,7 +197,7 @@ def read_state(companion: str) -> dict:
     cursor = data.get("cursor")
     if isinstance(cursor, int) and not isinstance(cursor, bool) and cursor >= 0:
         state["cursor"] = cursor
-    for key in ("delivered", "holdoff"):
+    for key in ("delivered", "delivered_row", "holdoff"):
         value = data.get(key)
         if isinstance(value, dict):
             state[key] = {
@@ -369,17 +379,33 @@ def parse_news(payload: dict) -> dict:
     return {"cursor": cursor, "rooms": [_clean_room(item) for item in rooms]}
 
 
+def _plain_int(value: Any, *, nullable: bool = False) -> bool:
+    if value is None:
+        return nullable
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _clean_room(item: Any) -> dict:
     if not isinstance(item, dict):
         raise PollError("format")
     room, count, sat = item.get("room"), item.get("count"), item.get("saturated", False)
     if not isinstance(room, str) or not ROOM_RE.fullmatch(room):
         raise PollError("format")
-    if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+    if not _plain_int(count):
         raise PollError("format")
     if not isinstance(sat, bool):
         raise PollError("format")
-    return {"room": room, "count": count, "saturated": sat}
+    clean = {"room": room, "count": count, "saturated": sat}
+    if "unanswered" in item:
+        newest, age = item.get("unanswered_newest"), item.get("unanswered_age_s")
+        if not _plain_int(item["unanswered"]):
+            raise PollError("format")
+        if not _plain_int(newest, nullable=True) or not _plain_int(age, nullable=True):
+            raise PollError("format")
+        if item["unanswered"] and (newest is None or age is None):
+            raise PollError("format")
+        clean.update(unanswered=item["unanswered"], unanswered_newest=newest, unanswered_age_s=age)
+    return clean
 
 
 def call_news_since(url: str, bearer: str, companion: str, after: int | None) -> dict:
@@ -501,6 +527,7 @@ class Poller:
         alive: Callable[[str], bool] = session_alive,
         log: Callable[[str], None] = lambda _line: None,
         interval: int = INTERVAL_S,
+        grace: int = GRACE_S,
     ):
         self.companion = companion
         self.socket_path = socket_path
@@ -514,6 +541,7 @@ class Poller:
         self.alive = alive
         self.log = log
         self.interval = interval
+        self.grace = grace
         self.max_interval = max(interval, MAX_INTERVAL_S * interval // INTERVAL_S)
         self.auth_failures = 0
         self.first = True
@@ -565,13 +593,11 @@ class Poller:
                 self.log("ok skipped (cursor moved by another poller)")
                 return "ok"
             state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
-            delivered = state["delivered"]
-            fresh = []
-            for item in answer["rooms"]:
-                new = item["count"] - int(delivered.get(item["room"], 0))
-                if new > 0:
-                    fresh.append(dict(item, new=new))
-            wakeable = [f for f in fresh if state["holdoff"].get(f["room"], 0) <= now]
+            delivered, delivered_row = state["delivered"], state["delivered_row"]
+            fresh = self._fresh(answer["rooms"], delivered, delivered_row)
+            wakeable = [
+                f for f in fresh if not f["waiting"] and state["holdoff"].get(f["room"], 0) <= now
+            ]
             if not wakeable:
                 if not fresh:
                     self._advance(state, base, answer["cursor"])
@@ -596,7 +622,10 @@ class Poller:
                 self.log(f"pending note rooms={len(rooms)}")
                 return "error:socket"
             for f in wakeable:
-                delivered[f["room"]] = f["count"]
+                if "unanswered" in f:
+                    delivered_row[f["room"]] = f["unanswered_newest"]
+                else:
+                    delivered[f["room"]] = f["count"]
                 state["holdoff"][f["room"]] = now + HOLDOFF_S
             bump(state, "wakes", now)
             if len(wakeable) == len(fresh):
@@ -604,10 +633,30 @@ class Poller:
             self.log(f"wake delivered rooms={len(rooms)}")
             return "ok"
 
+    def _fresh(self, rooms: list[dict], delivered: dict, delivered_row: dict) -> list[dict]:
+        """The rooms with a line not yet delivered; ``waiting`` marks one still in its grace.
+
+        A room with ``unanswered`` counts only an unanswered row newer than the one delivered
+        there; a room without it (an older server) every line beyond the delivered count.
+        """
+        fresh = []
+        for item in rooms:
+            if "unanswered" in item:
+                newest = item["unanswered_newest"]
+                if newest is not None and newest > int(delivered_row.get(item["room"], 0)):
+                    waiting = item["unanswered_age_s"] < self.grace
+                    fresh.append(dict(item, new=item["unanswered"], waiting=waiting))
+                continue
+            new = item["count"] - int(delivered.get(item["room"], 0))
+            if new > 0:
+                fresh.append(dict(item, new=new, waiting=False))
+        return fresh
+
     @staticmethod
     def _advance(state: dict, base: int | None, cursor: int) -> None:
         state["cursor"] = cursor if base is None else max(base, cursor)
         state["delivered"] = {}
+        state["delivered_row"] = {}
 
     def run(self, max_cycles: int | None = None) -> str:
         """Poll until the session ends or auth gives up; returns the exit reason."""
