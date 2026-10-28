@@ -11,7 +11,7 @@ Longer than 150 lines because the thread query and the gate checks are load-bear
 
 1. The gate is every required check (`gh pr checks $PR --required`, read live) concluded non-red, plus zero unresolved bot threads.
 2. A required reviewer's BLOCKING or WARNING is fixed. A skip needs cited evidence posted on the PR.
-3. Codex is advisory, with no end date (Foxy 30.09.2026). Only a Codex BLOCKING turns its check red. Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; Foxy decides the subscription on these numbers.
+3. Codex is advisory, with no end date (Foxy 30.09.2026). A Codex BLOCKING or WARNING turns its check red until each finding is fixed or skipped with a cited reply (Foxy 28.10.2026). Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; Foxy decides the subscription on these numbers.
 4. One round means collect, fix, validate locally, commit once, resolve the threads, merge the base, and push once. Wait with a background `gh pr checks --watch` or `gh run watch`, never a sleep loop and never a `Monitor` for a CI job (30-min cap, shorter than a backend test job).
 5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (a merge without `--auto`, a force-push, a rebase). Every other status note goes in the same message as the next tool call.
 

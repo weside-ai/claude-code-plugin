@@ -5,7 +5,8 @@ unless GitHub itself waits for it.
 Codex is no required check, so GitHub merges past it: an arm before its verdict merges the
 finding unread. The hook refuses `gh pr merge … --auto` while the Codex check on the PR's
 `headRefOid` is missing, queued, running, cancelled, or ended with `VERDICT:ERROR` (the runner,
-not a review) in the comment carrying `<!-- codex-review -->`. A BLOCKING or WARNING verdict lets it through: reading the finding is
+not a review) in the comment carrying `<!-- codex-review -->`. A BLOCKING or WARNING verdict lets it through: where the Codex check is
+required and gates on those verdicts, GitHub holds the merge; reading the finding is
 `/we:ci-review`'s job, the hook only makes sure there is one to read.
 
   * The check name is `.weside/config.json` → `review.codex_check`, default `Codex Review`.
