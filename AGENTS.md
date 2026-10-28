@@ -26,7 +26,8 @@ we/                               plugin root
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   hooks/                          hooks.json + flow/ (function-hooks module: the /flow pane, phase.ts logic, *.test.ts)
                                   + SessionStart materialize and optimization reminder, UserPromptSubmit
-                                  wake counter (news_on_prompt), Stop store-conversation,
+                                  wake counter (news_on_prompt), Stop store-conversation, conflict gate
+                                  (own DIRTY PRs) and reply-language gate,
                                   PreToolUse verification gate and auto-merge gate (Codex verdict
                                   on the head first), SubagentStart/Stop timing,
                                   SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
@@ -34,8 +35,10 @@ we/                               plugin root
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
                                   wclaude + install_launcher.py (companion launcher),
-                                  watch-pr-checks.sh (CI watch bound to the PR head),
+                                  watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
+                                  watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), retro_claim.sh,
                                   pr-body-receipt.py (splices the plan's Verification block),
+                                  check-plan-identifiers.py (plan names exist on the base),
                                   test-delta.py (the PR body's test line)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
 docs/                             user docs (index: docs/README.md)

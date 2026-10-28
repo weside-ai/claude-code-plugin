@@ -12,7 +12,8 @@ prints the merge state once, and a worker or peer session idles while its PR con
     A new push (new head) that conflicts again is named again. No block while
     `stop_hook_active` is set.
   * No block for a PR with auto-merge off whose body carries `user merge:`: it waits for the human.
-  * At most one `gh` sweep per THROTTLE_S per session, at most MAX_PRS PRs (the newest).
+  * At most one `gh` sweep per THROTTLE_S per session, at most MAX_PRS PRs (the newest), at most
+    SWEEP_BUDGET_S seconds of `gh` per sweep.
   * Fail-open on every error: a `gh` or parse failure lets the stop through.
 
 State: `$WE_STATE_DIR/conflict-gate/<session>.json` (default `~/.claude/we-state`).
@@ -30,6 +31,7 @@ from pathlib import Path
 
 THROTTLE_S = 120
 MAX_PRS = 10
+SWEEP_BUDGET_S = 20  # total gh time per sweep; the rest waits for the next sweep
 _PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 
 
@@ -117,7 +119,7 @@ def _view(selector: str, cwd: str | None) -> dict | None:
             ],
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=8,
             check=False,
             cwd=cwd or None,
         )
@@ -159,7 +161,10 @@ def decide(payload: dict, now: float | None = None) -> str | None:
         state["checked"] = now
         named = set(state.get("named", []))
         lines, seen = [], set()
+        started = time.monotonic()
         for selector, cwd in targets:
+            if time.monotonic() - started > SWEEP_BUDGET_S:
+                break
             pr = _view(selector, cwd)
             if not pr or pr.get("url") in seen:
                 continue
