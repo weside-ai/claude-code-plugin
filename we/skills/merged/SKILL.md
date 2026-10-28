@@ -52,15 +52,16 @@ like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the
 
 ## 3 · Auto retro
 
-Run one in the background when the PR needed many review rounds:
+Dispatch one only when you can name a concrete, new friction of this PR that an instruction change
+would prevent: a wrong assumption the instruction files should have held, a script or hook that
+misled, a correction the user had to repeat. Review rounds alone are no reason (Foxy 28.10.2026).
+Otherwise skip it and write `retro: skipped (<reason>)` into the report, without asking.
 
-- rounds: two or more `fix: address CI and review findings` commits on the PR, or three or more
-  completed runs of its required review check (`gh pr view <N> --json commits,statusCheckRollup`);
-- covered, and dispatched when not: `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode. A retro
-  `/we:orchestrate` dispatched for this PR has claimed it, even while it still runs.
+- covered, and dispatched when not: `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode, the
+  friction named in the brief. A retro `/we:orchestrate` dispatched for this PR has claimed it, even
+  while it still runs.
 
-Its working directory is the main checkout, never a tree that step 4 removes. Otherwise skip it
-silently.
+Its working directory is the main checkout, never a tree that step 4 removes.
 
 ## 4 · Tear down, in this order
 
@@ -69,7 +70,11 @@ silently.
    A cwd in a foreign tree belongs to another session and stays. Never `pkill -f <pattern>`,
    which matches its own command line and exits 144.
 2. **Check each tree:** `git -C <path> status --porcelain`. An untracked `WORKER-REPORT.md` is
-   expected. Anything else is unmerged work: leave that tree and name it.
+   expected. Anything else is unmerged work: leave that tree and name it. Then
+   `git -C <path> rev-list HEAD --not --remotes`, minus the PR's `commits` from step 1, must be
+   empty: a commit left is a worker's unpushed work, so the tree stays and is named. A tree a live
+   teammate still works in stays too: a running agent of this session (`ListAgents`) names it, or
+   a process has its cwd there (`ls -l /proc/*/cwd 2>/dev/null | grep <path>`).
 3. **Remove the worktrees**, then `git worktree prune`. A repo with its own worktree-removal verb (one that also
    drops the tree's database fork) uses that verb. That verb also kills a running agent-browser Chrome. If another session is
    driving agent-browser, use `git worktree remove` and name the leftover database fork in the report.

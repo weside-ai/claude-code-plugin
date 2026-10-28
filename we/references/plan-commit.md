@@ -24,7 +24,9 @@ Every verb that commits a planning document follows this section: `/we:story`, `
 3. **Get the file into the scratch tree.** A writer dispatched by the verb writes straight to the
    absolute path inside `<scratch>`. A file written elsewhere (a refiner's `isolation: "worktree"`
    tree) is copied with `cp` into `<scratch>` before the commit.
-4. **Commit and check.**
+4. **Commit and check.** A story plan first passes
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`: a
+   `missing:` name goes back to its writer (struck, or marked `(new)`), never committed as existing.
 
    ```bash
    git -C <scratch> add <files>

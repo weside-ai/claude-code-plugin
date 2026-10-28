@@ -53,6 +53,11 @@ Your final message is the report the dispatcher reads (step 5).
    - The code: the seam the story names. With the code graph, `graphify affected "<identifier>" --relation calls
      --depth 2`; otherwise `rg`, and write "grep-derived, no code graph" into `## Technical Approach`. Resolve
      prose scope ("the queue producer and consumer") to real paths before listing them.
+   - Four claim classes drew most of the Lead's corrections (about a dozen per plan, 10/2026): a claim over a
+     set ("every table", "all five call sites") lists each member with file:line; a new lookup into an existing
+     map names the keys its callers pass and what a miss does; every caller of the changed seam is traced and
+     each path that skips the new guard is named; every behaviour change on an existing path is an AC or a
+     `## Design Decisions` line.
 3. **Write the file.**
    - Real phases even for a small story: each independently committable, with its own `**Files:**` list
      (generated artifacts included; `rg` the changed symbols under the test trees for call sites that break) and
@@ -64,7 +69,8 @@ Your final message is the report the dispatcher reads (step 5).
      no wrap inside a code span or a table.
 4. **Proofread.** `rg -n '^### Phase \d+: ' <plan>` and `rg -c '\*\*Files:\*\*' <plan>` match per phase; every AC
    carries `**Given**`, `**When**` and `**Then**` capitalised; `## Context` is a paragraph; the frontmatter lines
-   are bare. Do the same after a step-0 edit.
+   are bare. Then `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`:
+   each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it. Do the same after a step-0 edit.
 5. **Report** as your final message, one of:
 
    ```text

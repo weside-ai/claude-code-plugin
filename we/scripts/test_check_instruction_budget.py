@@ -258,6 +258,49 @@ class GateTest(unittest.TestCase):
         code, out = self.run_gate()
         self.assertEqual(code, 0, out)
 
+    def ref_warnings(self) -> list[str]:
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)
+        return [line for line in out.splitlines() if "[ref-path-missing]" in line]
+
+    def test_a_deleted_path_in_a_rule_warns_with_file_and_line(self):
+        self.write("apps/api/app/crud/user.py", "x = 1\n")
+        self.write(
+            ".claude/rules/r.md",
+            "# R\n\nUse `src/app.py` and `app/crud/user.py`.\nNot `src/gone.py` any more.\n",
+        )
+        self.assertEqual(
+            self.ref_warnings(),
+            ["! .claude/rules/r.md:4: `src/gone.py` does not exist [ref-path-missing]"],
+        )
+
+    def test_placeholders_globs_refs_and_non_paths_are_skipped(self):
+        self.write(
+            ".claude/rules/r.md",
+            "# R\n\n`docs/plans/<KEY>-story.md` `src/**/*.py` `docs/{a}.md` `origin/main`\n"
+            "`~/x/y.md` `/proc/1/cwd` `ops/pod-0` `10/minute` `application/json`\n"
+            "`src/app.py:12` `src/app.py::test_x` `gone/x.md` <!-- ref-ok -->\n"
+            "```bash\ncat `gone/y.md`\n```\n",
+        )
+        self.assertEqual(self.ref_warnings(), [])
+
+    def test_plugin_files_check_only_plugin_paths_and_commands(self):
+        self.write("p/.claude-plugin/plugin.json", json.dumps({"name": "pl"}))
+        self.write(
+            "p/skills/go/SKILL.md",
+            "---\nname: go\ndescription: Go.\n---\n"
+            "`${CLAUDE_PLUGIN_ROOT}/scripts/run.sh <PR>` `scripts/gone.sh` "
+            "`.weside/config.json` `docs/plans/x.md` `/pl:go` `/pl:nope` `/other:x`\n",
+        )
+        self.write("p/scripts/run.sh", "echo\n")
+        self.assertEqual(
+            self.ref_warnings(),
+            [
+                "! p/skills/go/SKILL.md:5: `scripts/gone.sh` does not exist [ref-path-missing]",
+                "! p/skills/go/SKILL.md:5: `/pl:nope` does not exist [ref-path-missing]",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
