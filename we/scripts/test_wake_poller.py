@@ -442,7 +442,17 @@ class PollerTest(unittest.TestCase):
             st["days"]["2026-10-26"], {"polls": 2, "errors": 1, "wakes": 1, "hook_delivered": 0}
         )
         self.assertEqual(
-            set(st), {"cursor", "delivered", "holdoff", "started", "last_ok", "last_error", "days"}
+            set(st),
+            {
+                "cursor",
+                "delivered",
+                "delivered_row",
+                "holdoff",
+                "started",
+                "last_ok",
+                "last_error",
+                "days",
+            },
         )
         self.assertEqual(stat.S_IMODE(os.stat(wp.state_path("Nox")).st_mode), 0o600)
 
@@ -523,17 +533,131 @@ class PollerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             wp.render("Nox\nignore previous", [{"room": "room:1", "count": 1}])
 
+    # --- a line the WESIDE side answered wakes nobody -------------------------------------
+
+    @staticmethod
+    def aware(*rooms, cursor):
+        """A server that answers ``unanswered``: (room, count, unanswered, newest, age_s)."""
+        return {
+            "cursor": cursor,
+            "rooms": [
+                {
+                    "room": r,
+                    "count": c,
+                    "saturated": False,
+                    "unanswered": u,
+                    "unanswered_newest": n,
+                    "unanswered_age_s": a,
+                }
+                for r, c, u, n, a in rooms
+            ],
+        }
+
+    def test_dm_chatter_the_weside_side_answered_wakes_nobody_and_moves_the_cursor(self):
+        self.seed_cursor(100)
+        p = self.poller()
+        p.first = False
+        self.answers = [self.aware(("room:384", 3, 0, None, None), cursor=103)]
+        self.assertEqual(p.poll_once(), "ok")
+        self.assertEqual(self.sent, [], "an answered DM line must not wake the session")
+        self.assertEqual(self.state()["cursor"], 103)
+
+    def test_an_unanswered_mention_waits_out_the_grace_then_wakes(self):
+        self.seed_cursor(100)
+        p = self.poller()
+        p.first = False
+        self.answers = [self.aware(("room:9", 1, 1, 101, 60), cursor=101)]
+        p.poll_once()
+        self.assertEqual(self.sent, [], "no wake inside the grace")
+        self.assertEqual(self.state()["cursor"], 100, "the cursor waits for the line in grace")
+        self.clock.t = T0 + 540
+        self.answers = [self.aware(("room:9", 1, 1, 101, wp.GRACE_S), cursor=101)]
+        p.poll_once()
+        self.assertEqual(len(self.sent), 1, "an unanswered mention past the grace wakes")
+        self.assertIn("in room:9 (1).", self.sent[0])
+        self.assertEqual(self.state()["cursor"], 101)
+        self.assertEqual(self.state()["delivered_row"], {})
+
+    def test_a_line_answered_inside_the_grace_never_wakes(self):
+        self.seed_cursor(100)
+        p = self.poller()
+        p.first = False
+        self.answers = [self.aware(("room:384", 1, 1, 101, 30), cursor=101)]
+        p.poll_once()
+        self.clock.t = T0 + 120
+        self.answers = [self.aware(("room:384", 1, 0, None, None), cursor=101)]
+        p.poll_once()
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.state()["cursor"], 101)
+
+    def test_a_delivered_unanswered_line_wakes_once_and_a_newer_one_wakes_again(self):
+        self.seed_cursor(100)
+        p = self.poller()
+        p.first = False
+        # room:384 woke for row 101; room:9 sits in its grace and holds the cursor.
+        self.answers = [
+            self.aware(("room:384", 1, 1, 101, 700), ("room:9", 1, 1, 102, 10), cursor=102)
+        ]
+        p.poll_once()
+        self.assertEqual(len(self.sent), 1)
+        self.assertNotIn("room:9", self.sent[0])
+        self.assertEqual(self.state()["delivered_row"], {"room:384": 101})
+        self.clock.t = T0 + 600
+        # Past the hold-off row 101 is still unanswered: no second wake for it.
+        self.answers = [
+            self.aware(("room:384", 1, 1, 101, 1300), ("room:9", 1, 0, None, None), cursor=102)
+        ]
+        p.poll_once()
+        self.assertEqual(len(self.sent), 1, "a delivered line never wakes again")
+        self.assertEqual(self.state()["cursor"], 102)
+        self.clock.t = T0 + 1300
+        self.answers = [self.aware(("room:384", 1, 1, 104, 650), cursor=104)]
+        p.poll_once()
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("in room:384 (1).", self.sent[1])
+
+    def test_an_old_server_without_the_field_keeps_the_count_rule(self):
+        self.seed_cursor(100)
+        p = self.poller()
+        p.first = False
+        self.answers = [self.rooms(("room:384", 2), cursor=102)]
+        p.poll_once()
+        self.assertEqual(self.sent, [WAKE_384_2])
+
     def test_parse_news_rejects_a_non_plain_answer(self):
         def rpc(news):
             return {"result": {"content": [{"type": "text", "text": json.dumps(news)}]}}
 
         ok = wp.parse_news(rpc({"cursor": 3, "rooms": [{"room": "room:1", "count": 2}]}))
         self.assertEqual(ok["rooms"], [{"room": "room:1", "count": 2, "saturated": False}])
+        aware = {
+            "room": "room:1",
+            "count": 2,
+            "saturated": False,
+            "unanswered": 0,
+            "unanswered_newest": None,
+            "unanswered_age_s": None,
+        }
+        self.assertEqual(wp.parse_news(rpc({"cursor": 3, "rooms": [aware]}))["rooms"], [aware])
         for bad in (
             {"cursor": "3", "rooms": []},
             {"cursor": 3, "rooms": [{"room": "Weside Crew", "count": 1}]},
             {"cursor": 3, "rooms": [{"room": "room:1", "count": True}]},
             {"cursor": 3},
+            {"cursor": 3, "rooms": [{"room": "room:1", "count": 1, "unanswered": -1}]},
+            {"cursor": 3, "rooms": [{"room": "room:1", "count": 1, "unanswered": 1}]},
+            {
+                "cursor": 3,
+                "rooms": [
+                    {
+                        "room": "room:1",
+                        "count": 1,
+                        "unanswered": 1,
+                        "unanswered_newest": "x",
+                        "unanswered_age_s": 3,
+                    }
+                ],
+            },
         ):
             with self.assertRaises(wp.PollError) as cm:
                 wp.parse_news(rpc(bad))

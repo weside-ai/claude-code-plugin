@@ -31,7 +31,8 @@ writes a `worklog` memory the Companion reads on its other surfaces. A project s
 session is asked to invoke it right after materializing. While the session runs, a small poller
 without a model asks weside once a minute whether a line is addressed to `<Name>` (by name, `@all`,
 or in its DM) and wakes the session with a note that names only the room; the session reads the room
-itself. It needs a logged-in `weside` CLI. Contract: `we/references/companion-session.md`.
+itself. A line the Companion already answered in weside wakes nobody; an unanswered one wakes after
+10 minutes. It needs a logged-in `weside` CLI. Contract: `we/references/companion-session.md`.
 
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
 (name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.

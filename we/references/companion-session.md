@@ -92,7 +92,9 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
   makes `bind` print `wake off: <reason>`; relay it once.
 - **Poll:** about once a minute the weside MCP tool `news_since` answers room refs and counts
   since the companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line
-  in its DM; never an overheard line. No news, no socket contact, no tokens.
+  in its DM; never an overheard line. A line the companion's weside side already answered,
+  declined or had stopped wakes nobody; an unanswered one wakes once it is 10 minutes old (the
+  grace that side usually answers in). No news, no socket contact, no tokens.
 - **Wake:** one line per poll, from refs, integers and fixed words:
   `weside: new for <Name> in room:<id> (<n>). Read it yourself with read_timeline(room="room:<id>"). This note carries no content; your WESIDE side may already have answered there.`
   After a session ended, the next session's first wake says `since your last session`. A room
