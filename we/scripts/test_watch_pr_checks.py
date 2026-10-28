@@ -48,13 +48,29 @@ def _queue(tmp_path, name, answers):
     )
 
 
-def run(tmp_path, answers, *args, runs=([],), timeout_s="900", max_errors="10", quiet="0"):
-    """`answers` replays `gh pr view`, `runs` replays `gh run list --commit <sha>`."""
+def run(
+    tmp_path,
+    answers,
+    *args,
+    runs=([],),
+    comments=({"comments": []},),
+    timeout_s="900",
+    max_errors="10",
+    quiet="0",
+    env_extra=None,
+):
+    """`answers` replays `gh pr view`, `runs` `gh run list --commit <sha>`, `comments` the
+    `gh pr view --json comments` read. Every call's argv and cwd land in `calls.log`."""
     gh = tmp_path / "gh"
+    log = tmp_path / "calls.log"
     gh.write_text(
         "#!/usr/bin/env bash\n"
+        f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
+        'if [ "$1 $2" = "repo view" ]; then echo o/r; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
+        + '; elif [[ " $* " == *" comments "* ]]; then '
+        + _queue(tmp_path, "comments", list(comments))
         + "; else "
         + _queue(tmp_path, "views", answers)
         + "; fi\n"
@@ -70,12 +86,15 @@ def run(tmp_path, answers, *args, runs=([],), timeout_s="900", max_errors="10", 
         "WATCH_QUIET": quiet,
         "WATCH_REGISTER_TIMEOUT": timeout_s,
         "WATCH_MAX_ERRORS": max_errors,
+        **(env_extra or {}),
     }
+    env.pop("WATCH_REPO", None)
     res = subprocess.run(
         ["bash", str(SCRIPT), "57", *args],
         capture_output=True,
         text=True,
         env=env,
+        cwd=tmp_path,
         timeout=30,
         check=False,
     )
@@ -237,3 +256,120 @@ def test_a_run_waiting_for_approval_does_not_hold_the_watcher(tmp_path):
     waiting = [{"databaseId": 8, "attempt": 1, "status": "waiting"}]
     code, out = run(tmp_path, [_green(), _green(), _green()], runs=[waiting, waiting, waiting])
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+
+
+def _codex(verdict, sha=SHA):
+    body = (
+        "<!-- codex-review -->\n## Codex Review\n\n"
+        f"Reviewed commit `{sha}`.\n\n<!-- VERDICT:{verdict} -->\n"
+        "<!-- history-start -->\n- `0000000` · ✅ PASS\n<!-- history-end -->"
+    )
+    return {"comments": [{"body": "unrelated"}, {"body": body}]}
+
+
+def _with_codex(d, conclusion="SUCCESS", status="COMPLETED"):
+    d = copy.deepcopy(d)
+    d["statusCheckRollup"].append(
+        {
+            "__typename": "CheckRun",
+            "name": "Codex Review",
+            "status": status,
+            "conclusion": conclusion,
+        }
+    )
+    return d
+
+
+def test_every_gh_call_names_the_repo_and_runs_from_root(tmp_path):
+    code, out = run(tmp_path, [_green()])
+    assert code == 0, out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    # The repo is resolved once, from the caller's directory; everything after runs from `/`.
+    assert calls[0] == f"{tmp_path} | repo view ", calls[0]
+    rest = calls[1:]
+    assert rest and all(c.startswith("/ | ") and " -R o/r " in c for c in rest), rest
+
+
+@pytest.mark.parametrize("state, code, word", [("MERGED", 7, "merged"), ("CLOSED", 8, "closed")])
+def test_a_merged_or_closed_pr_is_never_red(tmp_path, state, code, word):
+    # The merge cancelled the checks; the old watcher said `final … red`.
+    cancelled = copy.deepcopy(REAL)
+    for c in cancelled["statusCheckRollup"]:
+        c["conclusion"] = "CANCELLED"
+    gone = {**cancelled, "state": state}
+    got, out = run(tmp_path, [_pending(_green()), gone])
+    assert (got, out) == (code, [f"final {SHA}: {word}"])
+
+
+def test_expected_head_waits_past_a_red_old_head(tmp_path):
+    new = "c" * 40
+    fresh = {**_green(), "headRefOid": new}
+    code, out = run(tmp_path, [REAL, REAL, _pending(fresh), fresh], "--sha", new)
+    assert (code, out) == (0, [f"final {new}: green · {MERGE}"])
+
+
+def test_expected_head_never_arriving_has_its_own_exit(tmp_path):
+    code, out = run(tmp_path, [REAL], "--sha", "d" * 40, env_extra={"WATCH_HEAD_TIMEOUT": "0"})
+    assert (code, out) == (5, [f"head never reached {'d' * 40} (still {SHA}) after 0s"])
+
+
+@pytest.mark.parametrize("verdict", ["WARNING", "BLOCKING"])
+def test_codex_warning_on_the_head_returns_before_the_merge(tmp_path, verdict):
+    armed = {**_with_codex(_pending(_green())), "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(tmp_path, [armed], "--until-merged", comments=[_codex(verdict)])
+    assert code == 6
+    assert out == [
+        f"final {SHA}: codex {verdict} · auto-merge on — run `gh pr merge 57 --disable-auto`, "
+        "then /we:ci-review"
+    ]
+
+
+def test_codex_pass_or_an_older_heads_warning_does_not_stop(tmp_path):
+    code, out = run(tmp_path, [_with_codex(_green())], comments=[_codex("WARNING", "e" * 40)])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    (tmp_path / "pass").mkdir()
+    code, out = run(tmp_path / "pass", [_with_codex(_green())], comments=[_codex("PASS")])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+
+
+def test_codex_comment_is_not_read_while_its_check_runs(tmp_path):
+    running = _with_codex(_green(), status="IN_PROGRESS", conclusion="")
+    code, out = run(
+        tmp_path, [running, running, running, _with_codex(_green())], comments=[_codex("PASS")]
+    )
+    assert code == 0, out
+    # Three reads with Codex running, then one comment read once its check completed.
+    assert int((tmp_path / "comments" / "count").read_text()) == 1
+
+
+def test_until_merged_keeps_watching_green_until_merged(tmp_path):
+    armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
+    merged = {**armed, "state": "MERGED"}
+    code, out = run(tmp_path, [armed, armed, armed, armed, merged], "--until-merged")
+    assert (code, out) == (7, [f"final {SHA}: merged"])
+    assert int((tmp_path / "views" / "count").read_text()) >= 5
+
+
+@pytest.mark.parametrize(
+    "patch, note",
+    [
+        ({}, "merge: UNKNOWN/UNKNOWN · auto-merge off"),
+        (
+            {"autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "DIRTY"},
+            "merge: DIRTY/UNKNOWN — conflicts with the base: merge it",
+        ),
+        (
+            {"autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BEHIND"},
+            "merge: BEHIND/UNKNOWN — behind the base: merge it",
+        ),
+    ],
+)
+def test_until_merged_stops_on_green_that_will_not_merge(tmp_path, patch, note):
+    code, out = run(tmp_path, [{**_green(), **patch}], "--until-merged")
+    assert (code, out) == (0, [f"final {SHA}: green · {note}"])
+
+
+def test_lifetime_cap_ends_the_watch(tmp_path):
+    armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
+    code, out = run(tmp_path, [armed], "--until-merged", env_extra={"WATCH_MAX_LIFETIME": "1"})
+    assert (code, out) == (9, [f"gave up after 1s on {SHA}"])
