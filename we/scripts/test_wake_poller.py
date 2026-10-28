@@ -691,11 +691,12 @@ class PollerProcessTest(unittest.TestCase):
             for env, reason in cases:
                 self.assertTrue(wp.spawn("Nox", env).startswith(f"wake off: {reason}"), reason)
             fake_weside(self.bin, exit_code=1)
+            origin = self.mcp.url.rsplit("/mcp/", 1)[0]
             self.assertEqual(
                 wp.spawn("Nox", self.env()),
-                "wake off: the weside CLI is not logged in (weside auth login)",
+                f"wake off: the weside CLI is not logged in for {origin}"
+                f" (weside auth login --api-url {origin})",
             )
-        origin = self.mcp.url.rsplit("/mcp/", 1)[0]
         self.assertEqual(self.argv_lines(), [f"auth token --api-url {origin}"])
         self.assertFalse(wp.lock_held(self.inbox.path))
 

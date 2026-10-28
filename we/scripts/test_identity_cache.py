@@ -252,8 +252,13 @@ class WakeBindTest(unittest.TestCase):
         self.assertTrue(line.startswith("wake off: CLAUDE_CODE_MESSAGING_SOCKET is unset"), line)
         os.environ["CLAUDE_CODE_MESSAGING_SOCKET"] = self.inbox.path
         fake_weside(self.bin, exit_code=1)
+        origin = wp.api_origin(wp.mcp_url(os.environ))
         self.assertEqual(
-            self.bind(), ["wake off: the weside CLI is not logged in (weside auth login)"]
+            self.bind(),
+            [
+                f"wake off: the weside CLI is not logged in for {origin}"
+                f" (weside auth login --api-url {origin})"
+            ],
         )
         os.environ["PATH"] = "/nonexistent"
         self.assertEqual(self.bind(), ["wake off: the weside CLI is not installed"])

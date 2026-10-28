@@ -684,9 +684,13 @@ def prerequisite_gap(companion: str, environ: dict, check_login: bool) -> str | 
     if not exe:
         return "the weside CLI is not installed"
     if check_login:
+        origin = api_origin(mcp_url(environ))
+        not_logged_in = (
+            f"the weside CLI is not logged in for {origin} (weside auth login --api-url {origin})"
+        )
         try:
             done = subprocess.run(
-                [exe, "auth", "token", "--api-url", api_origin(mcp_url(environ))],
+                [exe, "auth", "token", "--api-url", origin],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=TOKEN_TIMEOUT_S,
@@ -694,9 +698,9 @@ def prerequisite_gap(companion: str, environ: dict, check_login: bool) -> str | 
                 check=False,
             )
         except (OSError, subprocess.SubprocessError):
-            return "the weside CLI is not logged in (weside auth login)"
+            return not_logged_in
         if done.returncode != 0:
-            return "the weside CLI is not logged in (weside auth login)"
+            return not_logged_in
     return None
 
 
