@@ -134,8 +134,9 @@ replacement while the original may be alive: `TaskStop`, verify, then re-dispatc
 
 **Parallel chunks** (per the plan's `parallel_groups` or § Choosing the worker): create the integration worktree
 `git worktree add <repo>-<KEY>-integration -b <type>/<KEY>-<slug> origin/<default>`, dispatch
-the wave in one message, and merge each returned branch with
-`git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`. A result without
+the wave in one message, and merge each branch as it returns, not after the wave (chunks sat 20–35
+min unmerged, 17.10.2026): `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`.
+A serial successor is dispatched on its predecessor's head the moment that one reports. A result without
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run
 `worker-dispatch.md` § After each lane merge; a contract change breaks a sibling no chunk gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
 Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
@@ -155,18 +156,26 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
 3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
    relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
-   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body> <file>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. Move every
-   landed story to In Review and verify.
-4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command: it binds
-   to the PR's current head, prints only failed or cancelled checks and the final state with the merge
-   state, and exits once the head's check set has stayed complete and unchanged for the watcher's quiet period. One watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
+   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` while a worker round,
+   review round or dependency is pending (`/we:pr` step 4). Move every landed story to In Review and verify.
+4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
+   with `--until-merged` once auto-merge is armed, and next to it one
+   `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list
+   the exit codes. One checks watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
    the watch and you arm none. Meanwhile refine or prepare the next story.
-5. Once no check is pending, green or red, run `/we:ci-review <PR>` without asking: open bot threads
-   and review findings remain on a green run. Never from the shared main checkout:
-   `EnterWorktree(path=<wt>)` first, or a `we:dev-medium` with `cwd=<wt>` runs it. Its round cap
-   (three) and terminal states end the run.
-6. While any run PR is open, every `main` advance you see is followed by `gh pr view <N> --json mergeStateStatus,mergeable`
-   for each; `DIRTY`/`CONFLICTING` goes back to its worker (merge the default branch, after-merge check, push) without asking.
+5. You stay on an auto-merge PR until it is merged; the user never runs `/we:ci-review` or
+   `/we:merged` by hand on it (Foxy 28.10.2026). On the watcher's exit, without asking:
+   - red, or exit 6 (Codex WARNING/BLOCKING on the head) → `/we:ci-review <PR>`, which disarms first
+     and re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
+     or a `we:dev-medium` with `cwd=<wt>` runs it. Green but not yet armed → the same, open threads and
+     findings remain on a green run.
+   - exit 7 (merged) → `/we:merged <PR>` yourself; exit 8 (closed) → report.
+   - exit 3 (head moved) or 0 under `--until-merged` (conflict, behind, auto-merge off) → handle it,
+     then re-arm on the new head.
+   Bounds, no `/loop` or `/goal`: ci-review's three rounds; the watcher's 6-h lifetime (exit 9 →
+   report); at most three re-arms per PR head; a repeat finding (ci-review § 4) stops and reports.
+6. A conflict exit of `watch-pr-conflicts.sh` (or the `conflict_gate.py` Stop hook) goes back to the
+   PR's worker (merge the default branch, after-merge check, push) without asking; re-arm the watch after the push.
 
 ## Close the run
 
@@ -183,17 +192,18 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round
-  on an armed PR starts with `gh pr merge <PR> --disable-auto`.
-- **Auto retro** when the run was not smooth: a worker failed, was stopped or re-dispatched; a dispatch came back
-  empty; `/we:ci-review` needed two rounds or more; the user corrected an assumption or an action; a report
-  said green and was not; or a Decision-Queue item was answered by a fact the instruction files should hold.
-  Then dispatch it per `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode; it is the one agent
-  that keeps running after the run closes.
-  A smooth run gets none; the closing message says `retro: <reason> | skipped (smooth)`.
+  on an armed PR starts with `gh pr merge <PR> --disable-auto` and `gh pr ready <PR> --undo` (`/we:ci-review` § 1).
+- **Auto retro** only when you can name a concrete, new friction of the run that an instruction change
+  would prevent (a wrong assumption the files should have held, a script that misled, a repeated user
+  correction); round counts alone are no reason (Foxy 28.10.2026). Then dispatch it per
+  `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode with that friction in the brief; it is the
+  one agent that keeps running after the run closes. Otherwise skip it without asking; the closing
+  message says `retro: <friction> | skipped (<reason>)`.
 - The closing message starts with `PR #<n> · <branch> · <worktree> · CI <state> · auto-merge|user merge`,
   then at most three items someone owes. For a user merge it is the `/we:standup --branch` output. While a
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
-  decided per finish-first and reported, never asked (final sim 28.09.2026). Knowledge goes into the
+  decided per finish-first and reported, never asked (final sim 28.09.2026), unless its fix replaces a design the
+  user approved in the plan (another mechanism, a dropped AC, a changed interface): that goes back to the user first. Knowledge goes into the
   plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
 - Stop leftover agents with `TaskStop`, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
@@ -203,8 +213,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default
   branch is the backup; no extra documentation pass (Foxy 01.10.2026).
-- After the merge, `/we:merged` closes out: it finds the run's branches and worktrees by `<KEY>` in
-  git and the PR by number.
+- After the merge, you run `/we:merged <PR>` yourself (§ Push, PR, CI step 5): it finds the run's branches
+  and worktrees by `<KEY>` in git and the PR by number.
 
 ## `--solo`
 

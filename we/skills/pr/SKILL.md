@@ -22,7 +22,11 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    One line `Tests: +N / -M (net ±K)` from `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/test-delta.py origin/<base>`
    (what it counts and skips: its docstring). A refactor (branch `refactor/…`, a Conventional Commit of type
    `refactor`, or a plan that says so) with a positive net appends `— <reason>`. Visibility only, it blocks nothing.
-4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`. Ticket: link the PR, move it to In
+4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`, with `--draft` while a worker round,
+   a review round or a dependency is still pending: the user merges whatever is open and not a draft
+   (Foxy 28.10.2026). `gh pr ready <PR>` once nothing is pending. A fix after the merge is a
+   follow-up PR from `origin/<base>`, never a push to the merged branch. Ticket: link the PR, move it to In
    Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
-5. Report the URL. When the base branch requires the Codex check, arm auto-merge right after
+5. Report the URL. When the base branch requires the Codex check, arm auto-merge on a ready PR right after
    create, exceptions per orchestrate § Close the run; otherwise `/we:ci-review <PR>` arms it once green.
+   An armed PR is watched to the merge per orchestrate § Push, PR, CI step 4.

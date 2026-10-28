@@ -103,6 +103,16 @@ Answering the fork deletes the section.>
 <Patterns, primitives, the seam; the architecture refs used; how the `**Files:**` lists were
 derived — code graph, or "grep-derived, no code graph".>
 
+Three lists here each cost review rounds when missing (Codex rounds, 10/2026):
+
+- **Writes into two systems** (a table and an API, a table and a cache, two transactions): every outcome
+  combination — both succeed, the first fails, the second fails, a timeout after the first — and what the
+  code does in each.
+- **Foreign markup** the change parses or emits (Markdown, HTML, a platform's markup): its input forms up
+  front — nested, escaped, empty, unterminated, the platform's own variants.
+- **Error arms** on the changed path, including every broad catch (`except Exception`, a bare `except`,
+  `catch (e)`) and what it swallows.
+
 ## Implementation Phases
 
 ### Phase 1: <Title>

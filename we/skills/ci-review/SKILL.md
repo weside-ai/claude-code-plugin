@@ -12,7 +12,7 @@ Longer than 150 lines because the thread query and the gate checks are load-bear
 1. The gate is every required check (`gh pr checks $PR --required`, read live) concluded non-red, plus zero unresolved bot threads.
 2. A required reviewer's BLOCKING or WARNING is fixed. A skip needs cited evidence posted on the PR.
 3. Codex is advisory, with no end date (Foxy 30.09.2026). A Codex BLOCKING or WARNING turns its check red until each finding is fixed or skipped with a cited reply (Foxy 28.10.2026). Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; Foxy decides the subscription on these numbers.
-4. One round means collect, fix, validate locally, commit once, resolve the threads, merge the base, and push once. Wait with a background `gh pr checks --watch` or `gh run watch`, never a sleep loop and never a `Monitor` for a CI job (30-min cap, shorter than a backend test job).
+4. One round means collect, fix, validate locally, commit once, resolve the threads, merge the base, and push once. Wait with a background `scripts/watch-pr-checks.sh` (§ 4) or `gh run watch`, never a sleep loop and never a `Monitor` for a CI job (30-min cap, shorter than a backend test job).
 5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (a merge without `--auto`, a force-push, a rebase). Every other status note goes in the same message as the next tool call.
 
 The built-in `/autofix-pr` covers the same job and is the benchmark this skill is measured against.
@@ -62,7 +62,12 @@ BOT_OPEN='.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolve
 
 Without an authenticated `gh` or without a PR, the local gates are the only gate. Say that once.
 
-**Merge state first:** `gh pr view $PR --json mergeable,mergeStateStatus,autoMergeRequest`.
+**Merge state first:** `gh pr view $PR --json mergeable,mergeStateStatus,autoMergeRequest,isDraft`.
+
+- A round that will change code starts with `gh pr merge $PR --disable-auto` (when `autoMergeRequest` is
+  set) and `gh pr ready $PR --undo`: the user merges every open non-draft PR (Foxy 28.10.2026). After
+  the round's push, `gh pr ready $PR`; the main session re-arms on Green. A fix after the merge is a
+  follow-up PR from `origin/$BASE`.
 
 - `UNKNOWN` for a few seconds after a push: GitHub is still computing it, and a single read makes a
   conflicted PR look clean. Arm `Monitor` until the value changes, and report a lasting `UNKNOWN` as `UNKNOWN`.
@@ -160,10 +165,10 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 
 ## 4 · Wait and repeat
 
-- After the push, run `gh pr checks $PR --required --watch --fail-fast` as a background command. `--fail-fast` wakes you on a red
-  review without waiting for the test job. End the turn and act on the notification. Do not poll in the foreground.
-- If the watch exits at once with "no checks reported", the new head has no checks registered yet: run
-  `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh $PR` in the background instead; it waits for the head's checks.
+- After the push, run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh $PR --sha "$(git rev-parse HEAD)" --fail-fast`
+  as a background command, plus `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh $PR` when none runs for it.
+  `--fail-fast` and exit 6 (Codex WARNING/BLOCKING on the head) wake you on a review without waiting for the
+  test job. End the turn and act on the notification. Do not poll in the foreground.
 - Each round runs sections 1 to 3 again in full, including the thread resolve.
 - The default is at most three rounds. A budget the user states replaces that default, and you never raise it yourself.
 - **A repeat** is the same finding text on the same `file:line` after a fix aimed at it. It means the fix
@@ -175,9 +180,9 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 Terminal states. Report exactly one:
 
 1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
-   decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed and the merge state is `CLEAN`, the merge fires on its own: say so. Only
-   when the user asked for the merge itself ("bis gemerged"), wait on `gh pr view $PR --json state,mergedAt`
-   in a background command, then report `MERGED` or green but not yet merged. On a green end the main session arms auto-merge as `/we:orchestrate` § Close the run says (method, exceptions, `user merge: <reason>`). Run as a subagent, you report `merge-ready` and leave the arm to the Lead: `automerge_gate.py` refuses every merge from a subagent. A plain `gh pr merge` without `--auto` still needs the user's word.
+   decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed, the main session keeps `watch-pr-checks.sh $PR --until-merged` running
+   and on its `merged` exit runs `/we:merged $PR` itself, on red or a Codex exit the next round
+   (`/we:orchestrate` § Push, PR, CI step 5 and its bounds). On a green end the main session arms auto-merge as `/we:orchestrate` § Close the run says (method, exceptions, `user merge: <reason>`). Run as a subagent, you report `merge-ready` and leave the arm to the Lead: `automerge_gate.py` refuses every merge from a subagent. A plain `gh pr merge` without `--auto` still needs the user's word.
 2. **Cap reached, still red.** Report what is open and what you tried.
 3. **Blocked.** Infrastructure is red after a re-run, a required BLOCKING was skipped as wrong, or there are two migration heads.
    The PR needs a human.

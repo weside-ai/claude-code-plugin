@@ -45,6 +45,9 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
 - The discipline of `/we:grill`: one question per turn, each with your recommended answer; what the repo
   answers is looked up, not asked.
+- An `AskUserQuestion` option that rests on what existing code does cites that code's file:line in its
+  description, read before the option is offered: options built on an unread premise were picked and later
+  proved wrong (twice, 10/2026).
 - A decision already on record is stated with its source ("ADR-0065 settles this: …"), not asked again. Ask
   when two records disagree, or when the record predates the change the ticket describes.
 - A vague "why": the first question is what success looks like. ACs come after the goal is clear.

@@ -74,6 +74,9 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   a network service is skipped and listed, unless the brief names an integration suite for a
   critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
   last 20 lines in the report.
+- A mutation run the plan or repo asks for happens inside the chunk, right after its seam tests are
+  green and before the report, never as a step after the PR: run after a green PR it cost a second
+  CI round and let a parallel migration land first (64 of 201 min, 17.10.2026).
 - Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
   branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
   question, so the Lead can revert it. The worker never creates tickets.
