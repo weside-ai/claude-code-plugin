@@ -29,7 +29,8 @@ Per cycle
     every handoff lists from 0 and answers a lower one). After a wake attempt the hold-off key
     ``claude_code`` holds the next wake for 10 min; handoffs listed meanwhile wait, cursor kept.
     Server compatibility (delete once every weside server answers ``handoffs``): a
-    server that still answers ``rooms`` gets the room-news rule below. The answer's shape sets
+    server that answers ``rooms`` without ``handoffs`` gets the room-news rule below; an answer
+    with both keys (the rollout server) takes the handoff rule and ignores ``rooms``. The answer's shape sets
     ``server_shape``; a shape that differs from the one the call was made for is asked again in
     the same cycle with the other shape's cursor.
     Room-news rule: a room whose lines the companion's WESIDE side already took up wakes nobody: a server that

@@ -382,6 +382,24 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(self.sent, [WAKE_H17])
         self.assertEqual(self.state()["server_shape"], "handoffs")
 
+    def test_an_answer_with_both_keys_takes_the_handoff_rule_and_ignores_rooms(self):
+        # the rollout server answers ``rooms`` and ``handoffs`` side by side
+        self.seed_cursor(9000)
+        p = self.poller()
+        p.first = False
+        room = self.aware(("room:9", 1, 1, 9001, wp.GRACE_S), cursor=9001)["rooms"]
+        both = [
+            {**self.handoffs(cursor=9001), "rooms": room},
+            {**self.handoffs((17, "room:384"), cursor=17), "rooms": room},
+        ]
+        self.answers = list(both)
+        p.poll_once()
+        self.assertEqual(self.afters, [9000, 0], "asked again with the handoff cursor")
+        self.assertEqual(self.sent, [WAKE_H17], "both keys present → handoff rule, rooms ignored")
+        st = self.state()
+        self.assertEqual((st["server_shape"], st["handoff_cursor"]), ("handoffs", 17))
+        self.assertEqual(st["cursor"], 9000)
+
     def test_the_handoff_line_refuses_anything_but_ids_and_refs(self):
         for bad in (
             {"id": 1, "from": "Weside Crew"},
@@ -399,6 +417,8 @@ class PollerTest(unittest.TestCase):
             rpc({"cursor": 3, "handoffs": [{"id": 3, "from": "room:1", "note": "MARKER"}]})
         )
         self.assertEqual(ok, {"cursor": 3, "handoffs": [{"id": 3, "from": "room:1"}]})
+        both = {"cursor": 3, "handoffs": [], "rooms": [{"room": "room:1", "count": 2}]}
+        self.assertEqual(wp.parse_news(rpc(both)), {"cursor": 3, "handoffs": []})
         for bad in (
             {"cursor": 3, "handoffs": {}},
             {"cursor": 3, "handoffs": [{"id": True, "from": None}]},
