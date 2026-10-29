@@ -2,7 +2,7 @@
 // Claude Code Statusline — shipped by the "we" plugin (weside.ai).
 // Installed by /we:setup via scripts/install_statusline.py, which copies this
 // file to ~/.claude/we-statusline.js and points settings.json at the copy.
-// Shows: companion | model | branch (+ PR) | dirname | context bar | RAM | cost | rate limits
+// Shows: companion | model | branch (+ PR) | dirname | context bar | bg sessions | RAM | cost | rate limits
 // Single line, width-aware: segments are built as {plain, colorize} pairs so
 // truncation always cuts the plain text (never mid-escape-sequence), and the
 // whole line is fit against the terminal width before ANSI colors are applied.
@@ -131,6 +131,51 @@ if (process.argv[2] === '--refresh-pr') {
   process.exit(0);
 }
 
+// ── Background sessions ─────────────────────────────────────────────────────
+//
+// Sessions started with `claude --bg` have no window: the user sees them only
+// after opening the agents view. This segment counts them so a running worker
+// is visible at a glance. `claude agents --json` costs ~300 ms, so it follows
+// the PR cache's stale-while-revalidate: render reads the cache, a detached
+// refresh rewrites it once it is older than the TTL.
+const BG_CACHE = path.join(os.homedir(), '.claude', '.we-statusline-bg-cache.json');
+const BG_TTL_MS = 10_000;
+
+function readBgCache() {
+  try {
+    return JSON.parse(fs.readFileSync(BG_CACHE, 'utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+function refreshBgCacheDetached() {
+  try {
+    const child = spawn(process.execPath, [__filename, '--refresh-bg'], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch (e) {}
+}
+
+if (process.argv[2] === '--refresh-bg') {
+  let sessions = [];
+  try {
+    const out = execFileSync('claude', ['agents', '--json'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15_000,
+    });
+    sessions = JSON.parse(out)
+      .filter((a) => a.kind === 'background')
+      .map((a) => ({ sessionId: a.sessionId, working: a.state === 'working' || a.status === 'busy' }));
+  } catch (e) {
+    // No claude on PATH or an unparsable answer: cache "none" so we do not respawn on every render.
+  }
+  try {
+    const tmp = `${BG_CACHE}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ ts: Date.now(), sessions }));
+    fs.renameSync(tmp, BG_CACHE);
+  } catch (e) {}
+  process.exit(0);
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => input += chunk);
@@ -218,6 +263,19 @@ process.stdin.on('end', () => {
       ctxSeg = { plain: `${bar} ${u}%`, color: (s) => `\x1b[${color}m${s}\x1b[0m` };
     }
 
+    // Background sessions — every `claude --bg` session but this one.
+    // "bg 2" when all wait, "bg 1/2" (yellow) when one of two is working.
+    let bgSeg = null;
+    const bgCache = readBgCache();
+    if (!bgCache || Date.now() - (bgCache.ts || 0) > BG_TTL_MS) refreshBgCacheDetached();
+    const others = (bgCache?.sessions || []).filter((s) => s.sessionId !== data.session_id);
+    if (others.length > 0) {
+      const working = others.filter((s) => s.working).length;
+      const plain = working > 0 ? `bg ${working}/${others.length}` : `bg ${others.length}`;
+      const color = working > 0 ? '33' : '2';
+      bgSeg = { plain, color: (s) => `\x1b[${color}m${s}\x1b[0m` };
+    }
+
     // RAM — fixed width, optional (dropped first if the line is too long)
     let ram = null;
     try {
@@ -278,7 +336,7 @@ process.stdin.on('end', () => {
       return sum + Math.max(0, visible.length - 1) * SEP.length;
     }
 
-    let required = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg];
+    let required = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg, bgSeg];
 
     // Drop optional segments (lowest priority first) while over budget.
     while (widthOf(required.concat(opts)) > budget && opts.some(Boolean)) {
@@ -301,7 +359,7 @@ process.stdin.on('end', () => {
     }
 
     // ---- assemble ----
-    const parts = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg, ...opts]
+    const parts = [companionSeg, model, branchSeg, prSeg, dirSeg, ctxSeg, bgSeg, ...opts]
       .filter(Boolean)
       .map((s) => s.color(s.plain));
 
