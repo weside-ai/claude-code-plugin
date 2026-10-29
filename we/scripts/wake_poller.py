@@ -22,17 +22,18 @@ Per cycle
     JSON-RPC ``tools/call news_since`` at ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with
     ``X-Weside-Companion: <companion>``. The CLI keeps credentials per environment, so the token
     always comes for the origin the poller calls, never for the CLI config's default ``api_url``.
-    Handoff answer ``{"cursor": N, "handoffs": [{"id": <id>, "from": "room:<id>" | null}]}``: the
-    call sends ``after=<handoff_cursor>`` (0 when the file has none, so a cursor file of the
-    room-news poller is ignored), every listed handoff gets one line of one wake, and
+    The call sends ``handoffs=true`` and ``after=<handoff_cursor>`` (0 when the file has none, so
+    a cursor file of the room-news poller is ignored). Handoff answer
+    ``{"cursor": N, "handoffs": [{"id": <id>, "from": "room:<id>" | null}]}``: every listed handoff gets one line of one wake, and
     ``handoff_cursor`` takes the answer's ``cursor`` as given (a server that met a cursor above
     every handoff lists from 0 and answers a lower one). After a wake attempt the hold-off key
     ``claude_code`` holds the next wake for 10 min; handoffs listed meanwhile wait, cursor kept.
-    Server compatibility (delete once every weside server answers ``handoffs``): a
-    server that answers ``rooms`` without ``handoffs`` gets the room-news rule below; an answer
-    with both keys (the rollout server) takes the handoff rule and ignores ``rooms``. The answer's shape sets
-    ``server_shape``; a shape that differs from the one the call was made for is asked again in
-    the same cycle with the other shape's cursor.
+    Server compatibility (delete once every weside server answers ``handoffs``): an answer
+    without ``handoffs``, or a refusal of the call (JSON-RPC error, ``isError``), is dropped
+    unread (a server without the argument ignores it and lists rooms from the handoff cursor)
+    and the same cycle asks the 7.22.3 call: no ``handoffs``, ``after=<cursor>``, the
+    room-news rule below. Each cursor only ever goes out with its own call and takes only its
+    own call's answer; an answer with ``handoffs`` ignores any ``rooms`` beside it.
     Room-news rule: a room whose lines the companion's WESIDE side already took up wakes nobody: a server that
     answers ``unanswered`` per room (with ``unanswered_newest``, a row id, and
     ``unanswered_age_s``) wakes a room only for an unanswered line newer than the one last
@@ -51,7 +52,8 @@ Per cycle
 Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
 ``<file>.lock``, atomic replace), shared by every session of that companion:
     ``handoff_cursor`` int or null — every handoff id up to it is delivered
-    ``server_shape`` ``handoffs`` (default) or ``rooms`` — the shape the last answer had
+    ``server_shape`` ``handoffs`` (default) or ``rooms`` — the rule the last cycle applied
+                   (for ``status``; every cycle asks ``handoffs=true`` first)
     ``cursor``     int or null — room-news rule: every addressed row up to it is handed off; it
                    advances only when no room in the answer still holds a line not yet delivered
     ``delivered``  room → count already delivered against ``cursor`` (reset when it advances;
@@ -128,7 +130,11 @@ HANDOFF_TAIL = "This note carries no content."
 
 
 class PollError(Exception):
-    """A failed cycle, carrying one class from ``ERROR_CLASSES`` (auth: a key of ``AUTH_DETAILS``)."""
+    """A failed cycle, carrying one class from ``ERROR_CLASSES``.
+
+    Detail: auth → a key of ``AUTH_DETAILS``; http → ``refused`` when the server answered the
+    call with a JSON-RPC error or ``isError`` (an old server refusing ``handoffs``).
+    """
 
     def __init__(self, cls: str, detail: str | None = None):
         super().__init__(cls)
@@ -418,12 +424,12 @@ def _rpc_payload(body: bytes, content_type: str) -> dict:
 def parse_news(payload: dict) -> dict:
     """Validate a ``news_since`` JSON-RPC answer down to cursor and handoffs (or rooms)."""
     if "error" in payload:
-        raise PollError("http")
+        raise PollError("http", "refused")
     result = payload.get("result")
     if not isinstance(result, dict):
         raise PollError("format")
     if result.get("isError"):
-        raise PollError("http")
+        raise PollError("http", "refused")
     content = result.get("content")
     if not isinstance(content, list) or not content or not isinstance(content[0], dict):
         raise PollError("format")
@@ -485,8 +491,12 @@ def _clean_room(item: Any) -> dict:
     return clean
 
 
-def call_news_since(url: str, bearer: str, companion: str, after: int | None) -> dict:
-    arguments = {} if after is None else {"after": after}
+def call_news_since(
+    url: str, bearer: str, companion: str, after: int | None, handoffs: bool = False
+) -> dict:
+    arguments: dict = {"handoffs": True} if handoffs else {}
+    if after is not None:
+        arguments["after"] = after
     body = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -595,7 +605,7 @@ class Poller:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         get_bearer: Callable[[str], str] = weside_token,
-        news: Callable[[str, str, str, Any], dict] = call_news_since,
+        news: Callable[..., dict] = call_news_since,
         send: Callable[[str, str, str], None] = deliver,
         alive: Callable[[str], bool] = session_alive,
         log: Callable[[str], None] = lambda _line: None,
@@ -646,23 +656,27 @@ class Poller:
         """One cycle; returns ``ok``, ``error:<class>``, ``auth-exit`` or ``gone``."""
         now = self.clock()
         with locked_state(self.companion) as state:
-            shape = state["server_shape"]
+            last_shape = state["server_shape"]
             bases = {"handoffs": state["handoff_cursor"], "rooms": state["cursor"]}
             bump(state, "polls", now)
 
-        def ask(bearer: str, shape: str) -> dict:
-            base = bases[shape]
-            after = (base or 0) if shape == "handoffs" else base
-            return self.news(self.mcp_url, bearer, self.companion, after)
-
         try:
             bearer = self.get_bearer(api_origin(self.mcp_url))
-            answer = ask(bearer, shape)
-            if shape_of(answer) != shape:
-                shape = shape_of(answer)
-                answer = ask(bearer, shape)
-                if shape_of(answer) != shape:
+            shape = "handoffs"
+            try:
+                answer = self.news(
+                    self.mcp_url, bearer, self.companion, bases["handoffs"] or 0, handoffs=True
+                )
+            except PollError as exc:
+                if exc.detail != "refused":
+                    raise
+                answer = None
+            if answer is None or shape_of(answer) != "handoffs":
+                shape = "rooms"
+                answer = self.news(self.mcp_url, bearer, self.companion, bases["rooms"])
+                if shape_of(answer) != "rooms":
                     raise PollError("format")
+            if shape != last_shape:
                 with locked_state(self.companion) as state:
                     state["server_shape"] = shape
                 self.log(f"server shape {shape}")

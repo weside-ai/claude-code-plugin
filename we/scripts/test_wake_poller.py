@@ -2,7 +2,7 @@
 """Wake poller: one content-free line per handoff, hold-off, heartbeat, back-off, exits.
 
 Room news (``rooms`` answers) is the server-compatibility rule until the core release that
-answers ``handoffs``; its tests seed ``server_shape: rooms``.
+answers ``news_since(handoffs=true)``; its tests seed a room cursor on an old-server fake.
 
 Two layers. ``PollerTest`` drives ``Poller`` on a fake clock with injected news and
 delivery (no sleeps, no network). ``PollerProcessTest`` runs the real script against a fake
@@ -41,6 +41,21 @@ WAKE_H17 = (
     "weside: handoff for Nox from room:384 (#17). Read it with news_since(handoff=17), "
     'then read_timeline(room="room:384"). This note carries no content.'
 )
+# what an old server lists for ``handoffs=true, after=0``: every room since the beginning
+FLOOD = {
+    "cursor": 1,
+    "rooms": [
+        {
+            "room": f"room:{r}",
+            "count": 50,
+            "saturated": True,
+            "unanswered": 50,
+            "unanswered_newest": 1,
+            "unanswered_age_s": 99999,
+        }
+        for r in range(1, 30)
+    ],
+}
 WAKE_384_2 = (
     'weside: new for Nox in room:384 (2). Read it yourself with read_timeline(room="room:384"). '
     "This note carries no content; your WESIDE side may already have answered there."
@@ -100,6 +115,7 @@ class FakeMcp:
         self.requests: list[dict] = []
         self.answers: list = []
         self.sse = False
+        self.refuse_handoffs = False  # an old server whose tool rejects the argument
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -109,16 +125,25 @@ class FakeMcp:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 outer.requests.append({"headers": dict(self.headers), "body": body})
-                answer = outer.answers.pop(0) if outer.answers else {"cursor": 0, "handoffs": []}
-                if isinstance(answer, int):
-                    self.send_response(answer)
-                    self.end_headers()
-                    return
-                rpc = {
-                    "jsonrpc": "2.0",
-                    "id": body.get("id"),
-                    "result": {"content": [{"type": "text", "text": json.dumps(answer)}]},
-                }
+                if outer.refuse_handoffs and "handoffs" in body["params"]["arguments"]:
+                    rpc = {
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": {"code": -32602, "message": "unexpected argument handoffs"},
+                    }
+                else:
+                    answer = (
+                        outer.answers.pop(0) if outer.answers else {"cursor": 0, "handoffs": []}
+                    )
+                    if isinstance(answer, int):
+                        self.send_response(answer)
+                        self.end_headers()
+                        return
+                    rpc = {
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "result": {"content": [{"type": "text", "text": json.dumps(answer)}]},
+                    }
                 if outer.sse:
                     raw = f"event: message\ndata: {json.dumps(rpc)}\n\n".encode()
                     ctype = "text/event-stream"
@@ -192,6 +217,8 @@ class PollerTest(unittest.TestCase):
         self.clock = Clock()
         self.answers: list = []
         self.afters: list = []
+        self.calls: list = []
+        self.old_server = False
         self.call_times: list = []
         self.sent: list[str] = []
         self.send_error = None
@@ -203,9 +230,17 @@ class PollerTest(unittest.TestCase):
         self._env.stop()
         self._tmp.cleanup()
 
-    def news(self, _url, _bearer, _companion, after):
-        self.afters.append(after)
+    def news(self, _url, _bearer, _companion, after, handoffs=False):
+        """``calls`` records every call; ``afters`` the ones the scripted ``answers`` serve.
+
+        ``old_server``: a server without the argument ignores ``handoffs=true`` and lists rooms
+        from that cursor; the fake answers such a call with ``FLOOD`` (every room unanswered).
+        """
+        self.calls.append((after, handoffs))
         self.call_times.append(self.clock.t)
+        if handoffs and self.old_server:
+            return FLOOD
+        self.afters.append(after)
         answer = self.answers.pop(0) if self.answers else {"cursor": 0, "handoffs": []}
         if isinstance(answer, Exception):
             raise answer
@@ -242,7 +277,8 @@ class PollerTest(unittest.TestCase):
         return json.loads(wp.state_path("Nox").read_text())
 
     def seed_cursor(self, cursor):
-        """A room-news cursor on a server that still answers ``rooms``."""
+        """A room-news cursor on a server without the ``handoffs`` argument."""
+        self.old_server = True
         with wp.locked_state("Nox") as s:
             s["cursor"] = cursor
             s["server_shape"] = "rooms"
@@ -355,50 +391,96 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self.state()["handoff_cursor"], 3)
 
-    def test_an_old_server_keeps_todays_room_rule_and_one_call_from_then_on(self):
+    def test_a_new_server_is_asked_with_handoffs_true_and_the_handoff_cursor(self):
+        self.seed_handoff_cursor(5)
+        with wp.locked_state("Nox") as s:
+            s["cursor"] = 9000
+        p = self.poller()
+        self.answers = [self.handoffs((17, "room:384"), cursor=17)]
+        p.poll_once()
+        self.assertEqual(self.calls, [(5, True)], "one call: handoffs=true, handoff cursor")
+        self.assertEqual(self.sent, [WAKE_H17])
+        st = self.state()
+        self.assertEqual((st["handoff_cursor"], st["cursor"]), (17, 9000))
+        self.assertEqual(st["server_shape"], "handoffs")
+
+    def test_an_old_server_ignoring_the_argument_falls_back_without_a_flood(self):
         wp.news_dir().mkdir(parents=True)
         wp.state_path("Nox").write_text(json.dumps({"cursor": 100}))
+        self.old_server = True
         p = self.poller()
         p.first = False
         late = self.aware(("room:9", 1, 1, 101, wp.GRACE_S), cursor=101)
-        self.answers = [self.aware(cursor=101), late]
+        self.answers = [late]
         p.poll_once()
-        self.assertEqual(self.afters, [0, 100], "asked again with the room cursor")
-        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.calls, [(0, True), (100, False)], "fallback with the room cursor")
+        self.assertEqual(len(self.sent), 1, "the ignored-argument answer is dropped unread")
         self.assertIn("weside: new for Nox in room:9 (1).", self.sent[0])
         st = self.state()
         self.assertEqual((st["server_shape"], st["cursor"]), ("rooms", 101))
+        self.assertIsNone(st["handoff_cursor"])
         self.clock.t = T0 + 60
         self.answers = [self.aware(cursor=101)]
         p.poll_once()
-        self.assertEqual(self.afters, [0, 100, 101])
+        self.assertEqual(self.calls[2:], [(0, True), (101, False)], "asked anew every cycle")
 
-    def test_a_released_server_switches_the_poller_to_handoffs(self):
-        self.seed_cursor(9000)
+    def test_an_old_server_refusing_the_argument_falls_back_to_the_room_call(self):
+        self.seed_cursor(100)
+        self.old_server = False
         p = self.poller()
-        self.answers = [self.handoffs(cursor=0), self.handoffs((17, "room:384"), cursor=17)]
+        p.first = False
+        self.answers = [wp.PollError("http", "refused"), self.rooms(("room:384", 2), cursor=102)]
+        self.assertEqual(p.poll_once(), "ok")
+        self.assertEqual(self.calls, [(0, True), (100, False)])
+        self.assertEqual(self.sent, [WAKE_384_2])
+        self.assertEqual(self.state()["cursor"], 102)
+
+    def test_an_error_other_than_a_refusal_fails_the_cycle_without_fallback(self):
+        self.seed_cursor(100)
+        self.old_server = False
+        p = self.poller()
+        self.answers = [wp.PollError("network")]
+        self.assertEqual(p.poll_once(), "error:network")
+        self.assertEqual(self.calls, [(0, True)])
+
+    def test_the_two_cursors_never_cross(self):
+        with wp.locked_state("Nox") as s:
+            s["handoff_cursor"] = 5
+            s["cursor"] = 9000
+        p = self.poller()
+        p.first = False
+        # new server: its answer moves only the handoff cursor
+        self.answers = [self.handoffs(cursor=7)]
         p.poll_once()
-        self.assertEqual(self.afters, [9000, 0])
-        self.assertEqual(self.sent, [WAKE_H17])
-        self.assertEqual(self.state()["server_shape"], "handoffs")
+        self.assertEqual((self.state()["handoff_cursor"], self.state()["cursor"]), (7, 9000))
+        # rolled back to an old server: the room answer moves only the room cursor
+        self.old_server = True
+        self.clock.t = T0 + 60
+        self.answers = [self.aware(cursor=9005)]
+        p.poll_once()
+        self.assertEqual(self.calls, [(5, True), (7, True), (9000, False)])
+        self.assertEqual((self.state()["handoff_cursor"], self.state()["cursor"]), (7, 9005))
+        # back on the new server: the handoff call carries 7, never 9005
+        self.old_server = False
+        self.clock.t = T0 + 120
+        self.answers = [self.handoffs(cursor=8)]
+        p.poll_once()
+        self.assertEqual(self.calls[-1], (7, True))
+        self.assertEqual((self.state()["handoff_cursor"], self.state()["cursor"]), (8, 9005))
+        self.assertEqual(self.sent, [])
 
     def test_an_answer_with_both_keys_takes_the_handoff_rule_and_ignores_rooms(self):
-        # the rollout server answers ``rooms`` and ``handoffs`` side by side
-        self.seed_cursor(9000)
+        with wp.locked_state("Nox") as s:
+            s["cursor"] = 9000
         p = self.poller()
         p.first = False
         room = self.aware(("room:9", 1, 1, 9001, wp.GRACE_S), cursor=9001)["rooms"]
-        both = [
-            {**self.handoffs(cursor=9001), "rooms": room},
-            {**self.handoffs((17, "room:384"), cursor=17), "rooms": room},
-        ]
-        self.answers = list(both)
+        self.answers = [{**self.handoffs((17, "room:384"), cursor=17), "rooms": room}]
         p.poll_once()
-        self.assertEqual(self.afters, [9000, 0], "asked again with the handoff cursor")
+        self.assertEqual(self.calls, [(0, True)])
         self.assertEqual(self.sent, [WAKE_H17], "both keys present → handoff rule, rooms ignored")
         st = self.state()
-        self.assertEqual((st["server_shape"], st["handoff_cursor"]), ("handoffs", 17))
-        self.assertEqual(st["cursor"], 9000)
+        self.assertEqual((st["handoff_cursor"], st["cursor"]), (17, 9000))
 
     def test_the_handoff_line_refuses_anything_but_ids_and_refs(self):
         for bad in (
@@ -450,8 +532,7 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(self.state()["cursor"], 102)
 
     def test_first_poll_without_cursor_takes_the_head_and_wakes_nobody(self):
-        with wp.locked_state("Nox") as s:
-            s["server_shape"] = "rooms"
+        self.old_server = True
         p = self.poller()
         self.answers = [{"cursor": 57, "rooms": []}]
         p.poll_once()
@@ -714,7 +795,9 @@ class PollerTest(unittest.TestCase):
         p = self.poller()
         p.first = False
 
-        def news(url, bearer, companion, after):
+        def news(url, bearer, companion, after, handoffs=False):
+            if handoffs:
+                return FLOOD
             self.seed_cursor(150)
             return self.rooms(("room:384", 2), cursor=102)
 
@@ -931,16 +1014,21 @@ class PollerProcessTest(unittest.TestCase):
         first = self.mcp.requests[0]
         self.assertEqual(first["headers"]["Authorization"], f"Bearer {BEARER}")
         self.assertEqual(first["headers"]["X-Weside-Companion"], "Nox")
-        self.assertEqual(first["body"]["params"], {"name": "news_since", "arguments": {}})
+        self.assertEqual(
+            first["body"]["params"],
+            {"name": "news_since", "arguments": {"handoffs": True, "after": 0}},
+        )
+        self.assertEqual(self.mcp.requests[1]["body"]["params"]["arguments"], {})
         self.assertEqual(self.inbox.connections, 0, "no news, no socket contact")
 
         self.mcp.sse = True
         self.mcp.answers = [
-            {"cursor": 12, "rooms": [{"room": "room:384", "count": 2, "saturated": False}]}
+            {"cursor": 12, "rooms": [{"room": "room:99", "count": 50, "saturated": True}]},
+            {"cursor": 12, "rooms": [{"room": "room:384", "count": 2, "saturated": False}]},
         ]
         done = self.run_once()
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertEqual(self.mcp.requests[1]["body"]["params"]["arguments"], {"after": 10})
+        self.assertEqual(self.mcp.requests[3]["body"]["params"]["arguments"], {"after": 10})
         self.assertTrue(wait_for(lambda: len(self.inbox.lines) == 2))
         auth, user = self.inbox.lines
         self.assertEqual(auth, {"type": "auth", "token": TOKEN})
@@ -971,7 +1059,7 @@ class PollerProcessTest(unittest.TestCase):
             done = self.run_once()
             self.assertEqual(done.returncode, 0, done.stderr)
         args = [r["body"]["params"]["arguments"] for r in self.mcp.requests]
-        self.assertEqual(args, [{"after": 0}, {"after": 17}])
+        self.assertEqual(args, [{"handoffs": True, "after": 0}, {"handoffs": True, "after": 17}])
         self.assertTrue(wait_for(lambda: len(self.inbox.lines) == 2))
         time.sleep(0.3)
         users = [line for line in self.inbox.lines if line["type"] == "user"]
@@ -1017,7 +1105,7 @@ class PollerProcessTest(unittest.TestCase):
         done = self.run_once()
         self.assertEqual(done.returncode, 0, done.stderr)
         args = [r["body"]["params"]["arguments"] for r in self.mcp.requests]
-        self.assertEqual(args, [{"after": 0}, {"after": 100}])
+        self.assertEqual(args, [{"handoffs": True, "after": 0}, {"after": 100}])
         self.assertTrue(wait_for(lambda: len(self.inbox.lines) == 2))
         self.assertEqual(
             self.inbox.lines[1]["message"]["content"],
@@ -1025,6 +1113,21 @@ class PollerProcessTest(unittest.TestCase):
         )
         state = json.loads((self.news / "nox.json").read_text())
         self.assertEqual((state["server_shape"], state["cursor"]), ("rooms", 102))
+
+    def test_an_old_server_refusing_the_argument_gets_the_room_call(self):
+        self.news.mkdir(parents=True)
+        (self.news / "nox.json").write_text(json.dumps({"cursor": 100, "handoff_cursor": 3}))
+        self.mcp.refuse_handoffs = True
+        self.mcp.answers = [{"cursor": 100, "rooms": []}]
+        done = self.run_once()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        args = [r["body"]["params"]["arguments"] for r in self.mcp.requests]
+        self.assertEqual(args, [{"handoffs": True, "after": 3}, {"after": 100}])
+        state = json.loads((self.news / "nox.json").read_text())
+        self.assertEqual((state["handoff_cursor"], state["cursor"]), (3, 100))
+        self.assertIsNone(state["last_error"])
+        time.sleep(0.3)
+        self.assertEqual(self.inbox.connections, 0)
 
     def argv_lines(self) -> list[str]:
         return (self.bin / "weside.argv").read_text().splitlines()

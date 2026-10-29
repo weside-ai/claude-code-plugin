@@ -101,7 +101,7 @@ class NewsOnPromptTest(unittest.TestCase):
             SOCKET,
             "inbox-token",
             get_bearer=lambda _origin: "bearer",
-            news=lambda *_a: answer,
+            news=lambda *_a, **_k: answer,
             send=refuse,
         )
         poller.start()

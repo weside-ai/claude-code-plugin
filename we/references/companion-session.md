@@ -90,7 +90,7 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
   inherited, never written down) and a `weside` CLI logged in for the polled origin
   (`weside auth token --api-url <origin>`; credentials are per environment). A missing one
   makes `bind` print `wake off: <reason>`; relay it once.
-- **Poll:** about once a minute the weside MCP tool `news_since` lists the handoffs pending for
+- **Poll:** about once a minute `news_since(handoffs=true)` lists the handoffs pending for
   this Claude Code side since the companion's handoff cursor: ids and source room refs, no text.
   A handoff exists only when the companion's weside side chose to hand over here; a line addressed
   to the companion in a room wakes nothing, that side answers it. No handoff, no socket contact,
@@ -102,8 +102,9 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 - **On a wake:** call `news_since(handoff=<h>)` for the note (it is marked read then; a second
   read still answers it), read the source room with `read_timeline`, and do what the note asks of
   this Claude Code side. Report back in the room only when the note asks for it.
-- **Old servers:** a weside server that still answers room news (`rooms`) gets the earlier rule
-  until it is released with handoffs: unanswered addressed lines wake after a 10-minute grace,
+- **Old servers:** a weside server without the `handoffs` argument (it refuses it, or answers
+  room news without `handoffs`) is asked again without it, with the room cursor, and gets the
+  earlier rule until it is released with handoffs: unanswered addressed lines wake after a 10-minute grace,
   `weside: new for <Name> in room:<id> (<n>). …`.
 - **Heartbeat:** `identity_cache.py status` prints the companion's last success, last error class
   and the daily counters (polls, errors, wakes, hook deliveries). Repeated auth failures end the
