@@ -7,7 +7,7 @@ Reads `docs/plans/<KEY>-story.md` from the git top level of the current director
 `## Verification` block with the verification gate's own section finder, and writes <body-in>
 with that block to <body-out>: a receipt <body-in> already carries is replaced, otherwise the
 block is appended. The result is checked with the gate's own rules; exit 1 names the problem.
-Exit 2 before anything is read: a <KEY> that is no ticket key (`^[A-Z][A-Z0-9]+-\d+$`), or a
+Exit 2 before anything is read: a <KEY> without a `docs/plans/<KEY>-story.md`, or a
 <body-out> that is the plan itself or a git-tracked file (swapped arguments once overwrote an
 approved plan, 16.10.2026).
 
