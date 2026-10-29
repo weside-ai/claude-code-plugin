@@ -160,6 +160,7 @@ def test_fill_is_a_claim_with_no_receipt(armed: Path) -> None:
     reason = refuse("gh pr create --fill", armed)
     assert reason is not None
     assert "no body at all" in reason
+    assert reason.startswith("Blocked before anything ran: no part of this Bash command executed")
 
 
 def test_the_unfilled_template_does_not_pass(armed: Path) -> None:

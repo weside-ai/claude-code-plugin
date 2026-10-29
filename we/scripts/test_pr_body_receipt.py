@@ -115,3 +115,44 @@ def test_a_plan_block_the_gate_refuses_is_named(repo: Path) -> None:
     result = run(repo, BODY)
     assert result.returncode == 1
     assert "fails the gate" in result.stderr and "has to start with one of" in result.stderr
+
+
+def test_swapped_arguments_leave_the_plan_untouched(repo: Path) -> None:
+    plan_rel = "docs/plans/KEY-1-story.md"
+    subprocess.run(["git", "add", plan_rel], cwd=repo, check=True)
+    (repo / "in.md").write_text(BODY)
+    for args in (["in.md", "KEY-1", plan_rel], ["KEY-1", "in.md", plan_rel]):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 2, (args, result.stderr)
+        assert (repo / plan_rel).read_text() == PLAN
+    assert (
+        "no plan"
+        in subprocess.run(
+            [sys.executable, str(SCRIPT), "in.md", "KEY-1", "out.md"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stderr
+    )
+
+
+def test_a_tracked_body_out_is_refused(repo: Path) -> None:
+    (repo / "README.md").write_text("readme\n")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    (repo / "in.md").write_text(BODY)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "KEY-1", "in.md", "README.md"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2 and "tracked by git" in result.stderr
+    assert (repo / "README.md").read_text() == "readme\n"

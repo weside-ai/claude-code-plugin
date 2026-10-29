@@ -10,6 +10,13 @@ Limits and excludes are overridable in `.weside/config.json`:
 
     {"optimization": {"budget": {"rule_lines": 200, ...}, "exclude": ["content"]}}
 
+Warning `ref-path-missing`: a backticked repo path (it has a `/`; no glob, no `<placeholder>`, no
+`{var}`, no `~/` or absolute path, both machine-bound) or a `/<plugin>:<skill>` command of a
+plugin in this repo, named in an instruction file, that does not exist. A path counts when it
+exists from the repo root, from the file's directory, or as the tail of a repo path. Inside a plugin only plugin paths
+(`${CLAUDE_PLUGIN_ROOT}/…` or a top-level plugin directory) are checked: the rest names the
+consumer repo. A line carrying `<!-- ref-ok -->` is exempt.
+
 Usage: check-instruction-budget.py [--root DIR] [--json]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
@@ -345,6 +352,107 @@ def check_agents(repo: Repo) -> None:
         )
 
 
+CODE_SPAN_RE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+COMMAND_RE = re.compile(r"^/([a-z0-9-]+):([a-z0-9-]+)$")
+_NOT_A_PATH = re.compile(
+    r"[\s<>*?{}\[\]$|=@'\"\\…]|://|^-|^~|^/|^\.\.?$|^(origin|upstream|refs|\.git|info)/"
+)
+# A path names a directory (`dir/`) or a file with an extension; `ops/pod-0`, `a/b-rule`, a MIME
+# type or a rate (`10/minute`) is no path.
+_PATH_SHAPE = re.compile(r"(/|\.[A-Za-z0-9]{1,5})$")
+
+
+def _plugin_root(repo: Repo, rel: str) -> Path | None:
+    base = Path(rel).parent
+    return next(
+        (p for p in [base, *base.parents] if (repo.root / p / ".claude-plugin").is_dir()), None
+    )
+
+
+def _plugin_names(repo: Repo) -> dict[str, Path]:
+    names = {}
+    for rel in repo.files:
+        if rel.endswith(".claude-plugin/plugin.json"):
+            try:
+                name = json.loads(repo.text(rel)).get("name")
+            except ValueError:
+                continue
+            if name:
+                names[name] = Path(rel).parent.parent
+    return names
+
+
+def _exists(repo: Repo, candidate: str, known: set[str]) -> bool:
+    norm = os.path.normpath(candidate).removeprefix("./")
+    return (repo.root / norm).exists() or norm in known
+
+
+def _repo_candidates(repo: Repo, here: Path, token: str) -> list[str] | None:
+    first = token.split("/", 1)[0]
+    if (repo.root.parent / first).is_dir() and not (repo.root / first).exists():
+        # A sibling repo of the workspace (`other-repo/docs/x.md`): checked there when present.
+        return None if (repo.root.parent / token).exists() else [token]
+    return [token, (here / token).as_posix()]
+
+
+def _ref_candidates(repo: Repo, rel: str, token: str) -> list[str] | None:
+    """Repo-relative paths any of which makes `token` exist; None when `token` is not checked."""
+    plugin = _plugin_root(repo, rel)
+    here = Path(rel).parent
+    if token.startswith("${CLAUDE_PLUGIN_ROOT}/"):
+        token = token.split(maxsplit=1)[0].removeprefix("${CLAUDE_PLUGIN_ROOT}/")
+        return None if plugin is None else [(plugin / token).as_posix()]
+    if "/" not in token or _NOT_A_PATH.search(token):
+        return None
+    token = re.sub(r"(::.*|:\d+(-\d+)?|#.*)$", "", token).rstrip(".,;:")
+    if not _PATH_SHAPE.search(token):
+        return None
+    if plugin is None:
+        return _repo_candidates(repo, here, token)
+    first = token.split("/", 1)[0]
+    if first.startswith(".") or not (
+        (repo.root / plugin / first).is_dir() or (repo.root / here / first).is_dir()
+    ):
+        return None  # names a path of the repo the plugin runs in
+    return [(plugin / token).as_posix(), (here / token).as_posix()]
+
+
+def _missing_ref(
+    repo: Repo, rel: str, token: str, plugins: dict[str, Path], known: set[str]
+) -> bool:
+    command = COMMAND_RE.match(token)
+    if command:
+        root = plugins.get(command.group(1))
+        return root is not None and not (repo.root / root / "skills" / command.group(2)).is_dir()
+    candidates = _ref_candidates(repo, rel, token)
+    return candidates is not None and not any(_exists(repo, c, known) for c in candidates)
+
+
+def check_ref_paths(repo: Repo) -> None:
+    plugins = _plugin_names(repo)
+    # Every directory and file, and every tail of their paths: rules abbreviate a path from inside
+    # its subtree (`app/crud/` for `apps/backend/app/crud/`), which a reader resolves the same way.
+    known: set[str] = set()
+    for f in repo.files:
+        parts = f.split("/")
+        for end in range(1, len(parts) + 1):
+            for start in range(end):
+                known.add("/".join(parts[start:end]))
+    sources = set(instruction_texts(repo)) | set(repo.instruction_paths(is_agent_definition(repo)))
+    for rel in sorted(sources):
+        fenced = False
+        for number, line in enumerate(repo.text(rel).splitlines(), 1):
+            if line.lstrip().startswith(("```", "~~~")):
+                fenced = not fenced
+                continue
+            if fenced or "<!-- ref-ok -->" in line:
+                continue
+            for match in CODE_SPAN_RE.finditer(line):
+                token = match.group(1).strip()
+                if _missing_ref(repo, rel, token, plugins, known):
+                    repo.warn("ref-path-missing", f"{rel}:{number}", f"`{token}` does not exist")
+
+
 def run(root: Path) -> Repo:
     budget, exclude = load_config(root)
     repo = Repo(root=root, budget=budget, exclude=exclude, files=rule_loading.list_files(root))
@@ -352,6 +460,7 @@ def run(root: Path) -> Repo:
     check_instruction_files(repo)
     check_skills(repo)
     check_agents(repo)
+    check_ref_paths(repo)
     return repo
 
 

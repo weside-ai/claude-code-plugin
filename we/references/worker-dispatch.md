@@ -74,6 +74,9 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   a network service is skipped and listed, unless the brief names an integration suite for a
   critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
   last 20 lines in the report.
+- A mutation run the plan or repo asks for happens inside the chunk, right after its seam tests are
+  green and before the report, never as a step after the PR: run after a green PR it cost a second
+  CI round and let a parallel migration land first (64 of 201 min, 17.10.2026).
 - Finish first: a finding of at most ~30 min on the seam the chunk touches gets fixed in the same
   branch; "pre-existing" is no reason to defer. A money-path finding gets its own commit and a
   question, so the Lead can revert it. The worker never creates tickets.
@@ -143,16 +146,13 @@ chunk and names the symbols, because workers act on the brief, not on the repo r
 
 ### Watchdog
 
-Armed at dispatch, one per worker: a background command (`run_in_background`) that exits on
-the first event, so the Lead reports and re-arms; 25 min stays under its default 30-min timeout:
-
-```bash
-H0=$(git -C <wt> rev-parse HEAD); S0=$(git -C <wt> status --porcelain | md5sum); T=$(date +%s)
-while :; do sleep 60; H=$(git -C <wt> rev-parse HEAD); S=$(git -C <wt> status --porcelain | md5sum)
-  [ "$H" != "$H0" ] && { git -C <wt> log --oneline -1; exit 0; }
-  [ "$S" != "$S0" ] && { S0=$S; T=$(date +%s); }
-  [ $(( $(date +%s) - T )) -gt 1500 ] && { echo "STALL 25 min: <name>"; exit 0; }; done
-```
+Armed at dispatch, one per worker: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-worker.sh <wt> <name>` as
+a background command. It exits on the first event (a commit, a 25-min stall, the worktree gone, a
+25-min lifetime cap); its header lists the lines and exit codes. Re-arm it in a Bash call of its own
+with `run_in_background: true`, never `&` or `disown` in a foreground call: a detached watchdog
+sends no notification and survives the next one (twice on 15.10.2026). When the worker's report
+arrives or the worker is stopped, `TaskStop` its watchdog by task id in the same turn, never by a
+`pkill` pattern: a leftover watchdog later reports a stall that is not real (three on 17.10.2026).
 
 A commit becomes one status line to the human (phase done). A stall gets evidence (`git log -3`,
 `git status`, the agent's state) before any word about it. Three runs with it had 0 idle nudges

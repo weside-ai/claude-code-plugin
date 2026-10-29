@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Splice the plan's `## Verification` block into a PR body, verbatim.
+r"""Splice the plan's `## Verification` block into a PR body, verbatim.
 
     pr-body-receipt.py <KEY> <body-in> <body-out>
 
@@ -7,6 +7,9 @@ Reads `docs/plans/<KEY>-story.md` from the git top level of the current director
 `## Verification` block with the verification gate's own section finder, and writes <body-in>
 with that block to <body-out>: a receipt <body-in> already carries is replaced, otherwise the
 block is appended. The result is checked with the gate's own rules; exit 1 names the problem.
+Exit 2 before anything is read: a <KEY> without a `docs/plans/<KEY>-story.md`, or a
+<body-out> that is the plan itself or a git-tracked file (swapped arguments once overwrote an
+approved plan, 16.10.2026).
 
 Optional: without a plan, or without a block in it, the author writes the block into the body
 directly. When the plan has one, this script copies it instead of retyping it.
@@ -34,6 +37,26 @@ def _top_level() -> Path:
     return Path(out.stdout.strip() or os.getcwd())
 
 
+def _tracked(path: str) -> bool:
+    out = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.returncode == 0
+
+
+def _argument_problem(key: str, body_out: str, plan_path: Path) -> str | None:
+    if not plan_path.is_file():
+        return f"no plan `docs/plans/{key}-story.md` for <KEY> `{key}`; argument order is <KEY> <body-in> <body-out>"
+    if Path(body_out).resolve() == plan_path.resolve():
+        return "<body-out> is the plan itself; pass a scratch path"
+    if _tracked(body_out):
+        return f"<body-out> `{body_out}` is tracked by git; pass a scratch path"
+    return None
+
+
 def splice(plan: str, body: str) -> str:
     """`body` carrying the plan's Verification block. ValueError when the plan has none."""
     span = gate._section_span(plan)
@@ -56,6 +79,11 @@ def main(argv: list[str]) -> int:
         return 2
     key, body_in, body_out = argv[1:]
     plan_path = _top_level() / "docs" / "plans" / f"{key}-story.md"
+    problem = _argument_problem(key, body_out, plan_path)
+    if problem:
+        print(f"pr-body-receipt: {problem}", file=sys.stderr)
+        print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
+        return 2
     try:
         plan = plan_path.read_text(encoding="utf-8")
         body = Path(body_in).read_text(encoding="utf-8")

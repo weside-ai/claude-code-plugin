@@ -19,7 +19,7 @@ the user is the whole instruction: ask nothing the open-items list already decid
    - already reported → shut it down and verify it is gone (`TaskStop`, or no process under
      `/proc`); never restart it.
 3. **Waits.** Re-arm the monitors and background waits the stop killed: the CI watch on each open PR
-   (`${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command), rollout and
+   (`${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command, `--until-merged` for an armed PR), rollout and
    deploy waits.
 4. **Go.** Say in one line what resumes, then work the open items in their order. A merge outside a
    run's standing auto-merge (`orchestrate` § Close the run) or a release still needs the user's word.
