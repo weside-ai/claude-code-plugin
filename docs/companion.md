@@ -42,4 +42,8 @@ pass `--name` yourself). `/we:setup` offers to install it to `~/.local/bin/wclau
 `python3 <plugin>/scripts/install_launcher.py --apply` (`--revert` removes it). It needs bash and
 `python3`.
 
+`WCLAUDE_CLAUDE` names a command `wclaude` starts instead of `claude`, with the same arguments and
+environment: a wrapper of your own, for example one that runs every session you start through
+`wclaude` on a fixed account while plain `claude` sessions follow your account switcher.
+
 Settings: [getting-started.md](getting-started.md#plugin-settings).
