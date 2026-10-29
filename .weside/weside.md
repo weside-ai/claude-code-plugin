@@ -9,7 +9,7 @@ vault: claude-code-plugin
 
 ## Purpose
 
-The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refine, story, council, meet, setup, sideload, materialize, ...), agents (council-<role> generics + doc-architect + ac-reviewer + ...), commands (docs, pr, ac-review, static, test), MCP integration, hooks. Public repo; ships via the weside-ai Claude Code plugin marketplace.
+The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refine, story, council, meet, setup, sideload, materialize, ...), agents (council-<role> generics + dev-high, dev-medium, explore-medium), commands (docs, pr, ac-review, static, test), MCP integration, hooks. Public repo; ships via the weside-ai Claude Code plugin marketplace.
 
 ## Crew
 

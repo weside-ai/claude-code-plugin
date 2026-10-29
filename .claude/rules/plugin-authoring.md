@@ -41,11 +41,11 @@ schema doc were silently ignored.)
   sequential-vs-parallel in build but Story-vs-phase dispatch in orchestrate — build's modes are
   now "inline"/"fan-out".) New skill → new vocabulary, or exactly the same semantics.
 - **Leading words.** The design vocabulary — `seam`, `tracer bullet`, `tight` (loop),
-  `deep`/`shallow` (module), `deletion test` — is owned by `we/references/design-vocabulary.md`.
+  `deep`/`shallow` (module), `deletion test`.
   Use exactly these words wherever the concept appears; never substitute synonyms
   ("boundary", "vertical slice", "fast feedback"). A leading word recruits priors the model
   already holds — one word does the work of a sentence, but only if every file uses the same one.
-- `subagent_type` is always plugin-namespaced: `we:doc-architect`, never bare `doc-architect`.
+- `subagent_type` is always plugin-namespaced: `we:dev-medium`, never bare `dev-medium`.
 - Never create a command in `we/commands/` with the same name as a skill directory — the
   documented dispatch-loop anti-pattern (CI now rejects it).
 
