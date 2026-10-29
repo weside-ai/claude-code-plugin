@@ -7,6 +7,8 @@
 #   wclaude -c              menu, then claude -c (claude's own --continue)
 #   wclaude --as <Name> ... no menu; the rest goes to claude
 # Choice 0 starts claude with the pin cleared (WESIDE_COMPANION empty = no companion).
+# WCLAUDE_CLAUDE names the command to start instead of `claude` (one executable that takes claude's
+# arguments, e.g. a wrapper that pins the session to one account); unset or empty means `claude`.
 # Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
 set -euo pipefail
 
@@ -99,7 +101,7 @@ if [[ $picked -eq 0 ]]; then
   done
   other=$i
   printf '  %2d) %s\n' "$other" "other name..." >&2
-  printf '  %2d) %s\n' 0 "no companion (worker / neutral)" >&2
+  printf '  %2d) %s\n' 0 "no companion" >&2
 
   printf '> ' >&2
   IFS= read -r choice || { echo "wclaude: no choice read" >&2; exit 1; }
@@ -128,6 +130,8 @@ if [[ $picked -eq 0 ]]; then
   fi
 fi
 
+launch=${WCLAUDE_CLAUDE:-claude}
+
 if [[ -n "$pick" ]]; then
   # --name, not only the SessionStart hook's sessionTitle: the hook titles the prompt bar and
   # transcript, but the session list (`claude agents`) keeps its derived name (`<dir>-<hex>`).
@@ -138,13 +142,13 @@ if [[ -n "$pick" ]]; then
   if [[ $named -eq 0 ]]; then
     set -- --name "$pick" "$@"
   fi
-  printf '%s WESIDE_COMPANION=%q claude' '->' "$pick" >&2
+  printf '%s WESIDE_COMPANION=%q %q' '->' "$pick" "$launch" >&2
   printf ' %q' "$@" >&2
   printf '\n' >&2
-  WESIDE_COMPANION="$pick" exec claude "$@"
+  WESIDE_COMPANION="$pick" exec "$launch" "$@"
 else
-  printf '%s claude' '->' >&2
+  printf '%s %q' '->' "$launch" >&2
   [[ $# -gt 0 ]] && printf ' %q' "$@" >&2
   printf ' (no companion)\n' >&2
-  WESIDE_COMPANION="" exec claude "$@"
+  WESIDE_COMPANION="" exec "$launch" "$@"
 fi
