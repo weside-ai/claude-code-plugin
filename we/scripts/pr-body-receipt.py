@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -38,9 +37,6 @@ def _top_level() -> Path:
     return Path(out.stdout.strip() or os.getcwd())
 
 
-_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
-
-
 def _tracked(path: str) -> bool:
     out = subprocess.run(
         ["git", "ls-files", "--error-unmatch", "--", path],
@@ -52,8 +48,8 @@ def _tracked(path: str) -> bool:
 
 
 def _argument_problem(key: str, body_out: str, plan_path: Path) -> str | None:
-    if not _KEY.match(key):
-        return f"<KEY> `{key}` is no ticket key (`^[A-Z][A-Z0-9]+-\\d+$`); argument order is <KEY> <body-in> <body-out>"
+    if not plan_path.is_file():
+        return f"no plan `docs/plans/{key}-story.md` for <KEY> `{key}`; argument order is <KEY> <body-in> <body-out>"
     if Path(body_out).resolve() == plan_path.resolve():
         return "<body-out> is the plan itself; pass a scratch path"
     if _tracked(body_out):

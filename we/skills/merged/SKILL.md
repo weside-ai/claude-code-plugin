@@ -74,7 +74,7 @@ Its working directory is the main checkout, never a tree that step 4 removes.
    `git -C <path> rev-list HEAD --not --remotes`, minus the PR's `commits` from step 1, must be
    empty: a commit left is a worker's unpushed work, so the tree stays and is named. A tree a live
    teammate still works in stays too: a running agent of this session (`ListAgents`) names it, or
-   a process has its cwd there (`ls -l /proc/*/cwd 2>/dev/null | grep <path>`).
+   a process has its cwd there (`lsof -a -d cwd +D <path>`, Linux and macOS).
 3. **Remove the worktrees**, then `git worktree prune`. A repo with its own worktree-removal verb (one that also
    drops the tree's database fork) uses that verb. That verb also kills a running agent-browser Chrome. If another session is
    driving agent-browser, use `git worktree remove` and name the leftover database fork in the report.

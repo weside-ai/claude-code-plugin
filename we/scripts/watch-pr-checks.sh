@@ -62,6 +62,7 @@ QUIET=${WATCH_QUIET:-60}
 REGISTER_TIMEOUT=${WATCH_REGISTER_TIMEOUT:-900}
 HEAD_TIMEOUT=${WATCH_HEAD_TIMEOUT:-300}
 MAX_ERRORS=${WATCH_MAX_ERRORS:-10}
+BLOCKED_GRACE=${WATCH_BLOCKED_GRACE:-900}
 CODEX_CHECK=${WATCH_CODEX_CHECK:-Codex Review}
 CODEX_READS=${WATCH_CODEX_READS:-10}
 LIFETIME=${WATCH_MAX_LIFETIME:-$((MAX_HOURS * 3600))}
@@ -104,7 +105,10 @@ tick() {  # sleep one interval, or exit 9 once the lifetime cap is reached
   sleep "$INTERVAL"
 }
 
-until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do tick; done
+until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do
+  git rev-parse --git-dir >/dev/null 2>&1 || { echo "not inside a git repo: pass -R <owner/repo>" >&2; exit 2; }
+  tick
+done
 cd / || exit 2
 
 view() {
@@ -132,8 +136,11 @@ merge_note() {
   echo "$note"
 }
 merge_stuck() {  # green, but GitHub will not merge it by itself
+  # BLOCKED while green and armed is normal for seconds before the merge; only after BLOCKED_GRACE
+  # of a stable green does it mean a review or rule waits.
   [ "$(field 4)" = off ] || [ "$(field 1)" = DIRTY ] || [ "$(field 1)" = BEHIND ] \
-    || [ "$(field 2)" = CONFLICTING ]
+    || [ "$(field 2)" = CONFLICTING ] \
+    || { [ "$(field 1)" = BLOCKED ] && [ $(($(date +%s) - STABLE_SINCE)) -ge "$BLOCKED_GRACE" ]; }
 }
 codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or BLOCKING
   local reviewed verdict

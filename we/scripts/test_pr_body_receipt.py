@@ -132,7 +132,7 @@ def test_swapped_arguments_leave_the_plan_untouched(repo: Path) -> None:
         assert result.returncode == 2, (args, result.stderr)
         assert (repo / plan_rel).read_text() == PLAN
     assert (
-        "no ticket key"
+        "no plan"
         in subprocess.run(
             [sys.executable, str(SCRIPT), "in.md", "KEY-1", "out.md"],
             cwd=repo,

@@ -373,3 +373,10 @@ def test_lifetime_cap_ends_the_watch(tmp_path):
     armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
     code, out = run(tmp_path, [armed], "--until-merged", env_extra={"WATCH_MAX_LIFETIME": "1"})
     assert (code, out) == (9, [f"gave up after 1s on {SHA}"])
+
+
+def test_until_merged_reports_a_green_pr_blocked_past_the_grace(tmp_path, monkeypatch):
+    monkeypatch.setenv("WATCH_BLOCKED_GRACE", "0")
+    armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
+    code, out = run(tmp_path, [armed] * 6, "--until-merged")
+    assert code == 0 and out[-1].startswith(f"final {SHA}: green") and "BLOCKED" in out[-1], out
