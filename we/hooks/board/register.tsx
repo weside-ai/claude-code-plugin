@@ -8,7 +8,7 @@ type On = Parameters<Register>[0]
 
 import type { BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, LiveView } from '../../types'
 import {
-  ANSWER_PROMPT, ageDays, answersPathOf, freshness, groupSessions, isMasterOf, lampOf, lastAnswers, liveByName, majorityMode,
+  ageDays, answerPrompt, answersPathOf, freshness, groupSessions, isMasterOf, lampOf, lastAnswers, liveByName, majorityMode,
   ownName, parseBoard, sortQueue, startModeOf,
 } from './board'
 import type { Lamp, Liveness, StartMode } from './board'
@@ -124,17 +124,25 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
     )
     if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
     await loadAnswers($, file, true)
-    const orchestrator = (await read($, view))?.board?.updatedBy
-    if (me && orchestrator && me === orchestrator) await $.prompt.submit({ text: ANSWER_PROMPT[answer](id), asUser: true })
+    const board = (await read($, view))?.board
+    if (me && board?.updatedBy && me === board.updatedBy) {
+      await $.prompt.submit({ text: answerPrompt(answer, id, board.answerPrompts), asUser: true })
+    }
   } catch (err) {
     $.ui.toast(`board: answer ${id} not saved: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
-let isProbing = false
-async function probe($: $) {
-  if (isProbing) return
-  isProbing = true
+// One probe at a time; a caller that needs its result awaits the one in flight.
+let probing: Promise<void> | undefined
+function probe($: $): Promise<void> {
+  probing ??= probeOnce($).finally(() => {
+    probing = undefined
+  })
+  return probing
+}
+
+async function probeOnce($: $) {
   try {
     const run = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/board/probe.py`], { timeoutMs: 25_000 })
     const out = JSON.parse(run.stdout || '{}') as { sessions?: LiveView['sessions']; error?: string }
@@ -147,8 +155,6 @@ async function probe($: $) {
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     await update($, live, v => ({ sessions: v?.sessions ?? [], at: v?.at ?? 0, error }))
-  } finally {
-    isProbing = false
   }
 }
 

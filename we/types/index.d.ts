@@ -66,6 +66,8 @@ export type BoardFile = {
   updatedBy?: string
   queue: BoardQueueItem[]
   sessions: BoardSession[]
+  // `answer_prompts`: the orchestrator's own wording of the prompts a press sends.
+  answerPrompts?: Partial<Record<BoardAnswerKind, string>>
 }
 
 // What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.

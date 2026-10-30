@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  ANSWER_PROMPT, ageDays, answersPathOf, freshness, groupSessions, isMasterProfile, lastAnswers, liveByName, majorityMode, ownName, parseBoard,
+  ageDays, answerPrompt, answersPathOf, freshness, groupSessions, isMasterProfile, lastAnswers, liveByName, majorityMode, ownName, parseBoard,
   sortQueue, startModeOf,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
@@ -115,5 +115,8 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   const live = [{ name: 'lead', sessionId: 'a' }, { name: null, sessionId: 'b' }, { name: 'Orchestrator', sessionId: 'c' }]
   expect(ownName(live, 'c')).toBe('Orchestrator')
   expect(ownName(live, 'b')).toBeUndefined()
-  expect(ANSWER_PROMPT.discuss('Q4')).toBe('Q4: lass uns darüber reden')
+  expect(answerPrompt('discuss', 'Q4')).toBe("Q4: let's talk about it")
+  const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', info: 7 } })).answerPrompts
+  expect(answerPrompt('accept', 'Q4', own)).toBe('Q4: Vorschlag angenommen')
+  expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')
 })

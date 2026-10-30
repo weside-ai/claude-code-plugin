@@ -64,6 +64,7 @@ relative path count from the home folder). Without the file the pane says so and
 |---|---|
 | `updated` | ISO timestamp of the last write; the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
+| `answer_prompts` | optional `accept`, `discuss`, `info` texts for the prompt a press sends (§ Answers) |
 | `priorities` | free list for the orchestrator itself; the pane does not show it |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
@@ -100,8 +101,10 @@ handled. Until then the pane shows the newest answer beside the question (`✓ a
 
 When the pane runs in the orchestrator's own session, the one whose name equals `updated_by`, a
 press also sends a prompt there, queued as if typed and run once the session is idle:
-`<id>: Vorschlag angenommen`, `<id>: lass uns darüber reden` or `<id>: ich brauche mehr
-Informationen`. The pane finds its own name by matching its session id against `claude agents
+`<id>: proposal accepted`, `<id>: let's talk about it` or `<id>: I need more information`. The
+board's optional `answer_prompts` words them in the orchestrator's own language, `{id}` standing
+for the question's id: `{"accept": "{id}: Vorschlag angenommen"}`; a kind it leaves out keeps the
+default. The pane finds its own name by matching its session id against `claude agents
 --json`; a session without a name, or a pane in another session, only appends the line.
 
 ## The live column
