@@ -173,6 +173,8 @@ async function probeOnce($: $) {
 const fetchedAt = new Map<string, number>()
 let isLoadingWork = false
 let pendingWork: Set<string> | undefined
+// A Refresh pressed while a load runs keeps its fetch for the re-run.
+let pendingFresh = false
 
 const textLines = (out: string) => out.split('\n').map(l => l.trim()).filter(Boolean)
 
@@ -209,6 +211,7 @@ async function loadWork($: $, names?: string[], fresh = false) {
   if (isLoadingWork) {
     pendingWork ??= new Set()
     for (const n of names ?? (await read($, workOpen))) pendingWork.add(n)
+    pendingFresh ||= fresh
     return
   }
   isLoadingWork = true
@@ -242,8 +245,10 @@ async function loadWork($: $, names?: string[], fresh = false) {
   } finally {
     isLoadingWork = false
     const next = pendingWork
+    const nextFresh = pendingFresh
     pendingWork = undefined
-    if (next?.size) $.clock.after(0, () => void loadWork($, [...next]))
+    pendingFresh = false
+    if (next?.size) $.clock.after(0, () => void loadWork($, [...next], nextFresh))
   }
 }
 
