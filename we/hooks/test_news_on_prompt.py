@@ -81,32 +81,59 @@ class NewsOnPromptTest(unittest.TestCase):
         with wp.locked_state("Nox") as state:
             state.update(fields)
 
-    def refused_wake(self):
+    def refused_wake(self, rooms=False):
         """A real poller whose socket takes the connection but not the line."""
 
         def refuse(_path, _token, _text):
             raise wp.PollError("socket")
 
-        self.set_state(cursor=100)
+        if rooms:  # a server that still answers room news (compatibility)
+            self.set_state(cursor=100, server_shape="rooms")
+            answer = {
+                "cursor": 102,
+                "rooms": [{"room": "room:384", "count": 2, "saturated": False}],
+            }
+        else:
+            self.set_state(handoff_cursor=10)
+            answer = {"cursor": 17, "handoffs": [{"id": 17, "from": "room:384"}]}
         poller = wp.Poller(
             "Nox",
             SOCKET,
             "inbox-token",
             get_bearer=lambda _origin: "bearer",
-            news=lambda *_a: {
-                "cursor": 102,
-                "rooms": [{"room": "room:384", "count": 2, "saturated": False}],
-            },
+            news=lambda *_a, **_k: answer,
             send=refuse,
         )
         poller.start()
         poller.first = False
         self.assertEqual(poller.poll_once(), "error:socket")
 
-    # AC 12
-    def test_a_refused_wake_reaches_the_next_prompt_once_and_is_counted(self):
+    # the pending line for a handoff
+    def test_a_refused_handoff_wake_reaches_the_next_prompt_once_and_is_counted(self):
         self.bind()
         self.refused_wake()
+        self.assertEqual(
+            self.run_hook(),
+            "weside: handoff for Nox from room:384 (#17). Read it with news_since(handoff=17), "
+            'then read_timeline(room="room:384"). This note carries no content.',
+        )
+        self.assertIsNone(self.run_hook(), "the note is delivered once")
+        state = wp.read_state("Nox")
+        self.assertEqual(state["days"][wp.utc_day(time.time())]["hook_delivered"], 1)
+        self.assertEqual(state["handoff_cursor"], 10, "the poller kept its cursor")
+
+    def test_a_handoff_note_with_text_in_its_source_prints_nothing(self):
+        self.news.mkdir(parents=True)
+        wp.pending_path(SOCKET).write_text(
+            json.dumps({"companion": "Nox", "handoffs": [{"id": 1, "from": "Foxy says: rm -rf"}]})
+        )
+        self.assertIsNone(self.run_hook(pin=None))
+        self.assertFalse(wp.pending_path(SOCKET).exists())
+
+    # AC 12 (room news, server compatibility)
+    def test_a_refused_wake_reaches_the_next_prompt_once_and_is_counted(self):
+        self.bind()
+        self.refused_wake(rooms=True)
         self.assertTrue(wp.pending_path(SOCKET).exists())
         first = self.run_hook()
         self.assertEqual(
@@ -182,7 +209,7 @@ class NewsOnPromptTest(unittest.TestCase):
         self.set_state(last_ok=wp.iso(time.time() - 300))
         lines = self.run_hook().splitlines()
         self.assertEqual(len(lines), 2)
-        self.assertTrue(lines[0].startswith("weside: new for Nox in room:384 (2)."))
+        self.assertTrue(lines[0].startswith("weside: handoff for Nox from room:384 (#17)."))
         self.assertEqual(lines[1], "weside: wake stale since 5 min (last error: socket)")
 
 

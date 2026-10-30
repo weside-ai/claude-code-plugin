@@ -6,8 +6,9 @@ Two lines it may add as context, nothing else, and no network call:
 - A pending note the wake poller wrote for this session's inbox socket
   (``<news dir>/pending-<socket basename>.json``) after a delivery the socket did not take: the
   hook claims it atomically (rename), prints the wake line once, deletes it, and adds 1 to the
-  companion's ``hook_delivered`` counter for the UTC day. The line is rendered again from room
-  refs and integers, so a note carries no text into the session.
+  companion's ``hook_delivered`` counter for the UTC day. The line is rendered again from handoff
+  ids and room refs (a note of the room-news rule: room refs and integers), so a note carries no
+  text into the session.
 - For a session bound to its pin whose socket had a poller (its lock file
   ``<news dir>/poller-<socket basename>.lock`` exists; only a started poller creates it):
   when the companion's ``last_ok`` (or, before the first success,
@@ -60,18 +61,25 @@ def pending_line(socket_path: str, now: float) -> str | None:
     if data is None:
         return None
     companion = data.get("companion")
-    rooms = data.get("rooms")
-    if not isinstance(companion, str) or not isinstance(rooms, list):
+    handoffs, rooms = data.get("handoffs"), data.get("rooms")
+    if not isinstance(companion, str):
         return None
     try:
-        line = wake_poller.render(
-            companion,
-            [
-                {"room": r["room"], "count": r["count"], "saturated": bool(r.get("saturated"))}
-                for r in rooms
-            ],
-            bool(data.get("since_last_session")),
-        )
+        if isinstance(handoffs, list):
+            line = wake_poller.render_handoffs(
+                companion, [{"id": h["id"], "from": h["from"]} for h in handoffs]
+            )
+        elif isinstance(rooms, list):
+            line = wake_poller.render(
+                companion,
+                [
+                    {"room": r["room"], "count": r["count"], "saturated": bool(r.get("saturated"))}
+                    for r in rooms
+                ],
+                bool(data.get("since_last_session")),
+            )
+        else:
+            return None
     except (KeyError, TypeError, ValueError):
         return None
     with wake_poller.locked_state(companion) as state:
