@@ -149,7 +149,29 @@ function readBgCache() {
   }
 }
 
+const BG_LOCK = `${BG_CACHE}.lock`;
+const BG_LOCK_STALE_MS = 20_000; // longer than the refresh child's 15 s timeout
+
+// Claims the one refresh per TTL window across every open session (O_EXCL), so a cold cache does
+// not start a `claude agents` per redraw; a lock older than the child's timeout is taken over.
+function claimBgRefresh() {
+  try {
+    fs.closeSync(fs.openSync(BG_LOCK, 'wx'));
+    return true;
+  } catch (e) {
+    try {
+      if (Date.now() - fs.statSync(BG_LOCK).mtimeMs < BG_LOCK_STALE_MS) return false;
+      fs.unlinkSync(BG_LOCK);
+      fs.closeSync(fs.openSync(BG_LOCK, 'wx'));
+      return true;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
 function refreshBgCacheDetached() {
+  if (!claimBgRefresh()) return;
   try {
     const child = spawn(process.execPath, [__filename, '--refresh-bg'], { detached: true, stdio: 'ignore' });
     child.unref();
@@ -172,6 +194,9 @@ if (process.argv[2] === '--refresh-bg') {
     const tmp = `${BG_CACHE}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify({ ts: Date.now(), sessions }));
     fs.renameSync(tmp, BG_CACHE);
+  } catch (e) {}
+  try {
+    fs.unlinkSync(BG_LOCK);
   } catch (e) {}
   process.exit(0);
 }
