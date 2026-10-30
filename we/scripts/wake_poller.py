@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Wake poller: tells a running companion session that something is addressed to it in weside.
+"""Wake poller: tells a running companion session that its WESIDE side handed something over.
 
 One poller per Claude Code session (keyed by the session's inbox socket), started detached by
 ``identity_cache.py bind`` and by the SessionStart hook for a session already bound to its pin.
-It runs no model: once a minute it asks the weside MCP tool ``news_since`` "what is addressed to
-this companion since my cursor?" and, on news, writes one content-free line into the session's
-inbox socket; the session then reads the room itself with ``read_timeline``. Contract:
-``references/companion-session.md`` § Wake.
+It runs no model: once a minute it asks the weside MCP tool ``news_since`` "which handoffs to this
+Claude Code side are pending since my cursor?" and, per pending handoff, writes one content-free
+line into the session's inbox socket; the session then reads the note itself with
+``news_since(handoff=<id>)`` and the source room with ``read_timeline``. Lines addressed to the
+companion in a room wake nothing: its WESIDE side answers those, and hands over what belongs
+here. Contract: ``references/companion-session.md`` § Wake.
 
 Lifecycle
     Start: a non-blocking ``flock`` on ``<dir>/poller-<socket basename>.lock`` (one poller per
@@ -20,7 +22,19 @@ Per cycle
     JSON-RPC ``tools/call news_since`` at ``WESIDE_MCP_URL`` (default the plugin's MCP URL) with
     ``X-Weside-Companion: <companion>``. The CLI keeps credentials per environment, so the token
     always comes for the origin the poller calls, never for the CLI config's default ``api_url``.
-    A room whose lines the companion's WESIDE side already took up wakes nobody: a server that
+    The call sends ``handoffs=true`` and ``after=<handoff_cursor>`` (0 when the file has none, so
+    a cursor file of the room-news poller is ignored). Handoff answer
+    ``{"cursor": N, "handoffs": [{"id": <id>, "from": "room:<id>" | null}]}``: every listed handoff gets one line of one wake, and
+    ``handoff_cursor`` takes the answer's ``cursor`` as given (a server that met a cursor above
+    every handoff lists from 0 and answers a lower one). After a wake attempt the hold-off key
+    ``claude_code`` holds the next wake for 10 min; handoffs listed meanwhile wait, cursor kept.
+    Server compatibility (delete once every weside server answers ``handoffs``): an answer
+    without ``handoffs``, or a refusal of the call (JSON-RPC error, ``isError``), is dropped
+    unread (a server without the argument ignores it and lists rooms from the handoff cursor)
+    and the same cycle asks the 7.22.3 call: no ``handoffs``, ``after=<cursor>``, the
+    room-news rule below. Each cursor only ever goes out with its own call and takes only its
+    own call's answer; an answer with ``handoffs`` ignores any ``rooms`` beside it.
+    Room-news rule: a room whose lines the companion's WESIDE side already took up wakes nobody: a server that
     answers ``unanswered`` per room (with ``unanswered_newest``, a row id, and
     ``unanswered_age_s``) wakes a room only for an unanswered line newer than the one last
     delivered there, and only once the newest unanswered line is ``GRACE_S`` (10 min) old; the
@@ -29,18 +43,23 @@ Per cycle
     No news, or only rooms in their hold-off or grace → no socket contact. Otherwise one connection:
     ``{"type":"auth","token":…}`` then ``{"type":"user","message":{"role":"user","content":…}}``.
     The wake text is built from room refs (``room:<digits>``), integers and fixed words only.
+    A handoff line reads ``weside: handoff for <Name> from room:<id> (#<h>). Read it with
+    news_since(handoff=<h>), then read_timeline(room="room:<id>"). This note carries no content.``
     ``ECONNREFUSED``/``ENOENT`` on the socket = the session is gone: exit, cursor kept. Any other
     delivery failure → a pending note ``<dir>/pending-<socket basename>.json`` for the prompt hook
     (``hooks/news_on_prompt.py``), cursor kept.
 
 Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
 ``<file>.lock``, atomic replace), shared by every session of that companion:
-    ``cursor``     int or null — every addressed row up to it is handed off; it advances only when
-                   no room in the answer still holds a line not yet delivered
+    ``handoff_cursor`` int or null — every handoff id up to it is delivered
+    ``server_shape`` ``handoffs`` (default) or ``rooms`` — the rule the last cycle applied
+                   (for ``status``; every cycle asks ``handoffs=true`` first)
+    ``cursor``     int or null — room-news rule: every addressed row up to it is handed off; it
+                   advances only when no room in the answer still holds a line not yet delivered
     ``delivered``  room → count already delivered against ``cursor`` (reset when it advances;
                    a server without ``unanswered``)
     ``delivered_row`` room → newest unanswered row id already delivered (reset with ``cursor``)
-    ``holdoff``    room → epoch seconds; no second wake for that room before then (10 min)
+    ``holdoff``    ``claude_code`` or a room → epoch seconds; no second wake before then (10 min)
     ``started``    ISO time the newest poller started
     ``last_ok``    ISO time of the last successful ``news_since``
     ``last_error`` ``{"class": auth|network|http|socket|format, "at": ISO}`` — a class, never a text;
@@ -102,13 +121,20 @@ ERROR_CLASSES = ("auth", "network", "http", "socket", "format")
 AUTH_DETAILS = {"token": "token command failed", "401": "401 from /mcp"}
 COUNTERS = ("polls", "errors", "wakes", "hook_delivered")
 ROOM_RE = re.compile(r"room:[0-9]{1,18}")
+HANDOFF_KEY = "claude_code"
+SHAPES = ("handoffs", "rooms")
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}")
 
 TEXT_TAIL = "This note carries no content; your WESIDE side may already have answered there."
+HANDOFF_TAIL = "This note carries no content."
 
 
 class PollError(Exception):
-    """A failed cycle, carrying one class from ``ERROR_CLASSES`` (auth: a key of ``AUTH_DETAILS``)."""
+    """A failed cycle, carrying one class from ``ERROR_CLASSES``.
+
+    Detail: auth → a key of ``AUTH_DETAILS``; http → ``refused`` when the server answered the
+    call with a JSON-RPC error or ``isError`` (an old server refusing ``handoffs``).
+    """
 
     def __init__(self, cls: str, detail: str | None = None):
         super().__init__(cls)
@@ -174,6 +200,8 @@ def utc_day(epoch: float) -> str:
 
 def empty_state() -> dict:
     return {
+        "handoff_cursor": None,
+        "server_shape": "handoffs",
         "cursor": None,
         "delivered": {},
         "delivered_row": {},
@@ -194,20 +222,13 @@ def read_state(companion: str) -> dict:
         return state
     if not isinstance(data, dict):
         return state
-    cursor = data.get("cursor")
-    if isinstance(cursor, int) and not isinstance(cursor, bool) and cursor >= 0:
-        state["cursor"] = cursor
+    for key in ("cursor", "handoff_cursor"):
+        if _plain_int(data.get(key)):
+            state[key] = data[key]
+    if data.get("server_shape") in SHAPES:
+        state["server_shape"] = data["server_shape"]
     for key in ("delivered", "delivered_row", "holdoff"):
-        value = data.get(key)
-        if isinstance(value, dict):
-            state[key] = {
-                k: v
-                for k, v in value.items()
-                if isinstance(k, str)
-                and ROOM_RE.fullmatch(k)
-                and isinstance(v, (int, float))
-                and not isinstance(v, bool)
-            }
+        state[key] = _keyed_numbers(data.get(key), allow_handoff=key == "holdoff")
     for key in ("started", "last_ok"):
         if parse_iso(data.get(key)) is not None:
             state[key] = data[key]
@@ -216,17 +237,37 @@ def read_state(companion: str) -> dict:
         state["last_error"] = {"class": err["class"], "at": err["at"]}
         if err["class"] == "auth" and err.get("detail") in AUTH_DETAILS:
             state["last_error"]["detail"] = err["detail"]
-    days = data.get("days")
-    if isinstance(days, dict):
-        for day, counts in days.items():
-            if isinstance(day, str) and isinstance(counts, dict):
-                state["days"][day] = {
-                    c: int(counts.get(c, 0))
-                    if isinstance(counts.get(c, 0), int) and not isinstance(counts.get(c), bool)
-                    else 0
-                    for c in COUNTERS
-                }
+    state["days"] = _day_counters(data.get("days"))
     return state
+
+
+def _day_counters(days: Any) -> dict:
+    if not isinstance(days, dict):
+        return {}
+    return {
+        day: {
+            c: int(counts.get(c, 0))
+            if isinstance(counts.get(c, 0), int) and not isinstance(counts.get(c), bool)
+            else 0
+            for c in COUNTERS
+        }
+        for day, counts in days.items()
+        if isinstance(day, str) and isinstance(counts, dict)
+    }
+
+
+def _keyed_numbers(value: Any, *, allow_handoff: bool) -> dict:
+    """A ``room:<id>`` (or ``claude_code``) → number map; anything else is dropped."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        k: v
+        for k, v in value.items()
+        if isinstance(k, str)
+        and (ROOM_RE.fullmatch(k) or (allow_handoff and k == HANDOFF_KEY))
+        and isinstance(v, (int, float))
+        and not isinstance(v, bool)
+    }
 
 
 def _write_atomic(target: Path, payload: str) -> None:
@@ -287,6 +328,34 @@ def render(companion: str, rooms: list[dict], since_last_session: bool = False) 
         f"weside: new for {companion}{since} in {', '.join(parts)}. "
         f"Read it yourself with {', '.join(reads)}. {TEXT_TAIL}"
     )
+
+
+def render_handoffs(companion: str, handoffs: list[dict]) -> str:
+    """One line per handoff from its id, its source ref and fixed words; no note text."""
+    if not NAME_RE.fullmatch(companion):
+        raise ValueError("companion name is not plain")
+    lines = []
+    for item in handoffs:
+        hid, source = item["id"], item["from"]
+        if not _plain_int(hid) or not (source is None or ROOM_RE.fullmatch(str(source))):
+            raise ValueError("handoff id or source is not plain")
+        if source is None:
+            lines.append(
+                f"weside: handoff for {companion} (#{hid}). "
+                f"Read it with news_since(handoff={hid}). {HANDOFF_TAIL}"
+            )
+        else:
+            lines.append(
+                f"weside: handoff for {companion} from {source} (#{hid}). "
+                f'Read it with news_since(handoff={hid}), then read_timeline(room="{source}"). '
+                f"{HANDOFF_TAIL}"
+            )
+    return "\n".join(lines)
+
+
+def shape_of(answer: dict) -> str:
+    """``handoffs`` when the answer lists handoffs (any ``rooms`` beside it is ignored)."""
+    return "handoffs" if "handoffs" in answer else "rooms"
 
 
 # --- the three outside calls ---------------------------------------------------------------
@@ -353,14 +422,14 @@ def _rpc_payload(body: bytes, content_type: str) -> dict:
 
 
 def parse_news(payload: dict) -> dict:
-    """Validate a ``news_since`` JSON-RPC answer down to cursor, rooms, counts, saturation."""
+    """Validate a ``news_since`` JSON-RPC answer down to cursor and handoffs (or rooms)."""
     if "error" in payload:
-        raise PollError("http")
+        raise PollError("http", "refused")
     result = payload.get("result")
     if not isinstance(result, dict):
         raise PollError("format")
     if result.get("isError"):
-        raise PollError("http")
+        raise PollError("http", "refused")
     content = result.get("content")
     if not isinstance(content, list) or not content or not isinstance(content[0], dict):
         raise PollError("format")
@@ -371,12 +440,26 @@ def parse_news(payload: dict) -> dict:
     if not isinstance(news, dict):
         raise PollError("format")
     cursor = news.get("cursor")
-    rooms = news.get("rooms")
-    if not isinstance(cursor, int) or isinstance(cursor, bool) or cursor < 0:
+    if not _plain_int(cursor):
         raise PollError("format")
+    if shape_of(news) == "handoffs":
+        handoffs = news["handoffs"]
+        if not isinstance(handoffs, list):
+            raise PollError("format")
+        return {"cursor": cursor, "handoffs": [_clean_handoff(item) for item in handoffs]}
+    rooms = news.get("rooms")
     if not isinstance(rooms, list):
         raise PollError("format")
     return {"cursor": cursor, "rooms": [_clean_room(item) for item in rooms]}
+
+
+def _clean_handoff(item: Any) -> dict:
+    if not isinstance(item, dict) or not _plain_int(item.get("id")):
+        raise PollError("format")
+    source = item.get("from")
+    if source is not None and not (isinstance(source, str) and ROOM_RE.fullmatch(source)):
+        raise PollError("format")
+    return {"id": item["id"], "from": source}
 
 
 def _plain_int(value: Any, *, nullable: bool = False) -> bool:
@@ -408,8 +491,12 @@ def _clean_room(item: Any) -> dict:
     return clean
 
 
-def call_news_since(url: str, bearer: str, companion: str, after: int | None) -> dict:
-    arguments = {} if after is None else {"after": after}
+def call_news_since(
+    url: str, bearer: str, companion: str, after: int | None, handoffs: bool = False
+) -> dict:
+    arguments: dict = {"handoffs": True} if handoffs else {}
+    if after is not None:
+        arguments["after"] = after
     body = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -489,13 +576,9 @@ def session_alive(socket_path: str) -> bool:
     return True
 
 
-def write_pending(socket_path: str, companion: str, rooms: list[dict], since: bool, now: float):
-    payload = {
-        "companion": companion,
-        "rooms": rooms,
-        "since_last_session": since,
-        "at": iso(now),
-    }
+def write_pending(socket_path: str, companion: str, news: dict, now: float):
+    """The note for the prompt hook: ``handoffs`` or (room-news rule) ``rooms`` + ``since``."""
+    payload = dict(news, companion=companion, at=iso(now))
     _write_atomic(pending_path(socket_path), json.dumps(payload, sort_keys=True))
 
 
@@ -522,7 +605,7 @@ class Poller:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         get_bearer: Callable[[str], str] = weside_token,
-        news: Callable[[str, str, str, Any], dict] = call_news_since,
+        news: Callable[..., dict] = call_news_since,
         send: Callable[[str, str, str], None] = deliver,
         alive: Callable[[str], bool] = session_alive,
         log: Callable[[str], None] = lambda _line: None,
@@ -573,17 +656,73 @@ class Poller:
         """One cycle; returns ``ok``, ``error:<class>``, ``auth-exit`` or ``gone``."""
         now = self.clock()
         with locked_state(self.companion) as state:
-            base = state["cursor"]
+            last_shape = state["server_shape"]
+            bases = {"handoffs": state["handoff_cursor"], "rooms": state["cursor"]}
             bump(state, "polls", now)
+
         try:
             bearer = self.get_bearer(api_origin(self.mcp_url))
-            answer = self.news(self.mcp_url, bearer, self.companion, base)
+            shape = "handoffs"
+            try:
+                answer = self.news(
+                    self.mcp_url, bearer, self.companion, bases["handoffs"] or 0, handoffs=True
+                )
+            except PollError as exc:
+                if exc.detail != "refused":
+                    raise
+                answer = None
+            if answer is None or shape_of(answer) != "handoffs":
+                shape = "rooms"
+                answer = self.news(self.mcp_url, bearer, self.companion, bases["rooms"])
+                if shape_of(answer) != "rooms":
+                    raise PollError("format")
+            if shape != last_shape:
+                with locked_state(self.companion) as state:
+                    state["server_shape"] = shape
+                self.log(f"server shape {shape}")
         except PollError as exc:
             return self._fail(exc.cls, exc.detail)
         self.auth_failures = 0
         since = self.first and self.resumed
         self.first = False
-        return self._apply(base, answer, since)
+        if shape == "handoffs":
+            return self._apply_handoffs(bases["handoffs"], answer)
+        return self._apply(bases["rooms"], answer, since)
+
+    def _apply_handoffs(self, base: int | None, answer: dict) -> str:
+        now = self.clock()
+        with locked_state(self.companion) as state:
+            state["last_ok"] = iso(now)
+            if state["handoff_cursor"] != base:
+                self.log("ok skipped (cursor moved by another poller)")
+                return "ok"
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            handoffs = answer["handoffs"]
+            if not handoffs:
+                state["handoff_cursor"] = answer["cursor"]
+                self.log("ok handoffs=0")
+                return "ok"
+            if state["holdoff"].get(HANDOFF_KEY, 0) > now:
+                self.log(f"ok handoffs={len(handoffs)} held")
+                return "ok"
+            text = render_handoffs(self.companion, handoffs)
+            try:
+                self.send(self.socket_path, self._token, text)
+            except SessionGoneError:
+                self.log("exit session gone")
+                return "gone"
+            except PollError:
+                write_pending(self.socket_path, self.companion, {"handoffs": handoffs}, now)
+                state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
+                state["last_error"] = {"class": "socket", "at": iso(now)}
+                bump(state, "errors", now)
+                self.log(f"pending note handoffs={len(handoffs)}")
+                return "error:socket"
+            state["handoff_cursor"] = answer["cursor"]
+            state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
+            bump(state, "wakes", now)
+            self.log(f"wake delivered handoffs={len(handoffs)}")
+            return "ok"
 
     def _apply(self, base: int | None, answer: dict, since: bool) -> str:
         now = self.clock()
@@ -614,7 +753,8 @@ class Poller:
                 self.log("exit session gone")
                 return "gone"
             except PollError:
-                write_pending(self.socket_path, self.companion, rooms, since, now)
+                news = {"rooms": rooms, "since_last_session": since}
+                write_pending(self.socket_path, self.companion, news, now)
                 for f in wakeable:
                     state["holdoff"][f["room"]] = now + HOLDOFF_S
                 state["last_error"] = {"class": "socket", "at": iso(now)}

@@ -286,7 +286,7 @@ class WakeBindTest(unittest.TestCase):
         os.environ.pop("WESIDE_COMPANION")
         self.bind()
         with wp.locked_state("Nox") as state:
-            state["cursor"] = 42
+            state["handoff_cursor"] = 42
             state["last_ok"] = "2026-10-26T12:00:00+00:00"
             state["last_error"] = {
                 "class": "auth",
@@ -302,7 +302,7 @@ class WakeBindTest(unittest.TestCase):
         self.assertTrue(text.startswith("Nox\n"), text)
         for expected in (
             "poller: not running for this session",
-            "cursor: 42",
+            "handoff_cursor: 42",
             "last_ok: 2026-10-26T12:00:00+00:00",
             "last_error: auth (token command failed) at 2026-10-26T11:59:00+00:00",
             "polls 3 errors 0 wakes 1 hook_delivered 0",

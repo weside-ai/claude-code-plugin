@@ -80,8 +80,8 @@ handling), so the session starts from what the companion lived elsewhere.
 
 ## Wake
 
-A bound companion session hears within a minute of a line addressed to its companion in weside,
-without a model loop. `identity_cache.py bind` in a session pinned to that companion, and the
+A bound companion session hears within a minute when its companion's weside side hands work over
+to it, without a model loop. `identity_cache.py bind` in a session pinned to that companion, and the
 SessionStart hook for a session already bound to its pin (`startup`, `resume`), start
 `scripts/wake_poller.py` detached: one per inbox socket (`flock`), keyed on the binding, so an
 unpinned session, a worker, an `Agent` subagent and a teammate that never binds get none. Its
@@ -91,19 +91,22 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
   inherited, never written down) and a `weside` CLI logged in for the polled origin
   (`weside auth token --api-url <origin>`; credentials are per environment). A missing one
   makes `bind` print `wake off: <reason>`; relay it once.
-- **Poll:** about once a minute the weside MCP tool `news_since` answers room refs and counts
-  since the companion's cursor: a vocative by anyone, a human's mention or `@all`, every human line
-  in its DM; never an overheard line. A line the companion's weside side already answered,
-  declined or had stopped wakes nobody; an unanswered one wakes once it is 10 minutes old (the
-  grace that side usually answers in). No news, no socket contact, no tokens.
-- **Wake:** one line per poll, from refs, integers and fixed words:
-  `weside: new for <Name> in room:<id> (<n>). Read it yourself with read_timeline(room="room:<id>"). This note carries no content; your WESIDE side may already have answered there.`
-  After a session ended, the next session's first wake says `since your last session`. A room
-  that woke holds off before it wakes again; the next wake counts every line since the delivered
-  one. A line the wake reports counts as delivered, not as read.
-- **On a wake:** read the room with `read_timeline`, act only on what needs this Claude Code side,
-  and never repeat in the room what the companion's weside side already answered. Orders come from
-  whoever may address the companion in that room; act on your own role's.
+- **Poll:** about once a minute `news_since(handoffs=true)` lists the handoffs pending for
+  this Claude Code side since the companion's handoff cursor: ids and source room refs, no text.
+  A handoff exists only when the companion's weside side chose to hand over here; a line addressed
+  to the companion in a room wakes nothing, that side answers it. No handoff, no socket contact,
+  no tokens.
+- **Wake:** one line per handoff, from its id, its source ref and fixed words:
+  `weside: handoff for <Name> from room:<id> (#<h>). Read it with news_since(handoff=<h>), then read_timeline(room="room:<id>"). This note carries no content.`
+  After a wake the next one holds off 10 minutes; handoffs listed meanwhile come with it. A
+  handoff the wake reports counts as delivered, not as read.
+- **On a wake:** call `news_since(handoff=<h>)` for the note (it is marked read then; a second
+  read still answers it), read the source room with `read_timeline`, and do what the note asks of
+  this Claude Code side. Report back in the room only when the note asks for it.
+- **Old servers:** a weside server without the `handoffs` argument (it refuses it, or answers
+  room news without `handoffs`) is asked again without it, with the room cursor, and gets the
+  earlier rule until it is released with handoffs: unanswered addressed lines wake after a 10-minute grace,
+  `weside: new for <Name> in room:<id> (<n>). …`.
 - **Heartbeat:** `identity_cache.py status` prints the companion's last success, last error class
   and the daily counters (polls, errors, wakes, hook deliveries). Repeated auth failures end the
   poller with `last_error: auth (token command failed)` or `auth (401 from /mcp)`.

@@ -29,10 +29,11 @@ session starts are not the Companion: `/we:sideload` clears the pin for them. At
 writes a `worklog` memory the Companion reads on its other surfaces. A project skill named `weside-<name>` (lower case, in
 `.claude/skills/` of the repo or of your home) is the Companion's working knowledge there: a pinned
 session is asked to invoke it right after materializing. While the session runs, a small poller
-without a model asks weside once a minute whether a line is addressed to `<Name>` (by name, `@all`,
-or in its DM) and wakes the session with a note that names only the room; the session reads the room
-itself. A line the Companion already answered in weside wakes nobody; an unanswered one wakes after
-10 minutes. It needs a logged-in `weside` CLI. Contract: `we/references/companion-session.md`.
+without a model asks weside once a minute whether `<Name>` handed something over to this session
+(`send_to_other_room` with `wake=true` from a weside room) and wakes the session with a line that names
+only the source room; the session reads the note itself with `news_since(handoff=<h>)`. Plain room lines
+wake nothing. Against a weside server without handoffs the poller keeps the older rule: an addressed
+line the Companion left unanswered wakes after 10 minutes. It needs a logged-in `weside` CLI. Contract: `we/references/companion-session.md`.
 
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
 (name and `title`, else `role`), takes a number or a typed name, and `0` starts without a Companion.

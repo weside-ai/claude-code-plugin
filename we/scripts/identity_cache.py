@@ -54,7 +54,7 @@ Modes::
 Wake: a ``bind`` in a session pinned to that companion starts the wake poller
 (``wake_poller.py``) for the session's inbox socket and prints one ``wake on: …``
 or ``wake off: <reason>`` line; an unpinned bind starts none. ``status`` prints
-the companion's cursor file (cursor, ``last_ok``, ``last_error``, hold-offs, the
+the companion's cursor file (handoff cursor, ``last_ok``, ``last_error``, hold-offs, the
 day counters) and whether a poller runs for this session's socket; the session
 id defaults to ``CLAUDE_CODE_SESSION_ID``.
 
@@ -271,7 +271,10 @@ def status(session_id: str) -> int:
     err = state["last_error"]
     print(name)
     print(f"poller: {'running' if running else 'not running'} for this session")
-    print(f"cursor: {state['cursor'] if state['cursor'] is not None else 'none'}")
+    hc = state["handoff_cursor"]
+    print(f"handoff_cursor: {hc if hc is not None else 'none'}")
+    if state["server_shape"] == "rooms":
+        print(f"cursor: {state['cursor'] if state['cursor'] is not None else 'none'} (room news)")
     print(f"last_ok: {state['last_ok'] or 'never'}")
     print(f"last_error: {wake_poller.describe_error(err)}")
     for room, until in sorted(state["holdoff"].items()):
