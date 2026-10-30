@@ -61,7 +61,9 @@ asserts; the report's `retired:` field names each one and the test that replaces
 
 Run the commands yourself; they are deterministic. Scope and exceptions are in the contract:
 affected tests only, service-bound tests skipped and listed, the named integration suite for a
-critical chunk. A gate failure: fix, commit, re-run. The same gate red three times: stop.
+critical chunk. A gate failure: fix, commit, re-run. The same gate red three times: stop. A gate run
+that ended without a verdict (killed, timed out, out of memory) never starts again on its own: read why
+and report it; it runs again only after a fix that answers the cause (the contract's rule).
 
 ## 5. Finish, when the brief makes you the last writer
 
