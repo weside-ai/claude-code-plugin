@@ -55,12 +55,16 @@ test('/board draws the queue oldest first, masters with workers, live and start-
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'we', surface, component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
-    expect(await ui.find({ type: 'Text', text: /Waiting for the owner \(2\)/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /as of .* ago \(Orchestrator\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /WE_ROLE missing · not in the master profile — restart it as a master/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /P2 · test live/ })).toBeDefined()
+    // Sessions that run on no board fold into the last line until it is opened.
+    expect(await ui.find({ type: 'Text', text: /Live, not on the board: stray/ })).toBeUndefined()
+    await ui.press({ key: 'rest' })
     expect(await ui.find({ type: 'Text', text: /Live, not on the board: stray/ })).toBeDefined()
+    await ui.press({ key: 'rest' })
     expect(await ui.find({ type: 'Text', text: /#5560/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /⚠ WE_ROLE missing/ })).toBeDefined()
     await ui.press({ key: 'flow' })
@@ -89,7 +93,7 @@ test('without masterProfile no master is red; boardFile moves the file', { optio
   expect(reads).toEqual(['/home/me/boards/team.json', '/home/me/boards/board-answers.jsonl'])
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ type: 'Text', text: /restart it as a master/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Waiting for the owner \(2\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
   await ui.unmount()
 })
 

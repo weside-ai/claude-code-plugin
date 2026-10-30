@@ -15,6 +15,12 @@ const promptsOf = (raw: unknown): Partial<Record<BoardAnswerKind, string>> | und
   return out
 }
 
+const prioritiesOf = (raw: unknown): string | undefined => {
+  const items = Array.isArray(raw) ? raw.filter((p): p is string => typeof p === 'string') : typeof raw === 'string' ? [raw] : []
+  const line = items.map(p => p.trim()).filter(Boolean).join(' · ')
+  return line || undefined
+}
+
 export const parseBoard = (text: string): BoardFile => {
   const raw = JSON.parse(text) as unknown
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('board file is no JSON object')
@@ -24,6 +30,8 @@ export const parseBoard = (text: string): BoardFile => {
     updatedBy: typeof file.updated_by === 'string' ? file.updated_by : undefined,
     queue: Array.isArray(file.owner_queue) ? (file.owner_queue as BoardQueueItem[]) : [],
     sessions: Array.isArray(file.sessions) ? (file.sessions as BoardSession[]) : [],
+    priorities: prioritiesOf(file.priorities),
+    notes: typeof file.notes === 'string' && file.notes.trim() ? file.notes.trim() : undefined,
     answerPrompts: promptsOf(file.answer_prompts),
   }
 }
@@ -202,3 +210,44 @@ export const startModeOf = (
   }
   return { level: 'ok', reason: 'ok', mode }
 }
+
+// A group folds into the pane's last line when nothing in it runs or waits: an idle or done master
+// with idle or done workers, or nobody at all.
+export const isResting = (group: SessionGroup) =>
+  [...(group.head ? [group.head] : []), ...group.workers].every(s => lampOf(s.state) === 'quiet')
+
+export type BoardCounts = { masters: number; runs: number; waits: number; quiet: number; ci: number }
+
+// The header's counter: masters by lamp, and every session in CI.
+export const countBoard = (sessions: readonly BoardSession[]): BoardCounts => {
+  const masters = sessions.filter(s => isMasterOf(s, sessions))
+  const lamps = masters.map(s => lampOf(s.state))
+  return {
+    masters: masters.length,
+    runs: lamps.filter(l => l === 'runs').length,
+    waits: lamps.filter(l => l === 'waits').length,
+    quiet: lamps.filter(l => l !== 'runs' && l !== 'waits').length,
+    ci: sessions.filter(s => s.state === 'ci').length,
+  }
+}
+
+// Lays segments out left to right, a new line where the next would pass `room`; a segment wider than
+// the room stands alone on its line, which the pane clips. `gap` spaces between two on one line.
+export const pack = <T>(segments: readonly T[], widthOf: (s: T) => number, room: number, gap = 2): T[][] => {
+  const lines: T[][] = []
+  let used = 0
+  for (const s of segments) {
+    const w = widthOf(s)
+    const line = lines[lines.length - 1]
+    if (line && used + gap + w <= room) {
+      line.push(s)
+      used += gap + w
+    } else {
+      lines.push([s])
+      used = w
+    }
+  }
+  return lines
+}
+
+export const clip = (text: string, room: number) => (text.length > room ? `${text.slice(0, Math.max(0, room - 1))}…` : text)

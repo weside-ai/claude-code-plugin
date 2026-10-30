@@ -1,35 +1,65 @@
 # The board pane: `/board`
 
-`/board` opens a pane beside the transcript with the workspace board: what waits for the owner,
+`/board` opens a pane beside the transcript with the workspace board: what waits for the owner (you),
 which sessions run, who leads them and what each works on. An orchestrator session keeps the board
 in one JSON file; the pane reads it and adds what it sees live of each running session. The pane
 never writes the file; the owner answers a question with a button, which appends to a file of its own.
 
 ```text
 ◆ Board  as of 12 min ago (Orchestrator)
+████████░░░░  2/3 masters active · 2 waiting for you
+1 in CI
+Finish what is open → money → marketing.
+╭──────────────────────────────────────────────────────────╮
+│ ⚑ v2.4.1 is tagged, prod still reports v2.4.0            │
+╰──────────────────────────────────────────────────────────╯
 
-Waiting for the owner (2)
-9 d  marketing  PROJ-41
-  Storyline S1–S3
-  [ Discuss ] [ More info ]
-today  lead  PROJ-40  ✓ accepted 18:12 UTC (Orchestrator)
-  Live test AC 16
-  → tonight
-  [ Accept ] [ Discuss ] [ More info ]
+╭──────────────────────────────────────────────────────────╮
+│ Waiting for you (2)                                      │
+│                                                          │
+│ Q2  9 d  marketing  PROJ-41                              │
+│ Storyline S1–S3                                          │
+│ [ Discuss ] [ More info ]                                │
+│                                                          │
+│ Q1  today  lead  PROJ-40                                 │
+│ Live test AC 16                                          │
+│ → tonight                                                │
+│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ ✓ accepted 18:12 UTC (Orchestrator)                      │
+╰──────────────────────────────────────────────────────────╯
 
-◉ lead [Lead]  PROJ-40  waiting  ● bypass
-  Handoff
-  P2 · test live
+╭──────────────────────────────────────────────────────────╮
+│ ◉ lead  [Lead]  PROJ-40  waiting  ● bypass               │
+│ Handoff                                                  │
+│ waits for the live test                                  │
+│ P2 · test live                                           │
+╰──────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────╮
+│ ● CTA  PROJ-55  idle  ● bypass  P3                       │
+│ Bugs                                                     │
+│ three workers                                            │
+│                                                          │
+│ └ ● chip  PROJ-57  #5560  busy  ●  CI running            │
+╰──────────────────────────────────────────────────────────╯
 
-● CTA  PROJ-55  idle  ● bypass
-  Bugs
-  now: three workers
-   ● chip  PROJ-57  #5560  busy  ● bypass
-     Chip
+[ + 2 idle/other ]
 
-Live, not on the board: stray
-[ Refresh ] [ Flow ]  file 18:10 UTC · live 18:10 UTC · watch 3 s, all 1 min
+[ Refresh ]  [ Flow ]
+file 18:10 UTC · live 18:10 UTC · watch 3 s, all 1 min
+● runs  ◉ waits for you  ○ rests  ? unknown
+second ● = start mode
 ```
+
+## Layout
+
+From the top: the header with the board's age and a counter (a bar of the masters by lamp, how many
+are active, how many questions wait for you, how many sessions are in CI), the `priorities` line and,
+when set, the `notes` banner. Then one frame with every question, oldest first, and one frame per
+master with its workers inside, each worker on one line cut to the pane. A master whose group neither
+runs nor waits (`idle` or `done`, workers too), a headless worker group at rest and every session
+running but not on the board fold into the last line, **+ N idle/other**, which opens and closes
+them. The frame's border takes the master's lamp colour, red when its start mode is red. The pane
+breaks a header line between its parts, never inside a frame, so it stays readable at 60 columns.
 
 ## Opening it
 
@@ -48,6 +78,7 @@ relative path count from the home folder). Without the file the pane says so and
   "updated": "2026-10-30T18:10:00+01:00",
   "updated_by": "Orchestrator",
   "priorities": ["…"],
+  "notes": "v2.4.1 is tagged, prod still reports v2.4.0",
   "owner_queue": [
     { "id": "Q1", "session": "lead", "key": "PROJ-40", "ask": "Live test AC 16",
       "since": "2026-10-30", "recommendation": "tonight" }
@@ -65,7 +96,8 @@ relative path count from the home folder). Without the file the pane says so and
 | `updated` | ISO timestamp of the last write; the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `discuss`, `info` texts for the prompt a press sends (§ Answers) |
-| `priorities` | free list for the orchestrator itself; the pane does not show it |
+| `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
+| `notes` | optional: one line the orchestrator wants seen first, drawn as a banner under the header |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation |
@@ -73,8 +105,8 @@ relative path count from the home folder). Without the file the pane says so and
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
 | `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
-| `sessions[].priority` | a number, lower first; sessions without one after those with one |
-| `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic, current step, PR number, `P<priority> · direction`, a warning line |
+| `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
+| `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, live status, start lamp and `now` on one line |
 
 Every field but `sessions[].name` may be missing or `null`; the pane leaves it out.
 
@@ -116,7 +148,8 @@ variable as `master`, `worker` or `other`; the claude-swap profile's folder name
 environment it looks at those two keys alone and prints neither value as read. A session that runs
 but is not on the board is named in one line below the board.
 
-The second `●` on a row is the start mode, with the permission mode as its label:
+The second `●` in a master's title is the start mode, with the permission mode as its label; a
+worker's line shows the lamp alone. A red or yellow lamp names its reason on the next line:
 
 | Lamp | When |
 |---|---|

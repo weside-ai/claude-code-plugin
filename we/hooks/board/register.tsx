@@ -2,16 +2,16 @@
 // option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
 // question's Accept, Discuss or More info appends one line to board-answers.jsonl beside it.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
 
 type On = Parameters<Register>[0]
 
 import type { BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, LiveView } from '../../types'
 import {
-  ageDays, answerPrompt, answersPathOf, freshness, groupSessions, isMasterOf, lampOf, lastAnswers, liveByName, majorityMode,
-  ownName, parseBoard, sortQueue, startModeOf,
+  ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
+  liveByName, majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf,
 } from './board'
-import type { Lamp, Liveness, StartMode } from './board'
+import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import { openFlow } from '../flow/register'
 
 const PANE = 'we-board'
@@ -23,6 +23,7 @@ const view = atom({ plugin: 'we', key: 'boardView' } as const, null, { shape: 'b
 const live = atom({ plugin: 'we', key: 'boardLive' } as const, null, { shape: 'board-live-1' })
 const answers = atom({ plugin: 'we', key: 'boardAnswers' } as const, null, { shape: 'board-answers-1' })
 const isOpen = atom({ plugin: 'we', key: 'boardOpen' } as const, false)
+const isRestOpen = atom({ plugin: 'we', key: 'boardRestOpen' } as const, false)
 
 type $ = EngineInterface
 
@@ -200,6 +201,10 @@ export async function startBoard($: $, options: PluginOptions) {
   if (await read($, isOpen)) void $.ui.open({ id: PANE, title: 'Board' })
 }
 
+// A run of text that stays on one line, in parts that colour it.
+type Part = { text: string; color?: string; bold?: boolean; dim?: boolean }
+const widthOf = (seg: Part[]) => seg.reduce((n, p) => n + p.text.length, 0)
+
 export const registerBoard = (on: On, options: PluginOptions) => {
   const file = fileOf(options)
   const masterProfile = option(options, 'masterProfile')
@@ -211,8 +216,11 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const v = await read($, view)
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
+    const restOpen = await read($, isRestOpen)
     const now = await $.clock.now()
     const width = Math.max(30, e.props.bodyColumns ?? e.viewport?.columns ?? 80)
+    // Inside a frame: the border and one column of padding on each side.
+    const inner = width - 4
 
     if (!v) return <Text dimColor>{`reading ${file} …`}</Text>
 
@@ -225,81 +233,176 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const onBoard = new Set(sessions.map(s => s.name))
     const offBoard = l ? [...new Set(l.sessions.map(s => s.name).filter((n): n is string => !!n && !onBoard.has(n)))] : []
 
-    const queueRow = (q: BoardQueueItem, i: number) => {
+    // Segments packed into lines no wider than `room`; a segment wider than the room is clipped.
+    const lines = (segs: Part[][], room: number, key: string, sep = '  ') =>
+      pack(segs.filter(seg => widthOf(seg) > 0), widthOf, room, sep.length).map((line, i) => (
+        <Text key={`${key}-${i}`}>
+          {line.flatMap((seg, j) => {
+            let left = room - (j ? sep.length : 0)
+            return [
+              ...(j ? [<Text key={`${j}-gap`} dimColor>{sep}</Text>] : []),
+              ...seg.map((p, k) => {
+                const text = clip(p.text, Math.max(0, left))
+                left -= text.length
+                return <Text key={`${j}-${k}`} color={p.color} bold={p.bold} dimColor={p.dim}>{text}</Text>
+              }),
+            ]
+          })}
+        </Text>
+      ))
+
+    const frame = (key: string, color: string | undefined, children: RenderChildren[]) => (
+      <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>{children}</Box>
+    )
+
+    const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? given[q.id] : undefined
       const press = (answer: BoardAnswerKind) => () => {
         if (q.id) void answerQuestion($, file, q.id, answer)
       }
+      const head: Part[][] = [
+        q.id ? [{ text: q.id, bold: true }] : [],
+        days !== undefined ? [{ text: days === 0 ? 'today' : `${days} d`, color: days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined, bold: days >= 2 }] : [],
+        q.session ? [{ text: q.session }] : [],
+        q.key ? [{ text: q.key, dim: true }] : [],
+      ]
+      const buttons = q.id
+        ? [
+            ...(q.recommendation ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
+            { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
+            { key: `info-${q.id}`, label: 'More info', on: press('info') },
+          ]
+        : []
+      const answered = last
+        ? `✓ ${ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`
+        : undefined
+      // Buttons and the last answer share a row while they fit; the answer moves under them when not.
+      const row = [...buttons.map(b => ({ ...b, width: b.label.length + 4 })), ...(answered ? [{ key: 'answered', label: answered, width: answered.length }] : [])]
       return (
-        <Box key={`q-${q.id ?? i}`} flexDirection="column">
-          <Text>
-            {days !== undefined && <Text color={days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined} bold>{days === 0 ? 'today' : `${days} d`}</Text>}
-            {q.session && <Text bold>{`  ${q.session}`}</Text>}
-            {q.key && <Text dimColor>{`  ${q.key}`}</Text>}
-            {last && (
-              <Text color={ANSWER[last.answer].color}>
-                {`  ✓ ${ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`}
-              </Text>
-            )}
-          </Text>
-          <Box paddingLeft={2} flexDirection="column">
-            {q.ask && <Text>{q.ask}</Text>}
-            {q.recommendation && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
-            {q.id && (
-              <Box flexDirection="row" gap={2}>
-                {q.recommendation && <Button key={`accept-${q.id}`} label="Accept" onPress={press('accept')} />}
-                <Button key={`discuss-${q.id}`} label="Discuss" onPress={press('discuss')} />
-                <Button key={`info-${q.id}`} label="More info" onPress={press('info')} />
-              </Box>
-            )}
-          </Box>
+        <Box key={`q-${q.id ?? i}`} flexDirection="column" marginTop={i ? 1 : 0}>
+          {lines(head, inner, `q-${i}-head`)}
+          {q.ask && <Text>{q.ask}</Text>}
+          {q.recommendation && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
+          {pack(row, r => r.width, inner, 1).map((line, j) => (
+            <Box key={`q-${i}-row-${j}`} flexDirection="row" gap={1}>
+              {line.map(r =>
+                'on' in r ? (
+                  <Button key={r.key} label={r.label} onPress={r.on} />
+                ) : (
+                  <Text key={`answered-${q.id}`} color={last ? ANSWER[last.answer].color : undefined}>{clip(r.label, inner)}</Text>
+                ),
+              )}
+            </Box>
+          ))}
         </Box>
       )
     }
 
-    const sessionRow = (s: BoardSession, isWorker: boolean) => {
-      const lamp = LAMP[lampOf(s.state)]
+    const verdictOf = (s: BoardSession) => {
       const one = liveMap?.get(s.name)
       const liveness: Liveness | undefined = liveMap ? one?.liveness ?? 'gone' : undefined
-      const start = startModeOf(s, isMasterOf(s, sessions), one, majority, masterProfile)
-      const keys = (s.keys ?? []).filter(Boolean)
+      return { lamp: LAMP[lampOf(s.state)], liveness, start: startModeOf(s, isMasterOf(s, sessions), one, majority, masterProfile) }
+    }
+
+    const startReason = (start: StartMode, key: string, indent = 0) =>
+      start.level === 'bad' || start.level === 'warn' ? (
+        <Box key={key} paddingLeft={indent}><Text color={START[start.level]}>{start.reason}</Text></Box>
+      ) : null
+
+    // A worker in its master's frame: lamp, name, key, PR, live status, start lamp, and what it does, cut to the line.
+    const workerLine = (w: BoardSession) => {
+      const { lamp, liveness, start } = verdictOf(w)
+      const keys = (w.keys ?? []).filter(Boolean).join(' ')
+      const parts: Part[] = [
+        { text: '└ ', dim: true },
+        { text: lamp.glyph, color: lamp.color, bold: true },
+        { text: ` ${w.name}`, bold: true },
+        ...(keys ? [{ text: `  ${keys}`, dim: true }] : []),
+        ...(typeof w.pr === 'number' ? [{ text: `  #${w.pr}`, color: 'suggestion' }] : []),
+        ...(liveness ? [{ text: `  ${LIVE[liveness].label}`, color: LIVE[liveness].color }] : []),
+        ...(start.level !== 'none' ? [{ text: '  ●', color: START[start.level] }] : []),
+      ]
+      const room = inner - widthOf(parts) - 2
+      if (w.now && room >= 8) parts.push({ text: `  ${clip(w.now, room)}`, dim: true })
       return (
-        <Box key={`s-${s.name}`} flexDirection="column" paddingLeft={isWorker ? 3 : 0} marginTop={isWorker ? 0 : 1}>
-          <Text>
-            <Text color={lamp.color} bold>{lamp.glyph}</Text>
-            <Text bold>{` ${s.name}`}</Text>
-            {s.companion && <Text color="claude">{` [${s.companion}]`}</Text>}
-            {keys.length > 0 && <Text dimColor>{`  ${keys.join(' ')}`}</Text>}
-            {typeof s.pr === 'number' && <Text color="suggestion">{`  #${s.pr}`}</Text>}
-            {liveness && <Text color={LIVE[liveness].color}>{`  ${LIVE[liveness].label}`}</Text>}
-            {start.level !== 'none' && <Text color={START[start.level]}>{`  ● ${start.mode ?? '?'}`}</Text>}
-          </Text>
-          <Box paddingLeft={2} flexDirection="column">
-            {start.level === 'bad' || start.level === 'warn' ? <Text color={START[start.level]}>{start.reason}</Text> : null}
-            {s.topic && <Text>{s.topic}</Text>}
-            {s.now && <Text dimColor>{`now: ${s.now}`}</Text>}
-            {(typeof s.priority === 'number' || s.direction) && (
-              <Text color="suggestion">
-                {typeof s.priority === 'number' ? `P${s.priority}` : ''}
-                {typeof s.priority === 'number' && s.direction ? ' · ' : ''}
-                {s.direction ?? ''}
-              </Text>
-            )}
-            {s.note && <Text color="warning">{`⚠ ${s.note}`}</Text>}
-          </Box>
+        <Box key={`w-${w.name}`} flexDirection="column">
+          {lines([parts], inner, `w-${w.name}`)}
+          {startReason(start, `w-${w.name}-start`, 4)}
+          {w.note && <Box paddingLeft={4}><Text color="warning">{`⚠ ${w.note}`}</Text></Box>}
         </Box>
       )
     }
 
+    const groupFrame = (group: SessionGroup, i: number) => {
+      if (!group.head) {
+        return frame(`g-rest-${i}`, 'inactive', [
+          <Text key="t" dimColor>— no master —</Text>,
+          ...group.workers.map(workerLine),
+        ])
+      }
+      const s = group.head
+      const { lamp, liveness, start } = verdictOf(s)
+      const keys = (s.keys ?? []).filter(Boolean)
+      const title: Part[][] = [
+        [{ text: lamp.glyph, color: lamp.color, bold: true }, { text: ` ${s.name}`, bold: true }],
+        s.companion ? [{ text: `[${s.companion}]`, color: 'claude' }] : [],
+        keys.length ? [{ text: keys.join(' '), dim: true }] : [],
+        typeof s.pr === 'number' ? [{ text: `#${s.pr}`, color: 'suggestion' }] : [],
+        liveness ? [{ text: LIVE[liveness].label, color: LIVE[liveness].color }] : [],
+        start.level !== 'none' ? [{ text: `● ${start.mode ?? '?'}`, color: START[start.level] }] : [],
+        // A bare priority rides in the title; with a direction it leads that line.
+        typeof s.priority === 'number' && !s.direction ? [{ text: `P${s.priority}`, dim: true }] : [],
+      ]
+      const steer = s.direction ? [typeof s.priority === 'number' ? `P${s.priority}` : '', s.direction].filter(Boolean).join(' · ') : ''
+      return frame(`g-${s.name}`, start.level === 'bad' ? 'error' : lamp.color, [
+        ...lines(title, inner, `g-${s.name}-title`),
+        startReason(start, `g-${s.name}-start`),
+        s.topic ? <Text key="topic" dimColor>{s.topic}</Text> : null,
+        s.now ? <Text key="now">{s.now}</Text> : null,
+        steer ? <Text key="steer" color="suggestion">{steer}</Text> : null,
+        s.note ? <Text key="note" color="warning">{`⚠ ${s.note}`}</Text> : null,
+        group.workers.length ? <Box key="workers" flexDirection="column" marginTop={1}>{group.workers.map(workerLine)}</Box> : null,
+      ])
+    }
+
+    const groups = groupSessions(sessions)
+    const working = groups.filter(g => !isResting(g))
+    const resting = groups.filter(isResting)
+    const restCount = resting.reduce((n, g) => n + (g.head ? 1 : 0) + g.workers.length, 0) + offBoard.length
+
+    const counts = countBoard(sessions)
+    const barWidth = Math.min(20, counts.masters * 4, width - 2)
+    const cells = (n: number) => (counts.masters ? Math.round((n / counts.masters) * barWidth) : 0)
+    const runCells = cells(counts.runs)
+    const waitCells = Math.min(barWidth - runCells, cells(counts.waits))
+    const counter: Part[][] = [
+      [
+        { text: '█'.repeat(runCells), color: LAMP.runs.color },
+        { text: '█'.repeat(waitCells), color: LAMP.waits.color },
+        { text: '░'.repeat(barWidth - runCells - waitCells), color: 'inactive' },
+        { text: `  ${counts.runs + counts.waits}/${counts.masters} masters active`, bold: true },
+      ],
+      board?.queue.length ? [{ text: `${board.queue.length} waiting for you`, color: 'warning', bold: true }] : [],
+      counts.ci ? [{ text: `${counts.ci} in CI` }] : [],
+    ]
+
     const stamp = (at: number) => (at ? new Date(at).toISOString().slice(11, 16) + ' UTC' : '–')
+    const stampText = `file ${stamp(v.readAt)} · live ${stamp(l?.at ?? 0)} · watch 3 s, all 1 min`
 
     return (
       <Box flexDirection="column" width={width}>
-        <Text>
-          <Text bold>◆ Board</Text>
-          {fresh && <Text color={freshColor}>{`  as of ${fresh.label} ago${board?.updatedBy ? ` (${board.updatedBy})` : ''}`}</Text>}
-        </Text>
+        {lines(
+          [
+            [{ text: '◆ Board', bold: true }],
+            fresh ? [{ text: `as of ${fresh.label} ago${board?.updatedBy ? ` (${board.updatedBy})` : ''}`, color: freshColor }] : [],
+          ],
+          width,
+          'head',
+        )}
+        {counts.masters > 0 && lines(counter, width, 'count', ' · ')}
+        {board?.priorities && <Text dimColor>{board.priorities}</Text>}
+        {board?.notes && frame('notes', 'warning', [<Text key="t" color="warning" bold>{`⚑ ${board.notes}`}</Text>])}
         {v.isMissing && (
           <Text dimColor>{`No board yet: your orchestrator session writes ${v.path ?? file}; the schema is in ${$.plugin.root}/docs/board.md.`}</Text>
         )}
@@ -307,32 +410,54 @@ export const registerBoard = (on: On, options: PluginOptions) => {
 
         {board && board.queue.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
-            <Text color="warning" bold>{`Waiting for the owner (${board.queue.length})`}</Text>
-            {sortQueue(board.queue).map(queueRow)}
+            {frame('queue', 'warning', [
+              <Text key="t" color="warning" bold>{`Waiting for you (${board.queue.length})`}</Text>,
+              <Box key="cards" flexDirection="column" marginTop={1}>{sortQueue(board.queue).map(queueCard)}</Box>,
+            ])}
           </Box>
         )}
 
-        {groupSessions(sessions).map((group, i) => (
-          <Box key={`g-${group.head?.name ?? `rest-${i}`}`} flexDirection="column">
-            {!group.head && <Text dimColor>{'\n— no master —'}</Text>}
-            {group.head && sessionRow(group.head, false)}
-            {group.workers.map(w => sessionRow(w, !!group.head))}
-          </Box>
-        ))}
+        {working.length > 0 && <Box flexDirection="column" marginTop={1}>{working.map(groupFrame)}</Box>}
 
-        {offBoard.length > 0 && <Text dimColor>{`\nLive, not on the board: ${offBoard.join(', ')}`}</Text>}
+        {restCount > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            <Box flexDirection="row">
+              <Button
+                key="rest"
+                label={`${restOpen ? '−' : '+'} ${restCount} idle/other`}
+                onPress={() => void update($, isRestOpen, open => !open)}
+              />
+            </Box>
+            {restOpen && resting.map(groupFrame)}
+            {restOpen && offBoard.length > 0 && <Text dimColor>{`Live, not on the board: ${offBoard.join(', ')}`}</Text>}
+          </Box>
+        )}
         {l?.error && <Text color="warning">{`Live column: ${l.error}`}</Text>}
 
-        <Box flexDirection="row" gap={2} marginTop={1}>
-          <Button key="refresh" hotkey="r" label="Refresh" onPress={() => refreshAll($, file)} />
-          <Button key="flow" label="Flow" onPress={() => void openFlow($, '')} />
-          <Text dimColor>{`file ${stamp(v.readAt)} · live ${stamp(l?.at ?? 0)} · watch 3 s, all 1 min`}</Text>
-        </Box>
-        <Text dimColor>
-          <Text color="success">●</Text>{' runs  '}
-          <Text color="warning">◉</Text>{' waits for the owner  '}
-          <Text color="inactive">○</Text>{' rests  ? unknown · second ● = start mode'}
-        </Text>
+        {pack([{ key: 'refresh', width: 11 }, { key: 'flow', width: 8 }, { key: 'stamp', width: stampText.length }], b => b.width, width).map((line, i) => (
+          <Box key={`foot-${i}`} flexDirection="row" gap={2} marginTop={i ? 0 : 1}>
+            {line.map(b =>
+              b.key === 'refresh' ? (
+                <Button key="refresh" hotkey="r" label="Refresh" onPress={() => refreshAll($, file)} />
+              ) : b.key === 'flow' ? (
+                <Button key="flow" label="Flow" onPress={() => void openFlow($, '')} />
+              ) : (
+                <Text key="stamp" dimColor>{stampText}</Text>
+              ),
+            )}
+          </Box>
+        ))}
+        {lines(
+          [
+            [{ text: '●', color: 'success' }, { text: ' runs', dim: true }],
+            [{ text: '◉', color: 'warning' }, { text: ' waits for you', dim: true }],
+            [{ text: '○', color: 'inactive' }, { text: ' rests', dim: true }],
+            [{ text: '? unknown', dim: true }],
+            [{ text: 'second ● = start mode', dim: true }],
+          ],
+          width,
+          'legend',
+        )}
       </Box>
     )
   })
