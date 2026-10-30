@@ -86,7 +86,8 @@ relative path count from the home folder). Without the file the pane says so and
   "sessions": [
     { "name": "lead", "role": "master", "companion": "Lead", "parent": null, "keys": ["PROJ-40"],
       "topic": "Handoff", "now": "waits for the live test", "state": "wait-owner", "pr": null,
-      "priority": 2, "direction": "test live", "note": null }
+      "priority": 2, "direction": "test live", "note": null,
+      "cwd": "/home/me/work/lead", "session_id": "0b5c1e2a-7f3d-4c11-9a8e-1d2f3a4b5c6d" }
   ]
 }
 ```
@@ -106,6 +107,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
 | `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
+| `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>` |
 | `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, live status, start lamp and `now` on one line |
 
 Every field but `sessions[].name` may be missing or `null`; the pane leaves it out.

@@ -3,7 +3,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import { paint } from './paint'
 
 // Shaped like a real orchestrator's board: priorities as one string, a notes banner, four questions,
-// masters with and without workers, one master resting.
+// masters with and without workers, one master resting; two sessions carry the restore fields `cwd`
+// and `session_id`, which the pane never shows.
 const BOARD = JSON.stringify({
   updated: '2026-10-30T20:59:00+00:00',
   updated_by: 'Orchestrator',
@@ -18,9 +19,11 @@ const BOARD = JSON.stringify({
     { id: 'Q9', session: 'lead', key: 'PROJ-40', ask: 'Storyline S1–S3', since: '2026-10-21' },
   ],
   sessions: [
-    { name: 'lead', role: 'master', companion: 'Lead', keys: ['PROJ-40'], topic: 'Handoffs companion ↔ company', now: 'waits for the v2.4.1 rollout, then a re-test', state: 'wait-owner', priority: 1 },
+    { name: 'lead', role: 'master', companion: 'Lead', keys: ['PROJ-40'], topic: 'Handoffs companion ↔ company', now: 'waits for the v2.4.1 rollout, then a re-test', state: 'wait-owner', priority: 1,
+      cwd: '/home/me/work/lead', session_id: '0b5c1e2a-7f3d-4c11-9a8e-1d2f3a4b5c6d' },
     { name: 'apps', role: 'master', keys: ['PROJ-65', 'PROJ-66', 'PROJ-67', 'PROJ-68'], topic: '4 expert apps + image budget', now: '#563 today; apps tomorrow', state: 'build', priority: 2 },
-    { name: 'img', role: 'worker', parent: 'apps', keys: ['PROJ-65'], now: 'renders the second artwork batch for the journal and the tracker app', state: 'build', pr: 563 },
+    { name: 'img', role: 'worker', parent: 'apps', keys: ['PROJ-65'], now: 'renders the second artwork batch for the journal and the tracker app', state: 'build', pr: 563,
+      cwd: '/home/me/work/apps', session_id: '9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b' },
     { name: 'billing', role: 'master', companion: 'Vera', keys: ['PROJ-60'], topic: 'Account currency EUR/USD', now: '#562 green (Q12); #564 metering, CI runs; two stories in build. Merge migrations serially', state: 'wait-owner', pr: 562, priority: 3, direction: 'money first' },
     { name: 'meter', role: 'worker', parent: 'billing', keys: ['PROJ-63'], now: 'CI', state: 'ci', pr: 564 },
     { name: 'kernel', role: 'master', keys: ['PROJ-17'], topic: 'Kernel (long-term)', now: 'runs on its own', state: 'idle', priority: 4 },
@@ -141,4 +144,8 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   expect(narrow.open).toContain('[ − 2 idle/other ]')
   expect(narrow.open.some(line => line.startsWith('│ ○ kernel  PROJ-17  gone'))).toBe(true)
   expect(narrow.open).toContain('Live, not on the board: stray')
+  // The restore fields stay off the pane at every width.
+  for (const line of [...wide.folded, ...wide.open, ...narrow.folded, ...narrow.open]) {
+    expect(/\/home\/me\/work|0b5c1e2a|9e8d7c6b/.test(line)).toBe(false)
+  }
 })
