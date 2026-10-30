@@ -1,5 +1,5 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
-import type { BoardFile, BoardQueueItem, BoardSession, LiveSession } from '../../types'
+import type { BoardAnswer, BoardAnswerKind, BoardFile, BoardQueueItem, BoardSession, LiveSession } from '../../types'
 
 const MIN = 60_000
 const DAY = 86_400_000
@@ -15,6 +15,39 @@ export const parseBoard = (text: string): BoardFile => {
     sessions: Array.isArray(file.sessions) ? (file.sessions as BoardSession[]) : [],
   }
 }
+
+// The answers file sits beside the board file (docs/board.md § Answers).
+export const answersPathOf = (boardPath: string) => `${boardPath.replace(/[^/]*$/, '')}board-answers.jsonl`
+
+const KINDS: readonly BoardAnswerKind[] = ['accept', 'discuss', 'info']
+
+// The newest answer per question id: later lines win; a line that is no answer is skipped.
+export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
+  const out: Record<string, BoardAnswer> = {}
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const a = JSON.parse(line) as Partial<BoardAnswer>
+      if (typeof a.id === 'string' && KINDS.includes(a.answer as BoardAnswerKind) && typeof a.ts === 'string') {
+        out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null }
+      }
+    } catch {
+      // A torn or foreign line: the answers around it still count.
+    }
+  }
+  return out
+}
+
+// The prompt a press sends into the orchestrator's own session.
+export const ANSWER_PROMPT: Record<BoardAnswerKind, (id: string) => string> = {
+  accept: id => `${id}: Vorschlag angenommen`,
+  discuss: id => `${id}: lass uns darüber reden`,
+  info: id => `${id}: ich brauche mehr Informationen`,
+}
+
+// This session's name as `claude agents` lists it, matched on the transcript id.
+export const ownName = (live: readonly LiveSession[], sessionId: string): string | undefined =>
+  live.find(s => s.sessionId === sessionId && !!s.name)?.name ?? undefined
 
 export type Freshness = { label: string; level: 'ok' | 'warn' | 'stale' }
 

@@ -1,13 +1,15 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json,
-// option boardFile), the live state of each session and a start-mode lamp. Reads only; never writes the file.
+// option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
+// question's Accept, Discuss or More info appends one line to board-answers.jsonl beside it.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 type On = Parameters<Register>[0]
 
-import type { BoardQueueItem, BoardSession, BoardView, LiveView } from '../../types'
+import type { BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, LiveView } from '../../types'
 import {
-  ageDays, freshness, groupSessions, isMasterOf, lampOf, liveByName, majorityMode, parseBoard, sortQueue, startModeOf,
+  ANSWER_PROMPT, ageDays, answersPathOf, freshness, groupSessions, isMasterOf, lampOf, lastAnswers, liveByName, majorityMode,
+  ownName, parseBoard, sortQueue, startModeOf,
 } from './board'
 import type { Lamp, Liveness, StartMode } from './board'
 import { openFlow } from '../flow/register'
@@ -19,6 +21,7 @@ const REFRESH_MS = 60_000
 
 const view = atom({ plugin: 'we', key: 'boardView' } as const, null, { shape: 'board-view-1' })
 const live = atom({ plugin: 'we', key: 'boardLive' } as const, null, { shape: 'board-live-1' })
+const answers = atom({ plugin: 'we', key: 'boardAnswers' } as const, null, { shape: 'board-answers-1' })
 const isOpen = atom({ plugin: 'we', key: 'boardOpen' } as const, false)
 
 type $ = EngineInterface
@@ -36,6 +39,12 @@ const LIVE: Record<Liveness, { label: string; color: string }> = {
   blocked: { label: 'blocked', color: 'warning' },
   idle: { label: 'idle', color: 'inactive' },
   gone: { label: 'gone', color: 'inactive' },
+}
+
+const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
+  accept: { label: 'accepted', color: 'success' },
+  discuss: { label: 'discuss', color: 'warning' },
+  info: { label: 'more info asked', color: 'suggestion' },
 }
 
 const START: Record<StartMode['level'], string> = { ok: 'success', warn: 'warning', bad: 'error', none: 'inactive' }
@@ -74,6 +83,54 @@ async function loadBoard($: $, file: string, force = false) {
   }
 }
 
+// The answers file, re-read only when its mtime moved; a missing file is no answer yet.
+async function loadAnswers($: $, file: string, force = false) {
+  const path = answersPathOf(await boardPath($, file))
+  try {
+    if (!(await $.fs.exists(path))) {
+      const before = await read($, answers)
+      if (!before || before.mtimeMs !== 0 || before.path !== path) await update($, answers, () => ({ path, mtimeMs: 0, byId: {} }))
+      return
+    }
+    const stat = await $.fs.stat(path)
+    const before = await read($, answers)
+    if (!force && before && before.path === path && before.mtimeMs === stat.mtimeMs) return
+    const next: BoardAnswersView = { path, mtimeMs: stat.mtimeMs, byId: lastAnswers(String(await $.fs.read(path))) }
+    await update($, answers, () => next)
+  } catch (err) {
+    $.ui.log(`board: answers file ${path}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// This session's name, from the live column; probed once more when the column does not know it yet.
+async function selfName($: $): Promise<string | undefined> {
+  const id = await $.session.id()
+  const known = ownName((await read($, live))?.sessions ?? [], id)
+  if (known) return known
+  await probe($)
+  return ownName((await read($, live))?.sessions ?? [], id)
+}
+
+// A press of Accept, Discuss or More info: one appended line, and in the orchestrator's own session
+// (its name is the board's `updated_by`) the matching prompt, queued as if the person typed it.
+async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
+  try {
+    const path = answersPathOf(await boardPath($, file))
+    const me = await selfName($)
+    const ts = new Date(await $.clock.now()).toISOString()
+    const run = await $.process.run(
+      ['python3', '-I', `${$.plugin.root}/hooks/board/answer.py`, path, id, answer, ts, ...(me ? [me] : [])],
+      { timeoutMs: 10_000 },
+    )
+    if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
+    await loadAnswers($, file, true)
+    const orchestrator = (await read($, view))?.board?.updatedBy
+    if (me && orchestrator && me === orchestrator) await $.prompt.submit({ text: ANSWER_PROMPT[answer](id), asUser: true })
+  } catch (err) {
+    $.ui.toast(`board: answer ${id} not saved: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 let isProbing = false
 async function probe($: $) {
   if (isProbing) return
@@ -100,6 +157,7 @@ const fileOf = (options: PluginOptions) => option(options, 'boardFile') ?? DEFAU
 function refreshAll($: $, file: string) {
   $.clock.after(0, () => {
     void loadBoard($, file, true)
+    void loadAnswers($, file, true)
     void probe($)
   })
 }
@@ -119,12 +177,17 @@ export async function startBoard($: $, options: PluginOptions) {
   await $.command.register({ name: 'board', description: 'Workspace board: who works on what and what waits for the owner' })
   // Timers run only once /board was opened in this session; nothing polls before that.
   $.clock.every(WATCH_MS, () => {
-    void read($, isOpen).then(open => (open ? loadBoard($, file) : undefined))
+    void read($, isOpen).then(open => {
+      if (!open) return
+      void loadBoard($, file)
+      void loadAnswers($, file)
+    })
   })
   $.clock.every(REFRESH_MS, () => {
     void read($, isOpen).then(open => {
       if (!open) return
       void loadBoard($, file, true)
+      void loadAnswers($, file, true)
       void probe($)
     })
   })
@@ -141,6 +204,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const v = await read($, view)
     const l = await read($, live)
+    const given = (await read($, answers))?.byId ?? {}
     const now = await $.clock.now()
     const width = Math.max(30, e.props.bodyColumns ?? e.viewport?.columns ?? 80)
 
@@ -157,16 +221,32 @@ export const registerBoard = (on: On, options: PluginOptions) => {
 
     const queueRow = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
+      const last = q.id ? given[q.id] : undefined
+      const press = (answer: BoardAnswerKind) => () => {
+        if (q.id) void answerQuestion($, file, q.id, answer)
+      }
       return (
         <Box key={`q-${q.id ?? i}`} flexDirection="column">
           <Text>
             {days !== undefined && <Text color={days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined} bold>{days === 0 ? 'today' : `${days} d`}</Text>}
             {q.session && <Text bold>{`  ${q.session}`}</Text>}
             {q.key && <Text dimColor>{`  ${q.key}`}</Text>}
+            {last && (
+              <Text color={ANSWER[last.answer].color}>
+                {`  ✓ ${ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`}
+              </Text>
+            )}
           </Text>
           <Box paddingLeft={2} flexDirection="column">
             {q.ask && <Text>{q.ask}</Text>}
             {q.recommendation && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
+            {q.id && (
+              <Box flexDirection="row" gap={2}>
+                {q.recommendation && <Button key={`accept-${q.id}`} label="Accept" onPress={press('accept')} />}
+                <Button key={`discuss-${q.id}`} label="Discuss" onPress={press('discuss')} />
+                <Button key={`info-${q.id}`} label="More info" onPress={press('info')} />
+              </Box>
+            )}
           </Box>
         </Box>
       )

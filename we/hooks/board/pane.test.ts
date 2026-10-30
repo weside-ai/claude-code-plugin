@@ -51,7 +51,7 @@ test('/board draws the queue oldest first, masters with workers, live and start-
   const answer = await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   expect(answer.text).toBe('Board pane opened.')
   await clock.settle()
-  expect(reads).toEqual(['/home/me/.claude/we-state/board.json'])
+  expect(reads).toEqual(['/home/me/.claude/we-state/board.json', '/home/me/.claude/we-state/board-answers.jsonl'])
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'we', surface, component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
@@ -86,7 +86,7 @@ test('without masterProfile no master is red; boardFile moves the file', { optio
 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
-  expect(reads).toEqual(['/home/me/boards/team.json'])
+  expect(reads).toEqual(['/home/me/boards/team.json', '/home/me/boards/board-answers.jsonl'])
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ type: 'Text', text: /restart it as a master/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Waiting for the owner \(2\)/ })).toBeDefined()
@@ -118,8 +118,8 @@ test('the pane polls nothing before /board, then re-reads only when the mtime mo
   let mtimeMs = 1
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs, isLink: false } }))
   let reads = 0
-  on('fs.read', () => {
-    reads += 1
+  on('fs.read', (_$, e) => {
+    if (String((e as { path?: unknown }).path).endsWith('board.json')) reads += 1
     return { value: BOARD }
   })
   let probes = 0
@@ -144,4 +144,78 @@ test('the pane polls nothing before /board, then re-reads only when the mtime mo
   mtimeMs = 2
   await clock.advance(3_000)
   expect(reads).toBe(2)
+})
+
+// A fake home: board.json, and board-answers.jsonl once answer.py appended to it.
+function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }) {
+  const answersPath = '/home/me/.claude/we-state/board-answers.jsonl'
+  let lines = ''
+  let mtimeMs = 1
+  const appended: string[][] = []
+  const submitted: string[] = []
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', (_$, e) => ({ value: String((e as { path?: unknown }).path) !== answersPath || lines !== '' }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs, isLink: false } }))
+  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path) === answersPath ? lines : BOARD }))
+  on('session.id', () => ({ value: self.sessionId }))
+  on('process.run', (_$, e) => {
+    if (String(e.argv[2]).endsWith('/answer.py')) {
+      appended.push(e.argv.slice(3))
+      const [, id, answer, ts, session] = e.argv.slice(3)
+      lines += `${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`
+      mtimeMs += 1
+      return RUN('')
+    }
+    return RUN(JSON.stringify({ sessions: [{ name: self.name, sessionId: self.sessionId, pid: 9, status: 'busy', envRead: false }] }))
+  })
+  on('prompt.submit', (_$, e) => {
+    submitted.push(String((e as { text?: unknown }).text))
+    return { text: String((e as { text?: unknown }).text) }
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', (_$, e) => {
+    throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
+  })
+  return { answersPath, appended, submitted }
+}
+
+test('Accept in the orchestrator session appends one line, sends the prompt and shows the answer', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  // Q2 has no recommendation: no Accept, but Discuss and More info.
+  expect(await ui.find({ key: 'accept-Q2' })).toBeUndefined()
+  expect(await ui.find({ key: 'discuss-Q2' })).toBeDefined()
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  expect(home.appended).toHaveLength(1)
+  expect(home.appended[0]).toEqual([home.answersPath, 'Q1', 'accept', expect.stringMatching(/^\d{4}-\d\d-\d\dT/), 'Orchestrator'])
+  expect(home.submitted).toEqual(['Q1: Vorschlag angenommen'])
+  expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
+
+  await ui.press({ key: 'info-Q2' })
+  await clock.settle()
+  expect(home.submitted).toEqual(['Q1: Vorschlag angenommen', 'Q2: ich brauche mehr Informationen'])
+  expect(await ui.find({ type: 'Text', text: /✓ more info asked/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a press in any other session only appends the line, named after that session', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  await ui.press({ key: 'discuss-Q1' })
+  await clock.settle()
+  expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q1', 'discuss', 'lead']])
+  expect(home.submitted).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /✓ discuss \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
+  await ui.unmount()
 })

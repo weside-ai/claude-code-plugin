@@ -1,6 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ageDays, freshness, groupSessions, isMasterProfile, liveByName, majorityMode, parseBoard, sortQueue, startModeOf } from './board'
+import {
+  ANSWER_PROMPT, ageDays, answersPathOf, freshness, groupSessions, isMasterProfile, lastAnswers, liveByName, majorityMode, ownName, parseBoard,
+  sortQueue, startModeOf,
+} from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
 const NOW = Date.parse('2026-10-30T19:10:00+01:00')
@@ -93,4 +96,24 @@ test('a name running twice counts as its liveliest copy; the mode majority is co
   expect(map.get('Kiska')?.pid).toBe(2)
   expect(map.get('paint')?.liveness).toBe('blocked')
   expect(majorityMode(map.values())).toBe('bypassPermissions')
+})
+
+test('lastAnswers keeps the newest line per id and skips torn ones', () => {
+  const text = [
+    '{"id":"Q1","answer":"discuss","ts":"2026-10-30T18:00:00Z","session":"lead"}',
+    '{"id":"Q1","answer":"accept","ts":"2026-10-30T18:05:00Z"}',
+    '{"id":"Q2","answer":"yes","ts":"x"}',
+    '{"id":"Q3",',
+    '',
+  ].join('\n')
+  expect(lastAnswers(text)).toEqual({ Q1: { id: 'Q1', answer: 'accept', ts: '2026-10-30T18:05:00Z', session: null } })
+})
+
+test('the answers file sits beside the board file; ownName matches on the session id', () => {
+  expect(answersPathOf('/home/me/.claude/we-state/board.json')).toBe('/home/me/.claude/we-state/board-answers.jsonl')
+  expect(answersPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/board-answers.jsonl')
+  const live = [{ name: 'lead', sessionId: 'a' }, { name: null, sessionId: 'b' }, { name: 'Orchestrator', sessionId: 'c' }]
+  expect(ownName(live, 'c')).toBe('Orchestrator')
+  expect(ownName(live, 'b')).toBeUndefined()
+  expect(ANSWER_PROMPT.discuss('Q4')).toBe('Q4: lass uns darüber reden')
 })

@@ -71,6 +71,8 @@ export type BoardFile = {
 // What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.
 export type LiveSession = {
   name?: string | null
+  // The transcript's id; the pane finds its own session's name by it.
+  sessionId?: string | null
   pid?: number | null
   kind?: string | null
   status?: string | null
@@ -90,6 +92,23 @@ export type BoardView = {
   error?: string
 }
 
+// One line of board-answers.jsonl (docs/board.md): a press of Accept, Discuss or More info.
+export type BoardAnswerKind = 'accept' | 'discuss' | 'info'
+
+export type BoardAnswer = {
+  id: string
+  answer: BoardAnswerKind
+  ts: string
+  session?: string | null
+}
+
+// The newest answer per question id, read from the answers file beside the board file.
+export type BoardAnswersView = {
+  path: string
+  mtimeMs: number
+  byId: Record<string, BoardAnswer>
+}
+
 export type LiveView = {
   sessions: LiveSession[]
   at: number
@@ -102,6 +121,7 @@ declare module 'claude-code' {
       flowBoard: FlowView | null
       boardView: Shaped<BoardView | null>
       boardLive: Shaped<LiveView | null>
+      boardAnswers: Shaped<BoardAnswersView | null>
       boardOpen: boolean
     }
   }

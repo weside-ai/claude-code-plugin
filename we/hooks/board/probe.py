@@ -81,6 +81,7 @@ def main():
         out.append(
             {
                 "name": agent.get("name"),
+                "sessionId": agent.get("sessionId"),
                 "pid": pid,
                 "kind": agent.get("kind"),
                 "status": agent.get("status"),

@@ -7,5 +7,19 @@
 - [Council](council.md) — role lenses, meetings, the `.weside/council.json` roster.
 - [weside Companion](companion.md) — the optional MCP connection and its settings.
 
+## Options
+
+Set in `/plugin` → we → Configure (or `/plugin settings we@weside-ai`). The companion options need a
+weside.ai account.
+
+| Option | Effect | Default | Details |
+|---|---|---|---|
+| `companion` | weside Companion name | empty | [companion.md](companion.md) |
+| `autoMaterialize` | loads the Companion at session start | `false` | [companion.md](companion.md) |
+| `autoStoreConversations` | stores meaningful turns as Companion memories, only in a session that ran `/we:materialize` | `false` | [companion.md](companion.md) |
+| `loadCouncilFromWeside` | council members carry linked Companions' identities; `false` keeps every lens generic | `true` | [council.md](council.md) |
+| `boardFile` | the board file `/board` reads; its answers file `board-answers.jsonl` sits beside it | `~/.claude/we-state/board.json` | [board.md](../we/docs/board.md) |
+| `masterProfile` | the claude-swap profile master sessions run in; turns on `/board`'s red start-mode rules | empty | [board.md](../we/docs/board.md#the-live-column) |
+
 The verb list lives in the [README](../README.md#verbs). The authoring contract for everything in
 `we/` is [we/AUTHORING.md](../we/AUTHORING.md).
