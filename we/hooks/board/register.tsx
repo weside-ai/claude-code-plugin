@@ -6,24 +6,35 @@ import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'c
 
 type On = Parameters<Register>[0]
 
-import type { BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, LiveView } from '../../types'
+import type {
+  BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, BoardWork, FlowPhase, LiveView, WorkNode,
+} from '../../types'
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
   liveByName, majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
+import { buildWork, groupKeys, layoutWork, storiesInScope, storyKey, storyPhase, widthOf, workOf } from './work'
+import type { Part } from './work'
+import { matchesKey } from '../flow/phase'
 import { openFlow } from '../flow/register'
+import { ALL_PLANS, defaultBranch, git, loadPrs, parsePlanFiles, planGrep } from '../plans/plans'
 
 const PANE = 'we-board'
 const DEFAULT_FILE = '~/.claude/we-state/board.json'
 const WATCH_MS = 3_000
 const REFRESH_MS = 60_000
+// The work trees refresh like /flow: every two minutes, one fetch per repo.
+const WORK_MS = 120_000
 
 const view = atom({ plugin: 'we', key: 'boardView' } as const, null, { shape: 'board-view-1' })
 const live = atom({ plugin: 'we', key: 'boardLive' } as const, null, { shape: 'board-live-1' })
 const answers = atom({ plugin: 'we', key: 'boardAnswers' } as const, null, { shape: 'board-answers-1' })
 const isOpen = atom({ plugin: 'we', key: 'boardOpen' } as const, false)
 const isRestOpen = atom({ plugin: 'we', key: 'boardRestOpen' } as const, false)
+const work = atom({ plugin: 'we', key: 'boardWork' } as const, null, { shape: 'board-work-1' })
+// The masters whose work tree is open, by name; every box starts closed.
+const workOpen = atom({ plugin: 'we', key: 'boardWorkOpen' } as const, [], { shape: 'board-work-open-1' })
 
 type $ = EngineInterface
 
@@ -159,6 +170,93 @@ async function probeOnce($: $) {
   }
 }
 
+const fetchedAt = new Map<string, number>()
+let isLoadingWork = false
+let pendingWork: Set<string> | undefined
+
+const textLines = (out: string) => out.split('\n').map(l => l.trim()).filter(Boolean)
+
+// The trees of the boxes in one repo: one fetch (none when the last is younger than the refresh), one
+// grep over every plan file on the default branch, the stories' PRs, and branches only for a story
+// without a PR.
+async function deriveWork($: $, cwd: string, keySets: string[][], fresh: boolean): Promise<WorkNode[][]> {
+  const now = await $.clock.now()
+  const last = fetchedAt.get(cwd)
+  if (fresh || last === undefined || now - last >= WORK_MS - 5_000) {
+    await git($, cwd, ['fetch', 'origin', '--quiet'], 60_000)
+    fetchedAt.set(cwd, now)
+  }
+  const base = await defaultBranch($, cwd)
+  const files = parsePlanFiles(await git($, cwd, planGrep(base, ALL_PLANS)))
+  const storyKeys = storiesInScope([...new Set(keySets.flat())], files)
+  const prs = storyKeys.length ? await loadPrs($, cwd, storyKeys) : []
+  const bare = storyKeys.filter(k => !prs.some(pr => matchesKey(pr.headRefName, k) || matchesKey(pr.title, k)))
+  const refs = bare.length ? textLines(await git($, cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin'])) : []
+  const phases: Record<string, FlowPhase> = {}
+  for (const key of storyKeys) {
+    const ahead: string[] = []
+    for (const ref of bare.includes(key) ? refs.filter(r => matchesKey(r, key) && r !== 'origin/HEAD') : []) {
+      if (Number((await git($, cwd, ['rev-list', '--count', `${base}..${ref}`])).trim()) > 0) ahead.push(ref)
+    }
+    phases[key] = storyPhase(key, files.find(f => f.kind === 'story' && storyKey(f) === key), prs, ahead)
+  }
+  return keySets.map(keys => buildWork(keys, files, phases))
+}
+
+// Derives the trees of the open boxes (or of `names`), grouped by the repo their master runs in. A
+// box whose master carries `work` on the board needs nothing; one without `cwd` says so.
+async function loadWork($: $, names?: string[], fresh = false) {
+  if (isLoadingWork) {
+    pendingWork ??= new Set()
+    for (const n of names ?? (await read($, workOpen))) pendingWork.add(n)
+    return
+  }
+  isLoadingWork = true
+  try {
+    const board = (await read($, view))?.board
+    const wanted = names ?? (await read($, workOpen))
+    if (!board || !wanted.length) return
+    const byRepo = new Map<string, SessionGroup[]>()
+    const noCwd: string[] = []
+    for (const g of groupSessions(board.sessions)) {
+      if (!g.head || !wanted.includes(g.head.name) || workOf(g.head.work) || !groupKeys(g).length) continue
+      if (!g.head.cwd) noCwd.push(g.head.name)
+      else byRepo.set(g.head.cwd, [...(byRepo.get(g.head.cwd) ?? []), g])
+    }
+    const at = await $.clock.now()
+    const set = (name: string, next: (was: BoardWork | undefined) => BoardWork) =>
+      update($, work, v => ({ ...(v ?? {}), [name]: next(v?.[name]) }))
+    for (const name of noCwd) await set(name, () => ({ nodes: [], at, error: 'no cwd on the board' }))
+    for (const [cwd, groups] of byRepo) {
+      for (const g of groups) await set(g.head!.name, was => ({ nodes: was?.nodes ?? [], at: was?.at ?? 0, isLoading: true }))
+      try {
+        const trees = await deriveWork($, cwd, groups.map(groupKeys), fresh)
+        const done = await $.clock.now()
+        for (const [i, g] of groups.entries()) await set(g.head!.name, () => ({ nodes: trees[i] ?? [], at: done }))
+      } catch (err) {
+        const error = err instanceof Error ? err.message : String(err)
+        $.ui.log(`board: work tree in ${cwd}: ${error}`)
+        for (const g of groups) await set(g.head!.name, was => ({ nodes: was?.nodes ?? [], at: was?.at ?? 0, error }))
+      }
+    }
+  } finally {
+    isLoadingWork = false
+    const next = pendingWork
+    pendingWork = undefined
+    if (next?.size) $.clock.after(0, () => void loadWork($, [...next]))
+  }
+}
+
+// A press of a box's Work toggle; opening a box whose tree is missing or older than the refresh derives it.
+async function toggleWork($: $, name: string) {
+  const open = await read($, workOpen)
+  const isOpening = !open.includes(name)
+  await update($, workOpen, () => (isOpening ? [...open, name] : open.filter(n => n !== name)))
+  if (!isOpening) return
+  const was = (await read($, work))?.[name]
+  if (!was || was.error || (await $.clock.now()) - was.at >= WORK_MS) $.clock.after(0, () => void loadWork($, [name]))
+}
+
 const fileOf = (options: PluginOptions) => option(options, 'boardFile') ?? DEFAULT_FILE
 
 function refreshAll($: $, file: string) {
@@ -166,6 +264,7 @@ function refreshAll($: $, file: string) {
     void loadBoard($, file, true)
     void loadAnswers($, file, true)
     void probe($)
+    void loadWork($, undefined, true)
   })
 }
 
@@ -198,12 +297,13 @@ export async function startBoard($: $, options: PluginOptions) {
       void probe($)
     })
   })
+  $.clock.every(WORK_MS, () => {
+    void read($, isOpen).then(open => {
+      if (open) void loadWork($)
+    })
+  })
   if (await read($, isOpen)) void $.ui.open({ id: PANE, title: 'Board' })
 }
-
-// A run of text that stays on one line, in parts that colour it.
-type Part = { text: string; color?: string; bold?: boolean; dim?: boolean }
-const widthOf = (seg: Part[]) => seg.reduce((n, p) => n + p.text.length, 0)
 
 export const registerBoard = (on: On, options: PluginOptions) => {
   const file = fileOf(options)
@@ -217,6 +317,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
     const restOpen = await read($, isRestOpen)
+    const opened = await read($, workOpen)
+    const trees = (await read($, work)) ?? {}
     const now = await $.clock.now()
     const width = Math.max(30, e.props.bodyColumns ?? e.viewport?.columns ?? 80)
     // Inside a frame: the border and one column of padding on each side.
@@ -234,22 +336,23 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const offBoard = l ? [...new Set(l.sessions.map(s => s.name).filter((n): n is string => !!n && !onBoard.has(n)))] : []
 
     // Segments packed into lines no wider than `room`; a segment wider than the room is clipped.
+    const textLine = (line: Part[][], room: number, key: string, sep = '  ') => (
+      <Text key={key}>
+        {line.flatMap((seg, j) => {
+          let left = room - (j ? sep.length : 0)
+          return [
+            ...(j ? [<Text key={`${j}-gap`} dimColor>{sep}</Text>] : []),
+            ...seg.map((p, k) => {
+              const text = clip(p.text, Math.max(0, left))
+              left -= text.length
+              return <Text key={`${j}-${k}`} color={p.color} bold={p.bold} dimColor={p.dim}>{text}</Text>
+            }),
+          ]
+        })}
+      </Text>
+    )
     const lines = (segs: Part[][], room: number, key: string, sep = '  ') =>
-      pack(segs.filter(seg => widthOf(seg) > 0), widthOf, room, sep.length).map((line, i) => (
-        <Text key={`${key}-${i}`}>
-          {line.flatMap((seg, j) => {
-            let left = room - (j ? sep.length : 0)
-            return [
-              ...(j ? [<Text key={`${j}-gap`} dimColor>{sep}</Text>] : []),
-              ...seg.map((p, k) => {
-                const text = clip(p.text, Math.max(0, left))
-                left -= text.length
-                return <Text key={`${j}-${k}`} color={p.color} bold={p.bold} dimColor={p.dim}>{text}</Text>
-              }),
-            ]
-          })}
-        </Text>
-      ))
+      pack(segs.filter(seg => widthOf(seg) > 0), widthOf, room, sep.length).map((line, i) => textLine(line, room, `${key}-${i}`, sep))
 
     const frame = (key: string, color: string | undefined, children: RenderChildren[]) => (
       <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>{children}</Box>
@@ -354,14 +457,47 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         // A bare priority rides in the title; with a direction it leads that line.
         typeof s.priority === 'number' && !s.direction ? [{ text: `P${s.priority}`, dim: true }] : [],
       ]
+      // The Work toggle rides last in the title, on the line where it fits.
+      const own = workOf(s.work)
+      const hasWork = !!own?.length || groupKeys(group).length > 0
+      const isWorkOpen = hasWork && opened.includes(s.name)
+      const toggle = { label: `${isWorkOpen ? '▾' : '▸'} Work`, width: 10 }
+      type TitleSeg = Part[] | typeof toggle
+      const titleLines = pack<TitleSeg>(
+        [...title.filter(seg => widthOf(seg) > 0), ...(hasWork ? [toggle] : [])],
+        seg => ('label' in seg ? seg.width : widthOf(seg)),
+        inner,
+      ).map((line, i) => {
+        const segs = line.filter((seg): seg is Part[] => !('label' in seg))
+        if (segs.length === line.length) return textLine(segs, inner, `g-${s.name}-title-${i}`)
+        const room = inner - toggle.width - (segs.length ? 2 : 0)
+        return (
+          <Box key={`g-${s.name}-title-${i}`} flexDirection="row" gap={2}>
+            {segs.length ? textLine(segs, room, 't') : null}
+            <Button key={`work-${s.name}`} label={toggle.label} onPress={() => void toggleWork($, s.name)} />
+          </Box>
+        )
+      })
+      const tree = isWorkOpen ? trees[s.name] : undefined
+      const nodes = own ?? tree?.nodes ?? []
+      const workBox = isWorkOpen ? (
+        <Box key="work" flexDirection="column">
+          {layoutWork(nodes, inner).map((line, i) => (
+            <Box key={`g-${s.name}-work-${i}`} paddingLeft={2 * line.depth}>{textLine([line.parts], inner - 2 * line.depth, 't')}</Box>
+          ))}
+          {!own && !nodes.length && !tree?.error ? <Text dimColor>reading git and GitHub …</Text> : null}
+          {!own && tree?.error ? <Text color="error">{`Work: ${tree.error}`}</Text> : null}
+        </Box>
+      ) : null
       const steer = s.direction ? [typeof s.priority === 'number' ? `P${s.priority}` : '', s.direction].filter(Boolean).join(' · ') : ''
       return frame(`g-${s.name}`, start.level === 'bad' ? 'error' : lamp.color, [
-        ...lines(title, inner, `g-${s.name}-title`),
+        ...titleLines,
         startReason(start, `g-${s.name}-start`),
         s.topic ? <Text key="topic" dimColor>{s.topic}</Text> : null,
         s.now ? <Text key="now">{s.now}</Text> : null,
         steer ? <Text key="steer" color="suggestion">{steer}</Text> : null,
         s.note ? <Text key="note" color="warning">{`⚠ ${s.note}`}</Text> : null,
+        workBox,
         group.workers.length ? <Box key="workers" flexDirection="column" marginTop={1}>{group.workers.map(workerLine)}</Box> : null,
       ])
     }

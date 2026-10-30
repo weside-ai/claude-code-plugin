@@ -29,15 +29,20 @@ Finish what is open → money → marketing.
 ╰──────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────╮
-│ ◉ lead  [Lead]  PROJ-40  waiting  ● bypass               │
+│ ◉ lead  [Lead]  PROJ-40  waiting  ● bypass  [ ▸ Work ]   │
 │ Handoff                                                  │
 │ waits for the live test                                  │
 │ P2 · test live                                           │
 ╰──────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────╮
-│ ● CTA  PROJ-55  idle  ● bypass  P3                       │
+│ ● CTA  PROJ-55  idle  ● bypass  P3  [ ▾ Work ]           │
 │ Bugs                                                     │
 │ three workers                                            │
+│ Saga Reliability (active)                                │
+│   Epic PROJ-55 Bug sweep (selected) · 1/4 stories merged │
+│     ● PROJ-57 Chip state per plan  CI                    │
+│     ● PROJ-58 Retry on 502  build                        │
+│     ● PROJ-59 Cancel twice  approved                     │
 │                                                          │
 │ └ ● chip  PROJ-57  #5560  busy  ●  CI running            │
 ╰──────────────────────────────────────────────────────────╯
@@ -60,6 +65,55 @@ runs nor waits (`idle` or `done`, workers too), a headless worker group at rest 
 running but not on the board fold into the last line, **+ N idle/other**, which opens and closes
 them. The frame's border takes the master's lamp colour, red when its start mode is red. The pane
 breaks a header line between its parts, never inside a frame, so it stays readable at 60 columns.
+
+## Work
+
+A master whose group carries ticket keys (its own `keys` and its workers') or a `work` tree has a
+toggle last in its title: **▸ Work** closed, **▾ Work** open. Every box starts closed; the pane
+remembers per master which are open, across refreshes and restarts. Open, the box shows a compact
+tree of the work in progress:
+
+```text
+Saga <title> (status)
+  Epic <KEY> <title> (status) · n/m stories merged
+    ● <STORY-KEY> <title>  <phase>
+PROJ-99 (no plan)
+```
+
+The tree grows from the keys, read like `/flow` reads them: the plan files `docs/plans/*-saga.md`,
+`*-epic.md` and `*-story.md` on the default branch of the repo the master runs in (`cwd`), linked by
+their frontmatter (`story`, `epic`, `saga`, `ticket`, `status`, the first heading), and the stories'
+PRs from `gh`. A key that is an epic brings the epic with all its stories; a story brings its epic, or
+stands alone without one; an epic with a `saga` sits under it. A key without a plan file is a leaf
+`<KEY> (no plan)`. The lamp is the story's `/flow` phase: `plan`, `approved`, `build`, `PR`, `CI`,
+`CI red`, `PR closed`. Merged stories only count in their epic's line. The group's own stories lead
+their epic, then the most urgent; at most eight story lines, the rest as `+ k more`.
+
+Nothing is read while a box is closed. Opening one derives its tree; once open, the trees refresh
+every two minutes like `/flow`, with one `git fetch` per repo for all its open boxes; **Refresh**
+fetches again. A master without `cwd` says so in its box.
+
+A session's `work` field is a ready tree that replaces the derived one, for a repo without plan
+files. It needs no `cwd` and nothing is fetched for it:
+
+```json
+"work": [
+  { "kind": "saga", "title": "Brand refresh", "status": "active", "children": [
+    { "kind": "epic", "key": "LC-12", "title": "Launch kit", "status": "selected", "children": [
+      { "kind": "story", "key": "LC-13", "title": "Press page", "phase": "dev" },
+      { "kind": "story", "key": "LC-14", "title": "Logo files", "phase": "merged" },
+      { "kind": "story", "key": "LC-15", "title": "Fact sheet", "status": "drafting" }
+    ] }
+  ] }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `kind` | `saga`, `epic`, `story`, or `key` (a leaf without a plan) |
+| `key`, `title`, `status` | shown as written; a story's `status` stands where the lamp would without a `phase` |
+| `phase` | a story's lamp, one of `/flow`'s phases: `idea`, `draft`, `refined`, `dev`, `ci`, `ci-red`, `ready`, `merged`, `closed` |
+| `children` | a saga's epics, an epic's stories |
 
 ## Opening it
 
@@ -107,7 +161,8 @@ relative path count from the home folder). Without the file the pane says so and
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
 | `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
-| `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>` |
+| `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
+| `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
 | `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, live status, start lamp and `now` on one line |
 
 Every field but `sessions[].name` may be missing or `null`; the pane leaves it out.
@@ -166,4 +221,4 @@ red rules are off and only the yellow one holds.
 ## Requirements
 
 Claude Code with function hooks (2.1.302 or later); for the live column `python3`, Linux
-(`/proc`) and `claude agents`. The pane is part of the plugin's hooks module (`we/hooks/board/`); `answer.py` appends the answers.
+(`/proc`) and `claude agents`; for the work trees `git` and `gh` signed in. The pane is part of the plugin's hooks module (`we/hooks/board/`, the plan reader it shares with `/flow` in `we/hooks/plans/`); `answer.py` appends the answers.
