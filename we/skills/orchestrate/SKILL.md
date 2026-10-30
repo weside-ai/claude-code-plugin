@@ -17,7 +17,8 @@ has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. While a worker, refiner or watch
 runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
-"(Recommended)": plain text scrolls away under notifications (Foxy 30.09.2026). An
+"(Recommended)": plain text scrolls away under notifications (owner, 30.09.2026; hook `question_gate.py`).
+Phrase it per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
 
 Broad reading (a sweep over many files, "where is X") goes to `Agent(subagent_type="we:explore-medium")`, never the
@@ -156,8 +157,8 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
 3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
    relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
-   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` while a worker round,
-   review round or dependency is pending (`/we:pr` step 4). Move every landed story to In Review and verify.
+   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
+   `/we:pr` step 4. Move every landed story to In Review and verify.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed, and next to it one
    `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list
@@ -192,7 +193,7 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round
-  on an armed PR starts with `gh pr merge <PR> --disable-auto` and `gh pr ready <PR> --undo` (`/we:ci-review` § 1).
+  on an armed PR starts with `gh pr merge <PR> --disable-auto` and never drafts (`/we:ci-review` § 1).
 - **Auto retro** only when you can name a concrete, new friction of the run that an instruction change
   would prevent (a wrong assumption the files should have held, a script that misled, a repeated user
   correction); round counts alone are no reason (Foxy 28.10.2026). Then dispatch it per

@@ -64,10 +64,10 @@ Without an authenticated `gh` or without a PR, the local gates are the only gate
 
 **Merge state first:** `gh pr view $PR --json mergeable,mergeStateStatus,autoMergeRequest,isDraft`.
 
-- A round that will change code starts with `gh pr merge $PR --disable-auto` (when `autoMergeRequest` is
-  set) and `gh pr ready $PR --undo`: the user merges every open non-draft PR (Foxy 28.10.2026). After
-  the round's push, `gh pr ready $PR`; the main session re-arms on Green. A fix after the merge is a
-  follow-up PR from `origin/$BASE`.
+- A round that will change code starts with `gh pr merge $PR --disable-auto` when `autoMergeRequest` is
+  set, and never drafts the PR: a red required check already blocks the merge, and the Codex review
+  skips drafts (owner, 30.10.2026). After the round's push the main session re-arms on Green. A fix
+  after the merge is a follow-up PR from `origin/$BASE`. Drafts: `/we:pr` step 4.
 
 - `UNKNOWN` for a few seconds after a push: GitHub is still computing it, and a single read makes a
   conflicted PR look clean. Arm `Monitor` until the value changes, and report a lasting `UNKNOWN` as `UNKNOWN`.

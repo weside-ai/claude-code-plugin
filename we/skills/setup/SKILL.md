@@ -68,7 +68,8 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "tools": { "graphify": false, "turbovault": false },
   "test_discipline": "tests-after",
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true },
-  "review": { "available": ["claude"] }
+  "review": { "available": ["claude"] },
+  "agents": { "visible_teammates": false }
 }
 ```
 

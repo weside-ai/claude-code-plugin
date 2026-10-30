@@ -27,9 +27,11 @@ we/                               plugin root
   hooks/                          hooks.json + flow/ (function-hooks module: the /flow pane, phase.ts logic, *.test.ts)
                                   + SessionStart materialize and optimization reminder, UserPromptSubmit
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
-                                  (own DIRTY PRs) and reply-language gate,
-                                  PreToolUse verification gate and auto-merge gate (Codex verdict
-                                  on the head first), SubagentStart/Stop timing,
+                                  (own DIRTY PRs), reply-language gate and question gate
+                                  (AskUserQuestion while background work runs),
+                                  PreToolUse verification gate, auto-merge gate (Codex verdict
+                                  on the head first), draft-reason gate and teammate gate
+                                  (no worker panes by default), SubagentStart/Stop timing,
                                   SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
   scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
