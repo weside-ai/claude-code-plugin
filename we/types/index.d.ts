@@ -59,7 +59,34 @@ export type BoardSession = {
   priority?: number | null
   direction?: string | null
   note?: string | null
+  // Restore fields the orchestrator keeps for itself (`--resume <session_id>` in `cwd`); the pane never shows them.
+  cwd?: string | null
+  session_id?: string | null
+  // A ready tree of the work in progress, for a repo without plan files; it replaces the one the pane derives.
+  work?: WorkNode[] | null
 }
+
+// One node of a master's work tree (docs/board.md § Work): a saga holds epics, an epic its stories.
+// A `key` node is a ticket key without a plan file.
+export type WorkNode = {
+  kind: 'saga' | 'epic' | 'story' | 'key'
+  key?: string
+  title?: string
+  status?: string
+  // A story's /flow phase, which picks its lamp; merged stories only count in their epic's line.
+  phase?: FlowPhase
+  children?: WorkNode[]
+}
+
+// The work tree per master, derived when its box opens (hooks/board/work.ts).
+export type BoardWork = {
+  nodes: WorkNode[]
+  at: number
+  error?: string
+  isLoading?: boolean
+}
+
+export type BoardWorkView = Record<string, BoardWork>
 
 export type BoardFile = {
   updated?: string
@@ -130,6 +157,8 @@ declare module 'claude-code' {
       boardAnswers: Shaped<BoardAnswersView | null>
       boardOpen: boolean
       boardRestOpen: boolean
+      boardWork: Shaped<BoardWorkView | null>
+      boardWorkOpen: Shaped<string[]>
     }
   }
 }

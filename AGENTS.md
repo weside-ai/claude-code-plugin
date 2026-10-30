@@ -26,7 +26,8 @@ we/                               plugin root
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
-                                  phase.ts logic) and board/ (the /board pane, board.ts logic, probe.py, answer.py), *.test.ts
+                                  phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
+                                  answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
                                   + SessionStart materialize and optimization reminder, UserPromptSubmit
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate

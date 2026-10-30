@@ -1,23 +1,8 @@
 import type { FlowLight as Light, FlowPhase, FlowStage as Stage } from '../../types'
+import { parsePlanFiles } from '../plans/plans'
+import type { Check, Pr } from '../plans/plans'
 
-export type Check = {
-  name?: string
-  context?: string
-  status?: string
-  conclusion?: string | null
-  state?: string
-}
-
-export type Pr = {
-  number: number
-  state: 'OPEN' | 'MERGED' | 'CLOSED'
-  headRefName: string
-  title: string
-  autoMergeRequest: unknown
-  statusCheckRollup: Check[] | null
-  mergeStateStatus?: string
-  isDraft?: boolean
-}
+export type { Check, Pr }
 
 export type Plan = { key: string; title: string; status?: string; epic?: string }
 
@@ -55,28 +40,28 @@ export const phaseOf = (ev: Evidence): FlowPhase => {
   return 'idea'
 }
 
-// Parses `git grep -e ... <rev> -- <files>` output: `<rev>:<path>:<line>` per hit.
-export const parsePlans = (grepOut: string): Plan[] => {
-  const byPath = new Map<string, Plan>()
-  for (const raw of grepOut.split('\n')) {
-    const m = /^[^:]+:(docs\/plans\/[^:]+):(.*)$/.exec(raw)
-    const path = m?.[1]
-    const line = m?.[2] ?? ''
-    const key = path && ANY_KEY.exec(path)?.[0]
-    if (!path || !key) continue
-    const plan = byPath.get(path) ?? { key, title: '' }
-    const field = /^(story|status|epic):\s*(.*)$/.exec(line)
-    if (field) {
-      const value = (field[2] ?? '').trim()
-      if (field[1] === 'story') plan.key = value
-      if (field[1] === 'status') plan.status = value
-      if (field[1] === 'epic') plan.epic = value
-    } else if (!plan.title && line.startsWith('# ')) {
-      plan.title = line.replace(/^#\s*(Plan:\s*)?/, '').trim()
-    }
-    byPath.set(path, plan)
-  }
-  return [...byPath.values()]
+// A story plan per file that names a key, from `planGrep` output over story files.
+export const parsePlans = (grepOut: string): Plan[] =>
+  parsePlanFiles(grepOut).flatMap(file => {
+    const key = file.story ?? ANY_KEY.exec(file.path)?.[0]
+    return key ? [{ key, title: file.title, status: file.status, epic: file.epic }] : []
+  })
+
+// A phase's colour and its rank among open work, the most urgent first; /flow and /board both use them.
+export const PHASE_COLOR: Record<FlowPhase, string> = {
+  idea: 'inactive',
+  draft: 'warning',
+  refined: 'suggestion',
+  dev: 'warning',
+  ci: 'warning',
+  'ci-red': 'error',
+  ready: 'success',
+  merged: 'merged',
+  closed: 'error',
+}
+
+export const PHASE_URGENCY: Record<FlowPhase, number> = {
+  'ci-red': 0, closed: 1, ci: 2, ready: 3, dev: 4, refined: 5, draft: 6, idea: 7, merged: 8,
 }
 
 export const matchesKey = (name: string, key: string): boolean =>
