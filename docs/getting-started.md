@@ -18,7 +18,7 @@ verification, review gates, council. The answers go to `.weside/config.json`. A 
 current value and asks before replacing it.
 
 Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`), the
-shipped statusline (model, branch, PR, context, cost) and the companion launcher `wclaude`
+shipped statusline (model, branch, PR, context, background sessions, cost) and the companion launcher `wclaude`
 ([companion.md](companion.md#a-companion-session)).
 
 ## First story

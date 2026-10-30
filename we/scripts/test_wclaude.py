@@ -21,7 +21,7 @@ COUNCIL = {
 }
 
 
-def run(tmp_path, args=(), stdin="", council=COUNCIL):
+def run(tmp_path, args=(), stdin="", council=COUNCIL, launch=None):
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
     record = tmp_path / "record.json"
@@ -45,6 +45,9 @@ def run(tmp_path, args=(), stdin="", council=COUNCIL):
         "HOME": str(tmp_path),
         "WESIDE_COMPANION": "Stale",
     }
+    env.pop("WCLAUDE_CLAUDE", None)
+    if launch is not None:
+        env["WCLAUDE_CLAUDE"] = launch
     proc = subprocess.run(
         ["bash", str(SCRIPT), *args],
         input=stdin,
@@ -166,4 +169,32 @@ def test_own_name_is_kept(tmp_path, given):
 
 def test_no_companion_gets_no_name(tmp_path):
     _, result = run(tmp_path, stdin="0\n")
+    assert result == {"companion": "", "argv": []}
+
+
+def _write_wrapper(tmp_path):
+    # A wrapper that tags argv, so the test sees which command wclaude started.
+    wrapper = tmp_path / "bin" / "pinned"
+    wrapper.parent.mkdir(exist_ok=True)
+    wrapper.write_text('#!/usr/bin/env bash\nexec claude --via-wrapper "$@"\n')
+    wrapper.chmod(0o755)
+
+
+@pytest.mark.parametrize(
+    "stdin,companion,argv",
+    [
+        ("1\n", "Ada", ["--via-wrapper", "--name", "Ada", "-c"]),
+        ("0\n", "", ["--via-wrapper", "-c"]),
+    ],
+)
+def test_launch_command_replaces_claude(tmp_path, stdin, companion, argv):
+    _write_wrapper(tmp_path)
+    proc, result = run(tmp_path, args=["-c"], stdin=stdin, launch="pinned")
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": companion, "argv": argv}
+    assert "pinned" in proc.stderr
+
+
+def test_empty_launch_command_means_claude(tmp_path):
+    _, result = run(tmp_path, stdin="0\n", launch="")
     assert result == {"companion": "", "argv": []}

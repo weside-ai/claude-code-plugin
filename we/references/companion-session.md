@@ -22,7 +22,8 @@ second companion takes a second session. An unknown name answers HTTP 422.
 (optional `title` per member; the council uses it as the lens of a role without its own shell), `--as <Name>` without a menu, `0` clears
 the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
-`scripts/install_launcher.py`.
+`scripts/install_launcher.py`. `WCLAUDE_CLAUDE` names a command to start instead of `claude` (same arguments
+and environment; unset or empty is `claude`).
 
 A companion session is a normal Claude Code session; what binds it to its companion is the pin
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the
