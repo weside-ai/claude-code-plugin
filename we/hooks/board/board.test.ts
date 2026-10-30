@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  ageDays, answerPrompt, answersPathOf, freshness, groupSessions, isMasterProfile, lastAnswers, liveByName, majorityMode, ownName, parseBoard,
-  sortQueue, startModeOf,
+  ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterProfile, isResting, lastAnswers, liveByName,
+  majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
@@ -48,6 +48,33 @@ test('the file parses with missing fields left out', async () => {
   expect(board.queue).toEqual([])
   expect(board.sessions[0]?.name).toBe('x')
   expect(board.updatedBy).toBeUndefined()
+  expect([board.priorities, board.notes]).toEqual([undefined, undefined])
+})
+
+test('priorities as a list or one string make one line; notes is a trimmed string or nothing', () => {
+  expect(parseBoard('{"priorities":["a"," b ",""],"notes":"  hold the release "}')).toMatchObject({ priorities: 'a · b', notes: 'hold the release' })
+  expect(parseBoard('{"priorities":"one line","notes":"  "}')).toMatchObject({ priorities: 'one line', notes: undefined })
+  expect(parseBoard('{"priorities":3,"notes":["x"]}')).toMatchObject({ priorities: undefined, notes: undefined })
+})
+
+test('the counter counts masters by lamp and every session in CI; a group rests when nobody in it runs or waits', () => {
+  const sessions: BoardSession[] = [
+    { name: 'a', role: 'master', state: 'build' },
+    { name: 'b', role: 'master', state: 'wait-owner' },
+    { name: 'c', role: 'master', state: 'idle' },
+    { name: 'w', role: 'worker', parent: 'c', state: 'ci' },
+    { name: 'd', state: 'done' },
+  ]
+  expect(countBoard(sessions)).toEqual({ masters: 3, runs: 1, waits: 1, quiet: 1, ci: 1 })
+  const groups = groupSessions(sessions)
+  expect(groups.map(g => [g.head?.name ?? '-', isResting(g)])).toEqual([['b', false], ['a', false], ['c', false], ['-', true]])
+})
+
+test('pack breaks between segments at the room, a wide one alone; clip ends in an ellipsis', () => {
+  const w = (s: string) => s.length
+  expect(pack(['aaaa', 'bb', 'cc', 'dddddddddd'], w, 8)).toEqual([['aaaa', 'bb'], ['cc'], ['dddddddddd']])
+  expect(pack(['a', 'b'], w, 3, 1)).toEqual([['a', 'b']])
+  expect([clip('abcdef', 4), clip('abc', 4)]).toEqual(['abc…', 'abc'])
 })
 
 test('with masterProfile set, the lamp names why a master is red, and a deviating mode yellow', async () => {

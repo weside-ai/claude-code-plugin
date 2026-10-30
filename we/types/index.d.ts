@@ -66,6 +66,10 @@ export type BoardFile = {
   updatedBy?: string
   queue: BoardQueueItem[]
   sessions: BoardSession[]
+  // `priorities` (a list or one string), joined into one line.
+  priorities?: string
+  // `notes`: a banner the orchestrator wants seen first.
+  notes?: string
   // `answer_prompts`: the orchestrator's own wording of the prompts a press sends.
   answerPrompts?: Partial<Record<BoardAnswerKind, string>>
 }
@@ -125,6 +129,7 @@ declare module 'claude-code' {
       boardLive: Shaped<LiveView | null>
       boardAnswers: Shaped<BoardAnswersView | null>
       boardOpen: boolean
+      boardRestOpen: boolean
     }
   }
 }
