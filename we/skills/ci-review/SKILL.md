@@ -157,6 +157,8 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
    since your last merge fails there and not here. A rebase of pushed commits needs a force-push, the user's call. Then
    the after-merge check: the post-merge command `.weside/orchestrate.md` names, else, when the repo has a manual
    pre-commit stage, `pre-commit run --hook-stage manual --from-ref origin/$BASE --to-ref HEAD`; red → fix, commit, run it again.
+   A run that ended without a verdict (killed, timed out, out of memory) is not red: never restart it automatically,
+   read why it ended and report it.
    A merge that changed the diff means collecting again.
    On a migration branch, `alembic heads` must show exactly one head. If the second head came in from the base,
    the merge-heads migration belongs on the base branch: keep your fixes unpushed, report it, and stop as blocked.

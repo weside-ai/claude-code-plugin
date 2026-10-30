@@ -76,6 +76,11 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   a network service is skipped and listed, unless the brief names an integration suite for a
   critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
   last 20 lines in the report.
+- A gate run that ended without a verdict (killed, aborted, timed out, out of memory, a worker pool
+  that broke) is never restarted automatically, neither by the worker nor by a loop or a monitor: the
+  worker reads why it ended and reports it, and only a run it has answered with a fix runs again. On a
+  shared host the cause is usually another heavy run; a second start doubles the load (30.10.2026:
+  restarted gate runs took a shared host past its memory limit twice).
 - A mutation run the plan or repo asks for happens inside the chunk, right after its seam tests are
   green and before the report, never as a step after the PR: run after a green PR it cost a second
   CI round and let a parallel migration land first (64 of 201 min, 17.10.2026).
