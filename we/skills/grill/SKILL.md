@@ -16,6 +16,10 @@ The grill ends when the user says so or no branch is left; then summarise the de
 ## Discipline
 
 - **Wait for the answer** before the next question. One question with a recommendation beats four options.
+- **Ask in the user's words.** The question names the thing and its consequence in plain language, never
+  only a slug, phase or acronym ("S1 without F3?"); a label may follow in brackets. A question that needs
+  scrolling back to be understood is rewritten so it does not. Whenever possible it carries your
+  recommendation and why.
 - **A decision on record is cited, not asked.** "ADR-0065 decided X — I build on that." Ask only when two records
   disagree or the record predates the change under discussion. A wrong assumption about the environment or an
   earlier decision is the most frequent correction in past sessions.

@@ -16,6 +16,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 ## Choosing the worker
 
 - Dispatch shape: `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
+  A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
+  `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
   Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
   `effort:` overrides it (red arm, 27.09.2026).
 - Default `we:dev-medium`. `we:dev-high` for: a promise that must hold across several code paths

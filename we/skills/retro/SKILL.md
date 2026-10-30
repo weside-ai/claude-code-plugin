@@ -32,9 +32,10 @@ then dispatch it here the same way:
 1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/retro_claim.sh <N>` from the repo: `covered: …` (exit 1)
    → skip; `claimed <path>` (exit 0) → the claim exists outside the repo, go on. Never compute the
    path yourself (a guessed `.weside/optimization/staging/` missed the real claims, 07.10.2026).
-2. Dispatch `Agent(subagent_type="we:dev-medium", name="retro-<N>")`
-   with the brief "Use the Skill tool with skill `we:retro` and args `--auto --pr <N> --session
-   $CLAUDE_CODE_SESSION_ID`. Work from <main checkout path>." The caller does not wait for it.
+2. Dispatch `Agent(subagent_type="we:dev-medium", description="retro-<N>", run_in_background=true)`
+   (no `name`: `teammate_gate.py`) with the brief "Use the Skill tool with skill `we:retro` and args
+   `--auto --pr <N> --session $CLAUDE_CODE_SESSION_ID`. Work from <main checkout path>." The caller
+   does not wait for it.
 
 ## Gather (parallel)
 
