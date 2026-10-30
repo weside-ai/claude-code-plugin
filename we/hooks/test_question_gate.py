@@ -113,6 +113,16 @@ def test_notification_in_queue_operation_counts(tmp_path):
     assert run(tmp_path, [*LAUNCH_AGENT, queued]) is None
 
 
+def test_idle_notification_in_attachment_counts(tmp_path):
+    # An attachment carries the message as a string value; a JSON dump would escape its quotes.
+    attached = {
+        "type": "attachment",
+        "attachment": {"type": "queued_command", "prompt": IDLE["message"]["content"]},
+    }
+    assert run(tmp_path, [*TEAMMATE, attached]) is None
+    assert IDLE["message"]["content"] in g._text_of(attached)
+
+
 def test_statement_with_work_running_passes(tmp_path):
     assert (
         run(tmp_path, LAUNCH_AGENT, text="Worker läuft, ich melde mich mit dem Ergebnis.") is None

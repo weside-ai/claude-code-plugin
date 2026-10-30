@@ -70,6 +70,18 @@ def test_placeholder_or_missing_body_is_denied(tmp_path):
     assert run(tmp_path, "gh pr create --draft --fill") is not None
 
 
+def test_line_below_the_top_is_denied(tmp_path):
+    (tmp_path / "b.md").write_text("## Summary\nx\n\n" + REASONED)
+    assert run(tmp_path, "gh pr create --draft --body-file b.md") is not None
+    (tmp_path / "b.md").write_text("\n\n" + REASONED)
+    assert run(tmp_path, "gh pr create --draft --body-file b.md") is None
+
+
+def test_placeholder_in_the_condition_is_denied(tmp_path):
+    (tmp_path / "b.md").write_text("**Draft:** waits for the schema PR — ready when <condition>\n")
+    assert run(tmp_path, "gh pr create --draft --body-file b.md") is not None
+
+
 def test_ready_create_and_unreadable_body_pass(tmp_path):
     (tmp_path / "b.md").write_text(PLAIN)
     assert run(tmp_path, "gh pr create --title t --body-file b.md") is None

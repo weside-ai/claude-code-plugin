@@ -62,12 +62,23 @@ def ends_in_question(text: str) -> bool:
     return text.endswith("?")
 
 
+def _strings(value: object) -> list[str]:
+    """Every string inside a JSON value, unescaped (a dump would escape the quotes)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, list):
+        return [s for item in value for s in _strings(item)]
+    return []
+
+
 def _text_of(entry: dict) -> str:
     if entry.get("type") == "queue-operation":
         content = entry.get("content")
         return content if isinstance(content, str) else ""
     if entry.get("type") == "attachment":
-        return json.dumps(entry.get("attachment"))
+        return "\n".join(_strings(entry.get("attachment")))
     content = (entry.get("message") or {}).get("content")
     if isinstance(content, str):
         return content

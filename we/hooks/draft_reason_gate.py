@@ -11,7 +11,8 @@ reason in the body. Contract: `skills/pr/SKILL.md` step 4.
   * `create`: the body comes from `--body`/`-b` or `--body-file`/`-F` (a heredoc written in the
     same command counts). No body flag at all is a body without the line: denied.
   * `ready --undo`: the body comes from `gh pr view <selector> --json body`.
-  * Passes when a line starts with `**Draft:**` followed by a reason that is not a `<placeholder>`.
+  * Passes when the body's first non-empty line starts with `**Draft:**` followed by a reason, and
+    that line holds no `<placeholder>` (neither in the reason nor in the condition).
   * Fail-open when the body cannot be read (a substitution, `-`, `--web`, a missing file, a `gh`
     error) and on every other error.
 """
@@ -27,7 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_gate as vg
 
-_DRAFT_LINE = re.compile(r"^\s*\*\*Draft:\*\*[ \t]*(?!<)\S", re.MULTILINE)
+_DRAFT_LINE = re.compile(r"\s*\*\*Draft:\*\*[ \t]*\S")
+_PLACEHOLDER = re.compile(r"<[^<>\n]+>")
 _REPO_FLAGS = ("-R", "--repo")
 
 
@@ -94,8 +96,12 @@ def _denial(what: str, fix: str) -> str:
 
 
 def _has_reason(body: str | None) -> bool:
-    """True when the body carries the line, or cannot be read (fail open)."""
-    return body is None or bool(_DRAFT_LINE.search(body))
+    """True when the body's first non-empty line is the filled-in line, or the body cannot be
+    read (fail open)."""
+    if body is None:
+        return True
+    first = next((line for line in body.splitlines() if line.strip()), "")
+    return bool(_DRAFT_LINE.match(first)) and not _PLACEHOLDER.search(first)
 
 
 def _create_refusal(command: str, rest: list[str], cwd: str | None) -> str | None:
