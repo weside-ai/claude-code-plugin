@@ -24,7 +24,9 @@ we/                               plugin root
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring, companion-session)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
-  hooks/                          hooks.json + flow/ (function-hooks module: the /flow pane, phase.ts logic, *.test.ts)
+  docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
+  hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
+                                  phase.ts logic) and board/ (the /board pane, board.ts logic, probe.py), *.test.ts
                                   + SessionStart materialize and optimization reminder, UserPromptSubmit
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
@@ -65,12 +67,16 @@ bash scripts/validate-plugin-structure.sh
 python3 scripts/validate-consistency.py
 python3 -m pytest -q we scripts
 python3 we/scripts/check-instruction-budget.py
-claude plugin validate we && claude plugin test we   # the /flow hooks module
+claude plugin validate we && claude plugin test we   # the /flow and /board hooks module
 ```
 
-`claude plugin test` runs the `*.test.ts` files under `we/hooks/flow/` against Claude Code's own
+`claude plugin test` runs the `*.test.ts` files under `we/hooks/` against Claude Code's own
 engine; CI does not run it, so a change to the hooks module runs it locally before the push.
 The module's types come from Claude Code: `claude plugin validate` prints what it hooks and calls.
+The engine takes one `session.start` hook per module (`register.ts` starts both panes), follows
+`$` past an import only into `function` declarations, and a pane's button that runs the plugin's
+own command calls its function (`openFlow`, `openBoard`): `$.command.run` does not reach the
+plugin's own hook.
 
 Python floor 3.9 (macOS `/usr/bin/python3`): CI runs the tests on 3.9 and on the latest release.
 Re-record `we/scripts/fixtures/rule-loading.json` with `probe-rule-loading.py` after a Claude Code
