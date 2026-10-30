@@ -28,6 +28,14 @@ def test_env_keys_of_an_unreadable_process_is_none():
     assert probe.env_keys(-1) is None
 
 
+def test_mode_is_read_under_the_session_config_dir(tmp_path):
+    folder = tmp_path / "projects" / "-work-repo"
+    folder.mkdir(parents=True)
+    (folder / "s1.jsonl").write_text('{"permissionMode":"default"}\n{"permissionMode":"auto"}\n')
+    assert probe.mode_of(str(tmp_path), "/work/repo", "s1") == "auto"
+    assert probe.mode_of(str(tmp_path), "/work/repo", "missing") is None
+
+
 def test_role_and_profile_print_classes_not_values():
     assert probe.role_class("master") == "master"
     assert probe.role_class("anything") == "other"

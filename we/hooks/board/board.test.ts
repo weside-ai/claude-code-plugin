@@ -22,7 +22,7 @@ test('the queue shows the oldest ask first, its age in days', async () => {
   expect(ageDays(undefined, NOW)).toBeUndefined()
 })
 
-test('masters first, wait-owner on top, then priority with null last; workers under their parent', async () => {
+test('masters first, wait-owner on top, then priority with null last; workers under their parent, a parent without a role leads too', async () => {
   const s = (name: string, extra: Partial<BoardSession>): BoardSession => ({ name, ...extra })
   const groups = groupSessions([
     s('rust', { role: 'master', state: 'build' }),
@@ -31,10 +31,13 @@ test('masters first, wait-owner on top, then priority with null last; workers un
     s('lat', { role: 'worker', parent: 'CTA', state: 'wait-owner' }),
     s('Nox', { role: 'master', state: 'wait-owner' }),
     s('Kiska', { role: 'worker', parent: null, state: 'idle' }),
+    s('lead', {}),
+    s('w', { parent: 'lead' }),
   ])
-  expect(groups.map(g => g.head?.name ?? '-')).toEqual(['Nox', 'CTA', 'rust', '-'])
+  expect(groups.map(g => g.head?.name ?? '-')).toEqual(['Nox', 'CTA', 'rust', 'lead', '-'])
   expect(groups[1]?.workers.map(w => w.name)).toEqual(['lat', 'chip'])
-  expect(groups[3]?.workers.map(w => w.name)).toEqual(['Kiska'])
+  expect(groups[3]?.workers.map(w => w.name)).toEqual(['w'])
+  expect(groups[4]?.workers.map(w => w.name)).toEqual(['Kiska'])
 })
 
 test('the file parses with missing fields left out', async () => {

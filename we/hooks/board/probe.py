@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 SWAP_SESSIONS = os.path.expanduser("~/.local/share/claude-swap/sessions/")
-PROJECTS = os.path.expanduser("~/.claude/projects/")
+CLAUDE_HOME = os.path.expanduser("~/.claude")
 TAIL_BYTES = 262_144
 MODE = re.compile(rb'"permissionMode":"(\w+)"')
 WANTED = (b"WE_ROLE=", b"CLAUDE_CONFIG_DIR=")
@@ -52,11 +52,12 @@ def profile_of(config_dir):
     return "other"
 
 
-def mode_of(cwd, session_id):
-    """The newest permissionMode in the tail of the session's transcript."""
+def mode_of(config_dir, cwd, session_id):
+    """The newest permissionMode in the tail of the session's transcript, under its config dir."""
     if not cwd or not session_id:
         return None
-    path = os.path.join(PROJECTS, re.sub(r"[^a-zA-Z0-9]", "-", cwd), f"{session_id}.jsonl")
+    projects = os.path.join(config_dir or CLAUDE_HOME, "projects")
+    path = os.path.join(projects, re.sub(r"[^a-zA-Z0-9]", "-", cwd), f"{session_id}.jsonl")
     try:
         with open(path, "rb") as f:
             f.seek(max(0, os.path.getsize(path) - TAIL_BYTES))
@@ -87,7 +88,9 @@ def main():
                 "weRole": role_class(env.get("WE_ROLE")) if env is not None else None,
                 "profile": profile_of(env.get("CLAUDE_CONFIG_DIR")) if env is not None else None,
                 "envRead": env is not None,
-                "mode": mode_of(agent.get("cwd"), agent.get("sessionId")),
+                "mode": mode_of(
+                    (env or {}).get("CLAUDE_CONFIG_DIR"), agent.get("cwd"), agent.get("sessionId")
+                ),
             }
         )
     print(json.dumps({"sessions": out}))

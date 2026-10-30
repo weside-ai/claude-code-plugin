@@ -47,13 +47,17 @@ const bySession = (a: BoardSession, b: BoardSession) => {
   return pa === pb ? 0 : pa < pb ? -1 : 1
 }
 
+// A master by role, or by being named as some session's parent (docs/board.md).
+export const isMasterOf = (session: BoardSession, all: readonly BoardSession[]) =>
+  session.role === 'master' || all.some(s => s.parent === session.name)
+
 export type SessionGroup = { head?: BoardSession; workers: BoardSession[] }
 
 // Masters first, each with its workers under it; workers whose parent is not on the board last, headless.
 export const groupSessions = (sessions: readonly BoardSession[]): SessionGroup[] => {
   const names = new Set(sessions.map(s => s.name))
   const isChild = (s: BoardSession) => !!s.parent && names.has(s.parent)
-  const heads = sessions.filter(s => !isChild(s) && s.role === 'master').sort(bySession)
+  const heads = sessions.filter(s => !isChild(s) && isMasterOf(s, sessions)).sort(bySession)
   const groups: SessionGroup[] = heads.map(head => ({
     head,
     workers: sessions.filter(s => s.parent === head.name).sort(bySession),
@@ -151,6 +155,3 @@ export const startModeOf = (
   }
   return { level: 'ok', reason: 'ok', mode }
 }
-
-export const isMasterOf = (session: BoardSession, all: readonly BoardSession[]) =>
-  session.role === 'master' || all.some(s => s.parent === session.name)
