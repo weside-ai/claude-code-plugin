@@ -310,9 +310,9 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         <Box key={key} paddingLeft={indent}><Text color={START[start.level]}>{start.reason}</Text></Box>
       ) : null
 
-    // A worker in its master's frame: lamp, name, key, PR, start lamp, and what it does, cut to the line.
+    // A worker in its master's frame: lamp, name, key, PR, live status, start lamp, and what it does, cut to the line.
     const workerLine = (w: BoardSession) => {
-      const { lamp, start } = verdictOf(w)
+      const { lamp, liveness, start } = verdictOf(w)
       const keys = (w.keys ?? []).filter(Boolean).join(' ')
       const parts: Part[] = [
         { text: '└ ', dim: true },
@@ -320,6 +320,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         { text: ` ${w.name}`, bold: true },
         ...(keys ? [{ text: `  ${keys}`, dim: true }] : []),
         ...(typeof w.pr === 'number' ? [{ text: `  #${w.pr}`, color: 'suggestion' }] : []),
+        ...(liveness ? [{ text: `  ${LIVE[liveness].label}`, color: LIVE[liveness].color }] : []),
         ...(start.level !== 'none' ? [{ text: '  ●', color: START[start.level] }] : []),
       ]
       const room = inner - widthOf(parts) - 2

@@ -39,7 +39,7 @@ Finish what is open → money → marketing.
 │ Bugs                                                     │
 │ three workers                                            │
 │                                                          │
-│ └ ● chip  PROJ-57  #5560  ●  CI running                  │
+│ └ ● chip  PROJ-57  #5560  busy  ●  CI running            │
 ╰──────────────────────────────────────────────────────────╯
 
 [ + 2 idle/other ]
@@ -106,7 +106,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
 | `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
-| `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, start lamp and `now` on one line |
+| `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, live status, start lamp and `now` on one line |
 
 Every field but `sessions[].name` may be missing or `null`; the pane leaves it out.
 

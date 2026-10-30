@@ -86,7 +86,7 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ #562 green (Q12); #564 metering, CI runs; two stories in build. Merge migrations serially        │
 │ P3 · money first                                                                                 │
 │                                                                                                  │
-│ └ ● meter  PROJ-63  #564  ●  CI                                                                  │
+│ └ ● meter  PROJ-63  #564  busy  ●  CI                                                            │
 │     mode auto differs (most run bypass)                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -95,7 +95,7 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ 4 expert apps + image budget                                                                     │
 │ #563 today; apps tomorrow                                                                        │
 │                                                                                                  │
-│ └ ● img  PROJ-65  #563  ●  renders the second artwork batch for the journal and the tracker app  │
+│ └ ● img  PROJ-65  #563  busy  ●  renders the second artwork batch for the journal and the track… │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 [ + 2 idle/other ]
@@ -136,7 +136,7 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   // The narrow pane breaks between segments, never inside a frame's border.
   expect(narrow.folded.filter(line => line.startsWith('│')).every(line => line.length === 60 && line.endsWith('│'))).toBe(true)
   expect(narrow.folded).toContain('████████████░░░░  3/4 masters active · 4 waiting for you')
-  expect(narrow.folded).toContain('│ └ ● img  PROJ-65  #563  ●  renders the second artwork b… │')
+  expect(narrow.folded).toContain('│ └ ● img  PROJ-65  #563  busy  ●  renders the second art… │')
   // Opened, the rest shows the resting master in its frame and the sessions on no board.
   expect(narrow.open).toContain('[ − 2 idle/other ]')
   expect(narrow.open.some(line => line.startsWith('│ ○ kernel  PROJ-17  gone'))).toBe(true)
