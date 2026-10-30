@@ -45,6 +45,7 @@ const ANSWERS = `${JSON.stringify({ id: 'Q12', answer: 'accept', ts: '2026-10-30
 
 const RUN = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
+// Today's pane before the Work toggle: closed, a box differs from it only by the toggle.
 const AT_100 = `
 ◆ Board  as of 12 min ago (Orchestrator)
 ████████████░░░░  3/4 masters active · 4 waiting for you · 1 in CI
@@ -106,6 +107,80 @@ Finish what is open → money → marketing. The kernel runs on its own.
 [ Refresh ]  [ Flow ]  file 21:11 UTC · live 21:11 UTC · watch 3 s, all 1 min
 ● runs  ◉ waits for you  ○ rests  ? unknown  second ● = start mode`
 
+const AT_60 = `
+◆ Board  as of 12 min ago (Orchestrator)
+████████████░░░░  3/4 masters active · 4 waiting for you
+1 in CI
+Finish what is open → money → marketing. The kernel runs on
+its own.
+╭──────────────────────────────────────────────────────────╮
+│ ⚑ v2.4.1 is tagged, prod still reports v2.4.0: the       │
+│ rollout hung on a GitHub 502 and was restarted.          │
+╰──────────────────────────────────────────────────────────╯
+
+╭──────────────────────────────────────────────────────────╮
+│ Waiting for you (4)                                      │
+│                                                          │
+│ Q9  9 d  lead  PROJ-40                                   │
+│ Storyline S1–S3                                          │
+│ [ Discuss ] [ More info ]                                │
+│                                                          │
+│ Q12  2 d  billing  PROJ-59                               │
+│ Merge PR #562? (money path, CI green)                    │
+│ → yes                                                    │
+│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ ✓ accepted 21:02 UTC (Orchestrator)                      │
+│                                                          │
+│ Q19  today  legal  PROJ-69                               │
+│ UK: register with the tax office (quarterly returns,     │
+│ running cost) or keep the web checkout closed for the    │
+│ UK? The UK then buys in the app                          │
+│ → keep it closed until demand is measurable              │
+│ [ Accept ] [ Discuss ] [ More info ]                     │
+│                                                          │
+│ Q17  today  apps  PROJ-65..68                            │
+│ Release 4 app images (artwork/v2/)                       │
+│ → release                                                │
+│ [ Accept ] [ Discuss ] [ More info ]                     │
+╰──────────────────────────────────────────────────────────╯
+
+╭──────────────────────────────────────────────────────────╮
+│ ◉ lead  [Lead]  PROJ-40  waiting  ● bypass  P1           │
+│ Handoffs companion ↔ company                             │
+│ waits for the v2.4.1 rollout, then a re-test             │
+╰──────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────╮
+│ ◉ billing  [Vera]  PROJ-60  #562  busy  ● bypass         │
+│ Account currency EUR/USD                                 │
+│ #562 green (Q12); #564 metering, CI runs; two stories in │
+│ build. Merge migrations serially                         │
+│ P3 · money first                                         │
+│                                                          │
+│ └ ● meter  PROJ-63  #564  busy  ●  CI                    │
+│     mode auto differs (most run bypass)                  │
+╰──────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────╮
+│ ● apps  PROJ-65 PROJ-66 PROJ-67 PROJ-68  busy  ● bypass  │
+│ P2                                                       │
+│ WE_ROLE missing · not in the master profile — restart it │
+│ as a master                                              │
+│ 4 expert apps + image budget                             │
+│ #563 today; apps tomorrow                                │
+│                                                          │
+│ └ ● img  PROJ-65  #563  busy  ●  renders the second art… │
+╰──────────────────────────────────────────────────────────╯
+
+[ + 2 idle/other ]
+
+[ Refresh ]  [ Flow ]
+file 21:11 UTC · live 21:11 UTC · watch 3 s, all 1 min
+● runs  ◉ waits for you  ○ rests  ? unknown
+second ● = start mode`
+
+// The Work toggle out of a closed box: from the title line, or the line it stands on alone.
+const withoutToggle = (lines: string[]) =>
+  lines.filter(line => !/^│ \[ ▸ Work \] +│$/.test(line)).map(line => line.replace('  [ ▸ Work ]', ' '.repeat(12)))
+
 test('/board at 100 and 60 columns: frames, cards and folded rest, no line past the pane', { options: { masterProfile: 'me_example.com' } }, async ($, on) => {
   const clock = mock.clock(on, { now: Date.parse('2026-10-30T21:11:00Z') })
   mock.store(on)
@@ -131,8 +206,12 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   }
 
   const wide = await draw(100)
-  expect(`\n${wide.folded.join('\n')}`).toBe(AT_100)
+  expect(`\n${withoutToggle(wide.folded).join('\n')}`).toBe(AT_100)
   const narrow = await draw(60)
+  expect(`\n${withoutToggle(narrow.folded).join('\n')}`).toBe(AT_60)
+  // Every master with keys carries the closed toggle; at 60 columns it moves to a line of its own.
+  expect(wide.folded.filter(line => line.includes('[ ▸ Work ]')).length).toBe(3)
+  expect(narrow.folded).toContain('│ [ ▸ Work ]'.padEnd(59) + '│')
   for (const { folded, open } of [wide, narrow]) {
     expect(Math.max(...[...folded, ...open].map(line => line.length))).toBeLessThanOrEqual(folded === wide.folded ? 100 : 60)
   }

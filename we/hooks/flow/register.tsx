@@ -7,8 +7,9 @@ type On = Parameters<Register>[0]
 
 import type { FlowGroup, FlowLight, FlowPhase, FlowRow, FlowView } from '../../types'
 import { openBoard } from '../board/register'
-import { keysIn, matchesKey, parsePlans, phaseOf, stagesOf } from './phase'
-import type { Plan, Pr } from './phase'
+import { defaultBranch, git, loadPrs, planGrep } from '../plans/plans'
+import { PHASE_COLOR as COLOR, PHASE_URGENCY as URGENCY, keysIn, matchesKey, parsePlans, phaseOf, stagesOf } from './phase'
+import type { Plan } from './phase'
 
 const PANE = 'we-flow'
 const REFRESH_MS = 120_000
@@ -28,18 +29,6 @@ const LABEL: Record<FlowPhase, string> = {
   closed: 'PR closed',
 }
 
-const COLOR: Record<FlowPhase, string> = {
-  idea: 'inactive',
-  draft: 'warning',
-  refined: 'suggestion',
-  dev: 'warning',
-  ci: 'warning',
-  'ci-red': 'error',
-  ready: 'success',
-  merged: 'merged',
-  closed: 'error',
-}
-
 const LAMP: Record<FlowLight, { glyph: string; color: string }> = {
   done: { glyph: '●', color: 'success' },
   active: { glyph: '◉', color: 'warning' },
@@ -48,42 +37,10 @@ const LAMP: Record<FlowLight, { glyph: string; color: string }> = {
   skip: { glyph: '–', color: 'inactive' },
 }
 
-// Open work first, the most urgent on top.
-const URGENCY: Record<FlowPhase, number> = {
-  'ci-red': 0, closed: 1, ci: 2, ready: 3, dev: 4, refined: 5, draft: 6, idea: 7, merged: 8,
-}
-
 type $ = EngineInterface
 let isRefreshing = false
 
-async function git($: $, cwd: string, argv: string[], timeoutMs = 30_000): Promise<string> {
-  const run = await $.process.run(['git', ...argv], { cwd, timeoutMs })
-  // git grep answers 1 for "no match", which is a valid empty answer here.
-  if (run.exitCode !== 0 && !(argv[0] === 'grep' && run.exitCode === 1)) {
-    throw new Error(`git ${argv[0]}: ${run.stderr.trim().split('\n')[0] ?? run.exitCode}`)
-  }
-  return run.stdout
-}
-
 const lines = (out: string) => out.split('\n').map(l => l.trim()).filter(Boolean)
-
-async function loadPrs($: $, cwd: string, keys: string[]): Promise<Pr[]> {
-  const prs: Pr[] = []
-  // GitHub search takes at most five boolean operators per query.
-  for (let i = 0; i < keys.length; i += 6) {
-    const run = await $.process.run(
-      [
-        'gh', 'pr', 'list', '--state', 'all', '--limit', '100',
-        '--search', keys.slice(i, i + 6).join(' OR '),
-        '--json', 'number,state,headRefName,title,autoMergeRequest,statusCheckRollup,mergeStateStatus,isDraft',
-      ],
-      { cwd, timeoutMs: 30_000 },
-    )
-    if (run.exitCode !== 0) throw new Error(`gh pr list: ${run.stderr.trim().split('\n')[0]}`)
-    prs.push(...(JSON.parse(run.stdout) as Pr[]))
-  }
-  return prs
-}
 
 async function repoTop($: $): Promise<string> {
   const top = (await $.process.run(['git', 'rev-parse', '--show-toplevel'])).stdout.trim()
@@ -99,11 +56,6 @@ async function projectKey($: $, top: string): Promise<string | undefined> {
   } catch {
     return undefined
   }
-}
-
-async function defaultBranch($: $, top: string): Promise<string> {
-  const head = await $.process.run(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: top })
-  return head.exitCode === 0 && head.stdout.trim() ? head.stdout.trim() : 'origin/main'
 }
 
 async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
@@ -129,7 +81,7 @@ async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
 
   const allPaths = [...new Set(groups.flatMap(g => g.paths))]
   const plans: Plan[] = allPaths.length
-    ? parsePlans(await git($, top, ['grep', '-E', '-e', '^(story|status|epic):', '-e', '^# ', base, '--', ...allPaths]))
+    ? parsePlans(await git($, top, planGrep(base, allPaths)))
     : []
   for (const group of groups) {
     if (group.epicTitle === undefined) continue

@@ -85,6 +85,8 @@ Every refresh, in the repo the session runs in:
   default branch; `git worktree list` for the worktree path.
 - `gh pr list` for every key: state, draft, checks, auto-merge, merge state.
 
+The `/board` pane's work trees read the same plan files and PRs (`we/hooks/plans/`).
+
 The pane does not read the ticketing tool: a story that exists only as a ticket, without a plan file
 or a branch, is not listed. The summary also shows in the statusline.
 
