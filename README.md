@@ -52,6 +52,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 **Around the pipeline**
 
 - `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
+- `/board` — a pane with the workspace board an orchestrator session keeps in `~/.claude/we-state/board.json`: what waits for the owner, which sessions run and on what, with live and start-mode lamps. [we/docs/board.md](we/docs/board.md)
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
 - `/we:standup` — picks you back up: what we work on, where it stands, what you must do next; read-only (`--branch` for the branch view).
 - `/we:retro` — retrospective on a session or PR cycle; findings go to the optimization inbox.

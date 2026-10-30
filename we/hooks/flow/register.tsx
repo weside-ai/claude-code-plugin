@@ -1,9 +1,12 @@
 // /flow: a pane with a traffic light per /we:orchestrate step for a story, an epic's stories, or
 // what this session works on. Reads git and gh itself; no agent feeds it.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+
+type On = Parameters<Register>[0]
 
 import type { FlowGroup, FlowLight, FlowPhase, FlowRow, FlowView } from '../../types'
+import { openBoard } from '../board/register'
 import { keysIn, matchesKey, parsePlans, phaseOf, stagesOf } from './phase'
 import type { Plan, Pr } from './phase'
 
@@ -53,7 +56,7 @@ const URGENCY: Record<FlowPhase, number> = {
 type $ = EngineInterface
 let isRefreshing = false
 
-const git = async ($: $, cwd: string, argv: string[], timeoutMs = 30_000): Promise<string> => {
+async function git($: $, cwd: string, argv: string[], timeoutMs = 30_000): Promise<string> {
   const run = await $.process.run(['git', ...argv], { cwd, timeoutMs })
   // git grep answers 1 for "no match", which is a valid empty answer here.
   if (run.exitCode !== 0 && !(argv[0] === 'grep' && run.exitCode === 1)) {
@@ -64,7 +67,7 @@ const git = async ($: $, cwd: string, argv: string[], timeoutMs = 30_000): Promi
 
 const lines = (out: string) => out.split('\n').map(l => l.trim()).filter(Boolean)
 
-const loadPrs = async ($: $, cwd: string, keys: string[]): Promise<Pr[]> => {
+async function loadPrs($: $, cwd: string, keys: string[]): Promise<Pr[]> {
   const prs: Pr[] = []
   // GitHub search takes at most five boolean operators per query.
   for (let i = 0; i < keys.length; i += 6) {
@@ -82,14 +85,14 @@ const loadPrs = async ($: $, cwd: string, keys: string[]): Promise<Pr[]> => {
   return prs
 }
 
-const repoTop = async ($: $): Promise<string> => {
+async function repoTop($: $): Promise<string> {
   const top = (await $.process.run(['git', 'rev-parse', '--show-toplevel'])).stdout.trim()
   if (!top) throw new Error('this session runs in no git repository')
   return top
 }
 
 // The ticket prefix /we:setup wrote (`ticketing.project_key`), so `feat/proj-12-x` reads as PROJ-12.
-const projectKey = async ($: $, top: string): Promise<string | undefined> => {
+async function projectKey($: $, top: string): Promise<string | undefined> {
   try {
     const config = JSON.parse(String(await $.fs.read(`${top}/.weside/config.json`))) as { ticketing?: { project_key?: string } }
     return config.ticketing?.project_key || undefined
@@ -98,12 +101,12 @@ const projectKey = async ($: $, top: string): Promise<string | undefined> => {
   }
 }
 
-const defaultBranch = async ($: $, top: string): Promise<string> => {
+async function defaultBranch($: $, top: string): Promise<string> {
   const head = await $.process.run(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: top })
   return head.exitCode === 0 && head.stdout.trim() ? head.stdout.trim() : 'origin/main'
 }
 
-const gather = async ($: $, keys: string[]): Promise<FlowGroup[]> => {
+async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
   const top = await repoTop($)
   await git($, top, ['fetch', 'origin', '--quiet'], 60_000)
   const base = await defaultBranch($, top)
@@ -180,7 +183,7 @@ const gather = async ($: $, keys: string[]): Promise<FlowGroup[]> => {
 }
 
 // /flow with no key: what this session works on, the most specific source first.
-const detect = async ($: $): Promise<{ keys: string[]; source: string } | undefined> => {
+async function detect($: $): Promise<{ keys: string[]; source: string } | undefined> {
   const top = await repoTop($).catch(() => undefined)
   const prefix = top ? await projectKey($, top) : undefined
   const home = await $.env.get('HOME')
@@ -225,7 +228,7 @@ const summary = (v: FlowView): string => {
 
 const title = (keys: string[]) => `Flow ${keys.join(' ')}`
 
-const refresh = async ($: $, keys: string[], source?: string) => {
+async function refresh($: $, keys: string[], source?: string) {
   if (isRefreshing) return
   isRefreshing = true
   try {
@@ -247,12 +250,12 @@ const refresh = async ($: $, keys: string[], source?: string) => {
 }
 
 // The fetch outlives the command or press that asked for it: a timer runs outside that dispatch.
-const later = ($: $, keys: string[], source?: string) => {
+function later($: $, keys: string[], source?: string) {
   $.clock.after(0, () => void refresh($, keys, source))
 }
 
 // A button's slash command, queued as if the person typed it; it runs once the session is idle.
-const runCommand = async ($: $, command: string, args: string) => {
+async function runCommand($: $, command: string, args: string) {
   try {
     await $.command.run({ command, args })
   } catch (err) {
@@ -267,31 +270,35 @@ const bar = (done: number, total: number, width: number) => {
   return { filled: '█'.repeat(filled), empty: '░'.repeat(width - filled) }
 }
 
-export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'flow',
-      description: 'Traffic lights per /we:orchestrate step for a story or an epic; no key: what this session works on',
-      argumentHint: '[KEY …]',
-    })
-    const current = await read($, view)
-    if (current) void $.ui.open({ id: PANE, title: title(current.keys) })
-    $.clock.every(REFRESH_MS, () => {
-      void read($, view).then(v => v && refresh($, v.keys, v.source))
-    })
-    return next(e)
+// Run from the module's one session.start hook (hooks/register.ts); everything it reaches with $
+// is a function declaration, the only form the engine follows past an import.
+export async function startFlow($: $) {
+  await $.command.register({
+    name: 'flow',
+    description: 'Traffic lights per /we:orchestrate step for a story or an epic; no key: what this session works on',
+    argumentHint: '[KEY …]',
   })
+  const current = await read($, view)
+  if (current) void $.ui.open({ id: PANE, title: title(current.keys) })
+  $.clock.every(REFRESH_MS, () => {
+    void read($, view).then(v => v && refresh($, v.keys, v.source))
+  })
+}
 
-  on('command.run', { command: 'flow' }, async ($, e) => {
-    const asked = keysIn(e.args.toUpperCase()).slice(0, MAX_KEYS)
-    const found = asked.length ? { keys: asked, source: undefined } : await detect($)
-    if (!found) return { text: 'No ticket key found in this session. Usage: /flow PROJ-123 (a story or an epic)' }
-    const opened = await $.ui.open({ id: PANE, title: title(found.keys) })
-    later($, found.keys, found.source)
-    const from = found.source ? ` (from ${found.source})` : ''
-    if (!opened.isPlaced) return { text: `Flow pane for ${found.keys.join(' ')}${from} waits undrawn: ${opened.reason}` }
-    return { text: `Flow pane for ${found.keys.join(' ')}${from} opened.` }
-  })
+// /flow's work, also the board pane's Flow button: a plugin's own $.command.run does not reach its own hook.
+export async function openFlow($: $, args: string): Promise<string> {
+  const asked = keysIn(args.toUpperCase()).slice(0, MAX_KEYS)
+  const found = asked.length ? { keys: asked, source: undefined } : await detect($)
+  if (!found) return 'No ticket key found in this session. Usage: /flow PROJ-123 (a story or an epic)'
+  const opened = await $.ui.open({ id: PANE, title: title(found.keys) })
+  later($, found.keys, found.source)
+  const from = found.source ? ` (from ${found.source})` : ''
+  if (!opened.isPlaced) return `Flow pane for ${found.keys.join(' ')}${from} waits undrawn: ${opened.reason}`
+  return `Flow pane for ${found.keys.join(' ')}${from} opened.`
+}
+
+export const registerFlow = (on: On, options: PluginOptions) => {
+  on('command.run', { command: 'flow' }, async ($, e) => ({ text: await openFlow($, e.args) }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
@@ -367,7 +374,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
-          <Text bold>{`◆ ${v.keys.join(' · ')}`}</Text>
+          <Box flexDirection="row" gap={2}>
+            <Text bold>{`◆ ${v.keys.join(' · ')}`}</Text>
+            <Button key="board" label="Board" onPress={() => void openBoard($, options)} />
+          </Box>
           {v.source && <Text dimColor>{`detected from ${v.source}`}</Text>}
           {rows.length > 0 && (
             <Text>

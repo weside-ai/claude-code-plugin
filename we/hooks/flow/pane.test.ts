@@ -30,7 +30,19 @@ test('/flow PROJ-10 fills the pane after the command returned', async ($, on) =>
     const hit = answers.find(([pattern]) => pattern.test(line))
     return { value: { exitCode: 0, stdout: hit?.[1] ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  // The Board button opens the board pane, which looks for its file.
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', () => ({ value: false }))
+  const toasts: string[] = []
+  on('ui.toast', (_$, e) => {
+    toasts.push(String((e as { text?: unknown }).text))
+    return { value: undefined }
+  })
+  const opened: string[] = []
+  on('ui.open', (_$, e) => {
+    opened.push(String((e as { id?: unknown }).id))
+    return { value: { isPlaced: true } }
+  })
   on('ui.status', () => ({ value: undefined }))
   const logged: string[] = []
   on('ui.log', (_$, e) => {
@@ -61,7 +73,11 @@ test('/flow PROJ-10 fills the pane after the command returned', async ($, on) =>
     expect(await ui.find({ type: 'Text', text: /Claude running/ })).toBeDefined()
     await ui.press({ key: 'PROJ-14-ci' })
     await ui.press({ key: 'PROJ-14-standup' })
+    await ui.press({ key: 'board' })
     await ui.unmount()
   }
   expect(ran).toEqual(['we:ci-review 5090', 'we:standup PROJ-14', 'we:ci-review 5090', 'we:standup PROJ-14'])
+  await clock.settle()
+  expect(toasts).toEqual([])
+  expect(opened).toEqual(['we-flow', 'we-board', 'we-board'])
 })

@@ -1,4 +1,4 @@
-// The we plugin's $.state contract (the flow pane's board).
+// The we plugin's $.state contract (the /flow and /board panes).
 
 export type FlowPhase = 'idea' | 'draft' | 'refined' | 'dev' | 'ci' | 'ci-red' | 'ready' | 'merged' | 'closed'
 
@@ -36,8 +36,73 @@ export type FlowView = {
   isLoading: boolean
 }
 
+// /board: the file an orchestrator session keeps (docs/board.md), as the pane reads it.
+export type BoardQueueItem = {
+  id?: string
+  session?: string | null
+  key?: string | null
+  ask?: string | null
+  since?: string | null
+  recommendation?: string | null
+}
+
+export type BoardSession = {
+  name: string
+  role?: string | null
+  companion?: string | null
+  parent?: string | null
+  keys?: string[] | null
+  topic?: string | null
+  now?: string | null
+  state?: string | null
+  pr?: number | null
+  priority?: number | null
+  direction?: string | null
+  note?: string | null
+}
+
+export type BoardFile = {
+  updated?: string
+  updatedBy?: string
+  queue: BoardQueueItem[]
+  sessions: BoardSession[]
+}
+
+// What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.
+export type LiveSession = {
+  name?: string | null
+  pid?: number | null
+  kind?: string | null
+  status?: string | null
+  state?: string | null
+  weRole?: 'master' | 'worker' | 'other' | null
+  profile?: string | null
+  envRead?: boolean
+  mode?: string | null
+}
+
+export type BoardView = {
+  path?: string
+  board?: BoardFile
+  mtimeMs: number
+  readAt: number
+  isMissing?: boolean
+  error?: string
+}
+
+export type LiveView = {
+  sessions: LiveSession[]
+  at: number
+  error?: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    we: { flowBoard: FlowView | null }
+    we: {
+      flowBoard: FlowView | null
+      boardView: Shaped<BoardView | null>
+      boardLive: Shaped<LiveView | null>
+      boardOpen: boolean
+    }
   }
 }

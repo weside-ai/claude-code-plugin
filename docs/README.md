@@ -3,6 +3,7 @@
 - [Getting started](getting-started.md) — install, `/we:setup`, the first story from plan to PR.
 - [Workflow](workflow.md) — the APO altitudes, the build pipeline, the effort rule.
 - [The flow pane](flow.md) — `/flow`: traffic lights per pipeline step, buttons, data sources.
+- [The board pane](../we/docs/board.md) — `/board`: the workspace board an orchestrator session keeps, its file schema, live and start-mode lamps.
 - [Council](council.md) — role lenses, meetings, the `.weside/council.json` roster.
 - [weside Companion](companion.md) — the optional MCP connection and its settings.
 

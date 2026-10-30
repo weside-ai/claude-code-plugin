@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.27.0",
+  "version": "7.28.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -46,6 +46,18 @@
       "title": "Load Council Members from weside",
       "description": "Use your weside Companions as council members where the bridge links them (requires weside.ai account). Off = always use the generic role-lenses (Retorte), even if Companions exist.",
       "default": true
+    },
+    "boardFile": {
+      "type": "string",
+      "title": "Board File",
+      "description": "The workspace board /board reads (schema: docs/board.md). Default ~/.claude/we-state/board.json; ~/ and relative paths count from the home folder.",
+      "required": false
+    },
+    "masterProfile": {
+      "type": "string",
+      "title": "Master Profile",
+      "description": "The claude-swap profile master sessions run in (e.g. me_example.com). Set, /board flags a master without WE_ROLE=master or outside it, and a worker inside it; empty, those checks are off.",
+      "required": false
     }
   }
 }
