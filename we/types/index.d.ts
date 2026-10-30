@@ -59,6 +59,9 @@ export type BoardSession = {
   priority?: number | null
   direction?: string | null
   note?: string | null
+  // Restore fields the orchestrator keeps for itself (`--resume <session_id>` in `cwd`); the pane never shows them.
+  cwd?: string | null
+  session_id?: string | null
 }
 
 export type BoardFile = {
