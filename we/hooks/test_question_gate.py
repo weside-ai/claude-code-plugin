@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -57,7 +58,24 @@ IDLE = {
 }
 
 
+def _env(tmp: Path) -> dict:
+    """User and project settings point into tmp: the developer's own settings stay out."""
+    for sub in ("config", "project"):
+        (tmp / sub).mkdir(exist_ok=True)
+    return {
+        **os.environ,
+        "CLAUDE_CONFIG_DIR": str(tmp / "config"),
+        "CLAUDE_PROJECT_DIR": str(tmp / "project"),
+    }
+
+
+def _deny(path: Path, rules: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"permissions": {"deny": rules}}))
+
+
 def run(tmp: Path, entries: list[dict], text: str = QUESTION, **extra) -> dict | None:
+    env = _env(tmp)
     path = tmp / "t.jsonl"
     path.write_text("".join(json.dumps(e) + "\n" for e in entries))
     payload = {
@@ -73,6 +91,7 @@ def run(tmp: Path, entries: list[dict], text: str = QUESTION, **extra) -> dict |
         text=True,
         check=False,
         timeout=20,
+        env=env,
     )
     assert res.returncode == 0, res.stderr
     return json.loads(res.stdout) if res.stdout.strip() else None
@@ -82,6 +101,29 @@ def test_question_while_agent_runs_is_sent_back(tmp_path):
     out = run(tmp_path, LAUNCH_AGENT)
     assert out["decision"] == "block"
     assert "AskUserQuestion, recommendation as the first option" in out["reason"]
+
+
+def test_denied_tool_never_blocks(tmp_path):
+    # User settings: the session cannot call AskUserQuestion, plain text is the right form.
+    _deny(tmp_path / "config" / "settings.json", ["Bash(rm:*)", "AskUserQuestion"])
+    assert run(tmp_path, LAUNCH_AGENT) is None
+
+
+def test_denied_tool_in_project_settings_never_blocks(tmp_path):
+    _deny(tmp_path / "project" / ".claude" / "settings.local.json", ["AskUserQuestion(*)"])
+    assert run(tmp_path, LAUNCH_AGENT) is None
+
+
+def test_other_deny_rules_keep_the_block(tmp_path):
+    _deny(tmp_path / "config" / "settings.json", ["AskUserQuestionnaire", "Bash(rm:*)"])
+    assert run(tmp_path, LAUNCH_AGENT)["decision"] == "block"
+
+
+def test_unreadable_settings_fail_open(tmp_path):
+    bad = tmp_path / "config" / "settings.json"
+    bad.parent.mkdir(parents=True)
+    bad.write_text("{not json")
+    assert run(tmp_path, LAUNCH_AGENT) is None
 
 
 def test_question_after_completion_passes(tmp_path):
@@ -143,6 +185,7 @@ def test_unreadable_transcript_fails_open(tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        env=_env(tmp_path),
     )
     assert res.returncode == 0 and not res.stdout.strip()
 
