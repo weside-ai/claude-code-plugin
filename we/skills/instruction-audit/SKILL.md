@@ -55,7 +55,7 @@ this repo's always-loaded rules in that window (none → report "no usage data f
 `InstructionsLoaded`.
 
 Two homes: a Claude Code file (`AGENTS.md`, a rule, a skill) that cites a vault path (`handbook/…`) or
-carries the companion platform's own content (Lagebild, ranking, team register, rooms) is an entry,
+carries the companion platform's own content (situation report, ranking, team register, rooms) is an entry,
 pattern `G2-conflict`, action `move`: that content loads with the companion's identity, and a copy here
 drifts from it.
 

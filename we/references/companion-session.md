@@ -93,7 +93,7 @@ must know also goes to the shared room through `execute_tool(name="send_to_other
 A companion's role skill (`weside-<name>`) holds only what that role needs in Claude Code and no
 always-loaded instruction file, rule or plugin reference already owns. It is edited the same day
 the practice changes; what concerns another role goes into that role's file. Its weside side keeps
-a pinned memory `Arbeitsumgebung · <Rolle>` (the role in the title, not the name) that points at the
+a pinned memory titled `Arbeitsumgebung · <Rolle>` (a literal title in the workspace's language; the role, not the name) that points at the
 skill, and the milestone worklogs per § Writeback. Before a session parks, its state goes into the
 plan's Updates Log and a ticket comment.
 
