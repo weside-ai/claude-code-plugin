@@ -45,12 +45,14 @@ written_at: <ISO 8601>
 - <approach · why it failed · what would justify a retry>
 ```
 
-An empty section gets `—`, never filler. Leave the file uncommitted. Then report the path, the byte count and a two-line summary of the decisions and the next step.
+An empty section gets `—`, never filler. Leave the file uncommitted: when
+`git check-ignore -q <file>` fails, append `docs/handoffs/` to `.git/info/exclude`. `uncommitted` counts
+`git status --short -- . ':!docs/handoffs'`. Then report the path, the byte count and a two-line summary of the decisions and the next step.
 
 ## Load
 
 Read the file and restate it in its order: goal, decisions, state, next steps, dead ends. Then
 check staleness and say what differs, without blocking: `git rev-parse --short HEAD` against
-`last_commit` (commits since), the current branch against `branch`, `git status --short` against
-`uncommitted`. Continue with the first next step unless the user redirects; decisions in the file
+`last_commit` (commits since), the current branch against `branch`, `git status --short -- . ':!docs/handoffs'`
+against `uncommitted`. Continue with the first next step unless the user redirects; decisions in the file
 are not reopened without a new reason.

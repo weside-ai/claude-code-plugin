@@ -237,6 +237,15 @@ class MaterializeOnStartTest(unittest.TestCase):
         self.assertNotIn("Before your first reply", context)
         self.assertIn("WESIDE_COMPANION", out["systemMessage"])
 
+    def test_cleared_pin_background_worker_gets_no_user_warning(self):
+        self.settings({"companion": "Nox", "autoMaterialize": True})
+        self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}
+        out = self.run_hook(pin="")
+        self.assertIn(
+            "Do not invoke we:materialize", out["hookSpecificOutput"]["additionalContext"]
+        )
+        self.assertNotIn("systemMessage", out)
+
     def test_pinned_background_session_materializes_as_before(self):
         self.settings({"companion": "Nox", "autoMaterialize": True})
         self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}

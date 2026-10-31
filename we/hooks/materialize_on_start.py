@@ -22,7 +22,8 @@ ask the session to load the companion first. Off, absent or unreadable → the
 hook prints nothing.
 A background session (``claude --bg``, ``$CLAUDE_JOB_DIR`` set) without a pin is a
 worker: instead of the autoMaterialize note it gets a warning not to load or speak as the
-companion (``identity_cache.py bind`` refuses it too).
+companion (``identity_cache.py bind`` refuses it too); the user sees it only when the variable
+is absent, not for a worker started with it cleared (``WESIDE_COMPANION= claude --bg``).
 
 Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
 ``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
@@ -136,13 +137,16 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
                 )
         return {"hookSpecificOutput": specific}
     if enabled() and env.get("CLAUDE_JOB_DIR"):
-        return {
-            "systemMessage": BG_UNPINNED_MESSAGE,
+        answer: dict = {
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
                 "additionalContext": BG_UNPINNED_CONTEXT,
-            },
+            }
         }
+        # `WESIDE_COMPANION= claude --bg` is a worker launched as documented: no user warning
+        if "WESIDE_COMPANION" not in env:
+            answer["systemMessage"] = BG_UNPINNED_MESSAGE
+        return answer
     if enabled():
         return {
             "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": CONTEXT}
