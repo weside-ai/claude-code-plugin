@@ -16,9 +16,10 @@ required and gates on those verdicts, GitHub holds the merge; reading the findin
   * A repo whose `.github/workflows/` names no job by that name has no Codex review: allowed,
     decided offline before any `gh` call. With `-R <other repo>` the local tree says nothing about
     that repo, so a missing check there is allowed too.
-  * In any subagent (`agent_id` in the payload) every `gh pr merge` except `--disable-auto` is
-    refused: merging is the Lead's call in the main session (`references/worker-dispatch.md`
-    § Dev-only worker contract).
+  * In any worker every `gh pr merge` except `--disable-auto` is refused: merging is the Lead's
+    call in the main session (`references/worker-dispatch.md` § Dev-only worker contract). A
+    worker is a subagent (`agent_id` in the payload) or a process worker (the marker of
+    `scripts/worker_launch.py` in the worktree of the payload's `cwd`).
   * Fail-open on a `gh` or network error: Codex is advisory, an arm is reversible with
     `--disable-auto`, and a hook that blocks every merge during a GitHub outage costs more than
     the race it closes.
@@ -35,7 +36,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import verification_gate as vg
+from worker_launch import read_marker
 
 DEFAULT_CHECK = "Codex Review"
 # `gh pr merge` flags that take a value — their value is not the PR selector.
@@ -215,9 +218,9 @@ def _refusal(payload: dict) -> str | None:
     at, repo, args = found
     if "--disable-auto" in args:
         return None
-    if payload.get("agent_id"):
+    if payload.get("agent_id") or read_marker(payload.get("cwd")):
         return (
-            "A subagent never merges and never arms auto-merge; that is the main session's call "
+            "A worker never merges and never arms auto-merge; that is the main session's call "
             "(worker-dispatch.md § Dev-only worker contract). Report the PR; the Lead arms "
             "auto-merge after `/we:ci-review`."
         )

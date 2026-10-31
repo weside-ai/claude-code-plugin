@@ -229,8 +229,18 @@ def test_not_an_arm_passes(repo: Path, monkeypatch, command: str) -> None:
 def test_a_subagent_never_merges(repo: Path, monkeypatch, command: str) -> None:
     fake = FakeGh([run()])
     reason = refuse(repo, command, fake, monkeypatch, agent_id="a1", agent_type="we:dev-medium")
-    assert reason is not None and "A subagent never merges" in reason
+    assert reason is not None and "A worker never merges" in reason
     assert fake.calls == []
+
+
+@pytest.mark.parametrize("command", [ARM, "gh pr merge 7 --squash"])
+def test_a_process_worker_never_merges(repo: Path, monkeypatch, command: str) -> None:
+    (repo / ".git" / "we-worker.json").write_text(json.dumps({"name": "w1", "lead": "LEAD"}))
+    fake = FakeGh([run()])
+    reason = refuse(repo, command, fake, monkeypatch)
+    assert reason is not None and "A worker never merges" in reason
+    assert fake.calls == []
+    assert refuse(repo, "gh pr merge 7 --disable-auto", fake, monkeypatch) is None
 
 
 def test_a_subagent_may_disarm(repo: Path, monkeypatch) -> None:
