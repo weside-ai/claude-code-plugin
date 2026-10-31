@@ -125,6 +125,7 @@ class _HookRunCase(unittest.TestCase):
         self._env = mock.patch.dict(os.environ, {"WE_SESSION_DIR": str(self.sessions)})
         self._env.start()
         os.environ.pop("WESIDE_COMPANION", None)
+        os.environ.pop("CLAUDE_JOB_DIR", None)  # an unpinned bind in a `--bg` run is refused
 
     def tearDown(self):
         self._env.stop()

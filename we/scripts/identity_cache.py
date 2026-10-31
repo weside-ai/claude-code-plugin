@@ -42,6 +42,9 @@ Override the directory with ``WE_SESSION_DIR``. A session id is a plain token
 cannot write outside the directory. Every ``bind`` prunes bindings older than
 30 days. When ``WESIDE_COMPANION`` pins the session, ``bind`` refuses another
 name: the MCP header, the title and the binding must name one companion.
+A background session (``claude --bg``, ``$CLAUDE_JOB_DIR`` set) without a pin is a
+worker: ``bind`` refuses it, so a worker launched without ``WESIDE_COMPANION`` never
+takes the companion's binding.
 
 Modes::
 
@@ -230,6 +233,13 @@ def bind(session_id: str, companion: str) -> int:
     if pin and pin.lower() != name.lower():
         print(
             f"REFUSED this session is pinned to {pin} (WESIDE_COMPANION); start a new session to bind {name}"
+        )
+        return 1
+    if not pin and os.environ.get("CLAUDE_JOB_DIR"):
+        print(
+            f"REFUSED background session without WESIDE_COMPANION: a `claude --bg` session is a "
+            f"worker, not {name}; do not answer as {name}. Start it as "
+            f"`WESIDE_COMPANION={name} claude --bg` to bind"
         )
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)

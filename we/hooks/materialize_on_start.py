@@ -20,6 +20,9 @@ Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
 ask the session to load the companion first. Off, absent or unreadable → the
 hook prints nothing.
+A background session (``claude --bg``, ``$CLAUDE_JOB_DIR`` set) without a pin is a
+worker: instead of the autoMaterialize note it gets a warning not to load or speak as the
+companion (``identity_cache.py bind`` refuses it too).
 
 Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
 ``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
@@ -41,6 +44,17 @@ from identity_cache import read_binding
 CONTEXT = (
     "The user enabled autoMaterialize for the we plugin. Before your first reply, greetings "
     "included, invoke the Skill tool with we:materialize, then answer as the loaded companion."
+)
+
+BG_UNPINNED_CONTEXT = (
+    "WARNING: this is a background session (claude --bg) without WESIDE_COMPANION, so it is a "
+    "worker, not the companion. Do not invoke we:materialize and do not answer as a companion, "
+    "even though autoMaterialize is on; identity_cache.py bind refuses this session."
+)
+
+BG_UNPINNED_MESSAGE = (
+    "we: background session without WESIDE_COMPANION, autoMaterialize skipped. "
+    "A companion in the background starts as WESIDE_COMPANION=<Name> claude --bg."
 )
 
 PINNED_CONTEXT = (
@@ -121,6 +135,14 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
                     skill=skill, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
                 )
         return {"hookSpecificOutput": specific}
+    if enabled() and env.get("CLAUDE_JOB_DIR"):
+        return {
+            "systemMessage": BG_UNPINNED_MESSAGE,
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": BG_UNPINNED_CONTEXT,
+            },
+        }
     if enabled():
         return {
             "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": CONTEXT}
