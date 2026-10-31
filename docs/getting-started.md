@@ -21,6 +21,13 @@ Setup also offers the rule bridge for non-Claude agents (when the repo has `.cla
 shipped statusline (model, branch, PR, context, background sessions, cost) and the companion launcher `wclaude`
 ([companion.md](companion.md#a-companion-session)).
 
+If you rotate accounts with [claude-swap](https://github.com/realiti4/claude-swap) and one of them is a
+setup-token login whose usage endpoint answers 429, set `WE_CSWAP_FEED_ACCOUNTS` (comma-separated cswap
+emails, e.g. in the `env` block of `~/.claude/settings.json`). The statusline then records each
+session's `rate_limits` per account in `~/.claude/.we-rate-limits.json` and, at most once a minute,
+feeds the listed accounts to `cswap import-usage`. A window whose reset has passed is fed as 0 %.
+Dry run: `node ~/.claude/we-statusline.js --feed-cswap --dry-run`.
+
 ## First story
 
 1. `/we:story` — describe the change. The skill writes a minimal ticket and a detailed plan at
