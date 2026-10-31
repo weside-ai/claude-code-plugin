@@ -6,7 +6,7 @@ gets none of them. Skills that start, bind or spawn sessions point here.
 
 ## Contents
 
-Launch and pin · Name and binding · Workers · Writeback · Catch-up · Wake · Role owners.
+Launch and pin · Name and binding · Workers · Writeback · Upkeep · Catch-up · Wake · Role owners.
 
 ## Launch and pin
 
@@ -29,6 +29,20 @@ A companion session is a normal Claude Code session; what binds it to its compan
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the
 account's selected companion).
 
+`claude --bg` does not carry the launching shell's environment: the session comes from a pre-warmed
+`claude bg-spare` of the `claude daemon` and has the daemon's environment (`/proc/<pid>/environ` of
+the chain). `WESIDE_COMPANION=<Name> claude --bg` is therefore not pinned. A short companion session
+that is not a long-lived master (one person to consult, a role a master needs for an hour) runs in
+the foreground, in a tmux window, on the rotating global login:
+
+```bash
+tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPANION=<Name> WE_ROLE=worker claude \"\$(cat <brief-file>)\""
+```
+
+`-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
+`WE_ROLE=worker` says it is not a master. `claude stop <id>` finds it only with the same config
+(`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
+
 ## Name and binding
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
@@ -49,9 +63,10 @@ account's selected companion).
 
 ## Workers
 
-A worker is steered by the companion session and is never the companion. A `claude --bg` worker
-starts with the pin cleared: `WESIDE_COMPANION= claude --bg "<task>"`, so it is not titled, not
-asked to materialize, not bound, and stores no turn. A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
+A worker is steered by the companion session and is never the companion: it is not titled, not
+asked to materialize, not bound, and stores no turn. A `claude --bg` worker gets the daemon's
+environment (§ Launch and pin), so the pin is absent only when the daemon was started without one;
+a foreground worker starts with the pin cleared (`env -u WESIDE_COMPANION claude`). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
 connection and fire no SessionStart. A teammate in its own process inherits the environment: it gets
 the title and the note, and the note tells a spawned session to ignore it.
 
@@ -72,6 +87,15 @@ save_memory(memory_type="worklog",
 reads the entry on its other surfaces through its timeline and memory tools. A decision the crew
 must know also goes to the shared room through `execute_tool(name="send_to_other_room", …)`.
 `execute_tool` takes its `arguments` as a JSON string.
+
+## Upkeep
+
+A companion's role skill (`weside-<name>`) holds only what that role needs in Claude Code and no
+always-loaded instruction file, rule or plugin reference already owns. It is edited the same day
+the practice changes; what concerns another role goes into that role's file. Its weside side keeps
+a pinned memory `Arbeitsumgebung · <Rolle>` (the role in the title, not the name) that points at the
+skill, and the milestone worklogs per § Writeback. Before a session parks, its state goes into the
+plan's Updates Log and a ticket comment.
 
 ## Catch-up
 

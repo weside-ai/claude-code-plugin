@@ -18,6 +18,8 @@ action (release, a staging deploy the epic's Orchestration contract does not gra
 status note goes into the same message as your next tool call. While a worker, refiner or watch
 runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
 "(Recommended)": plain text scrolls away under notifications (owner, 30.09.2026; hook `question_gate.py`).
+Where `permissions.deny` blocks the tool, the question is plain text with the recommendation at its end,
+or goes the route the workspace's instructions name for a companion session.
 Phrase it per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
 

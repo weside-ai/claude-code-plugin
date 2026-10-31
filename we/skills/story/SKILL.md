@@ -45,6 +45,8 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
 - The discipline of `/we:grill`: one question per turn, each with your recommended answer; what the repo
   answers is looked up, not asked.
+- Where `permissions.deny` blocks `AskUserQuestion`, the question is plain text with the recommendation at
+  its end, or goes the route the workspace's instructions name for a companion session.
 - An `AskUserQuestion` option that rests on what existing code does cites that code's file:line in its
   description, read before the option is offered: options built on an unread premise were picked and later
   proved wrong (twice, 10/2026).
