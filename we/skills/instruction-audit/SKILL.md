@@ -54,6 +54,11 @@ this repo's always-loaded rules in that window (none → report "no usage data f
 `audit`, action `flag`, confidence `Medium`. `AGENTS.md` read as project instructions fires no
 `InstructionsLoaded`.
 
+Two homes: a Claude Code file (`AGENTS.md`, a rule, a skill) that cites a vault path (`handbook/…`) or
+carries the companion platform's own content (situation report, ranking, team register, rooms) is an entry,
+pattern `G2-conflict`, action `move`: that content loads with the companion's identity, and a copy here
+drifts from it.
+
 ## 4 · Built-in prompt audit
 
 Run Claude Code's own audit headless from the repo root, as a background command (it takes minutes):
