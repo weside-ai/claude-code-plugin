@@ -9,8 +9,8 @@ description: >
 # /we:handoff
 
 Only for a restart in a new session. Inside one session use the built-ins: `/resume` continues a
-session, `/fork` branches one, `/recap` summarises one. A handoff is a file in git that a fresh
-session reads first.
+session, `/fork` branches one, `/recap` summarises one. A handoff is a local file in
+`docs/handoffs/` that a fresh session reads first; it is written, never committed.
 
 | Invocation | Mode |
 |---|---|
@@ -45,13 +45,14 @@ written_at: <ISO 8601>
 - <approach · why it failed · what would justify a retry>
 ```
 
-An empty section gets `—`, never filler. Commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`; no branch or PR per handoff unless the repo demands PRs for docs.
-Then report the path, the byte count and a two-line summary of the decisions and the next step.
+An empty section gets `—`, never filler. Leave the file uncommitted: when
+`git check-ignore -q <file>` fails, append `docs/handoffs/` to `.git/info/exclude`. `uncommitted` counts
+`git status --short -- . ':!docs/handoffs'`. Then report the path, the byte count and a two-line summary of the decisions and the next step.
 
 ## Load
 
 Read the file and restate it in its order: goal, decisions, state, next steps, dead ends. Then
 check staleness and say what differs, without blocking: `git rev-parse --short HEAD` against
-`last_commit` (commits since), the current branch against `branch`, `git status --short` against
-`uncommitted`. Continue with the first next step unless the user redirects; decisions in the file
+`last_commit` (commits since), the current branch against `branch`, `git status --short -- . ':!docs/handoffs'`
+against `uncommitted`. Continue with the first next step unless the user redirects; decisions in the file
 are not reopened without a new reason.

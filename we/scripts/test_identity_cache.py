@@ -33,6 +33,8 @@ WAKE_ENV = (
     "WESIDE_MCP_URL",
     "WE_WAKE_INTERVAL_S",
     "PATH",
+    # a test run inside a `claude --bg` session must not trip the background-bind refusal
+    "CLAUDE_JOB_DIR",
 )
 
 
@@ -119,6 +121,7 @@ class SessionBindingTest(unittest.TestCase):
         # never reach the real session's inbox socket from a test
         os.environ.pop("CLAUDE_CODE_MESSAGING_SOCKET", None)
         os.environ.pop("CLAUDE_CODE_MESSAGING_TOKEN", None)
+        os.environ.pop("CLAUDE_JOB_DIR", None)
 
     def tearDown(self):
         for key, value in self._saved.items():
@@ -170,6 +173,23 @@ class SessionBindingTest(unittest.TestCase):
         self.assertIsNone(ic.read_binding("s-1"))
         self.assertEqual(ic.main(["bind", "--session", "s-1", "--companion", "vyra"]), 0)
 
+    def test_an_unpinned_background_session_refuses_to_bind(self):
+        # `claude --bg` without the pin is a worker (31.10.: an onboarding worker spoke as Nox)
+        os.environ["CLAUDE_JOB_DIR"] = str(Path(self._tmp.name) / "job")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ic.main(["bind", "--session", "s-1", "--companion", "Nox"])
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED background session without WESIDE_COMPANION", out.getvalue())
+        self.assertIsNone(ic.read_binding("s-1"))
+
+    def test_a_pinned_background_session_binds(self):
+        os.environ["CLAUDE_JOB_DIR"] = str(Path(self._tmp.name) / "job")
+        os.environ["WESIDE_COMPANION"] = "Nox"
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ic.main(["bind", "--session", "s-1", "--companion", "Nox"]), 0)
+        self.assertEqual(ic.read_binding("s-1"), "Nox")
+
     def test_corrupt_binding_reads_as_unbound(self):
         self.dir.mkdir(parents=True)
         (self.dir / "s-1.json").write_text("{not json")
@@ -200,6 +220,7 @@ class WakeBindTest(unittest.TestCase):
                 "PATH": f"{self.bin}{os.pathsep}{os.environ.get('PATH', '')}",
             }
         )
+        os.environ.pop("CLAUDE_JOB_DIR", None)
         self.pids = []
 
     def tearDown(self):

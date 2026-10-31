@@ -44,7 +44,7 @@ class MaterializeOnStartTest(unittest.TestCase):
         env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("WESIDE_COMPANION", "WE_SESSION_DIR", "WE_NEWS_DIR")
+            if k not in ("WESIDE_COMPANION", "WE_SESSION_DIR", "WE_NEWS_DIR", "CLAUDE_JOB_DIR")
             # never reach the real session's inbox socket from a test
             and not k.startswith("CLAUDE_CODE_MESSAGING_")
         }
@@ -69,6 +69,7 @@ class MaterializeOnStartTest(unittest.TestCase):
         env = dict(os.environ, HOME=str(self.home))
         env.pop("WESIDE_COMPANION", None)
         env.pop("WE_SESSION_DIR", None)
+        env.pop("CLAUDE_JOB_DIR", None)
         subprocess.run(
             [
                 sys.executable,
@@ -225,6 +226,37 @@ class MaterializeOnStartTest(unittest.TestCase):
         out = self.run_hook()["hookSpecificOutput"]
         self.assertIn("autoMaterialize", out["additionalContext"])
         self.assertNotIn("sessionTitle", out)
+
+    def test_unpinned_background_session_is_warned_not_materialized(self):
+        # `claude --bg` without the pin is a worker (31.10.: an onboarding worker spoke as Nox)
+        self.settings({"companion": "Nox", "autoMaterialize": True})
+        self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}
+        out = self.run_hook()
+        context = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Do not invoke we:materialize", context)
+        self.assertNotIn("Before your first reply", context)
+        self.assertIn("WESIDE_COMPANION", out["systemMessage"])
+
+    def test_cleared_pin_background_worker_gets_no_user_warning(self):
+        self.settings({"companion": "Nox", "autoMaterialize": True})
+        self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}
+        out = self.run_hook(pin="")
+        self.assertIn(
+            "Do not invoke we:materialize", out["hookSpecificOutput"]["additionalContext"]
+        )
+        self.assertNotIn("systemMessage", out)
+
+    def test_pinned_background_session_materializes_as_before(self):
+        self.settings({"companion": "Nox", "autoMaterialize": True})
+        self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}
+        out = self.run_hook(pin="Nox")
+        self.assertIn("we:materialize", out["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("systemMessage", out)
+
+    def test_unpinned_background_session_without_auto_materialize_prints_nothing(self):
+        self.settings({"companion": "Nox"})
+        self.extra_env = {"CLAUDE_JOB_DIR": str(self.home / "job")}
+        self.assertIsNone(self.run_hook())
 
     def test_unpinned_without_auto_materialize_prints_nothing(self):
         self.settings({"companion": "Nox"})

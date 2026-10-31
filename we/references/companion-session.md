@@ -51,7 +51,7 @@ account's selected companion).
 
 A worker is steered by the companion session and is never the companion. A `claude --bg` worker
 starts with the pin cleared: `WESIDE_COMPANION= claude --bg "<task>"`, so it is not titled, not
-asked to materialize, not bound, and stores no turn. `Agent` subagents share the session's MCP
+asked to materialize, not bound, and stores no turn. A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
 connection and fire no SessionStart. A teammate in its own process inherits the environment: it gets
 the title and the note, and the note tells a spawned session to ignore it.
 
