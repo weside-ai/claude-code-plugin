@@ -174,8 +174,7 @@
           {
             "type": "command",
             "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
-            "timeout": 5,
-            "async": true
+            "timeout": 5
           }
         ]
       }

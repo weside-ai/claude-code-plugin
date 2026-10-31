@@ -7,7 +7,8 @@ miss; the window title in the tmux status bar shows it, as Codex does.
   * On: `PreToolUse` of `AskUserQuestion`, and `Notification` of the types in `WAITING`.
   * Off: `UserPromptSubmit`, `PostToolUse`, `Stop`, `SessionStart`, `SessionEnd`. An approved
     permission fires no hook of its own, only the tool's `PostToolUse` (hooks reference), so
-    `PostToolUse` matches every tool; a denial ends at the next prompt or `Stop`. Off unsets the
+    `PostToolUse` matches every tool, synchronously so an earlier tool's off cannot land after a
+    later on; a denial ends at the next prompt or `Stop`. Off unsets the
     window option, so the window falls back to the session's style.
   * Both set `window-status-style` and `window-status-current-style` of the window holding
     `$TMUX_PANE`.

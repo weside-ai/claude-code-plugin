@@ -15,5 +15,5 @@ on the window of `$TMUX_PANE` and unsets them again, so the window falls back to
 It does nothing outside tmux, in a background session or in a subagent, and never stops a session:
 every error exits 0 without output.
 
-Options (`/plugin` → we → Configure): `tmuxAttention` (`true`) turns it off, `tmuxAttentionStyle`
-(`bg=white,fg=black`) takes any tmux style, e.g. `bg=yellow,fg=black,bold`.
+Options (`/plugin` → we → Configure): `tmuxAttention`, default `true`; `false` turns it off.
+`tmuxAttentionStyle`, default `bg=white,fg=black`, takes any tmux style, e.g. `bg=yellow,fg=black,bold`.
