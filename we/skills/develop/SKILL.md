@@ -30,9 +30,9 @@ Contract, finish sequence and report fields:
 
 ## 2. Worktree and branch
 
-- Dispatched with `isolation: "worktree"`: you are already in your own worktree. Rename its
-  `worktree-…` branch to the brief's branch (`git branch -m <type>/<KEY>-<slug>`) before the first
-  commit. Dispatched with `cwd=<path>`: work there on the branch it has.
+- Dispatched into your own worktree: rename a `worktree-…` branch to the brief's branch
+  (`git branch -m <type>/<KEY>-<slug>`) before the first commit; any other branch is already
+  named. Dispatched into an existing tree (`cwd=<path>`): work there on the branch it has.
 - A brief naming a base branch: `git merge <base>` first; your chunk builds on it.
 - Run the bootstrap the brief names (repo source: `.weside/orchestrate.md`) and check its result
   before the first gate; a missing venv or database surfaces later as an unrelated error.
@@ -75,6 +75,6 @@ affected gates again) and commit after each step. The brief says "not yours": sk
 
 A critical chunk gets its `code-review` at `high` (`worker-dispatch.md` § Dev-only worker contract) unless
 step 5 just ran it; any other chunk gets no LLM review. Push only when the brief says `Push: yes` (`git push -u origin <branch> && git ls-remote --heads origin
-<branch>`; an empty answer is a blocker). Then end with the § Report fields as your final
-message, one line per AC with its evidence. Stopping early is a report too: what you
+<branch>`; an empty answer is a blocker). Then end with the § Report fields, one line per AC with
+its evidence: as your final message, or as one `SendMessage` to the brief's `Lead:` line. Stopping early is a report too: what you
 completed, why you stopped, `blockers: <reason>`.

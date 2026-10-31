@@ -7,7 +7,7 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 
 ## Contents
 
-Choosing the worker · Dev-only worker contract · Finish sequence · Lead checks around a worker
+Choosing the worker · Worker launch backend · Dev-only worker contract · Finish sequence · Lead checks around a worker
 (premise check, code graph in the brief, watchdog, lane merge) · Report.
 
 The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
@@ -15,20 +15,20 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 
 ## Choosing the worker
 
-- Dispatch shape: `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
+- Dispatch shape: § Worker launch backend; the default is `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
   A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
   `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
   Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
   `effort:` overrides it (red arm, 27.09.2026).
 - Default `we:dev-medium`. `we:dev-high` for: a promise that must hold across several code paths
   ("always", "exactly once"); transactions, money or idempotency; auth or tenant isolation; a fix
-  routing around a fragile path; the second attempt after a failed worker; plan-writing (Foxy
+  routing around a fragile path; the second attempt after a failed worker; plan-writing (owner
   27.09.2026). The Lead writes the reason as one line in `description`; no reason, no `dev-high`
   (01.10.2026: 9 of 121 dispatches named none). A clearly bounded single fix stays medium: the bench
   (n = 27) found no difference there, and high costs about a third more time and money.
-- Implementation never runs on Sonnet (Foxy 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
+- Implementation never runs on Sonnet (owner 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
   chunk the Lead names mechanical (a rename, a generated file, a gate run).
-- Codex is not a dispatch backend; it reviews advisory only (Foxy 30.09.2026).
+- Codex is not a dispatch backend; it reviews advisory only (owner 30.09.2026).
 - One implementer per phase group by default. Measured over 18 runs (16.10.2026): an integrate merge
   costs ~15–20 min; the real cost of parallel work is the loop after the push (main merges, a second
   migration head, regenerated artifacts), and stacked branches netted about zero. Disjoint stories
@@ -53,6 +53,42 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 - All worktrees share one `.git`: a worker's local branch is visible to the Lead without a push.
 - The repo's `post-checkout` bootstrap may not have fired. The worker runs the bootstrap from
   `.weside/orchestrate.md` itself and checks it before the first gate.
+
+## Worker launch backend
+
+`.weside/config.json` → `agents.worker_launch` decides how every `we:dev-*` worker starts:
+implementer, finisher, refiner, a ci-review worker. `we:explore-medium` readers and council lenses
+stay subagents. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
+
+- `"subagent"` (the default, also when unset): the `Agent` call of § Choosing the worker. A
+  subagent bills the account of the session that calls it.
+- A command template: each worker is a session of its own, billed to the login the command starts
+  it on. Placeholders, each a token of its own: `{name}` (required), `{brief}` (required; becomes
+  `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
+  {agent}`, so its effort and model apply). Example: `"claude --bg -n {name} --agent {agent}
+  {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
+  the Lead's messages for approval.
+
+With a template, the Lead:
+
+1. Creates the worktree: `git fetch origin`, then `git worktree add <repo>-<KEY>[-p<N>] -b
+   <type>/<KEY>-<slug> origin/<default>`; the branch carries its final name, no rename. A finisher
+   or ci-review worker launches in the existing tree. `claude --bg` refuses an untrusted directory;
+   a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
+2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
+   --agent <we:dev-…> --brief-file <file>`. It appends `Lead: <this session's name>` to the brief
+   (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
+   worktree's git dir and runs the command there.
+3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
+   steer. A steer is `SendMessage(to=<name>)`, as for a subagent.
+4. Arms the watchdog (§ Watchdog). Its exit 4 `exited: <name>` means the session ended: read the
+   report, else `claude logs <name>`.
+5. Stops the worker with `worker_launch.py stop --name <name>` instead of `TaskStop`, once its
+   report is integrated or dropped, then removes the worktree.
+
+The worker reports by one `SendMessage` to its `Lead:`; its plain text never reaches the Lead. The
+Stop hook `worker_report_gate.py` blocks a turn without that message, and `automerge_gate.py`
+refuses its merge as for a subagent.
 
 ## Dev-only worker contract
 
@@ -173,7 +209,8 @@ red tests at the finisher on #4310.
 
 ## Report
 
-The worker's final message is the report; the Agent result delivers it to the Lead. Fields:
+A subagent's final message is the report, and the Agent result delivers it; a process worker sends
+it as one `SendMessage` to its `Lead:` (§ Worker launch backend). Fields:
 
 ```
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
