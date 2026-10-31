@@ -23,7 +23,7 @@ hook prints nothing.
 A background session (``claude --bg``, ``$CLAUDE_JOB_DIR`` set) without a pin is a
 worker: instead of the autoMaterialize note it gets a warning not to load or speak as the
 companion (``identity_cache.py bind`` refuses it too); the user sees it only when the variable
-is absent, not for a worker started with it cleared (``WESIDE_COMPANION= claude --bg``).
+is absent, not when the session's environment carries it empty (a worker with the pin cleared).
 
 Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
 ``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
@@ -55,7 +55,8 @@ BG_UNPINNED_CONTEXT = (
 
 BG_UNPINNED_MESSAGE = (
     "we: background session without WESIDE_COMPANION, autoMaterialize skipped. "
-    "A companion in the background starts as WESIDE_COMPANION=<Name> claude --bg."
+    "A companion starts in the foreground as WESIDE_COMPANION=<Name> claude (a tmux window for "
+    "background work); claude --bg carries the daemon's environment, not the shell's."
 )
 
 PINNED_CONTEXT = (
@@ -143,7 +144,7 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
                 "additionalContext": BG_UNPINNED_CONTEXT,
             }
         }
-        # `WESIDE_COMPANION= claude --bg` is a worker launched as documented: no user warning
+        # an empty pin in the session's environment marks a deliberate worker: no user warning
         if "WESIDE_COMPANION" not in env:
             answer["systemMessage"] = BG_UNPINNED_MESSAGE
         return answer

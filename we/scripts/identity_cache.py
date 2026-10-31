@@ -238,8 +238,9 @@ def bind(session_id: str, companion: str) -> int:
     if not pin and os.environ.get("CLAUDE_JOB_DIR"):
         print(
             f"REFUSED background session without WESIDE_COMPANION: a `claude --bg` session is a "
-            f"worker, not {name}; do not answer as {name}. Start it as "
-            f"`WESIDE_COMPANION={name} claude --bg` to bind"
+            f"worker, not {name}; do not answer as {name}. A companion starts in the foreground as "
+            f"`WESIDE_COMPANION={name} claude` (a tmux window for background work): `claude --bg` "
+            f"carries the daemon's environment, not the shell's"
         )
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
