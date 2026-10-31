@@ -21,15 +21,22 @@ and the user still could not find it. `AskUserQuestion` stays on screen until it
     notification, every background command without one had a `TaskStop`; teammates are the weak
     signal (2 of 84 left neither an idle notification nor a `TaskStop`), a stale one costs one
     extra block.
+  * No block where `AskUserQuestion` is denied: a `permissions.deny` entry `AskUserQuestion` (or
+    `AskUserQuestion(...)`) in the user settings (`$CLAUDE_CONFIG_DIR` or `~/.claude`), the
+    project's `.claude/settings.json` / `settings.local.json` (`$CLAUDE_PROJECT_DIR`, else the
+    payload's `cwd`) or the managed settings. The session cannot call the tool, so the plain-text
+    question with its recommendation at the end is the right form (owner, 31.10.2026).
   * One block per turn: no block while `stop_hook_active` is set. Never on SubagentStop or in a
-    subagent. Fail-open on every error, an unreadable transcript included.
+    subagent. Fail-open on every error, an unreadable transcript or settings file included.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+from pathlib import Path
 
 _FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1[^\n]*$", re.MULTILINE | re.DOTALL)
 _INLINE = re.compile(r"`[^`\n]*`")
@@ -151,6 +158,35 @@ def running_work(transcript_path: str) -> int:
     return ledger.running()
 
 
+_TOOL = "AskUserQuestion"
+_MANAGED = (
+    Path("/etc/claude-code/managed-settings.json"),
+    Path("/Library/Application Support/ClaudeCode/managed-settings.json"),
+)
+
+
+def settings_files(payload: dict) -> list[Path]:
+    """The settings files whose `permissions.deny` applies to this session."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude")
+    project = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
+    files = [Path(config) / "settings.json", *_MANAGED]
+    if project:
+        files += [Path(project) / ".claude" / n for n in ("settings.json", "settings.local.json")]
+    return files
+
+
+def tool_denied(payload: dict) -> bool:
+    """True when a settings file denies AskUserQuestion; an unreadable file raises (fail-open)."""
+    for path in settings_files(payload):
+        if not path.is_file():
+            continue
+        deny = (json.loads(path.read_text(encoding="utf-8")).get("permissions") or {}).get("deny")
+        for rule in deny or []:
+            if isinstance(rule, str) and (rule == _TOOL or rule.startswith(_TOOL + "(")):
+                return True
+    return False
+
+
 def decide(payload: dict) -> str | None:
     if payload.get("hook_event_name", "Stop") != "Stop" or payload.get("agent_id"):
         return None
@@ -159,6 +195,8 @@ def decide(payload: dict) -> str | None:
     text = payload.get("last_assistant_message") or ""
     path = payload.get("transcript_path")
     if not text or not path or not ends_in_question(text):
+        return None
+    if tool_denied(payload):
         return None
     return REASON if running_work(path) else None
 
