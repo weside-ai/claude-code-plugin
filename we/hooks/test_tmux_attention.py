@@ -23,6 +23,12 @@ import json, os, sys
 state = os.environ["FAKE_TMUX_STATE"]
 opts = json.load(open(state)) if os.path.exists(state) else {}
 args = sys.argv[1:]
+if args[0] == "show-options":
+    assert args[1:4] == ["-w", "-v", "-t"], args
+    value = opts.get(args[4] + " " + args[5])
+    if value is not None:
+        print(value)
+    sys.exit(0)
 assert args[0] == "set-window-option", args
 args = args[1:]
 unset = args[0] == "-u"
@@ -42,7 +48,11 @@ ANSWERED = {"hook_event_name": "PostToolUse", "tool_name": "AskUserQuestion"}
 PERMISSION = {"hook_event_name": "Notification", "notification_type": "permission_prompt"}
 IDLE = {"hook_event_name": "Notification", "notification_type": "idle_prompt"}
 PROMPT = {"hook_event_name": "UserPromptSubmit", "prompt": "ja"}
+STOP = {"hook_event_name": "Stop"}
+ELICIT = {"hook_event_name": "Notification", "notification_type": "elicitation_dialog"}
+ELICIT_URL = {"hook_event_name": "Notification", "notification_type": "elicitation_url_dialog"}
 WHITE = {"%3 window-status-style": t.STYLE, "%3 window-status-current-style": t.STYLE}
+GREY = {"%3 window-status-style": t.IDLE_STYLE, "%3 window-status-current-style": t.IDLE_STYLE}
 
 
 @pytest.fixture
@@ -95,10 +105,50 @@ def tmux(tmp_path: Path):
     return Tmux()
 
 
-@pytest.mark.parametrize("wait", [ASK, PERMISSION, IDLE])
+@pytest.mark.parametrize(
+    "wait",
+    [ASK, PERMISSION, ELICIT, ELICIT_URL],
+    ids=["ask", "permission", "elicit", "elicit-url"],
+)
 def test_waiting_turns_the_window_white(tmux, wait):
     tmux.hook(wait)
     assert tmux.options() == WHITE
+
+
+@pytest.mark.parametrize("rest", [STOP, IDLE], ids=["stop", "idle-prompt"])
+def test_resting_turns_the_window_grey(tmux, rest):
+    tmux.hook(rest)
+    assert tmux.options() == GREY
+
+
+def test_idle_prompt_after_a_question_stays_white(tmux):
+    tmux.hook(ASK)
+    tmux.hook(IDLE)
+    assert tmux.options() == WHITE
+
+
+def test_red_arm_without_the_guard_idle_overwrites_white(tmux, tmp_path):
+    """The control: a copy of the hook without the white guard turns an open question grey."""
+    source = HOOK.read_text()
+    mutated = source.replace("current(pane) == attention", "False")
+    assert mutated != source
+    cut = tmp_path / "tmux_attention_unguarded.py"
+    cut.write_text(mutated)
+    for payload in (ASK, IDLE):
+        subprocess.run(
+            [sys.executable, str(cut)],
+            input=json.dumps(payload),
+            env=tmux.env,
+            text=True,
+            check=True,
+        )
+    assert tmux.options() == GREY
+
+
+def test_stop_after_a_question_turns_grey(tmux):
+    tmux.hook(ASK)
+    tmux.hook(STOP)
+    assert tmux.options() == GREY
 
 
 @pytest.mark.parametrize(
@@ -107,13 +157,14 @@ def test_waiting_turns_the_window_white(tmux, wait):
         ANSWERED,
         {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
         PROMPT,
-        {"hook_event_name": "Stop"},
         {"hook_event_name": "SessionStart", "source": "resume"},
         {"hook_event_name": "SessionEnd"},
     ],
+    ids=["post-ask", "post-bash", "prompt", "session-start", "session-end"],
 )
-def test_an_answer_clears_the_window(tmux, answer):
-    tmux.hook(ASK)
+@pytest.mark.parametrize("before", [ASK, STOP], ids=["from-white", "from-grey"])
+def test_normal_events_clear_the_window(tmux, before, answer):
+    tmux.hook(before)
     tmux.hook(answer)
     assert tmux.options() == {}
 
@@ -122,7 +173,7 @@ def test_red_arm_without_the_off_the_style_stays(tmux, tmp_path):
     """The control: a copy of the hook with the off path cut leaves an answered window white."""
     source = HOOK.read_text()
     mutated = source.replace(
-        'OFF = ("UserPromptSubmit", "PostToolUse", "Stop", "SessionStart", "SessionEnd")',
+        'OFF = ("UserPromptSubmit", "PostToolUse", "SessionStart", "SessionEnd")',
         "OFF = ()",
     )
     assert mutated != source
@@ -190,6 +241,20 @@ def test_style_option(tmux):
     assert set(tmux.options().values()) == {"bg=yellow"}
 
 
+def test_idle_style_option_and_custom_white_survives_idle(tmux):
+    tmux.settings({"tmuxAttentionStyle": "bg=yellow", "tmuxIdleStyle": "bg=blue"})
+    tmux.hook(STOP)
+    assert set(tmux.options().values()) == {"bg=blue"}
+    tmux.hook(ASK)
+    tmux.hook(IDLE)
+    assert set(tmux.options().values()) == {"bg=yellow"}
+
+
+def test_idle_style_from_the_environment(tmux):
+    tmux.hook(IDLE, CLAUDE_PLUGIN_OPTION_TMUXIDLESTYLE="bg=green")
+    assert set(tmux.options().values()) == {"bg=green"}
+
+
 @pytest.mark.parametrize("stdin", ["", "not json", "[]"])
 def test_bad_input_and_missing_tmux_exit_silently(tmux, stdin):
     for env in ({}, {"PATH": "/nonexistent"}):
@@ -204,3 +269,4 @@ def test_bad_input_and_missing_tmux_exit_silently(tmux, stdin):
         )
         assert (res.returncode, res.stdout, res.stderr) == (0, "", "")
     tmux.hook(ASK, PATH="/nonexistent")
+    tmux.hook(IDLE, PATH="/nonexistent")
