@@ -113,25 +113,41 @@ as the code, run with `python3 -m pytest -q we scripts`.
 
 ## Verification
 
-- **Oracle:** cli — the launch, report and stop arms are observable with
-  `claude agents --json`, the Lead's received message and the process table.
-- **Seed:** a scratch git repo with `.weside/config.json` →
-  `{"agents": {"worker_launch": "claude --bg -n {name} --agent {agent} {brief}"}}`
-  and a brief "send `branch: probe` to your Lead by SendMessage, then stop".
-- **Asserted:** `worker_launch.py launch` exits 0; `claude agents --json` lists
-  `name=probe-1`, `cwd=<wt>`; the Lead receives one cross-session message from
-  `probe-1` starting `branch:`; the idle notice arrives; `worker_launch.py stop
-  --name probe-1` exits 0 and the session is gone from the running list.
-- **Not proven:** a launcher that rotates accounts bills the worker elsewhere —
-  site-specific, owed by the owner on their setup; a worker started in a
-  different permission mode than the Lead may hold the Lead's steers for
-  approval (Claude Code's `SendMessage` contract) — the doc names it, the
-  receipt records which mode the probe ran in.
-- **Exit criterion:** the four Asserted lines reproduce on a second run; the
-  `subagent` default produces the same dispatch text as `origin/main` (diff of
-  the dispatch lines in `worker-dispatch.md` § Choosing the worker shows only
-  added text).
+- **Oracle:** cli — launch, report and stop are observable with `claude agents
+  --json`, the Lead's received message and the watchdog's exit line.
+- **Seed:** a sibling worktree of this repo (`git worktree add
+  ../claude-code-plugin-probe -b probe/worker-launch origin/main`), its
+  `.weside/config.json` → `agents.worker_launch: "claude --bg
+  --permission-mode bypassPermissions -n {name} {brief}"` (the Lead ran in
+  bypass mode), brief "send `branch: probe · commits: 0` as one SendMessage to
+  your Lead, then end your turn".
+- **Asserted:** run 31.10.2026 on 845486b's tree — `worker_launch.py launch
+  --name probe-wl1` exit 0, `claude --bg` printed id 39bdeb03, marker in
+  `.git/worktrees/claude-code-plugin-probe/we-worker.json`; the Lead received
+  one cross-session message `from-name="probe-wl1"`: `branch: probe · commits:
+  0`; `claude agents --json` showed `probe-wl1 idle`; `worker_launch.py stop
+  --name probe-wl1 --worktree <wt>` → `stopped: probe-wl1`, exit 0; `alive`
+  then exit 1; `watch-worker.sh <wt> probe-wl1` → `exited: probe-wl1`, exit 4.
+  Refusal arm live: a worktree of an untrusted scratch repo → `claude exited 1:
+  Workspace not trusted …`, exit 1, marker and brief removed.
+- **Not proven:** the idle notice of `notify_when_idle` did not arrive before
+  the stop (not observed); a launcher that rotates accounts bills the worker
+  elsewhere — site-specific, owed by the owner on their setup; the Stop hook
+  `worker_report_gate.py` ran only in unit tests, the probe used the installed
+  7.31.2 plugin.
+- **Exit criterion:** the Asserted lines reproduce with the commands above;
+  the `subagent` default changes no dispatch (`worker_launch.py backend` prints
+  `subagent` without the key).
 - **Missing CLI verb:** none — `worker_launch.py` (Phase 1) is the verb.
+
+## Deviations from the plan
+
+- `claude --bg` refuses an untrusted directory: a fresh scratch repo fails, a
+  worktree of a trusted repo works. `worker-dispatch.md` names it.
+- `SendMessage` requires `message`: the idle subscription rides on the Lead's
+  first message to the worker, not on a message-less call.
+- `orchestrate/SKILL.md` keeps its 226 lines and is shorter in characters
+  (18 182 → 18 160); its report-hook sentence says "report gates".
 
 ## Technical Approach
 
