@@ -99,8 +99,8 @@ Per candidate, top down, until the user stops or the inbox is empty. Every decid
   `CLAUDE.md`), and the gate result after the edit.
 - **Batch the questions** with `AskUserQuestion`, `multiSelect: true`, two to four candidates per
   call: the label names the change, the description its benefit in one sentence. Chosen → applied;
-  not chosen → `rejected` ("not chosen"). Say so in the question. Where `permissions.deny` blocks the
-  tool, the same list goes in plain text at the end of the message, each with your recommendation.
+  not chosen → `rejected` ("not chosen"). Say so in the question. A denied tool: plain text per
+  `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline.
 
 ## 6 · Apply
 

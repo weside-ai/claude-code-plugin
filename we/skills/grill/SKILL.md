@@ -20,6 +20,8 @@ The grill ends when the user says so or no branch is left; then summarise the de
   only a slug, phase or acronym ("S1 without F3?"); a label may follow in brackets. A question that needs
   scrolling back to be understood is rewritten so it does not. Whenever possible it carries your
   recommendation and why.
+- **A denied question tool means plain text.** Where `permissions.deny` blocks `AskUserQuestion`, the question
+  is the last paragraph of your message, your recommendation at its end.
 - **A decision on record is cited, not asked.** "ADR-0065 decided X — I build on that." Ask only when two records
   disagree or the record predates the change under discussion. A wrong assumption about the environment or an
   earlier decision is the most frequent correction in past sessions.

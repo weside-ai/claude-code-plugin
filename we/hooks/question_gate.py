@@ -162,6 +162,7 @@ _TOOL = "AskUserQuestion"
 _MANAGED = (
     Path("/etc/claude-code/managed-settings.json"),
     Path("/Library/Application Support/ClaudeCode/managed-settings.json"),
+    Path("C:/Program Files/ClaudeCode/managed-settings.json"),
 )
 
 
