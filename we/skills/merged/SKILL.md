@@ -2,7 +2,7 @@
 name: merged
 description: >
   Close out a merged PR: verify the merge, tear down its worktrees, branches and processes, move
-  the landed tickets to Done, then name only what is still open. Triggers: "/we:merged", "merged",
+  the landed tickets on (Done by default), then name only what is still open. Triggers: "/we:merged", "merged",
   "gemergt".
 ---
 
@@ -10,7 +10,7 @@ description: >
 
 1. Confirm `gh pr view <N> --json state` says `MERGED` before deleting anything; `OPEN` or `CLOSED` → report and stop.
 2. Tear down only this PR's worktrees, branches and processes; anything foreign or dirty stays and is named.
-3. Move every ticket whose work landed in this PR to Done and read the status back.
+3. Move every ticket whose work landed in this PR to the after-merge state (§ 5) and read the status back.
 4. The report lists only what someone still has to do, one line each. It is not a retrospective.
 5. Never merge, release, or file a ticket on your own. Follow-ups are named in the report, not created.
 
@@ -85,23 +85,28 @@ Its working directory is the main checkout, never a tree that step 4 removes.
 
 `--keep-worktrees` skips this whole teardown section.
 
-## 5 · Tickets to Done
+## 5 · Tickets on after the merge
 
 Move every story whose work landed in this PR. The branch name alone can miss some, so take the
-full list from step 2. A story whose work did not land stays where it is. The human's "merged"
-is the word the DoD asks for, so Done is legitimate here.
+full list from step 2. A story whose work did not land stays where it is.
+
+The target comes from `.weside/config.json` `ticketing.after_merge`:
+
+- `"done"` (default, also when the key is missing): the Done state, whose name varies ("Done",
+  "Fertig", "Erledigt"). The human's "merged" is the word the DoD asks for, so Done is legitimate here.
+- `"in_review"`: the In Review state; Done is set later by an acceptance this verb does not run.
+  Report each ticket as `<KEY> In Review — Done setzt die Abnahme laut .weside/dod.md`.
 
 Ticketing follows `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (tool order, body format, transition before comment,
-read-back and retry). Specific to this step: the target is the Done state, whose name varies
-("Done", "Fertig", "Erledigt"); `gh issue` has no status, so skip the move; without a ticketing
-tool, skip silently. If the workflow rejects the move, report it and continue.
+read-back and retry). `gh issue` has no status, so skip the move; without a ticketing tool, skip
+silently. If the workflow rejects the move, report it and continue.
 
 ## 6 · Refresh the record
 
 - **Plan:** if `docs/plans/{KEY}-story.md` still describes an intention rather than what was built, correct it.
   The next agent reads the plan, not the diff.
 - **Epic mirror:** if the story has an `epic:`, update that story's row in the epic's mirror block
-  per `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block (status bucket, `Plan` column,
+  per `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block (status bucket as the ticket now reads, `Plan` column,
   `updated:`, one `## Updates Log` line), so the next roster does not offer a shipped story again.
 - **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
   the report (owner decision 2026-09-25).

@@ -131,4 +131,4 @@ worker or you moved the story. Its buttons start the verb the state calls for (`
 
 ## Deliver
 
-Claude arms auto-merge once the checks and the Codex verdict are in (exceptions: `/we:orchestrate` § Close the run); you review and merge the exceptions. `/we:merged` closes out: worktrees, branches, processes, tickets to Done.
+Claude arms auto-merge once the checks and the Codex verdict are in (exceptions: `/we:orchestrate` § Close the run); you review and merge the exceptions. `/we:merged` closes out: worktrees, branches, processes, tickets to Done (In Review with `ticketing.after_merge: "in_review"`).
