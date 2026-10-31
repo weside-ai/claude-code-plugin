@@ -6,6 +6,7 @@
 - [The board pane](../we/docs/board.md) — `/board`: the workspace board an orchestrator session keeps, its file schema, live and start-mode lamps.
 - [Council](council.md) — role lenses, meetings, the `.weside/council.json` roster.
 - [weside Companion](companion.md) — the optional MCP connection and its settings.
+- [tmux attention](tmux.md) — the window title turns white while a session waits for you.
 
 ## Options
 
@@ -20,6 +21,8 @@ weside.ai account.
 | `loadCouncilFromWeside` | council members carry linked Companions' identities; `false` keeps every lens generic | `true` | [council.md](council.md) |
 | `boardFile` | the board file `/board` reads; its answers file `board-answers.jsonl` sits beside it | `~/.claude/we-state/board.json` | [board.md](../we/docs/board.md) |
 | `masterProfile` | the claude-swap profile master sessions run in; turns on `/board`'s red start-mode rules | empty | [board.md](../we/docs/board.md#the-live-column) |
+| `tmuxAttention` | inside tmux, the window title turns white while the session waits for you | `true` | [tmux.md](tmux.md) |
+| `tmuxAttentionStyle` | the tmux style of a waiting window | `bg=white,fg=black` | [tmux.md](tmux.md) |
 
 The verb list lives in the [README](../README.md#verbs). The authoring contract for everything in
 `we/` is [we/AUTHORING.md](../we/AUTHORING.md).

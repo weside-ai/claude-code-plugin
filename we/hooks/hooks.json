@@ -13,6 +13,11 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/optimization_reminder.py\""
+          },
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -23,6 +28,11 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/news_on_prompt.py\""
+          },
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -46,6 +56,11 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/question_gate.py\""
+          },
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -84,6 +99,16 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -139,6 +164,41 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
             "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
+            "timeout": 5
           }
         ]
       }

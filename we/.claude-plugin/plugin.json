@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.31.2",
+  "version": "7.32.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -57,6 +57,18 @@
       "type": "string",
       "title": "Master Profile",
       "description": "The claude-swap profile master sessions run in (e.g. me_example.com). Set, /board flags a master without WE_ROLE=master or outside it, and a worker inside it; empty, those checks are off.",
+      "required": false
+    },
+    "tmuxAttention": {
+      "type": "boolean",
+      "title": "tmux Attention",
+      "description": "Inside tmux, the session's window title turns white in the status bar while it waits for you (a question, a permission, an idle prompt) and back when you answer.",
+      "default": true
+    },
+    "tmuxAttentionStyle": {
+      "type": "string",
+      "title": "tmux Attention Style",
+      "description": "The tmux style of a waiting window (window-status-style syntax). Default bg=white,fg=black.",
       "required": false
     }
   }
