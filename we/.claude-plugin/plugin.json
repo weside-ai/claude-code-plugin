@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.34.0",
+  "version": "7.35.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -62,13 +62,19 @@
     "tmuxAttention": {
       "type": "boolean",
       "title": "tmux Attention",
-      "description": "Inside tmux, the session's window title turns white in the status bar while it waits for you (a question, a permission, an idle prompt) and back when you answer.",
+      "description": "Inside tmux, the session's window title turns white in the status bar while it waits for you (a question, a permission, a dialog), grey once it is done and resting, and back when you answer.",
       "default": true
     },
     "tmuxAttentionStyle": {
       "type": "string",
       "title": "tmux Attention Style",
       "description": "The tmux style of a waiting window (window-status-style syntax). Default bg=white,fg=black.",
+      "required": false
+    },
+    "tmuxIdleStyle": {
+      "type": "string",
+      "title": "tmux Idle Style",
+      "description": "The tmux style of a window whose session is done and resting (window-status-style syntax). Default bg=colour240,fg=white.",
       "required": false
     }
   }
