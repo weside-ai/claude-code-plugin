@@ -19,7 +19,8 @@ def _repo(tmp_path, lead="LEAD-1"):
     wt.mkdir()
     _git(wt, "init", "-q")
     if lead:
-        (wt / ".git" / "we-worker.json").write_text(json.dumps({"name": "w1", "lead": lead}))
+        marker = {"name": "w1", "lead": lead, "session_id": "s"}
+        (wt / ".git" / "we-worker.json").write_text(json.dumps(marker))
     return wt
 
 
@@ -79,9 +80,15 @@ def test_no_marker_stop_hook_active_and_subagent_pass(tmp_path):
     entries = [_prompt("brief"), _say("done")]
     assert _run(tmp_path, _repo(tmp_path, lead=None), entries) is None
     wt = tmp_path / "wt"
-    (wt / ".git" / "we-worker.json").write_text(json.dumps({"name": "w1", "lead": "LEAD-1"}))
+    marker = {"name": "w1", "lead": "LEAD-1", "session_id": "s"}
+    (wt / ".git" / "we-worker.json").write_text(json.dumps(marker))
     assert _run(tmp_path, wt, entries, stop_hook_active=True) is None
     assert _run(tmp_path, wt, entries, agent_id="a1") is None
+
+
+def test_the_lead_working_in_the_worker_tree_passes(tmp_path):
+    wt = _repo(tmp_path)
+    assert _run(tmp_path, wt, [_prompt("fix it"), _say("done")], session_id="lead") is None
 
 
 def test_outside_a_repo_passes(tmp_path):

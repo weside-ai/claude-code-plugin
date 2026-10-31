@@ -6,7 +6,8 @@ own: its plain text never reaches the Lead, and no `SubagentStop` fires, so the 
 `^we:dev-(medium|high)$` never sees it. The worktree's marker (`<git-dir>/we-worker.json`) names
 the Lead; a turn that sent no `SendMessage` to it is blocked once with the report instruction.
 
-  * No marker in the session's worktree → pass at once (every session that is no process worker).
+  * No marker in the session's worktree, or one naming another session (the Lead working in the
+    worker's tree) → pass at once.
   * The turn is the transcript after the last user entry that is not only a tool result (the
     brief, a steer, a cross-session message). A `SendMessage` whose `to` is the Lead, with or
     without its ` [ref]`, passes.
@@ -22,7 +23,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from worker_launch import read_marker
+from worker_launch import worker_marker
 
 TAIL_BYTES = 4_000_000
 BLOCK = (
@@ -80,7 +81,7 @@ def reported(transcript: str, lead: str) -> bool:
 def decide(payload: dict) -> str | None:
     if payload.get("stop_hook_active") or payload.get("agent_id"):
         return None
-    marker = read_marker(payload.get("cwd"))
+    marker = worker_marker(payload)
     if not marker or not marker.get("lead") or not payload.get("transcript_path"):
         return None
     try:

@@ -14,13 +14,17 @@ shell. The command runs without a shell, cwd = the worker's worktree.
 
 `launch` writes two files into the worktree's own git dir (untracked, removed with the worktree):
 `we-brief.md` (the brief plus a `Lead:` line) and `we-worker.json` (the marker: name, lead, agent,
-launched_at). The hooks read the marker as the signal "this session is a process worker"
-(`hooks/worker_report_gate.py`, `hooks/automerge_gate.py`, `scripts/watch-worker.sh`).
+launched_at, and the worker's `session_id` from `claude agents --json`). The hooks treat a session
+as a process worker only when the marker's `session_id` is its own (`worker_marker`), so the Lead
+working in the same worktree is never one (`hooks/worker_report_gate.py`,
+`hooks/automerge_gate.py`); `scripts/watch-worker.sh` reads the marker by name. `stop` removes both
+files, also for a session that already ended.
 
 Usage:
   worker_launch.py backend [--repo <dir>]          prints `subagent` or the template; 2 = invalid
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
-  worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running
+  worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
+                                                   with --worktree it removes marker and brief
   worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
 """
@@ -44,6 +48,7 @@ SUBAGENT = "subagent"
 MARKER = "we-worker.json"
 BRIEF = "we-brief.md"
 STOP_WAIT_S = 30
+SESSION_WAIT_S = 10
 
 
 class LaunchError(Exception):
@@ -83,6 +88,22 @@ def read_marker(cwd: Path | str | None) -> dict | None:
     return data if isinstance(data, dict) and data.get("name") else None
 
 
+def worker_marker(payload: dict) -> dict | None:
+    """The marker when the hook payload's session is the process worker it names, else None."""
+    marker = read_marker(payload.get("cwd"))
+    session = payload.get("session_id")
+    if marker and session and marker.get("session_id") == session:
+        return marker
+    return None
+
+
+def clear_marker(worktree: Path | None) -> None:
+    gd = git_dir(worktree) if worktree else None
+    for path in (gd / MARKER, gd / BRIEF) if gd else ():
+        with contextlib.suppress(OSError):
+            path.unlink()
+
+
 def validate(template: str) -> list[str]:
     try:
         tokens = shlex.split(template)
@@ -111,8 +132,6 @@ def render(tokens: list[str], values: dict[str, str]) -> list[str]:
     for token in tokens:
         key = token[1:-1] if token.startswith("{") and token.endswith("}") else None
         if key in PLACEHOLDERS:
-            if not values.get(key):
-                continue  # an optional placeholder without a value drops out
             argv.append(values[key])
         else:
             argv.append(token)
@@ -183,6 +202,8 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
             'agents.worker_launch is `subagent`: dispatch with Agent(isolation="worktree")', 2
         )
     tokens = validate(template)
+    if "{agent}" in tokens and not agent:
+        raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
     gd = git_dir(worktree)
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
@@ -196,12 +217,8 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         f"{brief.rstrip()}\n\nLead: {lead} — send your report as one SendMessage to it; "
         "your plain text never reaches it.\n"
     )
-    marker_path.write_text(
-        json.dumps(
-            {"name": name, "lead": lead, "agent": agent, "launched_at": time.time()}, indent=2
-        )
-        + "\n"
-    )
+    marker = {"name": name, "lead": lead, "agent": agent, "launched_at": time.time()}
+    marker_path.write_text(json.dumps(marker, indent=2) + "\n")
     argv = render(
         tokens,
         {"name": name, "agent": agent or "", "brief": f"Read {brief_path} and follow it."},
@@ -213,10 +230,16 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
     except OSError as exc:
         failed, detail = True, str(exc)
     if failed:
-        for path in (brief_path, marker_path):
-            with contextlib.suppress(OSError):
-                path.unlink()
+        clear_marker(worktree)
         raise LaunchError(f"{argv[0]} {detail}")
+    marker["session_id"] = _session_of(name, worktree)
+    marker_path.write_text(json.dumps(marker, indent=2) + "\n")
+    if not marker["session_id"]:
+        print(
+            f"worker_launch: {name} not listed by claude agents --json within {SESSION_WAIT_S} s; "
+            "its report and merge gates stay off",
+            file=sys.stderr,
+        )
     _timing("WorkerLaunch", name=name, agent_type=agent, cwd=str(worktree))
     if out.stdout.strip():
         print(out.stdout.strip())
@@ -227,6 +250,20 @@ def _running(rows: list[dict], name: str, cwd: str | None = None) -> list[dict]:
     return [r for r in rows if r.get("name") == name and (cwd is None or r.get("cwd") == cwd)]
 
 
+def _session_of(name: str, worktree: Path) -> str | None:
+    deadline = time.monotonic() + SESSION_WAIT_S
+    while True:
+        try:
+            rows = _running(sessions(), name, str(worktree))
+        except LaunchError:
+            rows = []
+        if rows and rows[0].get("sessionId"):
+            return str(rows[0]["sessionId"])
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.5)
+
+
 def alive(name: str) -> bool:
     return bool(_running(sessions(), name))
 
@@ -235,6 +272,7 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
     cwd = str(worktree) if worktree else None
     rows = _running(sessions(), name, cwd)
     if not rows:
+        clear_marker(worktree)
         raise LaunchError(f"no running session named {name}")
     if len(rows) > 1:
         raise LaunchError(f"{len(rows)} sessions named {name}: pass --worktree")
@@ -248,6 +286,7 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
         if time.monotonic() >= deadline:
             raise LaunchError(f"{name} still running {wait_s:.0f} s after claude stop", 3)
         time.sleep(1)
+    clear_marker(worktree)
     _timing("WorkerStop", name=name, cwd=cwd)
 
 

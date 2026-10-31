@@ -176,6 +176,7 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
     marker = wl.read_marker(env["wt"])
     assert marker["name"] == "w1" and marker["lead"] == "LEAD-1"
     assert marker["agent"] == "we:dev-medium" and marker["launched_at"] > 0
+    assert marker["session_id"] == "s-w1"
     launch = _launch_call(env)
     assert launch["argv"] == [
         "--bg",
@@ -191,15 +192,26 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
     assert json.loads(timing[0].read_text().splitlines()[0])["event"] == "WorkerLaunch"
 
 
-def test_optional_agent_drops_out(env):
-    env["configure"]("claude --bg -n {name} {agent} {brief}")
+def test_agent_placeholder_needs_an_agent(env):
+    env["configure"](TEMPLATE)
+    with pytest.raises(wl.LaunchError, match="pass --agent") as exc:
+        wl.launch(env["wt"], "w2", env["brief"])
+    assert exc.value.code == 2 and wl.read_marker(env["wt"]) is None
+    env["configure"]("claude --bg -n {name} {brief}")
     wl.launch(env["wt"], "w2", env["brief"])
-    launch = _launch_call(env)
-    assert launch["argv"][:3] == ["--bg", "-n", "w2"] and len(launch["argv"]) == 4
+    assert _launch_call(env)["argv"][:3] == ["--bg", "-n", "w2"]
+
+
+def test_lead_in_the_worker_tree_is_no_worker(env):
+    env["configure"](TEMPLATE)
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    assert wl.worker_marker({"cwd": str(env["wt"]), "session_id": "s-w1"})["name"] == "w1"
+    assert wl.worker_marker({"cwd": str(env["wt"]), "session_id": "s-lead"}) is None
+    assert wl.worker_marker({"cwd": str(env["wt"])}) is None
 
 
 def test_unnamed_lead_refuses(env, monkeypatch):
-    env["configure"](TEMPLATE)
+    env["configure"]("claude --bg -n {name} {brief}")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-unknown")
     with pytest.raises(wl.LaunchError, match="name this session first"):
         wl.launch(env["wt"], "w1", env["brief"])
@@ -208,7 +220,7 @@ def test_unnamed_lead_refuses(env, monkeypatch):
 
 
 def test_failed_launch_removes_its_files(env, monkeypatch):
-    env["configure"](TEMPLATE)
+    env["configure"]("claude --bg -n {name} {brief}")
     monkeypatch.setenv("STUB_LAUNCH_FAILS", "1")
     with pytest.raises(wl.LaunchError, match="exited 7: boom"):
         wl.launch(env["wt"], "w1", env["brief"])
@@ -223,19 +235,30 @@ def test_launch_refuses_on_the_subagent_backend(env):
 
 def test_stop_and_alive(env):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"])
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
     assert _run("alive", "--name", "w1").returncode == 0
-    out = _run("stop", "--name", "w1")
+    out = _run("stop", "--name", "w1", "--worktree", str(env["wt"]))
     assert out.returncode == 0, out.stderr
     assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]
     assert _run("alive", "--name", "w1").returncode == 1
+    gd = wl.git_dir(env["wt"])
+    assert not (gd / wl.MARKER).exists() and not (gd / wl.BRIEF).exists()
     out = _run("stop", "--name", "w1")
     assert out.returncode == 1 and "no running session named w1" in out.stderr
 
 
+def test_stop_of_an_ended_session_clears_its_marker(env):
+    env["configure"](TEMPLATE)
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    env["state"].write_text(json.dumps([r for r in _rows(env) if r["name"] != "w1"]))
+    with pytest.raises(wl.LaunchError, match="no running session"):
+        wl.stop("w1", env["wt"])
+    assert wl.read_marker(env["wt"]) is None
+
+
 def test_stop_reports_a_session_that_keeps_running(env, monkeypatch):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"])
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
     monkeypatch.setenv("STUB_STOP_IGNORED", "1")
     with pytest.raises(wl.LaunchError, match="still running") as exc:
         wl.stop("w1", wait_s=0)

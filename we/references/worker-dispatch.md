@@ -76,15 +76,19 @@ With a template, the Lead:
    or ci-review worker launches in the existing tree. `claude --bg` refuses an untrusted directory;
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
-   --agent <we:dev-…> --brief-file <file>`. It appends `Lead: <this session's name>` to the brief
+   --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`). It appends `Lead: <this session's name>` to the brief
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
    steer. A steer is `SendMessage(to=<name>)`, as for a subagent.
 4. Arms the watchdog (§ Watchdog). Its exit 4 `exited: <name>` means the session ended: read the
    report, else `claude logs <name>`.
-5. Stops the worker with `worker_launch.py stop --name <name>` instead of `TaskStop`, once its
-   report is integrated or dropped, then removes the worktree.
+5. Stops the worker with `worker_launch.py stop --name <name> --worktree <wt>` instead of
+   `TaskStop`, once its report is integrated or dropped, also after exit 4: it removes the marker
+   and the brief, then the worktree can go or the Lead can work in it.
+
+The hooks treat a session as the worker only when the marker names its session id, so the Lead
+working in the worker's tree is never one.
 
 The worker reports by one `SendMessage` to its `Lead:`; its plain text never reaches the Lead. The
 Stop hook `worker_report_gate.py` blocks a turn without that message, and `automerge_gate.py`

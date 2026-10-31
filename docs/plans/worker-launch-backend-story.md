@@ -146,6 +146,12 @@ as the code, run with `python3 -m pytest -q we scripts`.
   worktree of a trusted repo works. `worker-dispatch.md` names it.
 - `SendMessage` requires `message`: the idle subscription rides on the Lead's
   first message to the worker, not on a message-less call.
+- Review round 1 (Claude Review): the marker carries the worker's
+  `session_id` and the hooks match only that session, so the Lead working in
+  the worker's tree is never a worker; `stop --worktree` removes marker and
+  brief, also for a session that already ended; a template with `{agent}`
+  refuses a launch without `--agent` (an empty value had shifted the brief
+  into the agent flag).
 - `orchestrate/SKILL.md` keeps its 226 lines and is shorter in characters
   (18 182 → 18 160); its report-hook sentence says "report gates".
 
