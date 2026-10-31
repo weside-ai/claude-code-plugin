@@ -32,7 +32,7 @@ shipped statusline (model, branch, PR, context, background sessions, cost) and t
    review, merge), refreshed from git and GitHub. Its **Standup** button runs `/we:standup`.
 4. Once CI and the reviews are green, auto-merge is armed (unless a money path or another exception
    applies; then you merge). Review the PR before it lands if you want to.
-5. `/we:merged` — removes the worktrees and branches and moves the ticket to Done.
+5. `/we:merged` — removes the worktrees and branches and moves the ticket to Done (or In Review, per `ticketing.after_merge`).
 
 For a change too small for a worker, `/we:orchestrate --solo` builds it in the current session.
 

@@ -63,7 +63,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
 
 ```json
 {
-  "ticketing": { "tool": "jira|github-issues|none", "project_key": "<KEY or null>" },
+  "ticketing": { "tool": "jira|github-issues|none", "project_key": "<KEY or null>", "after_merge": "done" },
   "stack": ["python", "node"],
   "tools": { "graphify": false, "turbovault": false },
   "test_discipline": "tests-after",
@@ -72,6 +72,8 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "agents": { "visible_teammates": false, "worker_launch": "subagent" }
 }
 ```
+
+`ticketing.after_merge` is `"done"` (default) or `"in_review"`: `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5.
 
 `agents.worker_launch` is `"subagent"` or a command template that starts each dev worker as a
 session of its own (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend).

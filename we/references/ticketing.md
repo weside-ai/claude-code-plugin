@@ -24,3 +24,4 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
   warn and continue. Transition first, comment second, in two calls: a comment inside the
   transition (Rovo `update`, `jira_*` `comment`) is lost or fails the whole transition.
 - Status names per repo live in `.weside/orchestrate.md` § Ticket states.
+- Only `/we:merged` moves a ticket on after the merge: `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5.
