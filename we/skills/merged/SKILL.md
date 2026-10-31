@@ -2,7 +2,7 @@
 name: merged
 description: >
   Close out a merged PR: verify the merge, tear down its worktrees, branches and processes, move
-  the landed tickets on (Done by default), then name only what is still open. Triggers: "/we:merged", "merged",
+  the landed tickets to Done or In Review, then name only what is still open. Triggers: "/we:merged", "merged",
   "gemergt".
 ---
 
@@ -95,7 +95,7 @@ The target comes from `.weside/config.json` `ticketing.after_merge`:
 - `"done"` (default, also when the key is missing): the Done state, whose name varies ("Done",
   "Fertig", "Erledigt"). The human's "merged" is the word the DoD asks for, so Done is legitimate here.
 - `"in_review"`: the In Review state; Done is set later by an acceptance this verb does not run.
-  Report each ticket as `<KEY> In Review — Done setzt die Abnahme laut .weside/dod.md`.
+  Report each ticket as `<KEY> In Review — Done follows acceptance (.weside/dod.md if present)`.
 
 Ticketing follows `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (tool order, body format, transition before comment,
 read-back and retry). `gh issue` has no status, so skip the move; without a ticketing tool, skip

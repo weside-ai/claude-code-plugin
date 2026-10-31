@@ -58,7 +58,7 @@ flowchart TD
     subgraph CLOSE["Close"]
         C1("auto-merge armed<br/>(user merge: money, destructive migration, open question)")
         C2{{"owner merges"}}
-        C3("/we:merged<br/>verify · tear down worktrees, branches, ports<br/>tickets → Done")
+        C3("/we:merged<br/>verify · tear down worktrees, branches, ports<br/>tickets → Done or In Review")
         C4[["auto retro<br/>we:dev-medium runs /we:retro --auto"]]
         C5[("optimization inbox")]
         C6("/we:optimize<br/>owner decides · ledger · review_by")

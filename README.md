@@ -47,7 +47,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 - `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence and the net test delta.
 - `/we:ci-review` — collects every CI and review finding, fixes by severity, resolves threads, pushes once.
 - `/we:ac-review` — checks a branch against its story's acceptance criteria and the DoD.
-- `/we:merged` — after your merge: tears down worktrees and branches, moves tickets to Done.
+- `/we:merged` — after your merge: tears down worktrees and branches, moves tickets to Done (or In Review, per `ticketing.after_merge`).
 
 **Around the pipeline**
 
