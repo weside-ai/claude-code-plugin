@@ -32,6 +32,7 @@ we/                               plugin root
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),
+                                  tmux attention (window title white while the session waits),
                                   PreToolUse verification gate, auto-merge gate (Codex verdict
                                   on the head first), draft-reason gate and teammate gate
                                   (no worker panes by default), SubagentStart/Stop timing,
