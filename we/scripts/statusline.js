@@ -250,12 +250,16 @@ function shortHash(str) {
 
 function maybeRecordRateLimits(data) {
   if (feedAccounts().length === 0) return;
+  // No reading (API-key session, or before the first response): leave the minute's slot to a render
+  // that has one. Sessions with readings run the feed.
+  const rl = data.rate_limits;
+  if (!rl || (!rl.five_hour && !rl.seven_day)) return;
   const cfg = claudeConfigPath();
   if (!claimSlot(`${RL_FILE}.${shortHash(cfg)}.stamp`, RL_INTERVAL_MS)) return;
   try {
     const child = spawn(
       process.execPath,
-      [__filename, '--record-rate-limits', cfg, JSON.stringify(data.rate_limits || {})],
+      [__filename, '--record-rate-limits', cfg, JSON.stringify(rl)],
       { detached: true, stdio: 'ignore' },
     );
     child.unref();

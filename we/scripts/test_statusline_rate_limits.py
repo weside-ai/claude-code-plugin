@@ -207,3 +207,18 @@ def test_document_is_accepted_by_cswap_import_usage(tmp_path):
     row = json.loads((store / "cache" / "usage.json").read_text())["accounts"]["1"]
     assert row["lastGood"]["five_hour"] == {"pct": 0.0}
     assert row["lastGood"]["seven_day"]["pct"] == 61.0
+
+
+def test_render_without_a_reading_leaves_the_slot_free(tmp_path):
+    (tmp_path / ".claude").mkdir()
+    payload = json.dumps({"session_id": "s1"})
+    subprocess.run(
+        ["node", str(SCRIPT)],
+        input=payload,
+        env=env_for(tmp_path),
+        text=True,
+        timeout=20,
+        check=True,
+        capture_output=True,
+    )
+    assert not list((tmp_path / ".claude").glob(".we-rate-limits*"))
