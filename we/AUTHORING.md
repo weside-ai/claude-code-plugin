@@ -32,7 +32,7 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 
 | Need | Use |
 |---|---|
-| Worker isolation | `Agent` with `isolation: "worktree"` |
+| Worker isolation | `Agent` with `isolation: "worktree"`, or a session of its own per `agents.worker_launch` (`references/worker-dispatch.md` § Worker launch backend) |
 | Worker effort | `subagent_type: "we:dev-medium"` (default) or `"we:dev-high"` (Lead states the reason) |
 | Broad read-only search | `subagent_type: "we:explore-medium"`; the built-in `Explore` inherits the caller's effort |
 | Waiting for CI or a background job | a background command with a wait condition (`scripts/watch-pr-checks.sh <PR>`, `scripts/watch-worker.sh`, `gh run watch <id> --exit-status`), never a sleep loop; `Monitor` only for waits under 30 min |

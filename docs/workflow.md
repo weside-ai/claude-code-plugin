@@ -104,6 +104,9 @@ merges the base, pushes once, opens one PR (`/we:pr` does the same by hand) and 
 `/we:ac-review` checks a branch against its acceptance criteria and the DoD on demand.
 
 The dispatch contract: [we/references/worker-dispatch.md](../we/references/worker-dispatch.md).
+A worker runs as a subagent, which bills the Lead's account, unless `.weside/config.json` sets
+`agents.worker_launch` to a command that starts each worker as a session of its own (§ *Worker
+launch backend* there).
 
 ## The effort rule
 

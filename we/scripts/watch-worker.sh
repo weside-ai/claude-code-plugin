@@ -9,6 +9,9 @@
 #   STALL <n> min: <name>                                    exit 1  (no commit, tree unchanged)
 #   gone: <name> (<worktree> is no git worktree)             exit 2  (removed or never existed)
 #   alive: <name> · no commit in <n> min, tree changing      exit 3  (lifetime cap; re-arm)
+#   exited: <name>                                           exit 4  (a process worker's session
+#                                                                     ended; the worktree carries the
+#                                                                     marker of worker_launch.py)
 # Env: WATCH_WORKER_INTERVAL (s, default 60), WATCH_WORKER_STALL (s, default 1500),
 # WATCH_WORKER_MAX (s, default 1500: stays under a background command's 30-min default).
 set -uo pipefail
@@ -20,6 +23,15 @@ STALL=${WATCH_WORKER_STALL:-1500}
 MAX=${WATCH_WORKER_MAX:-1500}
 
 gone() { echo "gone: $NAME ($WT is no git worktree)"; exit 2; }
+# A process worker (marker in the worktree's git dir) that is no longer running: exit 4.
+# `alive` exits 1 only when `claude agents --json` answered and lists no such session.
+exited() {
+  local gd
+  gd=$(git -C "$WT" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  [ -f "$gd/we-worker.json" ] || return 1
+  python3 "$(dirname "$0")/worker_launch.py" alive --name "$NAME" >/dev/null 2>&1
+  [ $? -eq 1 ]
+}
 head_of() { git -C "$WT" rev-parse HEAD 2>/dev/null; }
 tree_of() {  # status plus the tracked diff: an edit to an already-modified file counts too
   { git -C "$WT" status --porcelain && git -C "$WT" diff HEAD; } 2>/dev/null | cksum
@@ -33,6 +45,7 @@ while :; do
   H=$(head_of) && S=$(tree_of) || gone
   NOW=$(date +%s)
   if [ "$H" != "$H0" ]; then git -C "$WT" log --oneline -1; exit 0; fi
+  if exited; then echo "exited: $NAME"; exit 4; fi
   if [ "$S" != "$S0" ]; then S0=$S; T=$NOW; fi
   if [ $((NOW - T)) -ge "$STALL" ]; then echo "STALL $(((NOW - T) / 60)) min: $NAME"; exit 1; fi
   if [ $((NOW - BORN)) -ge "$MAX" ]; then

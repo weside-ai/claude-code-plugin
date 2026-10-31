@@ -36,13 +36,15 @@ we/                               plugin root
                                   PreToolUse verification gate, auto-merge gate (Codex verdict
                                   on the head first), draft-reason gate and teammate gate
                                   (no worker panes by default), SubagentStart/Stop timing,
-                                  SubagentStop report gate (dev workers), InstructionsLoaded + skill-run telemetry
+                                  SubagentStop report gate (dev workers), Stop report gate (process
+                                  workers, worker_report_gate), InstructionsLoaded + skill-run telemetry
   scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
                                   wclaude + install_launcher.py (companion launcher),
                                   watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
-                                  watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), retro_claim.sh,
+                                  watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), worker_launch.py
+                                  (worker launch backend), retro_claim.sh,
                                   pr-body-receipt.py (splices the plan's Verification block),
                                   check-plan-identifiers.py (plan names exist on the base),
                                   test-delta.py (the PR body's test line)

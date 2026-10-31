@@ -64,8 +64,8 @@ off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
 Open the scratch worktree `<scratch>/plan-{TICKET}` per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 1–2 (repo fact first).
 
-Dispatch `Agent(subagent_type: "we:dev-high", description: "refine {TICKET}", prompt: <brief>)`. Plan-writing
-is a named `dev-high` case (Foxy 27.09.); the session's own `medium` default would otherwise write it. The brief:
+Dispatch a `we:dev-high` worker (`references/worker-dispatch.md` § Worker launch backend; a process worker's `--worktree`
+is the scratch worktree). Plan-writing is a named `dev-high` case (owner 27.09.). The brief:
 
 - first line: `Read ${CLAUDE_PLUGIN_ROOT}/skills/refine/SKILL.md and follow it.` (the path as it resolves here);
 - the absolute target path inside the scratch worktree, `{TICKET}`, `epic`, `depends_on`, `comments_read_through`;
@@ -109,7 +109,7 @@ the refiner from writing the file.
 
    - One comment only when the plan overrides a statement in the ticket or its comments, naming each override;
      set `comments_read_through:` to that comment's id.
-   - No other ticket, and no question whether to create one. Side findings from the interview go into the output as a list (Foxy 25.09.).
+   - No other ticket, and no question whether to create one. Side findings from the interview go into the output as a list (owner 25.09.).
 3. Scan again, then commit, push and clean up per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` steps 4–6: files
    `docs/plans/{TICKET}-story.md` plus the glossary file if changed, subject
    `docs({TICKET}): story plan — <title>`.

@@ -69,9 +69,12 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "test_discipline": "tests-after",
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true },
   "review": { "available": ["claude"] },
-  "agents": { "visible_teammates": false }
+  "agents": { "visible_teammates": false, "worker_launch": "subagent" }
 }
 ```
+
+`agents.worker_launch` is `"subagent"` or a command template that starts each dev worker as a
+session of its own (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend).
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
 block (stack, ticketing, vision, test discipline, verification, review gates, missing tools).

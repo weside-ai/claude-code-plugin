@@ -11,9 +11,9 @@ description: >
 Longer than 150 lines: the Lead's contract spans refine, build, finish, PR and CI, which four other verbs rely on.
 
 You are the Lead. You read each story's state from git, `gh`, the plan and the ticket; refine what
-has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`, `isolation:
-"worktree"`) for what has one; push once, open one PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
-§ Close the run is the human's standing permission (Foxy 30.09.2026). You stop only for a protected
+has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`, per
+`worker-dispatch.md` § Worker launch backend) for what has one; push once, open one PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
+§ Close the run is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. While a worker, refiner or watch
 runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
@@ -42,7 +42,7 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
    section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first
    status message: one line per story step (refine, build, finish, PR, CI green), ticked as you go.
-   Run state lives in that checklist, git and the ticket (Foxy 25.09.2026: no `docs/plans/*-state.md`).
+   Run state lives in that checklist, git and the ticket (owner 25.09.2026: no `docs/plans/*-state.md`).
    The task tools are not available in every session (absent in `claude -p`, measured 27.09.2026).
 5. An epic plan with `## Orchestration contract` binds the run: its rebuild order, upkeep table,
    permissions and stops replace the defaults here. Ask only what it leaves open. A contract may
@@ -81,7 +81,7 @@ scan and are approved need no confirm: the invocation is the go.
 
 ## Refine lane
 
-A refiner is `Agent(subagent_type="we:dev-high", isolation="worktree", name="refiner-<KEY>")`
+A refiner is a `we:dev-high` worker `refiner-<KEY>`
 whose brief begins: "Use the Skill tool with skill `we:refine` and args `<KEY>`" (a bare `/we:refine` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes one file. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
@@ -107,7 +107,7 @@ into `description`.
 
 ```
 Run Skill("we:develop") for <KEY> [--phases N]. Plan: docs/plans/<KEY>-story.md.
-Branch: rename your worktree branch to <type>/<KEY>-<slug> (-p<N> for a parallel chunk) before the first commit.
+Branch: <type>/<KEY>-<slug> (-p<N> for a parallel chunk); rename `worktree-…` to it before the first commit.
 [Base: first `git merge <PR branch>` — the chunk builds on it.]
 Bootstrap: <commands from .weside/orchestrate.md>.
 Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker contract.
@@ -119,19 +119,19 @@ Finish: [you are the last writer: run the finish sequence | not yours]. Verifica
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
-Report: worker-dispatch.md § Report fields, as your final message; a skill's output is never it.
+Report: worker-dispatch.md § Report fields, as your final message or to your `Lead:`; a skill's output is never it.
   Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
 ```
 
 **While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog), never a
 `Monitor` on worker progress: the report arrives as a notification. Refine the next story or draft
-the PR body. The plugin's `SubagentStop` hook
-sends a worker that stopped before its report back to work; a result still without the Report fields
+the PR body. The plugin's report gates
+send a worker that stopped before its report back to work; a result still without the Report fields
 (the hook let it pass, or hit its block cap) gets `SendMessage` to continue at the step it stopped. A steer is `SendMessage(to=<name>)`; it is read
 at the worker's next turn boundary (measured: not acted on after 140 s), so every steer names a file
 to write, and you check that file before assuming it landed. A liveness question gets evidence
 (`git -C <worktree> log --oneline -3`, `git status`), never a status roll-up. Never spawn a
-replacement while the original may be alive: `TaskStop`, verify, then re-dispatch on `we:dev-high`.
+replacement while the original may be alive: stop it, verify, then re-dispatch on `we:dev-high`.
 
 **Parallel chunks** (per the plan's `parallel_groups` or § Choosing the worker): create the integration worktree
 `git worktree add <repo>-<KEY>-integration -b <type>/<KEY>-<slug> origin/<default>`, dispatch
@@ -140,7 +140,7 @@ min unmerged, 17.10.2026): `git -C <int> merge --no-ff <branch> -m "chore(<KEY>)
 A serial successor is dispatched on its predecessor's head the moment that one reports. A result without
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run
 `worker-dispatch.md` § After each lane merge; a contract change breaks a sibling no chunk gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
-Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
+Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 
 ## Push, PR, CI
 
@@ -165,10 +165,10 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
    the exit codes. One checks watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
    the watch and you arm none. Meanwhile refine or prepare the next story.
 5. You stay on an auto-merge PR until it is merged; the user never runs `/we:ci-review` or
-   `/we:merged` by hand on it (Foxy 28.10.2026). On the watcher's exit, without asking:
+   `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit, without asking:
    - red, or exit 6 (Codex WARNING/BLOCKING on the head) → `/we:ci-review <PR>`, which disarms first
      and re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
-     or a `we:dev-medium` with `cwd=<wt>` runs it. Green but not yet armed → the same, open threads and
+     or a `we:dev-medium` worker in `<wt>` runs it. Green but not yet armed → the same, open threads and
      findings remain on a green run.
    - exit 7 (merged) → `/we:merged <PR>` yourself; exit 8 (closed) → report.
    - exit 3 (head moved) or 0 under `--until-merged` (conflict, behind, auto-merge off) → handle it,
@@ -180,7 +180,7 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
 
 ## Close the run
 
-- **Auto-merge is the default** (Foxy 30.09.2026): run `gh pr merge <PR> --auto --merge` right after
+- **Auto-merge is the default** (owner 30.09.2026): run `gh pr merge <PR> --auto --merge` right after
   `gh pr create` when the base branch requires the Codex check (`review.codex_check`, default
   `Codex Review`; GitHub then waits for Codex), else when `/we:ci-review` ends green with every Codex
   finding read (`--squash`/`--rebase` when `.weside/orchestrate.md`
@@ -190,13 +190,13 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
   runs on the branch, a question to the human is open, or a repo-specific exception from the workspace
   or repo instruction files applies (e.g. Terraform, secrets); the closing message then says
-  `user merge: <reason>`. Non-destructive migrations auto-merge serially (Foxy 03.10.2026): the
+  `user merge: <reason>`. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round
   on an armed PR starts with `gh pr merge <PR> --disable-auto` and never drafts (`/we:ci-review` § 1).
 - **Auto retro** only when you can name a concrete, new friction of the run that an instruction change
   would prevent (a wrong assumption the files should have held, a script that misled, a repeated user
-  correction); round counts alone are no reason (Foxy 28.10.2026). Then dispatch it per
+  correction); round counts alone are no reason (owner 28.10.2026). Then dispatch it per
   `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode with that friction in the brief; it is the
   one agent that keeps running after the run closes. Otherwise skip it without asking; the closing
   message says `retro: <friction> | skipped (<reason>)`.
@@ -205,15 +205,15 @@ Then one `we:dev-medium` finisher with `cwd=<int>` runs the finish sequence.
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
   decided per finish-first and reported, never asked (final sim 28.09.2026), unless its fix replaces a design the
   user approved in the plan (another mechanism, a dropped AC, a changed interface): that goes back to the user first. Knowledge goes into the
-  plan. No ticket during a run, and no question whether to create one: name the follow-ups (Foxy 25.09.2026).
-- Stop leftover agents with `TaskStop`, except the auto retro. Keep the PR branch's worktree until the merge. Release
+  plan. No ticket during a run, and no question whether to create one: name the follow-ups (owner 25.09.2026).
+- Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - A Lead bound to a companion writes back at the run's milestones (plan approved, PR opened or merged,
   a blocker) per `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default
-  branch is the backup; no extra documentation pass (Foxy 01.10.2026).
+  branch is the backup; no extra documentation pass (owner 01.10.2026).
 - After the merge, you run `/we:merged <PR>` yourself (§ Push, PR, CI step 5): it finds the run's branches
   and worktrees by `<KEY>` in git and the PR by number.
 
