@@ -14,6 +14,10 @@ silently return:
 7. Indiscretion guard — no credential, personal identifier, or internal weside
    detail in any tracked file of this public repo (a hardcoded password once
    shipped here and had to be rotated).
+8. Config schema — every `agents.<key>` a hook or script reads appears in the
+   `.weside/config.json` schema block of skills/setup/SKILL.md § 3, and the
+   worker-launch placeholders in we/scripts/worker_launch.py are exactly the ones
+   references/worker-dispatch.md § Worker launch backend lists.
 6. Listing budget — `name` + `description` of every skill, agent and command sit in
    every session's context before the user has typed anything. The sum is capped.
 
@@ -154,6 +158,41 @@ def check_listing_budget() -> None:
         )
 
 
+def check_agents_config() -> None:
+    setup = (WE / "skills" / "setup" / "SKILL.md").read_text()
+    block = re.search(r"## 3\. `\.weside/config\.json`.*?```json\n(.*?)```", setup, re.S)
+    try:
+        schema = json.loads(block.group(1)) if block else {}
+    except json.JSONDecodeError as exc:
+        fail(f"skills/setup/SKILL.md § 3: config block is no JSON ({exc})")
+        return
+    documented = set(schema.get("agents", {}))
+    readers = {}
+    for path in sorted((WE / "hooks").glob("*.py")) + sorted((WE / "scripts").glob("*.py")):
+        if path.name.startswith("test_"):
+            continue
+        for key in re.findall(r"agents\.get\(\s*[\"'](\w+)[\"']", path.read_text()):
+            readers.setdefault(key, path.relative_to(REPO))
+    for key, rel in sorted(readers.items()):
+        if key not in documented:
+            fail(f"{rel} reads agents.{key}, which skills/setup/SKILL.md § 3 does not list")
+
+    source = (WE / "scripts" / "worker_launch.py").read_text()
+    known = re.search(r"^PLACEHOLDERS = \(([^)]*)\)", source, re.M)
+    placeholders = set(re.findall(r"\"(\w+)\"", known.group(1))) if known else set()
+    dispatch = (WE / "references" / "worker-dispatch.md").read_text()
+    section = re.search(r"^## Worker launch backend\n(.*?)(?=^## |\Z)", dispatch, re.S | re.M)
+    if not section:
+        fail("references/worker-dispatch.md has no § Worker launch backend")
+        return
+    listed = set(re.findall(r"`\{(\w+)\}`", section.group(1)))
+    if not placeholders or listed != placeholders:
+        fail(
+            "worker-dispatch.md § Worker launch backend lists placeholders "
+            f"{sorted(listed)}, worker_launch.py knows {sorted(placeholders)}"
+        )
+
+
 def check_installer_verdicts() -> None:
     """Each installer prints a `VERDICT:` line; /we:setup § 5 branches on its wording.
 
@@ -289,6 +328,7 @@ def main() -> int:
     check_listing_budget()
     check_instruction_hook_files()
     check_installer_verdicts()
+    check_agents_config()
     check_no_indiscretions()
 
     if errors:
