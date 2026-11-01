@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterProfile, isResting, lastAnswers, liveByName,
-  majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf,
+  majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
@@ -49,6 +49,29 @@ test('the file parses with missing fields left out', async () => {
   expect(board.sessions[0]?.name).toBe('x')
   expect(board.updatedBy).toBeUndefined()
   expect([board.priorities, board.notes]).toEqual([undefined, undefined])
+  expect(board.news).toEqual([])
+})
+
+test('news keeps items with an id and a title; an unknown kind is left out; a read item drops out', () => {
+  const board = parseBoard(JSON.stringify({
+    news: [
+      { id: 'N1', title: ' Prod on v2.4.1 ', body: 'rollout done', ts: '2026-10-30', kind: 'gate' },
+      { id: 'N2', title: 'Sign the agreement', kind: 'urgent' },
+      { id: 'N3' },
+      { title: 'no id' },
+      'loose text',
+    ],
+  }))
+  expect(board.news).toEqual([
+    { id: 'N1', title: 'Prod on v2.4.1', body: 'rollout done', ts: '2026-10-30', kind: 'gate' },
+    { id: 'N2', title: 'Sign the agreement', body: undefined, ts: undefined, kind: undefined },
+  ])
+  expect(parseBoard('{"news":"one string"}').news).toEqual([])
+  const answers = lastAnswers([
+    '{"id":"N1","answer":"read","ts":"2026-10-30T18:00:00Z","session":"lead"}',
+    '{"id":"N2","answer":"discuss","ts":"2026-10-30T18:00:00Z"}',
+  ].join('\n'))
+  expect(unreadNews(board.news, answers).map(n => n.id)).toEqual(['N2'])
 })
 
 test('priorities as a list or one string make one line; notes is a trimmed string or nothing', () => {
@@ -131,10 +154,14 @@ test('lastAnswers keeps the newest line per id and skips torn ones', () => {
     '{"id":"Q1","answer":"discuss","ts":"2026-10-30T18:00:00Z","session":"lead"}',
     '{"id":"Q1","answer":"accept","ts":"2026-10-30T18:05:00Z"}',
     '{"id":"Q2","answer":"yes","ts":"x"}',
+    '{"id":"Q5","answer":"deny","ts":"2026-10-30T18:06:00Z","session":"lead"}',
     '{"id":"Q3",',
     '',
   ].join('\n')
-  expect(lastAnswers(text)).toEqual({ Q1: { id: 'Q1', answer: 'accept', ts: '2026-10-30T18:05:00Z', session: null } })
+  expect(lastAnswers(text)).toEqual({
+    Q1: { id: 'Q1', answer: 'accept', ts: '2026-10-30T18:05:00Z', session: null },
+    Q5: { id: 'Q5', answer: 'deny', ts: '2026-10-30T18:06:00Z', session: 'lead' },
+  })
 })
 
 test('the answers file sits beside the board file; ownName matches on the session id', () => {
@@ -144,6 +171,8 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   expect(ownName(live, 'c')).toBe('Orchestrator')
   expect(ownName(live, 'b')).toBeUndefined()
   expect(answerPrompt('discuss', 'Q4')).toBe("Q4: let's talk about it")
+  expect(answerPrompt('deny', 'Q4')).toBe('Q4: proposal denied')
+  expect(answerPrompt('deny', 'Q4', parseBoard('{"answer_prompts":{"deny":"{id}: abgelehnt","read":"x"}}').answerPrompts)).toBe('Q4: abgelehnt')
   const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', info: 7 } })).answerPrompts
   expect(answerPrompt('accept', 'Q4', own)).toBe('Q4: Vorschlag angenommen')
   expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')

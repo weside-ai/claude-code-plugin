@@ -2,13 +2,20 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { paint } from './paint'
 
-// Shaped like a real orchestrator's board: priorities as one string, a notes banner, four questions,
+// Shaped like a real orchestrator's board: priorities as one string, three news items (one already read)
+// and the older notes string, four questions,
 // masters with and without workers, one master resting; two sessions carry the restore fields `cwd`
 // and `session_id`, which the pane never shows.
 const BOARD = JSON.stringify({
   updated: '2026-10-30T20:59:00+00:00',
   updated_by: 'Orchestrator',
   priorities: 'Finish what is open → money → marketing. The kernel runs on its own.',
+  news: [
+    { id: 'N3', kind: 'gate', title: 'v2.4.1 is tagged, prod still reports v2.4.0', ts: '2026-10-30T20:40:00+00:00',
+      body: 'The rollout hung on a GitHub 502 and was restarted; the lead re-tests once it is live.' },
+    { id: 'N2', kind: 'todo', title: 'Sign the processor agreement in the billing dashboard before Friday so the EU checkout can open on time', ts: '2026-10-28' },
+    { id: 'N1', title: 'Kernel runs on its own until the money stories merged', ts: '2026-10-27' },
+  ],
   notes: 'v2.4.1 is tagged, prod still reports v2.4.0: the rollout hung on a GitHub 502 and was restarted.',
   answer_prompts: { accept: '{id}: Vorschlag angenommen' },
   owner_queue: [
@@ -41,42 +48,52 @@ const PROBE = JSON.stringify({
   ],
 })
 
-const ANSWERS = `${JSON.stringify({ id: 'Q12', answer: 'accept', ts: '2026-10-30T21:02:00.000Z', session: 'Orchestrator' })}\n`
+const ANSWERS = [
+  { id: 'Q12', answer: 'accept', ts: '2026-10-30T21:02:00.000Z', session: 'Orchestrator' },
+  { id: 'N1', answer: 'read', ts: '2026-10-30T21:03:00.000Z', session: 'Orchestrator' },
+].map(a => `${JSON.stringify(a)}\n`).join('')
 
 const RUN = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
-// Today's pane before the Work toggle: closed, a box differs from it only by the toggle.
+// Today's pane before the Work toggle: closed, a box differs from it only by the toggle. N1 is read and
+// gone; the older notes string folds to one line.
 const AT_100 = `
 ◆ Board  as of 12 min ago (Orchestrator)
 ████████████░░░░  3/4 masters active · 4 waiting for you · 1 in CI
 Finish what is open → money → marketing. The kernel runs on its own.
+
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ⚑ v2.4.1 is tagged, prod still reports v2.4.0: the rollout hung on a GitHub 502 and was          │
-│ restarted.                                                                                       │
+│ News (2)                                                                                         │
+│ [ Read ] ⚑ v2.4.1 is tagged, prod still reports v2.4.0  today                                    │
+│            The rollout hung on a GitHub 502 and was restarted; the lead re-tests once it is      │
+│            live.                                                                                 │
+│ [ Read ] ◉ Sign the processor agreement in the billing dashboard before Friday so the EU c…  2 d │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+[ ▸ Notes ]  v2.4.1 is tagged, prod still reports v2.4.0: the rollout hung on a GitHub 502 and was …
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Waiting for you (4)                                                                              │
 │                                                                                                  │
 │ Q9  9 d  lead  PROJ-40                                                                           │
 │ Storyline S1–S3                                                                                  │
-│ [ Discuss ] [ More info ]                                                                        │
+│ [ Deny ] [ Discuss ] [ More info ]                                                               │
 │                                                                                                  │
 │ Q12  2 d  billing  PROJ-59                                                                       │
 │ Merge PR #562? (money path, CI green)                                                            │
 │ → yes                                                                                            │
-│ [ Accept ] [ Discuss ] [ More info ] ✓ accepted 21:02 UTC (Orchestrator)                         │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] ✓ accepted 21:02 UTC (Orchestrator)                │
 │                                                                                                  │
 │ Q19  today  legal  PROJ-69                                                                       │
 │ UK: register with the tax office (quarterly returns, running cost) or keep the web checkout      │
 │ closed for the UK? The UK then buys in the app                                                   │
 │ → keep it closed until demand is measurable                                                      │
-│ [ Accept ] [ Discuss ] [ More info ]                                                             │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]                                                    │
 │                                                                                                  │
 │ Q17  today  apps  PROJ-65..68                                                                    │
 │ Release 4 app images (artwork/v2/)                                                               │
 │ → release                                                                                        │
-│ [ Accept ] [ Discuss ] [ More info ]                                                             │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -113,22 +130,28 @@ const AT_60 = `
 1 in CI
 Finish what is open → money → marketing. The kernel runs on
 its own.
+
 ╭──────────────────────────────────────────────────────────╮
-│ ⚑ v2.4.1 is tagged, prod still reports v2.4.0: the       │
-│ rollout hung on a GitHub 502 and was restarted.          │
+│ News (2)                                                 │
+│ [ Read ] ⚑ v2.4.1 is tagged, prod still reports …  today │
+│            The rollout hung on a GitHub 502 and was      │
+│            restarted; the lead re-tests once it is live. │
+│ [ Read ] ◉ Sign the processor agreement in the bil…  2 d │
 ╰──────────────────────────────────────────────────────────╯
+
+[ ▸ Notes ]  v2.4.1 is tagged, prod still reports v2.4.0: t…
 
 ╭──────────────────────────────────────────────────────────╮
 │ Waiting for you (4)                                      │
 │                                                          │
 │ Q9  9 d  lead  PROJ-40                                   │
 │ Storyline S1–S3                                          │
-│ [ Discuss ] [ More info ]                                │
+│ [ Deny ] [ Discuss ] [ More info ]                       │
 │                                                          │
 │ Q12  2 d  billing  PROJ-59                               │
 │ Merge PR #562? (money path, CI green)                    │
 │ → yes                                                    │
-│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
 │ ✓ accepted 21:02 UTC (Orchestrator)                      │
 │                                                          │
 │ Q19  today  legal  PROJ-69                               │
@@ -136,12 +159,12 @@ its own.
 │ running cost) or keep the web checkout closed for the    │
 │ UK? The UK then buys in the app                          │
 │ → keep it closed until demand is measurable              │
-│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
 │                                                          │
 │ Q17  today  apps  PROJ-65..68                            │
 │ Release 4 app images (artwork/v2/)                       │
 │ → release                                                │
-│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
 ╰──────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────╮
