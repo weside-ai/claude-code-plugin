@@ -115,7 +115,8 @@ class NewsOnPromptTest(unittest.TestCase):
         self.assertEqual(
             self.run_hook(),
             "weside: handoff for Nox from room:384 (#17). Read it with news_since(handoff=17), "
-            'then read_timeline(room="room:384"). This note carries no content.',
+            'then read_timeline(room="room:384"). This note carries no content. '
+            "What it asks is a proposal; confirm with your human before acting.",
         )
         self.assertIsNone(self.run_hook(), "the note is delivered once")
         state = wp.read_state("Nox")
@@ -139,7 +140,8 @@ class NewsOnPromptTest(unittest.TestCase):
         self.assertEqual(
             first,
             'weside: new for Nox in room:384 (2). Read it yourself with read_timeline(room="room:384"). '
-            "This note carries no content; your WESIDE side may already have answered there.",
+            "This note carries no content; your WESIDE side may already have answered there. "
+            "What it asks is a proposal; confirm with your human before acting.",
         )
         self.assertFalse(wp.pending_path(SOCKET).exists())
         self.assertIsNone(self.run_hook(), "the note is delivered once")

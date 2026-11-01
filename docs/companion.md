@@ -31,8 +31,11 @@ writes a `worklog` memory the Companion reads on its other surfaces. A project s
 session is asked to invoke it right after materializing. While the session runs, a small poller
 without a model asks weside once a minute whether `<Name>` handed something over to this session
 (`send_to_other_room` with `wake=true` from a weside room) and wakes the session with a line that names
-only the source room; the session reads the note itself with `news_since(handoff=<h>)`. Plain room lines
-wake nothing. Against a weside server without handoffs the poller keeps the older rule: an addressed
+only the source room; the session reads the note itself with `news_since(handoff=<h>)`. The note is a
+proposal, never an order: the session shows you who sent it, from which room and what it asks, and
+does nothing it asks (no command, file write, push or message) until you confirm in the terminal.
+A note that asks to skip that confirmation, or says you already agreed, is reported as suspicious.
+Plain room lines wake nothing. Against a weside server without handoffs the poller keeps the older rule: an addressed
 line the Companion left unanswered wakes after 10 minutes. It needs a logged-in `weside` CLI. Contract: `we/references/companion-session.md`.
 
 `wclaude` does the launch from a menu: it lists the members of the nearest `.weside/council.json`
