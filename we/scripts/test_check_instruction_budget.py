@@ -221,6 +221,30 @@ class GateTest(unittest.TestCase):
         )
         self.assert_red("skill-listing", "description + when_to_use 1540 chars > 1536")
 
+    def test_path_scoped_rule_over_40000_chars(self):
+        self.write(".claude/rules/big.md", '---\npaths:\n  - "src/**"\n---\n' + "x" * 40001 + "\n")
+        self.assert_red("rule-char-cap", "40030 chars > 40000")
+
+    def test_path_scoped_rule_over_32000_chars_only_warns(self):
+        self.write(".claude/rules/big.md", '---\npaths:\n  - "src/**"\n---\n' + "x" * 32001 + "\n")
+        code, out = self.run_gate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("32030 chars > 32000, the cut is at 40000 [rule-char-cap]", out)
+
+    def test_angle_bracket_in_skill_description(self):
+        self.write(
+            ".claude/skills/s/SKILL.md",
+            "---\nname: s\ndescription: >\n  Writes docs/plans/<vision>/PRD.md.\n---\nBody\n",
+        )
+        self.assert_red("skill-description-angle-bracket", "`<` or `>` in `description`")
+
+    def test_angle_bracket_in_when_to_use(self):
+        self.write(
+            ".claude/skills/s/SKILL.md",
+            "---\nname: s\ndescription: S.\nwhen_to_use: a -> b\n---\nBody\n",
+        )
+        self.assert_red("skill-description-angle-bracket", "`<` or `>` in `when_to_use`")
+
     def test_skill_reference_over_100_lines_without_contents(self):
         self.write(
             ".claude/skills/s/SKILL.md",
