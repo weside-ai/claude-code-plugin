@@ -86,9 +86,10 @@ test('with masterProfile set, the lamp names why a master is red, and a deviatin
     .toEqual({ level: 'ok', reason: 'ok', mode: 'bypass' })
   const bare = startModeOf(master, true, live({}), 'bypassPermissions', OPTION)
   expect(bare.level).toBe('bad')
-  expect(bare.reason).toBe('WE_ROLE missing · not in the master profile — restart it as a master')
-  expect(startModeOf(master, true, live({ weRole: 'master', profile: '4-other_example.com' }), undefined, OPTION).reason)
-    .toBe('profile 4-other_example.com, not the master profile — restart it as a master')
+  expect(bare.reason).toBe('WE_ROLE missing — restart it as a master')
+  // Unpinned: a master on the global login, outside the master profile, is fine.
+  expect(startModeOf(master, true, live({ weRole: 'master', profile: '4-other_example.com' }), undefined, OPTION).level)
+    .toBe('ok')
   expect(startModeOf(worker, false, live({ weRole: 'worker', profile: MASTER }), undefined, OPTION).reason)
     .toBe('worker in the master profile — it bills the master account')
   const auto = startModeOf(master, true, live({ weRole: 'master', profile: MASTER, mode: 'auto' }), 'bypassPermissions', OPTION)

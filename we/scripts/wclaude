@@ -6,25 +6,44 @@
 #   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
 #   wclaude -c              menu, then claude -c (claude's own --continue)
 #   wclaude --as <Name> ... no menu; the rest goes to claude
-# Choice 0 starts claude with the pin cleared (WESIDE_COMPANION empty = no companion).
-# WCLAUDE_CLAUDE names the command to start instead of `claude` (one executable that takes claude's
-# arguments, e.g. a wrapper that pins the session to one account); unset or empty means `claude`.
+#   wclaude --pin ...       start through $WCLAUDE_PIN instead of claude (combines with --as)
+# Choice 0 starts claude with the companion pin cleared (WESIDE_COMPANION empty = no companion).
+# Every session it starts is a master: WE_ROLE=master. Without --pin it runs on the same login as a
+# plain `claude` and follows your account switcher. WCLAUDE_PIN names one executable that takes
+# claude's arguments and holds the session on one account (e.g. a claude-swap profile); --pin
+# without it is refused.
 # Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
 set -euo pipefail
 
 usage() {
-  echo "usage: wclaude [--as <Name>] [claude arguments...]" >&2
+  echo "usage: wclaude [--as <Name>] [--pin] [claude arguments...]" >&2
   exit 2
 }
 
 pick=""
 picked=0
-if [[ "${1:-}" == "--as" ]]; then
-  [[ $# -ge 2 && -n "$2" ]] || usage
-  pick=$2
-  picked=1
-  shift 2
+pin=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --as)
+      [[ $# -ge 2 && -n "$2" ]] || usage
+      pick=$2
+      picked=1
+      shift 2
+      ;;
+    --pin)
+      pin=1
+      shift
+      ;;
+    *) break ;;
+  esac
+done
+launch=claude
+if [[ $pin -eq 1 ]]; then
+  [[ -n "${WCLAUDE_PIN:-}" ]] || { echo "wclaude: --pin needs WCLAUDE_PIN (the command that pins an account)" >&2; exit 2; }
+  launch=$WCLAUDE_PIN
 fi
+export WE_ROLE=master
 
 find_council() {
   local d=$PWD
@@ -129,8 +148,6 @@ if [[ $picked -eq 0 ]]; then
     pick=$choice # a typed name works too
   fi
 fi
-
-launch=${WCLAUDE_CLAUDE:-claude}
 
 if [[ -n "$pick" ]]; then
   # --name, not only the SessionStart hook's sessionTitle: the hook titles the prompt bar and

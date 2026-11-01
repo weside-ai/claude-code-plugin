@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.39.0",
+  "version": "7.41.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -56,7 +56,7 @@
     "masterProfile": {
       "type": "string",
       "title": "Master Profile",
-      "description": "The claude-swap profile master sessions run in (e.g. me_example.com). Set, /board flags a master without WE_ROLE=master or outside it, and a worker inside it; empty, those checks are off.",
+      "description": "The claude-swap profile pinned master sessions run in (e.g. me_example.com). Set, /board flags a master without WE_ROLE=master and a worker inside it; empty, those checks are off.",
       "required": false
     },
     "tmuxAttention": {

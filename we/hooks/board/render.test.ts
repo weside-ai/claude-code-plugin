@@ -95,7 +95,7 @@ Finish what is open → money → marketing. The kernel runs on its own.
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ● apps  PROJ-65 PROJ-66 PROJ-67 PROJ-68  busy  ● bypass  P2                                      │
-│ WE_ROLE missing · not in the master profile — restart it as a master                             │
+│ WE_ROLE missing — restart it as a master                                                         │
 │ 4 expert apps + image budget                                                                     │
 │ #563 today; apps tomorrow                                                                        │
 │                                                                                                  │
@@ -162,8 +162,7 @@ its own.
 ╭──────────────────────────────────────────────────────────╮
 │ ● apps  PROJ-65 PROJ-66 PROJ-67 PROJ-68  busy  ● bypass  │
 │ P2                                                       │
-│ WE_ROLE missing · not in the master profile — restart it │
-│ as a master                                              │
+│ WE_ROLE missing — restart it as a master                 │
 │ 4 expert apps + image budget                             │
 │ #563 today; apps tomorrow                                │
 │                                                          │

@@ -178,7 +178,7 @@ export const isMasterProfile = (profile: string | null | undefined, masterProfil
 export type StartMode = { level: 'ok' | 'warn' | 'bad' | 'none'; reason: string; mode?: string }
 
 // The start-mode lamp. With `masterProfile` set it turns red when a master runs without WE_ROLE=master
-// or outside that profile, or a worker inside it; always yellow when only the permission mode differs
+// or a worker inside that profile (a master may run pinned in it or unpinned outside it); always yellow when only the permission mode differs
 // from what most sessions run.
 export const startModeOf = (
   session: BoardSession,
@@ -194,11 +194,6 @@ export const startModeOf = (
     const inMaster = isMasterProfile(live.profile, masterProfile)
     if (isMaster) {
       if (live.weRole !== 'master') reasons.push(live.weRole ? 'WE_ROLE is not master' : 'WE_ROLE missing')
-      if (!inMaster) {
-        reasons.push(live.profile && live.profile !== 'other'
-          ? `profile ${live.profile}, not the master profile`
-          : 'not in the master profile')
-      }
       if (reasons.length) reasons[reasons.length - 1] += ' — restart it as a master'
     } else if (inMaster && (session.role === 'worker' || live.weRole === 'worker')) {
       reasons.push('worker in the master profile — it bills the master account')
