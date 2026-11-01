@@ -1,14 +1,18 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
-import type { BoardAnswer, BoardAnswerKind, BoardFile, BoardQueueItem, BoardSession, LiveSession } from '../../types'
+import type {
+  BoardAnswer, BoardAnswerKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession, LiveSession,
+} from '../../types'
 
 const MIN = 60_000
 const DAY = 86_400_000
-const KINDS: readonly BoardAnswerKind[] = ['accept', 'discuss', 'info']
+const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info']
+const KINDS: readonly BoardAnswerKind[] = [...PROMPT_KINDS, 'read']
+const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
-const promptsOf = (raw: unknown): Partial<Record<BoardAnswerKind, string>> | undefined => {
+const promptsOf = (raw: unknown): Partial<Record<BoardPromptKind, string>> | undefined => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const out: Partial<Record<BoardAnswerKind, string>> = {}
-  for (const kind of KINDS) {
+  const out: Partial<Record<BoardPromptKind, string>> = {}
+  for (const kind of PROMPT_KINDS) {
     const text = (raw as Record<string, unknown>)[kind]
     if (typeof text === 'string' && text.trim()) out[kind] = text
   }
@@ -21,6 +25,28 @@ const prioritiesOf = (raw: unknown): string | undefined => {
   return line || undefined
 }
 
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+
+// `news[]`: an item needs an id and a title; anything else in it is optional, an unknown kind counts as info.
+const newsOf = (raw: unknown): BoardNewsItem[] => {
+  if (!Array.isArray(raw)) return []
+  const out: BoardNewsItem[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const n = item as Record<string, unknown>
+    const id = str(n.id)
+    const title = str(n.title)
+    if (!id || !title) continue
+    const kind = NEWS_KINDS.includes(n.kind as BoardNewsKind) ? (n.kind as BoardNewsKind) : undefined
+    out.push({ id, title, body: str(n.body), ts: str(n.ts), kind })
+  }
+  return out
+}
+
+// The news the owner has not marked read: an item whose newest line in the answers file is `read` drops out.
+export const unreadNews = (news: readonly BoardNewsItem[], answers: Record<string, BoardAnswer>) =>
+  news.filter(n => answers[n.id]?.answer !== 'read')
+
 export const parseBoard = (text: string): BoardFile => {
   const raw = JSON.parse(text) as unknown
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('board file is no JSON object')
@@ -31,7 +57,8 @@ export const parseBoard = (text: string): BoardFile => {
     queue: Array.isArray(file.owner_queue) ? (file.owner_queue as BoardQueueItem[]) : [],
     sessions: Array.isArray(file.sessions) ? (file.sessions as BoardSession[]) : [],
     priorities: prioritiesOf(file.priorities),
-    notes: typeof file.notes === 'string' && file.notes.trim() ? file.notes.trim() : undefined,
+    news: newsOf(file.news),
+    notes: str(file.notes),
     answerPrompts: promptsOf(file.answer_prompts),
   }
 }
@@ -58,13 +85,14 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
 
 // The prompt a press sends into the orchestrator's own session; the board's `answer_prompts` replaces
 // a default, `{id}` standing for the question's id.
-const DEFAULT_PROMPT: Record<BoardAnswerKind, string> = {
+const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   accept: '{id}: proposal accepted',
+  deny: '{id}: proposal denied',
   discuss: "{id}: let's talk about it",
   info: '{id}: I need more information',
 }
 
-export const answerPrompt = (answer: BoardAnswerKind, id: string, own?: Partial<Record<BoardAnswerKind, string>>) =>
+export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>) =>
   (own?.[answer] ?? DEFAULT_PROMPT[answer]).split('{id}').join(id)
 
 // This session's name as `claude agents` lists it, matched on the transcript id.

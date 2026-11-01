@@ -3,6 +3,11 @@ import { expect, mock, test } from 'claude-code/testing'
 const BOARD = JSON.stringify({
   updated: '2026-10-30T18:10:00+01:00',
   updated_by: 'Orchestrator',
+  news: [
+    { id: 'N1', kind: 'gate', title: 'Prod still on v2.4.0', body: 'the rollout hung', ts: '2026-10-30' },
+    { id: 'N2', title: 'Kernel runs on its own' },
+  ],
+  notes: 'older free text\nsecond line',
   owner_queue: [
     { id: 'Q1', session: 'lead', key: 'PROJ-40', ask: 'Live test AC 16', since: '2026-10-30', recommendation: 'tonight' },
     { id: 'Q2', session: 'marketing', key: 'PROJ-41', ask: 'Storyline S1–S3', since: '2026-10-21', recommendation: '' },
@@ -221,5 +226,49 @@ test('a press in any other session only appends the line, named after that sessi
   expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q1', 'discuss', 'lead']])
   expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ discuss \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Deny shows without a recommendation, appends deny and sends its prompt', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ key: 'deny-Q1' })).toBeDefined()
+  await ui.press({ key: 'deny-Q2' })
+  await clock.settle()
+  expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q2', 'deny', 'Orchestrator']])
+  expect(home.submitted).toEqual(['Q2: proposal denied'])
+  expect(await ui.find({ type: 'Text', text: /✓ denied \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Read appends a read line, sends no prompt and drops the item; the old notes open on a press', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ type: 'Text', text: /News \(2\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /the rollout hung/ })).toBeDefined()
+  await ui.press({ key: 'read-N1' })
+  await clock.settle()
+  expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['N1', 'read', 'Orchestrator']])
+  expect(home.submitted).toEqual([])
+  expect(await ui.find({ key: 'read-N1' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /News \(1\)/ })).toBeDefined()
+  await ui.press({ key: 'read-N2' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: /News \(/ })).toBeUndefined()
+  // The older notes string folds to one button and its first line; a press shows it whole.
+  expect(await ui.find({ type: 'Text', text: /^older free text$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /second line/ })).toBeUndefined()
+  await ui.press({ key: 'notes' })
+  expect(await ui.find({ type: 'Text', text: /second line/ })).toBeDefined()
   await ui.unmount()
 })

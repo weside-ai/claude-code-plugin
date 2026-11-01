@@ -3,28 +3,36 @@
 `/board` opens a pane beside the transcript with the workspace board: what waits for the owner (you),
 which sessions run, who leads them and what each works on. An orchestrator session keeps the board
 in one JSON file; the pane reads it and adds what it sees live of each running session. The pane
-never writes the file; the owner answers a question with a button, which appends to a file of its own.
+never writes the file; the owner answers a question or marks a news item read with a button, which
+appends to a file of its own.
 
 ```text
 ◆ Board  as of 12 min ago (Orchestrator)
 ████████░░░░  2/3 masters active · 2 waiting for you
 1 in CI
 Finish what is open → money → marketing.
+
 ╭──────────────────────────────────────────────────────────╮
-│ ⚑ v2.4.1 is tagged, prod still reports v2.4.0            │
+│ News (2)                                                 │
+│ [ Read ] ⚑ v2.4.1 is tagged, prod still reports …  today │
+│            The rollout hung on a GitHub 502 and was      │
+│            restarted; the lead re-tests once it is live. │
+│ [ Read ] ◉ Sign the processor agreement in the bil…  2 d │
 ╰──────────────────────────────────────────────────────────╯
+
+[ ▸ Notes ]  older free text, folded to its first line
 
 ╭──────────────────────────────────────────────────────────╮
 │ Waiting for you (2)                                      │
 │                                                          │
 │ Q2  9 d  marketing  PROJ-41                              │
 │ Storyline S1–S3                                          │
-│ [ Discuss ] [ More info ]                                │
+│ [ Deny ] [ Discuss ] [ More info ]                       │
 │                                                          │
 │ Q1  today  lead  PROJ-40                                 │
 │ Live test AC 16                                          │
 │ → tonight                                                │
-│ [ Accept ] [ Discuss ] [ More info ]                     │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
 │ ✓ accepted 18:12 UTC (Orchestrator)                      │
 ╰──────────────────────────────────────────────────────────╯
 
@@ -58,13 +66,43 @@ second ● = start mode
 ## Layout
 
 From the top: the header with the board's age and a counter (a bar of the masters by lamp, how many
-are active, how many questions wait for you, how many sessions are in CI), the `priorities` line and,
-when set, the `notes` banner. Then one frame with every question, oldest first, and one frame per
+are active, how many questions wait for you, how many sessions are in CI), the `priorities` line, the
+unread `news` in one frame (§ News) and, when set, the older `notes` folded to one line. Then one frame with every question, oldest first, and one frame per
 master with its workers inside, each worker on one line cut to the pane. A master whose group neither
 runs nor waits (`idle` or `done`, workers too), a headless worker group at rest and every session
 running but not on the board fold into the last line, **+ N idle/other**, which opens and closes
 them. The frame's border takes the master's lamp colour, red when its start mode is red. The pane
 breaks a header line between its parts, never inside a frame, so it stays readable at 60 columns.
+
+## News
+
+`news` is a list of short items the orchestrator wants the owner to see, each on one line:
+
+```json
+"news": [
+  { "id": "N3", "kind": "gate", "title": "v2.4.1 is tagged, prod still reports v2.4.0",
+    "body": "The rollout hung on a GitHub 502 and was restarted; the lead re-tests once it is live.",
+    "ts": "2026-10-30T20:40:00+01:00" },
+  { "id": "N2", "kind": "todo", "title": "Sign the processor agreement before Friday", "ts": "2026-10-28" },
+  { "id": "N1", "title": "Kernel runs on its own until the money stories merged" }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | required, unique across `news` and `owner_queue` (both answer into one file); a changed message takes a new id |
+| `title` | required, one line, bold; cut to the pane's width |
+| `body` | optional detail, dimmed and indented under the title; keep it to a few lines |
+| `ts` | optional date or ISO timestamp; shown as its age (`today`, `2 d`) |
+| `kind` | optional: `info` (`•`, the default), `gate` (`⚑`, something blocks), `todo` (`◉`, the owner must act) |
+
+The list keeps the file's order, so the orchestrator puts the newest or most urgent first. Each item
+carries **Read** in front; a press appends a `read` line to the answers file (§ Answers) and the item
+leaves the pane at once. The orchestrator reads those lines and prunes the items from `news`; until
+it does, an item whose newest line is `read` stays hidden. With every item read the frame is gone.
+
+`notes`, the older single string, still works: it folds to **▸ Notes** and its first line, dimmed,
+and opens to the whole text on a press. A new board writes `news`.
 
 ## Work
 
@@ -132,7 +170,9 @@ relative path count from the home folder). Without the file the pane says so and
   "updated": "2026-10-30T18:10:00+01:00",
   "updated_by": "Orchestrator",
   "priorities": ["…"],
-  "notes": "v2.4.1 is tagged, prod still reports v2.4.0",
+  "news": [
+    { "id": "N1", "kind": "gate", "title": "v2.4.1 is tagged, prod still reports v2.4.0", "ts": "2026-10-30" }
+  ],
   "owner_queue": [
     { "id": "Q1", "session": "lead", "key": "PROJ-40", "ask": "Live test AC 16",
       "since": "2026-10-30", "recommendation": "tonight" }
@@ -150,12 +190,13 @@ relative path count from the home folder). Without the file the pane says so and
 |---|---|
 | `updated` | ISO timestamp of the last write; the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `discuss`, `info` texts for the prompt a press sends (§ Answers) |
+| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info` texts for the prompt a press sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `notes` | optional: one line the orchestrator wants seen first, drawn as a banner under the header |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News) |
+| `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
-| `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation |
+| `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
@@ -169,8 +210,8 @@ Every field but `sessions[].name` may be missing or `null`; the pane leaves it o
 
 ## Answers
 
-Each question with an `id` carries the buttons **Accept** (only with a `recommendation`),
-**Discuss** and **More info**. A press appends one line to `board-answers.jsonl` in the board
+Each question with an `id` carries the buttons **Accept** (only with a `recommendation`), **Deny**,
+**Discuss** and **More info**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
 file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never writes `board.json`:
 
 ```json
@@ -179,18 +220,19 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 
 | Field | Meaning |
 |---|---|
-| `id` | the question's `owner_queue[].id` |
-| `answer` | `accept`, `discuss` or `info` |
+| `id` | the question's `owner_queue[].id`, or the item's `news[].id` |
+| `answer` | `accept`, `deny`, `discuss` or `info` for a question; `read` for a news item |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the pane was pressed in, as `claude agents` lists it; `null` when the live column does not know it |
 
-The file only grows: the orchestrator reads it and removes the question from `owner_queue` once
-handled. Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
+The file only grows: the orchestrator reads it and removes the question from `owner_queue`, or the
+item from `news`, once handled. Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
 (Orchestrator)`), so nobody answers twice. It re-reads the file with the board's three-second watch.
 
 When the pane runs in the orchestrator's own session, the one whose name equals `updated_by`, a
 press also sends a prompt there, queued as if typed and run once the session is idle:
-`<id>: proposal accepted`, `<id>: let's talk about it` or `<id>: I need more information`. The
+`<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it` or `<id>: I need more
+information`. **Read** sends nothing. The
 board's optional `answer_prompts` words them in the orchestrator's own language, `{id}` standing
 for the question's id: `{"accept": "{id}: Vorschlag angenommen"}`; a kind it leaves out keeps the
 default. The pane finds its own name by matching its session id against `claude agents
