@@ -96,6 +96,7 @@ Answering the fork deletes the section.>
 - **Asserted:** <what must be true: endpoint + field, or route + label>
 - **Not proven:** <what this oracle cannot show, and who owes it>
 - **Exit criterion:** <what someone else could run to decide "done">
+- **Receipt:** <`tests/staging_receipts/{TICKET}.yaml`, one check per AC id | none — why>
 - **Missing CLI verb:** <a seed or assert the repo's CLI cannot do yet, and the phase that ships it>
 
 ## Technical Approach
@@ -162,3 +163,6 @@ The block is copied into the PR body, where a hook reads the `**Oracle:**` line 
 undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and `not-observed`
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
+`**Receipt:**` names the staging receipt the smoketest runner checks after the deploy: mechanical
+staging ACs (status code, field, label) belong in the receipt, the prose ACs keep only the new and
+fuzzy ones. A repo without a receipt runner writes `none — no receipt runner`.
