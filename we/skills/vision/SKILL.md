@@ -2,7 +2,7 @@
 name: vision
 description: >
   Vision (Solo) at the PRD altitude: creates or sharpens the product's PRD (audience, problem,
-  intended change, non-bets) at docs/plans/<vision>/PRD.md. Triggers: "/we:vision", "PRD",
+  intended change, non-bets) at docs/plans/[vision]/PRD.md. Triggers: "/we:vision", "PRD",
   "write a vision", "refine vision".
 ---
 

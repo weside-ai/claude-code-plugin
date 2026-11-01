@@ -38,6 +38,8 @@ except ImportError:  # pragma: no cover - exercised only where PyYAML is absent
 
 DEFAULT_BUDGET = {
     "rule_lines": 200,  # memory.md: target under 200 lines per instruction file
+    "rule_chars_warn": 32000,  # early warning before the cut below
+    "rule_chars": 40000,  # memory.md: a path-scoped rule over 40,000 chars is cut silently
     "rules_total_lines": 600,  # per-repo budget for unconditional rules
     "instruction_file_lines": 200,  # memory.md: AGENTS.md / CLAUDE.md
     "skill_lines": 500,  # skills.md: keep SKILL.md under 500 lines
@@ -172,6 +174,7 @@ def check_rules(repo: Repo) -> None:
                 )
         else:
             check_paths_match(repo, rel, rule.patterns)
+            check_rule_chars(repo, rel, len(text))
         if (
             lines > repo.budget["contents_threshold"]
             and pointed_at(rel, texts)
@@ -188,6 +191,19 @@ def check_rules(repo: Repo) -> None:
             ".claude/rules",
             f"unconditional rules total {unconditional_total} lines > budget {repo.budget['rules_total_lines']}",
         )
+
+
+def check_rule_chars(repo: Repo, rel: str, chars: int) -> None:
+    """A path-scoped rule over the cap loads truncated, without a message (memory.md)."""
+    cap, warn = repo.budget["rule_chars"], repo.budget["rule_chars_warn"]
+    if chars > cap:
+        repo.error(
+            "rule-char-cap",
+            rel,
+            f"{chars} chars > {cap} — Claude Code cuts the rest silently; split the rule",
+        )
+    elif chars > warn:
+        repo.warn("rule-char-cap", rel, f"{chars} chars > {warn}, the cut is at {cap}")
 
 
 def check_paths_match(repo: Repo, rel: str, patterns: tuple[str, ...]) -> None:
@@ -263,6 +279,14 @@ def check_skills(repo: Repo) -> None:
                 rel,
                 f"description + when_to_use {len(listing)} chars > {repo.budget['skill_listing_chars']}",
             )
+        for key in ("description", "when_to_use"):
+            if re.search(r"[<>]", fields.get(key, "")):
+                repo.error(
+                    "skill-description-angle-bracket",
+                    rel,
+                    f"`<` or `>` in `{key}` renders escaped (`&lt;`) in the skill listing"
+                    " — write `[name]` instead",
+                )
         check_skill_references(repo, rel, text)
 
 

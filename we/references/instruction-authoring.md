@@ -27,7 +27,9 @@ Provenance · Frontmatter.
 | Rule without `paths:` | ≤ 200 lines each; all of them together ≤ the repo budget (default 600) | memory.md |
 | `AGENTS.md` / `CLAUDE.md` | ≤ 200 lines | memory.md |
 | `SKILL.md` | ≤ 500 lines | skills.md, Agent Skills best practices |
+| Rule with `paths:` | ≤ 40,000 characters (warning from 32,000) | memory.md: the rest is cut silently |
 | Skill `description` + `when_to_use` | ≤ 1,536 characters | skills.md |
+| Skill `description` / `when_to_use` | no `<` or `>` (renders as `&lt;`); write `[name]` | skills.md |
 | All subagent `description`s together | ≤ 15,000 tokens | sub-agents.md |
 | Reference file or pointed-at rule over 100 lines | opens with `## Contents` | Agent Skills best practices |
 | Rule `paths:` | matches at least one file | a rule whose globs match nothing never loads |
