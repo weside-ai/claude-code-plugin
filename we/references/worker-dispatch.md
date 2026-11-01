@@ -58,7 +58,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 
 `.weside/config.json` → `agents.worker_launch` decides how every `we:dev-*` worker starts:
 implementer, finisher, refiner, a ci-review worker. `we:explore-medium` readers and council lenses
-stay subagents. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
+stay subagents. Who may start workers, how many and how they are named: `references/working-mode.md`
+§ Masters and workers. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
 
 - `"subagent"` (the default, also when unset): the `Agent` call of § Choosing the worker. A
   subagent bills the account of the session that calls it.
@@ -76,7 +77,7 @@ With a template, the Lead:
    or ci-review worker launches in the existing tree. `claude --bg` refuses an untrusted directory;
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
-   --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`). It appends `Lead: <this session's name>` to the brief
+   --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each

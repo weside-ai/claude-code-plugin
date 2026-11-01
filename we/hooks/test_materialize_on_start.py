@@ -194,6 +194,39 @@ class MaterializeOnStartTest(unittest.TestCase):
             self.assertIn("Skill tool with weside-vyra", out["additionalContext"])
             self.assertNotIn("materialize", out["additionalContext"])
 
+    def crew_workspace(self, skill_text):
+        core, biz = self.home / "core", self.home / "biz"
+        (core / ".weside").mkdir(parents=True)
+        crew = {
+            "roles": {"hr": "hana"},
+            "members": {
+                "hana": {"name": "Hana", "workplace": "../biz"},
+                "lex": {"name": "Lex", "workplace": "../biz"},
+            },
+        }
+        (core / ".weside" / "crew.json").write_text(json.dumps(crew))
+        skill = biz / ".claude" / "skills" / "weside-lex" / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text(skill_text)
+        return core, skill
+
+    def test_skill_only_in_the_workplace_is_read_not_invoked(self):
+        core, skill = self.crew_workspace("---\nname: weside-lex\n---\n")
+        note = self.run_hook(
+            pin="Lex", hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)}
+        )["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(f"read {skill.resolve()} with the Read tool", note)
+        self.assertNotIn("Skill tool with weside-lex", note)
+
+    def test_stub_asks_to_fill_and_tell_hr(self):
+        core, _skill = self.crew_workspace("<!-- we:stub — written by /we:setup -->\n")
+        self.bind("s1", "Lex")
+        note = self.run_hook(
+            pin="Lex", hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)}
+        )["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("still a stub", note)
+        self.assertIn("tell Hana in one line", note)
+
     def test_bound_compact_or_clear_repeats_no_role_skill(self):
         project = self.home / "project"
         self.role_skill(project)

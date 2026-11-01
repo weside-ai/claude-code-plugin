@@ -172,7 +172,7 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
     assert out.returncode == 0, out.stderr
     gd = wl.git_dir(env["wt"])
     brief = (gd / wl.BRIEF).read_text()
-    assert brief.startswith('Run Skill("we:develop") for KEY.') and "Lead: LEAD-1" in brief
+    assert brief.startswith("Lead: LEAD-1 — ") and 'Run Skill("we:develop") for KEY.' in brief
     marker = wl.read_marker(env["wt"])
     assert marker["name"] == "w1" and marker["lead"] == "LEAD-1"
     assert marker["agent"] == "we:dev-medium" and marker["launched_at"] > 0

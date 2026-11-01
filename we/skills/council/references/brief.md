@@ -6,7 +6,7 @@ member acts only on what its prompt carries. Drop a `{…}` line whose condition
 by: `team-lead` in an Agent Teams session (v6 orchestrate); the ADJOURN message repeats it. A member
 that ends its turn also returns its text as the Agent result, so a wrong name loses nothing.
 The Companion name is the helper's `companion`, else the role's handbook owner (`weside-members.md`
-§ Identity, only without `council.json`).
+§ Identity, only without a crew).
 
 ```text
 COUNCIL SESSION — {meeting type, or "open council"}
@@ -50,7 +50,7 @@ end your turn with the same text:
 
 ## Lens lines
 
-For a shipped shell whose `lens_source` is `table` (no `lens` in `.weside/council.json`):
+For a shipped shell whose `lens_source` is `table` (no `lens` in `.weside/crew.json`):
 
 | Role | Lens line |
 |---|---|

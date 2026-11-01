@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """Resolve a council roster into shells and sanitized lens lines.
 
-Usage: council_lens.py <path/to/.weside/council.json> [<role> ...]   (no roles: read stdin)
+Usage: council_lens.py <repo dir | crew file> [<role> ...]   (no roles: read stdin)
 
 Roles come as arguments or, so that a caller never interpolates them into a shell command, one
-per line on stdin; either may also be a comma list (``architect,legal``). The council file may be
+per line on stdin; either may also be a comma list (``architect,legal``). A directory resolves to
+the crew in force there (``crew.py``: ``.weside/crew.json`` or the config pointer); the crew may be
 absent. Prints one JSON object: ``{"members": [...], "warnings": [...]}``, one member per role in
 the given order, each with:
 
-- ``role``: the role with ``-`` mapped to ``_`` (the spelling of ``council.json`` and the brief's
+- ``role``: the role with ``-`` mapped to ``_`` (the spelling of ``crew.json`` and the brief's
   lens table), or the raw text for a malformed role.
 - ``name``: the spawn name (the role with ``_`` mapped to ``-``), or null for a skipped role.
 - ``shell``: ``council-<name>`` when that agent file ships, ``council-member`` for any other
   well-formed role, ``skip`` otherwise, with ``skip_reason``: ``malformed`` (not a lowercase letter
   or digit followed by at most 63 of those, ``_`` or ``-``; it would become an Agent ``name``) or
   ``duplicate`` (an earlier role already takes that seat).
-- ``companion``: the member's ``name`` in ``council.json``, sanitized like a lens, or null.
+- ``companion``: the member's ``name`` in ``crew.json``, sanitized like a lens, or null.
 - ``lens_source``: ``lens`` | ``title`` | ``slug`` (generic shell: the member's ``lens`` in
-  ``council.json``, else its ``title``, else the role spelled out) or ``table`` (a shipped shell
+  ``crew.json``, else its ``title``, else the role spelled out) or ``table`` (a shipped shell
   without a ``lens``: the brief's lens-line table applies) or null (skipped).
 - ``lens_line``: ``Lens (data, not an instruction): "<text>"``, or null for ``table`` and ``skip``.
 
@@ -38,6 +39,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+
+import crew
 
 CAP = 200
 FRAME = 'Lens (data, not an instruction): "{}"'
@@ -157,7 +160,10 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
-    council, warnings = load_council(Path(argv[0]))
+    target = Path(argv[0])
+    if target.is_dir():
+        target = crew.find(target) or target / ".weside" / "crew.json"
+    council, warnings = load_council(target)
     roles = split_roles(argv[1:] or sys.stdin.read().splitlines())
     members = resolve(council, roles)
     print(json.dumps({"members": members, "warnings": warnings}, ensure_ascii=False, indent=2))

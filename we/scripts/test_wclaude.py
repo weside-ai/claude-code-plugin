@@ -12,7 +12,7 @@ SCRIPT = Path(__file__).parent / "wclaude"
 
 pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="wclaude is a bash script")
 
-COUNCIL = {
+CREW = {
     "members": {
         "po": {"name": "Ada", "role": "product_owner", "title": "Product Owner"},
         "arch": {"name": "Bo", "role": "architect"},
@@ -21,7 +21,7 @@ COUNCIL = {
 }
 
 
-def run(tmp_path, args=(), stdin="", council=COUNCIL, launch=None):
+def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
     record = tmp_path / "record.json"
@@ -37,9 +37,9 @@ def run(tmp_path, args=(), stdin="", council=COUNCIL, launch=None):
     project = tmp_path / "project"
     cwd = project / "sub" / "dir"
     cwd.mkdir(parents=True, exist_ok=True)
-    if council is not None:
+    if crew is not None:
         (project / ".weside").mkdir(exist_ok=True)
-        (project / ".weside" / "council.json").write_text(json.dumps(council))
+        (project / ".weside" / "crew.json").write_text(json.dumps(crew))
     env = {
         **os.environ,
         "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
@@ -72,7 +72,7 @@ def test_menu_lists_title_else_role_and_skips_nameless(tmp_path):
     assert "architect" in proc.stderr
     assert "scrum_master" not in proc.stderr
     assert " 3) other name..." in proc.stderr
-    assert "~/project/.weside/council.json" in proc.stderr
+    assert "~/project/.weside/crew.json" in proc.stderr
     assert result == {"companion": "Ada", "argv": ["--name", "Ada"]}
 
 
@@ -149,17 +149,17 @@ def test_closed_stdin_refused(tmp_path):
     assert result is None
 
 
-def test_without_council_offers_name_and_zero(tmp_path):
-    proc, result = run(tmp_path, council=None, stdin="1\nFay\n")
-    assert "no .weside/council.json found" in proc.stderr
+def test_without_crew_offers_name_and_zero(tmp_path):
+    proc, result = run(tmp_path, crew=None, stdin="1\nFay\n")
+    assert "no .weside/crew.json found" in proc.stderr
     assert result["companion"] == "Fay"
 
 
-def test_broken_council_still_offers_menu(tmp_path):
+def test_broken_crew_still_offers_menu(tmp_path):
     (tmp_path / "project" / ".weside").mkdir(parents=True)
-    (tmp_path / "project" / ".weside" / "council.json").write_text("{not json")
-    proc, result = run(tmp_path, council=None, stdin="Gus\n")
-    assert "cannot read" in proc.stderr
+    (tmp_path / "project" / ".weside" / "crew.json").write_text("{not json")
+    proc, result = run(tmp_path, crew=None, stdin="Gus\n")
+    assert "unreadable" in proc.stderr
     assert result["companion"] == "Gus"
 
 

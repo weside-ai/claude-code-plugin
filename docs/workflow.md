@@ -108,6 +108,15 @@ A worker runs as a subagent, which bills the Lead's account, unless `.weside/con
 `agents.worker_launch` to a command that starts each worker as a session of its own (§ *Worker
 launch backend* there).
 
+## Crew and working mode
+
+With a crew (`/we:setup` § Crew writes `.weside/crew.json`), the build above runs inside a working
+mode: a Product Owner approves plans, an Orchestrator starts one build master per epic in progress
+(an unnamed session that runs `/we:orchestrate`) and routes questions to you through the board
+(`/board`), component owners review and accept, a Tester accepts on staging. Each session gets a
+short note at start: its role, who the Product Owner and the Orchestrator are, where questions go.
+The rules: [we/references/working-mode.md](../we/references/working-mode.md).
+
 ## The effort rule
 
 - The default worker is `we:dev-medium` (Opus, effort `medium`).

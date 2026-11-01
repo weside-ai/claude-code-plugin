@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # wclaude — start Claude Code as a weside Companion (references/companion-session.md).
-# Lists the members of the nearest .weside/council.json (searched upwards from the cwd),
+# Lists the members of the repo's crew (.weside/crew.json or the config.json pointer, via crew.py),
 # then runs `WESIDE_COMPANION=<Name> claude --name <Name> <your args>` (no --name if you pass one).
 #   wclaude                 menu, then claude
 #   wclaude --resume        menu, then claude --resume (every other argument goes to claude)
@@ -45,51 +45,36 @@ if [[ $pin -eq 1 ]]; then
 fi
 export WE_ROLE=master
 
-find_council() {
-  local d=$PWD
-  while :; do
-    if [[ -f "$d/.weside/council.json" ]]; then
-      echo "$d/.weside/council.json"
-      return 0
-    fi
-    [[ "$d" == "/" || -z "$d" ]] && return 1
-    d=$(dirname "$d")
-  done
-}
-
-# One line per member: "<name>\t<title, else role>". Members without a name are skipped.
-list_members() {
-  python3 - "$1" <<'PY'
-import json, sys
-try:
-    with open(sys.argv[1]) as fh:
-        members = json.load(fh).get("members") or {}
-except (OSError, ValueError, AttributeError) as exc:
-    sys.stderr.write("wclaude: cannot read %s: %s\n" % (sys.argv[1], exc))
-    sys.exit(0)
-if not isinstance(members, dict):
-    sys.exit(0)
-for member in members.values():
-    if not isinstance(member, dict):
-        continue
-    name = str(member.get("name") or "").strip()
-    if name:
-        label = member.get("title") or member.get("role") or ""
-        print(name + "\t" + " ".join(str(label).split()))
-PY
+# crew.py next to this script (the plugin's copy), else the newest in the plugin cache (the
+# installed copy in ~/.local/bin); references/working-mode.md § Crew.
+crew_script() {
+  local here
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if [[ -f "$here/crew.py" ]]; then
+    echo "$here/crew.py"
+    return 0
+  fi
+  ls -d "$HOME"/.claude/plugins/cache/weside-ai/we/*/scripts/crew.py 2>/dev/null | sort -V | tail -1
 }
 
 if [[ $picked -eq 0 ]]; then
-  council=$(find_council || true)
+  crew=""
   names=()
-  if [[ -n "$council" ]]; then
-    if command -v python3 >/dev/null 2>&1; then
-      while IFS= read -r row; do
-        [[ -n "$row" ]] && names+=("$row")
-      done < <(list_members "$council")
+  if command -v python3 >/dev/null 2>&1; then
+    resolver=$(crew_script)
+    if [[ -n "$resolver" ]]; then
+      crew=$(python3 "$resolver" path 2>/dev/null || true)
+      if [[ -n "$crew" ]]; then
+        # One line per named member: "<name>\t<title, else role>".
+        while IFS= read -r row; do
+          [[ -n "$row" ]] && names+=("$row")
+        done < <(python3 "$resolver" members || true)
+      fi
     else
-      echo "wclaude: python3 not found; council members not listed" >&2
+      echo "wclaude: crew.py not found (we plugin absent); crew not listed" >&2
     fi
+  else
+    echo "wclaude: python3 not found; crew not listed" >&2
   fi
   count=${#names[@]}
 
@@ -106,12 +91,12 @@ if [[ $picked -eq 0 ]]; then
     prev=$arg
   done
 
-  if [[ -n "$council" ]]; then
-    shown=$council
-    case $council in "$HOME"/*) shown="~${council#"$HOME"}" ;; esac
+  if [[ -n "$crew" ]]; then
+    shown=$crew
+    case $crew in "$HOME"/*) shown="~${crew#"$HOME"}" ;; esac
     echo "Companion for this session (from $shown):" >&2
   else
-    echo "Companion for this session (no .weside/council.json found):" >&2
+    echo "Companion for this session (no .weside/crew.json found):" >&2
   fi
   i=1
   for row in ${names[@]+"${names[@]}"}; do

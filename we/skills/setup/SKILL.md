@@ -2,7 +2,7 @@
 name: setup
 description: >
   Project setup: detects stack, ticketing and tools, asks up to five skippable questions,
-  writes .weside/config.json, optionally the council rosters. Triggers: "/we:setup", "configure
+  writes .weside/config.json, optionally rosters and crew. Triggers: "/we:setup", "configure
   project", "initialize repo", "first time".
 ---
 
@@ -96,10 +96,23 @@ every lens is generic and still works." On yes:
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
    after both succeeded. A small repo may want no vault: `vault: null` is valid.
-3. `.weside/weside.md` and `.weside/council.json` are written by no verb. `/we:council` reads
-   `council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`; an optional
-   `title` only labels the member in the companion launcher's menu), which the user edits by hand;
-   without it every lens is generic.
+3. `.weside/weside.md` is written by no verb.
+
+## 4a. Crew (optional, ask once)
+
+"Does a crew work in this repo (Product Owner, Orchestrator, HR, Tester, component owners)?" Its
+working mode: `${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`; schema and the one reader:
+`${CLAUDE_PLUGIN_ROOT}/scripts/crew.py` (docstring). On yes:
+
+1. Another repo holds the crew → only `.weside/config.json` → `"crew": "<relative path>"`; check
+   with `crew.py show`, then step 4.
+2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
+   (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
+   the four roles, then one line per member (name, role, components, workplace, on call).
+3. Write `.weside/crew.json` (tracked; no identity text, no companion ids). A re-run shows the
+   diff and asks before replacing.
+4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
+   creates them from `templates/companion-skill/SKILL.md`, never overwriting.
 
 ## 5. Rule bridge and statusline
 
@@ -113,7 +126,7 @@ every lens is generic and still works." On yes:
   `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`
   refreshes `~/.claude/we-statusline.js`. `keep theirs` → keep the user's statusline and
   mention `--apply --force` (backed up, `--revert` restores it).
-- **Companion launcher** `wclaude` (menu over `.weside/council.json`, then
+- **Companion launcher** `wclaude` (menu over the crew, then
   `WESIDE_COMPANION=<Name> claude`; `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`): run
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_launcher.py --status`. `offer the launcher` → ask once,
   on yes `--apply` into `~/.local/bin/wclaude`. `launcher installed` with a `NOTE` that the copy differs →

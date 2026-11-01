@@ -121,7 +121,7 @@ def test_malformed_slug_is_skipped(tmp_path):
 
 
 def test_cli_reads_the_file_and_splits_comma_lists(tmp_path):
-    path = tmp_path / "council.json"
+    path = tmp_path / "crew.json"
     path.write_text(
         json.dumps(_council(alpha={"role": "people_ops", "lens": DEFECT})), encoding="utf-8"
     )
@@ -154,7 +154,7 @@ def test_cli_without_a_council_file_derives_every_lens(tmp_path):
 
 
 def test_unreadable_council_file_warns_and_derives(tmp_path):
-    path = tmp_path / "council.json"
+    path = tmp_path / "crew.json"
     path.write_text("{not json", encoding="utf-8")
     council, warnings = cl.load_council(path)
     assert council == {}
@@ -232,8 +232,28 @@ def test_cli_reads_roles_from_stdin(tmp_path):
 
 
 def test_members_that_is_not_an_object_warns(tmp_path):
-    path = tmp_path / "council.json"
+    path = tmp_path / "crew.json"
     path.write_text('{"members": []}', encoding="utf-8")
     council, warnings = cl.load_council(path)
     assert council == {}
     assert "members is not an object" in warnings[0]
+
+
+def test_cli_resolves_a_repo_dir_through_the_crew_pointer(tmp_path):
+    core, other = tmp_path / "core", tmp_path / "other"
+    (core / ".weside").mkdir(parents=True)
+    (other / ".weside").mkdir(parents=True)
+    (core / ".weside" / "crew.json").write_text(
+        json.dumps(_council(pia={"name": "Pia", "role": "product_owner"})), encoding="utf-8"
+    )
+    (other / ".weside" / "config.json").write_text(
+        json.dumps({"crew": "../core/.weside/crew.json"}), encoding="utf-8"
+    )
+    out = subprocess.run(
+        [sys.executable, str(Path(cl.__file__)), str(other), "product_owner"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    (member,) = json.loads(out.stdout)["members"]
+    assert member["companion"] == "Pia"
