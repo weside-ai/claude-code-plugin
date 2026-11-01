@@ -210,12 +210,13 @@ worker's line shows the lamp alone. A red or yellow lamp names its reason on the
 
 | Lamp | When |
 |---|---|
-| red | with `masterProfile` set: a master without `WE_ROLE=master`, a master outside that profile, or a worker inside it |
+| red | with `masterProfile` set: a master without `WE_ROLE=master`, or a worker inside that profile |
 | yellow | the permission mode differs from the one most running sessions use |
 | green | none of the above |
 
 `masterProfile` is a plugin option naming the account folder master sessions run in, with or
-without claude-swap's number (`me_example.com` matches `3-me_example.com`). Left empty, the three
+without claude-swap's number (`me_example.com` matches `3-me_example.com`); a master runs there pinned or
+outside it on the global login (`/we:pin`). Left empty, the two
 red rules are off and only the yellow one holds.
 
 ## Requirements

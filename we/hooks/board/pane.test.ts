@@ -58,7 +58,7 @@ test('/board draws the queue oldest first, masters with workers, live and start-
     expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /as of .* ago \(Orchestrator\)/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /WE_ROLE missing · not in the master profile — restart it as a master/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /WE_ROLE missing — restart it as a master/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /P2 · test live/ })).toBeDefined()
     // Sessions that run on no board fold into the last line until it is opened.
     expect(await ui.find({ type: 'Text', text: /Live, not on the board: stray/ })).toBeUndefined()

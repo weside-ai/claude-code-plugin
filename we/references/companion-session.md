@@ -22,8 +22,13 @@ second companion takes a second session. An unknown name answers HTTP 422.
 (optional `title` per member; the council uses it as the lens of a role without its own shell), `--as <Name>` without a menu, `0` clears
 the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
-`scripts/install_launcher.py`. `WCLAUDE_CLAUDE` names a command to start instead of `claude` (same arguments
-and environment; unset or empty is `claude`).
+`scripts/install_launcher.py`. Every session it starts is a master (`WE_ROLE=master`) on the global
+login, which follows the account switcher like a plain `claude`. `--pin` holds the session on one
+account instead: it starts `$WCLAUDE_PIN` (one command that takes claude's arguments, e.g. a
+claude-swap profile; unset, `--pin` is refused). A pinned session runs in its own `CLAUDE_CONFIG_DIR`.
+`/we:pin` shows which account bills and switches sides by restarting with `--resume`; a live session
+cannot switch, because the profile's credential belongs to the switcher (a link to the global login
+lets the switcher write through it, so the profile stays a plain file).
 
 A companion session is a normal Claude Code session; what binds it to its companion is the pin
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the
