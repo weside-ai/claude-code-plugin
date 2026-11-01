@@ -244,7 +244,7 @@ def test_cli_resolves_a_repo_dir_through_the_crew_pointer(tmp_path):
     (core / ".weside").mkdir(parents=True)
     (other / ".weside").mkdir(parents=True)
     (core / ".weside" / "crew.json").write_text(
-        json.dumps(_council(pia={"name": "Pia", "role": "product_owner"})), encoding="utf-8"
+        json.dumps(_council(ana={"name": "Ana", "role": "product_owner"})), encoding="utf-8"
     )
     (other / ".weside" / "config.json").write_text(
         json.dumps({"crew": "../core/.weside/crew.json"}), encoding="utf-8"
@@ -256,4 +256,4 @@ def test_cli_resolves_a_repo_dir_through_the_crew_pointer(tmp_path):
         check=True,
     )
     (member,) = json.loads(out.stdout)["members"]
-    assert member["companion"] == "Pia"
+    assert member["companion"] == "Ana"

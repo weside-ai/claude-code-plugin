@@ -80,7 +80,7 @@ proposal and drift check, the MCP pin header, wake.
 
 ## Budgets
 
-`working-mode.md` 111 lines with `## Contents`; `setup/SKILL.md` 168 lines; hook core ≤ 10 lines / 1,200 characters (test; about 930 for a seven-member crew);
+`working-mode.md` 121 lines with `## Contents`; `setup/SKILL.md` 168 lines; hook core ≤ 10 lines / 1,200 characters (test; about 930 for a seven-member crew);
 skill listing ≤ 6,000 characters (validator); `check-instruction-budget.py` 0 errors.
 
 ## Verification

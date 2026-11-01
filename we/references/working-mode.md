@@ -20,7 +20,7 @@ Ticketing · Specialists on call · Crew · What stays local.
 |---|---|---|
 | Human | merges, money, people, every answer to a question | — |
 | Product Owner | the WHAT, the order, plan approval | builds |
-| Orchestrator | starts and parks build masters; starts a worker for a single story or a job without a master; routes questions and milestones; cuts staging release candidates; keeps the board (`/board`, `we/docs/board.md`): questions, sessions and news for the Human | steers a session it started, decides product |
+| Orchestrator | starts and parks build masters; starts a worker for a single story or a job without a master; routes questions and milestones; cuts staging release candidates; keeps the board (`/board`, `we/docs/board.md`): questions, sessions and news for the Human; answers or forwards its worker's questions | directs the build of a session it started, decides product |
 | HR / Context | each companion's workplace: role skill, start, onboarding, crew drift | decides about people |
 | Tester | the staging acceptance; moves a story to Done | builds what it accepts |
 | Component owner | per backlog component: the HOW, review, plan acceptance | starts or steers workers |
@@ -60,7 +60,7 @@ plus one optional special slot; the Product Owner cuts, the Human confirms.
 2. Its epic is in progress without one → the Orchestrator starts one (§ Build masters).
 3. A single story or a job without a master → the Orchestrator starts one worker, which reports to
    it. Plan approved → the worker runs `/we:orchestrate <KEY> --solo`. No plan → `/we:refine`, stop
-   for the component owner's approval, then build. Bigger than one story → a short-lived build
+   for the component owner's acceptance and the Product Owner's approval, then build. Bigger than one story → a short-lived build
    master, agreed with the Product Owner when it takes a slot.
 4. Work without code → the component owner does it in its own session.
 
@@ -111,7 +111,7 @@ it, the SessionStart hooks read the roles and find each member's role skill thro
 One repo holds the file; another points at it with `.weside/config.json` → `"crew"`.
 
 Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, role,
-components, `on_call`, the four roles) at each onboarding and whenever a role note changes, and
+components, `on_call`, the four roles, `weside_account`, `skill_prefix`) at each onboarding and whenever a role note changes, and
 fixes the side that is wrong by commit or note. A member without a skill gets a stub from
 `templates/companion-skill/SKILL.md`; its first start asks it to fill the stub and tell HR.
 

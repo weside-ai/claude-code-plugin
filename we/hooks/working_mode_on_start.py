@@ -26,7 +26,8 @@ MAX_CHARS = 1200
 
 DUTIES = {
     "orchestrator": "starts and parks build masters, starts a worker for a single story, routes "
-    "questions and milestones, keeps the board (/board); steers no session it started",
+    "questions and milestones, keeps the board (/board); answers or forwards its worker's "
+    "questions, never directs its build",
     "product_owner": "the WHAT, the order, plan approval",
     "hr": "workplaces and role skills, crew drift",
     "tester": "staging acceptance; moves a story to Done",
@@ -66,8 +67,8 @@ def _session_line(crew: dict, kind: str, pin: str) -> str:
     slug, entry = found
     if kind == "consult":
         return (
-            f"- This session: a consultation as the companion {pin}: answer what you were asked, "
-            "steer no workers, then end."
+            f"- This session: a consultation as the companion {pin}: answer the session that "
+            "asked, by SendMessage; steer no workers, then end."
         )
     role = _held_role(crew, slug)
     if role:

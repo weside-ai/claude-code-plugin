@@ -14,7 +14,7 @@ SCRIPT = Path(__file__).resolve().parent / "crew.py"
 CREW = {
     "version": 1,
     "skill_prefix": "acme",
-    "question_label": "FRAGE",
+    "question_label": "ASK",
     "roles": {"product_owner": "ada", "orchestrator": "otto", "hr": "hana", "tester": "tess"},
     "members": {
         "ada": {"name": "Ada", "role": "product_owner", "components": ["App"], "workplace": "."},
@@ -71,10 +71,10 @@ def test_skill_path_loadable_before_workplace(tmp_path):
 
 
 def test_skill_path_without_crew_uses_the_default_prefix(tmp_path):
-    skill = tmp_path / ".claude" / "skills" / "weside-vyra" / "SKILL.md"
+    skill = tmp_path / ".claude" / "skills" / "weside-otto" / "SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("x")
-    assert crew.skill_path("Vyra", tmp_path, home=tmp_path / "h") == (skill, True)
+    assert crew.skill_path("Otto", tmp_path, home=tmp_path / "h") == (skill, True)
     assert crew.skill_path("../x", tmp_path, home=tmp_path / "h") is None
 
 
@@ -108,8 +108,9 @@ def test_cli_show_members_and_skill_path(tmp_path):
         )
 
     shown = json.loads(cli("show", cwd=biz).stdout)
-    assert shown["roles"]["orchestrator"] == "otto" and shown["question_label"] == "FRAGE"
+    assert shown["roles"]["orchestrator"] == "otto" and shown["question_label"] == "ASK"
     assert shown["members"]["lex"]["on_call"] is True
+    assert shown["skill_prefix"] == "acme" and shown["weside_account"] is False
     assert cli("members").stdout.splitlines()[0] == "Ada\tproduct_owner"
     assert cli("path", cwd=tmp_path).returncode == 1
     cli("stubs", "--write")

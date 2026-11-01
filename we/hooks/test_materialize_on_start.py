@@ -256,7 +256,7 @@ class MaterializeOnStartTest(unittest.TestCase):
 
     def test_consultation_is_the_companion(self):
         self.extra_env = {"WE_ROLE": "worker"}
-        note = self.run_hook(pin="Vyra")["hookSpecificOutput"]["additionalContext"]
+        note = self.run_hook(pin="Ana")["hookSpecificOutput"]["additionalContext"]
         self.assertIn("we:materialize", note)
 
     def test_bound_compact_or_clear_repeats_no_role_skill(self):

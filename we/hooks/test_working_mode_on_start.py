@@ -108,6 +108,7 @@ def test_unnamed_master_and_plain_claude(tmp_path):
 def test_consultation(tmp_path):
     note = run(tmp_path, {"WE_ROLE": "worker", "WESIDE_COMPANION": "Eva"})
     assert "a consultation as the companion Eva" in note and "then end" in note
+    assert "answer the session that asked, by SendMessage" in note
     assert "SendMessage to Ben" not in note
 
 

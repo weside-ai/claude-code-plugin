@@ -216,6 +216,8 @@ def show(crew_path: Path, crew: dict[str, Any]) -> dict[str, Any]:
         "path": str(crew_path),
         "roles": {role: crew.get("roles", {}).get(role) for role in WORKING_ROLES},
         "question_label": crew.get("question_label") or "QUESTION",
+        "skill_prefix": crew.get("skill_prefix") or "weside",
+        "weside_account": crew.get("weside_account") is True,
         "members": {
             slug: {
                 "name": entry.get("name"),
