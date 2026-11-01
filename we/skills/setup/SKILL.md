@@ -2,7 +2,7 @@
 name: setup
 description: >
   Project setup: detects stack, ticketing and tools, asks up to five skippable questions,
-  writes .weside/config.json, optionally the council rosters. Triggers: "/we:setup", "configure
+  writes .weside/config.json, optionally rosters and crew. Triggers: "/we:setup", "configure
   project", "initialize repo", "first time".
 ---
 
@@ -96,10 +96,23 @@ every lens is generic and still works." On yes:
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
    after both succeeded. A small repo may want no vault: `vault: null` is valid.
-3. `.weside/weside.md` and `.weside/council.json` are written by no verb. `/we:council` reads
-   `council.json` (members per role: `members.<slug>.name`, `.role`, optional `lens`; an optional
-   `title` only labels the member in the companion launcher's menu), which the user edits by hand;
-   without it every lens is generic.
+
+## 4a. Crew (optional, ask once)
+
+"Does a crew work in this repo (Product Owner, Orchestrator, HR, Tester, component owners)?" Rules:
+`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`; schema: `${CLAUDE_PLUGIN_ROOT}/scripts/crew.py`. On yes:
+
+1. Another repo holds the crew → only `.weside/config.json` → `"crew": "<relative path>"`, checked
+   with `crew.py show`; go to 4a.4.
+2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
+   (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
+   the four roles, then one line per member (name, role, components, workplace, on call). Ask the
+   skill prefix once (default: the team's or repo's name).
+3. Write `.weside/crew.json` (tracked; no identity text, no companion ids), with
+   `weside_account: true` only when the MCP was connected. A Tester set → `ticketing.after_merge:
+   "in_review"`. A re-run shows the diff and asks before replacing.
+4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
+   creates them from `templates/companion-skill/SKILL.md`, never overwriting.
 
 ## 5. Rule bridge and statusline
 
@@ -113,7 +126,7 @@ every lens is generic and still works." On yes:
   `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`
   refreshes `~/.claude/we-statusline.js`. `keep theirs` → keep the user's statusline and
   mention `--apply --force` (backed up, `--revert` restores it).
-- **Companion launcher** `wclaude` (menu over `.weside/council.json`, then
+- **Companion launcher** `wclaude` (menu over the crew, then
   `WESIDE_COMPANION=<Name> claude`; `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`): run
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_launcher.py --status`. `offer the launcher` → ask once,
   on yes `--apply` into `~/.local/bin/wclaude`. `launcher installed` with a `NOTE` that the copy differs →
@@ -140,23 +153,10 @@ every lens is generic and still works." On yes:
    that matches a file outside `optimization.exclude`; drop one that matches none. A candidate that
    also matches files under `exclude` is replaced by narrower globs over the kept files' directories,
    because `paths:` has no negation. A re-run refreshes the body after asking and keeps the `paths:`.
-3. **Gate as pre-commit hook**, when `.pre-commit-config.yaml` exists: add this local hook. It resolves
-   the gate from the plugin cache and passes with a notice where the plugin is absent. The gate is a
-   local hook and a `/we:optimize` step, not a CI job: the repo vendors no copy of the plugin's scripts.
-
-   ```yaml
-   - repo: local
-     hooks:
-       - id: instruction-budget
-         name: Instruction budget (we plugin)
-         entry: bash -c 'g=$(ls -d ~/.claude/plugins/cache/weside-ai/we/*/scripts/check-instruction-budget.py 2>/dev/null | sort -V | tail -1); if [ -z "$g" ]; then echo "we plugin absent - instruction budget not checked"; exit 0; fi; python3 "$g"'
-         language: system
-         pass_filenames: false
-         files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|\.weside/config\.json)$'
-   ```
-
-   Run it once (`pre-commit run instruction-budget --all-files`) and report the count; a red first
-   run is the repo's backlog for `/we:optimize`, not a setup failure.
+3. **Gate as pre-commit hook**, when `.pre-commit-config.yaml` exists: add the local hook of
+   `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Gate hook, run it once
+   (`pre-commit run instruction-budget --all-files`) and report the count; a red first run is the
+   repo's backlog for `/we:optimize`, not a setup failure.
 4. **Config keys**: `optimization.target_model` and `target_effort` (default: this session's model at
    `medium`), `exclude` for trees that hold content rather than instructions, and `workspace`: the
    sibling git repos of this one, one per remote URL, each the main checkout

@@ -10,5 +10,5 @@ node_modules/
 .reviews/
 .worktrees/
 
-# Companion Framework — bridge file holds crew membership
+# Legacy council bridge, read by no verb since 7.44.0 (.weside/crew.json replaces it)
 .weside/council.json

@@ -16,8 +16,10 @@ mechanically per event:
     `PostToolUse` matches every tool, synchronously so an earlier tool's normal cannot land after
     a later white; a denial ends at the next prompt or `Stop`. Normal unsets the window option,
     so the window falls back to the session's style.
-  * All set `window-status-style` and `window-status-current-style` of the window holding
-    `$TMUX_PANE`.
+  * White and grey set only `window-status-style` of the window holding `$TMUX_PANE`: the active
+    window keeps the session's or global `window-status-current-style`, so the human always sees
+    which window is active (owner, 01.11.2026). Normal also unsets a
+    `window-status-current-style` an older version set.
   * Nothing without `$TMUX_PANE`, in a background session (`$CLAUDE_JOB_DIR`), in a subagent
     (`agent_id`), or with the option `tmuxAttention` off. Options come from
     `CLAUDE_PLUGIN_OPTION_<KEY>`, else from `pluginConfigs` in `~/.claude/settings.json`.
@@ -33,7 +35,8 @@ import sys
 
 STYLE = "bg=white,fg=black"
 IDLE_STYLE = "bg=colour240,fg=white"
-OPTIONS = ("window-status-style", "window-status-current-style")
+OPTION = "window-status-style"
+LEGACY = "window-status-current-style"  # set by versions before 7.44.0; normal unsets it
 WAITING = ("permission_prompt", "elicitation_dialog", "elicitation_url_dialog")
 IDLE = "idle_prompt"
 OFF = ("UserPromptSubmit", "PostToolUse", "SessionStart", "SessionEnd")
@@ -79,7 +82,7 @@ def current_style(pane: str) -> str:
     """The window's own `window-status-style`, empty when unset or unreadable."""
     try:
         res = subprocess.run(
-            ["tmux", "show-options", "-w", "-v", "-t", pane, OPTIONS[0]],
+            ["tmux", "show-options", "-w", "-v", "-t", pane, OPTION],
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -103,7 +106,7 @@ def commands(
     if state is None:
         return []
     if state == NORMAL:
-        return [["tmux", "set-window-option", "-u", "-t", pane, opt] for opt in OPTIONS]
+        return [["tmux", "set-window-option", "-u", "-t", pane, opt] for opt in (OPTION, LEGACY)]
     attention = option(environ, settings, "tmuxAttentionStyle") or STYLE
     if state == ATTENTION:
         style = attention
@@ -111,7 +114,7 @@ def commands(
         if payload.get("hook_event_name") == "Notification" and current(pane) == attention:
             return []
         style = option(environ, settings, "tmuxIdleStyle") or IDLE_STYLE
-    return [["tmux", "set-window-option", "-t", pane, opt, style] for opt in OPTIONS]
+    return [["tmux", "set-window-option", "-t", pane, OPTION, style]]
 
 
 def main() -> None:

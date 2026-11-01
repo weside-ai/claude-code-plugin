@@ -8,13 +8,20 @@ Pinned (``WESIDE_COMPANION=<Name> claude``): the session is titled ``<Name>``
 option names another one and binds the session to it. A session the binding
 file already ties to the pin (a resume) gets the title only. A session started
 with ``--agent`` (``agent_type`` in the input) is a worker, never the companion:
-it gets nothing. When a role skill ``weside-<name lowercased>`` exists in the
-project (``<cwd>/.claude/skills/``) or in ``~/.claude/skills/``, the note also
-asks the session to invoke it after materializing; a session already bound to
+it gets nothing. When a role skill ``<prefix>-<name lowercased>`` exists
+(``scripts/crew.py skill-path``: the project's ``.claude/skills/``, ``~/.claude/skills/``, then
+the member's ``workplace`` repo from the crew), the note also asks the session to invoke it after
+materializing, or to read it when only the workplace holds it; a skill still marked as a stub is to
+be filled and reported to HR instead. A session already bound to
 the pin gets that skill line alone, but only on ``startup`` and ``resume``
 (``--continue`` too): after ``compact`` or ``clear`` the skill is still in
 context or the unbound note names it. Contract:
 ``references/companion-session.md``.
+
+The pin and the worker check come from ``crew.session_kind``: a ``--agent`` session gets nothing,
+a consultation (pin + ``WE_ROLE=worker``) is the companion like a master. In a repo whose crew has
+no ``weside_account: true`` (a team without a weside account) a pinned session gets its title and
+the role-skill line only, never the request to materialize.
 
 Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
@@ -39,6 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import crew
 import wake_poller
 from identity_cache import read_binding
 
@@ -67,13 +75,23 @@ PINNED_CONTEXT = (
 )
 
 BOUND_ROLE_SKILL_CONTEXT = (
-    "This session is the companion {name}. Before your first reply, invoke the Skill tool with "
-    "{skill}: it holds {name}'s working knowledge for this environment.{ignore}"
+    "This session is the companion {name}. Before your first reply, {action}{ignore}"
 )
 
-ROLE_SKILL_CONTEXT = (
-    " After that, invoke the Skill tool with {skill}: it holds {name}'s working knowledge "
-    "for this environment."
+ROLE_SKILL_CONTEXT = " After that, {action}"
+
+SKILL_ACTION = (
+    "invoke the Skill tool with {skill}: it holds {name}'s working knowledge for this environment."
+)
+
+READ_ACTION = (
+    "read {path} with the Read tool and follow it: it holds {name}'s working knowledge for this "
+    "environment (its repo is not this session's, so the Skill tool does not list it)."
+)
+
+STUB_ACTION = (
+    "fill {name}'s role skill {path}: it is still a stub. Follow the skeleton inside, commit it "
+    "per its repo's instruction file, then tell {hr} in one line."
 )
 
 IGNORE_CONTEXT = (
@@ -83,16 +101,32 @@ IGNORE_CONTEXT = (
 
 
 def role_skill(name: str, cwd: str) -> str | None:
-    """``weside-<name lowercased>`` when its SKILL.md exists in the project or the user's skills."""
-    skill = "weside-" + name.lower()
-    if os.sep in skill or (os.altsep and os.altsep in skill) or ".." in skill:
+    """The role-skill sentence for ``name`` (invoke, read or fill as a stub), or None."""
+    found = crew.skill_path(name, cwd)
+    if found is None:
         return None
-    roots = [Path(cwd) / ".claude" / "skills"] if cwd else []
-    roots.append(Path.home() / ".claude" / "skills")
-    for root in roots:
-        if (root / skill / "SKILL.md").is_file():
-            return skill
-    return None
+    path, loadable = found
+    if crew.is_stub(path):
+        try:
+            _, members = crew.find_and_load(cwd)
+        except crew.CrewError:
+            members = None
+        hr = crew.holder_name(members, "hr") if members else None
+        return STUB_ACTION.format(name=name, path=path, hr=hr or "HR")
+    if loadable:
+        return SKILL_ACTION.format(skill=path.parent.name, name=name)
+    return READ_ACTION.format(path=path, name=name)
+
+
+def weside_backed(cwd: str) -> bool:
+    """Whether a pin here names a weside companion: no crew (a plain pin), or a crew with
+    ``weside_account: true``. A crew without it is a team without an account: title and role
+    skill only, no ``/we:materialize``."""
+    try:
+        _, members = crew.find_and_load(cwd)
+    except crew.CrewError:
+        return True
+    return members is None or members.get("weside_account") is True
 
 
 def enabled() -> bool:
@@ -116,25 +150,29 @@ def read_input() -> dict:
 def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     """The hook's JSON answer, or None to print nothing."""
     env = os.environ if environ is None else environ
-    pin = env.get("WESIDE_COMPANION", "").strip()
+    _, pin = crew.session_kind(env, hook_input.get("agent_type"))
     if pin:
-        if hook_input.get("agent_type"):
-            return None
         specific: dict = {"hookEventName": "SessionStart", "sessionTitle": pin}
         bound = read_binding(hook_input.get("session_id", ""))
         cwd = hook_input.get("cwd") or os.getcwd()
-        if not bound or bound.lower() != pin.lower():
-            skill = role_skill(pin, cwd)
+        if not weside_backed(cwd):
+            action = role_skill(pin, cwd)
+            if action and hook_input.get("source") in ("startup", "resume"):
+                specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
+                    action=action, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
+                )
+        elif not bound or bound.lower() != pin.lower():
+            action = role_skill(pin, cwd)
             specific["additionalContext"] = PINNED_CONTEXT.format(
                 name=pin,
-                role_skill=ROLE_SKILL_CONTEXT.format(skill=skill, name=pin) if skill else "",
+                role_skill=ROLE_SKILL_CONTEXT.format(action=action) if action else "",
                 ignore=IGNORE_CONTEXT.format(name=pin),
             )
         elif hook_input.get("source") in ("startup", "resume"):
-            skill = role_skill(pin, cwd)
-            if skill:
+            action = role_skill(pin, cwd)
+            if action:
                 specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
-                    skill=skill, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
+                    action=action, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
                 )
         return {"hookSpecificOutput": specific}
     if enabled() and env.get("CLAUDE_JOB_DIR"):

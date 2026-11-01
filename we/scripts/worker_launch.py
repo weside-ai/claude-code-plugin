@@ -13,7 +13,7 @@ one-line prompt `Read <git-dir>/we-brief.md and follow it.`: the brief never pas
 shell. The command runs without a shell, cwd = the worker's worktree.
 
 `launch` writes two files into the worktree's own git dir (untracked, removed with the worktree):
-`we-brief.md` (the brief plus a `Lead:` line) and `we-worker.json` (the marker: name, lead, agent,
+`we-brief.md` (the brief under a first `Lead:` line) and `we-worker.json` (the marker: name, lead, agent,
 launched_at, and the worker's `session_id` from `claude agents --json`). The hooks treat a session
 as a process worker only when the marker's `session_id` is its own (`worker_marker`), so the Lead
 working in the same worktree is never one (`hooks/worker_report_gate.py`,
@@ -214,8 +214,8 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         raise LaunchError(f"brief: {exc}") from exc
     brief_path, marker_path = gd / BRIEF, gd / MARKER
     brief_path.write_text(
-        f"{brief.rstrip()}\n\nLead: {lead} — send your report as one SendMessage to it; "
-        "your plain text never reaches it.\n"
+        f"Lead: {lead} — send your report as one SendMessage to it; "
+        f"your plain text never reaches it.\n\n{brief.rstrip()}\n"
     )
     marker = {"name": name, "lead": lead, "agent": agent, "launched_at": time.time()}
     marker_path.write_text(json.dumps(marker, indent=2) + "\n")

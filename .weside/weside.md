@@ -86,7 +86,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 
 ## Cross-repo relations
 
-**Source-of-truth for the Companion Framework consumed by Claude Code projects.** The framework is consumer-agnostic — any user-or-team can install the plugin and bootstrap their own .weside/ per-repo. Bundled crew defaults are generic role placeholders; real crews are injected per-repo via scripts/bootstrap-weside-repo.py --crew-from <user-scope-json>.
+**Source-of-truth for the Companion Framework consumed by Claude Code projects.** The framework is consumer-agnostic — any user-or-team can install the plugin and bootstrap their own .weside/ per-repo. A team's crew lives in its own repo's `.weside/crew.json`, written by `/we:setup` (`we/references/working-mode.md` § Crew).
 
 ## Notes
 
@@ -95,8 +95,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Versioning**: SemVer on `we/.claude-plugin/plugin.json`; bumps enforced by `scripts/check-version-bump.sh`.
 - **Structure validation**: `scripts/validate-plugin-structure.sh` runs on every commit (pre-commit hook).
 - **Council shells**: nine `we/agents/council-<role>.md` files (architect, product-owner, scrum-master, ux-researcher, marketing, orchestrator, security, sales, legal) — the no-account fallback path.
-- **Real-crew override**: `scripts/bootstrap-weside-repo.py ... --crew-from ~/.weside/crew.json`. The bridge (`.weside/council.json`) is gitignored regardless.
 
 ## Companion identity
 
-Personalities, memories, body, and voice live in weside (the MCP backend). This file references companions by name + `Companion ID` only. Identity bodies are fetched at runtime via `mcp__plugin_we_weside-mcp__get_council` (preferred) or the thin `.weside/council.json` bridge (fallback). The bridge is gitignored — identity text never enters a project repo verbatim.
+Personalities, memories, body, and voice live in weside (the MCP backend). This file references companions by name + `Companion ID` only. Identity bodies are fetched at runtime via `mcp__plugin_we_weside-mcp__get_council`; identity text never enters a project repo verbatim.

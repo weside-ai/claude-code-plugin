@@ -16,7 +16,8 @@ has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`
 § Close the run is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. While a worker, refiner or watch
-runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
+runs, a question to the human goes, in a repo with a crew, to the Orchestrator
+(`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Questions and milestones); without a crew through `AskUserQuestion`, recommendation first and marked
 "(Recommended)": plain text scrolls away under notifications (owner, 30.09.2026; hook `question_gate.py`).
 Phrase it, and route it where `permissions.deny` blocks the tool, per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
@@ -37,7 +38,8 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
-   A bound companion session skips it (`references/companion-session.md` § Name and binding).
+   A build master named by the working mode (`references/working-mode.md` § Build masters) keeps
+   its name; a bound companion session skips it (`references/companion-session.md` § Name and binding).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
    section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first
@@ -71,7 +73,9 @@ consume (then it runs first, and dependents get `depends_on: [KEY]`); comments c
 plan (a refined story goes back to refine). Any signal → Decision Queue with your recommendation.
 
 The Decision Queue is one batch: signals, forks a worker reported, freshly refined plans waiting for
-approval, a risk-class call. A question never stops independent work: first dispatch everything that
+approval, a risk-class call. In a repo with a crew it goes out by role (`references/working-mode.md`
+§ Questions and milestones): plans to the epic owner (label `owner-<slug>`, else the component owner) and the Product Owner, what only the human
+decides through the Orchestrator. A question never stops independent work: first dispatch everything that
 does not depend on an answer, then ask early and batched (at the start and at wave boundaries, two to
 four plans per batch at most), and park only the chunk an answer blocks. An important question is
 still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase
@@ -208,8 +212,11 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   plan. No ticket during a run, and no question whether to create one: name the follow-ups (owner 25.09.2026).
 - Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
-- A Lead bound to a companion writes back at the run's milestones (plan approved, PR opened or merged,
-  a blocker) per `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
+- In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,
+  the HOW to the epic owner (else the component owner), each milestone (plan approved, PR opened or merged, a blocker) as one line
+  to the Orchestrator, a question for the human through it (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`
+  § Questions and milestones). A Lead bound to a companion also writes back at those milestones per
+  `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default

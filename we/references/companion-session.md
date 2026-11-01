@@ -18,8 +18,8 @@ each name a new sign-in (`scripts/test_mcp_config.py`). Every tool acts as
 changes the account's selection: `select_companion` to another name is refused, so talking as a
 second companion takes a second session. An unknown name answers HTTP 422.
 
-`scripts/wclaude` is the launcher: a menu over the members of the nearest `.weside/council.json`
-(optional `title` per member; the council uses it as the lens of a role without its own shell), `--as <Name>` without a menu, `0` clears
+`scripts/wclaude` is the launcher: a menu over the members of the repo's crew (`scripts/crew.py
+members`; `references/working-mode.md` § Crew), `--as <Name>` without a menu, `0` clears
 the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`. Every session it starts is a master (`WE_ROLE=master`) on the global
@@ -45,15 +45,20 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 ```
 
 `-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
-`WE_ROLE=worker` says it is not a master. `claude stop <id>` finds it only with the same config
+`WE_ROLE=worker` with the pin makes it a consultation, not a master (`references/working-mode.md`
+§ Masters and workers; kind from `scripts/crew.py session_kind`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
 (`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
 
 ## Name and binding
 
 - The SessionStart hook (`hooks/materialize_on_start.py`) titles a pinned session `<Name>` and asks
-  it to run `/we:materialize`, then the role skill `weside-<name lowercased>` when its `SKILL.md`
-  exists under `<cwd>/.claude/skills/` or `~/.claude/skills/` (the companion's working knowledge
-  for that environment). A session already bound to the pin gets the skill line alone on
+  it to run `/we:materialize`, then the role skill `<prefix>-<name lowercased>` (the companion's
+  working knowledge for that environment; prefix from the crew, default `weside`) that
+  `scripts/crew.py skill-path` finds: under `<cwd>/.claude/skills/` or `~/.claude/skills/` it is
+  invoked; only in the member's `workplace` repo it is read by path, so no link into
+  `~/.claude/skills/` is needed; a stub is to be filled and reported to HR. In a repo whose crew
+  lacks `weside_account: true` (a team without a weside account) the hook gives the title and the
+  role-skill line only, never `/we:materialize`. A session already bound to the pin gets the skill line alone on
   `startup` and `resume` (`-c` included), not on `compact` or `clear`. It skips a session started
   with `--agent`.
 - `/we:materialize` binds the session (its step 5 owns the call). The script's docstring owns the
@@ -68,7 +73,8 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 
 ## Workers
 
-A worker is steered by the companion session and is never the companion: it is not titled, not
+Who starts and steers workers: `references/working-mode.md` § Masters and workers. A worker is
+never the companion: it is not titled, not
 asked to materialize, not bound, and stores no turn. A `claude --bg` worker gets the daemon's
 environment (§ Launch and pin), so the pin is absent only when the daemon was started without one;
 a foreground worker starts with the pin cleared (`env -u WESIDE_COMPANION claude`). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
@@ -95,7 +101,7 @@ must know also goes to the shared room through `execute_tool(name="send_to_other
 
 ## Upkeep
 
-A companion's role skill (`weside-<name>`) holds only what that role needs in Claude Code and no
+A companion's role skill (`<prefix>-<name>`, skeleton in `templates/companion-skill/SKILL.md`) holds only what that role needs in Claude Code and no
 always-loaded instruction file, rule or plugin reference already owns. It is edited the same day
 the practice changes; what concerns another role goes into that role's file. Its weside side keeps
 a pinned memory titled `Arbeitsumgebung · <Rolle>` (a literal title in the workspace's language; the role, not the name) that points at the
@@ -156,7 +162,9 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 ## Role owners
 
 Who owns a role (CI, infrastructure, legal …) is read from the account's handbook (the `handbook/`
-notes of the vault) at the moment it is needed, never from memory or a list in a repo. A
+notes of the vault) at the moment it is needed, never from memory. A repo's `.weside/crew.json` is
+its projection for routing, checked against the handbook by HR (`references/working-mode.md`
+§ Crew); where the two disagree, the handbook wins. A
 materialized companion carries the handbook in its identity; otherwise
 `execute_tool(name="notes_search", arguments='{"query": "<role name>"}')` and `notes_get` on the
 hits under `handbook/`.

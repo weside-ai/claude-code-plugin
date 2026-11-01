@@ -223,18 +223,22 @@ def check_installer_verdicts() -> None:
 
 
 def check_instruction_hook_files() -> None:
-    """/we:setup installs the gate's pre-commit hook into user repos; this repo runs the same
+    """/we:setup installs the gate's pre-commit hook (owned by references/optimization-store.md
+    § Gate hook) into user repos; this repo runs the same
     hook. Their `files:` filters are one contract: a file that triggers the gate here must
     trigger it there."""
     pattern = re.compile(r"id: instruction-budget\n(?:.*\n){0,6}?\s*files: (.+)")
     ours = pattern.search((REPO / ".pre-commit-config.yaml").read_text())
-    theirs = pattern.search((WE / "skills" / "setup" / "SKILL.md").read_text())
+    theirs = pattern.search((WE / "references" / "optimization-store.md").read_text())
     if not ours or not theirs:
-        fail("instruction-budget hook: `files:` not found in .pre-commit-config.yaml or setup")
+        fail(
+            "instruction-budget hook: `files:` not found in .pre-commit-config.yaml or "
+            "optimization-store.md § Gate hook"
+        )
     elif ours.group(1).strip() != theirs.group(1).strip():
         fail(
             "instruction-budget hook: `files:` differs between .pre-commit-config.yaml and "
-            "we/skills/setup/SKILL.md — keep them identical"
+            "we/references/optimization-store.md — keep them identical"
         )
 
 
@@ -269,6 +273,8 @@ INDISCRETION_PATTERNS: list[tuple[str, str]] = [
     # Ticket keys in shipped examples use the neutral `PROJ-` placeholder; `WA-`
     # is weside's real Jira prefix and names real internal work.
     ("internal ticket prefix", r"\bWA-(?:\d+|\{|…)"),
+    # The same key glued into a session or branch name (`wa1234-build`).
+    ("internal ticket key in a name", r"(?i)\bwa\d{3,}"),
     # Private sibling repos of this workspace. `weside-cli` and `weside-mcp` are
     # public product names and stay allowed; examples name a neutral repo instead.
     ("internal repo name", r"\bweside-(?:core|infrastructure)\b|leading-companions"),

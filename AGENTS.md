@@ -22,13 +22,14 @@ we/                               plugin root
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   agents/                         dev-medium, dev-high, council-<role> lenses
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
-                                  optimization-store, instruction-sources, instruction-authoring, companion-session)
+                                  optimization-store, instruction-sources, instruction-authoring, companion-session,
+                                  working-mode)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
                                   phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
                                   answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
-                                  + SessionStart materialize and optimization reminder, UserPromptSubmit
+                                  + SessionStart materialize, working-mode core and optimization reminder, UserPromptSubmit
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),
@@ -38,7 +39,7 @@ we/                               plugin root
                                   (no worker panes by default), SubagentStart/Stop timing,
                                   SubagentStop report gate (dev workers), Stop report gate (process
                                   workers, worker_report_gate), InstructionsLoaded + skill-run telemetry
-  scripts/                        rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
+  scripts/                        crew.py (the one reader of .weside/crew.json), rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
                                   wclaude + install_launcher.py (companion launcher),
@@ -49,6 +50,7 @@ we/                               plugin root
                                   check-plan-identifiers.py (plan names exist on the base),
                                   test-delta.py (the PR body's test line)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
+  templates/companion-skill/      role-skill stub /we:setup writes per crew member
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
 scripts/                          repo validators (frontmatter, structure, consistency), claude_review_gate.py
