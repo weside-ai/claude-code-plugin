@@ -45,7 +45,8 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 ```
 
 `-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
-`WE_ROLE=worker` says it is not a master. `claude stop <id>` finds it only with the same config
+`WE_ROLE=worker` with the pin makes it a consultation, not a master (`references/working-mode.md`
+§ Masters and workers; kind from `scripts/crew.py session_kind`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
 (`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
 
 ## Name and binding
@@ -55,7 +56,9 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
   working knowledge for that environment; prefix from the crew, default `weside`) that
   `scripts/crew.py skill-path` finds: under `<cwd>/.claude/skills/` or `~/.claude/skills/` it is
   invoked; only in the member's `workplace` repo it is read by path, so no link into
-  `~/.claude/skills/` is needed; a stub is to be filled and reported to HR. A session already bound to the pin gets the skill line alone on
+  `~/.claude/skills/` is needed; a stub is to be filled and reported to HR. In a repo whose crew
+  lacks `weside_account: true` (a team without a weside account) the hook gives the title and the
+  role-skill line only, never `/we:materialize`. A session already bound to the pin gets the skill line alone on
   `startup` and `resume` (`-c` included), not on `compact` or `clear`. It skips a session started
   with `--agent`.
 - `/we:materialize` binds the session (its step 5 owns the call). The script's docstring owns the

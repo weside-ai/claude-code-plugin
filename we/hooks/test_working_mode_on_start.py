@@ -1,4 +1,4 @@
-"""SessionStart working-mode core: role per environment, nothing without a crew, a small budget."""
+"""SessionStart working-mode core: kind per environment, a line per role, nothing without a crew."""
 
 from __future__ import annotations
 
@@ -13,26 +13,27 @@ sys.path.insert(0, str(HOOK.parent))
 
 import working_mode_on_start as wm  # noqa: E402
 
-# The longest crew we know: names, titles and components of a real twelve-member crew.
+# A crew as long as a real one: every role held, long titles and several components.
 CREW = {
-    "question_label": "FRAGE",
-    "roles": {"product_owner": "pia", "orchestrator": "samu", "hr": "elise", "tester": "smoke"},
+    "question_label": "ASK",
+    "roles": {"product_owner": "ana", "orchestrator": "ben", "hr": "cleo", "tester": "dex"},
     "members": {
-        "pia": {
-            "name": "Pia",
+        "ana": {
+            "name": "Ana",
             "role": "product_owner",
-            "title": "Product Owner",
-            "components": ["Weside", "Omnilogue", "Community"],
+            "components": ["App", "Platform Core", "Community"],
         },
-        "samu": {"name": "Samu", "role": "orchestrator", "title": "Orchestrator"},
-        "vyra": {
-            "name": "Vyra",
+        "ben": {"name": "Ben", "role": "orchestrator"},
+        "cleo": {"name": "Cleo", "role": "hr"},
+        "dex": {"name": "Dexter", "role": "tester"},
+        "eva": {
+            "name": "Eva",
             "role": "architect",
-            "title": "Architecture (incl. Security)",
-            "components": ["Architecture"],
+            "title": "Architecture and Security Review",
+            "components": ["Architecture", "Security Engineering"],
         },
-        "elise": {"name": "Elise", "role": "hr"},
-        "smoke": {"name": "Smoketest", "role": "tester"},
+        "finn": {"name": "Finn", "role": "ux_researcher"},
+        "gus": {"name": "Gus", "role": "security", "on_call": True},
     },
 }
 
@@ -53,53 +54,92 @@ def run(tmp_path, env_extra, crew=CREW, hook_input=None):
         check=False,
     )
     assert done.returncode == 0, done.stderr
-    return (
-        json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"] if done.stdout else None
-    )
+    if not done.stdout:
+        return None
+    return json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
 
 
 def test_no_crew_no_output(tmp_path):
     assert run(tmp_path, {"WE_ROLE": "master"}, crew=None) is None
 
 
-def test_named_master_with_role(tmp_path):
-    note = run(tmp_path, {"WE_ROLE": "master", "WESIDE_COMPANION": "Vyra"})
-    assert "named master, the companion Vyra (Architecture (incl. Security)" in note
-    assert "steer no workers" in note
-    assert "SendMessage to Samu" in note and "`FRAGE · <KEY>" in note
+def test_component_owner(tmp_path):
+    note = run(tmp_path, {"WE_ROLE": "master", "WESIDE_COMPANION": "Eva"})
+    assert "component owner of Architecture, Security Engineering" in note
+    assert "you start no workers" in note
+    assert "SendMessage to Ben" in note and "`ASK · <KEY>" in note
+
+
+def test_one_line_per_role_with_duties(tmp_path):
+    note = run(tmp_path, {"WE_ROLE": "master"})
+    assert "- Orchestrator: Ben — starts and parks build masters" in note
+    assert "- Product Owner: Ana — the WHAT" in note
+    assert "- HR: Cleo — " in note
+    assert "- Tester: Dexter — staging acceptance; moves a story to Done." in note
+
+
+def test_role_holder_points_at_its_role_line(tmp_path):
+    note = run(tmp_path, {"WE_ROLE": "master", "WESIDE_COMPANION": "Ben"})
+    assert "the companion Ben, the Orchestrator (below)" in note
+    assert "SendMessage to Ben" not in note and "/board" in note
 
 
 def test_pin_without_we_role_is_a_named_master(tmp_path):
-    note = run(tmp_path, {"WESIDE_COMPANION": "Vyra"})
-    assert "named master, the companion Vyra" in note
+    assert "named master, the companion Finn" in run(tmp_path, {"WESIDE_COMPANION": "Finn"})
+
+
+def test_on_call_member(tmp_path):
+    note = run(tmp_path, {"WESIDE_COMPANION": "Gus"})
+    assert "on call: answer what you were woken for" in note
+
+
+def test_unknown_pin_asks_the_orchestrator(tmp_path):
+    note = run(tmp_path, {"WESIDE_COMPANION": "Zed"})
+    assert "not in the crew: ask the Orchestrator" in note and "judge" not in note
 
 
 def test_unnamed_master_and_plain_claude(tmp_path):
     for env in ({"WE_ROLE": "master"}, {}):
         note = run(tmp_path, env)
         assert "unnamed master (build master or helper)" in note
+        assert "epic owner (label `owner-<slug>`), else the component owner" in note
 
 
-def test_worker_by_env_or_agent(tmp_path):
-    assert "a worker" in run(tmp_path, {"WE_ROLE": "worker", "WESIDE_COMPANION": "Vyra"})
-    assert "a worker" in run(tmp_path, {"WE_ROLE": "master"}, hook_input={"agent_type": "x"})
+def test_consultation(tmp_path):
+    note = run(tmp_path, {"WE_ROLE": "worker", "WESIDE_COMPANION": "Eva"})
+    assert "a consultation as the companion Eva" in note and "then end" in note
+    assert "SendMessage to Ben" not in note
 
 
-def test_orchestrator_keeps_the_board_and_sends_no_question_to_itself(tmp_path):
-    note = run(tmp_path, {"WE_ROLE": "master", "WESIDE_COMPANION": "Samu"})
-    assert "/board" in note and "SendMessage to Samu" not in note
+def test_worker_reports_to_its_starter_only(tmp_path):
+    for env, extra in (
+        ({"WE_ROLE": "worker"}, None),
+        ({"WE_ROLE": "master"}, {"agent_type": "x"}),
+    ):
+        note = run(tmp_path, env, hook_input=extra)
+        assert "a worker" in note and "to your starter" in note
+        assert "SendMessage to Ben" not in note
 
 
-def test_names_the_reference(tmp_path):
+def test_reads_the_reference_as_an_imperative(tmp_path):
     note = run(tmp_path, {"WE_ROLE": "master"})
-    assert str(wm.REFERENCE) in note and wm.REFERENCE.is_file()
+    assert f"Read {wm.REFERENCE} before routing, starting a session or moving a ticket." in note
+    assert wm.REFERENCE.is_file()
 
 
-def test_budget_for_every_role():
+def test_budget_for_every_kind():
     reference = Path(
-        "/home/user/.claude/plugins/cache/weside-ai/we/7.44.0/references/working-mode.md"
+        "/home/user/.claude/plugins/cache/weside-ai/we/9.99.0/references/working-mode.md"
     )
-    for kind, pin in (("named", "Vyra"), ("named", "Samu"), ("unnamed", ""), ("worker", "")):
+    cases = (
+        ("named", "Eva"),
+        ("named", "Ben"),
+        ("named", "Gus"),
+        ("consult", "Eva"),
+        ("unnamed", ""),
+        ("worker", ""),
+    )
+    for kind, pin in cases:
         note = wm.core(CREW, kind, pin, reference=reference)
         assert len(note.splitlines()) <= wm.MAX_LINES, note
         assert len(note) <= wm.MAX_CHARS, (len(note), note)

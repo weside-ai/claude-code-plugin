@@ -14,11 +14,11 @@ workspace keeps only what is local to it.
 
 ### A. `we/references/working-mode.md` is the one owner
 
-Generic, roles not names: Owner (the human), Product Owner, Orchestrator, HR/Context, Tester,
+Generic, roles not names: Human, Product Owner, Orchestrator, HR/Context, Tester,
 component owners, specialists on call. The Orchestrator keeps questions, sessions and news for the
-Owner on the board (`we/docs/board.md`).
+Human on the board (`we/docs/board.md`).
 
-- Build-master name `<word>-<number>` (`gum-2662`), never `lead-<KEY>`; only build masters. A
+- Build-master name `<word>-<number>` (`onboarding-42`), never `lead-<KEY>`; only build masters. A
   worker's name carries its key; its brief names its starter in the first line
   (`worker_launch.py` now writes `Lead:` first).
 - Question line `<label> · <KEY> <title> · <question> · Recommendation: …`; the label is
@@ -45,7 +45,7 @@ stays the truth; HR checks drift with `crew.py show` against the handbook's role
 
 Only with a crew; every source; role from `WE_ROLE` + `WESIDE_COMPANION` (worker · named master,
 also a pin without `WE_ROLE` · unnamed master). Names the PO, the Orchestrator, where questions go,
-and the reference path. Budget ≤ 10 lines / 900 characters, asserted per role in the test.
+and the reference path. Budget ≤ 10 lines / 1,200 characters, asserted per kind in the test.
 
 ### D. Role-skill stubs, no links
 
@@ -60,9 +60,27 @@ A team gets `working-mode.md`, the crew from setup's questions, the `wclaude` me
 core, stubs and the fill note, council lenses with titles. Missing: materialize, the handbook
 proposal and drift check, the MCP pin header, wake.
 
+### Review round (simulation of the draft)
+
+- One resolver `crew.session_kind` for both hooks, with a fourth kind `consult` (pin +
+  `WE_ROLE=worker`): the companion answers one request and ends.
+- The Orchestrator starts sessions and steers none: build masters, and a worker for a single story
+  or a job without a master, which reports to it (plan approved → `--solo`; else `/we:refine`, the
+  component owner's acceptance, then build). Start recipe for a build master in § Build masters.
+- The core carries one line per `roles.*` holder with its duties; a worker sends questions and its
+  report to its starter; the last line is the imperative to read the reference.
+- Status flow as a chain of ownership in § Ticketing (component owner → Orchestrator → the
+  orchestrating session → Tester).
+- Done: `/we:setup` writes `after_merge: "in_review"` when the crew has a Tester, who moves a story
+  to Done; without a Tester, done at the merge.
+- Without `weside_account: true` a pinned session gets its title and role-skill line, no
+  `/we:materialize`. `find` stops at the repo root; setup asks the skill prefix.
+- The gate hook YAML moved from setup to `optimization-store.md` § Gate hook (setup back to 168
+  lines); the indiscretion check also catches a ticket key glued into a name.
+
 ## Budgets
 
-`working-mode.md` 101 lines with `## Contents`; hook core ≤ 10 lines / 900 characters (test);
+`working-mode.md` 111 lines with `## Contents`; `setup/SKILL.md` 168 lines; hook core ≤ 10 lines / 1,200 characters (test; about 930 for a seven-member crew);
 skill listing ≤ 6,000 characters (validator); `check-instruction-budget.py` 0 errors.
 
 ## Verification

@@ -8,17 +8,25 @@ Usage:
   crew.py skill-path NAME [--cwd DIR]       "<path>\\t<loadable|workplace>\\t<skill|stub>", exit 1 if none
   crew.py stubs [--from DIR] [--write]      members without a role skill; --write creates the stubs
 
-Lookup (``find``): from DIR (default the cwd) upwards, the first ``.weside/crew.json``; a
-``.weside/config.json`` whose ``crew`` names another crew file (relative to that repo's root)
-counts as that file. The crew is the repo's projection of the account's handbook; the handbook
+Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
+``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
+crew file (relative to that repo's root) counts as that file. A repo never inherits the crew of a
+directory above it. The crew is the repo's projection of the account's handbook; the handbook
 stays the truth about people. Contract: ``references/working-mode.md`` § Crew.
 
 Schema: ``roles`` maps ``product_owner``, ``orchestrator``, ``hr``, ``tester`` to member slugs;
 ``members.<slug>`` carries ``name``, ``role`` (the council lens role), optional ``title`` and
 ``lens``, ``components`` (backlogs the member orders), ``workplace`` (the repo holding the
 member's role skill, relative to the repo that holds the crew file) and ``on_call``.
-``skill_prefix`` (default ``weside``) names role skills ``<prefix>-<name lowercased>``;
-``question_label`` (default ``QUESTION``) opens a question line to the human.
+``skill_prefix`` names role skills ``<prefix>-<name lowercased>`` (``/we:setup`` asks for it; absent,
+and without a crew, ``weside``); ``question_label`` (default ``QUESTION``) opens a question line to
+the human; ``weside_account: true`` says the members are weside companions (setup sets it when the
+weside MCP was connected), so a pinned session loads its identity with ``/we:materialize``.
+
+Session kind (``session_kind``, read by both SessionStart hooks): ``worker`` (``WE_ROLE=worker``
+without a pin, or a session started with ``--agent``), ``consult`` (a pin with ``WE_ROLE=worker``:
+the companion answers one request and ends), ``named`` (a pin, ``WE_ROLE`` master or unset),
+``unnamed`` (no pin).
 """
 
 from __future__ import annotations
@@ -43,19 +51,40 @@ def find(start: str | Path | None = None) -> Path | None:
     """The crew file in force for ``start``, or None."""
     d = Path(start or Path.cwd()).resolve()
     for root in (d, *d.parents):
-        own = root / ".weside" / "crew.json"
-        if own.is_file():
-            return own
-        config = root / ".weside" / "config.json"
-        if config.is_file():
-            try:
-                pointer = json.loads(config.read_text(encoding="utf-8")).get("crew")
-            except (OSError, ValueError, AttributeError):
-                pointer = None
-            if isinstance(pointer, str) and pointer.strip():
-                target = (root / pointer.strip()).resolve()
-                return target if target.is_file() else None
+        found = _crew_at(root)
+        if found is not False:
+            return found
+        if (root / ".git").exists():
+            return None
     return None
+
+
+def _crew_at(root: Path) -> Path | None | bool:
+    """The crew file ``root`` declares, None for a dangling pointer, False when it declares none."""
+    own = root / ".weside" / "crew.json"
+    if own.is_file():
+        return own
+    config = root / ".weside" / "config.json"
+    if config.is_file():
+        try:
+            pointer = json.loads(config.read_text(encoding="utf-8")).get("crew")
+        except (OSError, ValueError, AttributeError):
+            pointer = None
+        if isinstance(pointer, str) and pointer.strip():
+            target = (root / pointer.strip()).resolve()
+            return target if target.is_file() else None
+    return False
+
+
+def session_kind(env: dict, agent_type: object = None) -> tuple[str, str]:
+    """(kind, pin) of a session: ``worker``, ``consult``, ``named`` or ``unnamed``."""
+    pin = str(env.get("WESIDE_COMPANION", "")).strip()
+    if agent_type:
+        return "worker", ""
+    worker = str(env.get("WE_ROLE", "")).strip() == "worker"
+    if pin:
+        return ("consult" if worker else "named"), pin
+    return ("worker" if worker else "unnamed"), ""
 
 
 def load(path: Path) -> dict[str, Any]:

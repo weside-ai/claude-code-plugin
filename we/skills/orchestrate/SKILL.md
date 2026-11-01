@@ -16,7 +16,8 @@ has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`
 § Close the run is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. While a worker, refiner or watch
-runs, a question to the human goes through `AskUserQuestion`, recommendation first and marked
+runs, a question to the human goes, in a repo with a crew, to the Orchestrator
+(`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Questions and milestones); without a crew through `AskUserQuestion`, recommendation first and marked
 "(Recommended)": plain text scrolls away under notifications (owner, 30.09.2026; hook `question_gate.py`).
 Phrase it, and route it where `permissions.deny` blocks the tool, per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
@@ -73,7 +74,7 @@ plan (a refined story goes back to refine). Any signal → Decision Queue with y
 
 The Decision Queue is one batch: signals, forks a worker reported, freshly refined plans waiting for
 approval, a risk-class call. In a repo with a crew it goes out by role (`references/working-mode.md`
-§ Questions and milestones): plans to the epic's owner and the Product Owner, what only the human
+§ Questions and milestones): plans to the epic owner (label `owner-<slug>`, else the component owner) and the Product Owner, what only the human
 decides through the Orchestrator. A question never stops independent work: first dispatch everything that
 does not depend on an answer, then ask early and batched (at the start and at wave boundaries, two to
 four plans per batch at most), and park only the chunk an answer blocks. An important question is
@@ -212,7 +213,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 - Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,
-  the HOW to the epic's owner, each milestone (plan approved, PR opened or merged, a blocker) as one line
+  the HOW to the epic owner (else the component owner), each milestone (plan approved, PR opened or merged, a blocker) as one line
   to the Orchestrator, a question for the human through it (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`
   § Questions and milestones). A Lead bound to a companion also writes back at those milestones per
   `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.

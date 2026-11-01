@@ -126,3 +126,26 @@ def test_broken_crew_is_an_error(tmp_path):
         assert "members" in str(exc)
     else:
         raise AssertionError("expected CrewError")
+
+
+def test_find_stops_at_the_repo_root(tmp_path):
+    (tmp_path / ".weside").mkdir()
+    (tmp_path / ".weside" / "crew.json").write_text(json.dumps(CREW))
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "src").mkdir()
+    assert crew.find(repo / "src") is None
+    assert crew.find(tmp_path / "other") == tmp_path / ".weside" / "crew.json"
+
+
+def test_session_kind():
+    assert crew.session_kind({"WE_ROLE": "worker"}) == ("worker", "")
+    assert crew.session_kind({"WESIDE_COMPANION": "Eva", "WE_ROLE": "worker"}) == (
+        "consult",
+        "Eva",
+    )
+    assert crew.session_kind({"WESIDE_COMPANION": "Eva"}) == ("named", "Eva")
+    assert crew.session_kind({"WESIDE_COMPANION": "Eva", "WE_ROLE": "master"}) == ("named", "Eva")
+    assert crew.session_kind({"WE_ROLE": "master"}) == ("unnamed", "")
+    assert crew.session_kind({}) == ("unnamed", "")
+    assert crew.session_kind({"WESIDE_COMPANION": "Eva"}, agent_type="x") == ("worker", "")

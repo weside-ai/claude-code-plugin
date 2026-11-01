@@ -11,8 +11,8 @@ holds a store: it is public, and entries come from transcripts and carry interna
 
 ## Contents
 
-Layout · Inbox entry · Ledger row · Source lock · Measurement adapter · Config keys · Plugin
-checkout and workspace.
+Layout · Inbox entry · Ledger row · Source lock · Measurement adapter · Config keys · Gate hook ·
+Plugin checkout and workspace.
 
 ## Layout
 
@@ -169,6 +169,23 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
   Claude Code loads (a product's own skill library, a history folder); otherwise they count
   against the limits. The gate prints this hint when it fails without any exclude.
 - `workspace`: sibling repos the loop may offer to work on, one entry per remote URL.
+
+## Gate hook
+
+The instruction-budget gate as a repo's local pre-commit hook (`/we:setup` § 6 adds it). It resolves
+the gate from the plugin cache and passes with a notice where the plugin is absent: a local hook and
+a `/we:optimize` step, not a CI job, so the repo vendors no copy of the plugin's scripts.
+
+```yaml
+- repo: local
+  hooks:
+    - id: instruction-budget
+      name: Instruction budget (we plugin)
+      entry: bash -c 'g=$(ls -d ~/.claude/plugins/cache/weside-ai/we/*/scripts/check-instruction-budget.py 2>/dev/null | sort -V | tail -1); if [ -z "$g" ]; then echo "we plugin absent - instruction budget not checked"; exit 0; fi; python3 "$g"'
+      language: system
+      pass_filenames: false
+      files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|\.weside/config\.json)$'
+```
 
 ## Plugin checkout and workspace
 

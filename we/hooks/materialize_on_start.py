@@ -18,6 +18,11 @@ the pin gets that skill line alone, but only on ``startup`` and ``resume``
 context or the unbound note names it. Contract:
 ``references/companion-session.md``.
 
+The pin and the worker check come from ``crew.session_kind``: a ``--agent`` session gets nothing,
+a consultation (pin + ``WE_ROLE=worker``) is the companion like a master. In a repo whose crew has
+no ``weside_account: true`` (a team without a weside account) a pinned session gets its title and
+the role-skill line only, never the request to materialize.
+
 Unpinned: when the user enabled autoMaterialize
 (``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
 ask the session to load the companion first. Off, absent or unreadable → the
@@ -113,6 +118,17 @@ def role_skill(name: str, cwd: str) -> str | None:
     return READ_ACTION.format(path=path, name=name)
 
 
+def weside_backed(cwd: str) -> bool:
+    """Whether a pin here names a weside companion: no crew (a plain pin), or a crew with
+    ``weside_account: true``. A crew without it is a team without an account: title and role
+    skill only, no ``/we:materialize``."""
+    try:
+        _, members = crew.find_and_load(cwd)
+    except crew.CrewError:
+        return True
+    return members is None or members.get("weside_account") is True
+
+
 def enabled() -> bool:
     try:
         with open(os.path.expanduser("~/.claude/settings.json")) as fh:
@@ -134,14 +150,18 @@ def read_input() -> dict:
 def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     """The hook's JSON answer, or None to print nothing."""
     env = os.environ if environ is None else environ
-    pin = env.get("WESIDE_COMPANION", "").strip()
+    _, pin = crew.session_kind(env, hook_input.get("agent_type"))
     if pin:
-        if hook_input.get("agent_type"):
-            return None
         specific: dict = {"hookEventName": "SessionStart", "sessionTitle": pin}
         bound = read_binding(hook_input.get("session_id", ""))
         cwd = hook_input.get("cwd") or os.getcwd()
-        if not bound or bound.lower() != pin.lower():
+        if not weside_backed(cwd):
+            action = role_skill(pin, cwd)
+            if action and hook_input.get("source") in ("startup", "resume"):
+                specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
+                    action=action, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
+                )
+        elif not bound or bound.lower() != pin.lower():
             action = role_skill(pin, cwd)
             specific["additionalContext"] = PINNED_CONTEXT.format(
                 name=pin,
