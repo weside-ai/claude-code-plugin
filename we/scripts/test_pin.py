@@ -13,9 +13,9 @@ SCRIPT = Path(__file__).parent / "pin.sh"
 pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="pin.sh is a bash script")
 
 
-def run(tmp_path, *args, profile=False, **extra):
+def run(tmp_path, *args, profile=False, profile_json=True, own_projects=False, **extra):
     home = tmp_path / "home"
-    home.mkdir(exist_ok=True)
+    (home / ".claude" / "projects").mkdir(parents=True, exist_ok=True)
     (home / ".claude.json").write_text(
         json.dumps({"oauthAccount": {"emailAddress": "global@example.com"}})
     )
@@ -27,10 +27,15 @@ def run(tmp_path, *args, profile=False, **extra):
     env.update(HOME=str(home), CLAUDE_CODE_SESSION_ID="sid-1", WESIDE_COMPANION="Ada", **extra)
     if profile:
         prof = tmp_path / "3-me_example.com"
-        prof.mkdir(exist_ok=True)
-        (prof / ".claude.json").write_text(
-            json.dumps({"oauthAccount": {"emailAddress": "me@example.com"}})
-        )
+        prof.mkdir()
+        if profile_json:
+            (prof / ".claude.json").write_text(
+                json.dumps({"oauthAccount": {"emailAddress": "me@example.com"}})
+            )
+        if own_projects:
+            (prof / "projects").mkdir()
+        else:
+            (prof / "projects").symlink_to(home / ".claude" / "projects")
         env["CLAUDE_CONFIG_DIR"] = str(prof)
     return subprocess.run(
         ["bash", str(SCRIPT), *args],
@@ -74,3 +79,14 @@ def test_on_needs_the_pin_command(tmp_path):
 def test_on_outside_tmux_uses_the_pin_command(tmp_path):
     proc = run(tmp_path, "on", WCLAUDE_PIN="/opt/pinned")
     assert "WE_ROLE=master /opt/pinned --name Ada --resume sid-1" in proc.stdout
+
+
+def test_pinned_status_never_falls_back_to_the_global_login(tmp_path):
+    out = run(tmp_path, profile=True, profile_json=False).stdout.strip()
+    assert out == "pinned · bills unknown · profile 3-me_example.com"
+
+
+def test_off_refuses_a_profile_with_its_own_transcripts(tmp_path):
+    proc = run(tmp_path, "off", profile=True, own_projects=True)
+    assert proc.returncode == 1
+    assert "--resume will not find" in proc.stderr

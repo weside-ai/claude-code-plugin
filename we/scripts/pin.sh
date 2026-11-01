@@ -14,29 +14,23 @@ set -euo pipefail
 mode=${1:-status}
 sid=${CLAUDE_CODE_SESSION_ID:-}
 
-account_of() { # <config dir> → the e-mail of the logged-in account, from Claude Code's own config
+account_of() { # <.claude.json> → the e-mail of the logged-in account, from Claude Code's own config
   python3 - "$1" <<'PY'
 import json, sys
-from pathlib import Path
-d = Path(sys.argv[1])
-for f in (d / ".claude.json", Path.home() / ".claude.json"):
-    if f.is_file():
-        try:
-            print((json.loads(f.read_text()).get("oauthAccount") or {}).get("emailAddress") or "unknown")
-        except ValueError:
-            print("unknown")
-        break
-else:
+try:
+    with open(sys.argv[1]) as fh:
+        print((json.load(fh).get("oauthAccount") or {}).get("emailAddress") or "unknown")
+except (OSError, ValueError, AttributeError):
     print("unknown")
 PY
 }
 
 if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
   state=pinned
-  account=$(account_of "$CLAUDE_CONFIG_DIR")
+  account=$(account_of "$CLAUDE_CONFIG_DIR/.claude.json")
 else
   state=unpinned
-  account=$(account_of "$HOME")
+  account=$(account_of "$HOME/.claude.json")
 fi
 
 case $mode in
@@ -63,6 +57,13 @@ if [[ $mode == on ]]; then
   launch=$(printf '%q' "$WCLAUDE_PIN")
   prefix=""
 else
+  # --resume finds the transcript only in the target's projects/; the profile must share it.
+  here=$(cd "$CLAUDE_CONFIG_DIR/projects" 2>/dev/null && pwd -P || true)
+  there=$(cd "$HOME/.claude/projects" 2>/dev/null && pwd -P || true)
+  if [[ -z "$here" || "$here" != "$there" ]]; then
+    echo "pin.sh: $CLAUDE_CONFIG_DIR/projects is not ~/.claude/projects; link it first, or --resume will not find this session" >&2
+    exit 1
+  fi
   launch=claude
   prefix="-u CLAUDE_CONFIG_DIR"
 fi

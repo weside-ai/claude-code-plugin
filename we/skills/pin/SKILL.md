@@ -14,5 +14,6 @@ description: "Account pin of a master session: status, on, off. Trigger: \"/we:p
 Pinned means the session was started through `$WCLAUDE_PIN` (`wclaude --pin`) and runs in its own
 config profile (`CLAUDE_CONFIG_DIR`); unpinned means the global login, like a plain `claude`. A live
 session cannot change sides: the profile's credential belongs to the account switcher, so a link to
-the global login would let the switcher write through it. Contract:
+the global login would let the switcher write through it. `--resume` needs the transcript on both
+sides: the pinned profile's `projects/` must be a link to `~/.claude/projects` (`off` checks it). Contract:
 `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Launch and pin.
