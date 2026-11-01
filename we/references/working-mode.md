@@ -110,10 +110,12 @@ docstring): `/we:setup` writes it, `wclaude` lists its members, `/we:council` ta
 it, the SessionStart hooks read the roles and find each member's role skill through `workplace`.
 One repo holds the file; another points at it with `.weside/config.json` → `"crew"`.
 
-Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, role,
-components, `on_call`, the four roles, `weside_account`, `skill_prefix`) at each onboarding and whenever a role note changes, and
-fixes the side that is wrong by commit or note. A member without a skill gets a stub from
-`templates/companion-skill/SKILL.md`; its first start asks it to fill the stub and tell HR.
+`crew.json` holds only members with a Claude Code workplace; a handbook member without one is not
+drift. Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, role,
+components, the four roles) at each onboarding and whenever a role note changes, and fixes the side
+that is wrong by commit or note; `on_call`, `weside_account` and `skill_prefix` are repo settings,
+not compared. A member without a skill gets a stub from `templates/companion-skill/SKILL.md`; its
+first start asks it to fill the stub and tell the Orchestrator in one line (for HR).
 
 ## What stays local
 

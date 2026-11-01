@@ -88,7 +88,11 @@ def test_stubs_write_once_and_never_overwrite(tmp_path):
     lex = biz / ".claude" / "skills" / "acme-lex" / "SKILL.md"
     text = lex.read_text()
     assert crew.is_stub(lex)
-    assert "name: acme-lex" in text and "# Lex · legal" in text and "tell Hana" in text
+    assert (
+        "name: acme-lex" in text
+        and "# Lex · legal" in text
+        and "tell Otto in one line (for HR)" in text
+    )
     assert "{{" not in text
     lex.write_text("filled")
     assert crew.stubs(path, CREW, write=True) == []

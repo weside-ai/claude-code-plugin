@@ -199,7 +199,7 @@ class MaterializeOnStartTest(unittest.TestCase):
         (core / ".weside").mkdir(parents=True)
         crew = {
             "weside_account": account,
-            "roles": {"hr": "hana"},
+            "roles": {"hr": "hana", "orchestrator": "lex"},
             "members": {
                 "hana": {"name": "Hana", "workplace": "../biz"},
                 "lex": {"name": "Lex", "workplace": "../biz"},
@@ -226,7 +226,7 @@ class MaterializeOnStartTest(unittest.TestCase):
             pin="Lex", hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)}
         )["hookSpecificOutput"]["additionalContext"]
         self.assertIn("still a stub", note)
-        self.assertIn("tell Hana in one line", note)
+        self.assertIn("tell Lex in one line (for HR)", note)
 
     def test_crew_without_account_gets_no_materialize(self):
         core, _skill = self.crew_workspace("---\nname: weside-lex\n---\n")

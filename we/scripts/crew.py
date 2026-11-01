@@ -184,7 +184,7 @@ def render_stub(crew: dict[str, Any], slug: str) -> str:
         "name": name,
         "role": str(entry.get("title") or entry.get("role") or "member").strip(),
         "components": components,
-        "hr": holder_name(crew, "hr") or "HR",
+        "orchestrator": holder_name(crew, "orchestrator") or "the Orchestrator",
     }
     text = TEMPLATE.read_text(encoding="utf-8")
     for key, value in values.items():

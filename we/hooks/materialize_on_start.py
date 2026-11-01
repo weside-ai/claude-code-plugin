@@ -12,7 +12,7 @@ it gets nothing. When a role skill ``<prefix>-<name lowercased>`` exists
 (``scripts/crew.py skill-path``: the project's ``.claude/skills/``, ``~/.claude/skills/``, then
 the member's ``workplace`` repo from the crew), the note also asks the session to invoke it after
 materializing, or to read it when only the workplace holds it; a skill still marked as a stub is to
-be filled and reported to HR instead. A session already bound to
+be filled and reported to the Orchestrator (for HR) instead. A session already bound to
 the pin gets that skill line alone, but only on ``startup`` and ``resume``
 (``--continue`` too): after ``compact`` or ``clear`` the skill is still in
 context or the unbound note names it. Contract:
@@ -91,7 +91,7 @@ READ_ACTION = (
 
 STUB_ACTION = (
     "fill {name}'s role skill {path}: it is still a stub. Follow the skeleton inside, commit it "
-    "per its repo's instruction file, then tell {hr} in one line."
+    "per its repo's instruction file, then tell {orch} in one line (for HR)."
 )
 
 IGNORE_CONTEXT = (
@@ -111,8 +111,8 @@ def role_skill(name: str, cwd: str) -> str | None:
             _, members = crew.find_and_load(cwd)
         except crew.CrewError:
             members = None
-        hr = crew.holder_name(members, "hr") if members else None
-        return STUB_ACTION.format(name=name, path=path, hr=hr or "HR")
+        orch = crew.holder_name(members, "orchestrator") if members else None
+        return STUB_ACTION.format(name=name, path=path, orch=orch or "the Orchestrator")
     if loadable:
         return SKILL_ACTION.format(skill=path.parent.name, name=name)
     return READ_ACTION.format(path=path, name=name)

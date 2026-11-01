@@ -52,7 +52,7 @@ and the reference path. Budget ≤ 10 lines / 1,200 characters, asserted per kin
 `we/templates/companion-skill/SKILL.md` (the skeleton, marker `<!-- we:stub`); `crew.py stubs
 --write` creates one per member without a skill in its `workplace`. `materialize_on_start.py`
 finds the skill through `crew.py skill-path`: loadable → invoke; only in the workplace → read by
-path (no link into `~/.claude/skills/` needed); a stub → fill it and tell HR.
+path (no link into `~/.claude/skills/` needed); a stub → fill it and tell the Orchestrator (for HR).
 
 ### Without a weside account
 
