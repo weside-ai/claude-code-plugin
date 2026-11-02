@@ -272,3 +272,51 @@ test('Read appends a read line, sends no prompt and drops the item; the old note
   expect(await ui.find({ type: 'Text', text: /second line/ })).toBeDefined()
   await ui.unmount()
 })
+
+// boardAutoOpen: the pane opens at session start for `on`, for `orchestrator` only when crew.py says so.
+async function startWith($: Parameters<Parameters<typeof test>[1]>[0], on: Parameters<Parameters<typeof test>[1]>[1], isOrchestrator: boolean) {
+  const clock = mock.clock(on)
+  mock.store(on)
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
+  on('fs.read', () => ({ value: BOARD }))
+  const checks: string[][] = []
+  on('process.run', (_$, e) => {
+    if (String(e.argv[2]).endsWith('/scripts/crew.py')) {
+      checks.push(e.argv.slice(3))
+      return { value: { exitCode: isOrchestrator ? 0 : 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    return RUN(PROBE)
+  })
+  const opened: string[] = []
+  on('ui.open', (_$, e) => {
+    opened.push(String((e as { id?: unknown }).id))
+    return { value: { isPlaced: true } }
+  })
+  on('command.register', () => ({ value: { command: 'board' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  return { opened, checks }
+}
+
+test('boardAutoOpen off by default: nothing opens, nothing runs', async ($, on) => {
+  const { opened, checks } = await startWith($, on, true)
+  expect([opened, checks]).toEqual([[], []])
+})
+
+test('boardAutoOpen on opens the board in every session', { options: { boardAutoOpen: 'on' } }, async ($, on) => {
+  const { opened, checks } = await startWith($, on, false)
+  expect([opened, checks]).toEqual([['we-board'], []])
+})
+
+test('boardAutoOpen orchestrator opens it only in the Orchestrator\'s session', { options: { boardAutoOpen: 'orchestrator' } }, async ($, on) => {
+  const { opened, checks } = await startWith($, on, true)
+  expect([opened, checks]).toEqual([['we-board'], [['is-role', 'orchestrator']]])
+})
+
+test('boardAutoOpen orchestrator leaves another session alone', { options: { boardAutoOpen: 'orchestrator' } }, async ($, on) => {
+  const { opened } = await startWith($, on, false)
+  expect(opened).toEqual([])
+})

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -154,3 +155,28 @@ def test_session_kind():
     assert crew.session_kind({"WE_ROLE": "master"}) == ("unnamed", "")
     assert crew.session_kind({}) == ("unnamed", "")
     assert crew.session_kind({"WESIDE_COMPANION": "Eva"}, agent_type="x") == ("worker", "")
+
+
+def test_holds_role_and_cli(tmp_path):
+    core, _biz = workspace(tmp_path)
+    assert crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"})
+    assert crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "otto"})
+    assert not crew.holds_role(
+        CREW, "orchestrator", {"WESIDE_COMPANION": "Otto", "WE_ROLE": "worker"}
+    )
+    assert not crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "Ada"})
+    assert not crew.holds_role(CREW, "orchestrator", {"WE_ROLE": "master"})
+
+    def cli(env):
+        base = {k: v for k, v in os.environ.items() if k not in ("WESIDE_COMPANION", "WE_ROLE")}
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "is-role", "orchestrator"],
+            cwd=core,
+            env={**base, **env},
+            capture_output=True,
+            check=False,
+        ).returncode
+
+    assert cli({"WESIDE_COMPANION": "Otto"}) == 0
+    assert cli({"WESIDE_COMPANION": "Ada"}) == 1
+    assert cli({}) == 1

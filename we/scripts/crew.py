@@ -7,6 +7,8 @@ Usage:
   crew.py members [--from DIR]              one line per named member: "<name>\\t<title, else role>"
   crew.py skill-path NAME [--cwd DIR]       "<path>\\t<loadable|workplace>\\t<skill|stub>", exit 1 if none
   crew.py stubs [--from DIR] [--write]      members without a role skill; --write creates the stubs
+  crew.py is-role ROLE [--from DIR]         exit 0 when this session (its environment) is a named
+                                            master holding ROLE (roles.<ROLE>), else 1
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -32,6 +34,7 @@ the companion answers one request and ends), ``named`` (a pin, ``WE_ROLE`` maste
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -85,6 +88,13 @@ def session_kind(env: dict, agent_type: object = None) -> tuple[str, str]:
     if pin:
         return ("consult" if worker else "named"), pin
     return ("worker" if worker else "unnamed"), ""
+
+
+def holds_role(crew: dict[str, Any], role: str, env: Any) -> bool:
+    """Whether the session of ``env`` is a named master whose member holds ``roles.<role>``."""
+    kind, pin = session_kind(env)
+    found = member(crew, pin) if kind == "named" else None
+    return bool(found) and crew.get("roles", {}).get(role) == found[0]
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -257,25 +267,35 @@ def _print_members(crew: dict[str, Any]) -> None:
             print(name + "\t" + " ".join(str(label).split()))
 
 
-def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("path", "show", "members", "skill-path", "stubs"):
-        print(__doc__.strip().splitlines()[2], file=sys.stderr)
-        return 2
-    cmd = argv[0]
-    if cmd == "skill-path":
-        return _skill_path_cli(argv)
-    if cmd == "path":
-        found = find(_opt(argv, "--from"))
-        if found is not None:
-            print(found)
-        return 0 if found is not None else 1
+def _load_cli(argv: list[str]) -> tuple[Path, dict[str, Any]] | None:
     try:
         crew_path, crew = find_and_load(_opt(argv, "--from"))
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
+        return None
+    return (crew_path, crew) if crew_path is not None and crew is not None else None
+
+
+def _path_cli(argv: list[str]) -> int:
+    found = find(_opt(argv, "--from"))
+    if found is not None:
+        print(found)
+    return 0 if found is not None else 1
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] not in ("path", "show", "members", "skill-path", "stubs", "is-role"):
+        print(__doc__.strip().splitlines()[2], file=sys.stderr)
+        return 2
+    cmd = argv[0]
+    if cmd in ("skill-path", "path"):
+        return _skill_path_cli(argv) if cmd == "skill-path" else _path_cli(argv)
+    loaded = _load_cli(argv)
+    if loaded is None:
         return 1
-    if crew_path is None or crew is None:
-        return 1
+    crew_path, crew = loaded
+    if cmd == "is-role":
+        return 0 if len(argv) > 1 and holds_role(crew, argv[1], os.environ) else 1
     if cmd == "show":
         print(json.dumps(show(crew_path, crew), ensure_ascii=False, indent=2))
     elif cmd == "members":

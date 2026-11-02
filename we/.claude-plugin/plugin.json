@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.44.0",
+  "version": "7.45.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -51,6 +51,13 @@
       "type": "string",
       "title": "Board File",
       "description": "The workspace board /board reads (schema: docs/board.md). Default ~/.claude/we-state/board.json; ~/ and relative paths count from the home folder.",
+      "required": false
+    },
+    "boardAutoOpen": {
+      "type": "string",
+      "title": "Board Auto Open",
+      "description": "Opens the /board pane when a session starts: off (default), on (every session), orchestrator (only the session of the crew's Orchestrator, .weside/crew.json). Opened unasked, the pane needs 144 terminal columns and waits below that.",
+      "default": "off",
       "required": false
     },
     "masterProfile": {
