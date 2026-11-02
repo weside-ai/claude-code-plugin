@@ -180,3 +180,41 @@ def test_holds_role_and_cli(tmp_path):
     assert cli({"WESIDE_COMPANION": "Otto"}) == 0
     assert cli({"WESIDE_COMPANION": "Ada"}) == 1
     assert cli({}) == 1
+
+
+def test_a_process_worker_is_a_worker_whatever_its_environment(tmp_path):
+    repo = tmp_path / "wt"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    git_dir = repo / ".git"
+    env = {"WESIDE_COMPANION": "Eva", "WE_ROLE": "master"}
+    payload = {"cwd": str(repo), "session_id": "s-w"}
+    assert crew.session_kind(env, hook_input=payload) == ("named", "Eva")
+    (git_dir / "we-worker.json").write_text(json.dumps({"name": "w1"}))
+    assert crew.session_kind(env, hook_input=payload) == ("worker", "")
+    (git_dir / "we-worker.json").write_text(json.dumps({"name": "w1", "session_id": "s-w"}))
+    assert crew.session_kind(env, hook_input=payload) == ("worker", "")
+    (git_dir / "we-worker.json").write_text(json.dumps({"name": "w1", "session_id": "other"}))
+    assert crew.session_kind(env, hook_input=payload) == ("named", "Eva")
+
+
+def test_lookup_keeps_non_ascii_names_stubs_stay_strict():
+    assert crew.skill_name("Zoë") == "weside-zoë"
+    assert crew.skill_name("Zoë", strict=True) is None
+    for bad in ("../x", "a/b", "a\\b", "two words", ""):
+        assert crew.skill_name(bad) is None
+
+
+def test_stub_frontmatter_survives_quotes_and_backslashes(tmp_path):
+    odd = {
+        "skill_prefix": "acme",
+        "roles": {"orchestrator": "otto"},
+        "members": {
+            "otto": {"name": "Otto"},
+            "q": {"name": "Quinn", "title": 'Head of "Growth" \\ Sales', "workplace": "."},
+        },
+    }
+    text = crew.render_stub(odd, "q")
+    head = text.split("\n---", 1)[0]
+    assert '(Head of \\"Growth\\" \\\\ Sales)' in head
+    assert '# Quinn · Head of "Growth" \\ Sales' in text

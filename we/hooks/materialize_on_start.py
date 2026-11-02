@@ -150,7 +150,7 @@ def read_input() -> dict:
 def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     """The hook's JSON answer, or None to print nothing."""
     env = os.environ if environ is None else environ
-    _, pin = crew.session_kind(env, hook_input.get("agent_type"))
+    _, pin = crew.session_kind(env, hook_input.get("agent_type"), hook_input)
     if pin:
         specific: dict = {"hookEventName": "SessionStart", "sessionTitle": pin}
         bound = read_binding(hook_input.get("session_id", ""))

@@ -26,7 +26,8 @@ the human; ``weside_account: true`` says the members are weside companions (setu
 weside MCP was connected), so a pinned session loads its identity with ``/we:materialize``.
 
 Session kind (``session_kind``, read by both SessionStart hooks): ``worker`` (``WE_ROLE=worker``
-without a pin, or a session started with ``--agent``), ``consult`` (a pin with ``WE_ROLE=worker``:
+without a pin, a session started with ``--agent``, or the process worker the worktree's
+``we-worker.json`` marker names: its own session id, or none recorded yet), ``consult`` (a pin with ``WE_ROLE=worker``:
 the companion answers one request and ends), ``named`` (a pin, ``WE_ROLE`` master or unset),
 ``unnamed`` (no pin).
 """
@@ -39,6 +40,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from worker_launch import read_marker
 
 WORKING_ROLES = ("product_owner", "orchestrator", "hr", "tester")
 STUB_MARKER = "<!-- we:stub"
@@ -79,10 +82,17 @@ def _crew_at(root: Path) -> Path | None | bool:
     return False
 
 
-def session_kind(env: dict, agent_type: object = None) -> tuple[str, str]:
-    """(kind, pin) of a session: ``worker``, ``consult``, ``named`` or ``unnamed``."""
+def session_kind(
+    env: Any, agent_type: object = None, hook_input: dict | None = None
+) -> tuple[str, str]:
+    """(kind, pin) of a session: ``worker``, ``consult``, ``named`` or ``unnamed``.
+
+    ``hook_input`` (``cwd``, ``session_id``) finds a process worker launched by
+    ``worker_launch.py``: a ``claude --bg`` worker carries the daemon's environment, which may hold
+    ``WE_ROLE=master`` and a pin, so its worktree's marker decides.
+    """
     pin = str(env.get("WESIDE_COMPANION", "")).strip()
-    if agent_type:
+    if agent_type or _is_process_worker(hook_input):
         return "worker", ""
     worker = str(env.get("WE_ROLE", "")).strip() == "worker"
     if pin:
@@ -90,11 +100,22 @@ def session_kind(env: dict, agent_type: object = None) -> tuple[str, str]:
     return ("worker" if worker else "unnamed"), ""
 
 
-def holds_role(crew: dict[str, Any], role: str, env: Any) -> bool:
-    """Whether the session of ``env`` is a named master whose member holds ``roles.<role>``."""
-    kind, pin = session_kind(env)
+def holds_role(crew: dict[str, Any], role: str, env: Any, hook_input: dict | None = None) -> bool:
+    """Whether the session of ``env`` is a named master whose member holds ``roles.<role>``; a
+    process worker (``hook_input``: ``cwd``, ``session_id``) never is."""
+    kind, pin = session_kind(env, hook_input=hook_input)
     found = member(crew, pin) if kind == "named" else None
     return bool(found) and crew.get("roles", {}).get(role) == found[0]
+
+
+def _is_process_worker(hook_input: dict | None) -> bool:
+    if not hook_input or not hook_input.get("cwd"):
+        return False
+    marker = read_marker(hook_input.get("cwd"))
+    if not marker:
+        return False
+    recorded = marker.get("session_id")
+    return not recorded or recorded == hook_input.get("session_id")
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -142,10 +163,16 @@ def holder_name(crew: dict[str, Any], role: str) -> str | None:
     return name or None
 
 
-def skill_name(name: str, crew: dict[str, Any] | None = None) -> str | None:
+def skill_name(name: str, crew: dict[str, Any] | None = None, strict: bool = False) -> str | None:
+    """``<prefix>-<name lowercased>``. Lookup refuses only what could leave the skills folder (a
+    separator, ``..``, a control character or space), so ``Zoë`` still finds ``weside-zoë``;
+    ``strict`` (a stub to write) keeps to ``[a-z0-9_-]``."""
     prefix = str((crew or {}).get("skill_prefix") or "weside").strip().lower()
     skill = f"{prefix}-{name.strip().lower()}"
-    return skill if _SAFE.fullmatch(skill) else None
+    if strict:
+        return skill if _SAFE.fullmatch(skill) else None
+    unsafe = any(part in skill for part in ("/", "\\", "..", " ")) or not skill.isprintable()
+    return None if unsafe or not name.strip() else skill
 
 
 def workplace(crew_path: Path, entry: dict[str, Any]) -> Path | None:
@@ -190,16 +217,20 @@ def render_stub(crew: dict[str, Any], slug: str) -> str:
     name = str(entry.get("name") or slug).strip()
     components = ", ".join(str(c) for c in entry.get("components") or []) or "none"
     values = {
-        "skill": skill_name(name, crew) or slug,
+        "skill": skill_name(name, crew, strict=True) or slug,
         "name": name,
         "role": str(entry.get("title") or entry.get("role") or "member").strip(),
         "components": components,
         "orchestrator": holder_name(crew, "orchestrator") or "the Orchestrator",
     }
     text = TEMPLATE.read_text(encoding="utf-8")
+    end = text.index("\n---", 3) + 4  # the frontmatter: values go into double-quoted YAML
+    head, body = text[:end], text[end:]
     for key, value in values.items():
-        text = text.replace("{{" + key + "}}", " ".join(value.split()))
-    return text
+        plain = " ".join(value.split())
+        head = head.replace("{{" + key + "}}", json.dumps(plain, ensure_ascii=False)[1:-1])
+        body = body.replace("{{" + key + "}}", plain)
+    return head + body
 
 
 def stubs(crew_path: Path, crew: dict[str, Any], write: bool = False) -> list[str]:
@@ -207,7 +238,7 @@ def stubs(crew_path: Path, crew: dict[str, Any], write: bool = False) -> list[st
     lines = []
     for slug, entry in members(crew).items():
         name = str(entry.get("name") or "").strip()
-        skill = skill_name(name, crew) if name else None
+        skill = skill_name(name, crew, strict=True) if name else None
         place = workplace(crew_path, entry)
         if not skill or place is None:
             continue
@@ -295,7 +326,8 @@ def main(argv: list[str]) -> int:
         return 1
     crew_path, crew = loaded
     if cmd == "is-role":
-        return 0 if len(argv) > 1 and holds_role(crew, argv[1], os.environ) else 1
+        here = {"cwd": os.getcwd(), "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "")}
+        return 0 if len(argv) > 1 and holds_role(crew, argv[1], os.environ, here) else 1
     if cmd == "show":
         print(json.dumps(show(crew_path, crew), ensure_ascii=False, indent=2))
     elif cmd == "members":
