@@ -7,6 +7,10 @@
   Council meeting that decomposes it into the next altitude.
 - **Build pipeline:** a Lead (`/we:orchestrate`) that refines stories without a plan, dispatches one
   dev worker per story, pushes once, opens one PR and works CI and review findings until green.
+- **Working mode (optional):** a crew of companions or people — Product Owner, Orchestrator, HR,
+  Tester, component owners — with build masters per epic and workers that build. `/we:setup` writes
+  the repo's crew; every session then starts knowing its role and where questions go.
+  [docs/workflow.md](docs/workflow.md#crew-and-working-mode)
 
 Claude arms auto-merge once CI and the Codex review are through, unless an exception applies (money path, destructive migration, open question); you review before it lands and merge the exceptions. `/we:merged` cleans up afterwards.
 

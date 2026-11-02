@@ -13,7 +13,7 @@ What loads where · Who owns what · One home per fact · The check · Shared me
 
 | Surface | Loads every turn | Loads on demand |
 |---|---|---|
-| Claude Code | instruction files (`~/AGENTS.md`, workspace and repo `AGENTS.md`), rules without `paths:`, the skill listing (descriptions only) | the role skill `weside-<name>` (SessionStart, `references/companion-session.md` § Name and binding), plugin references a skill points at, rules with `paths:` |
+| Claude Code | instruction files (`~/AGENTS.md`, workspace and repo `AGENTS.md`), rules without `paths:`, the skill listing (descriptions only), with a crew the working-mode core (`hooks/working_mode_on_start.py`) | the role skill `<prefix>-<name>` (SessionStart, `references/companion-session.md` § Name and binding), plugin references a skill points at, rules with `paths:` |
 | weside | identity prompt; pinned memories (`autoload`, at most 10 per companion); shared memories of the circles bound to the room, in `autoload_order`; snapshot; compass; goals | everything else through recall and tools |
 
 `get_companion_identity` (and `weside companions identity`) is the MCP delivery, not the full chat

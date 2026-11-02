@@ -5,7 +5,8 @@ additive: a failure drops that member to its generic shell, never the council.
 
 ## Identity
 
-- Members: the entries of `.weside/council.json` (`members.<slug>.name`, `.role`). Without the file,
+- Members: the entries of the repo's crew (`.weside/crew.json`, `members.<slug>.name`, `.role`;
+  `${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Crew). Without a crew,
   read the role owners from the account's handbook (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`
   § Role owners), never from memory: each roster role whose owner the handbook names is played by that
   Companion; a role it names no owner for keeps the generic shell, and the synthesis says
@@ -21,7 +22,7 @@ additive: a failure drops that member to its generic shell, never the council.
   "Woken for the council: <names>."
 - `status` is `"OK"` or buckets `"asleep: A, B | unavailable: C | not_found: D"`. `asleep` then means the
   wake failed and `unavailable` means inactive: both join with the generic lens, named in one line.
-  `not_found`: name them and point at `.weside/council.json` (the user edits it); never create a Companion.
+  `not_found`: name them and point at `.weside/crew.json` (`/we:setup` § Crew, or the user edits it); never create a Companion.
 - The member keeps its shell from step 1 of the skill, `we:council-member` for a role without one;
   the identity goes into the brief.
 - `resolved` = the keys of `members`. Only they get prep and writeback.

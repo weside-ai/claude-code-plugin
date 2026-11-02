@@ -15,7 +15,9 @@ Run `/we:setup` in the repo. It detects the stack from marker files (`pyproject.
 `package.json`, `Cargo.toml`, `go.mod`) and the ticketing tool (Jira through an MCP server, GitHub
 Issues through `gh`, or none), then asks up to five skippable questions: vision, test discipline,
 verification, review gates, council. The answers go to `.weside/config.json`. A re-run shows the
-current value and asks before replacing it.
+current value and asks before replacing it. When a crew works in the repo, setup also writes
+`.weside/crew.json` (who is Product Owner, Orchestrator, HR, Tester, who owns which component) and a
+stub role skill per member without one ([workflow.md](workflow.md#crew-and-working-mode)).
 
 Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`), the
 shipped statusline (model, branch, PR, context, background sessions, cost) and the companion launcher `wclaude`
