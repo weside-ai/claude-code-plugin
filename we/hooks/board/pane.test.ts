@@ -295,6 +295,7 @@ async function startWith($: Parameters<Parameters<typeof test>[1]>[0], on: Param
     return { value: { isPlaced: true } }
   })
   on('command.register', () => ({ value: { command: 'board' } }))
+  on('session.id', () => ({ value: 's-orch' }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.settle()
@@ -313,7 +314,7 @@ test('boardAutoOpen on opens the board in every session', { options: { boardAuto
 
 test('boardAutoOpen orchestrator opens it only in the Orchestrator\'s session', { options: { boardAutoOpen: 'orchestrator' } }, async ($, on) => {
   const { opened, checks } = await startWith($, on, true)
-  expect([opened, checks]).toEqual([['we-board'], [['is-role', 'orchestrator']]])
+  expect([opened, checks]).toEqual([['we-board'], [['is-role', 'orchestrator', '--session', 's-orch']]])
 })
 
 test('boardAutoOpen orchestrator leaves another session alone', { options: { boardAutoOpen: 'orchestrator' } }, async ($, on) => {

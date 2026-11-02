@@ -328,7 +328,8 @@ async function autoOpens($: $, options: PluginOptions): Promise<boolean> {
   if (mode === 'on') return true
   if (mode !== 'orchestrator') return false
   try {
-    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'is-role', 'orchestrator'], { timeoutMs: 10_000 })
+    const session = await $.session.id()
+    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'is-role', 'orchestrator', '--session', session], { timeoutMs: 10_000 })
     return run.exitCode === 0
   } catch {
     return false

@@ -7,8 +7,10 @@ Usage:
   crew.py members [--from DIR]              one line per named member: "<name>\\t<title, else role>"
   crew.py skill-path NAME [--cwd DIR]       "<path>\\t<loadable|workplace>\\t<skill|stub>", exit 1 if none
   crew.py stubs [--from DIR] [--write]      members without a role skill; --write creates the stubs
-  crew.py is-role ROLE [--from DIR]         exit 0 when this session (its environment) is a named
-                                            master holding ROLE (roles.<ROLE>), else 1
+  crew.py is-role ROLE [--from DIR] [--session ID]
+                                            exit 0 when this session (its environment) is a named
+                                            master holding ROLE (roles.<ROLE>), else 1; ID (default
+                                            $CLAUDE_CODE_SESSION_ID) excludes a process worker
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -115,7 +117,9 @@ def _is_process_worker(hook_input: dict | None) -> bool:
     if not marker:
         return False
     recorded = marker.get("session_id")
-    return not recorded or recorded == hook_input.get("session_id")
+    current = hook_input.get("session_id")
+    # no id on either side: the marker alone says this worktree runs a process worker
+    return not recorded or not current or recorded == current
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -272,6 +276,19 @@ def show(crew_path: Path, crew: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _positional(args: list[str], flags: tuple[str, ...]) -> str | None:
+    """The first argument that is neither a flag nor a flag's value."""
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+        elif arg in flags:
+            skip = True
+        elif not arg.startswith("--"):
+            return arg
+    return None
+
+
 def _opt(argv: list[str], flag: str) -> str | None:
     if flag in argv:
         i = argv.index(flag)
@@ -326,8 +343,10 @@ def main(argv: list[str]) -> int:
         return 1
     crew_path, crew = loaded
     if cmd == "is-role":
-        here = {"cwd": os.getcwd(), "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID", "")}
-        return 0 if len(argv) > 1 and holds_role(crew, argv[1], os.environ, here) else 1
+        session = _opt(argv, "--session") or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        here = {"cwd": os.getcwd(), "session_id": session}
+        role = _positional(argv[1:], ("--from", "--session"))
+        return 0 if role and holds_role(crew, role, os.environ, here) else 1
     if cmd == "show":
         print(json.dumps(show(crew_path, crew), ensure_ascii=False, indent=2))
     elif cmd == "members":
