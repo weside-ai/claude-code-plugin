@@ -113,7 +113,7 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
         return None
     if not crew:
         return None
-    kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"))
+    kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
     return {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
