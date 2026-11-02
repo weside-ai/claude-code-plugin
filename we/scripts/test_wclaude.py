@@ -12,7 +12,7 @@ SCRIPT = Path(__file__).parent / "wclaude"
 
 pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="wclaude is a bash script")
 
-COUNCIL = {
+CREW = {
     "members": {
         "po": {"name": "Ada", "role": "product_owner", "title": "Product Owner"},
         "arch": {"name": "Bo", "role": "architect"},
@@ -21,7 +21,7 @@ COUNCIL = {
 }
 
 
-def run(tmp_path, args=(), stdin="", council=COUNCIL, launch=None):
+def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
     record = tmp_path / "record.json"
@@ -31,23 +31,25 @@ def run(tmp_path, args=(), stdin="", council=COUNCIL, launch=None):
         "import json, os, sys\n"
         "json.dump({'companion': os.environ.get('WESIDE_COMPANION'), 'argv': sys.argv[1:]},"
         f" open({str(record)!r}, 'w'))\n"
+        f"open({str(tmp_path / 'role')!r}, 'w').write(os.environ.get('WE_ROLE', ''))\n"
     )
     stub.chmod(0o755)
     project = tmp_path / "project"
     cwd = project / "sub" / "dir"
     cwd.mkdir(parents=True, exist_ok=True)
-    if council is not None:
+    if crew is not None:
         (project / ".weside").mkdir(exist_ok=True)
-        (project / ".weside" / "council.json").write_text(json.dumps(council))
+        (project / ".weside" / "crew.json").write_text(json.dumps(crew))
     env = {
         **os.environ,
         "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
         "HOME": str(tmp_path),
         "WESIDE_COMPANION": "Stale",
     }
-    env.pop("WCLAUDE_CLAUDE", None)
+    env.pop("WCLAUDE_PIN", None)
+    env["WE_ROLE"] = "worker"
     if launch is not None:
-        env["WCLAUDE_CLAUDE"] = launch
+        env["WCLAUDE_PIN"] = launch
     proc = subprocess.run(
         ["bash", str(SCRIPT), *args],
         input=stdin,
@@ -70,7 +72,7 @@ def test_menu_lists_title_else_role_and_skips_nameless(tmp_path):
     assert "architect" in proc.stderr
     assert "scrum_master" not in proc.stderr
     assert " 3) other name..." in proc.stderr
-    assert "~/project/.weside/council.json" in proc.stderr
+    assert "~/project/.weside/crew.json" in proc.stderr
     assert result == {"companion": "Ada", "argv": ["--name", "Ada"]}
 
 
@@ -147,17 +149,17 @@ def test_closed_stdin_refused(tmp_path):
     assert result is None
 
 
-def test_without_council_offers_name_and_zero(tmp_path):
-    proc, result = run(tmp_path, council=None, stdin="1\nFay\n")
-    assert "no .weside/council.json found" in proc.stderr
+def test_without_crew_offers_name_and_zero(tmp_path):
+    proc, result = run(tmp_path, crew=None, stdin="1\nFay\n")
+    assert "no .weside/crew.json found" in proc.stderr
     assert result["companion"] == "Fay"
 
 
-def test_broken_council_still_offers_menu(tmp_path):
+def test_broken_crew_still_offers_menu(tmp_path):
     (tmp_path / "project" / ".weside").mkdir(parents=True)
-    (tmp_path / "project" / ".weside" / "council.json").write_text("{not json")
-    proc, result = run(tmp_path, council=None, stdin="Gus\n")
-    assert "cannot read" in proc.stderr
+    (tmp_path / "project" / ".weside" / "crew.json").write_text("{not json")
+    proc, result = run(tmp_path, crew=None, stdin="Gus\n")
+    assert "unreadable" in proc.stderr
     assert result["companion"] == "Gus"
 
 
@@ -181,20 +183,38 @@ def _write_wrapper(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "stdin,companion,argv",
+    "args,stdin,companion,argv",
     [
-        ("1\n", "Ada", ["--via-wrapper", "--name", "Ada", "-c"]),
-        ("0\n", "", ["--via-wrapper", "-c"]),
+        (["--pin", "-c"], "1\n", "Ada", ["--via-wrapper", "--name", "Ada", "-c"]),
+        (["--pin", "-c"], "0\n", "", ["--via-wrapper", "-c"]),
+        (["--as", "Eve", "--pin"], "", "Eve", ["--via-wrapper", "--name", "Eve"]),
+        (["--pin", "--as", "Eve"], "", "Eve", ["--via-wrapper", "--name", "Eve"]),
     ],
 )
-def test_launch_command_replaces_claude(tmp_path, stdin, companion, argv):
+def test_pin_starts_the_pin_command(tmp_path, args, stdin, companion, argv):
     _write_wrapper(tmp_path)
-    proc, result = run(tmp_path, args=["-c"], stdin=stdin, launch="pinned")
+    proc, result = run(tmp_path, args=args, stdin=stdin, launch="pinned")
     assert proc.returncode == 0, proc.stderr
     assert result == {"companion": companion, "argv": argv}
     assert "pinned" in proc.stderr
 
 
-def test_empty_launch_command_means_claude(tmp_path):
-    _, result = run(tmp_path, stdin="0\n", launch="")
+def test_without_pin_the_pin_command_is_not_used(tmp_path):
+    _write_wrapper(tmp_path)
+    _, result = run(tmp_path, stdin="0\n", launch="pinned")
     assert result == {"companion": "", "argv": []}
+
+
+@pytest.mark.parametrize("launch", [None, ""])
+def test_pin_without_command_is_refused(tmp_path, launch):
+    proc, result = run(tmp_path, args=["--pin", "--as", "Eve"], launch=launch)
+    assert proc.returncode == 2
+    assert "WCLAUDE_PIN" in proc.stderr
+    assert result is None
+
+
+@pytest.mark.parametrize("args", [["--as", "Eve"], ["--pin", "--as", "Eve"]])
+def test_every_start_is_a_master(tmp_path, args):
+    _write_wrapper(tmp_path)
+    run(tmp_path, args=args, launch="pinned")
+    assert (tmp_path / "role").read_text() == "master"

@@ -51,8 +51,8 @@ PROMPT = {"hook_event_name": "UserPromptSubmit", "prompt": "ja"}
 STOP = {"hook_event_name": "Stop"}
 ELICIT = {"hook_event_name": "Notification", "notification_type": "elicitation_dialog"}
 ELICIT_URL = {"hook_event_name": "Notification", "notification_type": "elicitation_url_dialog"}
-WHITE = {"%3 window-status-style": t.STYLE, "%3 window-status-current-style": t.STYLE}
-GREY = {"%3 window-status-style": t.IDLE_STYLE, "%3 window-status-current-style": t.IDLE_STYLE}
+WHITE = {"%3 window-status-style": t.STYLE}
+GREY = {"%3 window-status-style": t.IDLE_STYLE}
 
 
 @pytest.fixture
@@ -270,3 +270,16 @@ def test_bad_input_and_missing_tmux_exit_silently(tmux, stdin):
         assert (res.returncode, res.stdout, res.stderr) == (0, "", "")
     tmux.hook(ASK, PATH="/nonexistent")
     tmux.hook(IDLE, PATH="/nonexistent")
+
+
+def test_the_active_window_keeps_its_own_style(tmux):
+    for event in (ASK, STOP, IDLE):
+        tmux.hook(event)
+        assert "%3 window-status-current-style" not in tmux.options()
+
+
+def test_normal_unsets_a_current_style_an_older_version_set(tmux):
+    state = Path(tmux.env["FAKE_TMUX_STATE"])
+    state.write_text(json.dumps({"%3 window-status-current-style": t.STYLE}))
+    tmux.hook(PROMPT)
+    assert tmux.options() == {}

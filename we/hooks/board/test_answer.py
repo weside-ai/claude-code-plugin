@@ -40,3 +40,13 @@ def test_main_takes_the_session_as_optional_last_argument(tmp_path):
     assert answer.main(["answer.py", str(path), "Q2", "discuss", "t"]) == 0
     assert json.loads(path.read_text())["session"] is None
     assert answer.main(["answer.py", str(path)]) == 2
+
+
+def test_deny_and_read_are_answers_too(tmp_path):
+    path = tmp_path / "board-answers.jsonl"
+    answer.append(str(path), "Q3", "deny", "t1", "lead")
+    answer.append(str(path), "N7", "read", "t2", None)
+    assert [json.loads(line)["answer"] for line in path.read_text().splitlines()] == [
+        "deny",
+        "read",
+    ]

@@ -86,6 +86,9 @@ A `blocked` report carries a fork: ask the user that one question with the refin
    risk, decisions the user did not state), and what step 5 will do (ticket created or updated, where the
    commit lands).
 3. Feedback → `SendMessage` to the refiner, scan again, present again.
+4. In a repo with a crew the component owner accepts the plan and the Product Owner approves it
+   (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Roles); a session that holds neither role sends them
+   the plan path and waits for their word.
 
 Plan mode is not used: the Agent tool gives a subagent the parent's permission mode, and plan mode would stop
 the refiner from writing the file.

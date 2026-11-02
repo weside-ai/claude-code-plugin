@@ -1,17 +1,17 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json,
 // option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
-// question's Accept, Discuss or More info appends one line to board-answers.jsonl beside it.
+// question's Accept, Deny, Discuss or More info, and a news item's Read, append one line to board-answers.jsonl beside it.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
 
 type On = Parameters<Register>[0]
 
 import type {
-  BoardAnswerKind, BoardAnswersView, BoardQueueItem, BoardSession, BoardView, BoardWork, FlowPhase, LiveView, WorkNode,
+  BoardAnswerKind, BoardAnswersView, BoardNewsItem, BoardNewsKind, BoardQueueItem, BoardSession, BoardView, BoardWork, FlowPhase, LiveView, WorkNode,
 } from '../../types'
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
-  liveByName, majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf,
+  liveByName, majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import { buildWork, groupKeys, layoutWork, storiesInScope, storyKey, storyPhase, widthOf, workOf } from './work'
@@ -32,6 +32,7 @@ const live = atom({ plugin: 'we', key: 'boardLive' } as const, null, { shape: 'b
 const answers = atom({ plugin: 'we', key: 'boardAnswers' } as const, null, { shape: 'board-answers-1' })
 const isOpen = atom({ plugin: 'we', key: 'boardOpen' } as const, false)
 const isRestOpen = atom({ plugin: 'we', key: 'boardRestOpen' } as const, false)
+const isNotesOpen = atom({ plugin: 'we', key: 'boardNotesOpen' } as const, false)
 const work = atom({ plugin: 'we', key: 'boardWork' } as const, null, { shape: 'board-work-1' })
 // The masters whose work tree is open, by name; every box starts closed.
 const workOpen = atom({ plugin: 'we', key: 'boardWorkOpen' } as const, [], { shape: 'board-work-open-1' })
@@ -55,8 +56,16 @@ const LIVE: Record<Liveness, { label: string; color: string }> = {
 
 const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
   accept: { label: 'accepted', color: 'success' },
+  deny: { label: 'denied', color: 'error' },
   discuss: { label: 'discuss', color: 'warning' },
   info: { label: 'more info asked', color: 'suggestion' },
+  read: { label: 'read', color: 'inactive' },
+}
+
+const NEWS: Record<BoardNewsKind, { glyph: string; color: string }> = {
+  info: { glyph: '•', color: 'suggestion' },
+  gate: { glyph: '⚑', color: 'error' },
+  todo: { glyph: '◉', color: 'warning' },
 }
 
 const START: Record<StartMode['level'], string> = { ok: 'success', warn: 'warning', bad: 'error', none: 'inactive' }
@@ -123,8 +132,9 @@ async function selfName($: $): Promise<string | undefined> {
   return ownName((await read($, live))?.sessions ?? [], id)
 }
 
-// A press of Accept, Discuss or More info: one appended line, and in the orchestrator's own session
-// (its name is the board's `updated_by`) the matching prompt, queued as if the person typed it.
+// A press of Accept, Deny, Discuss, More info or Read: one appended line, and for a question in the
+// orchestrator's own session (its name is the board's `updated_by`) the matching prompt, queued as if
+// the person typed it. Read only appends: the item leaves the pane, nothing is sent.
 async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
   try {
     const path = answersPathOf(await boardPath($, file))
@@ -137,7 +147,7 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
     if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
     await loadAnswers($, file, true)
     const board = (await read($, view))?.board
-    if (me && board?.updatedBy && me === board.updatedBy) {
+    if (answer !== 'read' && me && board?.updatedBy && me === board.updatedBy) {
       await $.prompt.submit({ text: answerPrompt(answer, id, board.answerPrompts), asUser: true })
     }
   } catch (err) {
@@ -322,6 +332,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
     const restOpen = await read($, isRestOpen)
+    const notesOpen = await read($, isNotesOpen)
     const opened = await read($, workOpen)
     const trees = (await read($, work)) ?? {}
     const now = await $.clock.now()
@@ -378,6 +389,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       const buttons = q.id
         ? [
             ...(q.recommendation ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
+            { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
             { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
             { key: `info-${q.id}`, label: 'More info', on: press('info') },
           ]
@@ -403,6 +415,29 @@ export const registerBoard = (on: On, options: PluginOptions) => {
               )}
             </Box>
           ))}
+        </Box>
+      )
+    }
+
+    // One news item on one line: Read first so the buttons form a column, then kind glyph, bold title cut
+    // to the line and its age; the body dimmed and indented under it. No blank line between items.
+    const newsItem = (n: BoardNewsItem) => {
+      const kind = NEWS[n.kind ?? 'info']
+      const days = ageDays(n.ts, now)
+      const age = days === undefined ? '' : days === 0 ? 'today' : `${days} d`
+      const read = { label: 'Read', width: 8 }
+      const room = inner - read.width - 1
+      const parts: Part[] = [{ text: `${kind.glyph} `, color: kind.color, bold: true }]
+      const ageRoom = age ? age.length + 2 : 0
+      parts.push({ text: clip(n.title, Math.max(8, room - widthOf(parts) - ageRoom)), bold: true })
+      if (age) parts.push({ text: `  ${age}`, dim: true })
+      return (
+        <Box key={`n-${n.id}`} flexDirection="column">
+          <Box flexDirection="row" gap={1}>
+            <Button key={`read-${n.id}`} label={read.label} onPress={() => void answerQuestion($, file, n.id, 'read')} />
+            {textLine([parts], room, 't')}
+          </Box>
+          {n.body ? <Box paddingLeft={read.width + 3}><Text dimColor>{n.body}</Text></Box> : null}
         </Box>
       )
     }
@@ -512,6 +547,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const resting = groups.filter(isResting)
     const restCount = resting.reduce((n, g) => n + (g.head ? 1 : 0) + g.workers.length, 0) + offBoard.length
 
+    const news = board ? unreadNews(board.news, given) : []
     const counts = countBoard(sessions)
     const barWidth = Math.min(20, counts.masters * 4, width - 2)
     const cells = (n: number) => (counts.masters ? Math.round((n / counts.masters) * barWidth) : 0)
@@ -543,7 +579,23 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         )}
         {counts.masters > 0 && lines(counter, width, 'count', ' · ')}
         {board?.priorities && <Text dimColor>{board.priorities}</Text>}
-        {board?.notes && frame('notes', 'warning', [<Text key="t" color="warning" bold>{`⚑ ${board.notes}`}</Text>])}
+        {news.length > 0 && (
+          <Box flexDirection="column" marginTop={1}>
+            {frame('news', 'inactive', [
+              <Text key="t" bold>{`News (${news.length})`}</Text>,
+              <Box key="items" flexDirection="column">{news.map(newsItem)}</Box>,
+            ])}
+          </Box>
+        )}
+        {board?.notes && (
+          <Box flexDirection="column" marginTop={1}>
+            <Box flexDirection="row" gap={2}>
+              <Button key="notes" label={`${notesOpen ? '▾' : '▸'} Notes`} onPress={() => void update($, isNotesOpen, open => !open)} />
+              {!notesOpen && <Text dimColor>{clip(board.notes.split('\n')[0] ?? '', Math.max(0, width - 13))}</Text>}
+            </Box>
+            {notesOpen && <Text dimColor>{board.notes}</Text>}
+          </Box>
+        )}
         {v.isMissing && (
           <Text dimColor>{`No board yet: your orchestrator session writes ${v.path ?? file}; the schema is in ${$.plugin.root}/docs/board.md.`}</Text>
         )}

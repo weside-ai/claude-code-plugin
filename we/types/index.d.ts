@@ -88,6 +88,17 @@ export type BoardWork = {
 
 export type BoardWorkView = Record<string, BoardWork>
 
+// One item of the board's `news` (docs/board.md § News): a title line, an optional body, and a Read button.
+export type BoardNewsKind = 'info' | 'gate' | 'todo'
+
+export type BoardNewsItem = {
+  id: string
+  title: string
+  body?: string
+  ts?: string
+  kind?: BoardNewsKind
+}
+
 export type BoardFile = {
   updated?: string
   updatedBy?: string
@@ -95,10 +106,12 @@ export type BoardFile = {
   sessions: BoardSession[]
   // `priorities` (a list or one string), joined into one line.
   priorities?: string
-  // `notes`: a banner the orchestrator wants seen first.
+  // `news`: items the owner reads and acknowledges, each with its own id.
+  news: BoardNewsItem[]
+  // `notes`: the older free-text field, drawn as a collapsed block under the news.
   notes?: string
   // `answer_prompts`: the orchestrator's own wording of the prompts a press sends.
-  answerPrompts?: Partial<Record<BoardAnswerKind, string>>
+  answerPrompts?: Partial<Record<BoardPromptKind, string>>
 }
 
 // What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.
@@ -125,8 +138,11 @@ export type BoardView = {
   error?: string
 }
 
-// One line of board-answers.jsonl (docs/board.md): a press of Accept, Discuss or More info.
-export type BoardAnswerKind = 'accept' | 'discuss' | 'info'
+// One line of board-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss or More info on a
+// question, or of Read on a news item.
+export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'read'
+// The answers that send a prompt into the orchestrator's session; Read only appends its line.
+export type BoardPromptKind = Exclude<BoardAnswerKind, 'read'>
 
 export type BoardAnswer = {
   id: string
@@ -157,6 +173,7 @@ declare module 'claude-code' {
       boardAnswers: Shaped<BoardAnswersView | null>
       boardOpen: boolean
       boardRestOpen: boolean
+      boardNotesOpen: boolean
       boardWork: Shaped<BoardWorkView | null>
       boardWorkOpen: Shaped<string[]>
     }

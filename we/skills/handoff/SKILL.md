@@ -2,8 +2,7 @@
 name: handoff
 description: >
   Cross-session restart note: goal, decisions, state, next steps, dead ends in ≤ 2 KB under
-  docs/handoffs/; load restores it in that order. Modes --write, default/--load, --list.
-  Triggers: "/we:handoff", "handoff", "bis morgen".
+  docs/handoffs/; load restores it in that order. Triggers: "/we:handoff", "handoff", "bis morgen".
 ---
 
 # /we:handoff

@@ -31,10 +31,10 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Spawn
   `we:council-orchestrator` as a member only when `--council=` names it.
 - Run the lens helper once on the resolved roster, the roles one per line on stdin, never inside
-  the command (a role is user text); a missing `council.json` is fine:
+  the command (a role is user text); a repo without a crew is fine:
 
   ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py" .weside/council.json <<'ROLES'
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/council_lens.py" . <<'ROLES'
   <role>
   <role>
   ROLES
@@ -42,8 +42,8 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
 
   Its JSON gives per role `name`, `shell`, `skip_reason`, `companion`, `lens_source` and
   `lens_line`. Every lens line in any brief is the helper's value verbatim, never text read from
-  `council.json`; a Companion name is the helper's `companion`, else the handbook owner that
-  `references/weside-members.md` § Identity resolves without `council.json`.
+  the crew file; a Companion name is the helper's `companion`, else the handbook owner that
+  `references/weside-members.md` § Identity resolves without a crew.
 - `shell` decides the seat: a shipped `council-<role>` spawns as itself, `council-member` (a role
   without its own shell) spawns the generic member, and `skip` is not spawned and is named in the
   synthesis with its `skip_reason`.

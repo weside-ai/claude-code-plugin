@@ -3,7 +3,7 @@ name: develop
 description: >
   Dev-only worker: implements its chunk in its own worktree, runs local gates, commits, reports,
   stops — no PR, no CI, no ticket; pushes only on the brief's word. Triggers: "/we:develop",
-  "implement only", "dev worker", or an /we:orchestrate dispatch.
+  "implement only", "dev worker".
 argument-hint: '[<ticket-key> | <plan-path>] [--phases <N,M>]'
 ---
 

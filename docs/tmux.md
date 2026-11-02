@@ -12,9 +12,9 @@ the hook event alone, no model judges it.
 
 `idle_prompt` never overwrites white: a question still open stays white until you answer it.
 
-The hook `we/hooks/tmux_attention.py` sets `window-status-style` and `window-status-current-style`
-on the window of `$TMUX_PANE` and unsets them for normal, so the window falls back to your tmux
-theme. It does nothing outside tmux, in a background session or in a subagent, and never stops a
+The hook `we/hooks/tmux_attention.py` sets `window-status-style` on the window of `$TMUX_PANE` and
+unsets it for normal, so the window falls back to your tmux theme. The active window keeps your
+`window-status-current-style`, so you always see which window is active. It does nothing outside tmux, in a background session or in a subagent, and never stops a
 session: every error exits 0 without output.
 
 Options (`/plugin` → we → Configure): `tmuxAttention`, default `true`; `false` turns it off.

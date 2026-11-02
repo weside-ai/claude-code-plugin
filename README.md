@@ -7,6 +7,10 @@
   Council meeting that decomposes it into the next altitude.
 - **Build pipeline:** a Lead (`/we:orchestrate`) that refines stories without a plan, dispatches one
   dev worker per story, pushes once, opens one PR and works CI and review findings until green.
+- **Working mode (optional):** a crew of companions or people — Product Owner, Orchestrator, HR,
+  Tester, component owners — with build masters per epic and workers that build. `/we:setup` writes
+  the repo's crew; every session then starts knowing its role and where questions go.
+  [docs/workflow.md](docs/workflow.md#crew-and-working-mode)
 
 Claude arms auto-merge once CI and the Codex review are through, unless an exception applies (money path, destructive migration, open question); you review before it lands and merge the exceptions. `/we:merged` cleans up afterwards.
 
@@ -60,6 +64,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 - `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.
 - `/we:resume` — after a usage-limit stop ("weiter"): resumes open items, workers and CI watches.
 - `/we:handoff` — a cross-session restart note under `docs/handoffs/`.
+- `/we:pin` — which account bills this master session; `on`/`off` restarts it on a fixed account or on the global login. [docs/companion.md](docs/companion.md)
 - `/we:sideload` — works in a neighbour repo from here.
 - `/we:find-dead-code` — finds and removes dead code in Python backends.
 - `/we:codex-task` — sends one task to Codex; ends with the Codex subscription.
