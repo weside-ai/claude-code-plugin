@@ -106,7 +106,8 @@ always-loaded instruction file, rule or plugin reference already owns. It is edi
 the practice changes; what concerns another role goes into that role's file. Its weside side keeps
 a pinned memory titled `Arbeitsumgebung · <Rolle>` (a literal title in the workspace's language; the role, not the name) that points at the
 skill, and the milestone worklogs per § Writeback. Before a session parks, its state goes into the
-plan's Updates Log and a ticket comment.
+plan's Updates Log and a ticket comment. What the companion carries per turn on both surfaces, and how it is
+kept lean: `references/context-engineering.md`.
 
 ## Catch-up
 
@@ -161,10 +162,10 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 
 ## Role owners
 
-Who owns a role (CI, infrastructure, legal …) is read from the account's handbook (the `handbook/`
-notes of the vault) at the moment it is needed, never from memory. A repo's `.weside/crew.json` is
-its projection for routing, checked against the handbook by HR (`references/working-mode.md`
-§ Crew); where the two disagree, the handbook wins. A
-materialized companion carries the handbook in its identity; otherwise
-`execute_tool(name="notes_search", arguments='{"query": "<role name>"}')` and `notes_get` on the
-hits under `handbook/`.
+Who owns a role (CI, infrastructure, legal …) is read from the account's handbook at the moment it
+is needed, never from memory. A repo's `.weside/crew.json` is its projection for routing, checked
+against the handbook by HR (`references/working-mode.md` § Crew); where the two disagree, the
+handbook wins. The handbook lives as shared memories (the register one per person);
+`search_memories("<role name>")` finds it. An account that still keeps it as `handbook/` notes in
+the vault: `execute_tool(name="notes_search", arguments='{"query": "<role name>"}')` and `notes_get`
+on the hits.

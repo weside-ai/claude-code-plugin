@@ -36,7 +36,7 @@ import sys
 STYLE = "bg=white,fg=black"
 IDLE_STYLE = "bg=colour240,fg=white"
 OPTION = "window-status-style"
-LEGACY = "window-status-current-style"  # set by versions before 7.44.0; normal unsets it
+LEGACY = "window-status-current-style"  # set by versions before 7.45.0; normal unsets it
 WAITING = ("permission_prompt", "elicitation_dialog", "elicitation_url_dialog")
 IDLE = "idle_prompt"
 OFF = ("UserPromptSubmit", "PostToolUse", "SessionStart", "SessionEnd")
