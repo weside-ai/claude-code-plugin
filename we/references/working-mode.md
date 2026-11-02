@@ -21,7 +21,7 @@ Ticketing · Specialists on call · Crew · What stays local.
 | Human | merges, money, people, every answer to a question | — |
 | Product Owner | the WHAT, the order, plan approval | builds |
 | Orchestrator | starts and parks build masters; starts a worker for a single story or a job without a master; routes questions and milestones; cuts staging release candidates; keeps the board (`/board`, `we/docs/board.md`): questions, sessions and news for the Human; answers or forwards its worker's questions | directs the build of a session it started, decides product |
-| HR / Context | each companion's workplace: role skill, start, onboarding, crew drift | decides about people |
+| HR / Context | each companion's context on both surfaces — identity, pinned memories, compass, snapshot, shared memories, role skill (`references/context-engineering.md`); onboarding, crew drift | decides about people |
 | Tester | the staging acceptance; moves a story to Done | builds what it accepts |
 | Component owner | per backlog component: the HOW, review, plan acceptance | starts or steers workers |
 
