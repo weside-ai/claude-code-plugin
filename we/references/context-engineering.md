@@ -40,7 +40,7 @@ Claude Code budgets and their sources: `references/instruction-authoring.md`, ga
 | what everyone needs in every room | shared memory, circle for all |
 | crew-internal (status picture, people, platform, experiments) | shared memory in the crew circle; loads only in its bound rooms |
 | the role in Claude Code | role skill (`references/companion-session.md` § Upkeep) |
-| the role on weside | one pin `Arbeitsumgebung · <Rolle>` that points at the skill |
+| the role on weside | one pin that points at the skill (`references/companion-session.md` § Upkeep) |
 | state of work | the ticketing system, never a pin or a shared memory |
 | what happened | worklog memories, never autoloaded |
 
@@ -84,5 +84,3 @@ Per companion, read first, then fix, then measure again:
   02.11.2026: all three carried a dead `§` pointer). Point at a file or a heading's words.
 - **A status in a pin rots within a day** (same sample: a role change of 01.11. was wrong in two
   of three pins). Pins carry roles and pointers; the status lives in the ticketing system.
-- **Cutting kept the essentials** (same sample): the companions' own part fell by 18 %, 37 % and
-  39 %; role, owners, the question route and the pointers stayed.
