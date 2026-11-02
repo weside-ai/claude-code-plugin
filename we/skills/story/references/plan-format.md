@@ -96,6 +96,7 @@ Answering the fork deletes the section.>
 - **Asserted:** <what must be true: endpoint + field, or route + label>
 - **Not proven:** <what this oracle cannot show, and who owes it>
 - **Exit criterion:** <what someone else could run to decide "done">
+- **Staging checks:** <the staging-check file `.weside/verify.md` names, one check per AC, each with that AC's `id` | none — why>
 - **Missing CLI verb:** <a seed or assert the repo's CLI cannot do yet, and the phase that ships it>
 
 ## Technical Approach
@@ -162,3 +163,9 @@ The block is copied into the PR body, where a hook reads the `**Oracle:**` line 
 undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and `not-observed`
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
+`**Staging checks:**` names the file of checks the Tester runs on staging after the deploy
+(`references/working-mode.md` § Roles); the builder writes it in the same branch. Its path and
+format are the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it
+proves, so the run's report maps back to the ACs. Mechanical staging ACs (status code, field,
+label) belong there; the prose ACs keep the new and fuzzy ones. A repo whose `.weside/verify.md`
+names no staging checks writes `none — no staging checks in this repo`.
