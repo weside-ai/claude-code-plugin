@@ -7,6 +7,10 @@ Usage:
   crew.py members [--from DIR]              one line per named member: "<name>\\t<title, else role>"
   crew.py skill-path NAME [--cwd DIR]       "<path>\\t<loadable|workplace>\\t<skill|stub>", exit 1 if none
   crew.py stubs [--from DIR] [--write]      members without a role skill; --write creates the stubs
+  crew.py is-role ROLE [--from DIR] [--session ID]
+                                            exit 0 when this session (its environment) is a named
+                                            master holding ROLE (roles.<ROLE>), else 1; ID (default
+                                            $CLAUDE_CODE_SESSION_ID) excludes a process worker
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -33,6 +37,7 @@ the companion answers one request and ends), ``named`` (a pin, ``WE_ROLE`` maste
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -97,6 +102,14 @@ def session_kind(
     return ("worker" if worker else "unnamed"), ""
 
 
+def holds_role(crew: dict[str, Any], role: str, env: Any, hook_input: dict | None = None) -> bool:
+    """Whether the session of ``env`` is a named master whose member holds ``roles.<role>``; a
+    process worker (``hook_input``: ``cwd``, ``session_id``) never is."""
+    kind, pin = session_kind(env, hook_input=hook_input)
+    found = member(crew, pin) if kind == "named" else None
+    return bool(found) and crew.get("roles", {}).get(role) == found[0]
+
+
 def _is_process_worker(hook_input: dict | None) -> bool:
     if not hook_input or not hook_input.get("cwd"):
         return False
@@ -104,7 +117,9 @@ def _is_process_worker(hook_input: dict | None) -> bool:
     if not marker:
         return False
     recorded = marker.get("session_id")
-    return not recorded or recorded == hook_input.get("session_id")
+    current = hook_input.get("session_id")
+    # no id on either side: the marker alone says this worktree runs a process worker
+    return not recorded or not current or recorded == current
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -261,6 +276,19 @@ def show(crew_path: Path, crew: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _positional(args: list[str], flags: tuple[str, ...]) -> str | None:
+    """The first argument that is neither a flag nor a flag's value."""
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+        elif arg in flags:
+            skip = True
+        elif not arg.startswith("--"):
+            return arg
+    return None
+
+
 def _opt(argv: list[str], flag: str) -> str | None:
     if flag in argv:
         i = argv.index(flag)
@@ -287,25 +315,38 @@ def _print_members(crew: dict[str, Any]) -> None:
             print(name + "\t" + " ".join(str(label).split()))
 
 
-def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("path", "show", "members", "skill-path", "stubs"):
-        print(__doc__.strip().splitlines()[2], file=sys.stderr)
-        return 2
-    cmd = argv[0]
-    if cmd == "skill-path":
-        return _skill_path_cli(argv)
-    if cmd == "path":
-        found = find(_opt(argv, "--from"))
-        if found is not None:
-            print(found)
-        return 0 if found is not None else 1
+def _load_cli(argv: list[str]) -> tuple[Path, dict[str, Any]] | None:
     try:
         crew_path, crew = find_and_load(_opt(argv, "--from"))
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
+        return None
+    return (crew_path, crew) if crew_path is not None and crew is not None else None
+
+
+def _path_cli(argv: list[str]) -> int:
+    found = find(_opt(argv, "--from"))
+    if found is not None:
+        print(found)
+    return 0 if found is not None else 1
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] not in ("path", "show", "members", "skill-path", "stubs", "is-role"):
+        print(__doc__.strip().splitlines()[2], file=sys.stderr)
+        return 2
+    cmd = argv[0]
+    if cmd in ("skill-path", "path"):
+        return _skill_path_cli(argv) if cmd == "skill-path" else _path_cli(argv)
+    loaded = _load_cli(argv)
+    if loaded is None:
         return 1
-    if crew_path is None or crew is None:
-        return 1
+    crew_path, crew = loaded
+    if cmd == "is-role":
+        session = _opt(argv, "--session") or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        here = {"cwd": os.getcwd(), "session_id": session}
+        role = _positional(argv[1:], ("--from", "--session"))
+        return 0 if role and holds_role(crew, role, os.environ, here) else 1
     if cmd == "show":
         print(json.dumps(show(crew_path, crew), ensure_ascii=False, indent=2))
     elif cmd == "members":

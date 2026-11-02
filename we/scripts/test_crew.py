@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -156,6 +157,31 @@ def test_session_kind():
     assert crew.session_kind({"WESIDE_COMPANION": "Eva"}, agent_type="x") == ("worker", "")
 
 
+def test_holds_role_and_cli(tmp_path):
+    core, _biz = workspace(tmp_path)
+    assert crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"})
+    assert crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "otto"})
+    assert not crew.holds_role(
+        CREW, "orchestrator", {"WESIDE_COMPANION": "Otto", "WE_ROLE": "worker"}
+    )
+    assert not crew.holds_role(CREW, "orchestrator", {"WESIDE_COMPANION": "Ada"})
+    assert not crew.holds_role(CREW, "orchestrator", {"WE_ROLE": "master"})
+
+    def cli(env):
+        base = {k: v for k, v in os.environ.items() if k not in ("WESIDE_COMPANION", "WE_ROLE")}
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "is-role", "orchestrator"],
+            cwd=core,
+            env={**base, **env},
+            capture_output=True,
+            check=False,
+        ).returncode
+
+    assert cli({"WESIDE_COMPANION": "Otto"}) == 0
+    assert cli({"WESIDE_COMPANION": "Ada"}) == 1
+    assert cli({}) == 1
+
+
 def test_a_process_worker_is_a_worker_whatever_its_environment(tmp_path):
     repo = tmp_path / "wt"
     repo.mkdir()
@@ -192,3 +218,30 @@ def test_stub_frontmatter_survives_quotes_and_backslashes(tmp_path):
     head = text.split("\n---", 1)[0]
     assert '(Head of \\"Growth\\" \\\\ Sales)' in head
     assert '# Quinn · Head of "Growth" \\ Sales' in text
+
+
+def test_is_role_excludes_a_process_worker_by_session_and_reads_the_role_anywhere(tmp_path):
+    core, _biz = workspace(tmp_path)
+    subprocess.run(["git", "init", "-q", str(core)], check=True)
+    base = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("WESIDE_COMPANION", "WE_ROLE", "CLAUDE_CODE_SESSION_ID")
+    }
+    env = {**base, "WESIDE_COMPANION": "Otto", "WE_ROLE": "master"}
+
+    def cli(*args):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "is-role", *args],
+            cwd=core,
+            env=env,
+            capture_output=True,
+            check=False,
+        ).returncode
+
+    assert cli("orchestrator", "--session", "s1") == 0
+    assert cli("--session", "s1", "orchestrator") == 0
+    (core / ".git" / "we-worker.json").write_text(json.dumps({"name": "w", "session_id": "s-w"}))
+    assert cli("orchestrator", "--session", "s-w") == 1  # the worker the marker names
+    assert cli("orchestrator") == 1  # no session id: the marker alone decides
+    assert cli("orchestrator", "--session", "s-lead") == 0  # the Lead working in the worker's tree
