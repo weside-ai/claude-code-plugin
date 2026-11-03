@@ -161,8 +161,8 @@ nothing; the deliverer (§ Answers) checks the board file every three seconds in
 when it moved; every minute it re-reads the file and the live column whatever happened.
 
 The option `boardAutoOpen` (`/plugin` → we → Configure) opens it at session start: `off` (default),
-`on` (every session), `orchestrator` (only the session whose companion pin holds `roles.orchestrator`
-in the repo's crew, checked by `scripts/crew.py is-role orchestrator`; working mode:
+`on` (every session), `orchestrator` (only the session whose companion pin holds `roles.coordinator`
+in the repo's crew, checked by `scripts/crew.py is-role coordinator`; working mode:
 `references/working-mode.md`). Opened unasked, the pane needs 144 terminal columns and waits
 undrawn below that until you widen the terminal or run `/board`.
 

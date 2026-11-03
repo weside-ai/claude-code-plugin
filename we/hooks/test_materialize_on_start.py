@@ -198,8 +198,9 @@ class MaterializeOnStartTest(unittest.TestCase):
         core, biz = self.home / "core", self.home / "biz"
         (core / ".weside").mkdir(parents=True)
         crew = {
+            "version": 2,
             "weside_account": account,
-            "roles": {"hr": "hana", "orchestrator": "lex"},
+            "roles": {"hr": "hana", "coordinator": "lex"},
             "members": {
                 "hana": {"name": "Hana", "workplace": "../biz"},
                 "lex": {"name": "Lex", "workplace": "../biz"},

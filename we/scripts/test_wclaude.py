@@ -13,11 +13,12 @@ SCRIPT = Path(__file__).parent / "wclaude"
 pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="wclaude is a bash script")
 
 CREW = {
+    "version": 2,
+    "roles": {"product": "po", "architecture": "arch"},
     "members": {
-        "po": {"name": "Ada", "role": "product_owner", "title": "Product Owner"},
-        "arch": {"name": "Bo", "role": "architect"},
-        "generic": {"role": "scrum_master"},
-    }
+        "po": {"name": "Ada", "title": "Product Owner"},
+        "arch": {"name": "Bo"},
+    },
 }
 
 
@@ -64,13 +65,12 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
     return proc, result
 
 
-def test_menu_lists_title_else_role_and_skips_nameless(tmp_path):
+def test_menu_lists_title_else_held_role(tmp_path):
     proc, result = run(tmp_path, stdin="1\n")
     assert proc.returncode == 0, proc.stderr
     assert "Ada" in proc.stderr
     assert "Product Owner" in proc.stderr
-    assert "architect" in proc.stderr
-    assert "scrum_master" not in proc.stderr
+    assert "architecture" in proc.stderr
     assert " 3) other name..." in proc.stderr
     assert "~/project/.weside/crew.json" in proc.stderr
     assert result == {"companion": "Ada", "argv": ["--name", "Ada"]}

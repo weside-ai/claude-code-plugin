@@ -50,7 +50,7 @@ end your turn with the same text:
 
 ## Lens lines
 
-For a shipped shell whose `lens_source` is `table` (no `lens` in `.weside/crew.json`):
+For a shipped shell (`lens_source` is `table`; `.weside/crew.json` carries no lens text):
 
 | Role | Lens line |
 |---|---|
