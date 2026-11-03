@@ -4,7 +4,7 @@ description: "Stub: {{name}}'s working environment in Claude Code ({{role}}); to
 ---
 
 <!-- we:stub — written by /we:setup. Fill this file from the skeleton below, delete this comment
-and the skeleton notes, commit per the repo's instruction file, then tell {{orchestrator}} in one line (for HR). -->
+and the skeleton notes, commit per the repo's instruction file, then tell {{coordinator}} in one line (for HR). -->
 
 # {{name}} · {{role}}
 
