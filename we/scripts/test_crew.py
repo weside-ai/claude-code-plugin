@@ -477,3 +477,26 @@ def test_v7_transition_keys_must_agree(tmp_path):
     out = run(core, "show")
     assert out.returncode == 1
     assert "roles.orchestrator" in out.stderr and "roles.coordinator" in out.stderr
+
+
+def test_labels_default_merge_and_refuse_an_unknown_key(tmp_path):
+    core, _ = workspace(tmp_path)
+    assert json.loads(run(core, "show").stdout)["labels"] == {
+        "recommendation": "Recommendation",
+        "ready": "ready",
+    }
+    core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__ready="bereit")))
+    assert json.loads(run(core, "show").stdout)["labels"] == {
+        "recommendation": "Recommendation",
+        "ready": "bereit",
+    }
+    core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__readyz="x")))
+    out = run(core, "show")
+    assert out.returncode == 1 and "unknown key labels.readyz" in out.stderr
+
+
+@pytest.mark.parametrize("text", ["", "x" * 41, "two\nlines"])
+def test_a_label_is_one_short_line(tmp_path, text):
+    core, _ = workspace(tmp_path, with_(labels__recommendation=text))
+    out = run(core, "show")
+    assert out.returncode == 1 and "labels.recommendation" in out.stderr

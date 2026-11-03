@@ -28,7 +28,9 @@ the role keys are ``ROLE_KEYS``, one per role card) and ``members.<slug>`` (``na
 in, relative to the repo holding the crew file), ``extra_repos`` (more repos the member works in,
 same base), ``on_call``, ``specialist`` (the field of a member woken on demand)). Every other key
 has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``question_label``
-(opens a question line to the human), ``skill_prefix`` (role skills are ``<prefix>-<name
+(opens a question line to the human), ``labels`` (the words of a question line and of the
+parking signal in the crew's language: ``recommendation``, ``ready``; each one line of at most
+``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
 lowercased>``), ``weside_account`` (the members are weside companions: a pinned session loads its
 identity with ``/we:materialize``), ``lenses``, ``ready_lenses``, ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
@@ -93,6 +95,7 @@ VERSION_1 = (
 )
 LOCAL_RULES_MAX = 10
 LOCAL_RULE_CHARS = 160
+LABEL_CHARS = 40
 CADENCES = ("rc_train", "bundle", "replenishment", "flow_report", "process_inbox", "goal_file")
 STATES = ("on_hold", "backlog", "selected", "in_progress", "in_review", "done")
 FALLBACK_TARGETS = (*ROLE_KEYS, "human_bundle")
@@ -120,6 +123,7 @@ def _lens(key: str, sample: int | None = None) -> dict[str, Any]:
 DEFAULTS: dict[str, Any] = {
     "human": {"name": "the human", "decides": []},
     "question_label": "QUESTION",
+    "labels": {"recommendation": "Recommendation", "ready": "ready"},
     "skill_prefix": "weside",
     "weside_account": False,
     "lenses": {
@@ -361,6 +365,12 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
     if reviewer is not None and reviewer not in slugs:
         raise _fail(path, f"sla.t2_second_reviewer {reviewer!r} is no member")
     _validate_local_rules(path, data.get("local_rules", []))
+    for key, text in data.get("labels", {}).items():
+        if not text.strip() or len(text) > LABEL_CHARS or "\n" in text or "\r" in text:
+            raise _fail(
+                path,
+                f"labels.{key} must be one non-empty line of at most {LABEL_CHARS} characters",
+            )
     _validate_paths(path, data)
 
 
