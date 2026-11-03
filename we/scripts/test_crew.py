@@ -513,3 +513,51 @@ def test_a_label_is_one_short_line(tmp_path, text):
     core, _ = workspace(tmp_path, with_(labels__recommendation=text))
     out = run(core, "show")
     assert out.returncode == 1 and "labels.recommendation" in out.stderr
+
+
+@pytest.mark.parametrize(
+    ("env", "hook", "want"),
+    [
+        ({"WE_ROLE": "worker"}, None, "worker"),
+        ({}, {"agent_type": "x"}, "worker"),
+        ({"WE_ROLE": "master"}, None, "master"),
+        ({"WE_ROLE": "master", "WESIDE_COMPANION": "Otto"}, None, "coordinator"),
+        ({"WESIDE_COMPANION": "ada"}, None, "product"),
+        ({"WE_ROLE": "worker", "WESIDE_COMPANION": "Hana"}, None, "hr"),
+        ({"WESIDE_COMPANION": "Lex"}, None, "specialist"),
+        ({}, None, None),
+        ({"WESIDE_COMPANION": "Nobody"}, None, None),
+    ],
+)
+def test_role_of_session(env, hook, want):
+    merged = crew._merge(CREW)
+    assert crew.role_of_session(merged, env, hook) == want
+
+
+def test_session_kind_verb_prints_the_role_or_none_with_a_hint(tmp_path):
+    core, _ = workspace(tmp_path)
+    base = {k: v for k, v in os.environ.items() if k not in ("WE_ROLE", "WESIDE_COMPANION")}
+    base.pop("CLAUDE_CODE_SESSION_ID", None)
+
+    def verb(**env):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "session-kind", "--from", str(core)],
+            capture_output=True,
+            text=True,
+            env={**base, **env},
+            cwd=tmp_path,
+            check=False,
+        )
+
+    assert verb(WESIDE_COMPANION="Otto").stdout == "coordinator\n"
+    assert verb(WE_ROLE="master").stdout == "master\n"
+    none = verb()
+    assert none.returncode == 0
+    assert none.stdout == "none\nno role: ask the coordinator or run `/we:setup`\n"
+
+
+def test_at_reads_only_the_root_itself(tmp_path):
+    core, biz = workspace(tmp_path)
+    assert crew.at(core) == core / ".weside" / "crew.json"
+    assert crew.at(biz) == (core / ".weside" / "crew.json").resolve()
+    assert crew.at(core / ".weside") is None
