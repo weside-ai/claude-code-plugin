@@ -192,7 +192,12 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
   on('ui.toast', (_$, e) => {
     throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
   })
-  return { answersPath, appended, submitted }
+  // A line another writer appended (a chat write-back, another session's pane).
+  const push = (line: Record<string, unknown>) => {
+    lines += `${JSON.stringify(line)}\n`
+    mtimeMs += 1
+  }
+  return { answersPath, appended, submitted, push }
 }
 
 test('Accept in the orchestrator session appends one line, sends nothing itself and shows the answer', async ($, on) => {
@@ -271,6 +276,33 @@ test('Deny shows without a recommendation and appends deny', async ($, on) => {
   expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q2', 'deny', 'Orchestrator']])
   expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ denied \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Accept strikes the card at once: no buttons, the question struck, the stamp kept; a later line on it changes nothing', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props.strikethrough).toBeFalsy()
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  for (const kind of ['accept', 'deny', 'discuss', 'info', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props).toMatchObject({ strikethrough: true, dimColor: true })
+  expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
+  // The board file still lists Q1 and Q2; Q2 keeps its buttons.
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
+  // A Deny line on the struck id (a chat write-back, another pane) changes nothing.
+  home.push({ id: 'Q1', answer: 'deny', ts: '2026-10-30T19:00:00.000Z', session: 'lead', via: 'chat' })
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ denied/ })).toBeUndefined()
+  expect(home.appended.map(a => a[2])).toEqual(['accept'])
   await ui.unmount()
 })
 

@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 
-import { answerLines, isFinal, keyOf, ledgerState, markerRows, noticeMatches, versionAtLeast } from './deliver'
+import { answerLines, deliveryLine, isFinal, keyOf, ledgerState, markerRows, noticeMatches, versionAtLeast } from './deliver'
 
 type T$ = Parameters<TestBody>[0]
 type TOn = Parameters<TestBody>[1]
@@ -462,4 +462,19 @@ test('a held notice matches the asker row it names, the quoted id first; other n
 test('versionAtLeast compares releases part by part; a dev build counts by its release', () => {
   expect(['2.1.312', '2.1.317', '2.2.0', '2.1.312-dev.20260920.t101500.sha1a2b3c4'].map(v => versionAtLeast(v, '2.1.312'))).toEqual([true, true, true, true])
   expect(['2.1.302', '2.0.999', 'dev', undefined].map(v => versionAtLeast(v, '2.1.312'))).toEqual([false, false, false, false])
+})
+
+test('deliveryLine: delivered to the asker, else to the coordinator; a refusal or a marker stays with the coordinator', () => {
+  const ts = iso(T0)
+  const r = (role: string, to: string, delivered: boolean, reason?: string, at = T0 + 2_000) =>
+    ({ id: 'Q1', answer_ts: ts, to, role, click_ts: ts, ts: iso(at), delivered, ...(reason ? { reason } : {}) })
+  const line = (...rows: ReturnType<typeof r>[]) => deliveryLine({ id: 'Q1', ts }, ledgerState(rows.map(x => `${JSON.stringify(x)}\n`).join('')).rows, 'coord')
+  expect(line()).toBeUndefined()
+  expect(line(r('asker', 'asker', true), r('coordinator', 'coord', true))).toEqual({ text: '→ delivered to asker 16:00 UTC', isDelivered: true })
+  expect(line(r('coordinator', 'coord', true))).toEqual({ text: '→ delivered to coord 16:00 UTC', isDelivered: true })
+  expect(line(r('asker', 'asker', false, "2 agents are named 'asker'. Re-send with the ref of the one you mean:\n  asker [a2]"))?.text).toBe('not delivered, with coord (name not unique)')
+  expect(line(r('asker', 'asker', true), r('asker', 'asker', false, 'held', T0 + 9_000))?.text).toBe('not delivered, with coord (held)')
+  expect(line(r('coordinator', 'coord', false, 'coordinator not running', T0 + 60_000))?.text).toBe('not delivered, with coord (not running)')
+  expect(line(r('asker', 'asker', true), r('coordinator', 'coord', false, 'resubmitted'))?.text).toBe('→ delivered to asker 16:00 UTC')
+  expect(line(r('coordinator', 'coord', false, 'not stored after a resubmit'))?.text).toBe('not delivered, with coord (not stored after a resubmit)')
 })

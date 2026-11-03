@@ -12,12 +12,12 @@ import type {
   BoardWork, FlowPhase, LiveView, WorkNode,
 } from '../../types'
 import {
-  ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
+  ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
   liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
-  NOTICE, RESUBMITTED, answerLines, askerText, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
+  NOTICE, RESUBMITTED, answerLines, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
   versionAtLeast,
 } from './deliver'
 import type { Awaiting, Delivery, Ledger } from './deliver'
@@ -622,6 +622,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const v = await read($, view)
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
+    const ledgerRows = (await read($, deliveries))?.rows ?? {}
     const restOpen = await read($, isRestOpen)
     const notesOpen = await read($, isNotesOpen)
     const opened = await read($, workOpen)
@@ -665,19 +666,25 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>{children}</Box>
     )
 
+    // An Accept or Deny strikes the card at once: dim, the question struck through, no buttons, the
+    // stamp and the delivery line kept, whatever the board file still lists.
     const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined
+      const struck = isClosed(last)
+      const delivered = deliveryLine(last, ledgerRows, board?.updatedBy)
       const press = (answer: BoardAnswerKind) => () => {
         if (q.id) void answerQuestion($, file, q.id, answer)
       }
       const head: Part[][] = [
-        q.id ? [{ text: q.id, bold: true }] : [],
-        days !== undefined ? [{ text: days === 0 ? 'today' : `${days} d`, color: days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined, bold: days >= 2 }] : [],
-        q.session ? [{ text: q.session }] : [],
+        q.id ? [{ text: q.id, bold: !struck, dim: struck }] : [],
+        days !== undefined
+          ? [{ text: days === 0 ? 'today' : `${days} d`, color: struck ? undefined : days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined, bold: !struck && days >= 2, dim: struck }]
+          : [],
+        q.session ? [{ text: q.session, dim: struck }] : [],
         q.key ? [{ text: q.key, dim: true }] : [],
       ]
-      const buttons = q.id
+      const buttons = q.id && !struck
         ? [
             ...(q.recommendation ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
             { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
@@ -694,8 +701,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       return (
         <Box key={`q-${q.id ?? i}`} flexDirection="column" marginTop={i ? 1 : 0}>
           {lines(head, inner, `q-${i}-head`)}
-          {q.ask && <Text>{q.ask}</Text>}
-          {q.recommendation && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
+          {q.ask && <Text dimColor={struck} strikethrough={struck}>{q.ask}</Text>}
+          {q.recommendation && !struck && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
           {pack(row, r => r.width, inner, 1).map((line, j) => (
             <Box key={`q-${i}-row-${j}`} flexDirection="row" gap={1}>
               {line.map(r =>
@@ -707,6 +714,9 @@ export const registerBoard = (on: On, options: PluginOptions) => {
               )}
             </Box>
           ))}
+          {delivered && (
+            <Text key={`delivery-${q.id}`} color={delivered.isDelivered ? 'inactive' : 'warning'}>{clip(delivered.text, inner)}</Text>
+          )}
         </Box>
       )
     }

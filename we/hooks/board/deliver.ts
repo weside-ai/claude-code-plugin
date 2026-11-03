@@ -220,3 +220,36 @@ export type TurnClock = { runningSince?: number; lastEndedAt?: number; lastEnded
 export const isMissed = (a: Awaiting, now: number, turn: TurnClock) =>
   (turn.lastEndedStart !== undefined && turn.lastEndedStart >= a.submittedAt) ||
   (turn.runningSince === undefined && now - Math.max(a.submittedAt, turn.lastEndedAt ?? 0) >= IDLE_MS)
+
+const SHORT_REASONS: readonly [RegExp, string][] = [
+  [/^No agent named .* is reachable/, 'not reachable'],
+  [/^\d+ agents are named /, 'name not unique'],
+]
+
+const shortReason = (reason: string | undefined) => {
+  const first = (reason ?? 'not delivered').split('\n')[0]!.trim()
+  const known = SHORT_REASONS.find(([pattern]) => pattern.test(first))
+  return known ? known[1] : first.length > 40 ? `${first.slice(0, 39)}…` : first
+}
+
+export type DeliveryLine = { text: string; isDelivered: boolean }
+
+const hhmm = (ts: string) => `${ts.slice(11, 16)} UTC`
+
+// The line under a question's answer stamp: where its newest answer went, or with whom it stays.
+// A refusal of either recipient wins over a delivery; a resubmit still waits and shows nothing.
+export const deliveryLine = (
+  answer: { id: string; ts: string } | undefined,
+  rows: Record<string, BoardDelivery>,
+  coordinator: string | undefined,
+): DeliveryLine | undefined => {
+  if (!answer) return undefined
+  const row = (role: BoardDeliveryRole) => rows[keyOf(answer.id, answer.ts, role)]
+  const [asker, own] = [row('asker'), row('coordinator')]
+  const withCoordinator = (reason: string | undefined) => ({ text: `not delivered, with ${coordinator ?? 'the orchestrator'} (${shortReason(reason)})`, isDelivered: false })
+  if (asker && !asker.delivered && isFinal(asker)) return withCoordinator(asker.reason)
+  if (own && !own.delivered && own.reason === NOT_RUNNING) return withCoordinator('not running')
+  if (own && !own.delivered && isFinal(own)) return withCoordinator(own.reason)
+  const reached = asker?.delivered ? asker : own?.delivered ? own : undefined
+  return reached ? { text: `→ delivered to ${reached.to} ${hhmm(reached.ts)}`, isDelivered: true } : undefined
+}
