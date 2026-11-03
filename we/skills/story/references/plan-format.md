@@ -5,7 +5,7 @@
 Frontmatter · The refined scan · Lifecycle · Sections, in this order (Context, Open Fork, Acceptance
 Criteria, User Journey, Testing Requirements, Verification, Technical Approach, Implementation
 Phases, Out of scope, Constraints and Pins, Design Decisions, Code Guidance, Security Review
-Required, Documentation Impact).
+Required, Documentation Impact, Updates Log) · Oracle-class marker · Updates Log lines.
 
 The contract between the writers (`/we:story`, `/we:refine`) and the readers (`/we:orchestrate`,
 `/we:develop`). Change a field here only together with every reader.
@@ -78,7 +78,7 @@ Answering the fork deletes the section.>
 
 ## Acceptance Criteria
 
-1. **Given** <state> **When** <action> **Then** <observable result>
+1. **Given** <state> **When** <action> **Then** <observable result> [<oracle class>]
 
 ## User Journey
 
@@ -157,6 +157,10 @@ Three lists here each cost review rounds when missing (Codex rounds, 10/2026):
 - **ADR** — <only when hard to reverse, surprising and a real trade-off>
 - **Generated** — <API spec, clients, CLI reference to regenerate>
 - **New doc** — <only with the reason the code cannot hold it>
+
+## Updates Log
+
+- <one line per measured step, appended by a script; grammar below>
 ```
 
 The block is copied into the PR body, where a hook reads the `**Oracle:**` line literally: keep it
@@ -164,8 +168,37 @@ undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
 `**Staging checks:**` names the file of checks the Tester runs on staging after the deploy
-(`references/working-mode.md` § Roles); the builder writes it in the same branch. Its path and
-format are the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it
-proves, so the run's report maps back to the ACs. Mechanical staging ACs (status code, field,
+(`references/working-mode.md` § Roles). Its path, format, planned state and validate command are
+the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it proves (`AC<n>`,
+more than one per AC `AC<n>-b`), so the run's report maps back to the ACs. The refiner writes the
+file next to the plan for every `receipt` AC, in the planned state, and runs the validate command;
+plan and file land on the default branch in one commit (`references/plan-commit.md`). The builder
+arms it in the build branch (drops the planned state) and may correct seed, fields and assertions
+to the built code. Mechanical staging ACs (status code, field,
 label) belong there; the prose ACs keep the new and fuzzy ones. A repo whose `.weside/verify.md`
 names no staging checks writes `none — no staging checks in this repo`.
+
+## Oracle-class marker
+
+Every AC ends with its oracle class in brackets, backticks around the class tolerated: `[receipt]`
+(a mechanical check in the repo's staging-check file), `[ci: <test>]` (a test in CI proves it) or
+`[walk: <persona> · <screen>]` (a person walks it). A reader takes the marker only at the end of an
+AC's full text, a wrapped AC included; a marker quoted mid-sentence is prose.
+
+## Updates Log lines
+
+`## Updates Log` is the plan's last section, created by the first line written into it. A step that
+measures its token use appends one line through `${CLAUDE_PLUGIN_ROOT}/scripts/session_tokens.py --plan <plan> --step
+<step>`, never by hand:
+
+```text
+- 2026-11-03 refine tokens: in=12 out=34567 cache_read=1234567 cache_write=23456 models=<model> session=fbae4d4e
+- 2026-11-03 refine tokens: absent (subagent: no own session id)
+```
+
+`<date> <step> tokens:` then either the four counts (input, output, cache read, cache write),
+followed by optional `key=value` pairs (`models`, `session` as the first eight characters,
+`skipped` = unreadable transcript lines), or `absent (<reason>)` with no `)` in the reason. A value
+nobody measured is `absent`, never `0`. Only a session of its own is measured (`agents.worker_launch`
+is a command template, `references/worker-dispatch.md` § Worker launch backend): a subagent shares
+its caller's session id. The message the step sends after the line is not counted.

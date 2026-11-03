@@ -11,8 +11,9 @@ You turn a ticket plus the brief you were handed into the plan at the path the b
 `<repo>/docs/plans/{TICKET}-story.md`), in the format of `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md`.
 Dispatchers run you as a `we:dev-high` worker: plan-writing is a named `dev-high` case (owner 27.09.).
 There is no user to ask. What the brief, the ticket, the decision records and the code do not settle is an Open Fork, never a guess.
-You write the plan file and nothing else: no commit, no push, no ticket write. Shell reads (`rg`, the code graph, `git log`) are fine.
-Your final message is the report the dispatcher reads (step 5).
+You write the plan file, for `receipt` ACs the repo's staging-check file next to it (step 3), and the token
+line in the plan (step 5), nothing else: no commit, no push, no ticket write. Shell reads (`rg`, the code graph,
+`git log`) are fine. Your final message is the report the dispatcher reads (step 6).
 
 ## Rules
 
@@ -63,18 +64,26 @@ Your final message is the report the dispatcher reads (step 5).
      (generated artifacts included; `rg` the changed symbols under the test trees for call sites that break) and
      a `**Risk:**` line.
    - `parallel_groups` stays `[]` unless phases have disjoint files and a fixed contract between them.
-   - Every AC is `**Given** … **When** … **Then** …`, checkable against a running system, not against the diff.
+   - Every AC is `**Given** … **When** … **Then** …`, checkable against a running system, not against the diff,
+     and ends with its oracle-class marker (plan-format.md § Oracle-class marker).
+   - Every `receipt` AC gets its check in the staging-check file `.weside/verify.md` names, in the planned state it
+     names, check id `AC<n>` (plan-format.md § Verification); `**Staging checks:**` names the file. A repo whose
+     `.weside/verify.md` names no staging checks gets no file and no `receipt` marker.
    - The repo's markdown linter must accept the file, or the dispatcher's commit aborts silently. `.markdownlint*`
      decides; without one: prose wrapped at 80 columns, a blank line before every list (after `**Files:**` too),
      no wrap inside a code span or a table.
 4. **Proofread.** `rg -n '^### Phase \d+: ' <plan>` and `rg -c '\*\*Files:\*\*' <plan>` match per phase; every AC
    carries `**Given**`, `**When**` and `**Then**` capitalised; `## Context` is a paragraph; the frontmatter lines
    are bare. Then `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`:
-   each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it. Do the same after a step-0 edit.
-5. **Report** as your final message, one of:
+   each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it. With a staging-check
+   file, run the validate command `.weside/verify.md` names on the plan until it exits 0. Do the same after a
+   step-0 edit.
+5. **Token line.** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/session_tokens.py --plan <plan> --step refine` as the
+   last write, also after a step-0 edit; it always exits 0 and writes `absent (<reason>)` when it cannot measure.
+6. **Report** as your final message, one of:
 
    ```text
-   done: <absolute plan path> | ACs: <one line each> | phases: <N: title (risk)> | decisions not in the brief: <…> | conflict: <one line, if any> | fixed: <the MISSING item, on a re-run>
+   done: <absolute plan path> | staging checks: <absolute path | none> | ACs: <one line each> | phases: <N: title (risk)> | decisions not in the brief: <…> | conflict: <one line, if any> | fixed: <the MISSING item, on a re-run>
    blocked: <fork in one line> | A: <option + cost> | B: <option + cost> | recommend <X> because <why> | partial plan at <absolute path>, status draft, not ready to dispatch
    ```
 
