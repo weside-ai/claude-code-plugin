@@ -62,6 +62,12 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   Skills read the repo's instruction files and decision records before assuming.
 - Claude Review (Opus 5.5 `medium`) is the required review gate; Codex is advisory and ends with the
   subscription.
+- SessionStart hook output (Claude Code 2.1.317, `claude -p`, probed 2026-11-03 by
+  `scripts/probe-hook-cap.py`, fixture `scripts/fixtures/hook-cap.json`): `additionalContext`
+  arrived whole up to 50,000 chars, judged per hook (two 9,895-char hooks in one event both whole);
+  no cut found. An interactive session showed an 11.6 KB SessionStart output as a 2 KB preview, so
+  the crew process stays gated at 9,500 chars per hook (`render_process.BUDGET`); a probe that
+  finds a cut below 9,500 changes the gate, not the text.
 
 ## Porting from v6
 

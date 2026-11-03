@@ -328,3 +328,124 @@ class GateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+GENERIC_CREW = Path(__file__).with_name("fixtures") / "crew-v2-generic.json"
+sys.path.insert(0, str(SCRIPT.parent))
+
+import crew as crewlib  # noqa: E402
+import render_process  # noqa: E402
+
+
+class ProcessRenderTest(unittest.TestCase):
+    """`process-render`: every role's rendered crew process within 9,500 chars; `--role-totals`."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ws = Path(self._tmp.name)
+        self.root = self.ws / "app"
+        for repo in ("app", "biz", "infra"):
+            (self.ws / repo).mkdir()
+        (self.root / ".weside").mkdir()
+        (self.root / "AGENTS.md").write_text("# App\n\nShort.\n", encoding="utf-8")
+        self.crew = json.loads(GENERIC_CREW.read_text(encoding="utf-8"))
+        self.home = self.ws / "home"
+        self.home.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def save(self, config: dict | None = None) -> None:
+        (self.root / ".weside" / "crew.json").write_text(json.dumps(self.crew), encoding="utf-8")
+        if config is not None:
+            (self.root / ".weside" / "config.json").write_text(json.dumps(config))
+
+    def gate(self, *extra: str) -> tuple[int, str]:
+        result = subprocess.run(
+            [sys.executable, "-I", str(SCRIPT), "--root", str(self.root), *extra],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode, result.stdout
+
+    def sums(self) -> dict[str, int]:
+        path = self.root / ".weside" / "crew.json"
+        crew = crewlib.load(path)
+        out = {}
+        for role in render_process.all_roles():
+            rows = render_process.total_rows(path, crew, role, self.home)
+            if rows:
+                out[role] = max(total for _, _, total in rows)
+        return out
+
+    def test_a_repo_without_crew_is_skipped_and_a_fitting_crew_passes(self):
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.save()
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("process-render", out)
+
+    def test_ten_long_local_rules_go_red_naming_the_role(self):
+        self.crew["local_rules"] = ["r" * 160] * 10
+        self.save()
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertRegex(
+            out,
+            r"✗ \.weside/crew\.json: rendered L0 for role master has \d{4,} chars > 9500 "
+            r"\[process-render\]",
+        )
+        self.assertNotIn("role worker has", out)
+
+    def test_a_refused_crew_is_an_error(self):
+        self.crew["version"] = 1
+        self.save()
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("not rendered: crew.json is version 1", out)
+
+    def test_role_totals_pass_at_the_sums_and_go_red_one_char_below(self):
+        self.save()
+        sums = self.sums()
+        self.assertEqual(
+            set(sums),
+            {
+                *("product", "architecture", "acceptance", "machinery"),
+                "coordinator",
+                "escalation",
+                "hr",
+                "master",
+                "worker",
+                "specialist",
+            },
+        )
+        self.save({"optimization": {"budget": {"role_total_chars": sums}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"machinery Kit: {sums['machinery']} chars (limit {sums['machinery']})", out)
+        low = {**sums, "hr": sums["hr"] - 1}
+        self.save({"optimization": {"budget": {"role_total_chars": low}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn(
+            f"✗ .weside/config.json: role hr (hr Hana) loads {sums['hr']} chars > {sums['hr'] - 1}",
+            out,
+        )
+
+    def test_a_role_without_limit_fails_closed_and_slack_asks_to_lower(self):
+        self.save()
+        sums = self.sums()
+        partial = {k: v for k, v in sums.items() if k != "worker"}
+        self.save({"optimization": {"budget": {"role_total_chars": partial}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn("no total limit for role worker [role-total]", out)
+        loose = {**sums, "master": sums["master"] + 501}
+        self.save({"optimization": {"budget": {"role_total_chars": loose}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home), "--slack", "500")
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"lower `master` to {sums['master']} in .weside/config.json", out)
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 0, out)

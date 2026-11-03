@@ -184,7 +184,7 @@ a `/we:optimize` step, not a CI job, so the repo vendors no copy of the plugin's
       entry: bash -c 'g=$(ls -d ~/.claude/plugins/cache/weside-ai/we/*/scripts/check-instruction-budget.py 2>/dev/null | sort -V | tail -1); if [ -z "$g" ]; then echo "we plugin absent - instruction budget not checked"; exit 0; fi; python3 "$g"'
       language: system
       pass_filenames: false
-      files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|\.weside/config\.json)$'
+      files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|process/[^/]*\.md|\.weside/(config|crew)\.json)$'
 ```
 
 ## Plugin checkout and workspace
