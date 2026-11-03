@@ -25,6 +25,9 @@ Ticketing · Specialists on call · Crew · What stays local.
 | Tester | the staging acceptance; moves a story to Done | builds what it accepts |
 | Component owner | per backlog component: the HOW, review, plan acceptance | starts or steers workers |
 
+In `.weside/crew.json` the roles are keys of `roles`: Product Owner `product`, Orchestrator
+`coordinator`, HR `hr`, Tester `acceptance` (the other role keys: `crew.py` `ROLE_KEYS`).
+
 ## Masters and workers
 
 - A **master** is a long-lived session (`WE_ROLE=master`). A **named master** carries a
@@ -104,18 +107,22 @@ question.
 
 ## Crew
 
-`.weside/crew.json` is the repo's projection of who holds which role; the account's handbook stays
-the truth about people. `scripts/crew.py` is its one reader (schema and session kinds in its
-docstring): `/we:setup` writes it, `wclaude` lists its members, `/we:council` takes lenses from
-it, the SessionStart hooks read the roles and find each member's role skill through `workplace`.
-One repo holds the file; another points at it with `.weside/config.json` → `"crew"`.
+`.weside/crew.json` (version 2) is the repo's projection of who holds which role; the account's
+handbook stays the truth about people. `scripts/crew.py` is its one reader (schema, defaults and
+session kinds in its docstring); it refuses a file it cannot validate, naming the key, and a
+version-1 file with "in a worktree, merge the default branch; otherwise run /we:setup":
+`/we:setup` writes it, `wclaude` lists its members, `/we:council` seats its members by role key,
+`specialist` and lens `keeper` (`scripts/council_lens.py`), the SessionStart hooks read the roles
+and find each member's role skill through `workplace` (`crew.py workplace <slug>` adds
+`extra_repos`). One repo holds the file; another points at it
+with `.weside/config.json` → `"crew"`.
 
 `crew.json` holds only members with a Claude Code workplace; a handbook member without one is not
-drift. Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, role,
-components, the four roles) at each onboarding and whenever a role note changes, and fixes the side
+drift. Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, title,
+components, `roles`, `specialist`) at each onboarding and whenever a role note changes, and fixes the side
 that is wrong by commit or note; `on_call`, `weside_account` and `skill_prefix` are repo settings,
 not compared. A member without a skill gets a stub from `templates/companion-skill/SKILL.md`; its
-first start asks it to fill the stub and tell the Orchestrator in one line (for HR).
+first start asks it to fill the stub and tell the coordinator in one line (for HR).
 
 ## What stays local
 

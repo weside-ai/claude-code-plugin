@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "human": {"name": "Hal", "decides": ["vision", "money"]},
+  "question_label": "ASK",
+  "skill_prefix": "acme",
+  "weside_account": true,
+  "roles": {
+    "product": "ada",
+    "architecture": "vic",
+    "acceptance": "tess",
+    "machinery": "kit",
+    "coordinator": "otto",
+    "escalation": "nora",
+    "hr": "hana",
+    "product_owner": "ada",
+    "orchestrator": "otto",
+    "tester": "tess"
+  },
+  "members": {
+    "ada": {"name": "Ada", "role": "product_owner", "title": "Product Owner", "components": ["App"], "workplace": ".", "on_call": false},
+    "otto": {"name": "Otto", "role": "orchestrator", "title": "Orchestrator", "components": [], "workplace": ".", "on_call": false},
+    "hana": {"name": "Hana", "role": "hr", "title": "HR", "components": [], "workplace": "../biz", "on_call": false},
+    "tess": {"name": "Tess", "role": "tester", "title": "Tester", "components": [], "workplace": ".", "on_call": false},
+    "vic": {"name": "Vic", "role": "architect", "title": "Architecture", "components": ["Architecture"], "workplace": ".", "on_call": false},
+    "kit": {"name": "Kit", "role": "ci_build", "title": "Platform", "components": ["Platform"], "workplace": "../infra", "extra_repos": ["."], "on_call": false},
+    "nora": {"name": "Nora", "role": "ceo", "title": "CEO", "components": ["Company"], "workplace": ".", "on_call": false},
+    "lex": {"name": "Lex", "role": "legal", "lens": "legal", "title": "Legal", "components": ["Legal"], "workplace": "../biz", "on_call": true, "specialist": "legal"}
+  },
+  "lenses": {
+    "product": {"keeper": "ada"},
+    "architecture": {"registry": "docs/primitives.md", "keeper": "vic"},
+    "acceptance": {"keeper": "tess"},
+    "security": {"keeper": "vic"},
+    "premise": {"keeper": "vic"}
+  },
+  "risk": {"command": "scripts/risk-class.sh"},
+  "fallback": {"hr": "coordinator", "escalation": "human_bundle"},
+  "acceptance": {"mock_persona": "load-1", "mock_preset": 7},
+  "board": {"ticketing": "jira", "states": {"on_hold": "ON_HOLD"}},
+  "sla": {"tz": "Europe/Paris", "t2_second_reviewer": "vic"},
+  "limits": {"special_slots": ["spike"]},
+  "launch": {"worker": "start-worker {name} {brief}"},
+  "release": {"runbook": "docs/runbook.md"},
+  "capacity": {"pod_gib": 16, "gate_lock_gib": 2, "test_slot_gib": 3},
+  "files": {"dod": "docs/dod.md", "verify": "docs/verify.md"},
+  "local_rules": ["Draft means: may not merge even when green.", "Any session may resolve an error report naming its fix."]
+}

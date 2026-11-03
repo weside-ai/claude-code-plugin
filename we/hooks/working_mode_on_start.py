@@ -2,9 +2,10 @@
 """SessionStart hook: the working mode's core for this session, only when the repo has a crew.
 
 Prints at most ``MAX_LINES`` short lines (``MAX_CHARS``, asserted by the test): this session's
-kind and role, one line per working-mode role holder (``roles.*``) with its duties, where questions
-go, and the imperative to read ``references/working-mode.md``, which owns the rules. No crew
-(``scripts/crew.py find``) → nothing. The kind comes from ``crew.session_kind`` (``worker``,
+kind and role, one line per working-mode role holder (``roles.coordinator``, ``product``, ``hr``,
+``acceptance``) with its duties, where questions go, and the imperative to read
+``references/working-mode.md``, which owns the rules. No crew (``scripts/crew.py find``) → nothing;
+a crew ``crew.py`` refuses → one line naming the fault. The kind comes from ``crew.session_kind`` (``worker``,
 ``consult``, ``named``, ``unnamed``), the one resolver ``materialize_on_start.py`` reads too.
 Every source (startup, resume, clear, compact) gets it: a compaction drops the earlier injection.
 """
@@ -25,18 +26,18 @@ MAX_LINES = 10
 MAX_CHARS = 1200
 
 DUTIES = {
-    "orchestrator": "starts and parks build masters, starts a worker for a single story, routes "
+    "coordinator": "starts and parks build masters, starts a worker for a single story, routes "
     "questions and milestones, keeps the board (/board); answers or forwards its worker's "
     "questions, never directs its build",
-    "product_owner": "the WHAT, the order, plan approval",
+    "product": "the WHAT, the order, plan approval",
     "hr": "workplaces and role skills, crew drift",
-    "tester": "staging acceptance; moves a story to Done",
+    "acceptance": "staging acceptance; moves a story to Done",
 }
 TITLES = {
-    "orchestrator": "Orchestrator",
-    "product_owner": "Product Owner",
+    "coordinator": "Orchestrator",
+    "product": "Product Owner",
     "hr": "HR",
-    "tester": "Tester",
+    "acceptance": "Tester",
 }
 
 
@@ -85,7 +86,7 @@ def _session_line(crew: dict, kind: str, pin: str) -> str:
 
 
 def core(crew: dict, kind: str, pin: str, reference: Path = REFERENCE) -> str:
-    orch = crewlib.holder_name(crew, "orchestrator") or "the Orchestrator"
+    orch = crewlib.holder_name(crew, "coordinator") or "the Orchestrator"
     label = str(crew.get("question_label") or "QUESTION").strip()
     lines = ["we working mode (crew of this repo):", _session_line(crew, kind, pin)]
     for role, duty in DUTIES.items():
@@ -93,7 +94,7 @@ def core(crew: dict, kind: str, pin: str, reference: Path = REFERENCE) -> str:
         if name:
             lines.append(f"- {TITLES[role]}: {name} — {duty}.")
     found = crewlib.member(crew, pin) if pin else None
-    is_orch = bool(found) and _held_role(crew, found[0]) == "orchestrator"
+    is_orch = bool(found) and _held_role(crew, found[0]) == "coordinator"
     if kind in ("named", "unnamed") and not is_orch:
         lines.append(
             f"- A question only the human answers: one SendMessage to {orch} each, "
@@ -109,17 +110,16 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     cwd = hook_input.get("cwd") or os.getcwd()
     try:
         _, crew = crewlib.find_and_load(cwd)
-    except crewlib.CrewError:
-        return None
+    except crewlib.CrewError as exc:
+        return _context(f"crew: {exc}")
     if not crew:
         return None
     kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": core(crew, kind, pin),
-        }
-    }
+    return _context(core(crew, kind, pin))
+
+
+def _context(text: str) -> dict:
+    return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}
 
 
 def read_input() -> dict:
