@@ -11,7 +11,7 @@ import type {
 } from '../../types'
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
-  liveByName, majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf, unreadNews,
+  liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import { buildWork, groupKeys, layoutWork, storiesInScope, storyKey, storyPhase, widthOf, workOf } from './work'
@@ -393,7 +393,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
 
     const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
-      const last = q.id ? given[q.id] : undefined
+      const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined
       const press = (answer: BoardAnswerKind) => () => {
         if (q.id) void answerQuestion($, file, q.id, answer)
       }

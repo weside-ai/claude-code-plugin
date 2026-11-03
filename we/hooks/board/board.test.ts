@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterProfile, isResting, lastAnswers, liveByName,
-  majorityMode, ownName, pack, parseBoard, sortQueue, startModeOf, unreadNews,
+  majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
@@ -178,4 +178,14 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')
   expect(answerPrompt('update', 'Q4', parseBoard('{"answer_prompts":{"update":"{id}: noch aktuell?"}}').answerPrompts)).toBe('Q4: noch aktuell?')
   expect(lastAnswers('{"id":"Q6","answer":"update","ts":"t"}').Q6?.answer).toBe('update')
+})
+
+test('an update mark lapses once the board was rewritten after the press; other answers stay', () => {
+  const update = { id: 'Q6', answer: 'update' as const, ts: '2026-11-03T10:00:00.000Z', session: null }
+  const accept = { ...update, answer: 'accept' as const }
+  expect(shownAnswer(update, '2026-11-03T09:59:00Z')).toBe(update)
+  expect(shownAnswer(update, undefined)).toBe(update)
+  expect(shownAnswer(update, '2026-11-03T10:05:00Z')).toBeUndefined()
+  expect(shownAnswer(accept, '2026-11-03T10:05:00Z')).toBe(accept)
+  expect(shownAnswer(undefined, '2026-11-03T10:05:00Z')).toBeUndefined()
 })

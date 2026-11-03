@@ -214,7 +214,8 @@ test('Accept in the orchestrator session appends one line, sends the prompt and 
 })
 
 test('Update appends its line, asks the orchestrator to recheck the question and keeps it on the board', async ($, on) => {
-  const clock = mock.clock(on)
+  // Pressed after the board's `updated`: the mark shows until the orchestrator writes the board again.
+  const clock = mock.clock(on, { now: Date.parse('2026-10-30T18:00:00Z') })
   mock.store(on)
   const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
 

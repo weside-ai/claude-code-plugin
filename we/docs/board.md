@@ -233,7 +233,8 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 
 The file only grows: the orchestrator reads it and removes the question from `owner_queue`, or the
 item from `news`, once handled. **Update** asks the orchestrator to check whether the question is
-still current and correctly worded; the question stays until it rewords or removes it. Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
+still current and correctly worded; the question stays until it rewords or removes it, and its
+`✓ update asked` lapses with the orchestrator's next write of the board file (a newer `updated`). Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
 (Orchestrator)`), so nobody answers twice. It re-reads the file with the board's three-second watch.
 
 When the pane runs in the orchestrator's own session, the one whose name equals `updated_by`, a

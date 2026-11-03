@@ -83,6 +83,14 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
   return out
 }
 
+// The answer the pane shows beside a question. Update keeps the question on the board, so its mark
+// lapses once the orchestrator rewrote the board after the press; any other answer shows until handled.
+export const shownAnswer = (last: BoardAnswer | undefined, updated: string | undefined): BoardAnswer | undefined => {
+  if (last?.answer !== 'update' || !updated) return last
+  const at = Date.parse(updated)
+  return Number.isNaN(at) || at <= Date.parse(last.ts) ? last : undefined
+}
+
 // The prompt a press sends into the orchestrator's own session; the board's `answer_prompts` replaces
 // a default, `{id}` standing for the question's id.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
