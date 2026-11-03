@@ -86,7 +86,7 @@ scan and are approved need no confirm: the invocation is the go.
 ## Refine lane
 
 A refiner is a `we:dev-high` worker `refiner-<KEY>`
-whose brief begins: "Use the Skill tool with skill `we:refine` and args `<KEY>`" (a bare `/we:refine` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes one file. The
+whose brief begins: "Use the Skill tool with skill `we:refine` and args `<KEY>`" (a bare `/we:refine` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
 fork you cannot settle → write `## Open Fork` and stop".
@@ -95,7 +95,7 @@ On return, run the DoR scan on the plan in the returned worktree, then one `we:e
 checks every code claim in the plan (file:line, "only caller", "no reader", each named lever)
 against the code; a wrong claim goes back to the refiner. Pass → approval batch. Fail →
 re-dispatch once naming the missing item, then Decision Queue. An approved plan is committed per
-`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (copied out of the refiner's worktree, step 3; never the shared main checkout); then remove the
+`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main checkout); then remove the
 refiner's worktree (step 6) and move the ticket to the plan-approved status.
 
 ## Build
