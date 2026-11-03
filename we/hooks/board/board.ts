@@ -1,12 +1,16 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
 import type {
-  BoardAnswer, BoardAnswerKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession, LiveSession,
+  BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession,
+  LiveSession,
 } from '../../types'
 
 const MIN = 60_000
 const DAY = 86_400_000
-const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
-const KINDS: readonly BoardAnswerKind[] = [...PROMPT_KINDS, 'read']
+const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
+const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker']
+const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
+// An Accept or Deny closes its question: the pane strikes it, and later lines on that id change nothing.
+const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
 const promptsOf = (raw: unknown): Partial<Record<BoardPromptKind, string>> | undefined => {
@@ -63,16 +67,21 @@ export const parseBoard = (text: string): BoardFile => {
   }
 }
 
-// The answers file sits beside the board file (docs/board.md § Answers).
+// The answers file and the delivery ledger sit beside the board file (docs/board.md § Answers).
 export const answersPathOf = (boardPath: string) => `${boardPath.replace(/[^/]*$/, '')}board-answers.jsonl`
+export const deliveriesPathOf = (boardPath: string) => `${boardPath.replace(/[^/]*$/, '')}board-deliveries.jsonl`
 
-// The newest answer per question id: later lines win; a line that is no answer is skipped.
+export const isClosed = (answer: BoardAnswer | undefined) => !!answer && CLOSING.includes(answer.answer)
+
+// The newest answer per question id: later lines win, except that an Accept or Deny closes the id and
+// keeps its stamp; a line that is no answer is skipped.
 export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
   const out: Record<string, BoardAnswer> = {}
   for (const line of text.split('\n')) {
     if (!line.trim()) continue
     try {
       const a = JSON.parse(line) as Partial<BoardAnswer>
+      if (typeof a.id === 'string' && isClosed(out[a.id])) continue
       if (typeof a.id === 'string' && KINDS.includes(a.answer as BoardAnswerKind) && typeof a.ts === 'string') {
         out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null }
       }
@@ -91,14 +100,15 @@ export const shownAnswer = (last: BoardAnswer | undefined, updated: string | und
   return Number.isNaN(at) || at <= Date.parse(last.ts) ? last : undefined
 }
 
-// The prompt a press sends into the orchestrator's own session; the board's `answer_prompts` replaces
-// a default, `{id}` standing for the question's id.
+// The texts the deliverer sends: per kind to the orchestrator and the asker, `update_asker` to the asker
+// on Update; the board's `answer_prompts` replaces a default, `{id}` standing for the question's id.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   accept: '{id}: proposal accepted',
   deny: '{id}: proposal denied',
   discuss: "{id}: let's talk about it",
   info: '{id}: I need more information',
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
+  update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
 }
 
 export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>) =>

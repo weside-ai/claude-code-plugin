@@ -141,14 +141,47 @@ export type BoardView = {
 // One line of board-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info or Update on a
 // question, or of Read on a news item.
 export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'read'
-// The answers that send a prompt into the orchestrator's session; Read only appends its line.
-export type BoardPromptKind = Exclude<BoardAnswerKind, 'read'>
+// The answers the deliverer carries; Read only appends its line.
+export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
+// The texts a delivery sends, each overridable by the board's `answer_prompts`: one per delivered kind
+// for the orchestrator (and the asker), and `update_asker`, what Update asks of the asking session.
+export type BoardPromptKind = BoardDeliveredKind | 'update_asker'
 
 export type BoardAnswer = {
   id: string
   answer: BoardAnswerKind
   ts: string
   session?: string | null
+  // `chat` for a line `board.py answer` wrote back from a chat; a pane press has none. Older hand
+  // lines may carry free text here.
+  via?: string | null
+  // The owner's own words, when `board.py answer --quote` gave them.
+  quote?: string | null
+}
+
+// One row of board-deliveries.jsonl beside the answers file (docs/board.md § Answers): whether one
+// answer line reached one recipient. Readers fold the rows of one key (id, answer_ts, role) to the
+// newest by `ts`. The first row the deliverer ever writes is `{ "epoch": ts }` instead.
+export type BoardDeliveryRole = 'coordinator' | 'asker' | 'route'
+
+export type BoardDelivery = {
+  id: string
+  // The answer line's `ts`, the key's second half; `click_ts` is the same moment, kept for the latency.
+  answer_ts: string
+  to: string
+  role: BoardDeliveryRole
+  click_ts: string
+  ts: string
+  delivered: boolean
+  reason?: string
+}
+
+// The ledger as the pane reads it: the folded row per key, and the epoch the deliverer started at.
+export type BoardDeliveriesView = {
+  path: string
+  mtimeMs: number
+  epoch?: string
+  rows: Record<string, BoardDelivery>
 }
 
 // The newest answer per question id, read from the answers file beside the board file.
@@ -171,6 +204,7 @@ declare module 'claude-code' {
       boardView: Shaped<BoardView | null>
       boardLive: Shaped<LiveView | null>
       boardAnswers: Shaped<BoardAnswersView | null>
+      boardDeliveries: Shaped<BoardDeliveriesView | null>
       boardOpen: boolean
       boardRestOpen: boolean
       boardNotesOpen: boolean
