@@ -132,10 +132,10 @@ function home($: T$, on: TOn, o: Opts) {
     touch(ANSWERS)
   }
   // The engine storing a prompt that was queued earlier, as its turn begins.
-  const store = async (text: string) => {
+  const store = async (...texts: string[]) => {
     row += 1
     await $.session.append({
-      message: { type: 'user', role: 'user', content: [{ type: 'text', text }] },
+      message: { type: 'user', role: 'user', content: texts.map(text => ({ type: 'text', text })) },
       door: 'prompt',
       origin: { kind: 'plugin', name: 'we', asUser: true },
       uuid: `row-${row}`,
@@ -224,6 +224,28 @@ test('a busy coordinator: its row counts when the queued prompt is stored, well 
   expect(latency(row)).toBe(42_000)
   expect(latency(row)).toBeLessThanOrEqual(60_000)
 })
+
+// The engine merges two prompts queued behind a busy turn into one user row: each is confirmed once,
+// whether the row carries them as one joined text or as one block each.
+for (const shape of ['one text', 'two blocks'] as const) {
+  test(`two prompts stored as one row (${shape}) are each delivered once, none resubmitted`, async ($, on) => {
+    const { clock, h } = await coordinator($, on, { stores: () => false })
+    await $.turn.start({ text: 'long work', turnId: 'busy' } as never)
+    await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+    await h.click({ id: 'Q2', answer: 'discuss', ts: iso(T0 + 1_500), session: 'foxy' })
+    await clock.advance(3_000)
+    const prompts = ['Q1: proposal accepted', "Q2: let's talk about it"]
+    expect(h.submitted).toEqual(prompts)
+    await $.turn.complete({ reason: 'answer', answer: '', durationMs: 4_000, isAborted: false, turnId: 'busy' } as never)
+    await $.turn.start({ text: '', turnId: 'queued' } as never)
+    await (shape === 'one text' ? h.store(prompts.join('\n')) : h.store(...prompts))
+    await clock.settle()
+    await $.turn.complete({ reason: 'answer', answer: '', durationMs: 1, isAborted: false, turnId: 'queued' } as never)
+    await clock.advance(9_000)
+    expect(h.submitted).toEqual(prompts)
+    expect(['Q1', 'Q2'].map(id => h.rows(id, 'coordinator').map(r => r.delivered))).toEqual([[true], [true]])
+  })
+}
 
 for (const [name, reason] of [
   ['no such name', "No agent named 'asker' is reachable.\nUse ListAgents to see everyone you can message."],

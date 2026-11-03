@@ -105,7 +105,7 @@ export const isFinal = (row: BoardDelivery | undefined) => !!row && (row.deliver
 
 export type Recipient = { role: BoardDeliveryRole; to: string }
 
-// Who a line goes to: the coordinator unless she answered in its own chat; the asker unless the line
+// Who a line goes to: the coordinator unless the line came from its own chat; the asker unless the line
 // was written in the asker's session. A question no longer on the board, or without `session`, has no asker.
 export const recipientsOf = (line: AnswerLine, coordinator: string, asker: string | undefined): Recipient[] => [
   ...(line.via === 'chat' && line.session === coordinator ? [] : [{ role: 'coordinator' as const, to: coordinator }]),
@@ -155,7 +155,7 @@ type Prompts = Partial<Record<BoardPromptKind, string>> | undefined
 
 const quoteOf = (line: AnswerLine) => (line.quote ? `\nThe owner's words: "${line.quote}"` : '')
 
-// The prompt the coordinator receives: today's text per kind, the owner's words when she gave them.
+// The prompt the coordinator receives: today's text per kind, the owner's words when the owner gave them.
 export const coordinatorText = (line: AnswerLine, prompts: Prompts) => `${answerPrompt(line.answer, line.id, prompts)}${quoteOf(line)}`
 
 // The peer message to the asker: the same answer; for Update, the request to check the question.
@@ -210,6 +210,17 @@ export const versionAtLeast = (version: string | undefined, floor: string) => {
 
 // A prompt the deliverer submitted and waits to see stored.
 export type Awaiting = { key: string; delivery: Delivery; text: string; ledgerPath: string; submittedAt: number; tries: number }
+
+// The awaiting prompts one stored user row confirms, by index: a text block equal to the prompt, or the
+// row's text containing it, as the engine may merge queued prompts into one user message.
+export const storedHits = (awaiting: readonly Awaiting[], content: readonly { type: string; text?: string }[]) => {
+  const blocks = content.filter(b => b.type === 'text').map(b => (b.text ?? '').trim())
+  const whole = blocks.join('\n')
+  return awaiting.flatMap((a, i) => {
+    const text = a.text.trim()
+    return text && (blocks.includes(text) || whole.includes(text)) ? [i] : []
+  })
+}
 
 // The main loop's turns as the deliverer follows them: when the running one started, when the last one
 // ended and when that one had started.

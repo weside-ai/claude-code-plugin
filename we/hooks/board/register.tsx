@@ -18,7 +18,7 @@ import {
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
   NOTICE, RESUBMITTED, answerLines, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
-  versionAtLeast,
+  storedHits, versionAtLeast,
 } from './deliver'
 import type { Awaiting, Delivery, Ledger } from './deliver'
 import { buildWork, groupKeys, layoutWork, storiesInScope, storyKey, storyPhase, widthOf, workOf } from './work'
@@ -249,14 +249,14 @@ const delivery = {
 }
 
 const isoOf = (ms: number) => new Date(ms).toISOString()
-const textOf = (content: readonly { type: string; text?: string }[]) =>
-  content.filter(b => b.type === 'text').map(b => b.text ?? '').join('\n').trim()
 const isInFlight = (key: string) => delivery.sending.has(key) || delivery.awaiting.some(a => a.key === key)
 
-// The row the session stored for one awaiting prompt: taken out at once, so no check counts it lost.
-function takeStored(text: string): Awaiting | undefined {
-  const i = delivery.awaiting.findIndex(a => a.text === text.trim())
-  return i < 0 ? undefined : delivery.awaiting.splice(i, 1)[0]
+// The awaiting prompts one stored row confirms: taken out at once, so no check counts them lost.
+function takeStored(content: readonly { type: string; text?: string }[]): Awaiting[] {
+  const hits = storedHits(delivery.awaiting, content)
+  const taken = hits.map(i => delivery.awaiting[i]!)
+  delivery.awaiting = delivery.awaiting.filter((_, i) => !hits.includes(i))
+  return taken
 }
 
 async function readText($: $, path: string): Promise<string | undefined> {
@@ -588,8 +588,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
   on('session.append', async ($, e, next) => {
     const stored = await next(e)
     if (delivery.awaiting.length && e.agentId === undefined && e.message.type === 'user') {
-      const hit = takeStored(textOf(e.message.content))
-      if (hit) $.clock.after(0, () => void recordStored($, hit))
+      for (const hit of takeStored(e.message.content)) $.clock.after(0, () => void recordStored($, hit))
     }
     return stored
   }).catch(($, e, next) => next(e))
