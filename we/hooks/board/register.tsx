@@ -1,19 +1,26 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json,
 // option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
 // question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to board-answers.jsonl beside it.
+// In the orchestrator's own session the module is also the deliverer of those lines (deliver.ts), pane open or not.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
 
 type On = Parameters<Register>[0]
 
 import type {
-  BoardAnswerKind, BoardAnswersView, BoardNewsItem, BoardNewsKind, BoardQueueItem, BoardSession, BoardView, BoardWork, FlowPhase, LiveView, WorkNode,
+  BoardAnswerKind, BoardAnswersView, BoardDeliveriesView, BoardDelivery, BoardNewsItem, BoardNewsKind, BoardQueueItem, BoardSession, BoardView,
+  BoardWork, FlowPhase, LiveView, WorkNode,
 } from '../../types'
 import {
-  ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterOf, isResting, lampOf, lastAnswers,
+  ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
   liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
+import {
+  NOTICE, RESUBMITTED, answerLines, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
+  storedHits, versionAtLeast,
+} from './deliver'
+import type { Awaiting, Delivery, Ledger } from './deliver'
 import { buildWork, groupKeys, layoutWork, storiesInScope, storyKey, storyPhase, widthOf, workOf } from './work'
 import type { Part } from './work'
 import { matchesKey } from '../flow/phase'
@@ -30,6 +37,7 @@ const WORK_MS = 120_000
 const view = atom({ plugin: 'we', key: 'boardView' } as const, null, { shape: 'board-view-1' })
 const live = atom({ plugin: 'we', key: 'boardLive' } as const, null, { shape: 'board-live-1' })
 const answers = atom({ plugin: 'we', key: 'boardAnswers' } as const, null, { shape: 'board-answers-1' })
+const deliveries = atom({ plugin: 'we', key: 'boardDeliveries' } as const, null, { shape: 'board-deliveries-1' })
 const isOpen = atom({ plugin: 'we', key: 'boardOpen' } as const, false)
 const isRestOpen = atom({ plugin: 'we', key: 'boardRestOpen' } as const, false)
 const isNotesOpen = atom({ plugin: 'we', key: 'boardNotesOpen' } as const, false)
@@ -124,6 +132,45 @@ async function loadAnswers($: $, file: string, force = false) {
   }
 }
 
+// The delivery ledger as the pane shows it, re-read only when its mtime moved.
+async function loadDeliveries($: $, file: string, force = false) {
+  const path = deliveriesPathOf(await boardPath($, file))
+  try {
+    if (!(await $.fs.exists(path))) {
+      const before = await read($, deliveries)
+      if (!before || before.mtimeMs !== 0 || before.path !== path) await update($, deliveries, () => ({ path, mtimeMs: 0, rows: {} }))
+      return
+    }
+    const stat = await $.fs.stat(path)
+    const before = await read($, deliveries)
+    if (!force && before && before.path === path && before.mtimeMs === stat.mtimeMs) return
+    const ledger = ledgerState(String(await $.fs.read(path)))
+    const next: BoardDeliveriesView = { path, mtimeMs: stat.mtimeMs, epoch: ledger.epoch, rows: ledger.rows }
+    await update($, deliveries, () => next)
+  } catch (err) {
+    $.ui.log(`board: ledger ${path}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// The one row a pane writes: per answer a minute old with no ledger row while the orchestrator's session
+// does not run (the live column names it gone or not at all), the marker `coordinator not running`.
+async function markStale($: $, file: string) {
+  try {
+    const v = await read($, view)
+    const l = await read($, live)
+    const coordinator = v?.board?.updatedBy
+    if (!coordinator || !v?.path || !l || l.error) return
+    if ((liveByName(l.sessions).get(coordinator)?.liveness ?? 'gone') !== 'gone') return
+    const ledgerPath = deliveriesPathOf(v.path)
+    const ledger = ledgerState((await readText($, ledgerPath)) ?? '')
+    const lines = answerLines((await readText($, answersPathOf(v.path))) ?? '')
+    const rows = markerRows(lines, ledger, coordinator, await $.clock.now())
+    if (rows.length && (await appendRows($, ledgerPath, rows))) await loadDeliveries($, file, true)
+  } catch (err) {
+    $.ui.log(`board: marker: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 // This session's name, from the live column; probed once more when the column does not know it yet.
 async function selfName($: $): Promise<string | undefined> {
   const id = await $.session.id()
@@ -133,9 +180,8 @@ async function selfName($: $): Promise<string | undefined> {
   return ownName((await read($, live))?.sessions ?? [], id)
 }
 
-// A press of Accept, Deny, Discuss, More info, Update or Read: one appended line, and for a question in the
-// orchestrator's own session (its name is the board's `updated_by`) the matching prompt, queued as if
-// the person typed it. Read only appends: the item leaves the pane, nothing is sent.
+// A press of Accept, Deny, Discuss, More info, Update or Read: one appended line. The pane sends nothing:
+// the deliverer in the orchestrator's session carries the line, at once when that is this session.
 async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
   try {
     const path = answersPathOf(await boardPath($, file))
@@ -147,10 +193,7 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
     )
     if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
     await loadAnswers($, file, true)
-    const board = (await read($, view))?.board
-    if (answer !== 'read' && me && board?.updatedBy && me === board.updatedBy) {
-      await $.prompt.submit({ text: answerPrompt(answer, id, board.answerPrompts), asUser: true })
-    }
+    if (answer !== 'read' && delivery.isOn) $.clock.after(0, () => void deliverTick($, file))
   } catch (err) {
     $.ui.toast(`board: answer ${id} not saved: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -179,6 +222,199 @@ async function probeOnce($: $) {
     const error = err instanceof Error ? err.message : String(err)
     await update($, live, v => ({ sessions: v?.sessions ?? [], at: v?.at ?? 0, error }))
   }
+}
+
+// ── The deliverer (deliver.ts) ───────────────────────────────────────────────────────────────────
+// Runs in every session from session.start on the floor build and acts only in the one whose live
+// name is the board's `updated_by`. Its state lives with the module: a restart forgets what waits,
+// and the ledger names again what is still owed.
+const FLOOR = '2.1.312'
+// A session whose name the live column does not know is probed again at most this often.
+const NAME_PROBE_MS = 300_000
+
+type Prompts = Parameters<typeof askerText>[1]
+
+const delivery = {
+  isOn: false,
+  isBusy: false,
+  nameAt: Number.NEGATIVE_INFINITY,
+  // Prompts submitted and not yet seen stored, oldest first; the keys an asker send holds while it runs.
+  awaiting: [] as Awaiting[],
+  sending: new Set<string>(),
+  // The main loop's turns: when the running one started, and the start of the last one that ended.
+  turnStarts: new Map<string, number>(),
+  runningSince: undefined as number | undefined,
+  lastEndedAt: undefined as number | undefined,
+  lastEndedStart: undefined as number | undefined,
+}
+
+const isoOf = (ms: number) => new Date(ms).toISOString()
+const isInFlight = (key: string) => delivery.sending.has(key) || delivery.awaiting.some(a => a.key === key)
+
+// The awaiting prompts one stored row confirms: taken out at once, so no check counts them lost.
+function takeStored(content: readonly { type: string; text?: string }[]): Awaiting[] {
+  const hits = storedHits(delivery.awaiting, content)
+  const taken = hits.map(i => delivery.awaiting[i]!)
+  delivery.awaiting = delivery.awaiting.filter((_, i) => !hits.includes(i))
+  return taken
+}
+
+async function readText($: $, path: string): Promise<string | undefined> {
+  if (!(await $.fs.exists(path))) return undefined
+  return String(await $.fs.read(path))
+}
+
+// One write through deliveries.py (O_APPEND); a failure is logged and the rows count as unwritten.
+async function appendRows($: $, path: string, rows: readonly (BoardDelivery | { epoch: string })[]): Promise<boolean> {
+  try {
+    const run = await $.process.run(
+      ['python3', '-I', `${$.plugin.root}/hooks/board/deliveries.py`, 'append', path, ...rows.map(r => JSON.stringify(r))],
+      { timeoutMs: 10_000 },
+    )
+    if (run.exitCode === 0) return true
+    $.ui.log(`board: ledger ${path}: ${run.stderr.trim() || `deliveries.py exit ${run.exitCode}`}`)
+  } catch (err) {
+    $.ui.log(`board: ledger ${path}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  return false
+}
+
+// This session as the coordinator: the board, its name and the two files; undefined in any other session.
+async function coordinatorOf($: $, file: string) {
+  await loadBoard($, file)
+  const v = await read($, view)
+  const board = v?.board
+  if (!board?.updatedBy || !v?.path) return undefined
+  const id = await $.session.id()
+  let me = ownName((await read($, live))?.sessions ?? [], id)
+  const now = await $.clock.now()
+  if (!me && now - delivery.nameAt >= NAME_PROBE_MS) {
+    delivery.nameAt = now
+    await probe($)
+    me = ownName((await read($, live))?.sessions ?? [], id)
+  }
+  if (!me || me !== board.updatedBy) return undefined
+  return { board, name: me, ledgerPath: deliveriesPathOf(v.path), answersPath: answersPathOf(v.path) }
+}
+
+// Submits a coordinator-side prompt and waits for its row; registered first, as the row may be stored
+// before the submit resolves.
+async function submitAwaited($: $, ledgerPath: string, d: Delivery, text: string, tries: number) {
+  const key = keyOf(d.line.id, d.line.ts, d.role)
+  delivery.awaiting.push({ key, delivery: d, text, ledgerPath, submittedAt: await $.clock.now(), tries })
+  try {
+    await $.prompt.submit({ text, asUser: true })
+  } catch (err) {
+    $.ui.log(`board: prompt for ${d.line.id} not submitted: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// One recipient of one line: the asker by peer message, a refusal answered with the routing line to
+// the coordinator; the coordinator and the routing line by prompt.
+async function deliverOne($: $, ledgerPath: string, coordinator: string, d: Delivery, prompts: Prompts) {
+  if (d.role !== 'asker') return submitAwaited($, ledgerPath, d, promptTextOf(d, prompts), 1)
+  const key = keyOf(d.line.id, d.line.ts, d.role)
+  delivery.sending.add(key)
+  try {
+    let sent: { isDelivered: boolean; reason?: string }
+    try {
+      sent = await $.session.send({ to: d.to, text: askerText(d.line, prompts) })
+    } catch (err) {
+      sent = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
+    }
+    const row = rowOf(d, isoOf(await $.clock.now()), sent.isDelivered, sent.isDelivered ? undefined : sent.reason || 'not delivered')
+    if (!(await appendRows($, ledgerPath, [row])) || row.delivered) return
+    const route: Delivery = { role: 'route', to: coordinator, line: d.line, about: row }
+    if (!isInFlight(keyOf(d.line.id, d.line.ts, 'route'))) await submitAwaited($, ledgerPath, route, promptTextOf(route, prompts), 1)
+  } finally {
+    delivery.sending.delete(key)
+  }
+}
+
+// A prompt counted lost: submitted once more with a `resubmitted` row, or after the second time a
+// refusal row and a toast in this session.
+async function settleMissed($: $, a: Awaiting) {
+  const now = await $.clock.now()
+  if (a.tries < 2) {
+    if (await appendRows($, a.ledgerPath, [rowOf(a.delivery, isoOf(now), false, RESUBMITTED)])) {
+      await submitAwaited($, a.ledgerPath, a.delivery, a.text, a.tries + 1)
+    }
+    return
+  }
+  const reason = 'not stored after a resubmit'
+  await appendRows($, a.ledgerPath, [rowOf(a.delivery, isoOf(now), false, reason)])
+  $.ui.toast(`board: ${a.delivery.line.id} did not reach this session (${reason})`)
+}
+
+async function checkAwaiting($: $) {
+  const now = await $.clock.now()
+  const missed = delivery.awaiting.filter(a => isMissed(a, now, delivery))
+  delivery.awaiting = delivery.awaiting.filter(a => !missed.includes(a))
+  for (const a of missed) await settleMissed($, a)
+}
+
+async function recordStored($: $, a: Awaiting) {
+  await appendRows($, a.ledgerPath, [rowOf(a.delivery, isoOf(await $.clock.now()), true)])
+}
+
+// One pass: the epoch on a first start, then every recipient the ledger still owes, then the waits.
+async function deliverTick($: $, file: string) {
+  if (delivery.isBusy) return
+  delivery.isBusy = true
+  try {
+    const c = await coordinatorOf($, file)
+    if (!c) return
+    const ledger: Ledger = ledgerState((await readText($, c.ledgerPath)) ?? '')
+    if (!ledger.epoch) {
+      // A first start (or a ledger with no start row): nothing older than now is ever sent.
+      await appendRows($, c.ledgerPath, [{ epoch: isoOf(await $.clock.now()) }])
+      return
+    }
+    const lines = answerLines((await readText($, c.answersPath)) ?? '')
+    const askerOf = (id: string) => c.board.queue.find(q => q.id === id)?.session ?? undefined
+    for (const d of pendingLines(lines, ledger, c.name, askerOf)) {
+      if (!isInFlight(keyOf(d.line.id, d.line.ts, d.role))) await deliverOne($, c.ledgerPath, c.name, d, c.board.answerPrompts)
+    }
+    await checkAwaiting($)
+  } catch (err) {
+    $.ui.log(`board: delivery: ${err instanceof Error ? err.message : String(err)}`)
+  } finally {
+    delivery.isBusy = false
+  }
+}
+
+// A held notice for one of our asker messages: that row turns `held`, and the coordinator gets the routing line.
+async function heldNotice($: $, file: string, text: string) {
+  const c = await coordinatorOf($, file)
+  if (!c) return
+  const ledger = ledgerState((await readText($, c.ledgerPath)) ?? '')
+  const hit = noticeMatches(text, ledger)
+  const line = hit && answerLines((await readText($, c.answersPath)) ?? '').find(l => l.id === hit.id && l.ts === hit.answer_ts)
+  if (!hit || !line) return
+  const row: BoardDelivery = { ...hit, ts: isoOf(await $.clock.now()), delivered: false, reason: 'held' }
+  if (!(await appendRows($, c.ledgerPath, [row]))) return
+  const route: Delivery = { role: 'route', to: c.name, line, about: row }
+  if (!isInFlight(keyOf(line.id, line.ts, 'route'))) await submitAwaited($, c.ledgerPath, route, promptTextOf(route, c.board.answerPrompts), 1)
+}
+
+// The engine's version against the floor: below it (or unreadable) a toast and a log line, no deliverer.
+async function startDelivery($: $, file: string) {
+  let version: string | undefined
+  try {
+    const v = await $.session.version()
+    version = v.base ?? v.version
+  } catch {
+    version = undefined
+  }
+  if (!versionAtLeast(version, FLOOR)) {
+    const line = `board: delivery needs Claude Code ≥ ${FLOOR}, this is ${version ?? 'an older build'}`
+    $.ui.log(line)
+    $.ui.toast(line)
+    return
+  }
+  delivery.isOn = true
+  $.clock.after(0, () => void deliverTick($, file))
+  $.clock.every(WATCH_MS, () => void deliverTick($, file))
 }
 
 const fetchedAt = new Map<string, number>()
@@ -279,7 +515,8 @@ function refreshAll($: $, file: string) {
   $.clock.after(0, () => {
     void loadBoard($, file, true)
     void loadAnswers($, file, true)
-    void probe($)
+    void loadDeliveries($, file, true)
+    void probe($).then(() => markStale($, file))
     void loadWork($, undefined, true)
   })
 }
@@ -297,12 +534,14 @@ export async function openBoard($: $, options: PluginOptions): Promise<string> {
 export async function startBoard($: $, options: PluginOptions) {
   const file = fileOf(options)
   await $.command.register({ name: 'board', description: 'Workspace board: who works on what and what waits for the owner' })
-  // Timers run only once /board was opened in this session; nothing polls before that.
+  // The deliverer runs from here, pane or not; the pane's own timers read only once /board was opened.
+  await startDelivery($, file)
   $.clock.every(WATCH_MS, () => {
     void read($, isOpen).then(open => {
       if (!open) return
       void loadBoard($, file)
       void loadAnswers($, file)
+      void loadDeliveries($, file)
     })
   })
   $.clock.every(REFRESH_MS, () => {
@@ -310,7 +549,8 @@ export async function startBoard($: $, options: PluginOptions) {
       if (!open) return
       void loadBoard($, file, true)
       void loadAnswers($, file, true)
-      void probe($)
+      void loadDeliveries($, file, true)
+      void probe($).then(() => markStale($, file))
     })
   })
   $.clock.every(WORK_MS, () => {
@@ -343,11 +583,45 @@ export const registerBoard = (on: On, options: PluginOptions) => {
 
   on('command.run', { command: 'board' }, async $ => ({ text: await openBoard($, options) }))
 
+  // The deliverer's carriers: a stored user row confirms a submitted prompt, a held notice refuses an
+  // asker message, and the main loop's turns time a prompt that never shows.
+  on('session.append', async ($, e, next) => {
+    const stored = await next(e)
+    if (delivery.awaiting.length && e.agentId === undefined && e.message.type === 'user') {
+      for (const hit of takeStored(e.message.content)) $.clock.after(0, () => void recordStored($, hit))
+    }
+    return stored
+  }).catch(($, e, next) => next(e))
+  on('session.receive', ($, e, next) => {
+    if (delivery.isOn && e.text.includes(NOTICE)) $.clock.after(0, () => void heldNotice($, file, e.text))
+    return next(e)
+  }).catch(($, e, next) => next(e))
+  on('turn.start', async ($, e, next) => {
+    if (delivery.isOn && e.agentId === undefined) {
+      const now = await $.clock.now()
+      delivery.turnStarts.set(e.turnId, now)
+      delivery.runningSince = now
+    }
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    if (delivery.isOn && e.agentId === undefined) {
+      const started = delivery.turnStarts.get(e.turnId)
+      delivery.turnStarts.delete(e.turnId)
+      delivery.runningSince = undefined
+      delivery.lastEndedAt = await $.clock.now()
+      if (started !== undefined) delivery.lastEndedStart = started
+      if (delivery.awaiting.length) $.clock.after(0, () => void checkAwaiting($))
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const v = await read($, view)
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
+    const ledgerRows = (await read($, deliveries))?.rows ?? {}
     const restOpen = await read($, isRestOpen)
     const notesOpen = await read($, isNotesOpen)
     const opened = await read($, workOpen)
@@ -391,19 +665,25 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>{children}</Box>
     )
 
+    // An Accept or Deny strikes the card at once: dim, the question struck through, no buttons, the
+    // stamp and the delivery line kept, whatever the board file still lists.
     const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined
+      const struck = isClosed(last)
+      const delivered = deliveryLine(last, ledgerRows, board?.updatedBy)
       const press = (answer: BoardAnswerKind) => () => {
         if (q.id) void answerQuestion($, file, q.id, answer)
       }
       const head: Part[][] = [
-        q.id ? [{ text: q.id, bold: true }] : [],
-        days !== undefined ? [{ text: days === 0 ? 'today' : `${days} d`, color: days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined, bold: days >= 2 }] : [],
-        q.session ? [{ text: q.session }] : [],
+        q.id ? [{ text: q.id, bold: !struck, dim: struck }] : [],
+        days !== undefined
+          ? [{ text: days === 0 ? 'today' : `${days} d`, color: struck ? undefined : days >= 7 ? 'error' : days >= 2 ? 'warning' : undefined, bold: !struck && days >= 2, dim: struck }]
+          : [],
+        q.session ? [{ text: q.session, dim: struck }] : [],
         q.key ? [{ text: q.key, dim: true }] : [],
       ]
-      const buttons = q.id
+      const buttons = q.id && !struck
         ? [
             ...(q.recommendation ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
             { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
@@ -420,8 +700,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       return (
         <Box key={`q-${q.id ?? i}`} flexDirection="column" marginTop={i ? 1 : 0}>
           {lines(head, inner, `q-${i}-head`)}
-          {q.ask && <Text>{q.ask}</Text>}
-          {q.recommendation && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
+          {q.ask && <Text dimColor={struck} strikethrough={struck}>{q.ask}</Text>}
+          {q.recommendation && !struck && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
           {pack(row, r => r.width, inner, 1).map((line, j) => (
             <Box key={`q-${i}-row-${j}`} flexDirection="row" gap={1}>
               {line.map(r =>
@@ -433,6 +713,9 @@ export const registerBoard = (on: On, options: PluginOptions) => {
               )}
             </Box>
           ))}
+          {delivered && (
+            <Text key={`delivery-${q.id}`} color={delivered.isDelivered ? 'inactive' : 'warning'}>{clip(delivered.text, inner)}</Text>
+          )}
         </Box>
       )
     }

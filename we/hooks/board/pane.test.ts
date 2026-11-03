@@ -56,7 +56,11 @@ test('/board draws the queue oldest first, masters with workers, live and start-
   const answer = await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   expect(answer.text).toBe('Board pane opened.')
   await clock.settle()
-  expect(reads).toEqual(['/home/me/.claude/we-state/board.json', '/home/me/.claude/we-state/board-answers.jsonl'])
+  expect(reads).toEqual([
+    '/home/me/.claude/we-state/board.json',
+    '/home/me/.claude/we-state/board-answers.jsonl',
+    '/home/me/.claude/we-state/board-deliveries.jsonl',
+  ])
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'we', surface, component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
@@ -95,7 +99,7 @@ test('without masterProfile no master is red; boardFile moves the file', { optio
 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
-  expect(reads).toEqual(['/home/me/boards/team.json', '/home/me/boards/board-answers.jsonl'])
+  expect(reads).toEqual(['/home/me/boards/team.json', '/home/me/boards/board-answers.jsonl', '/home/me/boards/board-deliveries.jsonl'])
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ type: 'Text', text: /restart it as a master/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
@@ -119,7 +123,7 @@ test('a missing board file says who writes it and where the schema is', async ($
   }
 })
 
-test('the pane polls nothing before /board, then re-reads only when the mtime moved', async ($, on) => {
+test('before /board only the deliverer reads the board, once; the pane re-reads only when the mtime moved', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)
   on('env.get', () => ({ value: '/home/me' }))
@@ -139,20 +143,23 @@ test('the pane polls nothing before /board, then re-reads only when the mtime mo
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('command.register', () => ({ value: { command: 'board' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.version', () => ({ value: { version: '2.1.317', base: '2.1.317' } }))
+  on('session.id', () => ({ value: 's-other' }))
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(10_000)
-  expect(reads).toBe(0)
+  // The deliverer read the board once and asked once who this session is: not the orchestrator.
+  expect([reads, probes]).toEqual([1, 1])
 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
-  expect([reads, probes]).toEqual([1, 1])
+  expect([reads, probes]).toEqual([2, 2])
 
   await clock.advance(9_000)
-  expect(reads).toBe(1)
+  expect(reads).toBe(2)
   mtimeMs = 2
   await clock.advance(3_000)
-  expect(reads).toBe(2)
+  expect(reads).toBe(3)
 })
 
 // A fake home: board.json, and board-answers.jsonl once answer.py appended to it.
@@ -185,10 +192,15 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
   on('ui.toast', (_$, e) => {
     throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
   })
-  return { answersPath, appended, submitted }
+  // A line another writer appended (a chat write-back, another session's pane).
+  const push = (line: Record<string, unknown>) => {
+    lines += `${JSON.stringify(line)}\n`
+    mtimeMs += 1
+  }
+  return { answersPath, appended, submitted, push }
 }
 
-test('Accept in the orchestrator session appends one line, sends the prompt and shows the answer', async ($, on) => {
+test('Accept in the orchestrator session appends one line, sends nothing itself and shows the answer', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)
   const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
@@ -203,17 +215,18 @@ test('Accept in the orchestrator session appends one line, sends the prompt and 
   await clock.settle()
   expect(home.appended).toHaveLength(1)
   expect(home.appended[0]).toEqual([home.answersPath, 'Q1', 'accept', expect.stringMatching(/^\d{4}-\d\d-\d\dT/), 'Orchestrator'])
-  expect(home.submitted).toEqual(['Q1: proposal accepted'])
+  // The deliverer carries the line (deliver.test.ts); the press submits nothing.
+  expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
 
   await ui.press({ key: 'info-Q2' })
   await clock.settle()
-  expect(home.submitted).toEqual(['Q1: proposal accepted', 'Q2: I need more information'])
+  expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ more info asked/ })).toBeDefined()
   await ui.unmount()
 })
 
-test('Update appends its line, asks the orchestrator to recheck the question and keeps it on the board', async ($, on) => {
+test('Update appends its line and keeps the question on the board', async ($, on) => {
   // Pressed after the board's `updated`: the mark shows until the orchestrator writes the board again.
   const clock = mock.clock(on, { now: Date.parse('2026-10-30T18:00:00Z') })
   mock.store(on)
@@ -225,9 +238,7 @@ test('Update appends its line, asks the orchestrator to recheck the question and
   await ui.press({ key: 'update-Q2' })
   await clock.settle()
   expect(home.appended).toEqual([[home.answersPath, 'Q2', 'update', expect.stringMatching(/^\d{4}-\d\d-\d\dT/), 'Orchestrator']])
-  expect(home.submitted).toEqual([
-    'Q2: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
-  ])
+  expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ update asked/ })).toBeDefined()
   // The question stays: its buttons are still there until the orchestrator rewords or removes it.
   expect(await ui.find({ key: 'update-Q2' })).toBeDefined()
@@ -251,7 +262,7 @@ test('a press in any other session only appends the line, named after that sessi
   await ui.unmount()
 })
 
-test('Deny shows without a recommendation, appends deny and sends its prompt', async ($, on) => {
+test('Deny shows without a recommendation and appends deny', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)
   const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
@@ -263,8 +274,35 @@ test('Deny shows without a recommendation, appends deny and sends its prompt', a
   await ui.press({ key: 'deny-Q2' })
   await clock.settle()
   expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q2', 'deny', 'Orchestrator']])
-  expect(home.submitted).toEqual(['Q2: proposal denied'])
+  expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ denied \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Accept strikes the card at once: no buttons, the question struck, the stamp kept; a later line on it changes nothing', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props.strikethrough).toBeFalsy()
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  for (const kind of ['accept', 'deny', 'discuss', 'info', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props).toMatchObject({ strikethrough: true, dimColor: true })
+  expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
+  // The board file still lists Q1 and Q2; Q2 keeps its buttons.
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
+  // A Deny line on the struck id (a chat write-back, another pane) changes nothing.
+  home.push({ id: 'Q1', answer: 'deny', ts: '2026-10-30T19:00:00.000Z', session: 'lead', via: 'chat' })
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ denied/ })).toBeUndefined()
+  expect(home.appended.map(a => a[2])).toEqual(['accept'])
   await ui.unmount()
 })
 

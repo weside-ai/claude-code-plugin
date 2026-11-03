@@ -51,7 +51,17 @@ const PROBE = JSON.stringify({
 const ANSWERS = [
   { id: 'Q12', answer: 'accept', ts: '2026-10-30T21:02:00.000Z', session: 'Orchestrator' },
   { id: 'N1', answer: 'read', ts: '2026-10-30T21:03:00.000Z', session: 'Orchestrator' },
+  { id: 'Q17', answer: 'discuss', ts: '2026-10-30T21:05:00.000Z', session: 'Orchestrator' },
 ].map(a => `${JSON.stringify(a)}\n`).join('')
+
+// The ledger: Q12 reached its asker, Q17's asker was not reachable and stays with the orchestrator.
+const row = (id: string, answerTs: string, role: string, to: string, ts: string, delivered: boolean, reason?: string) =>
+  ({ id, answer_ts: answerTs, to, role, click_ts: answerTs, ts, delivered, ...(reason ? { reason } : {}) })
+const LEDGER = [
+  row('Q12', '2026-10-30T21:02:00.000Z', 'coordinator', 'Orchestrator', '2026-10-30T21:02:00.100Z', true),
+  row('Q12', '2026-10-30T21:02:00.000Z', 'asker', 'billing', '2026-10-30T21:02:00.300Z', true),
+  row('Q17', '2026-10-30T21:05:00.000Z', 'asker', 'apps', '2026-10-30T21:05:02.000Z', false, "No agent named 'apps' is reachable.\nUse ListAgents to see everyone you can message."),
+].map(r => `${JSON.stringify(r)}\n`).join('')
 
 const RUN = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
@@ -81,8 +91,8 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │                                                                                                  │
 │ Q12  2 d  billing  PROJ-59                                                                       │
 │ Merge PR #562? (money path, CI green)                                                            │
-│ → yes                                                                                            │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] ✓ accepted 21:02 UTC (Orchestrator)     │
+│ ✓ accepted 21:02 UTC (Orchestrator)                                                              │
+│ → delivered to billing 21:02 UTC                                                                 │
 │                                                                                                  │
 │ Q19  today  legal  PROJ-69                                                                       │
 │ UK: register with the tax office (quarterly returns, running cost) or keep the web checkout      │
@@ -93,7 +103,8 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ Q17  today  apps  PROJ-65..68                                                                    │
 │ Release 4 app images (artwork/v2/)                                                               │
 │ → release                                                                                        │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ]                                         │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] ✓ discuss 21:05 UTC (Orchestrator)      │
+│ not delivered, with Orchestrator (not reachable)                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -150,9 +161,8 @@ its own.
 │                                                          │
 │ Q12  2 d  billing  PROJ-59                               │
 │ Merge PR #562? (money path, CI green)                    │
-│ → yes                                                    │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
 │ ✓ accepted 21:02 UTC (Orchestrator)                      │
+│ → delivered to billing 21:02 UTC                         │
 │                                                          │
 │ Q19  today  legal  PROJ-69                               │
 │ UK: register with the tax office (quarterly returns,     │
@@ -165,6 +175,8 @@ its own.
 │ Release 4 app images (artwork/v2/)                       │
 │ → release                                                │
 │ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
+│ ✓ discuss 21:05 UTC (Orchestrator)                       │
+│ not delivered, with Orchestrator (not reachable)         │
 ╰──────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────╮
@@ -209,7 +221,10 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   on('env.get', () => ({ value: '/home/me' }))
   on('fs.exists', () => ({ value: true }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
-  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path).endsWith('.jsonl') ? ANSWERS : BOARD }))
+  on('fs.read', (_$, e) => {
+    const path = String((e as { path?: unknown }).path)
+    return { value: path.endsWith('board-deliveries.jsonl') ? LEDGER : path.endsWith('.jsonl') ? ANSWERS : BOARD }
+  })
   on('process.run', () => RUN(PROBE))
   on('ui.open', () => ({ value: { isPlaced: true } }))
 

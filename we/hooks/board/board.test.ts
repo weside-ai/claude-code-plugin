@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  ageDays, answerPrompt, answersPathOf, clip, countBoard, freshness, groupSessions, isMasterProfile, isResting, lastAnswers, liveByName,
+  ageDays, answerPrompt, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterProfile, isResting, lastAnswers,
+  liveByName,
   majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
@@ -178,6 +179,27 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')
   expect(answerPrompt('update', 'Q4', parseBoard('{"answer_prompts":{"update":"{id}: noch aktuell?"}}').answerPrompts)).toBe('Q4: noch aktuell?')
   expect(lastAnswers('{"id":"Q6","answer":"update","ts":"t"}').Q6?.answer).toBe('update')
+})
+
+test('update_asker words the asker\'s Update; answer_prompts overrides it like the others', () => {
+  expect(answerPrompt('update_asker', 'Q4')).toBe('check whether Q4 is still current and well worded; re-ask it with a new id or withdraw it')
+  const own = parseBoard('{"answer_prompts":{"update_asker":"{id}: bitte prüfen"}}').answerPrompts
+  expect(answerPrompt('update_asker', 'Q4', own)).toBe('Q4: bitte prüfen')
+  expect(deliveriesPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/board-deliveries.jsonl')
+})
+
+test('an Accept or Deny closes the id: later lines on it change nothing; legacy lines read without error', () => {
+  const text = [
+    '{"id":"Q1","answer":"accept","ts":"2026-11-03T10:00:00Z","session":"lead"}',
+    '{"id":"Q1","answer":"discuss","ts":"2026-11-03T10:05:00Z"}',
+    '{"id":"Q2","answer":"discuss","ts":"2026-11-03T10:00:00Z","via":"chat in lead"}',
+    '{"id":"Q2","answer":"deny","ts":"2026-11-03T10:01:00Z","via":"chat"}',
+    '{"id":"Q2","answer":"accept","ts":"2026-11-03T10:02:00Z"}',
+    '{"id":"Q3","answer":"decided","ts":"2026-11-03T10:00:00Z","via":"chat"}',
+  ].join('\n')
+  const last = lastAnswers(text)
+  expect([last.Q1?.answer, last.Q1?.ts, last.Q2?.answer, last.Q3]).toEqual(['accept', '2026-11-03T10:00:00Z', 'deny', undefined])
+  expect([isClosed(last.Q1), isClosed(last.Q2), isClosed({ id: 'Q4', answer: 'update', ts: 't' })]).toEqual([true, true, false])
 })
 
 test('an update mark lapses once the board was rewritten after the press; other answers stay', () => {
