@@ -479,6 +479,19 @@ def test_v7_transition_keys_must_agree(tmp_path):
     assert "roles.orchestrator" in out.stderr and "roles.coordinator" in out.stderr
 
 
+@pytest.mark.parametrize(
+    "old,new",
+    [("product_owner", "product"), ("orchestrator", "coordinator"), ("tester", "acceptance")],
+)
+def test_a_transition_key_without_its_v2_key_is_refused(tmp_path, old, new):
+    data = json.loads(TRANSITION.read_text())
+    del data["roles"][new]
+    core = transition_workspace(tmp_path, data)
+    out = run(core, "show")
+    assert out.returncode == 1
+    assert f"roles.{old} needs roles.{new} beside it" in out.stderr
+
+
 def test_labels_default_merge_and_refuse_an_unknown_key(tmp_path):
     core, _ = workspace(tmp_path)
     assert json.loads(run(core, "show").stdout)["labels"] == {

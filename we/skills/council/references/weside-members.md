@@ -5,8 +5,9 @@ additive: a failure drops that member to its generic shell, never the council.
 
 ## Identity
 
-- Members: the entries of the repo's crew (`.weside/crew.json`, `members.<slug>.name`, `.role`;
-  `${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Crew). Without a crew,
+- Members: the seat's `companion` from `council_lens.py`, which reads the repo's crew
+  (`.weside/crew.json`: the holder of `roles.<key>`, else the member whose `specialist` is the role,
+  else the lens `keeper`; `${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Crew). Without a crew,
   read the role owners from the account's handbook (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md`
   § Role owners), never from memory: each roster role whose owner the handbook names is played by that
   Companion; a role it names no owner for keeps the generic shell, and the synthesis says

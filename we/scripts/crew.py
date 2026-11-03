@@ -49,8 +49,8 @@ replaces), so every reader sees the defaults without knowing them.
 
 Transition (``V7_TRANSITION``): a file may still carry the version-1 keys ``roles.product_owner``,
 ``roles.orchestrator``, ``roles.tester``, ``members.*.role`` and ``members.*.lens`` while sessions
-on the previous major read it. They must agree with ``product``, ``coordinator`` and
-``acceptance``; ``load`` strips them and ``show`` names them on stderr. They and this block end at
+on the previous major read it. Each role key needs its counterpart ``product``, ``coordinator`` or
+``acceptance`` beside it, holding the same member; ``load`` strips them and ``show`` names them on stderr. They and this block end at
 the switchover cleanup (``V7_TRANSITION_ENDS``).
 
 Session kind (``session_kind``, read by both SessionStart hooks): ``worker`` (``WE_ROLE=worker``
@@ -434,7 +434,11 @@ def _validate_roles(path: Path, roles: dict[str, Any], slugs: set[str]) -> None:
         if not isinstance(slug, str) or slug not in slugs:
             raise _fail(path, f"roles.{key} {slug!r} is no member")
     for old, new in V7_TRANSITION.items():
-        if old in roles and new in roles and roles[old] != roles[new]:
+        if old not in roles:
+            continue
+        if new not in roles:
+            raise _fail(path, f"roles.{old} needs roles.{new} beside it (its version-2 key)")
+        if roles[old] != roles[new]:
             raise _fail(
                 path, f"roles.{old} {roles[old]!r} differs from roles.{new} {roles[new]!r}"
             )
