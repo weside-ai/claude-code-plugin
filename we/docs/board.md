@@ -272,5 +272,13 @@ red rules are off and only the yellow one holds.
 
 ## Requirements
 
-Claude Code with function hooks (2.1.302 or later); for the live column `python3`, Linux
+Claude Code 2.1.312 or later, the lowest build measured with the delivery carriers (§ Answers):
+`$.session.send` answered `isDelivered: true` for a running session and `isDelivered: false` with the
+engine's reason for an unknown name (`No agent named '<name>' is reachable.`), a name two sessions carry
+(`2 agents are named '<name>'. Re-send with the ref of the one you mean: …`) and a stopped session (the
+unknown-name reason); a plugin's `$.prompt.submit({ asUser: true })` came back as a `session.append` user
+row (door `prompt`, origin `plugin`) with the exact text. Two background sessions never held a message,
+whatever their permission modes; the held notice's wording (`hooks/board/fixtures/delivery-notice.txt`)
+is taken from the build's own strings, not from a live hold. Below the floor the pane still draws and
+nothing is delivered. For the live column `python3`, Linux
 (`/proc`) and `claude agents`; for the work trees `git` and `gh` signed in. The pane is part of the plugin's hooks module (`we/hooks/board/`, the plan reader it shares with `/flow` in `we/hooks/plans/`); `answer.py` appends the answers.
