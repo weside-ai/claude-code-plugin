@@ -323,14 +323,14 @@ export async function startBoard($: $, options: PluginOptions) {
 }
 
 // Option boardAutoOpen: `on` opens /board in every session, `orchestrator` only in the session whose
-// pin holds the crew's orchestrator role (crew.py is-role reads the session's environment), else off.
+// pin holds the crew's coordinator role (crew.py is-role reads the session's environment), else off.
 async function autoOpens($: $, options: PluginOptions): Promise<boolean> {
   const mode = option(options, 'boardAutoOpen')
   if (mode === 'on') return true
   if (mode !== 'orchestrator') return false
   try {
     const session = await $.session.id()
-    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'is-role', 'orchestrator', '--session', session], { timeoutMs: 10_000 })
+    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'is-role', 'coordinator', '--session', session], { timeoutMs: 10_000 })
     return run.exitCode === 0
   } catch {
     return false

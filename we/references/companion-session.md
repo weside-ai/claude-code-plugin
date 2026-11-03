@@ -56,7 +56,7 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
   working knowledge for that environment; prefix from the crew, default `weside`) that
   `scripts/crew.py skill-path` finds: under `<cwd>/.claude/skills/` or `~/.claude/skills/` it is
   invoked; only in the member's `workplace` repo it is read by path, so no link into
-  `~/.claude/skills/` is needed; a stub is to be filled and reported to the Orchestrator (for HR). In a repo whose crew
+  `~/.claude/skills/` is needed; a stub is to be filled and reported to the crew's coordinator (for HR). In a repo whose crew
   lacks `weside_account: true` (a team without a weside account) the hook gives the title and the
   role-skill line only, never `/we:materialize`. A session already bound to the pin gets the skill line alone on
   `startup` and `resume` (`-c` included), not on `compact` or `clear`. It skips a session started

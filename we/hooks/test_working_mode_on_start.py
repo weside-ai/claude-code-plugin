@@ -15,25 +15,21 @@ import working_mode_on_start as wm  # noqa: E402
 
 # A crew as long as a real one: every role held, long titles and several components.
 CREW = {
+    "version": 2,
     "question_label": "ASK",
-    "roles": {"product_owner": "ana", "orchestrator": "ben", "hr": "cleo", "tester": "dex"},
+    "roles": {"product": "ana", "coordinator": "ben", "hr": "cleo", "acceptance": "dex"},
     "members": {
-        "ana": {
-            "name": "Ana",
-            "role": "product_owner",
-            "components": ["App", "Platform Core", "Community"],
-        },
-        "ben": {"name": "Ben", "role": "orchestrator"},
-        "cleo": {"name": "Cleo", "role": "hr"},
-        "dex": {"name": "Dexter", "role": "tester"},
+        "ana": {"name": "Ana", "components": ["App", "Platform Core", "Community"]},
+        "ben": {"name": "Ben"},
+        "cleo": {"name": "Cleo"},
+        "dex": {"name": "Dexter"},
         "eva": {
             "name": "Eva",
-            "role": "architect",
             "title": "Architecture and Security Review",
             "components": ["Architecture", "Security Engineering"],
         },
-        "finn": {"name": "Finn", "role": "ux_researcher"},
-        "gus": {"name": "Gus", "role": "security", "on_call": True},
+        "finn": {"name": "Finn", "specialist": "ux"},
+        "gus": {"name": "Gus", "specialist": "security", "on_call": True},
     },
 }
 
@@ -147,5 +143,15 @@ def test_budget_for_every_kind():
 
 
 def test_defaults_without_roles_or_label(tmp_path):
-    note = run(tmp_path, {}, crew={"members": {}})
+    note = run(tmp_path, {}, crew={"version": 2, "roles": {}, "members": {}})
     assert "the Orchestrator" in note and "`QUESTION ·" in note
+
+
+def test_a_refused_crew_names_its_fault(tmp_path):
+    note = run(tmp_path, {}, crew={"version": 1, "roles": {}, "members": {}})
+    assert note == (
+        "crew: crew.json is version 1: in a worktree, merge the default branch; "
+        "otherwise run /we:setup"
+    )
+    note = run(tmp_path, {}, crew={**CREW, "limitz": 1})
+    assert note.startswith("crew: ") and note.endswith("unknown key limitz")

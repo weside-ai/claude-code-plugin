@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.48.0",
+  "version": "7.49.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -56,7 +56,7 @@
     "boardAutoOpen": {
       "type": "string",
       "title": "Board Auto Open",
-      "description": "Opens the /board pane when a session starts: off (default), on (every session), orchestrator (only the session of the crew's Orchestrator, .weside/crew.json). Opened unasked, the pane needs 144 terminal columns and waits below that.",
+      "description": "Opens the /board pane when a session starts: off (default), on (every session), orchestrator (only the session of the crew's coordinator, roles.coordinator in .weside/crew.json). Opened unasked, the pane needs 144 terminal columns and waits below that.",
       "default": "off",
       "required": false
     },
