@@ -1,6 +1,6 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json,
 // option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
-// question's Accept, Deny, Discuss or More info, and a news item's Read, append one line to board-answers.jsonl beside it.
+// question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to board-answers.jsonl beside it.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
 
@@ -59,6 +59,7 @@ const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
   deny: { label: 'denied', color: 'error' },
   discuss: { label: 'discuss', color: 'warning' },
   info: { label: 'more info asked', color: 'suggestion' },
+  update: { label: 'update asked', color: 'suggestion' },
   read: { label: 'read', color: 'inactive' },
 }
 
@@ -132,7 +133,7 @@ async function selfName($: $): Promise<string | undefined> {
   return ownName((await read($, live))?.sessions ?? [], id)
 }
 
-// A press of Accept, Deny, Discuss, More info or Read: one appended line, and for a question in the
+// A press of Accept, Deny, Discuss, More info, Update or Read: one appended line, and for a question in the
 // orchestrator's own session (its name is the board's `updated_by`) the matching prompt, queued as if
 // the person typed it. Read only appends: the item leaves the pane, nothing is sent.
 async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
@@ -408,6 +409,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
             { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
             { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
             { key: `info-${q.id}`, label: 'More info', on: press('info') },
+            { key: `update-${q.id}`, label: 'Update', on: press('update') },
           ]
         : []
       const answered = last

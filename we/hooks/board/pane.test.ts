@@ -213,6 +213,27 @@ test('Accept in the orchestrator session appends one line, sends the prompt and 
   await ui.unmount()
 })
 
+test('Update appends its line, asks the orchestrator to recheck the question and keeps it on the board', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  await ui.press({ key: 'update-Q2' })
+  await clock.settle()
+  expect(home.appended).toEqual([[home.answersPath, 'Q2', 'update', expect.stringMatching(/^\d{4}-\d\d-\d\dT/), 'Orchestrator']])
+  expect(home.submitted).toEqual([
+    'Q2: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
+  ])
+  expect(await ui.find({ type: 'Text', text: /✓ update asked/ })).toBeDefined()
+  // The question stays: its buttons are still there until the orchestrator rewords or removes it.
+  expect(await ui.find({ key: 'update-Q2' })).toBeDefined()
+  expect(await ui.find({ key: 'discuss-Q2' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('a press in any other session only appends the line, named after that session', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)

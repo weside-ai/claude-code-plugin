@@ -176,4 +176,6 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', info: 7 } })).answerPrompts
   expect(answerPrompt('accept', 'Q4', own)).toBe('Q4: Vorschlag angenommen')
   expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')
+  expect(answerPrompt('update', 'Q4', parseBoard('{"answer_prompts":{"update":"{id}: noch aktuell?"}}').answerPrompts)).toBe('Q4: noch aktuell?')
+  expect(lastAnswers('{"id":"Q6","answer":"update","ts":"t"}').Q6?.answer).toBe('update')
 })

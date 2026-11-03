@@ -5,7 +5,7 @@ import type {
 
 const MIN = 60_000
 const DAY = 86_400_000
-const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info']
+const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
 const KINDS: readonly BoardAnswerKind[] = [...PROMPT_KINDS, 'read']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
@@ -90,6 +90,7 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   deny: '{id}: proposal denied',
   discuss: "{id}: let's talk about it",
   info: '{id}: I need more information',
+  update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
 }
 
 export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>) =>

@@ -50,3 +50,14 @@ def test_deny_and_read_are_answers_too(tmp_path):
         "deny",
         "read",
     ]
+
+
+def test_update_is_an_answer(tmp_path):
+    path = tmp_path / "board-answers.jsonl"
+    assert answer.main(["answer.py", str(path), "Q4", "update", "t", "lead"]) == 0
+    assert json.loads(path.read_text()) == {
+        "id": "Q4",
+        "answer": "update",
+        "ts": "t",
+        "session": "lead",
+    }
