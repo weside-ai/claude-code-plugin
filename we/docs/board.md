@@ -271,7 +271,7 @@ Outcomes, each a row (readers fold the rows of one `id`, `answer_ts` and `role` 
 | What happened | Row | The pane under the stamp |
 |---|---|---|
 | both reached | `delivered: true` per recipient | `→ delivered to <asker> 16:08 UTC` |
-| the asker is unknown by that name, carried by two sessions, or stopped | asker `delivered: false` with the engine's reason; the routing prompt | `not delivered, with <orchestrator> (not reachable)` or `(name not unique)` |
+| the asker is unknown by that name, carried by two sessions, or stopped | asker `delivered: false` with the engine's reason; the routing prompt | `not delivered, with <orchestrator> (not reachable)`, `(name not unique)` or `(gone)` |
 | the asker's session holds the message (a `[Cross-session delivery notice]` naming it, usually another permission mode) | asker `delivered: false, reason: held`; the routing prompt | `not delivered, with <orchestrator> (held)` |
 | the orchestrator's prompt is never stored (a turn that started after it ended without it, or 30 s idle) | `reason: resubmitted`, the prompt once more; still none after the next turn: `delivered: false` and a toast there | `not delivered, with <orchestrator> (not stored after a resubmit)` |
 | the orchestrator's session is not running | a pane whose live column names it gone writes `delivered: false, reason: coordinator not running` for an answer a minute old with no row; the deliverer delivers it once it runs, its newer row replacing the marker | `not delivered, with <orchestrator> (not running)` |
@@ -328,7 +328,8 @@ and the carriers were measured live with two background sessions (which run the 
 service's build, 2.1.317): `$.session.send` answered `isDelivered: true` for a running session and
 `isDelivered: false` with the engine's reason for an unknown name (`No agent named '<name>' is
 reachable.`), a name two sessions carry (`2 agents are named '<name>'. Re-send with the ref of the
-one you mean: …`) and a stopped session (the unknown-name reason); a plugin's `$.prompt.submit({
+one you mean: …`) and a stopped session (the unknown-name reason, or right after the stop `Failed to
+send to <name>: HTTP 409 — that Remote Control session may have ended or disconnected. …`); a plugin's `$.prompt.submit({
 asUser: true })` came back as a `session.append` user row (door `prompt`, origin `plugin`) with the
 exact text. Background sessions never held a message, whatever their permission modes, so the held
 notice's wording (`hooks/board/fixtures/delivery-notice.txt`) is taken from the build's own strings,

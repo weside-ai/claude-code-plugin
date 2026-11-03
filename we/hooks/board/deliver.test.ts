@@ -474,6 +474,10 @@ test('deliveryLine: delivered to the asker, else to the coordinator; a refusal o
   expect(line(r('coordinator', 'coord', true))).toEqual({ text: '→ delivered to coord 16:00 UTC', isDelivered: true })
   expect(line(r('asker', 'asker', false, "2 agents are named 'asker'. Re-send with the ref of the one you mean:\n  asker [a2]"))?.text).toBe('not delivered, with coord (name not unique)')
   expect(line(r('asker', 'asker', true), r('asker', 'asker', false, 'held', T0 + 9_000))?.text).toBe('not delivered, with coord (held)')
+  // A session stopped a moment ago, as the live walk answered it.
+  const stopped = 'Failed to send to asker: HTTP 409 — that Remote Control session may have ended or disconnected. Call ListAgents to see who is reachable now.'
+  expect(line(r('asker', 'asker', false, stopped))?.text).toBe('not delivered, with coord (gone)')
+  expect(line(r('asker', 'asker', false, 'x'.repeat(60)))?.text).toBe(`not delivered, with coord (${'x'.repeat(39)}…)`)
   expect(line(r('coordinator', 'coord', false, 'coordinator not running', T0 + 60_000))?.text).toBe('not delivered, with coord (not running)')
   expect(line(r('asker', 'asker', true), r('coordinator', 'coord', false, 'resubmitted'))?.text).toBe('→ delivered to asker 16:00 UTC')
   expect(line(r('coordinator', 'coord', false, 'not stored after a resubmit'))?.text).toBe('not delivered, with coord (not stored after a resubmit)')

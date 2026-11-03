@@ -224,6 +224,7 @@ export const isMissed = (a: Awaiting, now: number, turn: TurnClock) =>
 const SHORT_REASONS: readonly [RegExp, string][] = [
   [/^No agent named .* is reachable/, 'not reachable'],
   [/^\d+ agents are named /, 'name not unique'],
+  [/^Failed to send to .*(ended|disconnected)/, 'gone'],
 ]
 
 const shortReason = (reason: string | undefined) => {
