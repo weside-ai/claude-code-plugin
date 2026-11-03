@@ -61,3 +61,29 @@ def test_update_is_an_answer(tmp_path):
         "ts": "t",
         "session": "lead",
     }
+
+
+def test_a_pane_line_carries_no_via_and_the_command_line_refuses_one(tmp_path, capsys):
+    path = tmp_path / "board-answers.jsonl"
+    assert answer.main(["answer.py", str(path), "Q1", "accept", "t", "lead", "--via", "chat"]) == 2
+    assert "board.py answer" in capsys.readouterr().err
+    assert not path.exists()
+    assert answer.main(["answer.py", str(path), "Q1", "accept", "t", "lead"]) == 0
+    assert "via" not in json.loads(path.read_text())
+
+
+def test_append_takes_via_and_quote_from_board_py(tmp_path):
+    path = tmp_path / "board-answers.jsonl"
+    line = answer.append(str(path), "Q1", "deny", "t", "lead", via="chat", quote="no")
+    assert (
+        json.loads(path.read_text())
+        == line
+        == {
+            "id": "Q1",
+            "answer": "deny",
+            "ts": "t",
+            "session": "lead",
+            "via": "chat",
+            "quote": "no",
+        }
+    )

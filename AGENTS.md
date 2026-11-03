@@ -48,7 +48,7 @@ we/                               plugin root
                                   (worker launch backend), retro_claim.sh,
                                   pr-body-receipt.py (splices the plan's Verification block),
                                   check-plan-identifiers.py (plan names exist on the base),
-                                  test-delta.py (the PR body's test line)
+                                  test-delta.py (the PR body's test line), session_tokens.py (a step's token line in the plan)
   templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
   templates/companion-skill/      role-skill stub /we:setup writes per crew member
 docs/                             user docs (index: docs/README.md)

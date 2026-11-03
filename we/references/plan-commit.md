@@ -23,10 +23,14 @@ Every verb that commits a planning document follows this section: `/we:story`, `
    hooks still run on the commit.
 3. **Get the file into the scratch tree.** A writer dispatched by the verb writes straight to the
    absolute path inside `<scratch>`. A file written elsewhere (a refiner's `isolation: "worktree"`
-   tree) is copied with `cp` into `<scratch>` before the commit.
+   tree) is copied with `cp` into `<scratch>` before the commit. A story plan's staging-check file
+   (its `**Staging checks:**` line) travels with it, to the same relative path.
 4. **Commit and check.** A story plan first passes
    `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`: a
    `missing:` name goes back to its writer (struck, or marked `(new)`), never committed as existing.
+   Plan and staging-check file go into one commit, so neither lands without the other, and the
+   subject names the story key (`docs(<KEY>): plan — …`): the repo's staging run finds a story by
+   the keys in commit subjects.
 
    ```bash
    git -C <scratch> add <files>
