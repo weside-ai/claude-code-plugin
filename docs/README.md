@@ -19,7 +19,7 @@ weside.ai account.
 | `autoMaterialize` | loads the Companion at session start | `false` | [companion.md](companion.md) |
 | `autoStoreConversations` | stores meaningful turns as Companion memories, only in a session that ran `/we:materialize` | `false` | [companion.md](companion.md) |
 | `loadCouncilFromWeside` | council members carry linked Companions' identities; `false` keeps every lens generic | `true` | [council.md](council.md) |
-| `boardFile` | the board file `/board` reads; its answers file `board-answers.jsonl` sits beside it | `~/.claude/we-state/board.json` | [board.md](../we/docs/board.md) |
+| `boardFile` | the board file `/board` reads; its answers file `board-answers.jsonl` and delivery ledger `board-deliveries.jsonl` sit beside it | `~/.claude/we-state/board.json` | [board.md](../we/docs/board.md) |
 | `boardAutoOpen` | opens `/board` at session start: `off`, `on` (every session), `orchestrator` (the crew's Orchestrator only) | `off` | [board.md](../we/docs/board.md#opening-it) |
 | `masterProfile` | the claude-swap profile master sessions run in; turns on `/board`'s red start-mode rules | empty | [board.md](../we/docs/board.md#the-live-column) |
 | `tmuxAttention` | inside tmux, the window title turns white while the session waits for you, grey once it rests | `true` | [tmux.md](tmux.md) |
