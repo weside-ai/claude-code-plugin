@@ -77,23 +77,23 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │                                                                                                  │
 │ Q9  9 d  lead  PROJ-40                                                                           │
 │ Storyline S1–S3                                                                                  │
-│ [ Deny ] [ Discuss ] [ More info ]                                                               │
+│ [ Deny ] [ Discuss ] [ More info ] [ Update ]                                                    │
 │                                                                                                  │
 │ Q12  2 d  billing  PROJ-59                                                                       │
 │ Merge PR #562? (money path, CI green)                                                            │
 │ → yes                                                                                            │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] ✓ accepted 21:02 UTC (Orchestrator)                │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] ✓ accepted 21:02 UTC (Orchestrator)     │
 │                                                                                                  │
 │ Q19  today  legal  PROJ-69                                                                       │
 │ UK: register with the tax office (quarterly returns, running cost) or keep the web checkout      │
 │ closed for the UK? The UK then buys in the app                                                   │
 │ → keep it closed until demand is measurable                                                      │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]                                                    │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ]                                         │
 │                                                                                                  │
 │ Q17  today  apps  PROJ-65..68                                                                    │
 │ Release 4 app images (artwork/v2/)                                                               │
 │ → release                                                                                        │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]                                                    │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -146,12 +146,12 @@ its own.
 │                                                          │
 │ Q9  9 d  lead  PROJ-40                                   │
 │ Storyline S1–S3                                          │
-│ [ Deny ] [ Discuss ] [ More info ]                       │
+│ [ Deny ] [ Discuss ] [ More info ] [ Update ]            │
 │                                                          │
 │ Q12  2 d  billing  PROJ-59                               │
 │ Merge PR #562? (money path, CI green)                    │
 │ → yes                                                    │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
 │ ✓ accepted 21:02 UTC (Orchestrator)                      │
 │                                                          │
 │ Q19  today  legal  PROJ-69                               │
@@ -159,12 +159,12 @@ its own.
 │ running cost) or keep the web checkout closed for the    │
 │ UK? The UK then buys in the app                          │
 │ → keep it closed until demand is measurable              │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
 │                                                          │
 │ Q17  today  apps  PROJ-65..68                            │
 │ Release 4 app images (artwork/v2/)                       │
 │ → release                                                │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
 ╰──────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────╮

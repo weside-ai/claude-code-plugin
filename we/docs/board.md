@@ -27,12 +27,12 @@ Finish what is open → money → marketing.
 │                                                          │
 │ Q2  9 d  marketing  PROJ-41                              │
 │ Storyline S1–S3                                          │
-│ [ Deny ] [ Discuss ] [ More info ]                       │
+│ [ Deny ] [ Discuss ] [ More info ] [ Update ]            │
 │                                                          │
 │ Q1  today  lead  PROJ-40                                 │
 │ Live test AC 16                                          │
 │ → tonight                                                │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ]            │
+│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
 │ ✓ accepted 18:12 UTC (Orchestrator)                      │
 ╰──────────────────────────────────────────────────────────╯
 
@@ -196,7 +196,7 @@ relative path count from the home folder). Without the file the pane says so and
 |---|---|
 | `updated` | ISO timestamp of the last write; the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info` texts for the prompt a press sends (§ Answers) |
+| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` texts for the prompt a press sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News) |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
@@ -217,7 +217,7 @@ Every field but `sessions[].name` may be missing or `null`; the pane leaves it o
 ## Answers
 
 Each question with an `id` carries the buttons **Accept** (only with a `recommendation`), **Deny**,
-**Discuss** and **More info**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
+**Discuss**, **More info** and **Update**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
 file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never writes `board.json`:
 
 ```json
@@ -227,18 +227,21 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 | Field | Meaning |
 |---|---|
 | `id` | the question's `owner_queue[].id`, or the item's `news[].id` |
-| `answer` | `accept`, `deny`, `discuss` or `info` for a question; `read` for a news item |
+| `answer` | `accept`, `deny`, `discuss`, `info` or `update` for a question; `read` for a news item |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the pane was pressed in, as `claude agents` lists it; `null` when the live column does not know it |
 
 The file only grows: the orchestrator reads it and removes the question from `owner_queue`, or the
-item from `news`, once handled. Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
+item from `news`, once handled. **Update** asks the orchestrator to check whether the question is
+still current and correctly worded; the question stays until it rewords or removes it, and its
+`✓ update asked` lapses with the orchestrator's next write of the board file (a newer `updated`). Until then the pane shows the newest answer beside the question (`✓ accepted 18:12 UTC
 (Orchestrator)`), so nobody answers twice. It re-reads the file with the board's three-second watch.
 
 When the pane runs in the orchestrator's own session, the one whose name equals `updated_by`, a
 press also sends a prompt there, queued as if typed and run once the session is idle:
-`<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it` or `<id>: I need more
-information`. **Read** sends nothing. The
+`<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more
+information` or `<id>: please check whether this question is still current and correctly worded
+(goal still active? needs an update?)`. **Read** sends nothing. The
 board's optional `answer_prompts` words them in the orchestrator's own language, `{id}` standing
 for the question's id: `{"accept": "{id}: Vorschlag angenommen"}`; a kind it leaves out keeps the
 default. The pane finds its own name by matching its session id against `claude agents

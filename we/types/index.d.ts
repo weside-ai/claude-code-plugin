@@ -138,9 +138,9 @@ export type BoardView = {
   error?: string
 }
 
-// One line of board-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss or More info on a
+// One line of board-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info or Update on a
 // question, or of Read on a news item.
-export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'read'
+export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'read'
 // The answers that send a prompt into the orchestrator's session; Read only appends its line.
 export type BoardPromptKind = Exclude<BoardAnswerKind, 'read'>
 

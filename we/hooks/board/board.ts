@@ -5,7 +5,7 @@ import type {
 
 const MIN = 60_000
 const DAY = 86_400_000
-const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info']
+const PROMPT_KINDS: readonly BoardPromptKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
 const KINDS: readonly BoardAnswerKind[] = [...PROMPT_KINDS, 'read']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
@@ -83,6 +83,14 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
   return out
 }
 
+// The answer the pane shows beside a question. Update keeps the question on the board, so its mark
+// lapses once the orchestrator rewrote the board after the press; any other answer shows until handled.
+export const shownAnswer = (last: BoardAnswer | undefined, updated: string | undefined): BoardAnswer | undefined => {
+  if (last?.answer !== 'update' || !updated) return last
+  const at = Date.parse(updated)
+  return Number.isNaN(at) || at <= Date.parse(last.ts) ? last : undefined
+}
+
 // The prompt a press sends into the orchestrator's own session; the board's `answer_prompts` replaces
 // a default, `{id}` standing for the question's id.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
@@ -90,6 +98,7 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   deny: '{id}: proposal denied',
   discuss: "{id}: let's talk about it",
   info: '{id}: I need more information',
+  update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
 }
 
 export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>) =>
