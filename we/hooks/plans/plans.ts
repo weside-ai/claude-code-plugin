@@ -26,7 +26,7 @@ export type Pr = {
 
 export type PlanKind = 'saga' | 'epic' | 'story'
 
-// One plan file's frontmatter links (apo-hierarchy.md) and its first heading.
+// One plan file's frontmatter links (epic-plan.md § Links; `saga` read only for older files) and its first heading.
 export type PlanFile = {
   path: string
   kind?: PlanKind

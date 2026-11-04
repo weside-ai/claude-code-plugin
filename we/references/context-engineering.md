@@ -24,8 +24,8 @@ Claude Code budgets and their sources: `references/instruction-authoring.md`, ga
 
 ## Who owns what
 
-- **Rules of work:** the crew's orchestrator writes them; the steward makes sure every companion
-  knows they exist and keeps the shared blocks lean.
+- **Rules of work:** the HR role owns them (L0 §Changing this: it decides the process inbox weekly);
+  the steward makes sure every companion knows they exist and keeps the shared blocks lean.
 - **Role and boundary of a person:** that person's register row (one shared memory per person),
   confirmed by the person.
 - **Identity, compass, snapshot, pins:** the companion. The steward reads them and, where the user

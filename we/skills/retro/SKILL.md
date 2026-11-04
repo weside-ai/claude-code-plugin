@@ -26,7 +26,7 @@ session's transcript instead of this one) · `--auto` (§ Auto mode: asks nothin
 
 ## Auto mode
 
-`/we:orchestrate` and `/we:merged` each decide by their own criteria whether a cycle earns a retro,
+`/we:master` and `/we:merged` each decide by their own criteria whether a cycle earns a retro,
 then dispatch it here the same way:
 
 1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/retro_claim.sh <N>` from the repo: `covered: …` (exit 1)

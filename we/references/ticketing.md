@@ -1,6 +1,6 @@
 ---
 name: ticketing
-description: Reading a ticket with its comments and moving it safely. Shared by /we:orchestrate and /we:develop.
+description: Reading a ticket with its comments and moving it safely. Shared by /we:master and /we:develop.
 ---
 
 # Ticketing
@@ -24,4 +24,8 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
   warn and continue. Transition first, comment second, in two calls: a comment inside the
   transition (Rovo `update`, `jira_*` `comment`) is lost or fails the whole transition.
 - Status names per repo live in `.weside/orchestrate.md` § Ticket states.
-- Only `/we:merged` moves a ticket on after the merge: `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5.
+- Every move follows the entry rule of its state (L0 §Lifecycle) and is made by `board.py move` once
+  it exists; until then by the verb the lifecycle names, through this file: the master moves Selected →
+  In Progress when it pulls a story, `/we:merged` moves a merged and linked story to In Review
+  (`${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5), and Done comes only from a receipt report or an
+  acceptance comment.

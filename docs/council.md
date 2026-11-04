@@ -1,30 +1,29 @@
 # Council
 
 `/we:council` convenes role lenses as a live agent team whose members message each other. The lead
-session writes the synthesis: agreement, tension, recommendation. `/we:meet` convenes it at one
-plan altitude.
+session writes the synthesis: agreement, tension, recommendation.
 
 ## Lenses
 
-The plugin ships one agent per lens: `council-architect`, `council-product-owner`,
-`council-scrum-master`, `council-security`, `council-ux-researcher`, `council-marketing`,
-`council-legal`, `council-sales`, and `council-orchestrator` (the lead session plays this role unless
-a roster names it). Any other role (`--council=people_ops`, or a crew member's `role`) sits
-on the generic `council-member`, its lens from the member's `lens`, else its `title`, else the role
-name; `we/scripts/council_lens.py` derives it.
+Every role sits on the one agent `council-member`. Nine roles take their lens line from the table in
+`we/skills/council/references/brief.md` § Lens lines: `product_owner`, `architect`, `scrum_master`,
+`security`, `ux_researcher`, `marketing`, `legal`, `sales` and `orchestrator` (the lead session plays
+this role unless a roster names it). Any other role (`--council=people_ops`, or a crew member's
+`role`) takes its lens from the member's `title`, else the role name; `we/scripts/council_lens.py`
+derives it.
 
 Live deliberation needs Agent Teams: `{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }`
 in `~/.claude/settings.json`.
 
 ## Rosters
 
-`/we:setup` writes the meeting rosters into `.weside/config.json` under `council`
-(`default` plus one list per meeting). `--council=role,role` overrides them for one call.
+`/we:setup` writes the roster into `.weside/config.json` under `council.default`.
+`--council=role,role` overrides it for one call.
 
 ## Members: the crew
 
 `/we:council` reads the repo's crew, `.weside/crew.json` (`/we:setup` § Crew writes it; schema in
-`we/scripts/crew.py`, the working mode in `we/references/working-mode.md`). Each entry under
+`we/scripts/crew.py`, the contract in `we/references/companion-session.md` § Crew). Each entry under
 `members.<slug>` names a `role`, optionally a Companion `name`, a `lens` string the member's brief
 carries, and a `title` that the companion launcher `wclaude` shows ([companion.md](companion.md)).
 `lens` and `title` reach a brief only as quoted data through `we/scripts/council_lens.py`: one line,
