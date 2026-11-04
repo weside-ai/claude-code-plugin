@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "limitz": {},
+  "limits": {
+    "masterz": 3
+  },
+  "human": {
+    "name": "Hal",
+    "decides": [
+      "vision",
+      "money",
+      "prod"
+    ]
+  },
+  "question_label": "ASK",
+  "labels": {
+    "recommendation": "Advice",
+    "ready": "done-for-now"
+  },
+  "skill_prefix": "acme",
+  "roles": {
+    "product": "ada",
+    "architecture": "vic",
+    "acceptance": "tess",
+    "machinery": "kit",
+    "coordinator": "otto",
+    "escalation": "nora",
+    "hr": "hana",
+    "security": "bo"
+  },
+  "members": {
+    "ada": {
+      "name": "Ada",
+      "title": "Product Owner",
+      "components": [
+        "App"
+      ],
+      "workplace": ".",
+      "titel": "Product"
+    },
+    "otto": {
+      "name": "Otto",
+      "title": "Orchestrator",
+      "workplace": "."
+    },
+    "hana": {
+      "name": "Hana",
+      "title": "HR",
+      "workplace": "../biz"
+    },
+    "tess": {
+      "name": "Tess",
+      "title": "Tester",
+      "workplace": "."
+    },
+    "vic": {
+      "name": "Vic",
+      "title": "Architecture",
+      "components": [
+        "Architecture"
+      ],
+      "workplace": "."
+    },
+    "kit": {
+      "name": "Kit",
+      "title": "Platform",
+      "components": [
+        "Platform"
+      ],
+      "workplace": "../infra",
+      "extra_repos": [
+        "."
+      ]
+    },
+    "nora": {
+      "name": "Nora",
+      "title": "CEO",
+      "components": [
+        "Company"
+      ],
+      "workplace": "."
+    },
+    "bo": {
+      "name": "Bo",
+      "title": "Security",
+      "workplace": ".",
+      "on_call": true,
+      "specialist": "security"
+    },
+    "lex": {
+      "name": "Lex",
+      "title": "Legal",
+      "workplace": "../biz",
+      "on_call": true,
+      "specialist": "legal"
+    }
+  },
+  "risk": {
+    "command": "scripts/risk-class.sh"
+  },
+  "sla": {
+    "tz": "Europe/Berlin",
+    "t2_second_reviewer": "bo"
+  },
+  "release": {
+    "runbook": "docs/RELEASE.md"
+  },
+  "capacity": {
+    "pod_gib": 16,
+    "gate_lock_gib": 2,
+    "test_slot_gib": 3
+  },
+  "local_rules": [
+    "A draft PR names why it waits in its first line.",
+    "Any session may close a monitoring issue that names its fix.",
+    "Never print a token or a cookie."
+  ],
+  "fallback": {
+    "securty": "human_bundle"
+  },
+  "lenses": {
+    "product": {
+      "keepr": "ada"
+    }
+  }
+}
