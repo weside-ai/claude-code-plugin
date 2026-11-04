@@ -376,7 +376,7 @@ class ProcessRenderTest(unittest.TestCase):
         for role in render_process.all_roles():
             rows = render_process.total_rows(path, crew, role, self.home)
             if rows:
-                out[role] = max(total for _, _, total in rows)
+                out[role] = max(t.total for t in rows)
         return out
 
     def test_a_repo_without_crew_is_skipped_and_a_fitting_crew_passes(self):
@@ -424,7 +424,9 @@ class ProcessRenderTest(unittest.TestCase):
         self.save({"optimization": {"budget": {"role_total_chars": sums}}})
         code, out = self.gate("--role-totals", "--home", str(self.home))
         self.assertEqual(code, 0, out)
-        self.assertIn(f"machinery Kit: {sums['machinery']} chars (limit {sums['machinery']})", out)
+        self.assertIn(
+            f"machinery Kit: {sums['machinery']} chars (limit machinery {sums['machinery']})", out
+        )
         low = {**sums, "hr": sums["hr"] - 1}
         self.save({"optimization": {"budget": {"role_total_chars": low}}})
         code, out = self.gate("--role-totals", "--home", str(self.home))
@@ -449,3 +451,102 @@ class ProcessRenderTest(unittest.TestCase):
         self.assertIn(f"lower `master` to {sums['master']} in .weside/config.json", out)
         code, out = self.gate("--role-totals", "--home", str(self.home))
         self.assertEqual(code, 0, out)
+
+    def specialist_sums(self) -> dict[str, int]:
+        path = self.root / ".weside" / "crew.json"
+        rows = render_process.total_rows(path, crewlib.load(path), "specialist", self.home)
+        return {f"specialist:{t.slug}": t.total for t in rows}
+
+    def test_a_member_key_wins_over_its_role_key(self):
+        self.save()
+        sums, members = self.sums(), self.specialist_sums()
+        self.assertEqual(set(members), {"specialist:bo", "specialist:lex"})
+        tight = {**sums, "specialist": 1, **members}
+        self.save({"optimization": {"budget": {"role_total_chars": tight}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home), "--slack", "500")
+        self.assertEqual(code, 0, out)
+        self.assertIn(
+            f"specialist Bo: {members['specialist:bo']} chars (limit specialist:bo "
+            f"{members['specialist:bo']})",
+            out,
+        )
+        low = {**tight, "specialist:lex": members["specialist:lex"] - 1}
+        self.save({"optimization": {"budget": {"role_total_chars": low}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"role specialist (specialist Lex) loads {members['specialist:lex']}", out)
+
+    def test_an_addendum_over_its_budget_or_repeating_l0_is_red(self):
+        self.save()
+        roles = self.root / ".weside" / "roles"
+        roles.mkdir()
+        l0_line = render_process.render_l0(crewlib.load(self.root / ".weside" / "crew.json"))
+        line = next(x for x in l0_line.split("\n") if x.startswith("- **Masters work:**"))
+        (roles / "ada.md").write_text(f"Local notes.\n\n{line}\n", encoding="utf-8")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("✗ .weside/roles/ada.md:3: line repeats L0 [card-dup]", out)
+        (roles / "ada.md").write_text("x" * 3_501, encoding="utf-8")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("✗ .weside/roles/ada.md: 3501 chars > 3500 [card-size]", out)
+
+
+class RoleCardTest(unittest.TestCase):
+    """`role-cards` over a plugin tree (`we/roles/`) rendered against the defaults."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.cards = self.root / "we" / "roles"
+        self.cards.mkdir(parents=True)
+        self.card = (render_process.ROLES / "master.md").read_text(encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def gate(self) -> tuple[int, str]:
+        result = subprocess.run(
+            [sys.executable, "-I", str(SCRIPT), "--root", str(self.root)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode, result.stdout
+
+    def test_the_plugin_cards_pass(self):
+        for card in render_process.ROLES.glob("*.md"):
+            (self.cards / card.name).write_text(card.read_text(encoding="utf-8"))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("[card-", out)
+
+    def test_a_card_with_an_l0_line_copied_in_is_red(self):
+        """Red arm of AC1: one L0 line pasted into the card."""
+        line = "- **Workers execute one chunk and end.** Masters and companions start them (`we-worker`); the name"
+        text = self.card.replace("## You never\n", f"## You never\n\n{line}\n", 1)
+        self.assertNotEqual(text, self.card)
+        (self.cards / "master.md").write_text(text, encoding="utf-8")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        number = text.split("\n").index(line) + 1
+        self.assertIn(f"✗ we/roles/master.md:{number}: line repeats L0 [card-dup]", out)
+
+    def test_a_reworded_l0_line_warns(self):
+        line = "- Sessions talk directly to the owner of a question; the coordinator carries what goes to the human."
+        (self.cards / "master.md").write_text(
+            self.card.replace("## You never\n", f"## You never\n\n{line}\n", 1), encoding="utf-8"
+        )
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("key terms repeat an L0 line [card-dup-terms]", out)
+
+    def test_a_missing_heading_or_an_oversized_card_is_red(self):
+        (self.cards / "master.md").write_text(
+            self.card.replace("## At start", "## First moves") + "\n" + "y " * 1_800,
+            encoding="utf-8",
+        )
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("[card-headings]", out)
+        self.assertRegex(out, r"✗ we/roles/master\.md: \d{4} chars > 5500 raw \[card-size\]")
