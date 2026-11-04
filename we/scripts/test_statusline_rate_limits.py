@@ -11,11 +11,22 @@ import time
 from pathlib import Path
 
 import pytest
+from node_test_procs import real_node, reap
 
 SCRIPT = Path(__file__).parent / "statusline.js"
 EMAIL = "setup-token-1@example.test"
 
-pytestmark = pytest.mark.skipif(not shutil.which("node"), reason="statusline.js needs node")
+NODE = real_node()
+
+pytestmark = pytest.mark.skipif(NODE is None, reason="statusline.js needs node")
+
+
+@pytest.fixture(autouse=True)
+def _no_process_outlives_its_test(tmp_path):
+    """Every process a test started (detached refreshes too) ends with it: 0 left, else red."""
+    yield
+    left = reap(tmp_path)
+    assert left == 0, f"{left} processes with HOME under {tmp_path} outlived the test"
 
 
 def env_for(home, accounts=EMAIL, stub_dir=None):
@@ -47,7 +58,7 @@ def write_rl(path, five=None, seven=None, email=EMAIL):
 
 def dry_run(tmp_path, rl_file, accounts=EMAIL):
     out = subprocess.run(
-        ["node", str(SCRIPT), "--feed-cswap", "--dry-run", "--file", str(rl_file)],
+        [NODE, str(SCRIPT), "--feed-cswap", "--dry-run", "--file", str(rl_file)],
         env=env_for(tmp_path, accounts),
         capture_output=True,
         text=True,
@@ -88,7 +99,7 @@ def test_no_file_does_nothing(tmp_path):
     stub_dir, log = stub_cswap(tmp_path)
     (tmp_path / ".claude").mkdir()
     subprocess.run(
-        ["node", str(SCRIPT), "--feed-cswap", "--file", str(tmp_path / "missing.json")],
+        [NODE, str(SCRIPT), "--feed-cswap", "--file", str(tmp_path / "missing.json")],
         env=env_for(tmp_path, stub_dir=stub_dir),
         timeout=20,
         check=True,
@@ -117,7 +128,7 @@ def test_record_merges_the_reading_and_feeds_cswap_once(tmp_path):
         "seven_day": {"used_percentage": 70, "resets_at": reset + 86_400},
     }
     run = [
-        "node",
+        NODE,
         str(SCRIPT),
         "--record-rate-limits",
         str(tmp_path / ".claude.json"),
@@ -151,7 +162,7 @@ def test_render_without_the_opt_in_spawns_nothing(tmp_path):
     )
     env = env_for(tmp_path, accounts="")
     subprocess.run(
-        ["node", str(SCRIPT)],
+        [NODE, str(SCRIPT)],
         input=payload,
         env=env,
         text=True,
@@ -213,7 +224,7 @@ def test_render_without_a_reading_leaves_the_slot_free(tmp_path):
     (tmp_path / ".claude").mkdir()
     payload = json.dumps({"session_id": "s1"})
     subprocess.run(
-        ["node", str(SCRIPT)],
+        [NODE, str(SCRIPT)],
         input=payload,
         env=env_for(tmp_path),
         text=True,

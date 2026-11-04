@@ -9,20 +9,30 @@ Usage:
                                                addendum, extra repos) for the role's holder (a
                                                specialist: the card alone)
   render_process.py --all-roles [--from DIR]   one line per role (``ROLE_KEYS``, ``master``,
-                                               ``worker``, ``specialist``): role, L0 chars, card
-                                               plus addendum chars, ok or the budget exceeded
+                                               ``worker``, ``specialist``): role, L0 chars (with
+                                               the ``NOTICE_CHARS`` reserve), card plus addendum
+                                               chars, ok or the budget exceeded; then the row
+                                               ``fallback``: the L0 and the worker form of the
+                                               crew a hook renders from when the file is refused
+                                               (``crew.fallback``), each with the reserve
   render_process.py --role R --total [--from DIR] [--home DIR]
                                                what a session of role R always loads: one row per
                                                counted part (part, path, chars), then the sum
   render_process.py --serves --from DIR        exit 0 iff ``process_on_start.py`` prints the L0 for
                                                a session there (a crew loads and both forms render
-                                               within ``BUDGET``), else 1
+                                               within ``BUDGET`` with the ``NOTICE_CHARS``
+                                               reserve), else 1
 
 Templates: ``process/L0.md`` (every session but a worker) and ``process/L0-worker.md``. A token is
 ``{key}`` or ``{key|fallback}``. ``key`` is a role key of ``crew.ROLE_KEYS`` (the holder's name,
 else the fallback, else the role's title), ``human`` (``human.name``), ``specialists`` (``Name
 (field)`` of every member with ``specialist``; the line holding it is dropped when there is none),
 ``local_rules`` (one bullet each; the section holding it is dropped when there is none),
+``crew_notice`` (``crew_error``, set by ``crew.fallback``, as ``<labels.crew_unreadable>: <reason>``,
+else the merged crew's ``unknown_keys`` as ``<labels.crew_unknown_keys>: <k1, k2>``; the line is
+its own paragraph: the token and the blank line after it are dropped when there is neither, so a
+clean crew renders as before; cut in the middle (``NOTICE_HEAD``, ``…``, the end) to ``NOTICE_CHARS``
+with its two newlines, the reserve every L0 measure counts, so the notice never pushes an L0 over ``BUDGET``),
 ``t2_second_reviewer`` (that member's name), or a
 dotted key of the merged crew (``crew.load`` merges ``DEFAULTS``, so every key has a value). A list
 renders ``a-b`` (en dash) for two numbers, else joined by ``, ``. A null or empty value takes the fallback; a
@@ -75,6 +85,10 @@ import rule_loading  # noqa: E402
 PROCESS = _HERE.parent / "process"
 ROLES = _HERE.parent / "roles"
 BUDGET = 9_500
+# the crew notice line, its two newlines included (reserved in every L0 measure); a longer notice
+# keeps NOTICE_HEAD leading characters, then "…", then its end
+NOTICE_CHARS = 160
+NOTICE_HEAD = 60
 CARD_RAW_BUDGET = 5_500
 ADDENDUM_BUDGET = 3_500
 CARD_HEADINGS = (
@@ -149,7 +163,25 @@ def _second_reviewer(crew: dict[str, Any]) -> str | None:
     return str(entry["name"]) if entry else None
 
 
+def crew_notice(crew: dict[str, Any]) -> str | None:
+    """The notice line for ``crew`` (``{crew_notice}`` in the module docstring), else None."""
+    labels = crew.get("labels") or {}
+    if crew.get("crew_error"):
+        line = f"{labels.get('crew_unreadable')}: {crew['crew_error']}"
+    elif crew.get("unknown_keys"):
+        line = f"{labels.get('crew_unknown_keys')}: {', '.join(crew['unknown_keys'])}"
+    else:
+        return None
+    line = " ".join(line.split())
+    if len(line) + 2 <= NOTICE_CHARS:
+        return line
+    # cut in the middle: the label and the reason's end (the dotted key, the fault) both stay
+    tail = NOTICE_CHARS - 3 - NOTICE_HEAD
+    return line[:NOTICE_HEAD] + "…" + line[-tail:]
+
+
 SPECIAL = {
+    "crew_notice": crew_notice,
     "human": lambda crew: _show((crew.get("human") or {}).get("name")),
     "specialists": _specialists,
     "local_rules": _local_rules,
@@ -168,6 +200,8 @@ def _resolve(crew: dict[str, Any], key: str) -> str | None:
 def render(template: str, crew: dict[str, Any]) -> str:
     """``template`` with every token filled from ``crew``; see the module docstring."""
     drop_lines = {"specialists": _resolve(crew, "specialists") is None}
+    if _resolve(crew, "crew_notice") is None:
+        template = template.replace("{crew_notice}\n\n", "", 1)
     drop_section = _resolve(crew, "local_rules") is None
     if drop_section:
         template = re.sub(r"\n## [^\n]*\n\n\{local_rules\}\n", "\n", template)
@@ -202,12 +236,18 @@ def role_text(crew: dict[str, Any], role: str, process: Path = PROCESS) -> str:
     return render_l0(crew, "worker" if role == "worker" else "full", process)
 
 
+def l0_chars(crew: dict[str, Any], kind: str = "full") -> int:
+    """The measure of an L0 form: its render without the notice plus the ``NOTICE_CHARS``
+    reserve."""
+    return len(render_l0({**crew, "crew_error": None, "unknown_keys": []}, kind)) + NOTICE_CHARS
+
+
 def serves(start: str | Path) -> bool:
     try:
         _, crew = crewlib.find_and_load(start)
         if crew is None:
             return False
-        return all(len(render_l0(crew, kind)) <= BUDGET for kind in ("full", "worker"))
+        return all(l0_chars(crew, kind) <= BUDGET for kind in ("full", "worker"))
     except (crewlib.CrewError, RenderError, OSError):
         return False
 
@@ -668,10 +708,14 @@ def _print_totals(crew_path: Path, crew: dict[str, Any], role: str, home: str | 
 
 def _print_sizes(crew_path: Path, crew: dict[str, Any]) -> None:
     for role in all_roles():
-        n = len(role_text(crew, role))
+        n = l0_chars(crew, "worker" if role == "worker" else "full")
         card = len(session_text(crew_path, crew, role, holder_slug(crew, role), run_hooks=False))
         ok = "ok" if max(n, card) <= BUDGET else f"> {BUDGET}"
         print(f"{role}\t{n}\t{card}\t{ok}")
+    fallback = crewlib.fallback(crew_path, "")
+    full, worker = l0_chars(fallback, "full"), l0_chars(fallback, "worker")
+    ok = "ok" if max(full, worker) <= BUDGET else f"> {BUDGET}"
+    print(f"fallback\t{full}\t{worker}\t{ok}")
 
 
 def _print_role(crew_path: Path, crew: dict[str, Any], role: str) -> None:

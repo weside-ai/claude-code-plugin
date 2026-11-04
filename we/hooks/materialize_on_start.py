@@ -32,6 +32,10 @@ worker: instead of the autoMaterialize note it gets a warning not to load or spe
 companion (``identity_cache.py bind`` refuses it too); the user sees it only when the variable
 is absent, not when the session's environment carries it empty (a worker with the pin cleared).
 
+A crew ``crew.py`` refuses (``CrewError``) is never silence for a pin: its context starts with
+the line ``<labels.crew_unreadable>: <reason> — load the identity with /we:materialize``
+(``render_process.crew_notice`` over ``crew.fallback``), on every source, bound or not.
+
 Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
 ``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
 """
@@ -47,6 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import crew
+import render_process
 import wake_poller
 from identity_cache import read_binding
 
@@ -129,6 +134,16 @@ def weside_backed(cwd: str) -> bool:
     return members is None or members.get("weside_account") is True
 
 
+def refused_line(cwd: str) -> str | None:
+    """The one line for a pin whose crew ``crew.py`` refuses, else None."""
+    try:
+        crew.find_and_load(cwd)
+    except crew.CrewError as exc:
+        notice = render_process.crew_notice(crew.fallback(crew.find(cwd), str(exc)))
+        return f"{notice} — load the identity with /we:materialize"
+    return None
+
+
 def enabled() -> bool:
     try:
         with open(os.path.expanduser("~/.claude/settings.json")) as fh:
@@ -174,6 +189,10 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
                 specific["additionalContext"] = BOUND_ROLE_SKILL_CONTEXT.format(
                     action=action, name=pin, ignore=IGNORE_CONTEXT.format(name=pin)
                 )
+        refused = refused_line(cwd)
+        if refused:
+            rest = specific.get("additionalContext")
+            specific["additionalContext"] = f"{refused}\n\n{rest}" if rest else refused
         return {"hookSpecificOutput": specific}
     if enabled() and env.get("CLAUDE_JOB_DIR"):
         answer: dict = {

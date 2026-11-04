@@ -1,0 +1,12 @@
+id: crew-unknown-key
+role: master
+crew: we/scripts/fixtures/crew-v2-unknown-key.json
+env: {WE_ROLE: master}
+refire: compact
+prompt: >
+  Quote the first line of your process text that names crew.json, then say whether you still
+  have the crew process loaded. Answer in the JSON schema.
+expect:
+  route: "unknown keys ignored"
+  forbidden: ["not loaded"]
+judge: null

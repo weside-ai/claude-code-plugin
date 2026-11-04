@@ -124,15 +124,65 @@ def test_workers_get_the_short_form_and_a_consultation_the_l0(tmp_path):
     assert consult == render_process.render_l0(crew)
 
 
-def test_no_crew_prints_nothing_and_a_refused_crew_one_line(tmp_path):
+REFUSED = {
+    "invalid JSON": ("{not json", "unreadable (JSONDecodeError)"),
+    "version 1": ({"version": 1, "roles": {}}, crewlib.VERSION_1),
+    "version 3": ({"version": 3, "roles": {}, "members": {}}, "version 3 is not 2"),
+    "type error": ({"limits": {"masters": "five"}}, "limits.masters must be a number"),
+}
+
+
+def refused_repo(tmp_path: Path, raw) -> Path:
+    if isinstance(raw, dict) and "version" not in raw:
+        data = json.loads(GENERIC.read_text())
+        data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+        data.update(raw)
+        raw = data
+    root = repo(tmp_path)
+    text = raw if isinstance(raw, str) else json.dumps(raw)
+    (root / ".weside" / "crew.json").write_text(text)
+    return root
+
+
+def test_no_crew_prints_nothing(tmp_path):
     bare = tmp_path / "bare"
     subprocess.run(["git", "init", "-q", str(bare)], check=True)
     assert context(run(tmp_path, bare, {"WE_ROLE": "master"})) is None
-    root = repo(tmp_path, {"version": 1, "roles": {}})
-    assert context(run(tmp_path, root, {"WE_ROLE": "master"})) == (
-        "crew: crew.json is version 1: in a worktree, merge the default branch; otherwise run "
-        "/we:setup"
+
+
+def test_a_refused_crew_gets_the_l0_from_the_defaults_with_the_reason_on_every_source(tmp_path):
+    for case, (raw, reason) in REFUSED.items():
+        root = refused_repo(tmp_path / case.replace(" ", "-"), raw)
+        path = root / ".weside" / "crew.json"
+        label = "crew.json nicht lesbar" if case == "type error" else "crew.json not readable"
+        fallback = crewlib.fallback(path, "x")
+        for env, form in (({"WE_ROLE": "master"}, "full"), ({"WE_ROLE": "worker"}, "worker")):
+            texts = {context(run(tmp_path, root, env, source=source)) for source in SOURCES}
+            assert len(texts) == 1, (case, env)
+            text = texts.pop()
+            assert text.startswith(f"{label}: "), (case, text[:200])
+            first, rest = text.split("\n\n", 1)
+            assert first.startswith(f"{label}: ") and reason in first, (case, first)
+            expected = render_process.render_l0({**fallback, "crew_error": None}, form)
+            assert rest == expected, (case, form)
+        pinned = context(run(tmp_path, root, {"WESIDE_COMPANION": "Ada"}))
+        assert pinned.split("\n\n", 1)[1] == render_process.render_l0(
+            {**fallback, "crew_error": None}
+        )
+    served = tmp_path / "home" / ".claude" / "we-state" / "l0-served.jsonl"
+    assert not served.exists(), "a fallback serve is not logged"
+
+
+def test_unknown_keys_get_the_full_l0_with_the_line(tmp_path):
+    root = repo(
+        tmp_path, json.loads((SCRIPTS / "fixtures" / "crew-v2-unknown-key.json").read_text())
     )
+    done = run(tmp_path, root, {"WE_ROLE": "master"})
+    text = context(done)
+    first, rest = text.split("\n\n", 1)
+    assert first.startswith("crew.json: unknown keys ignored: limitz, limits.masterz, ")
+    assert rest == render_process.render_l0(crewlib._merge(json.loads(GENERIC.read_text())))
+    assert "unknown key limitz ignored" in done.stderr
 
 
 def test_each_print_appends_a_plugin_line_to_the_served_log(tmp_path):

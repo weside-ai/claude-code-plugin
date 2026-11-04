@@ -277,6 +277,36 @@ class MaterializeOnStartTest(unittest.TestCase):
         )["hookSpecificOutput"]["additionalContext"]
         self.assertIn("we:materialize", note)
 
+    def test_a_refused_crew_is_one_line_never_silence(self):
+        core, _skill = self.crew_workspace("---\nname: weside-lex\n---\n", account=True)
+        path = core / ".weside" / "crew.json"
+        data = json.loads(path.read_text())
+        data["version"] = 3
+        data["labels"] = {"crew_unreadable": "crew.json nicht lesbar"}
+        path.write_text(json.dumps(data))
+        line = (
+            f"crew.json nicht lesbar: {path.resolve()}: version 3 is not 2 — load the identity "
+            "with /we:materialize"
+        )
+        self.bind("s1", "Lex")
+        for source in ("compact", "clear"):
+            out = self.run_hook(
+                pin="Lex", hook_input={"session_id": "s1", "source": source, "cwd": str(core)}
+            )
+            context = out["hookSpecificOutput"].get("additionalContext")
+            self.assertEqual(context, line, f"{source}: a refused crew left a pin silent")
+        path.write_text("{not json")
+        note = self.run_hook(
+            pin="Ana", hook_input={"session_id": "s2", "source": "startup", "cwd": str(core)}
+        )["hookSpecificOutput"]["additionalContext"]
+        first, rest = note.split("\n\n", 1)
+        self.assertEqual(
+            first,
+            f"crew.json not readable: {path.resolve()}: unreadable (JSONDecodeError) — load the "
+            "identity with /we:materialize",
+        )
+        self.assertIn("we:materialize", rest)
+
     def test_consultation_is_the_companion(self):
         self.extra_env = {"WE_ROLE": "worker"}
         note = self.run_hook(pin="Ana")["hookSpecificOutput"]["additionalContext"]

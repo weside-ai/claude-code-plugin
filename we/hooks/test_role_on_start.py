@@ -100,15 +100,45 @@ def test_each_session_kind_gets_its_card(tmp_path):
         assert text is not None and text.startswith(head), env
 
 
-def test_nothing_without_a_crew_with_a_refused_crew_or_without_a_role(tmp_path):
+def test_nothing_without_a_crew_or_without_a_role(tmp_path):
     bare = tmp_path / "bare"
     subprocess.run(["git", "init", "-q", str(bare)], check=True)
     assert context(run(tmp_path, bare, {"WE_ROLE": "master"})) is None
     repo, _ = workspace(tmp_path)
     assert context(run(tmp_path, repo, {})) is None, "no role: nothing"
+
+
+V1_LINE = (
+    "crew.json not readable: crew.json is version 1: in a worktree, merge the default branch; "
+    "otherwise run /we:setup"
+)
+
+
+def test_a_refused_crew_gets_the_default_card_with_the_reason_never_nothing(tmp_path):
+    repo, infra = workspace(tmp_path)
+    (repo / ".weside" / "roles").mkdir()
+    (repo / ".weside" / "roles" / "master.md").write_text("Repo addendum for masters.\n")
     (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 1, "roles": {}}))
-    done = run(tmp_path, repo, {"WE_ROLE": "master"})
-    assert context(done) is None and done.stderr == ""
+    for source in SOURCES:
+        master = context(run(tmp_path, repo, {"WE_ROLE": "master"}, source=source))
+        assert master is not None, f"{source}: a refused crew printed nothing"
+        assert master.startswith("# Role card: master"), source
+        assert "Repo addendum for masters." in master
+        assert V1_LINE in master.split("\n")
+        worker = context(run(tmp_path, repo, {"WE_ROLE": "worker"}, source=source))
+        assert worker.startswith("# Role card: worker") and V1_LINE in worker.split("\n")
+        pin = context(run(tmp_path, repo, {"WESIDE_COMPANION": "Kit"}, source=source))
+        assert pin == V1_LINE, source
+        unnamed = context(run(tmp_path, repo, {}, source=source))
+        assert unnamed == V1_LINE, source
+    data = json.loads(GENERIC.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    data["limits"] = {"masters": "five"}
+    (repo / ".weside" / "crew.json").write_text(json.dumps(data))
+    text = context(run(tmp_path, infra, {"WE_ROLE": "master"}))
+    path = repo / ".weside" / "crew.json"
+    line = f"crew.json nicht lesbar: {path.resolve()}: limits.masters must be a number"
+    assert line in text.split("\n"), text[-400:]
 
 
 def test_card_plus_addendum_over_the_budget_prints_nothing_and_names_the_addendum(tmp_path):
