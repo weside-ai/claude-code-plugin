@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The board's verbs for a session (docs/board.md § The file, § Answers, § Questions and decisions).
+"""The board's verbs for a session (docs/board.md § The file, § Answers, § Questions and decisions, § Escalations).
 
 Usage:
   board.py [--board FILE] answer <id> <accept|deny|discuss|info|update> --session NAME --via chat
