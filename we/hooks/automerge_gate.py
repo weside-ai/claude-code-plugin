@@ -3,7 +3,7 @@
 here first: the freeze flag, the PR's risk class, the T2 panel verdict, the Codex verdict on the
 head and the pre-merge receipt.
 
-A brake against slips, not a boundary (like `weside-guard`): it sees only Claude Code's Bash tool
+A brake against slips, not a boundary: it sees only Claude Code's Bash tool
 calls, and a session can work around it. The boundary is the repository's ruleset (required
 checks, code owners) and the owner's own merge.
 

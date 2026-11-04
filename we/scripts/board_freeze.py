@@ -16,7 +16,7 @@ crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.
   * A flag file that exists but does not parse is a standing freeze (`FreezeError`; the hook
     refuses): a torn write must not lift it.
 
-A brake against slips, not a boundary (like `weside-guard`): any session can delete the file. The
+A brake against slips, not a boundary: any session can delete the file. The
 boundary is the repository's ruleset and the owner's own merge. Pinned by `test_board.py`
 (`TestFreeze`) and `hooks/test_automerge_gate.py` (freeze cases).
 """

@@ -17,7 +17,7 @@ import pytest
 SCRIPT = Path(__file__).with_name("risk_paths.py")
 RULES = Path(__file__).resolve().parents[2] / ".weside" / "risk-paths"
 
-# AC 7: every path of the plugin's [brake-change] section (CODEOWNERS: Lars 04.11.).
+# AC 7: every path of the plugin's [brake-change] section.
 BRAKE = [
     ".weside/risk-paths",
     ".github/CODEOWNERS",
@@ -72,7 +72,7 @@ def classify(repo: Path, base: str = "origin/main") -> subprocess.CompletedProce
 
 
 def test_codeowners_names_every_brake_path() -> None:
-    """Lars 04.11.: the owner reviews every brake path, CODEOWNERS included."""
+    """The owner reviews every brake path, CODEOWNERS included."""
     owners = (RULES.parent.parent / ".github" / "CODEOWNERS").read_text().splitlines()
     owned = {line.split()[0].lstrip("/") for line in owners if line and not line.startswith("#")}
     assert owned == set(BRAKE)

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""The board's verbs for a session (docs/board.md); this release has one, `answer`.
+"""The board's verbs for a session (docs/board.md): `answer`, `freeze`, `unfreeze`.
 
 Usage:
   board.py [--board FILE] answer <id> <accept|deny|discuss|info|update> --session NAME --via chat
            [--quote "<the owner's words>"]
+  board.py [--board FILE] freeze --reason "<why>" [--repo OWNER/REPO ...] [--by NAME]
+  board.py [--board FILE] unfreeze
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -11,6 +13,11 @@ answer   writes back an answer the owner gave in a session's chat: one line in
          `owner_queue` nor `news` of the board file, an id an Accept or Deny already closed, and a
          kind outside the five; a refused write writes nothing. It opens board.json read-only and
          prints the written line.
+
+freeze   writes the freeze flag `freeze.json` beside the board file, then disarms every open PR with
+         auto-merge armed in the named repos (default: the current directory's repo) and prints
+         the flag; while it stands the merge hook refuses every merge and arm (scripts/board_freeze.py).
+unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
 
 FILE defaults to ~/.claude/we-state/board.json (the pane's option `boardFile` names another).
 """
@@ -20,6 +27,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -111,6 +120,54 @@ def cmd_answer(state, args):
     return 0
 
 
+def _freeze_module():
+    path = Path(__file__).resolve().with_name("board_freeze.py")
+    spec = importlib.util.spec_from_file_location("we_board_freeze", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _current_repo():
+    out = subprocess.run(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def cmd_freeze(state, args):
+    bf = _freeze_module()
+    repos = args.repo or [r for r in [_current_repo()] if r]
+    if not repos:
+        print("board.py freeze: name a repo with --repo; none found here", file=sys.stderr)
+        return 1
+    by = args.by or os.environ.get("WESIDE_COMPANION") or os.environ.get("USER") or "unknown"
+    try:
+        flag = bf.freeze(bf.flag_path(state.board_path), args.reason, repos, by)
+    except bf.FreezeError as exc:
+        print(f"board.py freeze: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(flag, ensure_ascii=False))
+    return 0
+
+
+def cmd_unfreeze(state, _args):
+    bf = _freeze_module()
+    flag = bf.unfreeze(bf.flag_path(state.board_path))
+    if flag is None:
+        print("board.py unfreeze: no freeze stands", file=sys.stderr)
+        return 1
+    prs = " ".join(f"{d['repo']}#{d['number']}" for d in flag.get("disarmed") or [])
+    print(f"unfrozen: {flag.get('reason')}")
+    print(f"re-arm through the hook: {prs or '(none was disarmed)'}")
+    return 0
+
+
 def parser():
     p = argparse.ArgumentParser(prog="board.py", description="The board's verbs for a session.")
     p.add_argument(
@@ -124,6 +181,13 @@ def parser():
     a.add_argument("--via", required=True, choices=("chat",))
     a.add_argument("--quote", help="the owner's own words")
     a.set_defaults(run=cmd_answer)
+    f = verbs.add_parser("freeze", help="stop every merge and arm until unfreeze")
+    f.add_argument("--reason", required=True)
+    f.add_argument("--repo", action="append", help="OWNER/REPO whose armed PRs to disarm")
+    f.add_argument("--by", help="who freezes (default: the companion or the user)")
+    f.set_defaults(run=cmd_freeze)
+    u = verbs.add_parser("unfreeze", help="lift the freeze; prints the PRs to re-arm by hand")
+    u.set_defaults(run=cmd_unfreeze)
     return p
 
 

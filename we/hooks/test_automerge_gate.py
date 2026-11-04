@@ -348,7 +348,7 @@ def test_a_red_receipt_does_not_block_a_disarm(repo: Path, monkeypatch) -> None:
     assert refuse(receipt_repo(repo), disarm, FakeGh([run()], body=RED), monkeypatch) is None
 
 
-# WA-2856: the class, the call forms, the freeze and the T2 panel.
+# The class, the call forms, the freeze and the T2 panel.
 
 FAKE_CLASSIFIER = """#!/usr/bin/env bash
 printf '%s\\n' "$*" > "$FAKE_LOG"
@@ -356,7 +356,7 @@ git rev-parse HEAD >> "$FAKE_LOG"
 printf '%s\\nreview: high\\n' "$FAKE_CLASS"
 exit "${FAKE_EXIT:-0}"
 """
-CREW = {"version": 2, "human": {"name": "Foxy"}, "risk": {"command": "bin/classify.sh"}}
+CREW = {"version": 2, "human": {"name": "Ada"}, "risk": {"command": "bin/classify.sh"}}
 NODE = {"number": 7, "repository": {"nameWithOwner": "o/r"}}
 
 
@@ -413,7 +413,7 @@ FORMS = [
     "gh api repos/o/r/pulls/7/merge -f merge_method=squash",
     GRAPHQL_MERGE,
     GRAPHQL_ARM,
-    "echo 'Foxy: merge du (Q999)' && gh pr merge 7 --squash",
+    "echo 'Ada: merge du (Q999)' && gh pr merge 7 --squash",
 ]
 
 
@@ -423,7 +423,7 @@ def test_one_way_is_refused_in_every_call_form(classed: dict, monkeypatch, comma
     reason = refuse(classed["repo"], command, fake, monkeypatch)
     assert reason is not None
     assert "`T2 one-way money`: one-way (money)" in reason
-    assert "Foxy merges one-way herself" in reason
+    assert "Ada merges one-way herself" in reason
     assert "PR #7 (https://github.com/o/r/pull/7)" in reason
     assert not any(c[:2] == ["pr", "merge"] for c in fake.calls), fake.calls
 
@@ -603,7 +603,7 @@ def test_a_worker_is_refused_before_any_class_work(classed: dict, monkeypatch) -
 
 
 def _freeze(state: Path, text: str | None = None) -> None:
-    flag = {"since": "2026-11-04T10:00:00Z", "by": "kiska", "reason": "incident on main"}
+    flag = {"since": "2026-11-04T10:00:00Z", "by": "ops", "reason": "incident on main"}
     (state / "freeze.json").write_text(text if text is not None else json.dumps(flag))
 
 
@@ -615,7 +615,7 @@ def test_freeze_refuses_every_form(
     fake = FakeGh([run()], node=NODE)
     reason = refuse(repo, command, fake, monkeypatch)
     assert reason is not None
-    assert "Merges are frozen since 2026-11-04T10:00:00Z by kiska: incident on main" in reason
+    assert "Merges are frozen since 2026-11-04T10:00:00Z by ops: incident on main" in reason
 
 
 def test_a_torn_freeze_flag_still_freezes(repo: Path, monkeypatch, _isolated_state: Path) -> None:
@@ -642,7 +642,7 @@ def test_the_crews_board_file_names_the_state_dir(
     assert reason is not None and "Merges are frozen" in reason
 
 
-# The T2 panel (lens_verdict.py of WA-2855; faked here).
+# The T2 panel (lens_verdict.py; faked here).
 
 FAKE_LENS = """
 from pathlib import Path
