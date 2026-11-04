@@ -12,7 +12,7 @@ flowchart TD
         S1("/we:story KEY<br/>load ticket, ADRs, rules, code")
         S2{{"interview<br/>one question per turn"}}
         S3[["we:dev-high refiner<br/>runs /we:refine"]]
-        S4("refined scan<br/>+ we:explore-medium checks code claims")
+        S4("Ready gate (ready_gate.py)<br/>+ we:explore-medium checks code claims")
         S5{{"owner approves plan"}}
         S6[("plan on main<br/>ticket → plan-approved")]
         S1 --> S2 --> S3 --> S4

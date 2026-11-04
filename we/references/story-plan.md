@@ -208,7 +208,7 @@ Every repo value comes from the crew (`scripts/crew.py`).
 
 Story checks, each failure one line, the run never stops at the first:
 
-1. Frontmatter `story:` and `epic:` present.
+1. Frontmatter `story:` present; without `epic:` the fence and goal checks warn (§ Warn until present).
 2. Every section of § Sections present except `## Code Guidance` and `## Updates Log`; an
    `## Open Fork` fails.
 3. Every AC holds `**Given**`, `**When**`, `**Then**` and a marker.
@@ -228,7 +228,7 @@ is dropped. A phase line `- **Repo:** <name>` puts its paths in repo `<name>`; w
 the plan's repo, and a path marked `(other repo)` there fails until the phase names its repo.
 
 **Epic plan.** The `*-epic.md` in the story plan's directory whose frontmatter `ticket:` or `epic:`
-equals the story's `epic:`, or whose `linked_epics:` holds it; none or more than one fails. Its
+equals the story's `epic:`, or whose `linked_epics:` holds it; none warns (§ Warn until present), more than one fails. Its
 frontmatter fields the gate reads:
 
 - `fence: [<glob>, <repo>:<glob>, …]` — where the epic's stories may write. A bare glob covers the

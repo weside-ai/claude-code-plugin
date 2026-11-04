@@ -390,9 +390,8 @@ class Gate:
 
     def story(self, text: str) -> None:
         meta = frontmatter(text)
-        for key in ("story", "epic"):
-            if not meta.get(key):
-                self.fail("frontmatter", f"no `{key}:`")
+        if not meta.get("story"):
+            self.fail("frontmatter", "no `story:`")
         present = sections(text)
         for name in REQUIRED_SECTIONS:
             if name not in present:
@@ -506,6 +505,10 @@ class Gate:
 
     def _epic_plan(self, key: str | None) -> tuple[Path, str] | None:
         if not key:
+            self.warnings.append(
+                f"warning: {self.plan}: fence and goal checks off: no `epic:` frontmatter; add it "
+                "to the story plan to arm the checks"
+            )
             return None
         hits = []
         for candidate in sorted(self.plan.parent.glob("*-epic.md")):
@@ -519,7 +522,10 @@ class Gate:
             ):
                 hits.append((candidate, text))
         if not hits:
-            self.fail("epic", f"no *-epic.md next to the plan names `{key}`")
+            self.warnings.append(
+                f"warning: {self.plan}: fence and goal checks off: no *-epic.md next to the plan "
+                f"names `{key}`; add the epic plan to arm the checks"
+            )
             return None
         if len(hits) > 1:
             names = " and ".join(p.name for p, _ in hits)
@@ -586,12 +592,14 @@ class Gate:
                 for t in _LINK.findall(line)
                 if t.split("#")[0].endswith(("-epic.md", "-story.md"))
             ]
-            key = key_re.search(line)
+            metric = _METRIC.match(line)
+            # On a metric line only the name part can name work; its definition may hold UTF-8.
+            named = re.split(r"\s+—\s+", metric.group(1))[0] if metric else line
+            key = key_re.search(" ".join([named, *_LINK.findall(line)]))
             if plans:
                 self.failures.append(f"{place}: goal file links the plan {plans[0]}")
             elif key:
                 self.failures.append(f"{place}: goal file names the ticket key {key.group(0)}")
-            metric = _METRIC.match(line)
             if metric:
                 metrics.append(_norm(re.split(r"\s+—\s+", metric.group(1))[0]))
         epic_path, epic_text = epic

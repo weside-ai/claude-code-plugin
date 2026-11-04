@@ -112,12 +112,22 @@ def test_an_open_fork_fails(tmp_path):
     ]
 
 
-def test_frontmatter_without_epic_fails(tmp_path):
-    root = repo(tmp_path)
+def test_a_standalone_story_warns_and_still_checks_repos(tmp_path):
+    root = repo(tmp_path, "crew-goals.json")
     path = root / plan(root, "green")
     path.write_text(path.read_text().replace("epic: PROJ-1\n", ""))
     out = gate(root, "story", str(path))
-    assert out.returncode == 1 and out.stdout.splitlines() == [f"{path}: frontmatter: no `epic:`"]
+    assert out.returncode == 0 and out.stdout == ""
+    assert out.stderr.splitlines() == [
+        f"warning: {path}: fence and goal checks off: no `epic:` frontmatter; add it to the story "
+        "plan to arm the checks"
+    ]
+    add_file(root, "green", "  - `lib/x.py` (other repo)", phase="### Phase 1")
+    out = gate(root, "story", str(path))
+    assert out.returncode == 1
+    assert out.stdout.splitlines() == [
+        f"{path}: phase 1: `lib/x.py` is marked (other repo): name the repo in a `**Repo:**` line"
+    ]
 
 
 def test_an_unknown_class_fails(tmp_path):
@@ -422,13 +432,18 @@ def test_adding_fence_arms_the_check_without_a_flag(tmp_path):
     )
 
 
-def test_no_epic_plan_or_two_fail(tmp_path):
-    root = repo(tmp_path)
+def test_an_epic_without_a_plan_warns_and_two_plans_fail(tmp_path):
+    root = repo(tmp_path, "crew-goals.json")
     path = use_epic(root, "green", "PROJ-9")
     out = gate(root, "story", path)
-    assert out.stdout.splitlines() == [
-        f"{path}: epic: no *-epic.md next to the plan names `PROJ-9`"
+    assert out.returncode == 0 and out.stdout == ""
+    assert out.stderr.splitlines() == [
+        f"warning: {path}: fence and goal checks off: no *-epic.md next to the plan names "
+        "`PROJ-9`; add the epic plan to arm the checks"
     ]
+    path = add_file(root, "green", "  - `lib/x.py` (other repo)", phase="### Phase 1")
+    out = gate(root, "story", path)
+    assert out.returncode == 1 and "is marked (other repo)" in out.stdout
     shutil.copy(root / PLANS / "PROJ-1-epic.md", root / PLANS / "PROJ-1b-epic.md")
     out = gate(root, "story", plan(root, "walk-why"))
     assert "is named by more than one epic plan: PROJ-1-epic.md and PROJ-1b-epic.md" in out.stdout
@@ -488,3 +503,34 @@ def test_files_goals_set_and_absent_is_the_crew_message(tmp_path):
     assert (
         out.stdout.startswith("crew: ") and "files.goals 'goals.md' does not exist" in out.stdout
     )
+
+
+def test_a_hyphenated_standard_in_a_metric_definition_is_no_ticket_key(tmp_path):
+    root = repo(tmp_path, "crew-goals.json")
+    goals = root / "goals.md"
+    goals.write_text(
+        goals.read_text().replace(
+            "- metric: time to first report",
+            "- metric: time to first report — UTF-8 export, SHA-256 checked, ISO-8601 dates, "
+            "HTTP-2",
+        )
+    )
+    out = gate(root, "epic", plan(root, "PROJ-1-epic"))
+    assert out.returncode == 0, out.stdout
+    assert out.stdout == ""
+
+
+def test_a_ticket_key_in_a_metric_name_or_link_target_fails(tmp_path):
+    root = repo(tmp_path, "crew-goals.json")
+    goals = root / "goals.md"
+    goals.write_text(
+        goals.read_text()
+        + "- metric: PROJ-7 adoption — share of owners\n"
+        + "- metric: churn — see [the ticket](https://jira.example/browse/PROJ-8)\n"
+    )
+    out = gate(root, "epic", plan(root, "PROJ-1-epic"))
+    assert out.returncode == 1
+    assert out.stdout.splitlines() == [
+        f"{goals}:7: goal file names the ticket key PROJ-7",
+        f"{goals}:8: goal file names the ticket key PROJ-8",
+    ]
