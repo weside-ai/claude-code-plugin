@@ -413,6 +413,32 @@ def test_fallback_is_the_defaults_with_the_reason_and_the_file_s_own_labels(tmp_
     assert crew.fallback(None, "why")["labels"] == crew.DEFAULTS["labels"]
 
 
+def test_a_retired_capacity_key_loads_with_one_stderr_line(tmp_path):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16, "gate_lock_gib": 2}))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    crew_file = core / ".weside" / "crew.json"
+    assert out.stderr.count("crew: capacity is no longer read") == 1
+    assert f"crew: capacity is no longer read; remove it from {crew_file}" in out.stderr
+    assert "capacity" not in crew.load(crew_file)
+    assert crew.load(crew_file)["unknown_keys"] == [], "a retired key is not an unknown one"
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 0, "a retired key never fails validate --strict"
+
+
+def test_only_retired_keys_are_skipped_silently_for_strict_another_unknown_key_is_refused(
+    tmp_path,
+):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16}, capacityz=1))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    assert warning(core, "capacityz") in out.stderr.splitlines()
+    assert json.loads(out.stdout)["unknown_keys"] == ["capacityz"]
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 1
+    assert strict.stderr.strip().endswith("unknown key capacityz")
+
+
 @pytest.mark.parametrize("version", [1, None])
 @pytest.mark.parametrize(
     "verb", [["show"], ["members"], ["stubs"], ["is-role", "hr"], ["workplace", "ada"], ["lenses"]]

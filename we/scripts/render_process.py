@@ -33,7 +33,7 @@ else the merged crew's ``unknown_keys`` as ``<labels.crew_unknown_keys>: <k1, k2
 its own paragraph: the token and the blank line after it are dropped when there is neither, so a
 clean crew renders as before; cut in the middle (``NOTICE_HEAD``, ``…``, the end) to ``NOTICE_CHARS``
 with its two newlines, the reserve every L0 measure counts, so the notice never pushes an L0 over ``BUDGET``),
-``t2_second_reviewer`` (that member's name), ``capacity_line`` (the host's memory split), or a
+``t2_second_reviewer`` (that member's name), or a
 dotted key of the merged crew (``crew.load`` merges ``DEFAULTS``, so every key has a value). A list
 renders ``a-b`` (en dash) for two numbers, else joined by ``, ``. A null or empty value takes the fallback; a
 token with neither raises ``RenderError``, so a template change cannot ship a hole.
@@ -152,15 +152,6 @@ def _specialists(crew: dict[str, Any]) -> str | None:
     return ", ".join(found) or None
 
 
-def _capacity_line(crew: dict[str, Any]) -> str | None:
-    cap = crew.get("capacity") or {}
-    if cap.get("pod_gib") is None:
-        return None
-    parts = [f"pod {cap['pod_gib']} GiB minus gate lock (≤ {cap.get('gate_lock_gib') or '?'})"]
-    parts.append(f"test slot (≤ {cap.get('test_slot_gib') or '?'}) and devbox")
-    return ", ".join(parts)
-
-
 def _local_rules(crew: dict[str, Any]) -> str | None:
     rules = [" ".join(str(r).split()) for r in crew.get("local_rules") or []]
     return "\n".join(f"- {r}" for r in rules if r) or None
@@ -195,9 +186,6 @@ SPECIAL = {
     "specialists": _specialists,
     "local_rules": _local_rules,
     "t2_second_reviewer": _second_reviewer,
-    "capacity_line": lambda crew: (
-        _capacity_line(crew) or "the host's memory minus the gate lock, the test slot and devboxes"
-    ),
 }
 
 

@@ -12,8 +12,11 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   read the report against the plan's ACs before you integrate it.
 - Run CI once per PR; check every review finding against the code, fix a real one, answer a false
   one with its reason on the PR.
-- After a merge: remove worktrees, branches and finished workers, move the ticket, then append the
-  epic's Updates Log before the next pull.
+- Size each step's effort: do it inline when it is a handful of tool calls; use a read-only
+  subagent for a wide read or a review; give a story to one worker (the default); start two to
+  four workers only for independent chunks. Multi-agent work costs ~15× the tokens.
+- After a merge: remove worktrees, branches and finished workers and move the ticket.
+- After every merged story: `/we:epic` update (Updates Log, ticket mirror) before you pull the next one.
 - Keep your open strands (workers, PRs, questions, promised replies) as a task list, so a
   compaction loses none.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
