@@ -22,7 +22,7 @@ The gate checks a declaration, not an observation: a `## Verification` heading a
 `**Oracle:**` line that picks cli | ui | substitute, or declines with a reason (`not-applicable`,
 `not-observed`). Its worth is that every PR says in public how — or whether — it was observed.
 
-Contract: `skills/story/references/plan-format.md` § Verification and
+Contract: `references/story-plan.md` § Verification and
 `references/worker-dispatch.md` § Finish sequence. Repo recipes: `.weside/verify.md`.
 """
 
@@ -119,7 +119,7 @@ _WHERE = (
     "A story plan with a `## Verification` block can be spliced in instead: `python3 "
     + _RECEIPT_SCRIPT
     + " <KEY> <body-in> <body-out>`. Contract: the `we` plugin's "
-    "skills/story/references/plan-format.md § Verification."
+    "references/story-plan.md § Verification."
 )
 
 

@@ -99,7 +99,7 @@ refuses its merge as for a subagent.
 
 - The brief outranks every default in `/we:develop`. The worker names each override in its report.
 - A brief never overrides a stop. The worker stops and reports `blocked` when the plan carries an
-  unanswered `## Open Fork`, when a ticket comment changes the scope after the plan, when the same
+  unanswered `## Open Fork` (`references/story-plan.md` § Readiness), when a ticket comment changes the scope after the plan, when the same
   gate fails three times, or when the work needs a product decision, a money-path redesign or a
   foreign subsystem's redesign.
 - The worker never opens a PR, runs or waits for CI, moves or creates a ticket, merges into the
@@ -154,9 +154,9 @@ The session or worker that writes last on the PR branch runs this once over
    only (staging is a question to the human). The receipt goes into the plan's `## Verification`
    with the four literal labels `**Oracle:**`, `**Seed:**`, `**Asserted:**`, `**Not proven:**`.
    `not-applicable` and `not-observed` are valid only with their reason
-   (`skills/story/references/plan-format.md` § Verification); a run that did not happen is
+   (`references/story-plan.md` § Verification); a run that did not happen is
    `not-observed`, never a filled receipt.
-4. Only the deviations from the plan recorded in the plan (`skills/story/references/plan-format.md` § Lifecycle).
+4. Only the deviations from the plan recorded in the plan (`references/story-plan.md` § Lifecycle).
 5. The affected gates again when step 2 or 3 moved code.
 
 No step's output is the final message; the turn ends with § Report (the plugin's `SubagentStop`

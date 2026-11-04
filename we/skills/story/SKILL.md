@@ -13,7 +13,7 @@ The interview runs in this session; a `we:dev-high` agent running `/we:refine` w
 Wanted stops: one interview question at a time, and the approval. Every other status note goes with the next tool call.
 After the approval you run step 5 straight through, print the next verb and stop: no branch, no build.
 
-Plan contract (frontmatter, sections, the refined scan): `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md`.
+Plan contract (frontmatter, sections, readiness): `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`.
 Epic work belongs to `/we:epic` or `/we:meet epic`. A contentious story goes through `/we:meet story`, which hands
 off here. The approved plan feeds `/we:orchestrate {TICKET}`.
 
@@ -79,13 +79,13 @@ A `blocked` report carries a fork: ask the user that one question with the refin
 
 ## 4. Approval
 
-1. Run the refined scan (`${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan) with `rg` on
-   the file, and check for `## Open Fork`.
+1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>` (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`
+   § Readiness).
    A failure goes back to the refiner via `SendMessage`, not to the user.
 2. Present in one message: the absolute plan path, the refiner's digest (ACs one line each, phases with their
    risk, decisions the user did not state), and what step 5 will do (ticket created or updated, where the
    commit lands).
-3. Feedback → `SendMessage` to the refiner, scan again, present again.
+3. Feedback → `SendMessage` to the refiner, run the gate again, present again.
 4. In a repo with a crew the component owner accepts the plan and the Product Owner approves it
    (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Roles); a session that holds neither role sends them
    the plan path and waits for their word.

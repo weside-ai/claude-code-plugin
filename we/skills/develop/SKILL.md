@@ -20,8 +20,8 @@ Contract, finish sequence and report fields:
 - A path argument is the plan. A key means `docs/plans/<KEY>-story.md`. No argument: ask the Lead
   or, invoked by a human, the human.
 - `--phases N,M` limits the chunk to those `### Phase` blocks; absent means all phases.
-- Invoked without a brief, run `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan
-  and stop on a failed item. A briefed worker skips it; the Lead ran it.
+- Invoked without a brief, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>`
+  (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md` § Readiness) and stop on a failure line. A briefed worker skips it; the Lead ran it.
 - An unanswered `## Open Fork` stops you. When the brief or the plan already carries the answer,
   build on it and name it in the report.
 - With a ticket key, read the ticket with its comments (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`).
