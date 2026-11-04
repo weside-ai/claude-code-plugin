@@ -37,6 +37,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 1. Read your epic's board line and the newest entries of its Updates Log.
 2. List your open PRs, running workers and unanswered questions.
 3. Name the one next move in one line, then make it.
+4. Also after a compaction: re-arm `watch-pr-checks.sh <PR> --until-merged` for every open PR of yours.
 
 ## You wait on / others wait on you
 

@@ -38,4 +38,5 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
    ready PR right after create, otherwise `/we:ci-review <PR>` arms it once green. The one merge brake is
    the one-way class (master § Close the run).
    A body with a `receipt red` line is not armed (`automerge_gate.py` refuses): rerun step 3 once the receipt is green.
-   An armed PR is watched to the merge per master § Push, PR, CI step 4.
+6. Arm the watcher as a background command: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <head>
+   --until-merged`. Whoever opens a PR watches it until the merge (L0 §Sessions).

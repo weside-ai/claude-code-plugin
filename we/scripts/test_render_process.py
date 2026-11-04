@@ -157,6 +157,46 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
     assert "one word arms auto-merge" in text
 
 
+WORKER_ENDS = (
+    "- **Workers execute one chunk and end**; a PR chunk ends at its merge or a `user merge` {label},\n"
+    "  and its opener watches it until then."
+)
+REARM = (
+    "4. Also after a compaction: re-arm `watch-pr-checks.sh <PR> --until-merged` for every open PR"
+    " of yours.\n"
+)
+
+
+def test_whoever_opens_a_pr_watches_it_and_the_master_re_arms_after_a_compaction():
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) in rp.render_l0(crew)
+    assert REARM in rp.render_card(generic(), "master")
+
+
+def test_the_watch_phrases_go_red_on_the_previous_text(tmp_path):
+    """Red arm: the text before the watch rule (worker ends after its chunk, no re-arm step)."""
+    process, roles = tmp_path / "process", tmp_path / "roles"
+    process.mkdir()
+    roles.mkdir()
+    l0 = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    old_l0 = l0.replace(
+        WORKER_ENDS.format(label="{question_label}") + " Masters",
+        "- **Workers execute one chunk and end.** Masters",
+    )
+    assert old_l0 != l0
+    (process / "L0.md").write_text(old_l0, encoding="utf-8")
+    for card in rp.ROLES.glob("*.md"):
+        (roles / card.name).write_text(card.read_text(encoding="utf-8"), encoding="utf-8")
+    master = (roles / "master.md").read_text(encoding="utf-8")
+    assert REARM in master
+    (roles / "master.md").write_text(master.replace(REARM, ""), encoding="utf-8")
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) not in rp.render_l0(
+        crew, process=process
+    )
+    assert REARM not in rp.render_card(crew, "master", roles=roles)
+
+
 def test_worker_form_is_short_and_carries_the_crew_values():
     text = rp.role_text(generic(), "worker")
     assert len(text) <= 1_500
