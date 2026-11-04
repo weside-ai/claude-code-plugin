@@ -1,0 +1,13 @@
+id: board-only-inbox
+role: product
+crew: we/scripts/fixtures/crew-v2-generic.json
+world: {}
+prompt: >
+  Where does the human see what they must decide: the push line, the evening bundle and an
+  escalation? Answer in the JSON schema.
+expect:
+  next_verb: [answer]
+  waits: []
+  route: "board"
+  forbidden: []
+judge: null

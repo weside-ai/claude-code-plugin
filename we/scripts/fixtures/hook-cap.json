@@ -1,0 +1,153 @@
+{
+  "claude_code": "2.1.317",
+  "recorded": "2026-11-03",
+  "model": "haiku",
+  "cases": [
+    {
+      "id": "one-9500",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 9500,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-9895",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 9895,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-10000",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 10000,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-10095",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 10095,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-12000",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 12000,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-20000",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 20000,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "one-50000",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 50000,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "two-9895",
+      "form": "context",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 9895,
+          "start": true,
+          "end": true,
+          "whole": true
+        },
+        {
+          "chars": 9895,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "plain-9500",
+      "form": "plain",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 9500,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    },
+    {
+      "id": "plain-12000",
+      "form": "plain",
+      "runs": 3,
+      "hooks": [
+        {
+          "chars": 12000,
+          "start": true,
+          "end": true,
+          "whole": true
+        }
+      ]
+    }
+  ],
+  "cap": {
+    "whole_max": 50000,
+    "cut_min": null,
+    "per": "hook"
+  },
+  "cap_plain": {
+    "whole_max": 12000,
+    "cut_min": null,
+    "per": null
+  }
+}
