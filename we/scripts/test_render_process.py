@@ -453,10 +453,13 @@ def test_a_refused_crew_renders_the_reason_under_its_own_label(tmp_path):
     assert crewlib.fallback(path, "x")["crew_error"] == "x" and crew["members"] == {}
 
 
-def test_a_long_notice_is_cut_to_the_reserve():
-    crew = {**generic(), "crew_error": "x" * 400}
+def test_a_long_notice_is_cut_to_the_reserve_keeping_label_and_reason_end():
+    reason = "/" + "deep/" * 60 + ".weside/crew.json: limits.masters must be a number"
+    crew = {**generic(), "crew_error": reason}
     first = rp.render_l0(crew).split("\n\n", 1)[0]
-    assert len(first) + 2 == rp.NOTICE_CHARS and first.endswith("…")
+    assert len(first) + 2 == rp.NOTICE_CHARS
+    assert first.startswith("crew.json not readable: /deep/") and "…" in first
+    assert first.endswith("crew.json: limits.masters must be a number")
     short = {**generic(), "crew_error": "y"}
     assert rp.render_l0(short).split("\n\n", 1)[0] == "crew.json not readable: y"
 

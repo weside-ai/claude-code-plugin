@@ -31,8 +31,8 @@ else the fallback, else the role's title), ``human`` (``human.name``), ``special
 ``crew_notice`` (``crew_error``, set by ``crew.fallback``, as ``<labels.crew_unreadable>: <reason>``,
 else the merged crew's ``unknown_keys`` as ``<labels.crew_unknown_keys>: <k1, k2>``; the line is
 its own paragraph: the token and the blank line after it are dropped when there is neither, so a
-clean crew renders as before; cut to ``NOTICE_CHARS`` with its two newlines, the reserve every L0
-measure counts, so the notice never pushes an L0 over ``BUDGET``),
+clean crew renders as before; cut in the middle (``NOTICE_HEAD``, ``…``, the end) to ``NOTICE_CHARS``
+with its two newlines, the reserve every L0 measure counts, so the notice never pushes an L0 over ``BUDGET``),
 ``t2_second_reviewer`` (that member's name), ``capacity_line`` (the host's memory split), or a
 dotted key of the merged crew (``crew.load`` merges ``DEFAULTS``, so every key has a value). A list
 renders ``a-b`` (en dash) for two numbers, else joined by ``, ``. A null or empty value takes the fallback; a
@@ -87,9 +87,10 @@ ROLES = _HERE.parent / "roles"
 REFERENCE = _HERE.parent / "references" / "working-mode.md"
 POINTER = f"Read {REFERENCE} before routing, starting a session or moving a ticket."
 BUDGET = 9_500
-NOTICE_CHARS = (
-    160  # the crew notice line, its two newlines included (reserved in every L0 measure)
-)
+# the crew notice line, its two newlines included (reserved in every L0 measure); a longer notice
+# keeps NOTICE_HEAD leading characters, then "…", then its end
+NOTICE_CHARS = 160
+NOTICE_HEAD = 60
 CARD_RAW_BUDGET = 5_500
 ADDENDUM_BUDGET = 3_500
 CARD_HEADINGS = (
@@ -183,7 +184,11 @@ def crew_notice(crew: dict[str, Any]) -> str | None:
     else:
         return None
     line = " ".join(line.split())
-    return line if len(line) + 2 <= NOTICE_CHARS else line[: NOTICE_CHARS - 3] + "…"
+    if len(line) + 2 <= NOTICE_CHARS:
+        return line
+    # cut in the middle: the label and the reason's end (the dotted key, the fault) both stay
+    tail = NOTICE_CHARS - 3 - NOTICE_HEAD
+    return line[:NOTICE_HEAD] + "…" + line[-tail:]
 
 
 SPECIAL = {
