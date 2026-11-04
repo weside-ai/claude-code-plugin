@@ -15,7 +15,7 @@ Every rule, procedure, schema, or template is defined in **exactly one file** �
 `references/*.md`, `quality/*.md`, or an executed script. Every other place cites it with one
 sentence + path (`see references/x.md`). Before writing a block into a second file, check the
 existing owners first: `dor-scan`, `ticketing` (incl. transition procedure), `worker-dispatch`
-(AC-review rule + bug-hunt dispatch matrix + model tiers), `po-altitude` (epic/saga skeleton), `council-deliberation`,
+(AC-review rule + bug-hunt dispatch matrix + model tiers), `skills/epic/references/template` (epic skeleton), `council-deliberation`,
 `mirror-block`, `agent-teams` (env flag + teardown), `privacy-guard`, `companion-voice`,
 `quality/dor.md` + `dod.md`.
 
@@ -81,7 +81,7 @@ Every skill pays one of two costs: model-invocable skills pay **context load** (
 description sits in every session), user-only skills (`disable-model-invocation: true`) pay
 **cognitive load** (the user must remember they exist). Decision note (v3.5.0 audit): we keep
 nearly all skills model-invocable — the plugin leans on natural-language triggers ("retro",
-"where am I", "diagnose this") and on skill-to-skill dispatch (meet→council, setup→council,
+"where am I", "diagnose this") and on skill-to-skill dispatch (setup→council,
 master→develop), both of which require model invocation. Revisit per skill only when a
 skill gains a description with no trigger phrases.
 

@@ -39,7 +39,7 @@ parallel_groups: []
 | `story` | Roster and branch key; the file name is the fallback. |
 | `epic` | An epic run rosters by it; without it the story is invisible there. Omit the line only for a standalone story. |
 | `depends_on` | Keys that must be built before this story is dispatched. |
-| `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the plan is on the default branch and passes the Ready gate. Approval is per epic (L0 §Units), never per story; the one exception is the master card's unconfirmed-fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
+| `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the plan passes the Ready gate in an epic its owner approved: the master sets it after the Ready gate and the owner's approval, in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's unconfirmed-fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
 | `comments_read_through` | Id or timestamp of the newest ticket comment the plan answers, or `none`. A newer comment means the plan may be stale. |
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |
 | `type`, `created` | Informational. |

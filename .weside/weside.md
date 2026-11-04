@@ -9,7 +9,7 @@ vault: claude-code-plugin
 
 ## Purpose
 
-The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refine, story, council, meet, setup, sideload, materialize, ...), agents (council-<role> generics + dev-high, dev-medium, explore-medium), commands (docs, pr, ac-review, static, test), MCP integration, hooks. Public repo; ships via the weside-ai Claude Code plugin marketplace.
+The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (master, plan-story, epic, council, lens, develop, setup, sideload, materialize, ...), agents (council-member with the role named in its brief, lens-<lens> + dev-high, dev-medium, explore-medium), commands (docs, pr, ac-review, static, test), MCP integration, hooks. Public repo; ships via the weside-ai Claude Code plugin marketplace.
 
 ## Crew
 
@@ -19,7 +19,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `orchestrator`
 - **Color:** purple
 - **Focus:** Holds the vision, coordinates the crew, synthesises council perspectives, balances cross-domain priorities
-- **In meetings:** vision, saga, epic
 
 ### Product Owner — Product Owner
 
@@ -27,7 +26,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `product_owner`
 - **Color:** orange
 - **Focus:** Backlog, prioritization, AC-quality, value-ranking
-- **In meetings:** vision, saga, epic, story
 
 ### Scrum Master — Scrum Master
 
@@ -35,7 +33,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `scrum_master`
 - **Color:** gray
 - **Focus:** Moderation, process, hand-offs, rituals — workflow clarity
-- **In meetings:** (none configured)
 
 ### Architect — Architect
 
@@ -43,7 +40,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `architect`
 - **Color:** green
 - **Focus:** Target architecture, constraints, ADRs, technical coherence
-- **In meetings:** vision, saga, epic, story
 
 ### Marketing — Marketing
 
@@ -51,7 +47,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `marketing`
 - **Color:** blue
 - **Focus:** Content, positioning, brand, term-claiming, messaging pipeline
-- **In meetings:** (none configured)
 
 ### Sales — Sales
 
@@ -59,7 +54,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `sales`
 - **Color:** yellow
 - **Focus:** Pipeline, deals, contract drafts, customer conversations
-- **In meetings:** (none configured)
 
 ### Legal — Legal / Compliance
 
@@ -67,7 +61,6 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `legal`
 - **Color:** black
 - **Focus:** Contracts, GDPR, AI Act, terms, compliance review
-- **In meetings:** (none configured)
 
 ### Security — Security / Data Protection
 
@@ -75,14 +68,10 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Role(s):** `security`
 - **Color:** white
 - **Focus:** Pen-tests, DPIAs, security reviews, hardening
-- **In meetings:** (none configured)
 
-## Meetings held here
+## Council
 
-- **vision** — roster: Product Owner, Architect, UX Researcher, Orchestrator
-- **saga** — roster: Product Owner, Architect, Orchestrator
-- **epic** — roster: Product Owner, Architect, Orchestrator
-- **story** — roster: Product Owner, Architect
+`/we:council` convenes the roles in `.weside/config.json` → `council.default` (product owner, architect, scrum master) unless the brief names others; each role runs as a `council-member` lens.
 
 ## Cross-repo relations
 
@@ -94,7 +83,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 - **Plugin marketplace**: <https://github.com/weside-ai/claude-code-plugin>.
 - **Versioning**: SemVer on `we/.claude-plugin/plugin.json`; bumps enforced by `scripts/check-version-bump.sh`.
 - **Structure validation**: `scripts/validate-plugin-structure.sh` runs on every commit (pre-commit hook).
-- **Council shells**: nine `we/agents/council-<role>.md` files (architect, product-owner, scrum-master, ux-researcher, marketing, orchestrator, security, sales, legal) — the no-account fallback path.
+- **Council shell**: one `we/agents/council-member.md`; the brief names the role it speaks for — the no-account fallback path.
 
 ## Companion identity
 

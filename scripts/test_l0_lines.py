@@ -46,6 +46,7 @@ STORY_PLAN = "we/references/story-plan.md"
 PLAN_COMMIT = "we/references/plan-commit.md"
 TICKETING = "we/references/ticketing.md"
 TEMPLATE = "we/skills/epic/references/template.md"
+PLAN_STORY = "we/skills/plan-story/SKILL.md"
 
 
 def _git(*args: str) -> str:
@@ -176,6 +177,17 @@ CASES = [
         r"Done comes only from a receipt report",
     ),
     ("F24 successor", TEMPLATE, r"^.*saga:|Saga", r"serves: <metric of the goal file>"),
+    # review rows of the cut (R*): a contract field or file the cut left without a writer or reader
+    (
+        "R1 approved has a writer",
+        MASTER,
+        r"Pass → commit it\.",
+        r"Pass → set `status: approved` in the plan's frontmatter, then commit it",
+    ),
+    ("R1 who sets approved", STORY_PLAN, None, r"the master sets it after the Ready gate"),
+    ("R1 the refiner writes draft", PLAN_STORY, r"status: approved", r"`status: draft`"),
+    ("R2 goals bound in the crew", SETUP, r"Skip → no goal check", r"bind `files\.goals`"),
+    ("R2 no crew, no goal check", SETUP, None, r"the goal check needs a crew"),
 ]
 
 

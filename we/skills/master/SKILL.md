@@ -94,9 +94,10 @@ fork you cannot settle → write `## Open Fork` and stop".
 
 On return, run the DoR scan on the plan in the returned worktree, then one `we:explore-medium`
 checks every code claim in the plan (file:line, "only caller", "no reader", each named lever)
-against the code; a wrong claim goes back to the refiner. Pass → commit it. Fail →
-re-dispatch once naming the missing item, then one question line to the epic owner. A passing plan is committed per
-`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main checkout); then remove the
+against the code; a wrong claim goes back to the refiner. Pass → set `status: approved` in the plan's
+frontmatter, then commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check
+file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main
+checkout). Fail → re-dispatch once naming the missing item, then one question line to the epic owner. Then remove the
 refiner's worktree (step 6). On the default branch and green under the Ready gate the story is
 Selected; move its ticket per `ticketing.md`, which names the mover for every state.
 

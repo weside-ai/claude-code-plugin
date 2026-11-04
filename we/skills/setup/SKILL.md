@@ -35,8 +35,9 @@ never commit yourself.
 ## 2. Questions
 
 1. **Goals**: the goal file above the epics (L0 §Units: goals with metrics, no epics; an epic
-   carries `serves: <metric>`): its path, or a link or short text → `.weside/goals.md`. Skip → no
-   goal check.
+   carries `serves: <metric>`): its path, or a link or short text → `.weside/goals.md`. The Ready
+   gate reads it only through the crew: step 4a.3 binds `files.goals` to this path. Without a crew,
+   the goal check needs a crew binding and stays off; skip → no goal file, no goal check.
 2. **Ticketing** tool confirmed; for Jira, the project key.
 3. **Stack** confirmed or corrected.
 4. **Tests**: when does a worker write them? `tdd` (failing test first) · `tests-after` (default,
@@ -112,7 +113,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    skill prefix once (default: the team's or repo's name).
 3. Write `.weside/crew.json` v2 (tracked; no identity text, no companion ids): `"version": 2`,
    `roles` (role key → member slug), `members`, and only the keys whose value differs from
-   `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. Check it with
+   `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. A goal file from
+   question 1 → bind `files.goals` to its path, or the Ready gate's goal check stays off. Check it with
    `crew.py show` (it names any key it refuses). Set `agents.worker_launch` to a command template
    that starts each worker as a session of its own (ask for the launcher; § Worker launch backend of
    `references/worker-dispatch.md` lists the placeholders). A re-run shows the diff and asks before

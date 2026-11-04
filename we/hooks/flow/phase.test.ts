@@ -69,3 +69,18 @@ test('keysIn finds each ticket key once, in order', async () => {
   expect(phaseModule.keysIn('main, utf-8')).toEqual([])
   expect(phaseModule.keysIn('feat/proj-12-x', 'PROJ')).toEqual(['PROJ-12'])
 })
+
+// The master's refine lane sets `status: approved` in the commit that puts the plan on the
+// default branch (pinned in prose by scripts/test_l0_lines.py, row R1): /flow then shows Build next.
+test('stages: a plan the master lane committed waits for Build, not Approval', async () => {
+  const out = [
+    'origin/main:docs/plans/PROJ-7-story.md:story: PROJ-7',
+    'origin/main:docs/plans/PROJ-7-story.md:status: approved',
+    'origin/main:docs/plans/PROJ-7-story.md:# Plan: x',
+  ].join('\n')
+  const [plan] = parsePlans(out)
+  expect(phaseOf({ plan, prs: [], aheadBranches: [] })).toBe('refined')
+  const stages = phaseModule.stagesOf({ plan, prs: [], aheadBranches: [], ahead: 0 })
+  expect(stages.slice(0, 3).map(s => `${s.name}:${s.light}`)).toEqual(['Plan:done', 'Approval:done', 'Build:todo'])
+  expect(stages[2]?.note).toBe('ready; no worker started yet')
+})

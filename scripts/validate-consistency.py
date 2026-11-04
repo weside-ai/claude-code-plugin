@@ -49,7 +49,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 WE = REPO / "we"
 
-# Check 9: what the cut to the crew process L0 removed. A tracked file names the successor.
+# Check 10: what the cut to the crew process L0 removed. A tracked file names the successor.
 RETIRED_PATHS = (
     "we/skills/saga",
     "we/skills/vision",
