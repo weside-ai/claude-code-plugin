@@ -46,7 +46,8 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 ``load`` validates on every read and raises ``CrewError`` naming the dotted key: a version other
 than 2; an unknown key; a value of the wrong type (a null default takes a string or null); a
 ``roles`` key outside ``ROLE_KEYS`` or a value, lens ``keeper`` or ``sla.t2_second_reviewer`` that
-is no member slug; a ``ready_lenses``/``t2_panel`` entry that is no lens; ``local_rules`` over
+is no member slug; a ``ready_lenses``/``t2_panel`` entry that is no lens (an undefined
+``FORMER_DEFAULT_LENSES`` entry is left out of its set with a line on stderr instead); ``local_rules`` over
 ``LOCAL_RULES_MAX`` entries or one entry over ``LOCAL_RULE_CHARS`` characters or with a newline; a
 path under ``files``, ``lenses.*.questions``, ``lenses.*.t2_questions`` or ``lenses.*.registry``
 that does not exist relative to the repo holding the crew file. It then merges the file over ``DEFAULTS`` one level into each
@@ -126,6 +127,11 @@ def _lens(key: str, sample: int | None = None) -> dict[str, Any]:
         "sample": sample,
     }
 
+
+# Default lenses of 7.56 and earlier. A crew that still names one in ``ready_lenses`` or
+# ``t2_panel`` without defining it under ``lenses`` loses it from that set with a stderr line
+# instead of failing every reader; any other undefined name stays a load error.
+FORMER_DEFAULT_LENSES = ("security", "premise")
 
 DEFAULTS: dict[str, Any] = {
     "human": {"name": "the human", "decides": []},
@@ -318,6 +324,7 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
     if version != VERSION or isinstance(version, bool):
         raise CrewError(f"{path}: version {version!r} is not {VERSION}")
     _validate(path, data)
+    _drop_former_lenses(path, data)
     found = _transition_keys(data)
     if notes is not None and found:
         notes.append(
@@ -325,6 +332,21 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
             f"cleanup, {V7_TRANSITION_ENDS}"
         )
     return _merge(data)
+
+
+def _drop_former_lenses(path: Path, data: dict[str, Any]) -> None:
+    lens_keys = set(DEFAULTS["lenses"]) | set(data.get("lenses", {}))
+    for key in ("ready_lenses", "t2_panel"):
+        if key not in data:
+            continue
+        for lens in data[key]:
+            if lens not in lens_keys:
+                print(
+                    f"crew: {path}: {key}: {lens!r} is a former default lens no longer defined; "
+                    "left out (define it under lenses or drop the entry)",
+                    file=sys.stderr,
+                )
+        data[key] = [lens for lens in data[key] if lens in lens_keys]
 
 
 def _fail(path: Path, message: str) -> CrewError:
@@ -418,7 +440,7 @@ def _validate_lenses(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
     lens_keys = set(DEFAULTS["lenses"]) | set(lenses)
     for key in ("ready_lenses", "t2_panel"):
         for lens in data.get(key, []):
-            if lens not in lens_keys:
+            if lens not in lens_keys and lens not in FORMER_DEFAULT_LENSES:
                 raise _fail(path, f"{key}: {lens!r} is no lens")
 
 

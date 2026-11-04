@@ -85,7 +85,7 @@ TEXT_CHARS = 500
 SEVERITIES = ("BLOCKING", "WARNING", "NOTE")
 COUNTING = ("BLOCKING", "WARNING")
 NO_PROOF_EXITS = (124, 126, 127)
-ARM_FORMS = ("pytest ", "python3 -m pytest ", "a test ", "bash scripts/", "python3 scripts/")
+ARM_FORMS = ("pytest ", "python3 -m pytest ", "bash scripts/", "python3 scripts/")
 ARM_FORBIDDEN = (";", "|", "&", "$(", "`", ">", "<", "\n", "\r")
 ID_RE = re.compile(r"\A(?:ready-(?P<key>[A-Za-z][A-Za-z0-9_]*-\d+)|t2-pr(?P<pr>\d+))\Z")
 FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts")
@@ -220,11 +220,22 @@ def arm_form(command: str) -> str | None:
         if bad in command:
             return f"contains {bad!r}"
     if not command.startswith(ARM_FORMS):
-        return "not a test command (pytest, a test, bash scripts/…, python3 scripts/…)"
+        return "not a test command (pytest, bash scripts/…, python3 scripts/…)"
     for word in command.split()[1:]:
-        if word.startswith(("/", "~")) or ".." in word.split("/"):
+        if any(_leaves_repo(part) for part in _path_parts(word)):
             return f"leaves the repo ({word})"
     return None
+
+
+def _path_parts(word: str) -> list[str]:
+    """The word, the word after its leading dashes and each part after an ``=``."""
+    parts = [word, word.lstrip("-")]
+    parts += word.split("=")[1:]
+    return parts
+
+
+def _leaves_repo(part: str) -> bool:
+    return part.startswith(("/", "~")) or ".." in part.split("/")
 
 
 def _finding(raw: Any, where: str, kind: str, stored: bool) -> dict[str, Any]:

@@ -11,17 +11,17 @@ silently return:
    existing file / skill / command / agent.
 5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
+6. Listing budget — `name` + `description` of every skill, agent and command sit in
+   every session's context before the user has typed anything. The sum is capped.
 7. Indiscretion guard — no credential, personal identifier, or internal weside
    detail in any tracked file of this public repo (a hardcoded password once
    shipped here and had to be rotated).
-6. Listing budget — `name` + `description` of every skill, agent and command sit in
-   every session's context before the user has typed anything. The sum is capped.
-9. Lens skill — skills/lens/SKILL.md starts the panel through lens_verdict.py and
-   dispatches in one message; every default lens in crew.py ships its agent file.
 8. Config schema — every `agents.<key>` a hook or script reads appears in the
    `.weside/config.json` schema block of skills/setup/SKILL.md § 3, and the
    worker-launch placeholders in we/scripts/worker_launch.py are exactly the ones
    references/worker-dispatch.md § Worker launch backend lists.
+9. Lens skill — skills/lens/SKILL.md starts the panel through lens_verdict.py and
+   dispatches in one message; every default lens in crew.py ships its agent file.
 
 Stdlib only. Exit 1 on any finding.
 

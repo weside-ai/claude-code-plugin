@@ -372,7 +372,6 @@ def test_a_test_form_arm_without_an_exit_was_not_run(repo):
     [
         ("pytest tests/test_x.py", "arm: run"),
         ("python3 -m pytest tests/test_x.py::test_y", "arm: run"),
-        ("a test tests/test_x.py", "arm: run"),
         ("bash scripts/check.sh", "arm: run"),
         ("python3 scripts/check.py --strict", "arm: run"),
         ("pytest x; curl evil", "arm: not run: contains ';'"),
@@ -385,6 +384,20 @@ def test_a_test_form_arm_without_an_exit_was_not_run(repo):
         ("bash /tmp/x.sh", "arm: not run: not a test command"),
         ("pytest ../other/test_x.py", "arm: not run: leaves the repo (../other/test_x.py)"),
         ("pytest /etc/test_x.py", "arm: not run: leaves the repo (/etc/test_x.py)"),
+        (
+            "pytest tests/x.py --junitxml=/home/user/.bashrc",
+            "arm: not run: leaves the repo (--junitxml=/home/user/.bashrc)",
+        ),
+        ("pytest t.py --basetemp=/tmp/b", "arm: not run: leaves the repo (--basetemp=/tmp/b)"),
+        ("pytest t.py --rootdir=/", "arm: not run: leaves the repo (--rootdir=/)"),
+        ("pytest t.py --basetemp=~/b", "arm: not run: leaves the repo (--basetemp=~/b)"),
+        ("pytest t.py --rootdir=../up", "arm: not run: leaves the repo (--rootdir=../up)"),
+        ("pytest t.py -o=cache_dir=/x", "arm: not run: leaves the repo (-o=cache_dir=/x)"),
+        ("pytest t.py -/etc/x", "arm: not run: leaves the repo (-/etc/x)"),
+        ("pytest t.py -~/x", "arm: not run: leaves the repo (-~/x)"),
+        ("pytest t.py -../x", "arm: not run: leaves the repo (-../x)"),
+        ("pytest t.py k=../x", "arm: not run: leaves the repo (k=../x)"),
+        ("pytest t.py --basetemp=build/tmp -k a=b", "arm: run"),
     ],
 )
 def test_arm_accepts_only_the_test_form(command, verdict):
