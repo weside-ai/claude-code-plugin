@@ -573,7 +573,7 @@ class RoleCardTest(unittest.TestCase):
 
     def test_a_card_with_an_l0_line_copied_in_is_red(self):
         """Red arm of AC1: one L0 line pasted into the card."""
-        line = "- **Workers execute one chunk and end.** Masters and companions start them (`we-worker`); the name"
+        line = "  the worker watches it until green and ends, its starter until the merge. Masters and companions start them"
         text = self.card.replace("## You never\n", f"## You never\n\n{line}\n", 1)
         self.assertNotEqual(text, self.card)
         (self.cards / "master.md").write_text(text, encoding="utf-8")
