@@ -331,6 +331,7 @@ def test_a_role_key_without_a_card_or_a_holder_without_a_member_is_refused(
         ({"files__dod": "docs/dod.md"}, "files.dod"),
         ({"lenses__architecture__registry": "docs/registry.md"}, "lenses.architecture.registry"),
         ({"lenses__product__questions": "docs/q.md"}, "lenses.product.questions"),
+        ({"lenses__product__t2_questions": "docs/q-t2.md"}, "lenses.product.t2_questions"),
     ],
 )
 @pytest.mark.parametrize("verb", [["show"], ["lenses"], ["workplace", "ada"]])
@@ -454,14 +455,15 @@ def test_lenses_prints_a_set_in_order_with_absolute_paths(tmp_path):
         "lens": "architecture",
         "agent": "we:lens-architecture",
         "questions": None,
+        "t2_questions": None,
         "registry": str((core / "docs" / "registry.md").resolve()),
         "keeper": "otto",
         "keeper_name": "Otto",
         "sample": 5,
     }
     t2 = json.loads(run(core, "lenses", "--set", "t2").stdout)
-    assert [lens["lens"] for lens in t2] == ["architecture", "security", "premise"]
-    assert len(json.loads(run(core, "lenses").stdout)) == 5
+    assert [lens["lens"] for lens in t2] == ["product", "architecture", "acceptance"]
+    assert len(json.loads(run(core, "lenses").stdout)) == 3
 
 
 def test_is_role_reads_v2_keys_and_refuses_a_v1_key(tmp_path):
