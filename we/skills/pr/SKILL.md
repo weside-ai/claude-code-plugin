@@ -39,6 +39,6 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
    the one-way class (master § Close the run).
    A body with a `receipt red` line is not armed (`automerge_gate.py` refuses): rerun step 3 once the receipt is green.
 6. Arm the watcher as a background command: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <head>
-   --until-merged`. Whoever opens a PR watches it until the merge (L0 §Sessions). Without auto-merge it
-   ends at green with `auto-merge off`; whoever arms auto-merge later (e.g. `/we:ci-review`) re-arms it
+   --until-merged`. The watch follows L0 §Sessions (a worker until green, its starter until the merge).
+   Without auto-merge it ends at green with `auto-merge off`; whoever arms auto-merge later (e.g. `/we:ci-review`) re-arms it
    with `--until-merged`.
