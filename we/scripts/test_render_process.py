@@ -278,6 +278,20 @@ def test_the_master_card_carries_the_fence_transition_line():
     assert "While `epic.fence_confirmed` is false on the board" in card
 
 
+def test_the_master_card_carries_the_effort_rule_and_the_epic_update():
+    card = rp.render_card(generic(), "master")
+    for phrase in (
+        "do it inline when it is a handful of tool calls",
+        "use a read-only\n  subagent for a wide read or a review",
+        "give a story to one worker (the default)",
+        "two to\n  four workers only for independent chunks",
+        "Multi-agent work costs ~15\u00d7 the tokens.",
+        "After every merged story: `/we:epic` update (Updates Log, ticket mirror) before you pull"
+        " the next one.",
+    ):
+        assert phrase in card, phrase
+
+
 def _member_ws(tmp_path: Path) -> tuple[Path, dict]:
     ws = tmp_path / "ws"
     repo = crew_repo(ws)
