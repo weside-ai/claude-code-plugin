@@ -29,6 +29,12 @@ ONE_WAY = (
 DECIDED_3 = "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge."
 
 
+@pytest.fixture(autouse=True)
+def _state_dir(tmp_path, monkeypatch):
+    """Recorded extra-hook outputs go to a temp state dir, never the real home."""
+    monkeypatch.setenv("WE_STATE_DIR", str(tmp_path / "we-state"))
+
+
 def crew_repo(tmp_path: Path, data: dict | None = None) -> Path:
     repo = tmp_path / "repo"
     (repo / ".weside").mkdir(parents=True, exist_ok=True)
@@ -134,7 +140,10 @@ def test_cli_role_and_all_roles(tmp_path):
         (tmp_path / workplace).mkdir()
     full = run("--role", "master", "--from", str(repo))
     card = rp.render_card(generic(), "master")
-    assert full.returncode == 0 and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n"
+    assert (
+        full.returncode == 0
+        and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n\n{rp.POINTER}\n"
+    )
     sizes = run("--all-roles", "--from", str(repo))
     assert sizes.returncode == 0
     rows = [line.split("\t") for line in sizes.stdout.splitlines()]
@@ -293,6 +302,7 @@ def test_total_rows_carry_card_addendum_extras_and_the_role_skill(tmp_path):
             {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "printf hi"}]}]}}
         ),
     )
+    rp.card_parts(repo / ".weside" / "crew.json", crew, "machinery", "kit")  # records "hi"
     [t] = rp.total_rows(repo / ".weside" / "crew.json", crew, "machinery", tmp_path / "home")
     rows = {part: (path, n) for part, path, n in t.rows}
     assert rows["card"] == ("roles/machinery.md", len(rp.render_card(crew, "machinery")))
@@ -345,3 +355,46 @@ def test_limit_key_prefers_the_member_key():
     )
     assert rp.limit_key("specialist", "lex", {"specialist": 1}) == "specialist"
     assert rp.limit_key("master", "", {"master": 1}) == "master"
+
+
+def _hook_settings(repo: Path, *commands: str) -> None:
+    hooks = [{"type": "command", "command": c} for c in commands]
+    _write(
+        repo / ".claude" / "settings.json",
+        json.dumps({"hooks": {"SessionStart": [{"hooks": hooks}]}}),
+    )
+
+
+def test_extra_hooks_share_one_total_time_cap(tmp_path, monkeypatch):
+    """Three hooks of 0.7 s under a 1 s cap: the first runs, the one that would cross the cap
+    and the one after it are skipped, each with one line."""
+    repo, crew = _member_ws(tmp_path)
+    _hook_settings(repo, "sleep 0.7; printf one", "sleep 0.7; printf two", "printf three")
+    monkeypatch.setattr(rp, "EXTRA_HOOKS_CAP", 1, raising=False)
+    parts = rp.card_parts(repo / ".weside" / "crew.json", crew, "machinery", "kit")
+    outputs = [out for _, _, out in parts.hooks]
+    assert outputs[0] == "one"
+    assert outputs[1:] == [
+        "extra hook skipped, total cap 1 s reached: sleep 0.7; printf two",
+        "extra hook skipped, total cap 1 s reached: printf three",
+    ]
+
+
+def test_totals_never_run_extra_hooks_and_count_the_recorded_output(tmp_path):
+    repo, crew = _member_ws(tmp_path)
+    marker = tmp_path / "ran"
+    _hook_settings(repo, f"touch {marker}; printf hello")
+    path = repo / ".weside" / "crew.json"
+    [t] = rp.total_rows(path, crew, "machinery", tmp_path / "home")
+    assert not marker.exists(), "role totals ran an extra repo's hook"
+    rows = [(part, where, n) for part, where, n in t.rows]
+    assert ("extra-hooks", f"touch {marker}; printf hello", 0) in rows
+    assert ("note", "extra-hooks not run (measure only)", 0) in rows
+    rp.card_parts(path, crew, "machinery", "kit")  # what the SessionStart hook does
+    assert marker.exists()
+    marker.unlink()
+    [t] = rp.total_rows(path, crew, "machinery", tmp_path / "home")
+    assert not marker.exists()
+    rows = [(part, where, n) for part, where, n in t.rows]
+    assert ("extra-hooks", f"touch {marker}; printf hello", len("hello")) in rows
+    assert all(part != "note" for part, _, _ in rows)

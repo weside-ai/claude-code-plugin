@@ -660,9 +660,9 @@ def show(crew_path: Path, crew: dict[str, Any]) -> dict[str, Any]:
     return {"path": str(crew_path), **crew}
 
 
-def workplace_paths(crew_path: Path, crew: dict[str, Any], who: str) -> list[Path]:
-    """The member's workplace, then each extra repo, absolute; CrewError for an unknown member or
-    a directory that does not exist."""
+def _member_places(crew_path: Path, crew: dict[str, Any], who: str) -> list[tuple[str, str, Path]]:
+    """(dotted key, value as written, absolute path) for the member's workplace, then each extra
+    repo; CrewError for an unknown member."""
     found = member(crew, who)
     if found is None:
         raise CrewError(f"{crew_path}: no member {who!r}")
@@ -670,13 +670,39 @@ def workplace_paths(crew_path: Path, crew: dict[str, Any], who: str) -> list[Pat
     root = crew_path.parent.parent
     named = [(f"members.{slug}.workplace", entry.get("workplace") or ".")]
     named += [(f"members.{slug}.extra_repos", repo) for repo in entry.get("extra_repos") or []]
+    return [(dotted, value, (root / value.strip()).resolve()) for dotted, value in named]
+
+
+def workplace_paths(crew_path: Path, crew: dict[str, Any], who: str) -> list[Path]:
+    """The member's workplace, then each extra repo, absolute; CrewError for an unknown member or
+    a directory that does not exist."""
     paths = []
-    for dotted, value in named:
-        place = (root / value.strip()).resolve()
+    for dotted, value, place in _member_places(crew_path, crew, who):
         if not place.is_dir():
             raise CrewError(f"{crew_path}: {dotted} {value!r} is no directory ({place})")
         paths.append(place)
     return paths
+
+
+def workplace_path(crew_path: Path, crew: dict[str, Any], who: str) -> Path:
+    """The member's workplace alone, absolute; CrewError for an unknown member or a workplace that
+    does not exist (its extra repos are not looked at)."""
+    dotted, value, place = _member_places(crew_path, crew, who)[0]
+    if not place.is_dir():
+        raise CrewError(f"{crew_path}: {dotted} {value!r} is no directory ({place})")
+    return place
+
+
+def extra_repos(crew_path: Path, crew: dict[str, Any], who: str) -> tuple[list[Path], list[str]]:
+    """(the member's extra repos that exist here, absolute; the values of those that do not, as
+    written in the crew); CrewError for an unknown member."""
+    present, missing = [], []
+    for _, value, place in _member_places(crew_path, crew, who)[1:]:
+        if place.is_dir():
+            present.append(place)
+        else:
+            missing.append(value)
+    return present, missing
 
 
 def lenses(

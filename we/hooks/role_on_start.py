@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 """SessionStart hook (every source: startup, resume, clear, compact): this session's role card (L1).
 
-Only in a repo with a crew (``scripts/crew.py find``); no crew, a crew ``crew.py`` refuses (the L0
-hook ``process_on_start.py`` already names that fault) or a session without a role
-(``crew.role_of_session`` → None) → nothing, exit 0. Otherwise it prints, in this order, what
+Only in a repo with a crew (``scripts/crew.py find``); no crew or a crew ``crew.py`` refuses (the
+L0 hook ``process_on_start.py`` already names that fault) → nothing, exit 0. A session without a
+role (``crew.role_of_session`` → None) gets the one line ``render_process.POINTER``, the only
+pointer to ``references/working-mode.md``. Otherwise it prints, in this order, what
 ``scripts/render_process.py`` composes (``card_parts``, ``compose``):
 
 1. the role card ``roles/<role>.md`` (a held role key, ``specialist``, ``master`` or ``worker``);
 2. the repo addendum: a pinned member's ``<workplace>/.weside/roles/<slug>.md``, an unpinned
    master's or worker's ``<crew repo>/.weside/roles/<role>.md``, when present;
-3. per extra repo of the member (``crew.workplace_paths`` after the first): its ``AGENTS.md`` up to
-   the first level-2 heading;
-4. per extra repo: the output of each ``type: command`` SessionStart hook of its
+3. the notes: per extra repo of the member that does not exist here, ``extra repo <value> not
+   found, skipped`` (``crew.extra_repos``; the card never depends on an extra repo), then
+   ``render_process.POINTER``;
+4. per extra repo that exists: its ``AGENTS.md`` up to the first level-2 heading;
+5. per extra repo: the output of each ``type: command`` SessionStart hook of its
    ``.claude/settings.json`` whose matcher takes this source, run there with this hook's input
-   (timeout ``render_process.HOOK_TIMEOUT`` s; a failure is the one line ``extra hook failed:
-   <command>``).
+   (timeout ``render_process.HOOK_TIMEOUT`` s each, ``render_process.EXTRA_HOOKS_CAP`` s for all
+   together; a failure is the one line ``extra hook failed: <command>``, a hook past the cap
+   ``extra hook skipped, total cap N s reached: <command>``). Each output is recorded for the
+   role totals, which never run a hook.
 
 The whole stays within ``render_process.BUDGET`` (Claude Code previews a longer hook output):
-hook output is cut first, then head lines, each with a line naming the full source. Card plus
-addendum over the budget → nothing printed, one stderr line naming the addendum, exit 1 (the
-budget gate keeps a repo from shipping that). Parts 1 to 3 do not read ``source``, so they are
-byte-identical on every source; part 4 may differ by time and matcher.
+hook output is cut first, then head lines, each with a line naming the full source. Card,
+addendum and notes over the budget → nothing printed, one stderr line naming the addendum, exit 1
+(the budget gate keeps a repo from shipping that). Parts 1 to 4 do not read ``source``, so they
+are byte-identical on every source; part 5 may differ by time and matcher.
 """
 
 from __future__ import annotations
@@ -48,7 +53,7 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
         return None, None
     role = crewlib.role_of_session(crew, env, hook_input)
     if role is None:
-        return None, None
+        return render_process.POINTER, None
     kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
     found = crewlib.member(crew, pin) if pin and kind != "worker" else None
     slug = found[0] if found else ""

@@ -401,6 +401,18 @@ def test_workplace_prints_the_start_repo_then_the_extra_repos(tmp_path):
     assert gone.returncode == 1 and "members.ada.workplace" in gone.stderr
 
 
+def test_extra_repos_splits_present_from_missing_and_workplace_path_ignores_them(tmp_path):
+    data = with_(members__ada__workplace="../infra", members__ada__extra_repos=[".", "../gone"])
+    core, _ = workspace(tmp_path, data)
+    (tmp_path / "infra").mkdir()
+    path = core / ".weside" / "crew.json"
+    loaded = crew.load(path)
+    assert crew.extra_repos(path, loaded, "ada") == ([core.resolve()], ["../gone"])
+    assert crew.workplace_path(path, loaded, "ada") == (tmp_path / "infra").resolve()
+    with pytest.raises(crew.CrewError, match=r"members\.ada\.extra_repos '\.\./gone'"):
+        crew.workplace_paths(path, loaded, "ada")
+
+
 def test_lenses_prints_a_set_in_order_with_absolute_paths(tmp_path):
     data = with_(
         lenses__architecture__registry="docs/registry.md", lenses__architecture__keeper="otto"

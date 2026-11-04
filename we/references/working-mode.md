@@ -1,6 +1,6 @@
 ---
 name: working-mode
-description: How a crew of companions and sessions works with Claude Code — roles, masters and workers, build masters, routing a story, questions and milestones, done, ticketing, the crew file. The SessionStart hook points every session of a repo with a crew here.
+description: How a crew of companions and sessions works with Claude Code — roles, masters and workers, build masters, routing a story, questions and milestones, done, ticketing, the crew file. The SessionStart hook `role_on_start.py` points every session of a repo with a crew here.
 ---
 
 # Working mode

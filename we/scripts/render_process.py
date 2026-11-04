@@ -39,7 +39,8 @@ and the hook cannot drift.
 prints around its parts: headers, separators, cut lines; with the part rows below it sums to that
 hook's whole output), ``card``, ``addendum`` (the repo addendum ``.weside/roles/<slug>.md``),
 ``extra-head`` (each extra repo's ``AGENTS.md`` head), ``extra-hooks`` (each extra repo's
-SessionStart command output, run as the hook runs it, as printed after the cut), ``role-skill``
+SessionStart command output as the hook last recorded it, as printed after the cut; never run here,
+a command without a record counts 0 and adds the row ``note`` ``NOT_RUN``), ``role-skill``
 (a pinned member's role skill, ``crew.skill_path``: ``materialize_on_start.py`` makes that
 session invoke or read it at start), ``instructions`` (each
 ``AGENTS.md``, ``CLAUDE.md``, ``CLAUDE.local.md`` from the workplace up through every ancestor,
@@ -53,11 +54,13 @@ instructions, a companion's identity.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -71,6 +74,8 @@ import rule_loading  # noqa: E402
 
 PROCESS = _HERE.parent / "process"
 ROLES = _HERE.parent / "roles"
+REFERENCE = _HERE.parent / "references" / "working-mode.md"
+POINTER = f"Read {REFERENCE} before routing, starting a session or moving a ticket."
 BUDGET = 9_500
 CARD_RAW_BUDGET = 5_500
 ADDENDUM_BUDGET = 3_500
@@ -82,6 +87,8 @@ CARD_HEADINGS = (
     "## You wait on / others wait on you",
 )
 HOOK_TIMEOUT = 10
+EXTRA_HOOKS_CAP = 15  # seconds, all extra repos' SessionStart hooks of one session together
+NOT_RUN = "extra-hooks not run (measure only)"
 EXTRA_KINDS = ("master", "worker", "specialist")
 ROLE_TITLES = {
     "product": "the product owner",
@@ -230,6 +237,7 @@ class Parts(NamedTuple):
     addendum: tuple[Path, str] | None
     heads: list[tuple[Path, str]]  # (extra repo, AGENTS.md head lines)
     hooks: list[tuple[Path, str, str]]  # (extra repo, command, output or failure line)
+    notes: tuple[str, ...] = ()  # one line each, after card and addendum, never cut
 
 
 def card_headings(text: str) -> list[str]:
@@ -245,9 +253,7 @@ def addendum_path(crew_path: Path, crew: dict[str, Any], role: str, slug: str) -
     """A pinned member's ``<workplace>/.weside/roles/<slug>.md``; an unpinned session's
     ``<crew repo>/.weside/roles/<role>.md``."""
     if slug:
-        return (
-            crewlib.workplace_paths(crew_path, crew, slug)[0] / ".weside" / "roles" / f"{slug}.md"
-        )
+        return crewlib.workplace_path(crew_path, crew, slug) / ".weside" / "roles" / f"{slug}.md"
     return crew_path.parent.parent.resolve() / ".weside" / "roles" / f"{role}.md"
 
 
@@ -292,9 +298,53 @@ def session_start_commands(repo: Path, source: str) -> list[str]:
     return commands
 
 
-def run_extra_hook(repo: Path, command: str, hook_input: dict[str, Any]) -> str:
+def _record_path(repo: Path, command: str) -> Path:
+    """Where the last printed output of ``command`` in ``repo`` is kept:
+    ``$WE_STATE_DIR/extra-hooks/<hash>.txt`` (default ``~/.claude/we-state``)."""
+    state = os.environ.get("WE_STATE_DIR") or str(Path.home() / ".claude" / "we-state")
+    key = hashlib.sha256(f"{repo}\0{command}".encode()).hexdigest()[:24]
+    return Path(state).expanduser() / "extra-hooks" / f"{key}.txt"
+
+
+def recorded_output(repo: Path, command: str) -> str | None:
+    """The output ``command`` printed in ``repo`` at its last run by the hook, or None."""
+    try:
+        return _record_path(repo, command).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _record(repo: Path, command: str, output: str) -> None:
+    path = _record_path(repo, command)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(output, encoding="utf-8")
+    except OSError:
+        pass  # a measurement aid: the hook output does not depend on it
+
+
+def run_extra_hook(
+    repo: Path,
+    command: str,
+    hook_input: dict[str, Any],
+    timeout: float = HOOK_TIMEOUT,
+    timeout_line: str | None = None,
+) -> str:
     """The command's context as Claude Code would take it in ``repo`` (``additionalContext`` of
-    a JSON answer, else stdout), or the line ``extra hook failed: <command>``."""
+    a JSON answer, else stdout), or the line ``extra hook failed: <command>`` (``timeout_line``,
+    when given, on a timeout). What it returns is recorded for ``recorded_output``."""
+    output = _run_extra_hook(repo, command, hook_input, timeout, timeout_line)
+    _record(repo, command, output)
+    return output
+
+
+def _run_extra_hook(
+    repo: Path,
+    command: str,
+    hook_input: dict[str, Any],
+    timeout: float,
+    timeout_line: str | None,
+) -> str:
     payload = {**hook_input, "cwd": str(repo)}
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
     try:
@@ -305,11 +355,13 @@ def run_extra_hook(repo: Path, command: str, hook_input: dict[str, Any]) -> str:
             input=json.dumps(payload),
             capture_output=True,
             text=True,
-            timeout=HOOK_TIMEOUT,
+            timeout=timeout,
             env=env,
             check=False,
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired:
+        return timeout_line or f"extra hook failed: {command}"
+    except OSError:
         return f"extra hook failed: {command}"
     if done.returncode != 0:
         return f"extra hook failed: {command}"
@@ -335,21 +387,43 @@ def card_parts(
     run_hooks: bool = True,
 ) -> Parts:
     """The parts for a session of ``role`` (``slug``: the pinned member, empty for an unpinned
-    master or worker). Extra repos are the member's ``workplace_paths`` after the first; their
-    hooks run only with ``run_hooks``. OSError and CrewError propagate."""
+    master or worker). Extra repos are the member's ``crew.extra_repos`` that exist here; a
+    missing one is the note ``extra repo <value> not found, skipped``, so the card never depends
+    on an extra repo. The notes end with ``POINTER``. Hooks run only with ``run_hooks``, all of
+    them within ``EXTRA_HOOKS_CAP`` seconds together (a hook past it: ``extra hook skipped, total
+    cap N s reached: <command>``); without, ``hooks`` holds the ``recorded_output`` of each
+    command that has one. OSError and CrewError (unknown
+    member, missing workplace) propagate."""
     card = render_card(crew, role)
     path = addendum_path(crew_path, crew, role, slug)
     addendum = (path, path.read_text(encoding="utf-8").strip("\n")) if path.is_file() else None
-    extras = crewlib.workplace_paths(crew_path, crew, slug)[1:] if slug else []
+    extras, missing = crewlib.extra_repos(crew_path, crew, slug) if slug else ([], [])
+    notes = [f"extra repo {value} not found, skipped" for value in missing]
     heads = [(repo, head) for repo in extras if (head := agents_head(repo))]
     hooks: list[tuple[Path, str, str]] = []
+    hook_input = hook_input or {}
+    source = str(hook_input.get("source") or "startup")
+    commands = [
+        (repo, command) for repo in extras for command in session_start_commands(repo, source)
+    ]
     if run_hooks:
-        hook_input = hook_input or {}
-        source = str(hook_input.get("source") or "startup")
-        for repo in extras:
-            for command in session_start_commands(repo, source):
-                hooks.append((repo, command, run_extra_hook(repo, command, hook_input)))
-    return Parts(role, card, addendum, heads, hooks)
+        deadline = time.monotonic() + EXTRA_HOOKS_CAP
+        for repo, command in commands:
+            capped = f"extra hook skipped, total cap {EXTRA_HOOKS_CAP} s reached: {command}"
+            left = deadline - time.monotonic()
+            if left <= 0:
+                hooks.append((repo, command, capped))
+                continue
+            timeout = min(HOOK_TIMEOUT, left)
+            line = capped if timeout < HOOK_TIMEOUT else None
+            hooks.append((repo, command, run_extra_hook(repo, command, hook_input, timeout, line)))
+    else:
+        for repo, command in commands:
+            recorded = recorded_output(repo, command)
+            if recorded is not None:
+                hooks.append((repo, command, recorded))
+    notes.append(POINTER)
+    return Parts(role, card, addendum, heads, hooks, tuple(notes))
 
 
 def _fit(body: str, room: int, marker: str) -> str | None:
@@ -376,6 +450,8 @@ def compose(parts: Parts, budget: int = BUDGET) -> tuple[str, dict[str, int]]:
         path, text = parts.addendum
         blocks.append(f"Repo addendum ({path}):\n{text}")
         sizes["addendum"] = len(text)
+    if parts.notes:
+        blocks.append("\n".join(parts.notes))
     base = "\n\n".join(blocks)
     if len(base) > budget:
         where = parts.addendum[0] if parts.addendum else ROLES / f"{parts.role}.md"
@@ -521,8 +597,12 @@ def total_rows(
         if not places:
             continue
         work, extras = places[0], places[1:]
-        parts = card_parts(crew_path, crew, role, slug, {"source": "startup", "cwd": str(work)})
+        hook_input = {"source": "startup", "cwd": str(work)}
+        parts = card_parts(crew_path, crew, role, slug, hook_input, run_hooks=False)
         text, sizes = compose(parts)
+        pairs = [(repo, c) for repo in extras for c in session_start_commands(repo, "startup")]
+        commands = [c for _, c in pairs]
+        unrecorded = any(recorded_output(repo, c) is None for repo, c in pairs)
         rows: list[tuple[str, str, int]] = [
             (
                 "L0",
@@ -537,12 +617,10 @@ def total_rows(
                 sizes["addendum"],
             ),
             ("extra-head", ", ".join(str(r) for r, _ in parts.heads) or "-", sizes["extra-head"]),
-            (
-                "extra-hooks",
-                ", ".join(c for _, c, _ in parts.hooks) or "-",
-                sizes["extra-hooks"],
-            ),
+            ("extra-hooks", ", ".join(commands) or "-", sizes["extra-hooks"]),
         ]
+        if unrecorded:
+            rows.append(("note", NOT_RUN, 0))
         skill = None
         if kind == "named":
             name = str(crewlib.members(crew)[slug].get("name") or slug)

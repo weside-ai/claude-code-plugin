@@ -100,12 +100,14 @@ def test_each_session_kind_gets_its_card(tmp_path):
         assert text is not None and text.startswith(head), env
 
 
-def test_nothing_without_crew_with_a_refused_crew_or_without_a_role(tmp_path):
+def test_nothing_without_or_with_a_refused_crew_only_the_pointer_without_a_role(tmp_path):
     bare = tmp_path / "bare"
     subprocess.run(["git", "init", "-q", str(bare)], check=True)
     assert context(run(tmp_path, bare, {"WE_ROLE": "master"})) is None
     repo, _ = workspace(tmp_path)
-    assert context(run(tmp_path, repo, {})) is None, "no WE_ROLE and no pin: role none"
+    pointer = context(run(tmp_path, repo, {}))
+    assert pointer is not None and pointer.startswith("Read "), "no role: only the pointer"
+    assert "# Role card" not in pointer
     (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 1, "roles": {}}))
     done = run(tmp_path, repo, {"WE_ROLE": "master"})
     assert context(done) is None and done.stderr == ""
@@ -119,3 +121,33 @@ def test_card_plus_addendum_over_the_budget_prints_nothing_and_names_the_addendu
     assert done.returncode == 1 and done.stdout == ""
     assert len(done.stderr.strip().splitlines()) == 1
     assert str(addendum.resolve()) in done.stderr
+
+
+def test_a_missing_extra_repo_is_skipped_by_name_and_the_card_still_loads(tmp_path):
+    """One of the member's extra repos is not cloned here: the card, the addendum and the present
+    extra repo still load on every source, plus one line naming the missing repo."""
+    data = json.loads(GENERIC.read_text())
+    data["members"]["kit"]["extra_repos"] = [".", "../absent"]
+    _, infra = workspace(tmp_path, data)
+    for source in SOURCES:
+        text = context(run(tmp_path, infra, {"WESIDE_COMPANION": "Kit"}, source=source))
+        assert text is not None, source
+        assert text.startswith("# Role card: machinery") and ADDENDUM in text, source
+        assert "extra repo ../absent not found, skipped" in text, source
+        assert "Head line one." in text and len(text) <= render_process.BUDGET, source
+
+
+def test_every_crew_session_is_pointed_at_the_working_mode_reference(tmp_path):
+    repo, infra = workspace(tmp_path)
+    reference = (HOOK.parent.parent / "references" / "working-mode.md").resolve()
+    assert reference.is_file()
+    line = f"Read {reference} before routing, starting a session or moving a ticket."
+    for cwd, env in (
+        (infra, {"WESIDE_COMPANION": "Kit"}),
+        (repo, {"WE_ROLE": "master"}),
+        (repo, {"WE_ROLE": "worker"}),
+        (repo, {}),
+    ):
+        text = context(run(tmp_path, cwd, env))
+        assert text is not None and line in text.split("\n"), env
+        assert len(text) <= render_process.BUDGET, env
