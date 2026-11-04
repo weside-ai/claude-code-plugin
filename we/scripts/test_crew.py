@@ -287,7 +287,7 @@ UNKNOWN_KEY = Path(__file__).resolve().parent / "fixtures" / "crew-v2-unknown-ke
 UNKNOWN_IN_FILE_ORDER = [
     "limitz",
     "limits.masterz",
-    "roles.security",
+    "roles.auditor",
     "members.ada.titel",
     "fallback.securty",
     "lenses.product.keepr",
@@ -305,7 +305,7 @@ def warning(core: Path, dotted: str) -> str:
         ({"limitz": {}}, "limitz"),
         ({"limits__masterz": 3}, "limits.masterz"),
         ({"members__ada__titel": "x"}, "members.ada.titel"),
-        ({"roles__security": "ada"}, "roles.security"),
+        ({"roles__auditor": "ada"}, "roles.auditor"),
         ({"fallback__securty": "human_bundle"}, "fallback.securty"),
         ({"lenses__product__keepr": "ada"}, "lenses.product.keepr"),
         ({"board__states__parked": "Parked"}, "board.states.parked"),
@@ -338,7 +338,7 @@ def test_every_unknown_key_warns_in_file_order_and_the_known_ones_still_hold(tmp
     shown = json.loads(out.stdout)
     assert shown["unknown_keys"] == UNKNOWN_IN_FILE_ORDER
     assert shown["limits"] == crew.DEFAULTS["limits"] and "limitz" not in shown
-    assert "security" not in shown["roles"] and shown["fallback"] == {}
+    assert "auditor" not in shown["roles"] and shown["fallback"] == {}
     assert shown["members"]["ada"] == {
         "name": "Ada",
         "title": "Product Owner",

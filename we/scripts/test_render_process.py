@@ -434,7 +434,7 @@ def test_unknown_keys_render_one_notice_line_first(tmp_path, kind, capsys):
     text = rp.render_l0(crew, kind)
     first, rest = text.split("\n\n", 1)
     assert first == (
-        "crew.json: unknown keys ignored: limitz, limits.masterz, roles.security, "
+        "crew.json: unknown keys ignored: limitz, limits.masterz, roles.auditor, "
         "members.ada.titel, fallback.securty, lenses.product.keepr"
     )
     assert rest == rp.render(_without_notice_token(kind), crew)
