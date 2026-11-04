@@ -158,12 +158,12 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
 
 
 WORKER_ENDS = (
-    "- **Workers execute one chunk and end**; a PR chunk ends at its merge or a `user merge` {label},\n"
-    "  and its opener watches it until then."
+    "- **Workers execute one chunk and end**; a PR chunk ends at its merge or a `user merge` {label};\n"
+    "  the worker watches it until green, its starter until the merge."
 )
 REARM = (
-    "4. Also after a compaction: re-arm `watch-pr-checks.sh <PR> --until-merged` for every open PR"
-    " of yours.\n"
+    "4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4"
+    " for every open PR you own.\n"
 )
 
 
