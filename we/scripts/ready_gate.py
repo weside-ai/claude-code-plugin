@@ -175,7 +175,7 @@ def _top_level(text: str) -> list[tuple[int, int]]:
         if ch == "`":
             run = len(text[i:]) - len(text[i:].lstrip("`"))
             close = text.find("`" * run, i + run)
-            i = (close + run) if close >= 0 else len(text)
+            i = (close + run) if close >= 0 else i + run  # unclosed run: literal (CommonMark)
             continue
         if ch == "[":
             if depth == 0:
@@ -197,7 +197,7 @@ def _split_top(body: str, sep: str) -> list[str]:
         if ch == "`":
             run = len(body[i:]) - len(body[i:].lstrip("`"))
             close = body.find("`" * run, i + run)
-            i = (close + run) if close >= 0 else len(body)
+            i = (close + run) if close >= 0 else i + run  # unclosed run: literal (CommonMark)
             continue
         if ch == "[":
             depth += 1
