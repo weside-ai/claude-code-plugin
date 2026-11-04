@@ -1,0 +1,12 @@
+# The merge brake's own files (the [brake-change] section of .weside/risk-paths, and this file):
+# a change needs the owner's review once the ruleset requires review from code owners.
+/.github/CODEOWNERS                @fbiebl
+/.weside/risk-paths                @fbiebl
+/we/hooks/automerge_gate.py        @fbiebl
+/we/hooks/hooks.json               @fbiebl
+/we/hooks/verification_gate.py     @fbiebl
+/we/scripts/ready_gate.py          @fbiebl
+/we/scripts/lens_verdict.py        @fbiebl
+/we/scripts/board_freeze.py        @fbiebl
+/we/scripts/risk_paths.py          @fbiebl
+/we/scripts/worker_launch.py       @fbiebl

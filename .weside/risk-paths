@@ -1,0 +1,16 @@
+# Risk rules of this repo, read by we/scripts/risk_paths.py from origin/main only.
+# A PR touching a [brake-change] path is `T2 one-way brake-change`: the merge hook
+# (we/hooks/automerge_gate.py) refuses every merge and arm of it; the owner merges by hand.
+# Grammar: `[section]` and `path <glob>` lines (risk_paths.py's docstring).
+
+[brake-change]
+path .github/CODEOWNERS
+path .weside/risk-paths
+path we/hooks/automerge_gate.py
+path we/hooks/hooks.json
+path we/hooks/verification_gate.py
+path we/scripts/ready_gate.py
+path we/scripts/lens_verdict.py
+path we/scripts/board_freeze.py
+path we/scripts/risk_paths.py
+path we/scripts/worker_launch.py
