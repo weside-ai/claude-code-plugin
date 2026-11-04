@@ -188,6 +188,19 @@ CASES = [
     ("R1 the refiner writes draft", PLAN_STORY, r"status: approved", r"`status: draft`"),
     ("R2 goals bound in the crew", SETUP, r"Skip → no goal check", r"bind `files\.goals`"),
     ("R2 no crew, no goal check", SETUP, None, r"the goal check needs a crew"),
+    # watch rows: the PR watcher rule has one owner, L0 §Sessions
+    (
+        "W1 pr watch follows the L0",
+        PR,
+        r"Whoever opens a PR watches it until the merge",
+        r"The watch follows L0 §Sessions",
+    ),
+    (
+        "W2 master arms after the worker's green",
+        MASTER,
+        r"the worker owns the watch and you arm none",
+        r"watches until green \(L0 §Sessions\), then you arm it `--until-merged`",
+    ),
 ]
 
 
