@@ -146,6 +146,9 @@ class MaterializeOnStartTest(unittest.TestCase):
         self.assertNotIn("{{", filled)
         self.assertIn("`.weside/roles/ada.md`", filled)
         self.assertIn("with the Read tool", filled)
+        # the start hook prints the addendum only; the files it names load when their step comes up
+        self.assertIn("Read each file it names when the step it names comes up.", filled)
+        self.assertNotIn("already in", filled)
         project = self.home / "project"
         skill = project / ".claude" / "skills" / "weside-ada" / "SKILL.md"
         skill.parent.mkdir(parents=True)
