@@ -162,7 +162,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
    relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
    spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
-   `/we:pr` step 4. Move every landed story to In Review and verify.
+   `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Move every landed story to In Review and verify.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed, and next to it one
    `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list

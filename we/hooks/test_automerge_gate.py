@@ -51,14 +51,18 @@ class FakeGh:
         rules: list[dict] | None = None,
         protection: list[str] | None = None,
         rules_fail: bool = False,
+        body: str = "",
     ):
         self.runs, self.comments, self.fail, self.calls = runs, list(comments), fail, []
+        self.body = body
         self.rules, self.protection, self.rules_fail = rules or [], protection, rules_fail
 
     def __call__(self, args: list[str], _cwd: str | None) -> str | None:
         self.calls.append(args)
         if self.fail:
             return None
+        if args[:2] == ["pr", "view"] and "number,body" in args:
+            return json.dumps({"number": 7, "body": self.body})
         if args[:2] == ["pr", "view"] and "comments" in args:
             return json.dumps({"comments": [{"body": b} for b in self.comments]})
         if args[:2] == ["pr", "view"]:
@@ -259,3 +263,65 @@ def test_hook_prints_a_deny(repo: Path, monkeypatch, capsys) -> None:
     gate.main()
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# The pre-merge receipt brake (`verification.pre_merge_receipt`).
+
+RED = "## Verification\n\n- **Oracle:** cli\n\nreceipt red: `/c/r/x`\n"
+
+
+def receipt_repo(repo: Path) -> Path:
+    (repo / ".weside").mkdir(exist_ok=True)
+    (repo / ".weside" / "config.json").write_text(
+        json.dumps({"verification": {"pre_merge_receipt": "bash receipt.sh {KEY}"}})
+    )
+    return repo
+
+
+@pytest.mark.parametrize(
+    "line", ["receipt red: `/c/r/x`", "receipt red (not run: exit 3: backend down)"]
+)
+def test_a_red_receipt_refuses_the_arm_naming_the_line(repo: Path, monkeypatch, line: str) -> None:
+    fake = FakeGh([run()], body=f"## Summary\n\n{line}\n")
+    reason = refuse(receipt_repo(repo), ARM, fake, monkeypatch)
+    assert reason is not None
+    assert "receipt red on #7: run the pre-merge receipt green" in reason
+    assert line in reason
+
+
+def test_a_red_receipt_refuses_even_without_a_codex_workflow(repo: Path, monkeypatch) -> None:
+    (repo / ".github" / "workflows" / "codex.yml").unlink()
+    reason = refuse(receipt_repo(repo), ARM, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "receipt red on #7" in reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "receipt green: `/c/r/x`\n",
+        "receipt green: `/c/r/x`\nreceipt not run on DEV: no DEV slot dev-usd-1\n",
+        "## Summary\n\nNo receipt line.\n",
+        "The last run said receipt red, fixed since.\n> receipt red: quoted\n",
+        "```\nreceipt red: `/c/r/x`\n```\n",
+    ],
+)
+def test_no_red_line_arms_as_today(repo: Path, monkeypatch, body: str) -> None:
+    assert refuse(receipt_repo(repo), ARM, FakeGh([run()], body=body), monkeypatch) is None
+
+
+def test_without_the_config_key_the_body_is_not_read(repo: Path, monkeypatch) -> None:
+    fake = FakeGh([run()], body=RED)
+    assert refuse(repo, ARM, fake, monkeypatch) is None
+    assert not any("number,body" in call for call in fake.calls), fake.calls
+
+
+def test_a_gh_failure_on_the_receipt_read_fails_open(repo: Path, monkeypatch) -> None:
+    """Stated in the docstring: a brake against slips, not a barrier."""
+    assert (
+        refuse(receipt_repo(repo), ARM, FakeGh([run()], body=RED, fail=True), monkeypatch) is None
+    )
+
+
+def test_a_red_receipt_does_not_block_a_disarm(repo: Path, monkeypatch) -> None:
+    disarm = "gh pr merge 7 --disable-auto"
+    assert refuse(receipt_repo(repo), disarm, FakeGh([run()], body=RED), monkeypatch) is None
