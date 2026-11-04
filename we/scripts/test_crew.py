@@ -561,3 +561,25 @@ def test_at_reads_only_the_root_itself(tmp_path):
     assert crew.at(core) == core / ".weside" / "crew.json"
     assert crew.at(biz) == (core / ".weside" / "crew.json").resolve()
     assert crew.at(core / ".weside") is None
+
+
+ROLE_CARDS = Path(__file__).resolve().parent.parent / "roles"
+
+
+def card_stems(cards: Path = ROLE_CARDS) -> set[str]:
+    return {p.stem for p in cards.glob("*.md")}
+
+
+def test_one_role_card_per_role_key_and_session_kind():
+    assert card_stems() == set(crew.ROLE_KEYS) | {"master", "worker", "specialist"}
+
+
+def test_an_extra_card_or_a_missing_key_breaks_the_match(tmp_path):
+    """Red arm of the card set: an eleventh card file, and a card set missing one key."""
+    shutil.copytree(ROLE_CARDS, tmp_path / "roles")
+    (tmp_path / "roles" / "auditor.md").write_text("# Role card: auditor\n")
+    expected = set(crew.ROLE_KEYS) | {"master", "worker", "specialist"}
+    assert card_stems(tmp_path / "roles") != expected
+    (tmp_path / "roles" / "auditor.md").unlink()
+    (tmp_path / "roles" / "hr.md").unlink()
+    assert card_stems(tmp_path / "roles") != expected

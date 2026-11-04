@@ -4,6 +4,7 @@ and the ``--serves`` predicate."""
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -129,13 +130,16 @@ def test_worker_form_is_short_and_carries_the_crew_values():
 
 def test_cli_role_and_all_roles(tmp_path):
     repo = crew_repo(tmp_path)
+    for workplace in ("biz", "infra"):
+        (tmp_path / workplace).mkdir()
     full = run("--role", "master", "--from", str(repo))
-    assert full.returncode == 0 and full.stdout == rp.render_l0(generic())
+    card = rp.render_card(generic(), "master")
+    assert full.returncode == 0 and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n"
     sizes = run("--all-roles", "--from", str(repo))
     assert sizes.returncode == 0
-    roles = [line.split("\t")[0] for line in sizes.stdout.splitlines()]
-    assert roles == list(rp.all_roles())
-    assert all(line.endswith("\tok") for line in sizes.stdout.splitlines())
+    rows = [line.split("\t") for line in sizes.stdout.splitlines()]
+    assert [r[0] for r in rows] == list(rp.all_roles())
+    assert all(r[3] == "ok" and int(r[2]) > 0 for r in rows)
 
 
 def test_serves_needs_a_crew_that_loads(tmp_path):
@@ -185,13 +189,18 @@ def test_total_counts_the_instruction_layer_of_a_role(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     crew = crewlib.load(core / ".weside" / "crew.json")
-    [(label, rows, total)] = rp.total_rows(core / ".weside" / "crew.json", crew, "machinery", home)
-    assert label == "machinery Kit"
+    [(label, slug, rows, total)] = rp.total_rows(
+        core / ".weside" / "crew.json", crew, "machinery", home
+    )
+    assert (label, slug) == ("machinery Kit", "kit")
     parts = {(part, Path(path).name) for part, path, _ in rows}
     assert ("extra", "AGENTS.md") not in parts and ("rules", "c.md") not in parts
     assert ("rules-any-file", "d.md") in parts and ("extra", "CLAUDE.md") in parts
     l0 = len(rp.render_l0(crew))
-    hook = {p: n for p, _, n in rows}["plugin-hook"]
+    sizes = {p: n for p, _, n in rows}
+    hook = sum(sizes[p] for p in ("plugin-hook", "card", "addendum", "extra-head", "extra-hooks"))
+    assert hook == len(rp.session_text(core / ".weside" / "crew.json", crew, "machinery", "kit"))
+    assert sizes["extra-head"] == len("core agents, never counted for an extra repo")
     assert total == counted + l0 + hook
     assert scoped and loose  # neither is in the sum
     out = run("--role", "machinery", "--total", "--from", str(core), "--home", str(home))
@@ -213,3 +222,126 @@ def test_total_for_specialists_prints_one_block_each(tmp_path):
         "# specialist Bo",
         "# specialist Lex",
     ]
+
+
+# --- role cards (L1) ----------------------------------------------------------------------
+
+DEFAULTS_ONLY = {"version": 2, "roles": {}, "members": {}}
+
+
+def _norm(line: str) -> str:
+    return " ".join(line.strip().lstrip("-*0123456789. ").replace("*", "").split()).lower()
+
+
+@pytest.mark.parametrize("data", [None, DEFAULTS_ONLY], ids=["fixture", "defaults"])
+def test_every_card_has_the_five_headings_fits_and_repeats_no_l0_line(data):
+    crew = generic() if data is None else crewlib._merge(data)
+    for role in rp.all_roles():
+        raw = (rp.ROLES / f"{role}.md").read_text(encoding="utf-8")
+        assert len(raw) <= rp.CARD_RAW_BUDGET, role
+        card = rp.render_card(crew, role)
+        assert tuple(rp.card_headings(card)) == rp.CARD_HEADINGS, role
+        assert not rp.TOKEN.search(card), role
+        assert len(rp.compose(rp.Parts(role, card, None, [], []))[0]) <= rp.BUDGET
+        l0 = rp.render_l0(crew, "worker" if role == "worker" else "full")
+        l0_lines = {_norm(x) for x in l0.split("\n") if len(_norm(x).split()) >= 4}
+        for line in card.split("\n"):
+            assert _norm(line) not in l0_lines, (role, line)
+
+
+def test_the_card_sizes_follow_the_plan():
+    sizes = {r: len((rp.ROLES / f"{r}.md").read_text(encoding="utf-8")) for r in rp.all_roles()}
+    assert sizes["specialist"] <= 1_800 and sizes["worker"] <= 1_500
+
+
+def test_no_card_names_a_member_of_the_fixture_crew():
+    """A card written from a filled example carries a real name; the plugin cannot know real
+    names, so the neutral fixture's stand in."""
+    data = json.loads(GENERIC.read_text())
+    names = {m["name"] for m in data["members"].values()} | {data["human"]["name"]}
+    for card in rp.ROLES.glob("*.md"):
+        words = set(re.findall(r"\b[A-Z][a-z]+\b", card.read_text(encoding="utf-8")))
+        assert not words & names, (card.name, words & names)
+
+
+def test_the_master_card_carries_the_fence_transition_line():
+    card = rp.render_card(generic(), "master")
+    assert "While `epic.fence_confirmed` is false on the board" in card
+
+
+def _member_ws(tmp_path: Path) -> tuple[Path, dict]:
+    ws = tmp_path / "ws"
+    repo = crew_repo(ws)
+    for d in ("biz", "infra"):
+        (ws / d).mkdir()
+    return repo, crewlib.load(repo / ".weside" / "crew.json")
+
+
+def test_total_rows_carry_card_addendum_extras_and_the_role_skill(tmp_path):
+    repo, crew = _member_ws(tmp_path)
+    infra = repo.parent / "infra"
+    addendum = _write(infra / ".weside" / "roles" / "kit.md", "Kit's local notes.\n")
+    # the session starts in infra; its crew pointer gives the skill prefix (``crew.skill_path``)
+    _write(infra / ".weside" / "config.json", json.dumps({"crew": "../repo/.weside/crew.json"}))
+    skill = _write(
+        infra / ".claude" / "skills" / "acme-kit" / "SKILL.md", "---\nname: x\n---\nbody\n"
+    )
+    _write(repo / "AGENTS.md", "# Repo\n\nHead line.\n\n## Later\n\nnot counted\n")
+    _write(
+        repo / ".claude" / "settings.json",
+        json.dumps(
+            {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "printf hi"}]}]}}
+        ),
+    )
+    [t] = rp.total_rows(repo / ".weside" / "crew.json", crew, "machinery", tmp_path / "home")
+    rows = {part: (path, n) for part, path, n in t.rows}
+    assert rows["card"] == ("roles/machinery.md", len(rp.render_card(crew, "machinery")))
+    assert rows["addendum"][1] == addendum - 1  # the trailing newline is stripped
+    assert rows["extra-head"] == (str(repo.resolve()), len("# Repo\n\nHead line."))
+    assert rows["extra-hooks"] == ("printf hi", 2)
+    assert rows["role-skill"] == (str(infra.resolve() / ".claude/skills/acme-kit/SKILL.md"), skill)
+    out = run("--role", "machinery", "--total", "--from", str(repo), "--home", str(tmp_path))
+    lines = out.stdout.splitlines()
+    assert [ln.split("\t")[0] for ln in lines[1:8]] == [
+        "L0",
+        "plugin-hook",
+        "card",
+        "addendum",
+        "extra-head",
+        "extra-hooks",
+        "role-skill",
+    ]
+
+
+def test_an_unpinned_master_has_no_role_skill_and_its_repo_addendum_counts(tmp_path):
+    repo, crew = _member_ws(tmp_path)
+    _write(repo / ".weside" / "roles" / "master.md", "Masters here use the shared lane.\n")
+    [t] = rp.total_rows(repo / ".weside" / "crew.json", crew, "master", tmp_path / "home")
+    rows = {part: n for part, _, n in t.rows}
+    assert rows["role-skill"] == 0 and rows["addendum"] == len("Masters here use the shared lane.")
+
+
+def test_compose_cuts_hook_output_first_then_head_lines():
+    head = "\n".join(f"head {i}" for i in range(200))
+    hook = "\n".join(f"line {i:05d}" for i in range(1_100))
+    parts = rp.Parts(
+        "master", "C" * 6_000, None, [(Path("/x"), head)], [(Path("/x"), "cmd", hook)]
+    )
+    text, sizes = rp.compose(parts)
+    assert len(text) <= rp.BUDGET and sizes["extra-head"] == len(head)
+    assert head in text and text.rstrip().endswith("… cut, full output: cmd in /x")
+    small = rp.Parts(
+        "master", "C" * 9_000, None, [(Path("/x"), head)], [(Path("/x"), "cmd", hook)]
+    )
+    text, _ = rp.compose(small)
+    assert len(text) <= rp.BUDGET and "… cut, full text: /x/AGENTS.md" in text
+    with pytest.raises(rp.RenderError, match=r"plus addendum /a\.md has"):
+        rp.compose(rp.Parts("master", "C" * 9_000, (Path("/a.md"), "A" * 600), [], []))
+
+
+def test_limit_key_prefers_the_member_key():
+    assert (
+        rp.limit_key("specialist", "bo", {"specialist": 1, "specialist:bo": 2}) == "specialist:bo"
+    )
+    assert rp.limit_key("specialist", "lex", {"specialist": 1}) == "specialist"
+    assert rp.limit_key("master", "", {"master": 1}) == "master"

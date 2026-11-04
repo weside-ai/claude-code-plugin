@@ -2,11 +2,15 @@
 """The one renderer of the crew process (L0): the templates under ``process/`` filled from a crew.
 
 Usage:
-  render_process.py --role R [--from DIR]      what ``process_on_start.py`` prints for a session of
-                                               role R (``worker`` → the short form, every other
-                                               role → the L0)
-  render_process.py --all-roles [--from DIR]   one size line per role (``ROLE_KEYS``, ``master``,
-                                               ``worker``, ``specialist``)
+  render_process.py --role R [--from DIR]      what a session of role R sees at start: the text
+                                               ``process_on_start.py`` prints (``worker`` → the
+                                               short form, every other role → the L0), then the
+                                               text ``role_on_start.py`` prints (role card,
+                                               addendum, extra repos) for the role's holder (a
+                                               specialist: the card alone)
+  render_process.py --all-roles [--from DIR]   one line per role (``ROLE_KEYS``, ``master``,
+                                               ``worker``, ``specialist``): role, L0 chars, card
+                                               plus addendum chars, ok or the budget exceeded
   render_process.py --role R --total [--from DIR] [--home DIR]
                                                what a session of role R always loads: one row per
                                                counted part (part, path, chars), then the sum
@@ -24,14 +28,24 @@ dotted key of the merged crew (``crew.load`` merges ``DEFAULTS``, so every key h
 renders ``a-b`` (en dash) for two numbers, else joined by ``, ``. A null or empty value takes the fallback; a
 token with neither raises ``RenderError``, so a template change cannot ship a hole.
 
+Role cards (L1): ``roles/<role>.md`` per role of ``all_roles``, the five ``CARD_HEADINGS`` and
+nothing else, raw ≤ ``CARD_RAW_BUDGET``; rendered with the same tokens (``render_card``).
+``card_parts`` collects what ``role_on_start.py`` prints for one session and ``compose`` joins it,
+cut to ``BUDGET`` (order and cut rule: ``compose``); ``--total`` counts the same text, so the gate
+and the hook cannot drift.
+
 ``--total`` parts (``total_rows``), the definition of an instruction layer this gate bounds:
-``L0`` (this renderer's text for the role), ``plugin-hook`` (the other always-on model context
-this plugin prints at SessionStart: ``working_mode_on_start.core``), ``instructions`` (each
+``L0`` (this renderer's text for the role), ``plugin-hook`` (the framing ``role_on_start.py``
+prints around its parts: headers, separators, cut lines; with the part rows below it sums to that
+hook's whole output), ``card``, ``addendum`` (the repo addendum ``.weside/roles/<slug>.md``),
+``extra-head`` (each extra repo's ``AGENTS.md`` head), ``extra-hooks`` (each extra repo's
+SessionStart command output, run as the hook runs it, as printed after the cut), ``role-skill``
+(a pinned member's role skill, ``crew.skill_path``: ``materialize_on_start.py`` makes that
+session invoke or read it at start), ``instructions`` (each
 ``AGENTS.md``, ``CLAUDE.md``, ``CLAUDE.local.md`` from the workplace up through every ancestor,
 plus ``<home>/.claude/CLAUDE.md``), ``rules`` (each ``.claude/rules/**/*.md`` of the workplace and
 of ``<home>/.claude/rules`` that ``rule_loading.parse_rule`` calls always-on), ``extra`` (per
-extra repo: its ``CLAUDE.md`` and always-on rules, never its ``AGENTS.md``), ``card`` and
-``addendum`` (0 until role cards exist). ``rules-any-file`` (rules with ``paths: "**"``, loaded on
+extra repo: its ``CLAUDE.md`` and always-on rules, never its ``AGENTS.md``). ``rules-any-file`` (rules with ``paths: "**"``, loaded on
 the first file read) is printed and not summed. Not counted: auto memory, the skill listing, MCP
 instructions, a companion's identity.
 """
@@ -39,10 +53,13 @@ instructions, a companion's identity.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 _HERE = Path(__file__).resolve().parent
 for _p in (str(_HERE), str(_HERE.parent / "hooks")):
@@ -51,10 +68,20 @@ for _p in (str(_HERE), str(_HERE.parent / "hooks")):
 
 import crew as crewlib  # noqa: E402
 import rule_loading  # noqa: E402
-import working_mode_on_start  # noqa: E402 - the plugin's other always-on SessionStart text
 
 PROCESS = _HERE.parent / "process"
+ROLES = _HERE.parent / "roles"
 BUDGET = 9_500
+CARD_RAW_BUDGET = 5_500
+ADDENDUM_BUDGET = 3_500
+CARD_HEADINGS = (
+    "## Cornerstone",
+    "## You do",
+    "## You never",
+    "## At start",
+    "## You wait on / others wait on you",
+)
+HOOK_TIMEOUT = 10
 EXTRA_KINDS = ("master", "worker", "specialist")
 ROLE_TITLES = {
     "product": "the product owner",
@@ -192,6 +219,217 @@ def serves(start: str | Path) -> bool:
         return False
 
 
+# --- role cards (L1) -----------------------------------------------------------------------
+
+
+class Parts(NamedTuple):
+    """What ``role_on_start.py`` prints for one session, before ``compose`` cuts it."""
+
+    role: str
+    card: str
+    addendum: tuple[Path, str] | None
+    heads: list[tuple[Path, str]]  # (extra repo, AGENTS.md head lines)
+    hooks: list[tuple[Path, str, str]]  # (extra repo, command, output or failure line)
+
+
+def card_headings(text: str) -> list[str]:
+    return [line.rstrip() for line in text.split("\n") if line.startswith("## ")]
+
+
+def render_card(crew: dict[str, Any], role: str, roles: Path = ROLES) -> str:
+    """The role card for ``role`` (``all_roles``) filled from ``crew``."""
+    return render((roles / f"{role}.md").read_text(encoding="utf-8"), crew).strip("\n")
+
+
+def addendum_path(crew_path: Path, crew: dict[str, Any], role: str, slug: str) -> Path:
+    """A pinned member's ``<workplace>/.weside/roles/<slug>.md``; an unpinned session's
+    ``<crew repo>/.weside/roles/<role>.md``."""
+    if slug:
+        return (
+            crewlib.workplace_paths(crew_path, crew, slug)[0] / ".weside" / "roles" / f"{slug}.md"
+        )
+    return crew_path.parent.parent.resolve() / ".weside" / "roles" / f"{role}.md"
+
+
+def agents_head(repo: Path) -> str | None:
+    """``repo/AGENTS.md`` up to its first level-2 heading, or None."""
+    path = repo / "AGENTS.md"
+    if not path.is_file():
+        return None
+    head = []
+    for line in path.read_text(encoding="utf-8", errors="replace").split("\n"):
+        if line.startswith("## "):
+            break
+        head.append(line)
+    return "\n".join(head).strip("\n") or None
+
+
+def _matches(matcher: Any, source: str) -> bool:
+    if not isinstance(matcher, str) or matcher in ("", "*"):
+        return True
+    try:
+        return re.fullmatch(matcher, source) is not None
+    except re.error:
+        return matcher == source
+
+
+def session_start_commands(repo: Path, source: str) -> list[str]:
+    """The ``type: command`` SessionStart hooks of ``repo/.claude/settings.json`` whose matcher
+    takes ``source``, in order; an unreadable file gives none."""
+    path = repo / ".claude" / "settings.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    entries = ((data.get("hooks") or {}) if isinstance(data, dict) else {}).get("SessionStart")
+    commands = []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict) or not _matches(entry.get("matcher"), source):
+            continue
+        for hook in entry.get("hooks") or []:
+            if isinstance(hook, dict) and hook.get("type") == "command" and hook.get("command"):
+                commands.append(str(hook["command"]))
+    return commands
+
+
+def run_extra_hook(repo: Path, command: str, hook_input: dict[str, Any]) -> str:
+    """The command's context as Claude Code would take it in ``repo`` (``additionalContext`` of
+    a JSON answer, else stdout), or the line ``extra hook failed: <command>``."""
+    payload = {**hook_input, "cwd": str(repo)}
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
+    try:
+        done = subprocess.run(
+            command,
+            shell=True,
+            cwd=repo,
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=HOOK_TIMEOUT,
+            env=env,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return f"extra hook failed: {command}"
+    if done.returncode != 0:
+        return f"extra hook failed: {command}"
+    out = done.stdout.strip("\n")
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return out
+    context = (
+        (data.get("hookSpecificOutput") or {}).get("additionalContext")
+        if isinstance(data, dict)
+        else None
+    )
+    return str(context).strip("\n") if context else out
+
+
+def card_parts(
+    crew_path: Path,
+    crew: dict[str, Any],
+    role: str,
+    slug: str = "",
+    hook_input: dict[str, Any] | None = None,
+    run_hooks: bool = True,
+) -> Parts:
+    """The parts for a session of ``role`` (``slug``: the pinned member, empty for an unpinned
+    master or worker). Extra repos are the member's ``workplace_paths`` after the first; their
+    hooks run only with ``run_hooks``. OSError and CrewError propagate."""
+    card = render_card(crew, role)
+    path = addendum_path(crew_path, crew, role, slug)
+    addendum = (path, path.read_text(encoding="utf-8").strip("\n")) if path.is_file() else None
+    extras = crewlib.workplace_paths(crew_path, crew, slug)[1:] if slug else []
+    heads = [(repo, head) for repo in extras if (head := agents_head(repo))]
+    hooks: list[tuple[Path, str, str]] = []
+    if run_hooks:
+        hook_input = hook_input or {}
+        source = str(hook_input.get("source") or "startup")
+        for repo in extras:
+            for command in session_start_commands(repo, source):
+                hooks.append((repo, command, run_extra_hook(repo, command, hook_input)))
+    return Parts(role, card, addendum, heads, hooks)
+
+
+def _fit(body: str, room: int, marker: str) -> str | None:
+    """``body`` within ``room`` chars: whole, else its first whole lines plus ``marker``; None
+    when not even the marker fits."""
+    if len(body) <= room:
+        return body
+    keep = room - len(marker) - 1
+    if keep < 0:
+        return None if len(marker) > room else marker
+    cut = body.rfind("\n", 0, keep + 1)
+    return marker if cut <= 0 else f"{body[:cut]}\n{marker}"
+
+
+def compose(parts: Parts, budget: int = BUDGET) -> tuple[str, dict[str, int]]:
+    """(text, chars per part as printed). Order: card, addendum, each extra repo's ``AGENTS.md``
+    head, each extra hook's output. Card plus addendum over ``budget`` raises ``RenderError``
+    naming the addendum. The rest takes what is left: heads first, so hook output is cut first
+    (``… cut, full output: <command> in <repo>``), then heads (``… cut, full text:
+    <repo>/AGENTS.md``); a part whose cut line does not fit is left out."""
+    blocks = [parts.card]
+    sizes = {"card": len(parts.card), "addendum": 0, "extra-head": 0, "extra-hooks": 0}
+    if parts.addendum:
+        path, text = parts.addendum
+        blocks.append(f"Repo addendum ({path}):\n{text}")
+        sizes["addendum"] = len(text)
+    base = "\n\n".join(blocks)
+    if len(base) > budget:
+        where = parts.addendum[0] if parts.addendum else ROLES / f"{parts.role}.md"
+        raise RenderError(
+            f"role card {parts.role} plus addendum {where} has {len(base)} chars > {budget}"
+        )
+    used = len(base)
+    sections = [
+        (
+            "extra-head",
+            f"Extra repo {repo}, AGENTS.md head:\n",
+            head,
+            f"… cut, full text: {repo}/AGENTS.md",
+        )
+        for repo, head in parts.heads
+    ]
+    sections += [
+        (
+            "extra-hooks",
+            f"Extra repo {repo}, SessionStart `{command}`:\n",
+            output,
+            f"… cut, full output: {command} in {repo}",
+        )
+        for repo, command, output in parts.hooks
+    ]
+    for kind, header, body, marker in sections:
+        room = budget - used - 2 - len(header)
+        shown = _fit(body, room, marker) if room > 0 else None
+        if shown is None:
+            continue
+        blocks.append(header + shown)
+        sizes[kind] += len(shown)
+        used += 2 + len(header) + len(shown)
+    return "\n\n".join(blocks), sizes
+
+
+def session_text(
+    crew_path: Path,
+    crew: dict[str, Any],
+    role: str,
+    slug: str = "",
+    hook_input: dict[str, Any] | None = None,
+    run_hooks: bool = True,
+) -> str:
+    """What ``role_on_start.py`` prints for that session."""
+    return compose(card_parts(crew_path, crew, role, slug, hook_input, run_hooks))[0]
+
+
+def holder_slug(crew: dict[str, Any], role: str) -> str:
+    """The slug holding ``role`` (a role key), else empty."""
+    slug = crew.get("roles", {}).get(role) if role in crewlib.ROLE_KEYS else None
+    return slug if isinstance(slug, str) and slug in crewlib.members(crew) else ""
+
+
 # --- role totals ---------------------------------------------------------------------------
 
 
@@ -215,50 +453,83 @@ def _rules(root: Path) -> tuple[list[Path], list[Path]]:
 
 
 def _sessions(crew_path: Path, crew: dict[str, Any], role: str) -> list[tuple[str, str, str]]:
-    """(label, session kind, pin) per session of ``role``; a specialist role gives one each."""
+    """(label, session kind, member slug) per session of ``role``; a specialist role gives one
+    each."""
     if role == "master":
         return [("master", "unnamed", "")]
     if role == "worker":
         return [("worker", "worker", "")]
     if role == "specialist":
         return [
-            (f"specialist {e['name']}", "named", str(e["name"]))
-            for e in crewlib.members(crew).values()
+            (f"specialist {e['name']}", "named", slug)
+            for slug, e in crewlib.members(crew).items()
             if e.get("specialist")
         ]
     if role not in crewlib.ROLE_KEYS:
         raise crewlib.CrewError(f"{crew_path}: unknown role {role}")
     name = crewlib.holder_name(crew, role)
-    return [(f"{role} {name}", "named", name)] if name else []
+    return [(f"{role} {name}", "named", holder_slug(crew, role))] if name else []
+
+
+class Total(NamedTuple):
+    """One session's always-loaded total: ``slug`` empty for an unpinned master or worker."""
+
+    label: str
+    slug: str
+    rows: list[tuple[str, str, int]]
+    total: int
+
+
+def limit_key(role: str, slug: str, limits: dict[str, Any]) -> str:
+    """The ``role_total_chars`` key bounding a session: ``<role>:<slug>`` when present, else the
+    role key."""
+    member_key = f"{role}:{slug}" if slug else ""
+    return member_key if member_key and member_key in limits else role
 
 
 def total_rows(
     crew_path: Path, crew: dict[str, Any], role: str, home: Path | None = None
-) -> list[tuple[str, list[tuple[str, str, int]], int]]:
-    """Per session of ``role``: (label, rows of (part, path, chars), sum). CrewError for an
-    unknown role or a workplace that does not exist."""
+) -> list[Total]:
+    """Per session of ``role``: its ``Total`` (rows of (part, path, chars), sum). CrewError for an
+    unknown role or a workplace that does not exist; RenderError for a card plus addendum over
+    ``BUDGET``."""
     home = home or Path.home()
     out = []
-    for label, kind, pin in _sessions(crew_path, crew, role):
+    for label, kind, slug in _sessions(crew_path, crew, role):
         if kind == "named":
-            places = crewlib.workplace_paths(crew_path, crew, pin)
+            places = crewlib.workplace_paths(crew_path, crew, slug)
         else:
             places = [crew_path.parent.parent.resolve()]
         work, extras = places[0], places[1:]
+        parts = card_parts(crew_path, crew, role, slug, {"source": "startup", "cwd": str(work)})
+        text, sizes = compose(parts)
         rows: list[tuple[str, str, int]] = [
             (
                 "L0",
                 f"process/{'L0-worker' if kind == 'worker' else 'L0'}.md",
                 len(render_l0(crew, "worker" if kind == "worker" else "full")),
             ),
+            ("plugin-hook", "hooks/role_on_start.py", len(text) - sum(sizes.values())),
+            ("card", f"roles/{role}.md", sizes["card"]),
             (
-                "plugin-hook",
-                "hooks/working_mode_on_start.py",
-                len(working_mode_on_start.core(crew, kind, pin)),
+                "addendum",
+                str(parts.addendum[0]) if parts.addendum else "-",
+                sizes["addendum"],
             ),
-            ("card", "-", 0),
-            ("addendum", "-", 0),
+            ("extra-head", ", ".join(str(r) for r, _ in parts.heads) or "-", sizes["extra-head"]),
+            (
+                "extra-hooks",
+                ", ".join(c for _, c, _ in parts.hooks) or "-",
+                sizes["extra-hooks"],
+            ),
         ]
+        skill = None
+        if kind == "named":
+            name = str(crewlib.members(crew)[slug].get("name") or slug)
+            skill = crewlib.skill_path(name, work, home)
+        rows.append(
+            ("role-skill", str(skill[0]) if skill else "-", _chars(skill[0]) if skill else 0)
+        )
         seen: set[Path] = set()
         for directory in (work, *work.parents):
             for name in INSTRUCTION_NAMES:
@@ -282,7 +553,7 @@ def total_rows(
             rows += [("extra", str(p), _chars(p)) for p in always]
         total = sum(n for _, _, n in rows)
         rows += [("rules-any-file", str(p), _chars(p)) for p in any_file]
-        out.append((label, rows, total))
+        out.append(Total(label, slug, rows, total))
     return out
 
 
@@ -302,7 +573,7 @@ def _load(start: str | None) -> tuple[Path, dict[str, Any]] | None:
 
 
 def _print_totals(crew_path: Path, crew: dict[str, Any], role: str, home: str | None) -> None:
-    for label, rows, total in total_rows(crew_path, crew, role, Path(home) if home else None):
+    for label, _, rows, total in total_rows(crew_path, crew, role, Path(home) if home else None):
         print(f"# {label}")
         summed = [r for r in rows if r[0] != "rules-any-file"]
         for part, path, n in summed:
@@ -312,10 +583,19 @@ def _print_totals(crew_path: Path, crew: dict[str, Any], role: str, home: str | 
             print(f"{part}\t{path}\t{n}")
 
 
-def _print_sizes(crew: dict[str, Any]) -> None:
+def _print_sizes(crew_path: Path, crew: dict[str, Any]) -> None:
     for role in all_roles():
         n = len(role_text(crew, role))
-        print(f"{role}\t{n}\t{'ok' if n <= BUDGET else f'> {BUDGET}'}")
+        card = len(session_text(crew_path, crew, role, holder_slug(crew, role), run_hooks=False))
+        ok = "ok" if max(n, card) <= BUDGET else f"> {BUDGET}"
+        print(f"{role}\t{n}\t{card}\t{ok}")
+
+
+def _print_role(crew_path: Path, crew: dict[str, Any], role: str) -> None:
+    slug = holder_slug(crew, role)
+    hook_input = {"source": "startup", "cwd": str(crew_path.parent.parent.resolve())}
+    sys.stdout.write(role_text(crew, role))
+    sys.stdout.write("\n\n" + session_text(crew_path, crew, role, slug, hook_input) + "\n")
 
 
 def main(argv: list[str]) -> int:
@@ -338,12 +618,12 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         if args.all_roles:
-            _print_sizes(crew)
+            _print_sizes(crew_path, crew)
         elif args.total:
             _print_totals(crew_path, crew, args.role, args.home)
         else:
-            sys.stdout.write(role_text(crew, args.role))
-    except (crewlib.CrewError, RenderError) as exc:
+            _print_role(crew_path, crew, args.role)
+    except (crewlib.CrewError, RenderError, OSError) as exc:
         print(f"render_process: {exc}", file=sys.stderr)
         return 1
     return 0
