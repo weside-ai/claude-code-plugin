@@ -72,6 +72,7 @@ SET_FIELDS = ("waiting_on", "state", "now")
 CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "info")
 DECISION_KINDS = ("cut", "fence")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
+RETURN_PREFIX = "returned to "
 LOCK_WAIT_S = 10.0
 MINUTE_FMT = "%Y-%m-%dT%H:%MZ"
 UNCHANGED = object()  # a `write_board` mutation returning this leaves board.json untouched
@@ -447,6 +448,10 @@ def _reader_verdict(answer):
     return "; ".join(reasons) or None
 
 
+def _is_return_note(note):
+    return isinstance(note, str) and note.startswith(RETURN_PREFIX)
+
+
 def cmd_ask(state, args, crew, now):
     failures = _ask_failures(args, crew)
     if failures:
@@ -471,12 +476,19 @@ def cmd_ask(state, args, crew, now):
     reason = _reader_verdict(answer)
     session = fields["session"]
 
+    def asker_lines(board):
+        for line in board.get("sessions") or []:
+            if isinstance(line, dict) and line.get("name") == session:
+                yield line
+
     if reason is not None:
-        text = f"returned to {session}: {reason}"
+        text = f"{RETURN_PREFIX}{session}: {reason}"
 
         def returned(board):
-            for line in board.get("sessions") or []:
-                if isinstance(line, dict) and line.get("name") == session:
+            # Only an empty note or an earlier return is replaced; another note stays and the
+            # news item below carries the return.
+            for line in asker_lines(board):
+                if not str(line.get("note") or "").strip() or _is_return_note(line["note"]):
                     line["note"] = text
             board.setdefault("news", []).append(
                 {
@@ -496,6 +508,9 @@ def cmd_ask(state, args, crew, now):
         raise BoardError(f"board.py ask: {text}")
 
     def posted(board):
+        for line in asker_lines(board):
+            if _is_return_note(line.get("note")):
+                del line["note"]
         qid = state.next_id("Q", board)
         item = {"id": qid, **fields, "since": now.strftime("%Y-%m-%d"), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)

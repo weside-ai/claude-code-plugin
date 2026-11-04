@@ -336,7 +336,9 @@ language than the labels. A question that passes lands in `owner_queue` as `Q<n>
 `Q` number on the board, in the answers file and in the log), with `since` and `ts` stamped by the
 script, and prints `posted Q<n>`. One that does not comes back, never silently: exit 1 with
 `returned to <asker>: <reason>`, the same text as the asker's line's `note`, and a news item `R<n>`
-of kind `returned` for the coordinator. A reader that cannot run (no `claude`, 90 s, no parseable
+of kind `returned` for the coordinator. The asker's next posted question clears a `returned to`
+note; a note that does not start with `returned to` is never overwritten, and the news item alone
+carries the return. A reader that cannot run (no `claude`, 90 s, no parseable
 answer) posts nothing and exits 1 with `reader-error: <cause>`.
 
 Every `ask` past the field check appends one line to `board-questions.jsonl`:

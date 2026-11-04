@@ -526,6 +526,42 @@ class TestAsk:
         assert f"returned to lead-12: {finding}" in capsys.readouterr().err
         assert "Q8" not in {q["id"] for q in board_of(crewless)["owner_queue"]}
 
+    @staticmethod
+    def note_on_lead(state_dir, note):
+        board_now = board_of(state_dir)
+        line = next(s for s in board_now["sessions"] if s["name"] == "lead-12")
+        line["note"] = note
+        (state_dir / "board.json").write_text(json.dumps(board_now), encoding="utf-8")
+
+    def test_a_posted_question_clears_the_earlier_return(self, crewless):
+        self.note_on_lead(crewless, "returned to lead-12: no recommendation")
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        assert "note" not in line_of(crewless, "lead-12"), "a posted ask keeps the stale return"
+
+    def test_a_posted_question_keeps_an_unrelated_note(self, crewless):
+        self.note_on_lead(crewless, "CI red on main")
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        assert line_of(crewless, "lead-12")["note"] == "CI red on main", (
+            "posted ask dropped a note"
+        )
+
+    def test_a_return_leaves_an_unrelated_note_and_still_writes_news(self, crewless):
+        self.note_on_lead(crewless, "CI red on main")
+        answer_with(crewless, {**CLEAR, "form": ["no recommendation"]})
+        assert go(crewless, *ask_argv()) == 1
+        after = board_of(crewless)
+        assert line_of(crewless, "lead-12")["note"] == "CI red on main", "return overwrote a note"
+        assert after["news"][-1]["id"] == "R1"
+        assert after["news"][-1]["title"] == "PROJ-12 returned to lead-12: no recommendation"
+
+    def test_a_return_replaces_an_earlier_return(self, crewless):
+        self.note_on_lead(crewless, "returned to lead-12: German text")
+        answer_with(crewless, {**CLEAR, "form": ["no recommendation"]})
+        assert go(crewless, *ask_argv()) == 1
+        assert line_of(crewless, "lead-12")["note"] == "returned to lead-12: no recommendation"
+
     @pytest.mark.parametrize(
         "setup, cause",
         [
