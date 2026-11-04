@@ -308,7 +308,9 @@ the question stays open on the pane.
 `board.py` (in the plugin's `scripts/`) writes `board.json` only through one locked writer: an
 exclusive lock on `board.json.lock` beside it (10 s, then it gives up naming the file), a fresh
 read, then a temp file and `os.replace`. A hand write between that read and the replace is lost.
-The JSONL files beside the board only grow (`O_APPEND`, one whole line per write).
+The JSONL files beside the board only grow (`O_APPEND`, one whole line per write). A line that
+records a board change is appended after board.json was replaced, still under the lock, so a failed
+write leaves no line.
 
 **`set` — the session's own line.** `board.py set now="<step>" state=<state> waiting_on=<role>`
 writes the line whose `name` is the caller's, as `claude agents --json` lists it for its
@@ -320,7 +322,8 @@ another session's line and is the coordinator's (`roles.coordinator`). A new `wa
 line clears all three and on any other line changes nothing, so a hand-written `since` survives.
 `state` and `now` never touch `since`, and `set` never writes `updated` or `updated_by`.
 
-**`ask` — a question for the owner.** The coordinator posts a session's question with
+**`ask` — a question for the owner.** Each session asks its own question with `board.py ask`;
+the coordinator owns the queue (answers, re-routing). The call is
 `board.py ask --session <asker> --key <KEY> --key-title "<title>" --ask "<question>"
 --recommendation "<recommendation>" --cause <cause>`. A missing or blank field, a key outside the
 crew's `naming.key` or a cause outside the six is refused, one line each, before anything runs.
@@ -344,9 +347,9 @@ chat). The line keeps the question's text after the coordinator removes it from 
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
 
 **`decision` — an owner's cut or fence.** `board.py decision <area> <cut|fence> --key <KEY> --text
-"<decision>"` needs the caller to hold `roles.<area>`. It appends
-`{id, kind: "decision", title, ts, by, area, decision, key, text}` to `board-decisions.jsonl`, then
-the news item `{id: "D<n>", kind: "decision", title: "<area> <kind> <KEY>: <decision>", ts, by}`.
+"<decision>"` needs the caller to hold `roles.<area>`. It writes the news item
+`{id: "D<n>", kind: "decision", title: "<area> <kind> <KEY>: <decision>", ts, by}`, then appends
+`{id, kind: "decision", title, ts, by, area, decision, key, text}` to `board-decisions.jsonl`.
 
 **`bundle` — the evening bundle.** The coordinator runs `board.py bundle` at its `bundle` cadence.
 It writes one news item `B-<YYYY-MM-DD>` (`-2`, `-3` for a further bundle that day) of kind `todo`,

@@ -27,8 +27,8 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          without context; otherwise the reader's reason goes back as a `note` on the asking
          session's line and a `returned` news item. Every run past the field check leaves one line
          in board-questions.jsonl, text included. Prints `posted Q<n>`.
-decision records an owner's cut or fence decision of their area (`roles.<area>`): one line in
-         board-decisions.jsonl, then one news item `D<n>` of kind `decision`.
+decision records an owner's cut or fence decision of their area (`roles.<area>`): one news item
+         `D<n>` of kind `decision`, then one line in board-decisions.jsonl.
 bundle   the coordinator's evening bundle: one news item `B-<date>` of kind `todo` listing the
          decisions since the last bundle by area and the open questions oldest first, then a
          marker line in board-decisions.jsonl. Nothing to show prints `bundle: nothing`.
@@ -137,7 +137,6 @@ class StateDir:
     def __init__(self, board_file):
         self.board_path = Path(board_file).expanduser()
         self.answers_path = self.board_path.with_name("board-answers.jsonl")
-        self.transitions_path = self.board_path.with_name("board-transitions.jsonl")
         self.questions_path = self.board_path.with_name("board-questions.jsonl")
         self.decisions_path = self.board_path.with_name("board-decisions.jsonl")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
@@ -153,10 +152,12 @@ class StateDir:
             raise BoardError(f"{self.board_path} is no JSON object")
         return data
 
-    def write_board(self, mutate):
+    def write_board(self, mutate, after=None):
         """Run `mutate(board)` on a fresh read under the board lock, then replace the file with the
-        mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED`. Returns what
-        `mutate` returned. The plugin's only writer of board.json."""
+        mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED`. `after(result)`
+        runs once the file is replaced, still under the lock: the place for a JSONL line that must
+        not exist without its board change. Returns what `mutate` returned. The plugin's only
+        writer of board.json."""
         self.board_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT, 0o644)
         try:
@@ -187,6 +188,8 @@ class StateDir:
                 if os.path.exists(tmp_name):
                     os.unlink(tmp_name)
                 raise
+            if after is not None:
+                after(result)
             return result
         finally:
             os.close(fd)
@@ -214,12 +217,6 @@ class StateDir:
         return _answer_writer()(
             str(self.answers_path), qid, kind, stamp, session, via=via, quote=quote
         )
-
-    def transitions(self):
-        return _read_jsonl(self.transitions_path)
-
-    def append_transition(self, row):
-        return _append_jsonl(self.transitions_path, row)
 
     def questions(self):
         return _read_jsonl(self.questions_path)
@@ -478,9 +475,6 @@ def cmd_ask(state, args, crew, now):
         text = f"returned to {session}: {reason}"
 
         def returned(board):
-            state.append_question(
-                {**base, "outcome": "returned", "reason": reason, "reader": reader}
-            )
             for line in board.get("sessions") or []:
                 if isinstance(line, dict) and line.get("name") == session:
                     line["note"] = text
@@ -493,17 +487,24 @@ def cmd_ask(state, args, crew, now):
                 }
             )
 
-        state.write_board(returned)
+        state.write_board(
+            returned,
+            after=lambda _r: state.append_question(
+                {**base, "outcome": "returned", "reason": reason, "reader": reader}
+            ),
+        )
         raise BoardError(f"board.py ask: {text}")
 
     def posted(board):
         qid = state.next_id("Q", board)
-        state.append_question({"id": qid, **base, "outcome": "posted", "reader": reader})
         item = {"id": qid, **fields, "since": now.strftime("%Y-%m-%d"), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)
         return qid
 
-    print(f"posted {state.write_board(posted)}")
+    def log_posted(qid):
+        state.append_question({"id": qid, **base, "outcome": "posted", "reader": reader})
+
+    print(f"posted {state.write_board(posted, after=log_posted)}")
     return 0
 
 
@@ -535,13 +536,15 @@ def cmd_decision(state, args, crew, now):
             "ts": _iso(now),
             "by": args.area,
         }
-        state.append_decision(
-            {**item, "area": args.area, "decision": args.kind, "key": args.key, "text": text}
-        )
         board.setdefault("news", []).append(item)
         return item
 
-    print(json.dumps(state.write_board(mutate), ensure_ascii=False))
+    def log(item):
+        state.append_decision(
+            {**item, "area": args.area, "decision": args.kind, "key": args.key, "text": text}
+        )
+
+    print(json.dumps(state.write_board(mutate, after=log), ensure_ascii=False))
     return 0
 
 
@@ -591,10 +594,12 @@ def cmd_bundle(state, args, crew, now):
             "ts": _iso(now),
         }
         board.setdefault("news", []).append(item)
-        state.append_decision({"bundle": bid, "ts": item["ts"]})
         return item
 
-    item = state.write_board(mutate)
+    def mark(item):
+        state.append_decision({"bundle": item["id"], "ts": item["ts"]})
+
+    item = state.write_board(mutate, after=mark)
     print("bundle: nothing" if item is UNCHANGED else json.dumps(item, ensure_ascii=False))
     return 0
 

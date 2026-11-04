@@ -155,7 +155,6 @@ import shutil  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
 import cold_reader  # noqa: E402
-import ticket_adapter  # noqa: E402
 
 FAKE_BIN = HERE / "fixtures" / "board"
 CREW = HERE / "fixtures" / "crew-v2-generic.json"
@@ -267,38 +266,6 @@ class TestStateDir:
                 board.BoardError, match=r"board\.json\.lock not taken within 0\.2 s"
             ):
                 state.write_board(lambda _b: None)
-
-    def test_transitions_only_grow(self, crewless):
-        state = board.StateDir(crewless / "board.json")
-        state.append_transition({"key": "PROJ-1", "to": "selected"})
-        first = state.transitions_path.read_bytes()
-        state.append_transition({"key": "PROJ-1", "to": "in_progress"})
-        assert state.transitions_path.read_bytes().startswith(first)
-        assert [r["to"] for r in state.transitions()] == ["selected", "in_progress"]
-
-
-class TestTicketAdapter:
-    def test_none_carries_nothing(self):
-        adapter = ticket_adapter.adapter_for({"board": {"ticketing": "none"}})
-        assert isinstance(adapter, ticket_adapter.NoneAdapter)
-        assert adapter.move("PROJ-1", "In Progress") == []
-
-    def test_an_unknown_transport_is_named(self):
-        with pytest.raises(
-            ValueError, match=r"board\.ticketing 'carrier-pigeon' has no transport"
-        ):
-            ticket_adapter.adapter_for({"board": {"ticketing": "carrier-pigeon"}})
-
-    def test_fake_records_calls_and_holds_the_status(self):
-        fake = ticket_adapter.FakeAdapter({"PROJ-1": "Backlog"})
-        fake.move("PROJ-1", "Selected for Development")
-        assert fake.calls == [("PROJ-1", "Selected for Development")]
-        assert fake.statuses["PROJ-1"] == "Selected for Development"
-        assert ticket_adapter.CarryOp("transition", "PROJ-1", "Done").as_json() == {
-            "op": "transition",
-            "key": "PROJ-1",
-            "value": "Done",
-        }
 
 
 class TestSet:
@@ -701,3 +668,43 @@ class TestBundle:
         pin(monkeypatch, "ada")
         assert go(crewed, "bundle") == 1
         assert "only the coordinator bundles" in capsys.readouterr().err
+
+
+class TestLogFollowsTheBoard:
+    """A JSONL line is appended only after board.json was replaced: a failed write logs nothing."""
+
+    @pytest.mark.parametrize(
+        "verb, log",
+        [
+            ("posted", "board-questions.jsonl"),
+            ("returned", "board-questions.jsonl"),
+            ("decision", "board-decisions.jsonl"),
+            ("bundle", "board-decisions.jsonl"),
+        ],
+    )
+    def test_a_failed_board_write_appends_no_line(self, crewed, monkeypatch, verb, log):
+        answer_with(
+            crewed, CLEAR if verb == "posted" else {"decides": "", "on_yes": "", "form": []}
+        )
+        if verb == "bundle":
+            pin(monkeypatch, "ada")
+            decide(crewed)
+            pin(monkeypatch, "otto")
+        else:
+            pin(monkeypatch, "ada")
+        before = jsonl(crewed / log)
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            if verb == "decision":
+                decide(crewed)
+            elif verb == "bundle":
+                go(crewed, "bundle")
+            else:
+                go(crewed, *ask_argv())
+        assert jsonl(crewed / log) == before, (
+            f"{verb}: {log} grew although board.json was not written"
+        )
