@@ -104,7 +104,7 @@ every lens is generic and still works." On yes:
 `${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`; schema: `${CLAUDE_PLUGIN_ROOT}/scripts/crew.py`. On yes:
 
 1. Another repo holds the crew → only `.weside/config.json` → `"crew": "<relative path>"`, checked
-   with `crew.py show`; go to 4a.4.
+   with `crew.py validate --strict --from <target>`; go to 4a.4.
 2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
    (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
    who holds each role key (`crew.py` `ROLE_KEYS`; skippable), then one line per member (name,
@@ -113,7 +113,7 @@ every lens is generic and still works." On yes:
 3. Write `.weside/crew.json` v2 (tracked; no identity text, no companion ids): `"version": 2`,
    `roles` (role key → member slug), `members`, and only the keys whose value differs from
    `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. Check it with
-   `crew.py show` (it names any key it refuses). A holder of `acceptance` set →
+   `crew.py validate --strict` (it names every key it refuses, an unknown one too). A holder of `acceptance` set →
    `ticketing.after_merge: "in_review"`. A re-run shows the diff and asks before replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
    creates them from `templates/companion-skill/SKILL.md`, never overwriting.
