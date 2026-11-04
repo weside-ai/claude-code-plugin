@@ -117,7 +117,7 @@ def test_owners_decide_cut_and_fence_and_the_manual_moves_line_closes_the_l0():
         " or the vision\n  is touched; a board line records it and Hal may overturn it.\n"
     ) in text
     assert text.rstrip().endswith(
-        "Until `board.py` and the RC train job ship, moves and RCs stay by hand."
+        "Until `board.py move` and the RC train job ship, moves and RCs stay by hand."
     )
     assert "today's rules hold" not in text
 
