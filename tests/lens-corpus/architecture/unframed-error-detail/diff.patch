@@ -1,0 +1,13 @@
+diff --git a/app/tools/weather.py b/app/tools/weather.py
+index 3b1c2d0..9e4f7a1 100644
+--- a/app/tools/weather.py
++++ b/app/tools/weather.py
+@@ -18,9 +18,12 @@ async def weather_tool(city: str, client: httpx.AsyncClient) -> str:
+     """Today's forecast for ``city``, as text the model reads."""
+     response = await client.get(FORECAST_URL, params={"q": city})
+     if response.status_code >= 400:
+-        return "The forecast service is unavailable right now."
++        # Show the model what went wrong so it can explain it to the user.
++        return f"The forecast service refused the request: {response.text}"
+     data = response.json()
+     return render_forecast(data)

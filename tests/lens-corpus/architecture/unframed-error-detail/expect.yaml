@@ -1,0 +1,10 @@
+id: unframed-error-detail
+lens: architecture
+mode: t2
+diff: diff.patch
+# The upstream body of a 4xx is foreign text; returned into the tool result unframed, it reaches
+# the model as if the tool had written it (prompt injection through an error page).
+must_flag:
+  - where: "app/tools/weather.py:22"
+    severity: [BLOCKING, WARNING]
+    question: "Does foreign text reach a model outside the repo's framing seam?"
