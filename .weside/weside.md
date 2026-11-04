@@ -86,7 +86,7 @@ The 'we' Claude Code plugin — Agentic Product Ownership toolkit. Skills (refin
 
 ## Cross-repo relations
 
-**Source-of-truth for the Companion Framework consumed by Claude Code projects.** The framework is consumer-agnostic — any user-or-team can install the plugin and bootstrap their own .weside/ per-repo. A team's crew lives in its own repo's `.weside/crew.json`, written by `/we:setup` (`we/references/working-mode.md` § Crew).
+**Source-of-truth for the Companion Framework consumed by Claude Code projects.** The framework is consumer-agnostic — any user-or-team can install the plugin and bootstrap their own .weside/ per-repo. A team's crew lives in its own repo's `.weside/crew.json`, written by `/we:setup` (`we/references/companion-session.md` § Crew).
 
 ## Notes
 

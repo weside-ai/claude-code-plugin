@@ -1,6 +1,6 @@
 {
   "name": "we",
-  "description": "Agentic Product Ownership toolkit for Claude Code — four Plan altitudes (Vision/Saga/Epic/Story) with Solo + Council deliberation, autonomous Build pipeline, runtime-agnostic worker dispatch (/we:develop + /we:master), CI automation, and optional AI companion augmentation.",
+  "description": "Crew process toolkit for Claude Code — epics serving a goal-file metric, one PR per story, an epic master that starts refiner and build workers (/we:master, /we:plan-story, /we:develop), council lenses, CI automation, and optional AI companion augmentation.",
   "author": {
     "name": "weside.ai",
     "email": "info@weside.ai",
@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "7.56.1",
+  "version": "7.60.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
