@@ -31,10 +31,10 @@ You judge, you never edit, commit or push; Bash is for reading (`git show`, `git
 - `severity`: BLOCKING (must not ship), WARNING (a defect that should not ship), NOTE (worth reading,
   never blocks). No finding: `{"findings": []}`.
 - Every finding names the question line it answers. On T2, every BLOCKING or WARNING carries
-  `red_arm.command`: one command in test form (`pytest <path>`, `python3 -m pytest <path>::<test>`,
-  `bash scripts/<file>`, `python3 scripts/<file>`, a path inside the repo, no `;`, pipe, `&`, `$(`,
-  backtick or redirect) that fails on `head` because of the defect. A finding without such a command
-  is refused; when no existing test or gate shows the defect, make it a NOTE.
+  `red_arm.command`: one test or gate command that fails on `head` because of the defect, in the form
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lens_verdict.py" arm "<command>"` accepts (exit 0; it owns the
+  rule). A command it refuses is never run and its finding stays standing; when no existing test or
+  gate shows the defect, make it a NOTE.
 - No other key: the answer schema is closed (a skip, a confirmation or an override is refused). You
   never set a verdict; `lens_verdict.py` computes it from your findings.
 
