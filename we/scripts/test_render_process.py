@@ -72,7 +72,7 @@ def test_every_role_renders_within_the_budget_with_crew_values():
     assert "`ASK · <KEY> <title> · <question without context> · Advice: …`" in full
     assert "`done-for-now` before parking" in full
     assert "- **Capacity:** a master's limit is its context: watch compactions" in full
-    assert "GiB" not in full, "host memory numbers live in crew.json capacity, not in the L0"
+    assert "GiB" not in full, "the L0 names no host memory numbers"
     assert "\n## Local (this crew)\n\n- A draft PR names why it waits in its first line.\n" in full
 
 
