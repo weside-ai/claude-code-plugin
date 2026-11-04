@@ -32,8 +32,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py escalation open --key <KEY> \
   fix the call, never write the record by hand.
 - The last stdout line `carry: [...]` (ticketing `jira`) holds a `comment` op: post it on the
   story's ticket with the ticketing MCP and re-read the comment.
-- A `warning: <pair>: more than two escalations this week` line goes to the coordinator: the right
-  in `crew.json` between those roles is drawn wrong, and that gets fixed, not the escalation path.
+- A `warning: <pair>: more than two escalations this week` line goes to the escalation role, which
+  acts on it as its role card says (`roles/escalation.md`, § You do).
 
 Good: `--question "Paywall in v1?" --a "no paywall, free launch" --a-cost "two weeks of revenue"`.
 Bad: `--question "Pricing and launch plan"`: two decisions, no one can settle it in one line.
@@ -49,13 +49,22 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py escalation settle E<n> --outcome 
   item `E<n>`; a `--touches` record refuses until `advise` is in.
 - Carry the `carry:` line as in § 1, then tell the other party the outcome.
 
-## 3 · Advise (the escalation role, `--touches` records only)
+## 3 · Read what waits on you (any role holder)
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py escalation list [--waiting-on <role>] [--stage <stage>]
+```
+
+One line per open record waiting on your roles (or `--waiting-on`). A record routed to stage
+`escalation` also puts a news item `E<n>` of kind `escalation` on the board for the role waited on.
+
+## 4 · Advise (the escalation role, `--touches` records only)
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py escalation advise E<n> --recommendation "<advice>"
 ```
 
-## 4 · Route and count (the coordinator)
+## 5 · Route and count (the coordinator)
 
 `board.py bundle` runs `escalation route` first. Between bundles: `board.py escalation route` moves
 every record past its `sla_due` and prints one `route: E<n> <KEY> <from> → <to>` line per move;

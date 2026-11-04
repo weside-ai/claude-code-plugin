@@ -905,7 +905,9 @@ class TestEscalation:
             "2026-11-03T15:00Z",
             "2026-11-03T19:00Z",
         )
-        assert not any(i.get("id") == "E1" for i in board_of(escalating)["news"])
+        assert [i["kind"] for i in board_of(escalating)["news"] if i.get("id") == "E1"] == [
+            "escalation"
+        ]
 
     def test_idle_holder_gets_escalation(self, escalating, monkeypatch):
         holder_line(escalating, "idle")
@@ -1104,4 +1106,74 @@ class TestEscalation:
         monkeypatch.setattr(board.os, "replace", broken)
         with pytest.raises(OSError, match="disk full"):
             go(escalating, "escalation", "route", now=LATER)
+        assert len(esc_log(escalating)) == 1
+
+
+class TestEscalationSignal:
+    """A record routed to stage `escalation` reaches its holder: a news item and `list`."""
+
+    def test_a_routed_record_shows_in_list_waiting_on_its_role(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5", now=LATER)  # still at self
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list", "--waiting-on", "escalation") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture escalation since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z"
+        ]
+        pin(monkeypatch, "nora")  # default: the caller's own role
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines()[0].startswith("E1 PROJ-4 ")
+        pin(monkeypatch, "ada")
+        assert go(escalating, "escalation", "list") == 0
+        assert [x.split()[0] for x in capsys.readouterr().out.splitlines()] == ["E2"]
+        argv = ["escalation", "list", "--waiting-on", "product", "--stage", "bundle"]
+        assert go(escalating, *argv) == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on product at bundle"
+
+    def test_list_refusals(self, escalating, monkeypatch, capsys):
+        pin(monkeypatch, "zed")
+        assert go(escalating, "escalation", "list") == 1
+        assert "holds no role; pass --waiting-on" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "sales") == 1
+        assert "--waiting-on 'sales' is no role key" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "human", "--stage", "x") == 1
+        assert "--stage 'x' is not one of self, escalation, bundle" in capsys.readouterr().err
+
+    def test_route_to_escalation_writes_one_news_item_for_the_holder(
+        self, escalating, monkeypatch
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert (item["kind"], item["for"], item["title"]) == (
+            "escalation",
+            "escalation",
+            "Escalation E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # moving on to the bundle replaces it: one item per id, now the human's todo
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert item["kind"] == "todo"
+
+    def test_a_failed_board_write_leaves_no_escalation_news(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        before = (escalating / "board.json").read_bytes()
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            go(escalating, "escalation", "route", now=LATER)
+        assert (escalating / "board.json").read_bytes() == before
         assert len(esc_log(escalating)) == 1

@@ -198,7 +198,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`) and `returned`, which the pane draws as info until it has glyphs for them |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on) and `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
@@ -389,9 +389,16 @@ the fold of its events by `id` in log order (`fold_escalations`).
 - `self` with `touches` → `bundle` with `advice_from: escalation`, whatever the holder's line says.
 - `escalation` → `bundle` (`waiting_on: human`).
 
-Entering `bundle` adds one `news` item `{id: "E<n>", kind: "todo", title: "Escalation E<n> <KEY>:
-<question>", body, ts}` through the locked writer, and the route events are appended after it; a
-failed board write appends none. A record stays in `bundle` until it is settled.
+Entering `escalation` adds one `news` item `{id: "E<n>", kind: "escalation", for: <the role waited
+on>, title: "Escalation E<n> <KEY>: <question>", body, ts}`; entering `bundle` replaces it by the
+same item of kind `todo` without `for` (one item per id). Both go through the locked writer, and
+the route events are appended after it; a failed board write appends none and adds no item. A
+record stays in `bundle` until it is settled.
+
+**List.** `escalation list [--waiting-on ROLE] [--stage STAGE]` (read-only) prints one line per open
+record waiting on the role, `E<n> <KEY> <role>/<role> <stage> since <since> due <sla_due>`, or
+`escalations: none waiting on <roles>`. Without `--waiting-on` it lists the records waiting on the
+roles the caller holds; a caller holding none is refused.
 
 **Settle.** `escalation settle E<n> --outcome T`: at `self` a party, at `escalation` the holder of the
 role in `waiting_on`, at `bundle` only the coordinator with `--via human` (the human answered on

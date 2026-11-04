@@ -12,6 +12,7 @@ Usage:
   board.py [--board FILE] escalation open --key KEY --parties ROLE,ROLE --question Q --a T --a-cost C
            --b T --b-cost C --reversible <yes|no> [--touches <vision|money|law|priority>]
   board.py [--board FILE] escalation <route|count>
+  board.py [--board FILE] escalation list [--waiting-on ROLE] [--stage STAGE]
   board.py [--board FILE] escalation advise E<n> --recommendation T
   board.py [--board FILE] escalation settle E<n> --outcome T [--via human]
 
@@ -47,7 +48,10 @@ escalation the decision story between two owners (docs/board.md § Escalations):
          the `roles.escalation` holder's board line is there and not `parked`, else to
          `crew.fallback.escalation` (`human_bundle` → stage `bundle`); `escalation` → `bundle`; a
          `--touches` record goes from `self` straight to `bundle` with `advice_from: escalation`.
-         Entering `bundle` adds one `news` item `E<n>` of kind `todo`. `advise` (the escalation
+         Entering `escalation` adds one `news` item `E<n>` of kind `escalation` with `for` the role
+         waited on; entering `bundle` replaces it by one of kind `todo`. `list` prints the open
+         records waiting on `--waiting-on` (default: the caller's roles), one line each, optionally
+         at one `--stage`. `advise` (the escalation
          holder) puts the recommendation into a `--touches` record; `settle` closes a record: a
          party at `self`, the role waited on at `escalation`, the coordinator `--via human` at
          `bundle` (a `--touches` record only once advised). `count` prints the records per role
@@ -96,6 +100,8 @@ ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
 RETURN_PREFIX = "returned to "
 TOUCHES = ("vision", "money", "law", "priority")
 OPEN_FIELDS = ("key", "parties", "question", "a", "a_cost", "b", "b_cost", "reversible")
+STAGES = ("self", "escalation", "bundle")
+NEWS_KIND_BY_STAGE = {"escalation": "escalation", "bundle": "todo"}
 PAIR_WARN_AFTER = 2  # escalations per role pair and ISO week before the crew's rights look wrong
 LOCK_WAIT_S = 10.0
 MINUTE_FMT = "%Y-%m-%dT%H:%MZ"
@@ -369,6 +375,23 @@ def _parse_assignments(items, crew):
     return fields, failures
 
 
+def _minute(ts):
+    return ts.astimezone(timezone.utc).replace(second=0, microsecond=0)
+
+
+def _wait(crew, now, waiting_on):
+    """`{waiting_on, since, sla_due}` from `now`: the one owner of the SLA wait, its defaults
+    `crew.DEFAULTS["sla"]`."""
+    sla = {**crew_mod.DEFAULTS["sla"], **(crew.get("sla") or {})}
+    since = _minute(now)
+    due = daytime_due(since, sla["hours"], sla["daytime"], sla["tz"])
+    return {
+        "waiting_on": waiting_on,
+        "since": since.strftime(MINUTE_FMT),
+        "sla_due": due.strftime(MINUTE_FMT),
+    }
+
+
 def _apply_wait(line, role, crew, now):
     if not role:
         if line.get("waiting_on"):
@@ -377,14 +400,7 @@ def _apply_wait(line, role, crew, now):
         return
     if line.get("waiting_on") == role:
         return
-    sla = crew.get("sla") or {}
-    since = now.astimezone(timezone.utc).replace(second=0, microsecond=0)
-    due = daytime_due(
-        since, sla.get("hours", 4), sla.get("daytime", "08-20"), sla.get("tz", "UTC")
-    )
-    line["waiting_on"] = role
-    line["since"] = since.strftime(MINUTE_FMT)
-    line["sla_due"] = due.strftime(MINUTE_FMT)
+    line.update(_wait(crew, now, role))
 
 
 def cmd_set(state, args, crew, now):
@@ -662,28 +678,8 @@ def cmd_bundle(state, args, crew, now):
 # --- escalation: the decision story between two owners ---------------------------------------
 
 
-def _minute(ts):
-    return ts.astimezone(timezone.utc).replace(second=0, microsecond=0)
-
-
 def _parse_minute(text):
     return datetime.strptime(text, MINUTE_FMT).replace(tzinfo=timezone.utc)
-
-
-def _due(crew, since):
-    sla = crew.get("sla") or {}
-    return daytime_due(
-        since, sla.get("hours", 4), sla.get("daytime", "08-20"), sla.get("tz", "UTC")
-    )
-
-
-def _wait(crew, now, waiting_on):
-    since = _minute(now)
-    return {
-        "waiting_on": waiting_on,
-        "since": since.strftime(MINUTE_FMT),
-        "sla_due": _due(crew, since).strftime(MINUTE_FMT),
-    }
 
 
 def fold_escalations(events):
@@ -899,25 +895,28 @@ def _route(state, crew, now):
             if advice_from:
                 event["advice_from"] = advice_from
             moved.append((event, rec))
-        added = False
+        if not moved:
+            return UNCHANGED
         news = board.setdefault("news", [])
         for event, rec in moved:
-            if event["stage"] == "bundle" and not any(
-                isinstance(i, dict) and i.get("id") == rec["id"] for i in news
+            kind = NEWS_KIND_BY_STAGE[event["stage"]]
+            if any(
+                isinstance(i, dict) and i.get("id") == rec["id"] and i.get("kind") == kind
+                for i in news
             ):
-                news.append(
-                    {
-                        "id": rec["id"],
-                        "kind": "todo",
-                        "title": f"Escalation {rec['id']} {rec['key']}: {rec['question']}",
-                        "body": _story_text({**rec, **event}),
-                        "ts": _iso(now),
-                    }
-                )
-                added = True
-        if not added:
-            append_all(moved)
-            return UNCHANGED
+                continue
+            # one item per id: the human's todo replaces the holder's escalation item
+            news[:] = [i for i in news if not (isinstance(i, dict) and i.get("id") == rec["id"])]
+            item = {
+                "id": rec["id"],
+                "kind": kind,
+                "title": f"Escalation {rec['id']} {rec['key']}: {rec['question']}",
+                "body": _story_text({**rec, **event}),
+                "ts": _iso(now),
+            }
+            if kind == "escalation":
+                item["for"] = event["waiting_on"]
+            news.append(item)
         return moved
 
     def append_all(events):
@@ -1011,6 +1010,41 @@ def cmd_escalation_settle(state, args, crew, now):
     return 0
 
 
+def cmd_escalation_list(state, args, crew, now):
+    verb = "board.py escalation list"
+    failures = []
+    if args.waiting_on is not None and args.waiting_on not in (*crew_mod.ROLE_KEYS, "human"):
+        failures.append(
+            f"{verb}: --waiting-on {args.waiting_on!r} is no role key "
+            f"({', '.join(crew_mod.ROLE_KEYS)} or human)"
+        )
+    if args.stage is not None and args.stage not in STAGES:
+        failures.append(f"{verb}: --stage {args.stage!r} is not one of {', '.join(STAGES)}")
+    if args.waiting_on is not None:
+        roles = [args.waiting_on]
+    else:
+        roles = [r for r in crew_mod.ROLE_KEYS if crew_mod.holds_role(crew, r, os.environ)]
+        if not roles:
+            failures.append(f"{verb}: this session holds no role; pass --waiting-on ROLE")
+    if failures:
+        raise BoardError("\n".join(failures))
+    out = []
+    for rec in fold_escalations(state.escalations()).values():
+        if not rec["open"] or (args.stage and rec["stage"] != args.stage):
+            continue
+        if not set(str(rec.get("waiting_on") or "").split(",")) & set(roles):
+            continue
+        out.append(
+            f"{rec['id']} {rec['key']} {'/'.join(rec['parties'])} {rec['stage']} "
+            f"since {rec['since']} due {rec['sla_due']}"
+        )
+    if not out:
+        where = f" at {args.stage}" if args.stage else ""
+        out = [f"escalations: none waiting on {','.join(roles)}{where}"]
+    print("\n".join(out))
+    return 0
+
+
 def cmd_escalation_count(state, args, crew, now):
     week = _week(_minute(now).strftime(MINUTE_FMT))
     lines = _count_lines(_pair_counts(fold_escalations(state.escalations()), week), week)
@@ -1072,6 +1106,10 @@ def parser():
     es.add_argument("--outcome", required=True)
     es.add_argument("--via", choices=("human",))
     es.set_defaults(run=cmd_escalation_settle)
+    el = ev.add_parser("list", help="open records waiting on a role (default: the caller's)")
+    el.add_argument("--waiting-on", dest="waiting_on", metavar="ROLE")
+    el.add_argument("--stage", help=f"one of {', '.join(STAGES)}")
+    el.set_defaults(run=cmd_escalation_list)
     ec = ev.add_parser("count", help="escalations per role pair this ISO week")
     ec.set_defaults(run=cmd_escalation_count)
     return p
