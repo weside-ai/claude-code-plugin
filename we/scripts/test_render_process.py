@@ -71,7 +71,8 @@ def test_every_role_renders_within_the_budget_with_crew_values():
     assert "Specialists woken on demand: Bo (security), Lex (legal)." in full
     assert "`ASK · <KEY> <title> · <question without context> · Advice: …`" in full
     assert "`done-for-now` before parking" in full
-    assert "pod 16 GiB minus gate lock (≤ 2), test slot (≤ 3) and devbox" in full
+    assert "- **Capacity:** a master's limit is its context: watch compactions" in full
+    assert "GiB" not in full, "host memory numbers live in crew.json capacity, not in the L0"
     assert "\n## Local (this crew)\n\n- A draft PR names why it waits in its first line.\n" in full
 
 
@@ -103,6 +104,36 @@ def test_waits_names_the_human_as_the_only_merger_of_one_way():
     assert DECIDED_3 in text
     for old in ("one word arms auto-merge", "one push line at panel green", "reads the class"):
         assert old not in text, old
+
+
+# the crew notice line a hook may print above the L0, its two newlines included
+NOTICE_RESERVE = 160
+
+
+def test_owners_decide_cut_and_fence_and_the_manual_moves_line_closes_the_l0():
+    text = rp.render_l0(generic())
+    assert (
+        "- An owner decides cut and fence questions of their area unless a new outcome, money, law"
+        " or the vision\n  is touched; a board line records it and Hal may overturn it.\n"
+    ) in text
+    assert text.rstrip().endswith(
+        "Until `board.py` and the RC train job ship, moves and RCs stay by hand."
+    )
+    assert "today's rules hold" not in text
+
+
+def test_the_l0_keeps_room_for_the_notice_line():
+    for data in (None, DEFAULTS_ONLY):
+        crew = generic() if data is None else crewlib._merge(data)
+        assert len(rp.render_l0(crew)) + NOTICE_RESERVE <= rp.BUDGET
+
+
+def test_capacity_numbers_and_cadence_owners_left_the_l0():
+    template = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    assert "capacity_line" not in rp.SPECIAL and "{capacity" not in template
+    cadences = template.split("## Cadences", 1)[1].split("\n## ", 1)[0]
+    for gone in ("({machinery})", "({hr},", "({human} + {escalation})"):
+        assert gone not in cadences, gone
 
 
 def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
