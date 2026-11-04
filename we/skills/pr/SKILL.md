@@ -16,6 +16,8 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
 3. Body in a file, passed as `--body-file` (a `--body "$(…)"` cannot be read by the verification
    hook): summary, the ticket key on its own line, AC → evidence, and a `## Verification` block. A plan
    with that block: splice it with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>`.
+   With `verification.pre_merge_receipt` in `.weside/config.json` it also runs that receipt and writes the
+   `receipt green|red|not run on DEV` line under the block; only the script writes it, never by hand.
    No ticket, no plan or no block: write it yourself, `**Oracle:**` cli | ui | substitute with what you
    drove and saw, or `not-observed — <reason>` when nothing beyond tests was observed. A hook refusal for
    a wrong flag or an unreadable file is fixed once; a second refusal is reported verbatim.
@@ -33,4 +35,5 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
 5. Report the URL. When the base branch requires the Codex check, arm auto-merge on a ready PR right after
    create, exceptions per orchestrate § Close the run; otherwise `/we:ci-review <PR>` arms it once green.
+   A body with a `receipt red` line is not armed (`automerge_gate.py` refuses): rerun step 3 once the receipt is green.
    An armed PR is watched to the merge per orchestrate § Push, PR, CI step 4.

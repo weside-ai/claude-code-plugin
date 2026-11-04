@@ -20,6 +20,11 @@ required and gates on those verdicts, GitHub holds the merge; reading the findin
     call in the main session (`references/worker-dispatch.md` § Dev-only worker contract). A
     worker is a subagent (`agent_id` in the payload) or a process worker (the marker of
     `scripts/worker_launch.py` in its worktree names its `session_id`).
+  * A repo whose `.weside/config.json` names `verification.pre_merge_receipt`: the arm is refused
+    while a line starting `receipt red` stands in the PR body (outside fenced code), the line
+    `pr-body-receipt.py` writes from a red or unfinished pre-merge receipt run. This is a brake
+    against slips, not a barrier: a session can delete the line, and a `gh` failure lets the arm
+    through (below); a CI check that judges the receipt is the barrier.
   * Fail-open on a `gh` or network error: Codex is advisory, an arm is reversible with
     `--disable-auto`, and a hook that blocks every merge during a GitHub outage costs more than
     the race it closes.
@@ -61,6 +66,8 @@ _NO_VERDICT = frozenset({"cancelled", "timed_out", "action_required", "stale", "
 _VERDICT = re.compile(r"VERDICT:([A-Z]+)")
 # The Codex workflow's own comment marker: other reviewers post `VERDICT:` markers too.
 _MARKER = "<!-- codex-review -->"
+_RECEIPT_RED = re.compile(r"^receipt red\b")
+_FENCE = re.compile(r"^(`{3,}|~{3,})")
 
 
 def _gh(args: list[str], cwd: str | None) -> str | None:
@@ -162,6 +169,44 @@ def _check_required(slug: str, base: str, name: str, cwd: str | None) -> bool:
         return False
 
 
+def _receipt_armed(root: str) -> bool:
+    try:
+        with open(os.path.join(root, ".weside", "config.json")) as fh:
+            block = json.load(fh).get("verification")
+    except Exception:
+        return False
+    return isinstance(block, dict) and bool(block.get("pre_merge_receipt"))
+
+
+def _red_receipt_line(body: str) -> str | None:
+    """The first `receipt red …` line of a PR body, fenced code skipped."""
+    fenced = False
+    for raw in body.splitlines():
+        line = raw.strip()
+        if _FENCE.match(line):
+            fenced = not fenced
+        elif not fenced and _RECEIPT_RED.match(line):
+            return line
+    return None
+
+
+def _receipt_state(selector: str | None, repo: str | None, cwd: str | None) -> str | None:
+    """Why the arm must wait for a green receipt, or None (no red line, or gh failed)."""
+    view = ["pr", "view", *([selector] if selector else []), *(["-R", repo] if repo else [])]
+    try:
+        pr = json.loads(_gh([*view, "--json", "number,body"], cwd) or "")
+        line = _red_receipt_line(pr.get("body") or "")
+        number = pr["number"]
+    except Exception:
+        return None
+    if line is None:
+        return None
+    return (
+        f"receipt red on #{number}: run the pre-merge receipt green, then /we:pr updates the "
+        f"body. The PR body says: {line}"
+    )
+
+
 def _codex_state(selector: str | None, repo: str | None, name: str, cwd: str | None) -> str | None:
     """Why the arm must wait, or None when Codex has a verdict on the head, the base branch
     requires the check, or gh failed."""
@@ -231,6 +276,10 @@ def _refusal(payload: dict) -> str | None:
     if not root:
         return None
     selector, repo = _selector_and_repo(args, repo)
+    if _receipt_armed(root):
+        red = _receipt_state(selector, repo, cwd)
+        if red is not None:
+            return f"Auto-merge waits for a green pre-merge receipt: {red}"
     name = _review_name(root, "codex_check", DEFAULT_CHECK)
     if not repo and not _workflow_names(root, name):
         return None
