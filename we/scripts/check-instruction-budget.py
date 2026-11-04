@@ -39,8 +39,13 @@ against `optimization.budget.role_total_chars` (`{"<role>": chars, "<role>:<slug
 member key bounds that member and wins over its role key); over the limit → error, a session
 without a limit → error `no total limit for role <R>` (fail-closed). `--slack N`: a limit more
 than N chars above the largest sum it bounds is an error too (lower it: a limit only falls).
+The report names the chars a session in the repo loads from outside it (ancestor instruction
+files, `<home>/.claude/CLAUDE.md` and rules). Where those files and the sibling repos are absent
+(CI), `--skip-absent` leaves out a session whose workplace or extra repo is missing (named, not
+an error) and `--assume-outside N` adds N chars to every remaining sum, so the same limits hold.
 
-Usage: check-instruction-budget.py [--root DIR] [--json] [--role-totals [--home DIR] [--slack N]]
+Usage: check-instruction-budget.py [--root DIR] [--json]
+         [--role-totals [--home DIR] [--slack N] [--skip-absent] [--assume-outside N]]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
 
@@ -643,7 +648,23 @@ def _check_addenda(repo: Repo, crew: dict, cards: Path, l0: list[str]) -> None:
             repo.error("card-size", rel, str(exc))
 
 
-def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
+def _outside(root: Path, rows: list[tuple[str, str, int]]) -> int:
+    """Chars of instruction files and rules a session loads from outside ``root``."""
+    base = root.resolve()
+    return sum(
+        n
+        for part, path, n in rows
+        if part in ("instructions", "rules") and not Path(path).resolve().is_relative_to(base)
+    )
+
+
+def role_totals(
+    repo: Repo,
+    home: Path | None,
+    slack: int | None,
+    skip_absent: bool = False,
+    assume_outside: int = 0,
+) -> list[str]:
     """Check each role's total against ``role_total_chars``; returns one report line per sum."""
     path = crewlib.at(repo.root)
     if path is None:
@@ -658,14 +679,23 @@ def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
     except crewlib.CrewError as exc:
         repo.error("role-total", label, str(exc))
         return report
+    absent: list[str] = []
     for role in render_process.all_roles():
         try:
-            sessions = render_process.total_rows(path, crew, role, home)
+            sessions = render_process.total_rows(
+                path, crew, role, home, absent if skip_absent else None
+            )
         except (crewlib.CrewError, render_process.RenderError) as exc:
             repo.error("role-total", label, f"role {role}: {exc}")
             continue
         tops: dict[str, int] = {}
-        for member, slug, _, total in sessions:
+        for member, slug, rows, measured in sessions:
+            total = measured + assume_outside
+            if role == "master":
+                report.append(
+                    f"outside {repo.root.name}: {_outside(repo.root, rows)} chars "
+                    f"(ancestor instruction files and home; assumed {assume_outside})"
+                )
             key = render_process.limit_key(role, slug, limits)
             limit = limits.get(key)
             if not isinstance(limit, int):
@@ -684,6 +714,7 @@ def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
                     config,
                     f"lower `{key}` to {top} in {config} (limit {limits[key]})",
                 )
+    report += [f"{who}: skipped, its workplace or an extra repo is absent" for who in absent]
     return report
 
 
@@ -707,11 +738,19 @@ def main() -> int:
     parser.add_argument("--role-totals", action="store_true", help="also gate each role's total")
     parser.add_argument("--home", help="home for --role-totals (default: ~)")
     parser.add_argument("--slack", type=int, help="--role-totals: a limit may exceed the sum by N")
+    parser.add_argument(
+        "--skip-absent",
+        action="store_true",
+        help="--role-totals: skip a session without workplace",
+    )
+    parser.add_argument(
+        "--assume-outside", type=int, default=0, help="--role-totals: add N chars to each sum"
+    )
     args = parser.parse_args()
     repo = run(rule_loading.repo_root(args.root))
     if args.role_totals:
         home = Path(args.home) if args.home else None
-        for line in role_totals(repo, home, args.slack):
+        for line in role_totals(repo, home, args.slack, args.skip_absent, args.assume_outside):
             if not args.json:
                 print(f"  {line}")
     errors = [f for f in repo.findings if f.severity == "error"]

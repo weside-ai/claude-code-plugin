@@ -8,6 +8,7 @@ Run with: python3 -m pytest -q we/scripts/test_check_instruction_budget.py
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -456,6 +457,32 @@ class ProcessRenderTest(unittest.TestCase):
         path = self.root / ".weside" / "crew.json"
         rows = render_process.total_rows(path, crewlib.load(path), "specialist", self.home)
         return {f"specialist:{t.slug}": t.total for t in rows}
+
+    def test_ci_skips_an_absent_workplace_and_adds_the_assumed_outside(self):
+        """A CI checkout lacks the sibling repos and the files above the repo: the control fails
+        on the missing workplace, `--skip-absent` names the session instead, and
+        `--assume-outside N` adds N to every sum the limits then judge."""
+        self.save()
+        sums = self.sums()
+        self.save({"optimization": {"budget": {"role_total_chars": sums}}})
+        shutil.rmtree(self.ws / "infra")
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn("role machinery:", out)
+        self.assertIn("is no directory", out)
+        code, out = self.gate("--role-totals", "--home", str(self.home), "--skip-absent")
+        self.assertEqual(code, 0, out)
+        self.assertIn("machinery Kit: skipped, its workplace or an extra repo is absent", out)
+        self.assertIn("outside app: 0 chars", out)
+        code, out = self.gate(
+            "--role-totals", "--home", str(self.home), "--skip-absent", "--assume-outside", "7"
+        )
+        self.assertEqual(code, 1, out)
+        self.assertIn(
+            f"✗ .weside/config.json: role master (master) loads {sums['master'] + 7} chars > "
+            f"{sums['master']} [role-total]",
+            out,
+        )
 
     def test_a_member_key_wins_over_its_role_key(self):
         self.save()

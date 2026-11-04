@@ -6,6 +6,6 @@ world: {}
 prompt: >
   In one sentence: what is your cornerstone, and what do you do first at start?
 expect:
-  route: "(?is)^(?=.*\\b(accept\\w*|prod)\\b)(?=.*\\b(release candidate|candidate|In Review)\\b)"
+  route: "(?is)^(?=.*\\b(accept\\w*|abnahme|abnehm\\w*|prod)\\b)(?=.*\\b(release candidate|candidate|kandidat\\w*|in review)\\b)"
   refire: compact
 judge: null

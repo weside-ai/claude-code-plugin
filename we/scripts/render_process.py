@@ -471,6 +471,22 @@ def _sessions(crew_path: Path, crew: dict[str, Any], role: str) -> list[tuple[st
     return [(f"{role} {name}", "named", holder_slug(crew, role))] if name else []
 
 
+def _places(
+    crew_path: Path, crew: dict[str, Any], slug: str, label: str, absent: list[str] | None
+) -> list[Path]:
+    """A member's workplace then extra repos, the crew repo for an unpinned session; empty (and
+    ``label`` noted in ``absent``) when one is missing and ``absent`` is a list."""
+    if not slug:
+        return [crew_path.parent.parent.resolve()]
+    try:
+        return crewlib.workplace_paths(crew_path, crew, slug)
+    except crewlib.CrewError:
+        if absent is None:
+            raise
+        absent.append(label)
+        return []
+
+
 class Total(NamedTuple):
     """One session's always-loaded total: ``slug`` empty for an unpinned master or worker."""
 
@@ -488,18 +504,22 @@ def limit_key(role: str, slug: str, limits: dict[str, Any]) -> str:
 
 
 def total_rows(
-    crew_path: Path, crew: dict[str, Any], role: str, home: Path | None = None
+    crew_path: Path,
+    crew: dict[str, Any],
+    role: str,
+    home: Path | None = None,
+    absent: list[str] | None = None,
 ) -> list[Total]:
     """Per session of ``role``: its ``Total`` (rows of (part, path, chars), sum). CrewError for an
-    unknown role or a workplace that does not exist; RenderError for a card plus addendum over
-    ``BUDGET``."""
+    unknown role or a workplace that does not exist, unless ``absent`` is a list: then such a
+    session is left out and its label appended there (a CI checkout without the sibling repos);
+    RenderError for a card plus addendum over ``BUDGET``."""
     home = home or Path.home()
     out = []
     for label, kind, slug in _sessions(crew_path, crew, role):
-        if kind == "named":
-            places = crewlib.workplace_paths(crew_path, crew, slug)
-        else:
-            places = [crew_path.parent.parent.resolve()]
+        places = _places(crew_path, crew, slug, label, absent)
+        if not places:
+            continue
         work, extras = places[0], places[1:]
         parts = card_parts(crew_path, crew, role, slug, {"source": "startup", "cwd": str(work)})
         text, sizes = compose(parts)
