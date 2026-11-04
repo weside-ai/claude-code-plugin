@@ -160,6 +160,7 @@ def test_a_refused_crew_gets_the_l0_from_the_defaults_with_the_reason_on_every_s
             texts = {context(run(tmp_path, root, env, source=source)) for source in SOURCES}
             assert len(texts) == 1, (case, env)
             text = texts.pop()
+            assert text.startswith(f"{label}: "), (case, text[:200])
             first, rest = text.split("\n\n", 1)
             assert first.startswith(f"{label}: ") and reason in first, (case, first)
             expected = render_process.render_l0({**fallback, "crew_error": None}, form)

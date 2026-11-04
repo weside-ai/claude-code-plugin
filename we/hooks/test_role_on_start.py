@@ -123,6 +123,7 @@ def test_a_refused_crew_gets_the_default_card_with_the_reason_never_nothing(tmp_
     (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 1, "roles": {}}))
     for source in SOURCES:
         master = context(run(tmp_path, repo, {"WE_ROLE": "master"}, source=source))
+        assert master is not None, f"{source}: a refused crew printed nothing"
         assert master.startswith("# Role card: master"), source
         assert "Repo addendum for masters." in master
         assert V1_LINE in master.split("\n") and master.endswith(render_process.POINTER)

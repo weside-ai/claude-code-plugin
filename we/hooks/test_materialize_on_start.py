@@ -290,7 +290,8 @@ class MaterializeOnStartTest(unittest.TestCase):
             out = self.run_hook(
                 pin="Lex", hook_input={"session_id": "s1", "source": source, "cwd": str(core)}
             )
-            self.assertEqual(out["hookSpecificOutput"]["additionalContext"], line, source)
+            context = out["hookSpecificOutput"].get("additionalContext")
+            self.assertEqual(context, line, f"{source}: a refused crew left a pin silent")
         path.write_text("{not json")
         note = self.run_hook(
             pin="Ana", hook_input={"session_id": "s2", "source": "startup", "cwd": str(core)}
