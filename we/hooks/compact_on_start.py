@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """SessionStart hook, matcher ``compact``: give a compacted session its live context back.
 
-Only in a repo with a crew that loads; a ``--agent`` session (``agent_type``) gets nothing. The
+Only in a repo with a crew; a ``--agent`` session (``agent_type``) gets nothing. A crew
+``crew.py`` refuses (``CrewError``) is never silence: the head, the line
+``<labels.crew_unreadable>: <reason>`` (``render_process.crew_notice`` over ``crew.fallback``),
+the companion block for a pin and the memory hint; no board line and no epic, both read crew
+values that may be the broken ones. The
 summary of a compaction keeps little of what the session was doing, so this prints, for this
 session only, in this order:
 
@@ -211,6 +215,14 @@ def take_flag(crew: dict, session_id: str) -> bool:
     return True
 
 
+def refused(crew: dict, hook_input: dict, env: Any, cwd: str) -> tuple[str | None, str | None]:
+    """The compact block for a refused crew (``crew``: ``crew.fallback``)."""
+    _, pin = crewlib.session_kind(env, None, hook_input)
+    parts = ["Context restored after compaction:", render_process.crew_notice(crew) or ""]
+    parts += [companion_block(crew, pin, cwd)] if pin else []
+    return "\n\n".join([*parts, MEMORY]), None
+
+
 def render(
     hook_input: dict, env: Any, runner: Runner = subprocess.run
 ) -> tuple[str | None, str | None]:
@@ -220,8 +232,8 @@ def render(
     cwd = str(hook_input.get("cwd") or os.getcwd())
     try:
         crew_path, crew = crewlib.find_and_load(cwd)
-    except crewlib.CrewError:
-        return None, None  # process_on_start.py names the fault
+    except crewlib.CrewError as exc:
+        return refused(crewlib.fallback(crewlib.find(cwd), str(exc)), hook_input, env, cwd)
     if crew is None or crew_path is None:
         return None, None
     session_id = str(hook_input.get("session_id") or "")

@@ -515,8 +515,9 @@ def _crew_label(repo: Repo, path: Path) -> str:
 
 
 def check_process_render(repo: Repo) -> None:
-    """Every role's rendered process text within ``render_process.BUDGET``; a repo whose root
-    declares no crew is skipped."""
+    """Every role's rendered process text, with the ``render_process.NOTICE_CHARS`` reserve for
+    the crew notice line (``render_process.l0_chars``), within ``render_process.BUDGET``; a repo
+    whose root declares no crew is skipped."""
     path = crewlib.at(repo.root)
     if path is None:
         return
@@ -524,7 +525,8 @@ def check_process_render(repo: Repo) -> None:
     try:
         crew = crewlib.load(path)
         sizes = {
-            role: len(render_process.role_text(crew, role)) for role in render_process.all_roles()
+            role: render_process.l0_chars(crew, "worker" if role == "worker" else "full")
+            for role in render_process.all_roles()
         }
     except (crewlib.CrewError, render_process.RenderError) as exc:
         repo.error("process-render", label, f"not rendered: {exc}")

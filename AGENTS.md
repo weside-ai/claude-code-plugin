@@ -72,10 +72,14 @@ pre-commit run --all-files
 python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
 bash scripts/validate-plugin-structure.sh
 python3 scripts/validate-consistency.py
-python3 -m pytest -q we scripts
+python3 scripts/full_test_run.py   # pytest we scripts under the host's test slot, prints its peak
 python3 we/scripts/check-instruction-budget.py
 claude plugin validate we && claude plugin test we   # the /flow and /board hooks module
 ```
+
+A full local test run goes through `scripts/full_test_run.py`: on a host shared by several sessions it
+waits for the test slot (`$WESIDE_TESTS_LOCK`, default `/tmp/weside-tests.lock`) and ends with its
+peak process count and RSS; a single suite runs with plain `pytest <file>`.
 
 `claude plugin test` runs the `*.test.ts` files under `we/hooks/` against Claude Code's own
 engine; CI does not run it, so a change to the hooks module runs it locally before the push.
