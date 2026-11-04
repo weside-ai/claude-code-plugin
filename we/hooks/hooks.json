@@ -16,7 +16,7 @@
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/working_mode_on_start.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/role_on_start.py\""
           },
           {
             "type": "command",

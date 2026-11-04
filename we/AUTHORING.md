@@ -68,6 +68,12 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   no cut found. An interactive session showed an 11.6 KB SessionStart output as a 2 KB preview, so
   the crew process stays gated at 9,500 chars per hook (`render_process.BUDGET`); a probe that
   finds a cut below 9,500 changes the gate, not the text.
+- Role cards (`roles/<role>.md`, one per `crew.ROLE_KEYS` key plus `master`, `worker`,
+  `specialist`) carry exactly the headings `Cornerstone`, `You do`, `You never`, `At start`,
+  `You wait on / others wait on you`, in that order; ≤ 5,500 chars raw (`specialist` ≤ 1,800,
+  `worker` ≤ 1,500), a repo addendum ≤ 3,500, card plus addendum ≤ 9,500 rendered; role tokens,
+  never names; no line repeats the L0, every "never" names the move instead (gate:
+  `scripts/check-instruction-budget.py`, checks `card-*`).
 
 ## Porting from v6
 
