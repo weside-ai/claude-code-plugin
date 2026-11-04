@@ -17,7 +17,18 @@ exists from the repo root, from the file's directory, or as the tail of a repo p
 (`${CLAUDE_PLUGIN_ROOT}/…` or a top-level plugin directory) are checked: the rest names the
 consumer repo. A line carrying `<!-- ref-ok -->` is exempt.
 
-Usage: check-instruction-budget.py [--root DIR] [--json]
+Check `process-render` (on by default, only in a repo whose root declares a crew,
+`scripts/crew.py`): every role's rendered crew process (`scripts/render_process.py --all-roles`)
+stays within `render_process.BUDGET` (9,500 chars, below Claude Code's hook cap,
+`AUTHORING.md` § Measured facts); a crew `crew.py` refuses is an error too.
+
+`--role-totals` (opt-in; it reads the sibling repos and the home ancestors a session loads, so it
+runs where they are, not in CI): per role, `render_process.py --role R --total` against
+`optimization.budget.role_total_chars` (`{"<role>": chars}`); over the limit → error, a role
+without a limit → error `no total limit for role <R>` (fail-closed). `--slack N`: a limit more
+than N chars above the role's largest sum is an error too (lower it: a limit only falls).
+
+Usage: check-instruction-budget.py [--root DIR] [--json] [--role-totals [--home DIR] [--slack N]]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
 
@@ -55,6 +66,8 @@ LINK_RE = re.compile(r"\]\(([^)#\s]+\.md)\)|`([^`\s]+\.md)`")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import crew as crewlib  # noqa: E402
+import render_process  # noqa: E402
 import rule_loading  # noqa: E402 - the sibling module, found via the line above
 
 
@@ -477,6 +490,78 @@ def check_ref_paths(repo: Repo) -> None:
                     repo.warn("ref-path-missing", f"{rel}:{number}", f"`{token}` does not exist")
 
 
+def _crew_label(repo: Repo, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(repo.root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def check_process_render(repo: Repo) -> None:
+    """Every role's rendered process text within ``render_process.BUDGET``; a repo whose root
+    declares no crew is skipped."""
+    path = crewlib.at(repo.root)
+    if path is None:
+        return
+    label = _crew_label(repo, path)
+    try:
+        crew = crewlib.load(path)
+        sizes = {
+            role: len(render_process.role_text(crew, role)) for role in render_process.all_roles()
+        }
+    except (crewlib.CrewError, render_process.RenderError) as exc:
+        repo.error("process-render", label, f"not rendered: {exc}")
+        return
+    for role, n in sizes.items():
+        if n > render_process.BUDGET:
+            repo.error(
+                "process-render",
+                label,
+                f"rendered L0 for role {role} has {n} chars > {render_process.BUDGET}",
+            )
+
+
+def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
+    """Check each role's total against ``role_total_chars``; returns one report line per sum."""
+    path = crewlib.at(repo.root)
+    if path is None:
+        repo.error("role-total", ".", "no crew here: --role-totals needs one")
+        return []
+    label = _crew_label(repo, path)
+    limits = repo.budget.get("role_total_chars") or {}
+    config = ".weside/config.json"
+    report = []
+    try:
+        crew = crewlib.load(path)
+    except crewlib.CrewError as exc:
+        repo.error("role-total", label, str(exc))
+        return report
+    for role in render_process.all_roles():
+        try:
+            sessions = render_process.total_rows(path, crew, role, home)
+        except (crewlib.CrewError, render_process.RenderError) as exc:
+            repo.error("role-total", label, f"role {role}: {exc}")
+            continue
+        if not sessions:
+            continue
+        limit = limits.get(role)
+        if not isinstance(limit, int):
+            repo.error("role-total", config, f"no total limit for role {role}")
+            continue
+        for member, _, total in sessions:
+            report.append(f"{member}: {total} chars (limit {limit})")
+            if total > limit:
+                repo.error(
+                    "role-total", config, f"role {role} ({member}) loads {total} chars > {limit}"
+                )
+        top = max(total for _, _, total in sessions)
+        if slack is not None and limit - top > slack:
+            repo.error(
+                "role-total", config, f"lower `{role}` to {top} in {config} (limit {limit})"
+            )
+    return report
+
+
 def run(root: Path) -> Repo:
     budget, exclude = load_config(root)
     repo = Repo(root=root, budget=budget, exclude=exclude, files=rule_loading.list_files(root))
@@ -485,6 +570,7 @@ def run(root: Path) -> Repo:
     check_skills(repo)
     check_agents(repo)
     check_ref_paths(repo)
+    check_process_render(repo)
     return repo
 
 
@@ -492,8 +578,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", help="repo root (default: the git toplevel, else cwd)")
     parser.add_argument("--json", action="store_true", help="one JSON list of findings")
+    parser.add_argument("--role-totals", action="store_true", help="also gate each role's total")
+    parser.add_argument("--home", help="home for --role-totals (default: ~)")
+    parser.add_argument("--slack", type=int, help="--role-totals: a limit may exceed the sum by N")
     args = parser.parse_args()
     repo = run(rule_loading.repo_root(args.root))
+    if args.role_totals:
+        home = Path(args.home) if args.home else None
+        for line in role_totals(repo, home, args.slack):
+            if not args.json:
+                print(f"  {line}")
     errors = [f for f in repo.findings if f.severity == "error"]
     if args.json:
         print(json.dumps([asdict(f) for f in repo.findings], indent=2))

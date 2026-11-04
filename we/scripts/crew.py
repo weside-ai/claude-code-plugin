@@ -15,6 +15,9 @@ Usage:
   crew.py workplace SLUG [--from DIR]       the member's workplace, then each extra repo, absolute
   crew.py lenses [--set ready|t2] [--from DIR]
                                             the lenses as JSON (all, or ready_lenses / t2_panel in order)
+  crew.py session-kind [--from DIR] [--session ID]
+                                            this session's role (``role_of_session``): worker, master,
+                                            a held role key, specialist, or none (with a hint)
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -249,6 +252,28 @@ def session_kind(
     if pin:
         return ("consult" if worker else "named"), pin
     return ("worker" if worker else "unnamed"), ""
+
+
+NO_ROLE = "no role: ask the coordinator or run `/we:setup`"
+
+
+def role_of_session(crew: dict[str, Any], env: Any, hook_input: dict | None = None) -> str | None:
+    """``worker``; ``master`` (``WE_ROLE=master``, no pin); the role key a pinned member holds
+    (``ROLE_KEYS``); ``specialist`` (a pinned member with ``specialist``); else None. A consultation
+    (pin + ``WE_ROLE=worker``) counts as its member."""
+    kind, pin = session_kind(env, hook_input.get("agent_type") if hook_input else None, hook_input)
+    if kind == "worker":
+        return "worker"
+    if kind == "unnamed":
+        return "master" if str(env.get("WE_ROLE", "")).strip() == "master" else None
+    found = member(crew, pin)
+    if found is None:
+        return None
+    slug, entry = found
+    held = next((r for r in ROLE_KEYS if crew.get("roles", {}).get(r) == slug), None)
+    if held:
+        return held
+    return "specialist" if entry.get("specialist") else None
 
 
 def holds_role(crew: dict[str, Any], role: str, env: Any, hook_input: dict | None = None) -> bool:
@@ -494,6 +519,13 @@ def _merge(data: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def at(root: str | Path) -> Path | None:
+    """The crew file ``root`` itself declares (its own file or its config pointer), never one
+    above it; None without one."""
+    found = _crew_at(Path(root).resolve())
+    return found if isinstance(found, Path) else None
+
+
 def find_and_load(start: str | Path | None = None) -> tuple[Path | None, dict[str, Any] | None]:
     path = find(start)
     if path is None:
@@ -733,7 +765,17 @@ def _path_cli(argv: list[str]) -> int:
     return 0 if found is not None else 1
 
 
-VERBS = ("path", "show", "members", "skill-path", "stubs", "is-role", "workplace", "lenses")
+VERBS = (
+    "path",
+    "show",
+    "members",
+    "skill-path",
+    "stubs",
+    "is-role",
+    "workplace",
+    "lenses",
+    "session-kind",
+)
 
 
 def main(argv: list[str]) -> int:
@@ -795,12 +837,22 @@ def _stubs_cli(argv: list[str], crew_path: Path, crew: dict[str, Any]) -> int:
     return 0
 
 
+def _session_kind_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -> int:
+    session = _opt(argv, "--session") or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    role = role_of_session(crew, os.environ, {"cwd": os.getcwd(), "session_id": session})
+    print(role or "none")
+    if role is None:
+        print(NO_ROLE)
+    return 0
+
+
 _READERS = {
     "show": _show_cli,
     "members": _members_cli,
     "workplace": _workplace_cli,
     "lenses": _lenses_cli,
     "stubs": _stubs_cli,
+    "session-kind": _session_kind_cli,
 }
 
 
