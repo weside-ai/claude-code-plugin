@@ -22,4 +22,4 @@ the user is the whole instruction: ask nothing the open-items list already decid
    (`${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command, `--until-merged` for an armed PR), rollout and
    deploy waits.
 4. **Go.** Say in one line what resumes, then work the open items in their order. A merge outside a
-   run's standing auto-merge (`orchestrate` § Close the run) or a release still needs the user's word.
+   run's standing auto-merge (`master` § Close the run) or a release still needs the user's word.

@@ -23,7 +23,7 @@ def test_gate_matches_only_the_dev_workers():
             "we:dev-medium",
             "we:dev-high",
             "we:explore-medium",
-            "we:council-architect",
+            "we:council-member",
             "we:council-member",
             "dev-medium",
             "other:we:dev-medium",

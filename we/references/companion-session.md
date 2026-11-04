@@ -6,7 +6,7 @@ gets none of them. Skills that start, bind or spawn sessions point here.
 
 ## Contents
 
-Launch and pin · Name and binding · Workers · Writeback · Upkeep · Catch-up · Wake · Role owners.
+Launch and pin · Name and binding · Workers · Writeback · Upkeep · Catch-up · Wake · Role owners · Crew.
 
 ## Launch and pin
 
@@ -19,7 +19,7 @@ changes the account's selection: `select_companion` to another name is refused, 
 second companion takes a second session. An unknown name answers HTTP 422.
 
 `scripts/wclaude` is the launcher: a menu over the members of the repo's crew (`scripts/crew.py
-members`; `references/working-mode.md` § Crew), `--as <Name>` without a menu, `0` clears
+members`; § Crew), `--as <Name>` without a menu, `0` clears
 the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`. Every session it starts is a master (`WE_ROLE=master`) on the global
@@ -45,8 +45,7 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 ```
 
 `-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
-`WE_ROLE=worker` with the pin makes it a consultation, not a master (`references/working-mode.md`
-§ Masters and workers; kind from `scripts/crew.py session_kind`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
+`WE_ROLE=worker` with the pin makes it a consultation, not a master (L0 §Sessions; kind from `scripts/crew.py session_kind`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
 (`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
 
 ## Name and binding
@@ -73,7 +72,7 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 
 ## Workers
 
-Who starts and steers workers: `references/working-mode.md` § Masters and workers. A worker is
+Who starts and steers workers: L0 §Sessions and the master role card. A worker is
 never the companion: it is not titled, not
 asked to materialize, not bound, and stores no turn. A `claude --bg` worker gets the daemon's
 environment (§ Launch and pin), so the pin is absent only when the daemon was started without one;
@@ -164,8 +163,30 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 
 Who owns a role (CI, infrastructure, legal …) is read from the account's handbook at the moment it
 is needed, never from memory. A repo's `.weside/crew.json` is its projection for routing, checked
-against the handbook by HR (`references/working-mode.md` § Crew); where the two disagree, the
+against the handbook by HR (§ Crew); where the two disagree, the
 handbook wins. The handbook lives as shared memories (the register one per person);
 `search_memories("<role name>")` finds it. An account that still keeps it as `handbook/` notes in
 the vault: `execute_tool(name="notes_search", arguments='{"query": "<role name>"}')` and `notes_get`
 on the hits.
+
+## Crew
+
+`.weside/crew.json` (version 2) is the repo's projection of who holds which role; the account's
+handbook stays the truth about people. `scripts/crew.py` is its one reader (schema, defaults and
+session kinds in its docstring); it refuses a file it cannot validate, naming the key, and a
+version-1 file with "in a worktree, merge the default branch; otherwise run /we:setup":
+`/we:setup` writes it, `wclaude` lists its members, `/we:council` seats its members by role key,
+`specialist` and lens `keeper` (`scripts/council_lens.py`), the SessionStart hooks read the roles
+and find each member's role skill through `workplace` (`crew.py workplace <slug>` adds
+`extra_repos`). One repo holds the file; another points at it
+with `.weside/config.json` → `"crew"`.
+
+`crew.json` holds only members with a Claude Code workplace; a handbook member without one is not
+drift. Drift: HR compares `crew.py show` with the handbook's role notes field by field (name, title,
+components, `roles`, `specialist`) at each onboarding and whenever a role note changes, and fixes the side
+that is wrong by commit or note; `on_call`, `weside_account` and `skill_prefix` are repo settings,
+not compared. A member without a skill gets a stub from `templates/companion-skill/SKILL.md`; its
+first start asks it to fill the stub and tell the coordinator in one line (for HR).
+
+Accounts and their rotation, launchers, remote control, secrets and how they are set, the concrete
+people and the heavy-gate lock of a repo live in the workspace's own instruction file, never here.

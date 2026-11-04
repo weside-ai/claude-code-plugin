@@ -1,11 +1,11 @@
 ---
-name: refine
+name: plan-story
 description: >
   Writes a build-ready story plan from front-loaded context, with no user in the room — what a
-  dispatched refiner runs. Triggers: "/we:refine", "refine this story without asking me".
+  dispatched refiner runs. Triggers: "/we:plan-story", "refine this story without asking me".
 ---
 
-# /we:refine
+# /we:plan-story
 
 You turn a ticket plus the brief you were handed into the plan at the path the brief names (default
 `<repo>/docs/plans/{TICKET}-story.md`), in the format of `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`.

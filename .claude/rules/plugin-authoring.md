@@ -20,12 +20,12 @@ existing owners first: `dor-scan`, `ticketing` (incl. transition procedure), `wo
 `quality/dor.md` + `dod.md`.
 
 **The one legitimate copy: self-contained briefs.** Worker/refiner/chunk briefs that are sent
-verbatim to processes without plugin context (orchestrate's Worker-Brief, codex-dispatch's chunk
+verbatim to processes without plugin context (master's Worker-Brief, codex-dispatch's chunk
 brief, the foreign-engine brief) may carry rules inline — they cannot follow references.
 
 **Rules blocks don't retell steps.** A `## Rules` section at the end of a skill contains ONLY
 invariants that are not already stated in the steps. A Rules block that paraphrases the steps is
-the start of drift: two places, one behavior, and only one gets updated. (orchestrate once
+the start of drift: two places, one behavior, and only one gets updated. (master, then orchestrate, once
 carried 72 lines of step paraphrase.)
 
 ## Prose follows the executed artifact
@@ -38,7 +38,7 @@ schema doc were silently ignored.)
 ## Naming and vocabulary
 
 - The same term must not mean different things in two skills. (Lesson: "Mode A/B" meant
-  sequential-vs-parallel in build but Story-vs-phase dispatch in orchestrate — build's modes are
+  sequential-vs-parallel in build but Story-vs-phase dispatch in master — build's modes are
   now "inline"/"fan-out".) New skill → new vocabulary, or exactly the same semantics.
 - **Leading words.** The design vocabulary — `seam`, `tracer bullet`, `tight` (loop),
   `deep`/`shallow` (module), `deletion test`.
@@ -82,7 +82,7 @@ description sits in every session), user-only skills (`disable-model-invocation:
 **cognitive load** (the user must remember they exist). Decision note (v3.5.0 audit): we keep
 nearly all skills model-invocable — the plugin leans on natural-language triggers ("retro",
 "where am I", "diagnose this") and on skill-to-skill dispatch (meet→council, setup→council,
-orchestrate→develop), both of which require model invocation. Revisit per skill only when a
+master→develop), both of which require model invocation. Revisit per skill only when a
 skill gains a description with no trigger phrases.
 
 ## Before every push

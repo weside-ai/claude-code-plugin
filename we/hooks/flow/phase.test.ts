@@ -8,7 +8,7 @@ const pr = (state: Pr['state'], checks: Pr['statusCheckRollup'] = []): Pr => ({
   number: 1, state, headRefName: 'feat/PROJ-1-x', title: 'x', autoMergeRequest: null, statusCheckRollup: checks,
 })
 
-test('phase follows the orchestrate state table, first match wins', async () => {
+test('phase follows the master state table, first match wins', async () => {
   expect(phaseOf({ prs: [], aheadBranches: [] })).toBe('idea')
   expect(phaseOf({ plan: { key: 'PROJ-1', title: '' }, prs: [], aheadBranches: [] })).toBe('draft')
   expect(phaseOf({ plan: { key: 'PROJ-1', title: '', status: 'approved' }, prs: [], aheadBranches: [] })).toBe('refined')
