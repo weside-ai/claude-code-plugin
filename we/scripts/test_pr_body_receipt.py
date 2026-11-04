@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -156,3 +157,130 @@ def test_a_tracked_body_out_is_refused(repo: Path) -> None:
     )
     assert result.returncode == 2 and "tracked by git" in result.stderr
     assert (repo / "README.md").read_text() == "readme\n"
+
+
+# The pre-merge receipt line (`verification.pre_merge_receipt`): a fake command prints the
+# stdout contract and exits with the code the test names.
+
+FAKE = """import sys
+from pathlib import Path
+here = Path(__file__).parent
+(here / "called").write_text(" ".join(sys.argv[1:]))
+sys.stdout.write((here / "fake-out").read_text())
+sys.stderr.write((here / "fake-err").read_text())
+sys.exit(int((here / "fake-exit").read_text()))
+"""
+
+
+def arm_receipt(repo: Path, stdout: str, code: int, stderr: str = "") -> None:
+    (repo / "fake.py").write_text(FAKE)
+    (repo / "fake-out").write_text(stdout)
+    (repo / "fake-err").write_text(stderr)
+    (repo / "fake-exit").write_text(str(code))
+    command = f"{shlex.quote(sys.executable)} fake.py {{KEY}}"
+    (repo / ".weside" / "config.json").write_text(
+        json.dumps({"verification": {"required": True, "pre_merge_receipt": command}})
+    )
+
+
+def receipt_lines(repo: Path, body: str = BODY) -> list:
+    result = run(repo, body)
+    assert result.returncode == 0, result.stderr
+    out = (repo / "out.md").read_text()
+    assert gate_verdict(repo) is None
+    return [ln for ln in out.splitlines() if ln.startswith("receipt ")]
+
+
+def test_no_config_key_leaves_the_body_as_today(repo: Path) -> None:
+    (repo / "fake.py").write_text(FAKE)
+    assert receipt_lines(repo) == []
+    assert not (repo / "called").exists()
+
+
+def test_green_names_the_report_and_the_key_reaches_the_command(repo: Path) -> None:
+    arm_receipt(repo, "report: /c/r/dev-abc\n", 0)
+    assert receipt_lines(repo) == ["receipt green: `/c/r/dev-abc`"]
+    assert (repo / "called").read_text() == "KEY-1"
+    out = (repo / "out.md").read_text()
+    # Directly under the spliced block.
+    assert "- **Not proven:** device geometry\n\nreceipt green:" in out
+
+
+def test_skip_writes_no_line(repo: Path) -> None:
+    arm_receipt(repo, "skip: no receipt\n", 0)
+    assert receipt_lines(repo) == []
+
+
+def test_not_run_lines_join_the_green_line(repo: Path) -> None:
+    arm_receipt(
+        repo,
+        "report: /c/r/x\nnot-run: no DEV slot dev-usd-1\nnot-run: no DEV slot dev-eur-1\n",
+        0,
+    )
+    assert receipt_lines(repo) == [
+        "receipt green: `/c/r/x`",
+        "receipt not run on DEV: no DEV slot dev-usd-1; no DEV slot dev-eur-1",
+    ]
+
+
+def test_not_run_alone_is_its_own_line(repo: Path) -> None:
+    arm_receipt(repo, "not-run: no DEV slot dev-usd-1\n", 0)
+    assert receipt_lines(repo) == ["receipt not run on DEV: no DEV slot dev-usd-1"]
+
+
+def test_red_wins_over_not_run(repo: Path) -> None:
+    arm_receipt(repo, "report: /c/r/x\nnot-run: no DEV slot dev-usd-1\n", 1)
+    assert receipt_lines(repo) == ["receipt red: `/c/r/x`"]
+
+
+@pytest.mark.parametrize(
+    "code,stderr,why",
+    [
+        (2, "refused: --env dev runs the branch's own story only\n", "exit 2: refused: --env dev"),
+        (3, "mock not running (start it first)\n", "exit 3: mock not running"),
+    ],
+)
+def test_a_run_that_did_not_complete_is_red(repo: Path, code: int, stderr: str, why: str) -> None:
+    arm_receipt(repo, "", code, stderr)
+    (line,) = receipt_lines(repo)
+    assert line.startswith(f"receipt red (not run: {why}")
+
+
+def test_a_command_not_on_path_is_red(repo: Path) -> None:
+    (repo / ".weside" / "config.json").write_text(
+        json.dumps({"verification": {"pre_merge_receipt": "no-such-receipt-cmd-xyz {KEY}"}})
+    )
+    assert receipt_lines(repo) == ["receipt red (not run: no-such-receipt-cmd-xyz not found)"]
+
+
+def test_a_timeout_is_red(repo: Path, monkeypatch) -> None:
+    spec = importlib.util.spec_from_file_location("pr_body_receipt", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod, "RECEIPT_TIMEOUT_S", 0.5)
+    command = f"{sys.executable} -c 'import time; time.sleep(5)'"
+    assert mod.run_receipt(command, "KEY-1", repo) == [
+        "receipt red (not run: timeout after 0.5 s)"
+    ]
+
+
+@pytest.mark.parametrize(
+    "path,span",
+    [("/c/my report/x", "`/c/my report/x`"), ("/c/a`b/x", "``/c/a`b/x``")],
+)
+def test_a_path_with_a_space_or_a_backtick_sits_in_a_code_span(
+    repo: Path, path: str, span: str
+) -> None:
+    arm_receipt(repo, f"report: {path}\n", 1)
+    assert receipt_lines(repo) == [f"receipt red: {span}"]
+
+
+def test_a_second_run_replaces_the_old_line(repo: Path) -> None:
+    arm_receipt(repo, "report: /c/r/old\n", 1)
+    first = run(repo, BODY)
+    assert first.returncode == 0, first.stderr
+    body = (repo / "out.md").read_text() + "\n## Notes\n\nn\n"
+    arm_receipt(repo, "report: /c/r/new\n", 0)
+    assert receipt_lines(repo, body) == ["receipt green: `/c/r/new`"]
+    assert "## Notes" in (repo / "out.md").read_text()
