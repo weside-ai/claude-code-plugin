@@ -3,7 +3,7 @@
 
     session_tokens.py --plan <plan> --step refine
 
-The line grammar is owned by `skills/story/references/plan-format.md` § Updates Log:
+The line grammar is owned by `references/story-plan.md` § Updates Log lines:
 
     - 2026-11-03 refine tokens: in=12 out=34567 cache_read=1234567 cache_write=23456 models=m session=fbae4d4e
     - 2026-11-03 refine tokens: absent (no session transcript)

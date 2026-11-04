@@ -176,7 +176,7 @@ def test_existing_section_in_the_middle_keeps_the_next_header(repo, tmp_path):
 
 
 def test_line_parses_with_the_documented_grammar(repo, tmp_path):
-    """The grammar of plan-format.md § Updates Log, as a reader would apply it."""
+    """The grammar of story-plan.md § Updates Log lines, as a reader would apply it."""
     grammar = re.compile(
         r"^- \d{4}-\d{2}-\d{2} [a-z][a-z0-9_-]* tokens: "
         r"(absent \([^)]+\)|in=\d+ out=\d+ cache_read=\d+ cache_write=\d+( [a-z_]+=\S+)*)$"

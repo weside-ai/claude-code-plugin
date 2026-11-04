@@ -2,13 +2,15 @@
 
 ## Contents
 
-Frontmatter · The refined scan · Lifecycle · Sections, in this order (Context, Open Fork, Acceptance
+Frontmatter · Readiness · Lifecycle · Sections, in this order (Context, Open Fork, Acceptance
 Criteria, User Journey, Testing Requirements, Verification, Technical Approach, Implementation
 Phases, Out of scope, Constraints and Pins, Design Decisions, Code Guidance, Security Review
-Required, Documentation Impact, Updates Log) · Oracle-class marker · Updates Log lines.
+Required, Documentation Impact, Updates Log) · Oracle-class marker · What the Ready gate reads ·
+Updates Log lines.
 
 The contract between the writers (`/we:story`, `/we:refine`) and the readers (`/we:orchestrate`,
-`/we:develop`). Change a field here only together with every reader.
+`/we:develop`, `scripts/ready_gate.py`). This file owns the grammar the gate parses; change a field
+here only together with every reader.
 
 The file is `docs/plans/{TICKET}-story.md`. `{TICKET}` is the Jira key, the bare GitHub issue
 number, or a kebab-case slug when there is no ticketing tool. The same token names the file, the
@@ -42,17 +44,11 @@ parallel_groups: []
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |
 | `type`, `created` | Informational. |
 
-## The refined scan
+## Readiness
 
-A plan counts as refined when all three hold:
-
-1. The tokens `Given`, `When` and `Then` appear. The test is case-sensitive and file-wide, so it
-   cannot catch one lowercase keyword in one AC: capitalise all three in every AC.
-2. At least one line matches `^### Phase \d+`. Write `### Phase N: Title`, no leading zeros.
-3. `## Context` carries more than 50 non-whitespace characters before the next level-2 header.
-
-The scan cannot see an `## Open Fork` section. A plan carrying one is not dispatchable, and
-every reader checks for it by hand.
+A plan is ready when `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>` exits 0;
+it prints one line per gap (§ What the Ready gate reads). A plan carrying `## Open Fork` is never
+ready. An epic plan is checked with `ready_gate.py epic <epic plan>`.
 
 ## Lifecycle
 
@@ -119,6 +115,7 @@ Three lists here each cost review rounds when missing (Codex rounds, 10/2026):
 ### Phase 1: <Title>
 
 - **Goal:** <the outcome>
+- **Repo:** <only when the phase works in another repo: its name, as the epic's `fence:` writes it>
 - **Files:** <every file the change touches, including generated artifacts and the existing
   test files whose call sites break>
 - **Risk:** <ordinary | migration | money | auth | tenant-isolation> — <on what; also name a
@@ -180,10 +177,84 @@ names no staging checks writes `none — no staging checks in this repo`.
 
 ## Oracle-class marker
 
-Every AC ends with its oracle class in brackets, backticks around the class tolerated: `[receipt]`
-(a mechanical check in the repo's staging-check file), `[ci: <test>]` (a test in CI proves it) or
-`[walk: <persona> · <screen>]` (a person walks it). A reader takes the marker only at the end of an
-AC's full text, a wrapped AC included; a marker quoted mid-sentence is prose.
+Every AC ends with its oracle class in brackets: `[receipt]` (a mechanical check in the repo's
+staging-check file), `[ci: <test>]` (a test in CI proves it) or `[walk: <persona> · <screen>]` (a
+person walks it). This section owns the syntax only, not when to choose a class.
+
+Syntax (an AC is a numbered item of `## Acceptance Criteria` and runs to the next item or header,
+nested bullets and wrapped lines included):
+
+- The marker is the last balanced `[...]` at the very end of the AC's text; brackets inside a
+  backtick span do not count (`` `[[mock:call …]]` `` inside a marker is text). A marker quoted
+  mid-sentence is prose.
+- Its body splits on top-level `;` into parts. A part starts with a class token `receipt`, `ci` or
+  `walk` (backticks around it tolerated) followed by `:`, whitespace or the end; the rest is its
+  detail. The first part must start with one; a later part that starts with no class token
+  continues the detail before it (`[ci: test_x.py; staging cannot see it]`). Any other token in
+  that place is an unknown class.
+- `ci` needs a detail: the test, and why staging cannot see it.
+- `walk` needs a detail whose `·`-separated fields hold the persona and the screen; a field
+  `why: <sentence>` says why a person walks a change outside the walk paths.
+- `receipt` may say `boundary` (a server-boundary AC, judged against the mock-bound persona) or
+  `not-boundary: <why>` (exempt from the boundary terms).
+- Several classes in one marker: ``[`ci` for the file; `walk`: owner · settings]``.
+
+## What the Ready gate reads
+
+`ready_gate.py story <plan>` prints one line per failure, `<plan>: <place>: <what is missing>`, and
+exits 1; exit 0 is ready, 2 a usage error. Warnings go to stderr, prefixed `warning:`, and never
+change the exit. The gate takes the mode and the plan, nothing else: no option turns a check off.
+Every repo value comes from the crew (`scripts/crew.py`).
+
+Story checks, each failure one line, the run never stops at the first:
+
+1. Frontmatter `story:` present; without `epic:` the fence and goal checks warn (§ Warn until present).
+2. Every section of § Sections present except `## Code Guidance` and `## Updates Log`; an
+   `## Open Fork` fails.
+3. Every AC holds `**Given**`, `**When**`, `**Then**` and a marker.
+4. Every marker parses (§ Oracle-class marker).
+5. A `walk` part without `why:` passes only when a `**Files:**` path of a phase without
+   `**Repo:**` matches a glob of the crew's `oracles.walk_paths`.
+6. With a `receipt` AC the gate runs the crew's `oracles.receipt_check` (§ Receipt check).
+7. A `receipt` AC is a boundary AC when its marker says `boundary` or its text matches a term of
+   `acceptance.boundary_terms` (case-insensitive, whole words), unless the marker says
+   `not-boundary: <why>`; boundary ACs need `acceptance.mock_persona`.
+8. Fence, goal file and `serves:` (below), through the story's epic plan.
+
+**Files.** Under each `### Phase <n>:`, the bullets after `**Files:**` up to the next
+`- **<Label>:**` bullet. A backtick span is a path when it holds no whitespace and contains `/`,
+starts with `.`, or is a bullet's first span and ends in an extension; a trailing `:<line>[-<line>]`
+is dropped. A phase line `- **Repo:** <name>` puts its paths in repo `<name>`; without it they are
+the plan's repo, and a path marked `(other repo)` there fails until the phase names its repo.
+
+**Epic plan.** The `*-epic.md` in the story plan's directory whose frontmatter `ticket:` or `epic:`
+equals the story's `epic:`, or whose `linked_epics:` holds it; none warns (§ Warn until present), more than one fails. Its
+frontmatter fields the gate reads:
+
+- `fence: [<glob>, <repo>:<glob>, …]` — where the epic's stories may write. A bare glob covers the
+  plan's repo, `<repo>:` another repo by its `**Repo:**` name. `**` matches any depth, `*` within
+  one segment, `?` one character (the same matcher serves `walk_paths`). A path outside it is a
+  `scope change` line naming the approver (`roles.product`, and `human.name` if it changes the
+  outcome); approval is widening `fence:` on the default branch, the epic file is the record.
+- `serves: <metric part>; <metric part>` — each part starts (casefolded, whitespace collapsed)
+  with a metric name of the goal file, followed by the end, a space or `(`.
+
+**Goal file** (crew `files.goals`): metrics are list items `- metric: <name>`, optionally followed
+by an em dash and a definition; anything else is prose. A line naming a ticket key (crew `naming.key`) or
+linking a target ending `-epic.md` or `-story.md` fails: the goal file names outcomes, not work.
+
+**Warn until present.** An epic plan without `fence:` turns the fence check off, a crew without
+`files.goals` the goal and `serves:` checks, an epic plan without `serves:` the `serves:` check:
+each prints one `warning:` naming the reason and the backfill, and refuses nothing for it. The
+check arms itself the moment its source lands, with no flag. A `files.goals` naming an absent file
+is a crew error and refuses.
+
+**Receipt check.** `oracles.receipt_check` is a command line; the gate runs it with the plan's path
+appended, plus `--boundary-acs <n,…> --mock-persona <persona>` when boundary ACs exist, in the
+crew's repo root, 60 s at most. Its stdout lines prefixed `warning:` go to stderr; every other line
+is a failure; exit 1 without a line is one failure. A receipt AC with no command set fails.
+
+`ready_gate.py epic <epic plan>` runs the `serves:`, goal-file and fence-presence parts only.
 
 ## Updates Log lines
 

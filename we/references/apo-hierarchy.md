@@ -74,9 +74,9 @@ _Mirror of child Stories in the ticketing tool, refreshed YYYY-MM-DD._
 
 - The Saga block sits under `## Sub-Epics`, has no `Plan` column and says `/we:saga`. The Epic block
   sits under `## Stories`.
-- `Plan` is `✓` when `docs/plans/<KEY>-story.md` passes
-  `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan, else `—`.
-- Status buckets: Done · Active · Refined (Epic only: plan passes the scan, not started) · Backlog ·
+- `Plan` is `✓` when `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story
+  docs/plans/<KEY>-story.md` exits 0 (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md` § Readiness), else `—`.
+- Status buckets: Done · Active · Refined (Epic only: plan passes the gate, not started) · Backlog ·
   Blocked. Map the tool's status names through `.weside/orchestrate.md` § Ticket states.
 - Children come from the ticketing tool (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`) by parent or
   Epic link. Without ticketing: the frontmatter of the child plan files, with a footnote saying so.

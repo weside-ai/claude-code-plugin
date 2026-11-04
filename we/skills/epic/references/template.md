@@ -1,7 +1,8 @@
 # Epic template
 
 The file is `docs/plans/<epic>-epic.md`. Frontmatter values and the mirror block format:
-`references/apo-hierarchy.md` § Links between altitudes and § Mirror block. `/we:story`, `/we:refine`
+`references/apo-hierarchy.md` § Links between altitudes and § Mirror block. `serves:` and `fence:` (where the
+epic's stories may write) follow `references/story-plan.md` § What the Ready gate reads. `/we:story`, `/we:refine`
 and `/we:orchestrate` read `## Success Criteria` and `## Scope`: keep both headings verbatim.
 
 ```markdown
@@ -10,6 +11,8 @@ type: epic-plan
 epic: <epic-slug>
 saga: <saga-slug or null>
 ticket: <KEY or null>
+serves: <metric of the goal file>; <metric>
+fence: [<glob>, <repo>:<glob>]
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft

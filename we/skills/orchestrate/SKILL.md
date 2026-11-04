@@ -24,7 +24,7 @@ Phrase it, and route it where `permissions.deny` blocks the tool, per `${CLAUDE_
 
 Broad reading (a sweep over many files, "where is X") goes to `Agent(subagent_type="we:explore-medium")`, never the
 built-in `Explore`: it inherits your session effort. Dispatch facts, the worker contract and the finish sequence: `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md`.
-Plan readiness ("the DoR scan"): `${CLAUDE_PLUGIN_ROOT}/skills/story/references/plan-format.md` § The refined scan, no `## Open Fork`, plus the rows of `.weside/dor.md`. Tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
+Plan readiness ("the DoR scan"): `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>` exits 0 (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md` § Readiness), plus the rows of `.weside/dor.md`. Tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 ## Invocation
 

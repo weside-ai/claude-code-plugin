@@ -1,0 +1,18 @@
+# One oracle-class marker per line: <expected classes, comma-separated, or ! for invalid><TAB><marker>.
+# The grammar is references/story-plan.md § Oracle-class marker; each repo parser reads its own copy.
+receipt	[receipt]
+receipt	[`receipt`]
+receipt	[receipt: boundary]
+receipt	[receipt: not-boundary: reads only its own rows]
+ci	[`ci`: `test_board.py`, `deliver.test.ts`]
+ci	[ci: test_x.py; staging never runs a local script]
+ci	[`ci`: `test_x.py` asserts `[[mock:call tool]]` ran]
+walk	[walk: owner · settings screen]
+walk	[`walk`: guest · chat · why: the copy changed]
+ci,walk	[`ci` for the file; `walk`: owner · settings]
+receipt,ci	[receipt; ci: test_y.py]
+!	[manual]
+!	[`ci`]
+!	[manual: someone looks]
+!	[walk: owner]
+ci	[ci: `test_x.py` checks that a lone `]` stays text]

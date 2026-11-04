@@ -152,8 +152,13 @@ DEFAULTS: dict[str, Any] = {
     },
     "fallback": {},
     "local_rules": [],
-    "acceptance": {"mock_persona": None, "mock_preset": None},
-    "oracles": {"receipt_dir": None, "receipt_schema": None, "walk_paths": []},
+    "acceptance": {"mock_persona": None, "mock_preset": None, "boundary_terms": []},
+    "oracles": {
+        "receipt_dir": None,
+        "receipt_schema": None,
+        "receipt_check": None,
+        "walk_paths": [],
+    },
     "board": {
         "file": "~/.claude/we-state/board.json",
         "ticketing": "none",

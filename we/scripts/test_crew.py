@@ -387,6 +387,31 @@ def test_a_value_of_the_wrong_type_is_refused(tmp_path):
     assert out.returncode == 1 and "limits.masters must be a number" in out.stderr
 
 
+def test_the_ready_gate_keys_default_and_are_typed(tmp_path):
+    minimal = {"version": 2, "roles": CREW["roles"], "members": CREW["members"]}
+    core, _ = workspace(tmp_path, minimal)
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["oracles"]["receipt_check"] is None
+    assert shown["acceptance"]["boundary_terms"] == []
+    bound = with_(oracles__receipt_check="python3 check.py", acceptance__boundary_terms=["tenant"])
+    core.joinpath(".weside", "crew.json").write_text(json.dumps(bound))
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["oracles"]["receipt_check"] == "python3 check.py"
+    assert shown["acceptance"]["boundary_terms"] == ["tenant"]
+    for changes, message in [
+        (
+            {"oracles__receipt_check": ["python3"]},
+            "oracles.receipt_check must be a string or null",
+        ),
+        ({"acceptance__boundary_terms": "tenant"}, "acceptance.boundary_terms must be a list"),
+        ({"acceptance__boundary_termz": []}, "unknown key acceptance.boundary_termz"),
+        ({"oracles__receipt_checks": "x"}, "unknown key oracles.receipt_checks"),
+    ]:
+        core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(**changes)))
+        out = run(core, "show")
+        assert out.returncode == 1 and message in out.stderr, (changes, out.stderr)
+
+
 def test_workplace_prints_the_start_repo_then_the_extra_repos(tmp_path):
     data = with_(members__ada__workplace="../infra", members__ada__extra_repos=["."])
     core, _ = workspace(tmp_path, data)

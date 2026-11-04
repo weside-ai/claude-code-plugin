@@ -12,7 +12,7 @@ also hunted bugs. Bugs belong to the CI review on the PR (and a local `code-revi
 Report a suspected bug in one line outside the verdict; it never blocks here.
 
 1. Key from the branch (`<type>/<KEY>-…`) → `docs/plans/<KEY>-story.md` (`## Acceptance Criteria`,
-   `## Verification`, `### Phase N` with `**Files:**`) and the ticket with its comments
+   `## Verification`, `### Phase N` with `**Files:**`; grammar `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`) and the ticket with its comments
    (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`). No plan → check against the ticket and say so.
 2. Diff: `git diff $(git merge-base origin/<base> HEAD)` plus the uncommitted changes; the base is
    the PR's `baseRefName`, else the remote's `HEAD`.
