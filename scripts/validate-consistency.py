@@ -11,15 +11,17 @@ silently return:
    existing file / skill / command / agent.
 5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
+6. Listing budget — `name` + `description` of every skill, agent and command sit in
+   every session's context before the user has typed anything. The sum is capped.
 7. Indiscretion guard — no credential, personal identifier, or internal weside
    detail in any tracked file of this public repo (a hardcoded password once
    shipped here and had to be rotated).
-6. Listing budget — `name` + `description` of every skill, agent and command sit in
-   every session's context before the user has typed anything. The sum is capped.
 8. Config schema — every `agents.<key>` a hook or script reads appears in the
    `.weside/config.json` schema block of skills/setup/SKILL.md § 3, and the
    worker-launch placeholders in we/scripts/worker_launch.py are exactly the ones
    references/worker-dispatch.md § Worker launch backend lists.
+9. Lens skill — skills/lens/SKILL.md starts the panel through lens_verdict.py and
+   dispatches in one message; every default lens in crew.py ships its agent file.
 
 Stdlib only. Exit 1 on any finding.
 
@@ -129,8 +131,10 @@ def check_listing_budget() -> None:
     anything is asked of it — so it is a budget, and a budget without a gate drifts. It
     was 12,188 chars over 46 entries before the 6.0.0 cut and is the reason eight uncalled
     skills were removed. To raise the cap, change the number here in a PR that says why.
+    6,000 -> 6,400 (7.57.0): the lens panel adds one skill and three lens agents (~390 chars);
+    a lens agent must be listed to be spawned by `subagent_type`.
     """
-    budget = 6_000
+    budget = 6_400
     total, entries = 0, 0
     for pattern in ("skills/*/SKILL.md", "agents/*.md", "commands/*.md"):
         for path in sorted(WE.glob(pattern)):
@@ -156,6 +160,29 @@ def check_listing_budget() -> None:
             f"listing budget: {total} chars over {entries} entries, cap {budget}. "
             "This text loads in every session — cut a description or drop an entry."
         )
+
+
+def check_lens_skill() -> None:
+    """The lens skill starts its panel through lens_verdict.py and dispatches every entry in one
+    message (parallel fresh agents); each agent a crew default names ships as a file."""
+    skill = WE / "skills" / "lens" / "SKILL.md"
+    if not skill.is_file():
+        fail("skills/lens/SKILL.md is missing")
+        return
+    text = skill.read_text(encoding="utf-8")
+    for needle in ("lens_verdict.py", "LV plan ready", "LV plan t2", "in one message"):
+        if needle not in text:
+            fail(f"skills/lens/SKILL.md does not name {needle!r}")
+    crew_src = (WE / "scripts" / "crew.py").read_text(encoding="utf-8")
+    block = re.search(r'^    "lenses": \{\n(.*?)^    \},', crew_src, re.S | re.M)
+    keys = re.findall(r'_lens\("(\w+)"', block.group(1)) if block else []
+    if not keys:
+        fail("crew.py DEFAULTS names no lens")
+    for key in keys:
+        if not (WE / "agents" / f"lens-{key}.md").is_file():
+            fail(f"crew.py default lens {key!r} ships no agents/lens-{key}.md")
+        if f"we:lens-{key}" not in text:
+            fail(f"skills/lens/SKILL.md does not name the shipped agent we:lens-{key}")
 
 
 def check_agents_config() -> None:
@@ -335,6 +362,7 @@ def main() -> int:
     check_instruction_hook_files()
     check_installer_verdicts()
     check_agents_config()
+    check_lens_skill()
     check_no_indiscretions()
 
     if errors:

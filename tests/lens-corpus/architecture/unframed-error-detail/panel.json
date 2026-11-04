@@ -1,0 +1,8 @@
+{
+  "id": "t2-pr7",
+  "answers": {
+    "product": "No product finding on this diff.\n\n```json\n{\"findings\": []}\n```\n",
+    "architecture": "One finding: the upstream error body reaches the model unframed.\n\n```json\n{\"findings\": [{\"severity\": \"BLOCKING\", \"claim\": \"The 4xx response body of the forecast service is returned verbatim in the tool result the model reads, outside the framing seam.\", \"where\": \"app/tools/weather.py:22\", \"question\": \"Does foreign text reach a model outside the repo's framing seam?\", \"red_arm\": {\"command\": \"pytest tests/tools/test_weather_frame.py\", \"exit\": 1}}]}\n```\n",
+    "acceptance": "```json\n{\"findings\": [{\"severity\": \"NOTE\", \"claim\": \"No test covers the 4xx branch.\", \"where\": \"app/tools/weather.py:20\", \"question\": \"Is each changed branch observed by a test?\"}]}\n```\n"
+  }
+}
