@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "human": {
+    "name": "Hal"
+  },
+  "roles": {
+    "product": "ada"
+  },
+  "members": {
+    "ada": {
+      "name": "Ada",
+      "workplace": "."
+    }
+  },
+  "acceptance": {
+    "mock_persona": "mock-1",
+    "boundary_terms": [
+      "tenant",
+      "room member"
+    ]
+  },
+  "oracles": {
+    "receipt_check": "python3 fake_receipt_check.py",
+    "walk_paths": [
+      "app/screens/**"
+    ]
+  },
+  "files": {
+    "goals": "goals.md"
+  }
+}
