@@ -50,7 +50,10 @@ while classifying, a PR in a repo other than the local checkout's (`-R`, a URL s
 the hook cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded), a command that
 does not parse as shell words, a GraphQL query piped in from stdin or from an unreadable file, and
 a repo that uses rules but has no `origin/main` all refuse with the reason. The freeze flag counts
-beside the default board file and beside the crew's `board.file`. Fail open on the Codex wait and the
+beside the default board file and beside the crew's `board.file`. Any exception while checking a
+command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
+from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
+short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
 receipt read (5, 6) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
 Pinned by `test_automerge_gate.py`.
 """
@@ -65,6 +68,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
@@ -109,6 +113,17 @@ _LOOKS_LIKE_MERGE = re.compile(
     re.DOTALL,
 )
 RULES_FROM = "origin/main"
+# The whole hook stays inside this many seconds, below hooks.json's 600: a hook Claude Code kills
+# on its timeout is a non-blocking error, and the command would run unbraked.
+BUDGET_SECONDS = 540
+_DEADLINE = [time.monotonic() + BUDGET_SECONDS]
+
+
+def _left(wanted: float) -> float:
+    """`wanted` seconds, cut to what is left of the hook's budget (at least 0.1)."""
+    return max(0.1, min(wanted, _DEADLINE[0] - time.monotonic()))
+
+
 CLASSIFY_TIMEOUT = 60
 DEFAULT_BOARD = "~/.claude/we-state/board.json"
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
@@ -120,7 +135,12 @@ def _gh(args: list[str], cwd: str | None) -> str | None:
     """stdout of `gh <args>`, or None on any failure (the caller fails open)."""
     try:
         out = subprocess.run(
-            ["gh", *args], capture_output=True, text=True, timeout=20, check=False, cwd=cwd or None
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            timeout=_left(20),
+            check=False,
+            cwd=cwd or None,
         )
     except Exception:
         return None
@@ -443,7 +463,7 @@ def _git(root: str, *args: str, timeout: int = 20) -> str | None:
             ["git", "-c", "core.hooksPath=/dev/null", *args],
             capture_output=True,
             text=True,
-            timeout=timeout,
+            timeout=_left(timeout),
             check=False,
             cwd=root,
         )
@@ -467,14 +487,24 @@ def _crew_on_main(root: str) -> dict:
     return crew if isinstance(crew, dict) else {}
 
 
+def _fetch_rules(root: str, ref: str) -> bool:
+    """Fetch `origin/<branch>` so the rules are current; False when it cannot be fetched (a ref
+    outside `origin/` is not fetched and must exist)."""
+    remote, _, branch = ref.partition("/")
+    if remote == "origin" and branch:
+        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+        if _git(root, "fetch", "-q", "--no-tags", "origin", refspec, timeout=60) is None:
+            return False
+    return _git(root, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}") is not None
+
+
 def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
     """(argv prefix with a {file} slot, blob spec to write there or None, rules ref);
     None when the repo uses no rules (class T0); a str is the reason it cannot be computed."""
-    if _git(root, "rev-parse", "--verify", "-q", f"{RULES_FROM}^{{commit}}") is None:
-        local = Path(root, ".weside")
-        if (local / "risk-paths").exists() or "risk" in _read_json(local / "crew.json"):
-            return f"the repo uses risk rules but has no `{RULES_FROM}` ref; fetch origin"
-        return None
+    if not _fetch_rules(root, RULES_FROM):
+        return (
+            f"`git fetch origin {RULES_FROM.split('/', 1)[1]}` failed; the rules must be current"
+        )
     risk = _crew_on_main(root).get("risk") or {}
     rules_from = risk.get("rules_from") if isinstance(risk.get("rules_from"), str) else RULES_FROM
     command = risk.get("command")
@@ -517,12 +547,9 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
     except (ValueError, TypeError, KeyError):
         return ClassResult(reason="`gh pr view` did not name the PR's head")
     result = ClassResult(number=number, url=url)
-    remote, _, branch = rules_from.partition("/")
-    if remote == "origin" and branch:
-        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
-        if _git(root, "fetch", "-q", "--no-tags", "origin", refspec, timeout=60) is None:
-            result.reason = f"`git fetch origin {branch}` failed; the rules must be current"
-            return result
+    if rules_from != RULES_FROM and not _fetch_rules(root, rules_from):
+        result.reason = f"`git fetch` of {rules_from} failed; the rules must be current"
+        return result
     if _git(root, "cat-file", "-e", f"{head}^{{commit}}") is None:
         _git(root, "fetch", "-q", "--no-tags", "origin", head, timeout=60)
     base = (_git(root, "merge-base", rules_from, head) or "").strip()
@@ -563,7 +590,7 @@ def _run_classifier(
                 cwd=tree,
                 capture_output=True,
                 text=True,
-                timeout=CLASSIFY_TIMEOUT,
+                timeout=_left(CLASSIFY_TIMEOUT),
                 check=False,
                 env=env,
             )
@@ -749,7 +776,21 @@ def main() -> None:
         payload = json.load(sys.stdin)
     except Exception:
         return
-    reason = _refusal(payload)
+    _DEADLINE[0] = time.monotonic() + BUDGET_SECONDS
+    try:
+        reason = _refusal(payload)
+    except Exception as exc:  # a brake: an error on a merge refuses it, never lets it through
+        command = (
+            str((payload.get("tool_input") or {}).get("command", ""))
+            if isinstance(payload, dict)
+            else ""
+        )
+        if not _LOOKS_LIKE_MERGE.search(command):
+            return
+        reason = (
+            f"Merge refused: the merge gate failed ({type(exc).__name__}: {exc}). "
+            "Fix the cause or run the merge by hand."
+        )
     if reason is None:
         return
     print(

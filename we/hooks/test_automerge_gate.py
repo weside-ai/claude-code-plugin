@@ -33,6 +33,8 @@ def repo(tmp_path: Path) -> Path:
     subprocess.run(
         ["git", "remote", "add", "origin", "https://github.com/o/r.git"], cwd=tmp_path, check=True
     )
+    first = _commit(tmp_path, {}, "root", allow_empty=True)
+    _publish_main(tmp_path, first)
     wf = tmp_path / ".github" / "workflows"
     wf.mkdir(parents=True)
     (wf / "codex.yml").write_text(WORKFLOW)
@@ -365,13 +367,25 @@ def _git(repo: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
-def _commit(repo: Path, files: dict[str, str], msg: str) -> str:
+def _commit(repo: Path, files: dict[str, str], msg: str, allow_empty: bool = False) -> str:
     for rel, text in files.items():
         path = repo / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     _git(repo, "add", "-A")
-    _git(repo, "-c", "user.name=t", "-c", "user.email=t@x.invalid", "commit", "-q", "-m", msg)
+    extra = ["--allow-empty"] if allow_empty else []
+    _git(
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@x.invalid",
+        "commit",
+        "-q",
+        *extra,
+        "-m",
+        msg,
+    )
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -596,11 +610,12 @@ def test_mains_own_risk_paths_blob_is_preferred(repo: Path, monkeypatch) -> None
     assert reason is not None and "one-way (terraform-secrets)" in reason
 
 
-def test_rules_without_origin_main_refuse(repo: Path, monkeypatch) -> None:
+def test_rules_without_a_fetchable_main_refuse(repo: Path, monkeypatch) -> None:
     (repo / ".weside").mkdir()
     (repo / ".weside" / "risk-paths").write_text("[money]\npath x\n")
+    _git(repo, "remote", "set-url", "origin", "https://github.com/o/r-gone.git")
     reason = refuse(repo, "gh pr merge 7 --squash", FakeGh([run()]), monkeypatch)
-    assert reason is not None and "has no `origin/main` ref" in reason
+    assert reason is not None and "`git fetch origin main` failed" in reason
 
 
 def test_a_worker_is_refused_before_any_class_work(classed: dict, monkeypatch) -> None:
@@ -816,3 +831,57 @@ def test_the_default_freeze_counts_beside_a_crew_board(
     )
     reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
     assert reason is not None and "Merges are frozen" in reason
+
+
+# Lars's review: an error never lets a merge through; the rules branch is always fetched.
+
+
+def test_an_exception_in_the_gate_denies_a_merge(monkeypatch, capsys) -> None:
+    def boom(_payload):
+        raise RuntimeError("torn state")
+
+    monkeypatch.setattr(gate, "_refusal", boom)
+    payload = {"tool_name": "Bash", "cwd": "/", "tool_input": {"command": ARM}}
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
+    gate.main()
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert "the merge gate failed (RuntimeError: torn state)" in out["permissionDecisionReason"]
+
+
+def test_an_exception_on_a_non_merge_command_stays_silent(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(gate, "_refusal", lambda _p: 1 / 0)
+    payload = {"tool_name": "Bash", "cwd": "/", "tool_input": {"command": "ls"}}
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
+    gate.main()
+    assert capsys.readouterr().out == ""
+
+
+def test_an_unfetchable_rules_branch_denies_even_without_rules(repo: Path, monkeypatch) -> None:
+    _git(
+        repo,
+        "config",
+        "--unset-all",
+        f"url.{(repo.parent / f'{repo.name}-origin.git').as_uri()}.insteadOf",
+    )
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    reason = refuse(repo, "gh pr merge 7 --squash", FakeGh([run()]), monkeypatch)
+    assert reason is not None and "`git fetch origin main` failed" in reason
+
+
+def test_a_fetched_main_without_rules_is_t0(repo: Path, monkeypatch) -> None:
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    assert refuse(repo, "gh pr merge 7 --squash", FakeGh([run()]), monkeypatch) is None
+    assert _git(repo, "rev-parse", "--verify", "-q", "refs/remotes/origin/main")
+
+
+def test_every_call_takes_its_timeout_from_one_budget(monkeypatch) -> None:
+    assert gate.BUDGET_SECONDS < 600  # hooks.json's timeout for this hook
+    hooks = json.loads((HOOK.parent / "hooks.json").read_text())
+    entries = [h for e in hooks["hooks"]["PreToolUse"] for h in e["hooks"]]
+    (entry,) = [h for h in entries if "automerge_gate.py" in h["command"]]
+    assert entry["timeout"] == 600
+    monkeypatch.setattr(gate, "_DEADLINE", [gate.time.monotonic() + 5])
+    assert gate._left(20) <= 5
+    monkeypatch.setattr(gate, "_DEADLINE", [gate.time.monotonic() - 1])
+    assert gate._left(20) == 0.1
