@@ -571,6 +571,14 @@ class RoleCardTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertNotIn("[card-", out)
 
+    def test_the_security_card_has_no_card_finding(self):
+        for card in render_process.ROLES.glob("*.md"):
+            (self.cards / card.name).write_text(card.read_text(encoding="utf-8"))
+        self.assertTrue((self.cards / "security.md").is_file())
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("we/roles/security.md", out)
+
     def test_a_card_with_an_l0_line_copied_in_is_red(self):
         """Red arm of AC1: one L0 line pasted into the card."""
         line = "- **Workers execute one chunk and end.** Masters and companions start them (`we-worker`); the name"

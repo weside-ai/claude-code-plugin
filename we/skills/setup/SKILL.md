@@ -108,8 +108,9 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    with `crew.py validate --strict --from <target>`; go to 4a.4.
 2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
    (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
-   who holds each role key (`crew.py` `ROLE_KEYS`; skippable), then one line per member (name,
-   title, components, workplace, on call, `specialist` for a member woken on demand). Ask the
+   who holds each role key (`crew.py` `ROLE_KEYS`; skippable, `OPTIONAL_ROLE_KEYS` such as
+   `security` may stay unbound), then one line per member (name, title, components, workplace, on
+   call, `specialist` for a member woken on demand that holds no role key). Ask the
    skill prefix once (default: the team's or repo's name).
 3. Write `.weside/crew.json` v2 (tracked; no identity text, no companion ids): `"version": 2`,
    `roles` (role key → member slug), `members`, and only the keys whose value differs from

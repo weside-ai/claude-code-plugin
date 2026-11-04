@@ -787,3 +787,38 @@ def test_a_defined_former_default_lens_is_kept_and_an_unknown_lens_stays_an_erro
     out = run(core, "show")
     assert out.returncode == 1
     assert "t2_panel: 'bogus' is no lens" in out.stderr
+
+
+def test_security_is_an_optional_role_key():
+    assert crew.ROLE_KEYS[-1] == "security" and len(crew.ROLE_KEYS) == 8
+    assert crew.OPTIONAL_ROLE_KEYS == ("security",)
+    assert set(crew.OPTIONAL_ROLE_KEYS) <= set(crew.ROLE_KEYS)
+
+
+def test_a_crew_without_the_security_role_loads_silently(tmp_path):
+    core, _ = workspace(tmp_path)
+    out = run(core, "validate", "--strict")
+    assert out.returncode == 0 and out.stderr == "", out.stderr
+    assert crew.load(core / ".weside" / "crew.json")["unknown_keys"] == []
+
+
+def test_a_bound_security_role_and_fallback_are_known_keys(tmp_path):
+    data = with_(roles__security="lex", fallback__security="hr")
+    core, _ = workspace(tmp_path, data)
+    out = run(core, "validate", "--strict")
+    assert out.returncode == 0 and out.stderr == "", out.stderr
+    assert crew.holder_name(crew.load(core / ".weside" / "crew.json"), "security") == "Lex"
+
+
+def test_the_pinned_security_holder_is_security_even_with_a_specialist_field():
+    merged = crew._merge(with_(roles__security="lex"))
+    assert merged["members"]["lex"]["specialist"] == "legal"
+    assert crew.role_of_session(merged, {"WESIDE_COMPANION": "Lex"}) == "security"
+
+
+def test_is_role_accepts_security_for_its_holder(tmp_path):
+    core, _ = workspace(tmp_path, with_(roles__security="lex"))
+    lex = {"WESIDE_COMPANION": "Lex", "WE_ROLE": "master"}
+    assert run(core, "is-role", "security", "--session", "s", env=lex).returncode == 0
+    otto = {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"}
+    assert run(core, "is-role", "security", "--session", "s", env=otto).returncode == 1

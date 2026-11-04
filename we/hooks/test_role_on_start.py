@@ -100,6 +100,16 @@ def test_each_session_kind_gets_its_card(tmp_path):
         assert text is not None and text.startswith(head), env
 
 
+def test_the_pinned_security_holder_gets_the_security_card(tmp_path):
+    data = json.loads((SCRIPTS / "fixtures" / "crew-v2-security.json").read_text())
+    _, infra = workspace(tmp_path, data)
+    repo = infra.parent / "repo"
+    for source in ("startup", "compact"):
+        text = context(run(tmp_path, repo, {"WESIDE_COMPANION": "Bo"}, source=source))
+        assert text is not None and text.startswith("# Role card: security"), source
+        assert "trust-loosening" in text and "# Role card: specialist" not in text
+
+
 def test_nothing_without_a_crew_or_without_a_role(tmp_path):
     bare = tmp_path / "bare"
     subprocess.run(["git", "init", "-q", str(bare)], check=True)

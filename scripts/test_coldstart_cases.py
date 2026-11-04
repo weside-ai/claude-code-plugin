@@ -60,9 +60,8 @@ def test_card_case_names_its_role_an_environment_and_a_route_regex(case: Path):
 def test_the_route_matches_the_cards_own_cornerstone_and_first_move(case: Path):
     """The expected answer is the card's own text: a route the card cannot satisfy is wrong."""
     role = case.parent.name
-    crew = crewlib._merge(
-        json.loads((REPO / "we/scripts/fixtures/crew-v2-generic.json").read_text())
-    )
+    top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
+    crew = crewlib._merge(json.loads((REPO / top["crew"]).read_text()))
     card = render_process.render_card(crew, role)
     cornerstone = card.split("## Cornerstone", 1)[1].split("## You do", 1)[0]
     first = card.split("## At start", 1)[1].split("## You wait on", 1)[0]
@@ -100,3 +99,36 @@ def test_an_unknown_crew_key_keeps_the_full_l0_with_the_line_on_startup_and_comp
     assert re.search(route, first) and first.startswith("crew.json: unknown keys ignored: limitz")
     generic = json.loads((REPO / "we/scripts/fixtures/crew-v2-generic.json").read_text())
     assert rest == render_process.render_l0(crewlib._merge(generic))
+
+
+LIST = re.compile(r"^  (waits|not_waits|forbidden): \[(.*)\]$", re.MULTILINE)
+SECURITY_FIXTURE = "we/scripts/fixtures/crew-v2-security.json"
+
+
+def _lists(case: Path) -> dict[str, list[str]]:
+    found = LIST.findall(case.read_text(encoding="utf-8"))
+    return {k: [x.strip().strip('"') for x in v.split(",") if x.strip()] for k, v in found}
+
+
+@pytest.mark.parametrize(
+    ("name", "waits", "not_waits"),
+    [
+        ("security-twoway-panel-enough", [], ["security", "human"]),
+        ("security-oneway-owner-signs", ["security", "human"], ["product", "acceptance"]),
+    ],
+)
+def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
+    """A two-way auth diff with a green panel waits on nobody; a ``trust-loosening`` one waits on
+    the security holder's signature, then the human's merge."""
+    case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
+    top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
+    assert top["role"] == "master" and top["crew"] == SECURITY_FIXTURE
+    lists = _lists(case)
+    assert lists["waits"] == waits and lists["not_waits"] == not_waits
+    assert ("gh pr merge --auto" in lists.get("forbidden", [])) == bool(waits)
+
+
+def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
+    case = REPO / "tests" / "coldstart" / "master" / "t2-oneway-human-merges.yaml"
+    assert "crew-v2-generic.json" in case.read_text(encoding="utf-8")
+    assert _lists(case)["waits"] == ["human"]

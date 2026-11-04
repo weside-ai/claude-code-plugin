@@ -26,7 +26,9 @@ Usage:
 Templates: ``process/L0.md`` (every session but a worker) and ``process/L0-worker.md``. A token is
 ``{key}`` or ``{key|fallback}``. ``key`` is a role key of ``crew.ROLE_KEYS`` (the holder's name,
 else the fallback, else the role's title), ``human`` (``human.name``), ``specialists`` (``Name
-(field)`` of every member with ``specialist``; the line holding it is dropped when there is none),
+(field)`` of every member with ``specialist`` that holds no role key; the line holding it is
+dropped when there is none), a key of ``crew.OPTIONAL_ROLE_KEYS`` without a holder (the line holding
+its bare token is dropped, so an unbound crew renders as before),
 ``local_rules`` (one bullet each; the section holding it is dropped when there is none),
 ``crew_notice`` (``crew_error``, set by ``crew.fallback``, as ``<labels.crew_unreadable>: <reason>``,
 else the merged crew's ``unknown_keys`` as ``<labels.crew_unknown_keys>: <k1, k2>``; the line is
@@ -110,6 +112,7 @@ ROLE_TITLES = {
     "coordinator": "the coordinator",
     "escalation": "the escalation owner",
     "hr": "the HR owner",
+    "security": "the security owner",
 }
 INSTRUCTION_NAMES = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md")
 EN_DASH = "\u2013"
@@ -143,12 +146,24 @@ def _show(value: Any) -> str | None:
     return str(value)
 
 
-def _specialists(crew: dict[str, Any]) -> str | None:
-    found = [
-        f"{entry['name']} ({entry['specialist']})"
-        for entry in crewlib.members(crew).values()
-        if entry.get("specialist")
+def _role_holders(crew: dict[str, Any]) -> set[str]:
+    roles = crew.get("roles", {})
+    return {roles[r] for r in crewlib.ROLE_KEYS if isinstance(roles.get(r), str)}
+
+
+def specialist_members(crew: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(slug, entry) of every member with ``specialist`` that holds no role key: a held role wins,
+    as in ``crew.role_of_session``."""
+    held = _role_holders(crew)
+    return [
+        (slug, entry)
+        for slug, entry in crewlib.members(crew).items()
+        if entry.get("specialist") and slug not in held
     ]
+
+
+def _specialists(crew: dict[str, Any]) -> str | None:
+    found = [f"{entry['name']} ({entry['specialist']})" for _, entry in specialist_members(crew)]
     return ", ".join(found) or None
 
 
@@ -200,6 +215,8 @@ def _resolve(crew: dict[str, Any], key: str) -> str | None:
 def render(template: str, crew: dict[str, Any]) -> str:
     """``template`` with every token filled from ``crew``; see the module docstring."""
     drop_lines = {"specialists": _resolve(crew, "specialists") is None}
+    for key in crewlib.OPTIONAL_ROLE_KEYS:
+        drop_lines[key] = _resolve(crew, key) is None
     if _resolve(crew, "crew_notice") is None:
         template = template.replace("{crew_notice}\n\n", "", 1)
     drop_section = _resolve(crew, "local_rules") is None
@@ -561,11 +578,7 @@ def _sessions(crew_path: Path, crew: dict[str, Any], role: str) -> list[tuple[st
     if role == "worker":
         return [("worker", "worker", "")]
     if role == "specialist":
-        return [
-            (f"specialist {e['name']}", "named", slug)
-            for slug, e in crewlib.members(crew).items()
-            if e.get("specialist")
-        ]
+        return [(f"specialist {e['name']}", "named", slug) for slug, e in specialist_members(crew)]
     if role not in crewlib.ROLE_KEYS:
         raise crewlib.CrewError(f"{crew_path}: unknown role {role}")
     name = crewlib.holder_name(crew, role)
