@@ -1177,3 +1177,61 @@ class TestEscalationSignal:
             go(escalating, "escalation", "route", now=LATER)
         assert (escalating / "board.json").read_bytes() == before
         assert len(esc_log(escalating)) == 1
+
+    def test_a_touches_record_waits_on_the_holder_until_advised(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="money")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture bundle since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z (advice pending)"
+        ]
+        news = {
+            i["id"]: i for i in board_of(escalating)["news"] if i.get("id", "").startswith("E1")
+        }
+        assert news["E1"]["kind"] == "todo" and "for" not in news["E1"]
+        assert (news["E1a"]["kind"], news["E1a"]["for"], news["E1a"]["title"]) == (
+            "escalation",
+            "escalation",
+            "Advice E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # a second route adds no second advice item
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert (ids.count("E1"), ids.count("E1a")) == (1, 1)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "take a") == 0
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on escalation"
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1a" not in ids and "E1" in ids, "advice drops the holder's item, not the todo"
+
+    def test_settle_drops_the_records_news_items(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert {"E1", "E2"} <= {i.get("id") for i in board_of(escalating)["news"]}
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "a") == 0
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1" not in ids and "E2" in ids
+
+    def test_settle_via_human_drops_the_todo(self, escalating, monkeypatch):
+        holder_line(escalating, "parked")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert "E1" in [i.get("id") for i in board_of(escalating)["news"]]
+        argv = ["escalation", "settle", "E1", "--outcome", "a", "--via", "human"]
+        assert go(escalating, *argv) == 0
+        assert "E1" not in [i.get("id") for i in board_of(escalating)["news"]]

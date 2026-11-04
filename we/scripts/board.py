@@ -49,11 +49,12 @@ escalation the decision story between two owners (docs/board.md § Escalations):
          `crew.fallback.escalation` (`human_bundle` → stage `bundle`); `escalation` → `bundle`; a
          `--touches` record goes from `self` straight to `bundle` with `advice_from: escalation`.
          Entering `escalation` adds one `news` item `E<n>` of kind `escalation` with `for` the role
-         waited on; entering `bundle` replaces it by one of kind `todo`. `list` prints the open
+         waited on; entering `bundle` replaces it by one of kind `todo` (a `--touches` record adds
+         `E<n>a` of kind `escalation` for the holder until `advise`). `list` prints the open
          records waiting on `--waiting-on` (default: the caller's roles), one line each, optionally
-         at one `--stage`. `advise` (the escalation
-         holder) puts the recommendation into a `--touches` record; `settle` closes a record: a
-         party at `self`, the role waited on at `escalation`, the coordinator `--via human` at
+         at one `--stage`. `advise` (the escalation holder) puts the recommendation into a
+         `--touches` record and drops `E<n>a`; `settle` closes a record and drops its news items:
+         a party at `self`, the role waited on at `escalation`, the coordinator `--via human` at
          `bundle` (a `--touches` record only once advised). `count` prints the records per role
          pair in this ISO week and warns past two. With `board.ticketing: jira`, `open` and
          `settle` print a `carry:` `comment` op on the story's ticket as the last line.
@@ -730,9 +731,27 @@ def _story_text(rec):
     )
 
 
+def _advice_pending(rec):
+    """Whether a `--touches` record still waits on the escalation role's recommendation."""
+    return bool(rec.get("advice_from")) and not rec.get("recommendation")
+
+
+def _advice_id(eid):
+    """The id of the escalation holder's advice item beside the human's `todo` item `E<n>`."""
+    return eid + "a"
+
+
+def _drop_news(board, ids):
+    """Remove every news item whose id is in `ids`; returns how many went."""
+    news = board.get("news") or []
+    kept = [i for i in news if not (isinstance(i, dict) and i.get("id") in ids)]
+    board["news"] = kept
+    return len(news) - len(kept)
+
+
 def _bundle_line(rec):
     line = f"escalation {rec['id']} {rec['key']}: {rec['question']}"
-    if rec.get("advice_from") and not rec.get("recommendation"):
+    if _advice_pending(rec):
         line += " (advice pending)"
     elif rec.get("recommendation"):
         line += f" (advice: {rec['recommendation']})"
@@ -917,6 +936,17 @@ def _route(state, crew, now):
             if kind == "escalation":
                 item["for"] = event["waiting_on"]
             news.append(item)
+            if _advice_pending({**rec, **event}):
+                # the human's todo keeps id E<n>; the holder's advice signal is E<n>a
+                news.append(
+                    {
+                        **item,
+                        "id": _advice_id(rec["id"]),
+                        "kind": "escalation",
+                        "for": event["advice_from"],
+                        "title": f"Advice {rec['id']} {rec['key']}: {rec['question']}",
+                    }
+                )
         return moved
 
     def append_all(events):
@@ -961,7 +991,12 @@ def cmd_escalation_advise(state, args, crew, now):
         "by": "escalation",
         "recommendation": args.recommendation.strip(),
     }
-    _locked(state, lambda _b: state.append_escalation(event))
+
+    def drop(board):
+        _drop_news(board, {_advice_id(args.id)})
+        return event
+
+    state.write_board(drop, after=state.append_escalation)
     print(json.dumps(event, ensure_ascii=False))
     return 0
 
@@ -1003,7 +1038,12 @@ def cmd_escalation_settle(state, args, crew, now):
         "by": by,
         "outcome": args.outcome.strip(),
     }
-    _locked(state, lambda _b: state.append_escalation(event))
+
+    def drop(board):
+        _drop_news(board, {args.id, _advice_id(args.id)})
+        return event
+
+    state.write_board(drop, after=state.append_escalation)
     print(json.dumps(event, ensure_ascii=False))
     text = f"Escalation {args.id} settled at stage {rec['stage']} by {by}: {event['outcome']}"
     _print_carry(crew, [{"op": "comment", "key": rec["key"], "text": text}])
@@ -1032,11 +1072,15 @@ def cmd_escalation_list(state, args, crew, now):
     for rec in fold_escalations(state.escalations()).values():
         if not rec["open"] or (args.stage and rec["stage"] != args.stage):
             continue
-        if not set(str(rec.get("waiting_on") or "").split(",")) & set(roles):
+        waiting = set(str(rec.get("waiting_on") or "").split(","))
+        if _advice_pending(rec):
+            waiting.add(rec["advice_from"])
+        if not waiting & set(roles):
             continue
         out.append(
             f"{rec['id']} {rec['key']} {'/'.join(rec['parties'])} {rec['stage']} "
             f"since {rec['since']} due {rec['sla_due']}"
+            + (" (advice pending)" if _advice_pending(rec) else "")
         )
     if not out:
         where = f" at {args.stage}" if args.stage else ""

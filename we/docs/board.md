@@ -391,13 +391,18 @@ the fold of its events by `id` in log order (`fold_escalations`).
 
 Entering `escalation` adds one `news` item `{id: "E<n>", kind: "escalation", for: <the role waited
 on>, title: "Escalation E<n> <KEY>: <question>", body, ts}`; entering `bundle` replaces it by the
-same item of kind `todo` without `for` (one item per id). Both go through the locked writer, and
-the route events are appended after it; a failed board write appends none and adds no item. A
+same item of kind `todo` without `for` (one item per id). A `--touches` record entering `bundle`
+with its advice pending gets a second item beside the todo, `{id: "E<n>a", kind: "escalation",
+for: "escalation", title: "Advice E<n> <KEY>: <question>", body, ts}`: the human's todo keeps
+`E<n>`, the holder's advice signal takes its own id, so each id still names one item. `advise`
+drops `E<n>a`; `settle` drops `E<n>` and `E<n>a`. Every one of these goes through the locked writer,
+and the event is appended after it; a failed board write appends none and changes no item. A
 record stays in `bundle` until it is settled.
 
 **List.** `escalation list [--waiting-on ROLE] [--stage STAGE]` (read-only) prints one line per open
 record waiting on the role, `E<n> <KEY> <role>/<role> <stage> since <since> due <sla_due>`, or
-`escalations: none waiting on <roles>`. Without `--waiting-on` it lists the records waiting on the
+`escalations: none waiting on <roles>`. A `--touches` record with its advice pending also waits on
+`escalation` (its `advice_from`) beside `human`, and its line ends in `(advice pending)`. Without `--waiting-on` it lists the records waiting on the
 roles the caller holds; a caller holding none is refused.
 
 **Settle.** `escalation settle E<n> --outcome T`: at `self` a party, at `escalation` the holder of the

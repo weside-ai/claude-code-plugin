@@ -64,6 +64,9 @@ One line per open record waiting on your roles (or `--waiting-on`). A record rou
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py escalation advise E<n> --recommendation "<advice>"
 ```
 
+Your signal: a news item `E<n>a` of kind `escalation` for `escalation`, and the record in your
+`escalation list` marked `(advice pending)`. Both go once you advise; `settle` clears `E<n>`.
+
 ## 5 · Route and count (the coordinator)
 
 `board.py bundle` runs `escalation route` first. Between bundles: `board.py escalation route` moves
