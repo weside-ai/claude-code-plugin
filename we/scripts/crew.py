@@ -41,7 +41,8 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 ``we:lens-<key>``), ``ready_lenses``, ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
-``capacity``, ``files``, ``coldstart``.
+``files``, ``coldstart``. A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
+stderr naming the file, never a ``CrewError``, so a crew file written for an older release loads.
 
 ``load`` validates on every read and raises ``CrewError`` naming the dotted key: a version other
 than 2; an unknown key; a value of the wrong type (a null default takes a string or null); a
@@ -199,18 +200,16 @@ DEFAULTS: dict[str, Any] = {
         "process_inbox": "weekly",
         "goal_file": "monthly",
     },
-    "capacity": {"unit_gib": 1, "pod_gib": None, "gate_lock_gib": None, "test_slot_gib": None},
     "files": {"goals": None, "dod": None, "verify": None},
     "coldstart": {"suite": None},
 }
 # a null default takes a string or null; these take a number or null
 NUMBER_OR_NULL = (
     "acceptance.mock_preset",
-    "capacity.pod_gib",
-    "capacity.gate_lock_gib",
-    "capacity.test_slot_gib",
     "sample",
 )
+# keys no release reads any more: skipped with a stderr line instead of refused as unknown
+RETIRED_KEYS = ("capacity",)
 STUB_MARKER = "<!-- we:stub"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "companion-skill" / "SKILL.md"
 _SAFE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
@@ -323,6 +322,7 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
         raise CrewError(VERSION_1)
     if version != VERSION or isinstance(version, bool):
         raise CrewError(f"{path}: version {version!r} is not {VERSION}")
+    _drop_retired(path, data)
     _validate(path, data)
     _drop_former_lenses(path, data)
     found = _transition_keys(data)
@@ -332,6 +332,13 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
             f"cleanup, {V7_TRANSITION_ENDS}"
         )
     return _merge(data)
+
+
+def _drop_retired(path: Path, data: dict[str, Any]) -> None:
+    for key in RETIRED_KEYS:
+        if key in data:
+            del data[key]
+            print(f"crew: {key} is no longer read; remove it from {path}", file=sys.stderr)
 
 
 def _drop_former_lenses(path: Path, data: dict[str, Any]) -> None:

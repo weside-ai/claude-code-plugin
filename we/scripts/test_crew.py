@@ -299,6 +299,23 @@ def test_an_unknown_key_is_refused_by_name(tmp_path, changes, dotted):
     assert f"unknown key {dotted}" in out.stderr
 
 
+def test_a_retired_capacity_key_loads_with_one_stderr_line(tmp_path):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16, "gate_lock_gib": 2}))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    crew_file = core / ".weside" / "crew.json"
+    assert out.stderr.count("crew: capacity is no longer read") == 1
+    assert f"crew: capacity is no longer read; remove it from {crew_file}" in out.stderr
+    assert "capacity" not in crew.load(crew_file)
+
+
+def test_only_retired_keys_are_skipped_another_unknown_key_still_fails(tmp_path):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16}, capacityz=1))
+    out = run(core, "show")
+    assert out.returncode == 1
+    assert "unknown key capacityz" in out.stderr
+
+
 @pytest.mark.parametrize("version", [1, None])
 @pytest.mark.parametrize(
     "verb", [["show"], ["members"], ["stubs"], ["is-role", "hr"], ["workplace", "ada"], ["lenses"]]

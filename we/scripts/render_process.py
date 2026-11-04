@@ -23,7 +23,7 @@ Templates: ``process/L0.md`` (every session but a worker) and ``process/L0-worke
 else the fallback, else the role's title), ``human`` (``human.name``), ``specialists`` (``Name
 (field)`` of every member with ``specialist``; the line holding it is dropped when there is none),
 ``local_rules`` (one bullet each; the section holding it is dropped when there is none),
-``t2_second_reviewer`` (that member's name), ``capacity_line`` (the host's memory split), or a
+``t2_second_reviewer`` (that member's name), or a
 dotted key of the merged crew (``crew.load`` merges ``DEFAULTS``, so every key has a value). A list
 renders ``a-b`` (en dash) for two numbers, else joined by ``, ``. A null or empty value takes the fallback; a
 token with neither raises ``RenderError``, so a template change cannot ship a hole.
@@ -138,15 +138,6 @@ def _specialists(crew: dict[str, Any]) -> str | None:
     return ", ".join(found) or None
 
 
-def _capacity_line(crew: dict[str, Any]) -> str | None:
-    cap = crew.get("capacity") or {}
-    if cap.get("pod_gib") is None:
-        return None
-    parts = [f"pod {cap['pod_gib']} GiB minus gate lock (≤ {cap.get('gate_lock_gib') or '?'})"]
-    parts.append(f"test slot (≤ {cap.get('test_slot_gib') or '?'}) and devbox")
-    return ", ".join(parts)
-
-
 def _local_rules(crew: dict[str, Any]) -> str | None:
     rules = [" ".join(str(r).split()) for r in crew.get("local_rules") or []]
     return "\n".join(f"- {r}" for r in rules if r) or None
@@ -163,9 +154,6 @@ SPECIAL = {
     "specialists": _specialists,
     "local_rules": _local_rules,
     "t2_second_reviewer": _second_reviewer,
-    "capacity_line": lambda crew: (
-        _capacity_line(crew) or "the host's memory minus the gate lock, the test slot and devboxes"
-    ),
 }
 
 

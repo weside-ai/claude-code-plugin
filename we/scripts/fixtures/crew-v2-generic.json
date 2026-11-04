@@ -27,7 +27,6 @@
   "risk": {"command": "scripts/risk-class.sh"},
   "sla": {"tz": "Europe/Berlin", "t2_second_reviewer": "bo"},
   "release": {"runbook": "docs/RELEASE.md"},
-  "capacity": {"pod_gib": 16, "gate_lock_gib": 2, "test_slot_gib": 3},
   "local_rules": [
     "A draft PR names why it waits in its first line.",
     "Any session may close a monitoring issue that names its fix.",

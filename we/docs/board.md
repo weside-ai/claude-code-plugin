@@ -198,15 +198,18 @@ relative path count from the home folder). Without the file the pane says so and
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News) |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle) and `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
+| `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
-| `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
+| `sessions[].state` | `build`, `ci` or `active` (● runs), `wait-owner` (◉ waits, listed first), `idle`, `parked` or `done` (○ rests); anything else `?`. `board.py`'s `SESSION_STATES` owns this list; the pane draws `active` and `parked` as `?` until its lamps follow |
+| `sessions[].since` | `YYYY-MM-DDTHH:MMZ`: in this state since; a wait (`waiting_on`) is such a state, so `board.py set waiting_on=…` moves it |
+| `sessions[].waiting_on`, `.sla_due` | the role key (or `human`) the session waits on, and when that wait passes the SLA (`YYYY-MM-DDTHH:MMZ`, the crew's `sla.hours` counted only inside `sla.daytime` in `sla.tz`); written by `board.py set` only (§ Questions and decisions) |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
 | `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
 | `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
@@ -293,10 +296,70 @@ back, and the deliverer carries it like a press:
 python3 <plugin>/scripts/board.py answer Q1 accept --session lead --via chat --quote "go ahead"
 ```
 
-It refuses, writing nothing, an id in neither `owner_queue` nor `news`, an id an Accept or Deny
-closed, and a kind outside `accept`, `deny`, `discuss`, `info`, `update`; it opens `board.json`
-read-only and prints the line it wrote. `--board FILE` names another board file. Without that line
+It refuses, writing nothing, an id in neither `owner_queue` nor `news` and a kind outside `accept`,
+`deny`, `discuss`, `info`, `update`; it opens `board.json` read-only and prints the line it wrote. A
+second answer on an id an Accept or Deny already closed (the owner answered twice) is a duplicate:
+no answer line, so nothing is carried again, one `duplicate-answer` line in `board-questions.jsonl`,
+and exit 0 with `<id> is closed by <kind>; recorded as a duplicate, nothing runs again`. `--board FILE` names another board file. Without that line
 the question stays open on the pane.
+
+## Questions and decisions
+
+`board.py` (in the plugin's `scripts/`) writes `board.json` only through one locked writer: an
+exclusive lock on `board.json.lock` beside it (10 s, then it gives up naming the file), a fresh
+read, then a temp file and `os.replace`. A hand write between that read and the replace is lost.
+The JSONL files beside the board only grow (`O_APPEND`, one whole line per write). A line that
+records a board change is appended after board.json was replaced, still under the lock, so a failed
+write leaves no line.
+
+**`set` — the session's own line.** `board.py set now="<step>" state=<state> waiting_on=<role>`
+writes the line whose `name` is the caller's, as `claude agents --json` lists it for its
+`CLAUDE_CODE_SESSION_ID` (a missing line is appended with `name` and `session_id`; a session without
+a name is told to `/rename` first). Only `waiting_on`, `state` and `now` are settable; `state` takes
+the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--for <name>` writes
+another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
+`since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting
+line clears all three and on any other line changes nothing, so a hand-written `since` survives.
+`state` and `now` never touch `since`, and `set` never writes `updated` or `updated_by`.
+
+**`ask` — a question for the owner.** Each session asks its own question with `board.py ask`;
+the coordinator owns the queue (answers, re-routing). The call is
+`board.py ask --session <asker> --key <KEY> --key-title "<title>" --ask "<question>"
+--recommendation "<recommendation>" --cause <cause>`. A missing or blank field, a key outside the
+crew's `naming.key` or a cause outside the six is refused, one line each, before anything runs.
+Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of
+`templates/cold-reader.md`) in an empty directory, with no tools, no MCP server, no settings files, hooks
+off, no session file and the global login, given only the question, the recommendation, the title
+and the crew's two labels. It must say what the owner decides and what happens on yes, and it names
+form findings: more than one decision, no recommendation, more than three options, another
+language than the labels. A question that passes lands in `owner_queue` as `Q<n>` (one above every
+`Q` number on the board, in the answers file and in the log), with `since` and `ts` stamped by the
+script, and prints `posted Q<n>`. One that does not comes back, never silently: exit 1 with
+`returned to <asker>: <reason>`, the same text as the asker's line's `note`, and a news item `R<n>`
+of kind `returned` for the coordinator. The asker's next posted question clears a `returned to`
+note; a note that does not start with `returned to` is never overwritten, and the news item alone
+carries the return. A reader that cannot run (no `claude`, 90 s, no parseable
+answer) posts nothing and exits 1 with `reader-error: <cause>`.
+
+Every `ask` past the field check appends one line to `board-questions.jsonl`:
+`{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
+`outcome` `posted` (only then `id`), `returned` or `reader-error`, and `reader` the reader's raw
+`decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
+chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
+questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
+
+**`decision` — an owner's cut or fence.** `board.py decision <area> <cut|fence> --key <KEY> --text
+"<decision>"` needs the caller to hold `roles.<area>`. It writes the news item
+`{id: "D<n>", kind: "decision", title: "<area> <kind> <KEY>: <decision>", ts, by}`, then appends
+`{id, kind: "decision", title, ts, by, area, decision, key, text}` to `board-decisions.jsonl`.
+
+**`bundle` — the evening bundle.** The coordinator runs `board.py bundle` at its `bundle` cadence.
+It writes one news item `B-<YYYY-MM-DD>` (`-2`, `-3` for a further bundle that day) of kind `todo`,
+titled `Bundle <date>: <n> decisions · <m> open questions`, its body one line
+`<area>: <kind> <KEY> <text>` per decision since the last bundle, grouped by area, then
+`open: Q12, Q15 …`, the questions no Accept or Deny closed, oldest `since` first. Then it appends
+the marker `{"bundle": "<id>", "ts": …}` to `board-decisions.jsonl`, so the next bundle shows only
+newer decisions. With nothing to show it prints `bundle: nothing` and writes nothing.
 
 ## The live column
 
