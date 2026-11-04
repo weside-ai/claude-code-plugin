@@ -112,13 +112,18 @@ def freeze(
     if not reason.strip():
         raise FreezeError("a freeze needs a reason")
     stamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    try:
+        standing = read_flag(path) or {}
+    except FreezeError:
+        standing = {}
     flag = {
-        "since": stamp,
+        "since": standing.get("since") or stamp,
         "by": by,
         "reason": reason,
-        "repos": list(repos),
-        "disarmed": [],
-        "not_disarmed": [],
+        "repos": sorted(set(standing.get("repos") or []) | set(repos)),
+        # A second freeze keeps what the first disarmed: `unfreeze` must list every PR.
+        "disarmed": list(standing.get("disarmed") or []),
+        "not_disarmed": list(standing.get("not_disarmed") or []),
     }
     _write_atomic(path, flag)
     for repo in repos:
@@ -129,6 +134,8 @@ def freeze(
         for number in armed:
             ok = gh(["pr", "merge", str(number), "-R", repo, "--disable-auto"]) is not None
             entry = {"repo": repo, "number": number}
+            if entry in flag["disarmed"]:
+                continue
             if ok:
                 flag["disarmed"].append(entry)
             else:

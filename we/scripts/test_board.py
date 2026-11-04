@@ -228,3 +228,18 @@ class TestFreeze:
         (state_dir / "freeze.json").write_text("{torn")
         assert run(state_dir, "unfreeze") == 0
         assert not (state_dir / "freeze.json").exists()
+
+    @pytest.mark.usefixtures("fake_gh")
+    def test_a_second_freeze_keeps_the_first_ones_disarmed(self, state_dir, capsys):
+        run(state_dir, "freeze", "--reason", "one", "--repo", "o/r")
+        flag = json.loads((state_dir / "freeze.json").read_text())
+        flag["disarmed"].append({"repo": "o/old", "number": 1})
+        (state_dir / "freeze.json").write_text(json.dumps(flag))
+        run(state_dir, "freeze", "--reason", "two", "--repo", "o/r")
+        again = json.loads((state_dir / "freeze.json").read_text())
+        assert again["reason"] == "two" and again["since"] == flag["since"]
+        assert {"repo": "o/old", "number": 1} in again["disarmed"]
+        assert again["disarmed"].count({"repo": "o/r", "number": 5}) == 1
+        capsys.readouterr()
+        run(state_dir, "unfreeze")
+        assert "o/r#5 o/old#1" in capsys.readouterr().out

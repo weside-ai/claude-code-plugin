@@ -2,6 +2,7 @@
 # a change needs the owner's review once the ruleset requires review from code owners.
 /.github/CODEOWNERS                @fbiebl
 /.weside/risk-paths                @fbiebl
+/.weside/crew.json                 @fbiebl
 /we/hooks/automerge_gate.py        @fbiebl
 /we/hooks/hooks.json               @fbiebl
 /we/hooks/verification_gate.py     @fbiebl

@@ -42,9 +42,15 @@ no-checkout worktree of the head; without a `risk.command`, the plugin's `script
 `.weside/risk-paths`; with neither the class is `T0`, decided offline. Line 1 must match
 `^T[02]( one-way \\S+)?$`.
 
-Fail closed on the class, the freeze and the panel: a classifier failure, a `gh` failure while
-classifying, a PR in a repo other than the local checkout's (`-R`, a URL selector) and a repo that
-uses rules but has no `origin/main` all refuse with the reason. Fail open on the Codex wait and the
+Before classifying, the hook fetches the rules branch (`origin/main`), so a stale local ref neither
+misses a new rule nor drags main's own commits into the diff.
+
+Fail closed on the class, the freeze and the panel: a classifier failure, a `gh` or fetch failure
+while classifying, a PR in a repo other than the local checkout's (`-R`, a URL selector), a `cd`
+the hook cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded), a command that
+does not parse as shell words, a GraphQL query piped in from stdin or from an unreadable file, and
+a repo that uses rules but has no `origin/main` all refuse with the reason. The freeze flag counts
+beside the default board file and beside the crew's `board.file`. Fail open on the Codex wait and the
 receipt read (5, 6) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
 Pinned by `test_automerge_gate.py`.
 """
@@ -66,6 +72,7 @@ from urllib.parse import quote
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import board_freeze
+import crew
 import verification_gate as vg
 from worker_launch import worker_marker
 
@@ -97,6 +104,10 @@ _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
 _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
+_LOOKS_LIKE_MERGE = re.compile(
+    r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
+    re.DOTALL,
+)
 RULES_FROM = "origin/main"
 CLASSIFY_TIMEOUT = 60
 DEFAULT_BOARD = "~/.claude/we-state/board.json"
@@ -163,21 +174,45 @@ def _api_method(args: list[str]) -> str:
     return "POST" if any(a in fields or a.startswith(fields) for a in args) else "GET"
 
 
-def _graphql_text(args: list[str], command: str, cwd: str | None) -> str:
-    """The command's own text plus every query file it names (`query=@f`, `--input f`)."""
-    parts, files = [command], []
+def _graphql_text(args: list[str], command: str, cwd: str | None) -> tuple[str, str | None]:
+    """(the command's own text plus every query file it names, why a query is unseen or None).
+
+    A query from stdin (`--input -`, `query=@-`) is in the command only as a heredoc; piped from
+    elsewhere the hook cannot read it, nor a file it cannot open: both are reported unseen.
+    """
+    parts, files, unseen = [command], [], None
     for k, a in enumerate(args):
         value = args[k + 1] if k + 1 < len(args) else ""
         if a in ("-F", "--field", "-f", "--raw-field") and value.startswith("query=@"):
             files.append(value[len("query=@") :])
-        if a == "--input" and value and value != "-":
+        if a == "--input" and value:
             files.append(value)
     for name in files:
+        if name == "-":
+            if "<<" not in command:
+                unseen = "the GraphQL query comes from stdin, which the hook cannot read"
+            continue
         try:
             parts.append(Path(cwd or ".", name).read_text(encoding="utf-8", errors="replace"))
         except OSError:
-            continue
-    return "\n".join(parts)
+            unseen = f"the GraphQL query file {name} is not readable from {cwd or '.'}"
+    return "\n".join(parts), unseen
+
+
+def _cwd_at(argv: list[str], cwd: str | None, stop: int) -> tuple[str | None, bool]:
+    """(the directory `argv[stop]` runs in after the command's own `cd`s, whether it is known).
+
+    `~` and `$VAR` are expanded as the shell would; a target still holding `$` (a command
+    substitution, an unset variable) leaves the directory unknown.
+    """
+    known = True
+    for i, tok in enumerate(argv[:stop]):
+        if tok.rstrip(";&|") in ("cd", "pushd") and i + 1 < len(argv):
+            target = os.path.expanduser(os.path.expandvars(argv[i + 1].rstrip(";&|")))
+            if "$" in target or "`" in target:
+                known = False
+            cwd = os.path.join(cwd or "", target)
+    return cwd, known
 
 
 def _merge_calls(argv: list[str], command: str, cwd: str | None) -> list[MergeCall]:
@@ -213,13 +248,15 @@ def _merge_calls(argv: list[str], command: str, cwd: str | None) -> list[MergeCa
             continue
         if "graphql" not in args:
             continue
-        text = _graphql_text(args, command, cwd)
+        text, unseen = _graphql_text(args, command, _cwd_at(argv, cwd, i)[0])
         arm = "enablePullRequestAutoMerge" in text
-        if not arm and "mergePullRequest" not in text:
+        if not arm and "mergePullRequest" not in text and unseen is None:
             continue
         call = MergeCall(i, "graphql", arm)
         ids = sorted(set(_NODE_ID.findall(text)))
-        if len(ids) != 1:
+        if unseen is not None:
+            call.unresolved = unseen
+        elif len(ids) != 1:
             call.unresolved = f"the mutation names {len(ids)} pull-request node ids, not one"
         else:
             _resolve_node(call, ids[0], cwd)
@@ -416,7 +453,7 @@ def _git(root: str, *args: str, timeout: int = 20) -> str | None:
 
 
 def _local_slug(root: str) -> str | None:
-    m = _SLUG.search((_git(root, "remote", "get-url", "origin") or "").strip())
+    m = _SLUG.search((_git(root, "config", "--get", "remote.origin.url") or "").strip())
     return m.group(1).lower() if m else None
 
 
@@ -480,12 +517,27 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
     except (ValueError, TypeError, KeyError):
         return ClassResult(reason="`gh pr view` did not name the PR's head")
     result = ClassResult(number=number, url=url)
+    remote, _, branch = rules_from.partition("/")
+    if remote == "origin" and branch:
+        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+        if _git(root, "fetch", "-q", "--no-tags", "origin", refspec, timeout=60) is None:
+            result.reason = f"`git fetch origin {branch}` failed; the rules must be current"
+            return result
     if _git(root, "cat-file", "-e", f"{head}^{{commit}}") is None:
         _git(root, "fetch", "-q", "--no-tags", "origin", head, timeout=60)
     base = (_git(root, "merge-base", rules_from, head) or "").strip()
     if not base:
         result.reason = f"no merge base of {head[:9]} and {rules_from} (fetch origin)"
         return result
+    result.line, result.reason = _run_classifier(root, prefix, blob, head, base)
+    return result
+
+
+def _run_classifier(
+    root: str, prefix: list[str], blob: str | None, head: str, base: str
+) -> tuple[str | None, str | None]:
+    """(class line, None) or (None, why): the classifier run as a file in a no-checkout
+    worktree of `head`, on `base`; the worktree is removed whatever happens."""
     tmp = tempfile.mkdtemp(prefix="we-merge-class.")
     tree = os.path.join(tmp, "head")
     try:
@@ -495,16 +547,14 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
         else:
             body = _git(root, "show", blob)
             if body is None:
-                result.reason = f"`{blob}` is missing"
-                return result
+                return None, f"`{blob}` is missing"
             Path(script).write_text(body, encoding="utf-8")
         os.chmod(script, 0o700)
         if (
             _git(root, "worktree", "add", "--no-checkout", "--detach", tree, head, timeout=60)
             is None
         ):
-            result.reason = f"`git worktree add` of {head[:9]} failed"
-            return result
+            return None, f"`git worktree add` of {head[:9]} failed"
         argv = [script if a == "{file}" else a for a in prefix] + [base]
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
         try:
@@ -518,26 +568,29 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
                 env=env,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            result.reason = f"the classifier did not finish ({type(exc).__name__})"
-            return result
+            return None, f"the classifier did not finish ({type(exc).__name__})"
         line = (out.stdout.splitlines() or [""])[0].strip()
         if out.returncode != 0 or not _CLASS_LINE.match(line):
             last = (out.stderr.strip().splitlines() or [line or "no output"])[-1]
-            result.reason = f"the classifier exited {out.returncode}: {last}"
-            return result
-        result.line = line
-        return result
+            return None, f"the classifier exited {out.returncode}: {last}"
+        return line, None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         _git(root, "worktree", "prune")
 
 
-def _board_file(root: str | None) -> str:
+def _board_files(root: str | None) -> list[str]:
+    """Every board file a freeze may sit beside: the default (`board.py`'s) and the crew's."""
+    files = [DEFAULT_BOARD]
     if root:
-        board = _read_json(Path(root, ".weside", "crew.json")).get("board")
+        try:
+            _, crew_data = crew.find_and_load(root)
+        except crew.CrewError:
+            crew_data = None
+        board = (crew_data or {}).get("board")
         if isinstance(board, dict) and isinstance(board.get("file"), str):
-            return board["file"]
-    return DEFAULT_BOARD
+            files.append(board["file"])
+    return files
 
 
 def _human(root: str) -> str:
@@ -547,11 +600,16 @@ def _human(root: str) -> str:
 
 
 def _freeze_refusal(root: str | None) -> str | None:
-    path = board_freeze.flag_path(_board_file(root))
-    try:
-        flag = board_freeze.read_flag(path)
-    except board_freeze.FreezeError as exc:
-        return f"Merges are frozen: the freeze flag is unreadable ({exc}); it counts as standing."
+    flag = None
+    for board_file in _board_files(root):
+        try:
+            flag = board_freeze.read_flag(board_freeze.flag_path(board_file))
+        except board_freeze.FreezeError as exc:
+            return (
+                f"Merges are frozen: the freeze flag is unreadable ({exc}); it counts as standing."
+            )
+        if flag is not None:
+            break
     if flag is None:
         return None
     return (
@@ -592,15 +650,17 @@ def _pr_target(call: MergeCall) -> str | None:
     return m.group(1).lower() if m else None
 
 
-def _class_refusal(root: str | None, call: MergeCall, cwd: str | None) -> tuple[str | None, bool]:
+def _class_refusal(
+    root: str | None, call: MergeCall, cwd: str | None, cwd_known: bool = True
+) -> tuple[str | None, bool]:
     """(refusal, go on): the class and panel refusals; go on is False when nothing is to merge."""
     if call.unresolved:
         return f"Merge refused, class not computed: {call.unresolved}.", False
     target = _pr_target(call)
     if root is None or (target is not None and target != _local_slug(root)):
-        if root is None and target is None:
+        if root is None and target is None and cwd_known:
             return None, False  # `gh` has no repository here and merges nothing
-        where = target or "this repository"
+        where = target or "the repository this command runs in"
         return (
             f"Merge refused, class not computed: no local checkout of {where} here; run the "
             "merge from that repository's checkout, where the hook can classify it.",
@@ -635,12 +695,12 @@ def _call_refusal(
             "(worker-dispatch.md § Dev-only worker contract). Report the PR; the Lead arms "
             "auto-merge after `/we:ci-review`."
         )
-    cwd = vg._cwd_after_cd(argv, command_cwd, stop=call.at)
-    root = vg._repo_root(cwd)
+    cwd, cwd_known = _cwd_at(argv, command_cwd, call.at)
+    root = vg._repo_root(cwd) if cwd_known else None
     frozen = _freeze_refusal(root)
     if frozen:
         return frozen
-    refusal, go_on = _class_refusal(root, call, cwd)
+    refusal, go_on = _class_refusal(root, call, cwd, cwd_known)
     if refusal or not go_on or not call.arm or root is None:
         return refusal
     # The PR is this checkout's (checked above): read it as the local repo's, so a missing Codex
@@ -672,6 +732,11 @@ def _refusal(payload: dict) -> str | None:
     if "gh" not in command or ("merge" not in lower and "graphql" not in lower):
         return None
     argv = vg._argv_or_none(command)
+    if not argv and _LOOKS_LIKE_MERGE.search(command):
+        return (
+            "Merge refused: the command does not parse as shell words (an unbalanced quote?), "
+            "so the hook cannot see what it merges. Rewrite it without the stray quote."
+        )
     for call in _merge_calls(argv, command, payload.get("cwd")):
         reason = _call_refusal(payload, argv, call, payload.get("cwd"))
         if reason is not None:

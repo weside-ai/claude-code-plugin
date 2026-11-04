@@ -375,6 +375,17 @@ def _commit(repo: Path, files: dict[str, str], msg: str) -> str:
     return _git(repo, "rev-parse", "HEAD")
 
 
+def _publish_main(repo: Path, sha: str) -> None:
+    """`sha` becomes main on the repo's origin (a local bare repo standing in for github.com,
+    through `url.<bare>.insteadOf`), so the hook's fetch of origin/main finds it."""
+    bare = repo.parent / f"{repo.name}-origin.git"
+    if not bare.exists():
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+        _git(repo, "config", f"url.{bare.as_uri()}.insteadOf", "https://github.com/o/r.git")
+    _git(repo, "push", "-q", "-f", "origin", f"{sha}:refs/heads/main")
+    _git(repo, "update-ref", "refs/remotes/origin/main", sha)
+
+
 @pytest.fixture()
 def classed(repo: Path, monkeypatch, tmp_path_factory) -> dict:
     """`repo` whose origin/main carries a crew `risk.command`; a PR head on top of it."""
@@ -388,7 +399,7 @@ def classed(repo: Path, monkeypatch, tmp_path_factory) -> dict:
         },
         "main",
     )
-    _git(repo, "update-ref", "refs/remotes/origin/main", main)
+    _publish_main(repo, main)
     head = _commit(repo, {"README.md": "y\n"}, "pr")
     monkeypatch.setenv("FAKE_LOG", str(log))
     monkeypatch.setenv("FAKE_CLASS", "T2 one-way money")
@@ -564,7 +575,7 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
         {".weside/risk-paths": "[brake-change]\npath gate.py\n", "gate.py": "a\n"},
         "main",
     )
-    _git(repo, "update-ref", "refs/remotes/origin/main", main)
+    _publish_main(repo, main)
     head = _commit(repo, {".weside/risk-paths": "", "gate.py": "b\n"}, "empty rules + gate")
     reason = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None
@@ -579,7 +590,7 @@ def test_mains_own_risk_paths_blob_is_preferred(repo: Path, monkeypatch) -> None
         {".weside/risk-paths": "[t2]\npath x\n", "we/scripts/risk_paths.py": own},
         "main",
     )
-    _git(repo, "update-ref", "refs/remotes/origin/main", main)
+    _publish_main(repo, main)
     head = _commit(repo, {"we/scripts/risk_paths.py": "print('T0')\n"}, "lower it")
     reason = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None and "one-way (terraform-secrets)" in reason
@@ -636,7 +647,14 @@ def test_the_crews_board_file_names_the_state_dir(
     _freeze(other)
     (repo / ".weside").mkdir()
     (repo / ".weside" / "crew.json").write_text(
-        json.dumps({"board": {"file": str(other / "board.json")}})
+        json.dumps(
+            {
+                "version": 2,
+                "roles": {},
+                "members": {},
+                "board": {"file": str(other / "board.json")},
+            }
+        )
     )
     reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
     assert reason is not None and "Merges are frozen" in reason
@@ -699,3 +717,102 @@ def test_without_lens_verdict_the_panel_check_is_off(classed: dict, monkeypatch,
     monkeypatch.setenv("FAKE_CLASS", "T2")
     assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
     assert "T2 panel check off" in capsys.readouterr().err
+
+
+# Review round: a merge the hook cannot read is refused, not let through.
+
+
+def test_cd_with_tilde_reaches_the_checkout(classed: dict, monkeypatch, tmp_path_factory) -> None:
+    monkeypatch.setenv("HOME", str(classed["repo"].parent))
+    elsewhere = tmp_path_factory.mktemp("elsewhere")
+    command = f"cd ~/{classed['repo'].name} && gh pr merge 7 --squash"
+    fake = FakeGh([run()], head=classed["head"])
+    reason = refuse(elsewhere, command, fake, monkeypatch)
+    assert reason is not None and "one-way (money)" in reason
+
+
+def test_a_cd_the_hook_cannot_resolve_refuses(repo: Path, monkeypatch) -> None:
+    command = 'cd "$(git rev-parse --show-toplevel)" && gh pr merge 7 --squash'
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None
+    assert "no local checkout of the repository this command runs in" in reason
+
+
+def test_an_unparsable_merge_command_refuses(repo: Path, monkeypatch) -> None:
+    reason = refuse(repo, "gh pr merge 7 --squash # don't wait", FakeGh([run()]), monkeypatch)
+    assert reason is not None and "does not parse as shell words" in reason
+
+
+def test_an_unparsable_command_without_a_merge_passes(repo: Path, monkeypatch) -> None:
+    assert refuse(repo, "echo don't merge yet; gh pr view 7", FakeGh([run()]), monkeypatch) is None
+
+
+def test_a_graphql_query_from_a_pipe_refuses(repo: Path, monkeypatch) -> None:
+    command = "cat q.json | gh api graphql --input -"
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin, which the hook cannot read" in reason
+
+
+def test_a_graphql_heredoc_is_read(classed: dict, monkeypatch) -> None:
+    command = (
+        "gh api graphql --input - <<'EOF'\n"
+        '{"query": "mutation { mergePullRequest(input: {pullRequestId: \\"PR_kwDOabc\\"}) '
+        '{ clientMutationId } }"}\nEOF'
+    )
+    fake = FakeGh([run()], head=classed["head"], node=NODE)
+    reason = refuse(classed["repo"], command, fake, monkeypatch)
+    assert reason is not None and "one-way (money)" in reason
+
+
+def test_a_graphql_file_is_read_after_the_commands_cd(classed: dict, monkeypatch) -> None:
+    sub = classed["repo"] / "sub"
+    sub.mkdir()
+    (sub / "q.graphql").write_text(GRAPHQL_MERGE.split("query=")[1].strip("'"))
+    fake = FakeGh([run()], head=classed["head"], node=NODE)
+    reason = refuse(
+        classed["repo"], "cd sub && gh api graphql -F query=@q.graphql", fake, monkeypatch
+    )
+    assert reason is not None and "one-way (money)" in reason
+
+
+def test_the_rules_are_fetched_before_classifying(classed: dict, monkeypatch) -> None:
+    repo = classed["repo"]
+    _git(repo, "update-ref", "refs/remotes/origin/main", f"{classed['main']}~0")
+    stale = _commit(repo, {"other.txt": "x\n"}, "unrelated")
+    _git(repo, "update-ref", "refs/remotes/origin/main", stale)  # local ref ahead of origin
+    fake = FakeGh([run()], head=classed["head"])
+    reason = refuse(repo, ARM, fake, monkeypatch)
+    assert reason is not None and "one-way (money)" in reason
+    assert _git(repo, "rev-parse", "refs/remotes/origin/main") == classed["main"]
+
+
+def test_a_failed_rules_fetch_refuses(classed: dict, monkeypatch) -> None:
+    _git(classed["repo"], "remote", "set-url", "origin", "https://github.com/o/r-gone.git")
+    _git(
+        classed["repo"],
+        "config",
+        "url.file:///nonexistent.insteadOf",
+        "https://github.com/o/r-gone.git",
+    )
+    reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
+    assert reason is not None and "`git fetch origin main` failed" in reason
+
+
+def test_the_default_freeze_counts_beside_a_crew_board(
+    repo: Path, monkeypatch, _isolated_state: Path, tmp_path_factory
+) -> None:
+    _freeze(_isolated_state)
+    other = tmp_path_factory.mktemp("board")
+    (repo / ".weside").mkdir()
+    (repo / ".weside" / "crew.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "roles": {},
+                "members": {},
+                "board": {"file": str(other / "board.json")},
+            }
+        )
+    )
+    reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason

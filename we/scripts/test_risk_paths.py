@@ -21,6 +21,7 @@ RULES = Path(__file__).resolve().parents[2] / ".weside" / "risk-paths"
 BRAKE = [
     ".weside/risk-paths",
     ".github/CODEOWNERS",
+    ".weside/crew.json",
     "we/hooks/automerge_gate.py",
     "we/hooks/hooks.json",
     "we/hooks/verification_gate.py",

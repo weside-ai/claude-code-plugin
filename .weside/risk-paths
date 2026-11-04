@@ -5,6 +5,7 @@
 
 [brake-change]
 path .github/CODEOWNERS
+path .weside/crew.json
 path .weside/risk-paths
 path we/hooks/automerge_gate.py
 path we/hooks/hooks.json
