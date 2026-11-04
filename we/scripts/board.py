@@ -9,6 +9,11 @@ Usage:
            --cause <merge-go|plan|prod|cut-fence|access-click|info>
   board.py [--board FILE] decision <area> <cut|fence> --key KEY --text T
   board.py [--board FILE] bundle
+  board.py [--board FILE] escalation open --key KEY --parties ROLE,ROLE --question Q --a T --a-cost C
+           --b T --b-cost C --reversible <yes|no> [--touches <vision|money|law|priority>]
+  board.py [--board FILE] escalation <route|count>
+  board.py [--board FILE] escalation advise E<n> --recommendation T
+  board.py [--board FILE] escalation settle E<n> --outcome T [--via human]
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -31,7 +36,23 @@ decision records an owner's cut or fence decision of their area (`roles.<area>`)
          `D<n>` of kind `decision`, then one line in board-decisions.jsonl.
 bundle   the coordinator's evening bundle: one news item `B-<date>` of kind `todo` listing the
          decisions since the last bundle by area and the open questions oldest first, then a
-         marker line in board-decisions.jsonl. Nothing to show prints `bundle: nothing`.
+         marker line in board-decisions.jsonl. Nothing to show prints `bundle: nothing`. It runs
+         `escalation route` first and lists the open bundle-stage escalations after the open
+         questions.
+escalation the decision story between two owners (docs/board.md § Escalations): events in
+         board-escalations.jsonl (`open`, `route`, `advise`, `settle`), a record is the fold of
+         its events. `open` (a session holding one of the two `--parties` roles) writes `E<n>` at
+         stage `self`, waiting on both parties until `sla_due` (the crew's `sla`, daytime hours).
+         `route` (the coordinator) moves a record past its `sla_due`: `self` → `escalation` while
+         the `roles.escalation` holder's board line is there and not `parked`, else to
+         `crew.fallback.escalation` (`human_bundle` → stage `bundle`); `escalation` → `bundle`; a
+         `--touches` record goes from `self` straight to `bundle` with `advice_from: escalation`.
+         Entering `bundle` adds one `news` item `E<n>` of kind `todo`. `advise` (the escalation
+         holder) puts the recommendation into a `--touches` record; `settle` closes a record: a
+         party at `self`, the role waited on at `escalation`, the coordinator `--via human` at
+         `bundle` (a `--touches` record only once advised). `count` prints the records per role
+         pair in this ISO week and warns past two. With `board.ticketing: jira`, `open` and
+         `settle` print a `carry:` `comment` op on the story's ticket as the last line.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
@@ -73,6 +94,9 @@ CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "info")
 DECISION_KINDS = ("cut", "fence")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
 RETURN_PREFIX = "returned to "
+TOUCHES = ("vision", "money", "law", "priority")
+OPEN_FIELDS = ("key", "parties", "question", "a", "a_cost", "b", "b_cost", "reversible")
+PAIR_WARN_AFTER = 2  # escalations per role pair and ISO week before the crew's rights look wrong
 LOCK_WAIT_S = 10.0
 MINUTE_FMT = "%Y-%m-%dT%H:%MZ"
 UNCHANGED = object()  # a `write_board` mutation returning this leaves board.json untouched
@@ -140,6 +164,7 @@ class StateDir:
         self.answers_path = self.board_path.with_name("board-answers.jsonl")
         self.questions_path = self.board_path.with_name("board-questions.jsonl")
         self.decisions_path = self.board_path.with_name("board-decisions.jsonl")
+        self.escalations_path = self.board_path.with_name("board-escalations.jsonl")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
 
     def board(self):
@@ -231,6 +256,12 @@ class StateDir:
     def append_decision(self, line):
         return _append_jsonl(self.decisions_path, line)
 
+    def escalations(self):
+        return _read_jsonl(self.escalations_path)
+
+    def append_escalation(self, line):
+        return _append_jsonl(self.escalations_path, line)
+
     def next_id(self, prefix, board):
         """`<prefix><n+1>` over every id the board, the answers file and the two logs carry."""
         pattern = re.compile(re.escape(prefix) + r"(\d+)")
@@ -240,7 +271,8 @@ class StateDir:
             for item in board.get(field) or []
             if isinstance(item, dict)
         ]
-        seen += [line.get("id") for line in self.answers() + self.questions() + self.decisions()]
+        logs = self.answers() + self.questions() + self.decisions() + self.escalations()
+        seen += [line.get("id") for line in logs]
         numbers = [
             int(m.group(1))
             for m in (pattern.fullmatch(i) for i in seen if isinstance(i, str))
@@ -578,6 +610,7 @@ def _open_questions(state, board):
 def cmd_bundle(state, args, crew, now):
     if not crew_mod.holds_role(crew, "coordinator", os.environ):
         raise BoardError("board.py bundle: only the coordinator bundles")
+    _route(state, crew, now)
     date = now.strftime("%Y-%m-%d")
 
     def mutate(board):
@@ -585,7 +618,12 @@ def cmd_bundle(state, args, crew, now):
         last_marker = max((i for i, d in enumerate(lines) if "bundle" in d), default=-1)
         fresh = [d for d in lines[last_marker + 1 :] if d.get("kind") == "decision"]
         open_ids = _open_questions(state, board)
-        if not fresh and not open_ids:
+        escalations = [
+            r
+            for r in fold_escalations(state.escalations()).values()
+            if r["open"] and r["stage"] == "bundle"
+        ]
+        if not fresh and not open_ids and not escalations:
             return UNCHANGED
         body = [
             f"{area}: {d.get('decision')} {d.get('key')} {d.get('text')}"
@@ -595,6 +633,7 @@ def cmd_bundle(state, args, crew, now):
         ]
         if open_ids:
             body.append("open: " + ", ".join(open_ids))
+        body += [_bundle_line(r) for r in escalations]
         taken = {i.get("id") for i in board.get("news") or [] if isinstance(i, dict)}
         taken |= {d.get("bundle") for d in lines}
         bid, n = f"B-{date}", 1
@@ -604,7 +643,8 @@ def cmd_bundle(state, args, crew, now):
         item = {
             "id": bid,
             "kind": "todo",
-            "title": f"Bundle {date}: {len(fresh)} decisions · {len(open_ids)} open questions",
+            "title": f"Bundle {date}: {len(fresh)} decisions · {len(open_ids)} open questions"
+            + (f" · {len(escalations)} escalations" if escalations else ""),
             "body": "\n".join(body),
             "ts": _iso(now),
         }
@@ -616,6 +656,365 @@ def cmd_bundle(state, args, crew, now):
 
     item = state.write_board(mutate, after=mark)
     print("bundle: nothing" if item is UNCHANGED else json.dumps(item, ensure_ascii=False))
+    return 0
+
+
+# --- escalation: the decision story between two owners ---------------------------------------
+
+
+def _minute(ts):
+    return ts.astimezone(timezone.utc).replace(second=0, microsecond=0)
+
+
+def _parse_minute(text):
+    return datetime.strptime(text, MINUTE_FMT).replace(tzinfo=timezone.utc)
+
+
+def _due(crew, since):
+    sla = crew.get("sla") or {}
+    return daytime_due(
+        since, sla.get("hours", 4), sla.get("daytime", "08-20"), sla.get("tz", "UTC")
+    )
+
+
+def _wait(crew, now, waiting_on):
+    since = _minute(now)
+    return {
+        "waiting_on": waiting_on,
+        "since": since.strftime(MINUTE_FMT),
+        "sla_due": _due(crew, since).strftime(MINUTE_FMT),
+    }
+
+
+def fold_escalations(events):
+    """`{E<n>: record}`: each record is its `open` event updated by its later events in log order."""
+    records = {}
+    for e in events:
+        eid, kind = e.get("id"), e.get("event")
+        if kind == "open" and isinstance(eid, str) and eid not in records:
+            rec = {k: v for k, v in e.items() if k != "event"}
+            rec["open"] = True
+            records[eid] = rec
+            continue
+        rec = records.get(eid)
+        if rec is None or not rec["open"]:
+            continue
+        if kind == "route":
+            for k in ("stage", "waiting_on", "since", "sla_due", "advice_from"):
+                if k in e:
+                    rec[k] = e[k]
+        elif kind == "advise":
+            rec["recommendation"] = e.get("recommendation")
+        elif kind == "settle":
+            rec.update(open=False, outcome=e.get("outcome"), settled_by=e.get("by"))
+    return records
+
+
+def _ticketing(crew):
+    return str((crew.get("board") or {}).get("ticketing") or "none")
+
+
+def _print_carry(crew, ops):
+    """The `carry:` last line for a session with `board.ticketing: jira`; nothing otherwise."""
+    if ops and _ticketing(crew) == "jira":
+        print("carry: " + json.dumps(ops, ensure_ascii=False))
+
+
+def _story_text(rec):
+    a, b = rec["parties"]
+    return "\n".join(
+        [
+            f"Escalation {rec['id']} ({a}/{b}): {rec['question']}",
+            f"{a}: {rec['a']} (cost: {rec['a_cost']})",
+            f"{b}: {rec['b']} (cost: {rec['b_cost']})",
+            f"Reversible: {'yes' if rec['reversible'] else 'no'}"
+            + (f" · touches {rec['touches']}" if rec.get("touches") else ""),
+            f"Waiting on: {rec['waiting_on']} since {rec['since']}, due {rec['sla_due']}",
+        ]
+    )
+
+
+def _bundle_line(rec):
+    line = f"escalation {rec['id']} {rec['key']}: {rec['question']}"
+    if rec.get("advice_from") and not rec.get("recommendation"):
+        line += " (advice pending)"
+    elif rec.get("recommendation"):
+        line += f" (advice: {rec['recommendation']})"
+    return line
+
+
+def _week(since):
+    year, week, _ = _parse_minute(since).isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _pair_counts(records, week):
+    counts = {}
+    for rec in records.values():
+        if _week(rec["since_open"]) == week:
+            pair = "/".join(sorted(rec["parties"]))
+            counts[pair] = counts.get(pair, 0) + 1
+    return counts
+
+
+def _count_lines(counts, week, only_warn=False):
+    out = []
+    for pair in sorted(counts):
+        n = counts[pair]
+        if only_warn and n <= PAIR_WARN_AFTER:
+            continue
+        out.append(f"{pair} {n} in {week}")
+        if n > PAIR_WARN_AFTER:
+            out.append(
+                f"warning: {pair}: more than two escalations this week; "
+                "the right in crew.json is drawn wrong"
+            )
+    return out
+
+
+def _locked(state, fn):
+    """`fn(board)` under the board lock with board.json left untouched; returns what `fn` returned."""
+    out = []
+
+    def mutate(board):
+        out.append(fn(board))
+        return UNCHANGED
+
+    state.write_board(mutate)
+    return out[0]
+
+
+def _open_failures(args, crew):
+    verb = "board.py escalation open"
+    failures = []
+    for field in OPEN_FIELDS:
+        value = getattr(args, field)
+        if value is None or not value.strip():
+            failures.append(f"{verb}: missing --{field.replace('_', '-')}")
+    parties = []
+    if args.parties and args.parties.strip():
+        parties = [p.strip() for p in args.parties.split(",")]
+        for p in parties:
+            if p not in crew_mod.ROLE_KEYS:
+                failures.append(
+                    f"{verb}: party {p!r} is no role key ({', '.join(crew_mod.ROLE_KEYS)})"
+                )
+        if len(parties) != 2 or len(set(parties)) != 2:
+            failures.append(f"{verb}: --parties names two different role keys")
+        elif not failures and not any(crew_mod.holds_role(crew, p, os.environ) for p in parties):
+            failures.append(
+                f"{verb}: this session holds neither roles.{parties[0]} nor roles.{parties[1]}"
+            )
+    if args.key and args.key.strip():
+        failures += _key_failure(crew, args.key.strip(), "escalation open")
+    if args.reversible and args.reversible.strip() not in ("yes", "no"):
+        failures.append(f"{verb}: --reversible {args.reversible!r} is not yes or no")
+    if args.touches is not None and args.touches not in TOUCHES:
+        failures.append(f"{verb}: --touches {args.touches!r} is not one of {', '.join(TOUCHES)}")
+    return failures, parties
+
+
+def cmd_escalation_open(state, args, crew, now):
+    failures, parties = _open_failures(args, crew)
+    if failures:
+        raise BoardError("\n".join(failures))
+    by = next(p for p in parties if crew_mod.holds_role(crew, p, os.environ))
+    wait = _wait(crew, now, ",".join(parties))
+
+    def write(board):
+        event = {
+            "id": state.next_id("E", board),
+            "event": "open",
+            "ts": _iso(now),
+            "key": args.key.strip(),
+            "parties": parties,
+            "by": by,
+            "question": args.question.strip(),
+            "a": args.a.strip(),
+            "a_cost": args.a_cost.strip(),
+            "b": args.b.strip(),
+            "b_cost": args.b_cost.strip(),
+            "reversible": args.reversible.strip() == "yes",
+            "touches": args.touches,
+            "stage": "self",
+            **wait,
+            "since_open": wait["since"],
+        }
+        state.append_escalation(event)
+        return event
+
+    event = _locked(state, write)
+    records = fold_escalations(state.escalations())
+    rec = records[event["id"]]
+    print(json.dumps({k: v for k, v in rec.items() if k != "since_open"}, ensure_ascii=False))
+    week = _week(rec["since_open"])
+    for line in _count_lines(_pair_counts(records, week), week, only_warn=True):
+        print(line)
+    _print_carry(crew, [{"op": "comment", "key": rec["key"], "text": _story_text(rec)}])
+    return 0
+
+
+def _holder_available(crew, board):
+    """Whether the `roles.escalation` holder has a board line that is not `parked` (`idle` is)."""
+    slug = (crew.get("roles") or {}).get("escalation")
+    if not isinstance(slug, str):
+        return False
+    entry = crew_mod.members(crew).get(slug) or {}
+    names = {slug.lower(), str(entry.get("name") or "").strip().lower()} - {""}
+    lines = [
+        s
+        for s in board.get("sessions") or []
+        if isinstance(s, dict) and str(s.get("name") or "").strip().lower() in names
+    ]
+    return any(s.get("state") != "parked" for s in lines)
+
+
+def _next_stage(rec, crew, board):
+    """(stage, waiting_on, advice_from) a record past its `sla_due` moves to."""
+    if rec["stage"] == "self":
+        if rec.get("touches"):
+            return "bundle", "human", "escalation"
+        if _holder_available(crew, board):
+            return "escalation", "escalation", None
+        target = (crew.get("fallback") or {}).get("escalation") or "human_bundle"
+        if target != "human_bundle":
+            return "escalation", target, None
+    return "bundle", "human", None
+
+
+def _route(state, crew, now):
+    """Move every open record past its `sla_due`; returns the route events written."""
+    moved = []
+
+    def mutate(board):
+        for rec in fold_escalations(state.escalations()).values():
+            if not rec["open"] or rec["stage"] == "bundle":
+                continue
+            if now < _parse_minute(rec["sla_due"]):
+                continue
+            stage, waiting_on, advice_from = _next_stage(rec, crew, board)
+            event = {"id": rec["id"], "event": "route", "ts": _iso(now), "from": rec["stage"]}
+            event["stage"] = stage
+            event.update(_wait(crew, now, waiting_on))
+            if advice_from:
+                event["advice_from"] = advice_from
+            moved.append((event, rec))
+        added = False
+        news = board.setdefault("news", [])
+        for event, rec in moved:
+            if event["stage"] == "bundle" and not any(
+                isinstance(i, dict) and i.get("id") == rec["id"] for i in news
+            ):
+                news.append(
+                    {
+                        "id": rec["id"],
+                        "kind": "todo",
+                        "title": f"Escalation {rec['id']} {rec['key']}: {rec['question']}",
+                        "body": _story_text({**rec, **event}),
+                        "ts": _iso(now),
+                    }
+                )
+                added = True
+        if not added:
+            append_all(moved)
+            return UNCHANGED
+        return moved
+
+    def append_all(events):
+        for event, _rec in events:
+            state.append_escalation(event)
+
+    state.write_board(mutate, after=append_all)
+    for event, rec in moved:
+        print(f"route: {rec['id']} {rec['key']} {event['from']} → {event['stage']}")
+    return moved
+
+
+def cmd_escalation_route(state, args, crew, now):
+    if not crew_mod.holds_role(crew, "coordinator", os.environ):
+        raise BoardError("board.py escalation route: only the coordinator routes")
+    _route(state, crew, now)
+    return 0
+
+
+def _record(state, eid, verb):
+    rec = fold_escalations(state.escalations()).get(eid)
+    if rec is None:
+        raise BoardError(f"board.py escalation {verb}: no escalation {eid}")
+    if not rec["open"]:
+        raise BoardError(f"board.py escalation {verb}: {eid} is settled")
+    return rec
+
+
+def cmd_escalation_advise(state, args, crew, now):
+    verb = "board.py escalation advise"
+    rec = _record(state, args.id, "advise")
+    if not crew_mod.holds_role(crew, "escalation", os.environ):
+        raise BoardError(f"{verb}: only roles.escalation advises")
+    if not rec.get("touches"):
+        raise BoardError(f"{verb}: {args.id} asks for no advice (opened without --touches)")
+    if not args.recommendation.strip():
+        raise BoardError(f"{verb}: missing --recommendation")
+    event = {
+        "id": args.id,
+        "event": "advise",
+        "ts": _iso(now),
+        "by": "escalation",
+        "recommendation": args.recommendation.strip(),
+    }
+    _locked(state, lambda _b: state.append_escalation(event))
+    print(json.dumps(event, ensure_ascii=False))
+    return 0
+
+
+def _settler(rec, args, crew):
+    """The role settling `rec`, or a BoardError naming who may."""
+    verb, eid, stage = "board.py escalation settle", rec["id"], rec["stage"]
+    if args.via == "human":
+        if stage != "bundle":
+            raise BoardError(f"{verb}: --via human settles only a record at stage bundle")
+        if not crew_mod.holds_role(crew, "coordinator", os.environ):
+            raise BoardError(f"{verb}: only the coordinator settles for the human")
+        if rec.get("advice_from") and not rec.get("recommendation"):
+            raise BoardError(f"{verb}: {eid} waiting for the escalation role's recommendation")
+        return "human"
+    if stage == "self":
+        held = [p for p in rec["parties"] if crew_mod.holds_role(crew, p, os.environ)]
+        if not held:
+            raise BoardError(f"{verb}: {eid} is at stage self; only a party settles it")
+        return held[0]
+    if stage == "escalation":
+        role = rec["waiting_on"]
+        if not crew_mod.holds_role(crew, role, os.environ):
+            raise BoardError(f"{verb}: {eid} is at stage escalation; only roles.{role} settles it")
+        return role
+    raise BoardError(f"{verb}: {eid} is at stage bundle; the coordinator settles it --via human")
+
+
+def cmd_escalation_settle(state, args, crew, now):
+    rec = _record(state, args.id, "settle")
+    by = _settler(rec, args, crew)
+    if not args.outcome.strip():
+        raise BoardError("board.py escalation settle: missing --outcome")
+    event = {
+        "id": args.id,
+        "event": "settle",
+        "ts": _iso(now),
+        "stage": rec["stage"],
+        "by": by,
+        "outcome": args.outcome.strip(),
+    }
+    _locked(state, lambda _b: state.append_escalation(event))
+    print(json.dumps(event, ensure_ascii=False))
+    text = f"Escalation {args.id} settled at stage {rec['stage']} by {by}: {event['outcome']}"
+    _print_carry(crew, [{"op": "comment", "key": rec["key"], "text": text}])
+    return 0
+
+
+def cmd_escalation_count(state, args, crew, now):
+    week = _week(_minute(now).strftime(MINUTE_FMT))
+    lines = _count_lines(_pair_counts(fold_escalations(state.escalations()), week), week)
+    print("\n".join(lines) if lines else f"escalations: none in {week}")
     return 0
 
 
@@ -654,6 +1053,27 @@ def parser():
 
     b = verbs.add_parser("bundle", help="the coordinator's evening bundle as one news item")
     b.set_defaults(run=cmd_bundle)
+
+    e = verbs.add_parser("escalation", help="the decision story between two owners")
+    ev = e.add_subparsers(dest="step", required=True)
+    eo = ev.add_parser("open", help="open the decision story (a party)")
+    for field in OPEN_FIELDS:
+        eo.add_argument("--" + field.replace("_", "-"), dest=field)
+    eo.add_argument("--touches", help=f"one of {', '.join(TOUCHES)}: the human decides")
+    eo.set_defaults(run=cmd_escalation_open)
+    er = ev.add_parser("route", help="move records past their SLA (the coordinator)")
+    er.set_defaults(run=cmd_escalation_route)
+    ea = ev.add_parser("advise", help="the escalation role's recommendation on a --touches record")
+    ea.add_argument("id")
+    ea.add_argument("--recommendation", required=True)
+    ea.set_defaults(run=cmd_escalation_advise)
+    es = ev.add_parser("settle", help="close a record with its outcome")
+    es.add_argument("id")
+    es.add_argument("--outcome", required=True)
+    es.add_argument("--via", choices=("human",))
+    es.set_defaults(run=cmd_escalation_settle)
+    ec = ev.add_parser("count", help="escalations per role pair this ISO week")
+    ec.set_defaults(run=cmd_escalation_count)
     return p
 
 
