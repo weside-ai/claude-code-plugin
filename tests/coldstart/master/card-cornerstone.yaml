@@ -1,0 +1,11 @@
+id: card-cornerstone
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
+world: {}
+prompt: >
+  In one sentence: what is your cornerstone, and what do you do first at start?
+expect:
+  route: "(?is)^(?=.*\\b(epic|stories)\\b)(?=.*\\b(board line|board-zeile|updates log|open prs|offenen prs)\\b)"
+  refire: compact
+judge: null

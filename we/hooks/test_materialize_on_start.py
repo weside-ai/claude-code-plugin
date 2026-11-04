@@ -137,6 +137,25 @@ class MaterializeOnStartTest(unittest.TestCase):
             "Skill tool with weside-vyra", out["hookSpecificOutput"]["additionalContext"]
         )
 
+    def test_a_pointer_stub_is_invoked_never_filled(self):
+        """The pointer template (a member's skill after its notes moved to the repo addendum)
+        carries no stub marker, so the hook asks to invoke it, not to fill it."""
+        pointer = (SCRIPTS.parent / "templates" / "companion-skill" / "pointer.md").read_text()
+        filled = pointer.replace("{{skill}}", "weside-ada").replace("{{name}}", "Ada")
+        filled = filled.replace("{{slug}}", "ada")
+        self.assertNotIn("{{", filled)
+        self.assertIn("`.weside/roles/ada.md`", filled)
+        self.assertIn("with the Read tool", filled)
+        project = self.home / "project"
+        skill = project / ".claude" / "skills" / "weside-ada" / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text(filled)
+        note = self.run_hook(
+            pin="Ada", hook_input={"session_id": "s1", "source": "startup", "cwd": str(project)}
+        )["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("invoke the Skill tool with weside-ada", note)
+        self.assertNotIn("still a stub", note)
+
     def test_role_skill_comes_before_the_ignore_clause(self):
         self.role_skill(self.home)
         for hook_input in (

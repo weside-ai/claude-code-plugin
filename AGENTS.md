@@ -20,6 +20,7 @@ we/                               plugin root
   .mcp.json                       weside-mcp (OAuth, optional)
   AUTHORING.md                    authoring contract
   skills/<verb>/SKILL.md          one directory per /we:<verb>
+  roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
   agents/                         dev-medium, dev-high, council-<role> lenses
   references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring, companion-session,
@@ -29,7 +30,7 @@ we/                               plugin root
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
                                   phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
                                   answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
-                                  + SessionStart materialize, working-mode core and optimization reminder, UserPromptSubmit
+                                  + SessionStart materialize, process L0, role card and optimization reminder, UserPromptSubmit
                                   wake counter (news_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),

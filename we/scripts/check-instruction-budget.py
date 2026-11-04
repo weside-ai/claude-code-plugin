@@ -22,13 +22,30 @@ Check `process-render` (on by default, only in a repo whose root declares a crew
 stays within `render_process.BUDGET` (9,500 chars, below Claude Code's hook cap,
 `AUTHORING.md` § Measured facts); a crew `crew.py` refuses is an error too.
 
-`--role-totals` (opt-in; it reads the sibling repos and the home ancestors a session loads, so it
-runs where they are, not in CI): per role, `render_process.py --role R --total` against
-`optimization.budget.role_total_chars` (`{"<role>": chars}`); over the limit → error, a role
-without a limit → error `no total limit for role <R>` (fail-closed). `--slack N`: a limit more
-than N chars above the role's largest sum is an error too (lower it: a limit only falls).
+Check `role-cards` (in the plugin repo, which holds `we/roles/`, and in a repo whose root declares
+a crew, against the installed plugin's cards): each card `roles/<role>.md` carries exactly the
+five `render_process.CARD_HEADINGS` in order (`[card-headings]`) and is ≤
+`render_process.CARD_RAW_BUDGET` raw (`[card-size]`); each repo addendum `.weside/roles/*.md` is ≤
+`render_process.ADDENDUM_BUDGET` and, with its member's card, ≤ `render_process.BUDGET`
+rendered (`[card-size]`). A card or addendum line equal to a line of the rendered L0 (`L0.md`,
+`L0-worker.md`; whitespace, case and list or emphasis marks ignored, lines under four words
+skipped) is an error `line repeats L0` (`[card-dup]`): one fact, one layer. A line sharing most
+of its key terms (words of five letters or more, numbers with `≤`, `<`, `h`) with an L0 line is a
+warning (`[card-dup-terms]`): a reworded duplicate is the common case of the cut.
 
-Usage: check-instruction-budget.py [--root DIR] [--json] [--role-totals [--home DIR] [--slack N]]
+`--role-totals` (opt-in; it reads the sibling repos and the home ancestors a session loads, so it
+runs where they are, not in CI): per session of each role, `render_process.py --role R --total`
+against `optimization.budget.role_total_chars` (`{"<role>": chars, "<role>:<slug>": chars}`; a
+member key bounds that member and wins over its role key); over the limit → error, a session
+without a limit → error `no total limit for role <R>` (fail-closed). `--slack N`: a limit more
+than N chars above the largest sum it bounds is an error too (lower it: a limit only falls).
+The report names the chars a session in the repo loads from outside it (ancestor instruction
+files, `<home>/.claude/CLAUDE.md` and rules). Where those files and the sibling repos are absent
+(CI), `--skip-absent` leaves out a session whose workplace or extra repo is missing (named, not
+an error) and `--assume-outside N` adds N chars to every remaining sum, so the same limits hold.
+
+Usage: check-instruction-budget.py [--root DIR] [--json]
+         [--role-totals [--home DIR] [--slack N] [--skip-absent] [--assume-outside N]]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
 
@@ -521,7 +538,133 @@ def check_process_render(repo: Repo) -> None:
             )
 
 
-def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
+WORD_RE = re.compile(r"[a-z][a-z'-]{4,}|[≤<>]=?\s*\d+|\d+\s*h\b")
+MARKS_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+|[*_`]")
+
+
+def normalized(line: str) -> str:
+    return " ".join(MARKS_RE.sub("", line.strip()).split()).lower()
+
+
+def key_terms(line: str) -> set[str]:
+    return {" ".join(t.split()) for t in WORD_RE.findall(normalized(line))}
+
+
+def _l0_lines(crew: dict) -> list[str]:
+    lines = []
+    for kind in ("full", "worker"):
+        for line in render_process.render_l0(crew, kind).split("\n"):
+            if len(normalized(line).split()) >= 4:
+                lines.append(line)
+    return lines
+
+
+def check_card_text(repo: Repo, rel: str, text: str, l0: list[str]) -> None:
+    exact = {normalized(line) for line in l0}
+    terms = [key_terms(line) for line in l0]
+    for number, line in enumerate(text.split("\n"), start=1):
+        norm = normalized(line)
+        if len(norm.split()) < 4 or line.startswith("#"):
+            continue
+        if norm in exact:
+            repo.error("card-dup", f"{rel}:{number}", "line repeats L0")
+            continue
+        mine = key_terms(line)
+        if len(mine) < 5:
+            continue
+        if any(len(mine & other) / len(mine | other) >= 0.6 for other in terms if other):
+            repo.warn("card-dup-terms", f"{rel}:{number}", "key terms repeat an L0 line")
+
+
+def _role_card_dir(repo: Repo) -> Path | None:
+    own = repo.root / "we" / "roles"
+    if own.is_dir():
+        return own
+    return render_process.ROLES if crewlib.at(repo.root) is not None else None
+
+
+def check_role_cards(repo: Repo) -> None:
+    """Card and addendum sizes, headings and L0 duplicates (module docstring, `role-cards`)."""
+    cards = _role_card_dir(repo)
+    if cards is None:
+        return
+    path = crewlib.at(repo.root)
+    try:
+        crew = (
+            crewlib.load(path)
+            if path
+            else crewlib._merge({"version": 2, "roles": {}, "members": {}})
+        )
+        l0 = _l0_lines(crew)
+    except (crewlib.CrewError, render_process.RenderError):
+        return  # check_process_render names it
+    for card in sorted(cards.glob("*.md")):
+        rel = _crew_label(repo, card)
+        raw = card.read_text(encoding="utf-8")
+        if len(raw) > render_process.CARD_RAW_BUDGET:
+            repo.error(
+                "card-size", rel, f"{len(raw)} chars > {render_process.CARD_RAW_BUDGET} raw"
+            )
+        headings = render_process.card_headings(raw)
+        if tuple(headings) != render_process.CARD_HEADINGS:
+            repo.error(
+                "card-headings",
+                rel,
+                f"headings {headings} are not {list(render_process.CARD_HEADINGS)}",
+            )
+        try:
+            check_card_text(repo, rel, render_process.render(raw, crew), l0)
+        except render_process.RenderError as exc:
+            repo.error("card-size", rel, f"not rendered: {exc}")
+    if path is not None:
+        _check_addenda(repo, crew, cards, l0)
+
+
+def _check_addenda(repo: Repo, crew: dict, cards: Path, l0: list[str]) -> None:
+    addenda = repo.root / ".weside" / "roles"
+    for addendum in sorted(addenda.glob("*.md")) if addenda.is_dir() else []:
+        rel = _crew_label(repo, addendum)
+        text = addendum.read_text(encoding="utf-8")
+        if len(text) > render_process.ADDENDUM_BUDGET:
+            repo.error("card-size", rel, f"{len(text)} chars > {render_process.ADDENDUM_BUDGET}")
+        check_card_text(repo, rel, text, l0)
+        found = crewlib.member(crew, addendum.stem)
+        role = addendum.stem if addendum.stem in ("master", "worker") else None
+        if found:
+            role = next(
+                (r for r in crewlib.ROLE_KEYS if crew.get("roles", {}).get(r) == found[0]),
+                "specialist" if found[1].get("specialist") else None,
+            )
+        if role is None:
+            continue
+        try:
+            card = render_process.render_card(crew, role, cards)
+        except (OSError, render_process.RenderError):
+            continue
+        parts = render_process.Parts(role, card, (addendum, text.strip("\n")), [], [])
+        try:
+            render_process.compose(parts)
+        except render_process.RenderError as exc:
+            repo.error("card-size", rel, str(exc))
+
+
+def _outside(root: Path, rows: list[tuple[str, str, int]]) -> int:
+    """Chars of instruction files and rules a session loads from outside ``root``."""
+    base = root.resolve()
+    return sum(
+        n
+        for part, path, n in rows
+        if part in ("instructions", "rules") and not Path(path).resolve().is_relative_to(base)
+    )
+
+
+def role_totals(
+    repo: Repo,
+    home: Path | None,
+    slack: int | None,
+    skip_absent: bool = False,
+    assume_outside: int = 0,
+) -> list[str]:
     """Check each role's total against ``role_total_chars``; returns one report line per sum."""
     path = crewlib.at(repo.root)
     if path is None:
@@ -536,29 +679,42 @@ def role_totals(repo: Repo, home: Path | None, slack: int | None) -> list[str]:
     except crewlib.CrewError as exc:
         repo.error("role-total", label, str(exc))
         return report
+    absent: list[str] = []
     for role in render_process.all_roles():
         try:
-            sessions = render_process.total_rows(path, crew, role, home)
+            sessions = render_process.total_rows(
+                path, crew, role, home, absent if skip_absent else None
+            )
         except (crewlib.CrewError, render_process.RenderError) as exc:
             repo.error("role-total", label, f"role {role}: {exc}")
             continue
-        if not sessions:
-            continue
-        limit = limits.get(role)
-        if not isinstance(limit, int):
-            repo.error("role-total", config, f"no total limit for role {role}")
-            continue
-        for member, _, total in sessions:
-            report.append(f"{member}: {total} chars (limit {limit})")
+        tops: dict[str, int] = {}
+        for member, slug, rows, measured in sessions:
+            total = measured + assume_outside
+            if role == "master":
+                report.append(
+                    f"outside {repo.root.name}: {_outside(repo.root, rows)} chars "
+                    f"(ancestor instruction files and home; assumed {assume_outside})"
+                )
+            key = render_process.limit_key(role, slug, limits)
+            limit = limits.get(key)
+            if not isinstance(limit, int):
+                repo.error("role-total", config, f"no total limit for role {role}")
+                continue
+            report.append(f"{member}: {total} chars (limit {key} {limit})")
+            tops[key] = max(tops.get(key, 0), total)
             if total > limit:
                 repo.error(
                     "role-total", config, f"role {role} ({member}) loads {total} chars > {limit}"
                 )
-        top = max(total for _, _, total in sessions)
-        if slack is not None and limit - top > slack:
-            repo.error(
-                "role-total", config, f"lower `{role}` to {top} in {config} (limit {limit})"
-            )
+        for key, top in tops.items():
+            if slack is not None and limits[key] - top > slack:
+                repo.error(
+                    "role-total",
+                    config,
+                    f"lower `{key}` to {top} in {config} (limit {limits[key]})",
+                )
+    report += [f"{who}: skipped, its workplace or an extra repo is absent" for who in absent]
     return report
 
 
@@ -571,6 +727,7 @@ def run(root: Path) -> Repo:
     check_agents(repo)
     check_ref_paths(repo)
     check_process_render(repo)
+    check_role_cards(repo)
     return repo
 
 
@@ -581,11 +738,19 @@ def main() -> int:
     parser.add_argument("--role-totals", action="store_true", help="also gate each role's total")
     parser.add_argument("--home", help="home for --role-totals (default: ~)")
     parser.add_argument("--slack", type=int, help="--role-totals: a limit may exceed the sum by N")
+    parser.add_argument(
+        "--skip-absent",
+        action="store_true",
+        help="--role-totals: skip a session without workplace",
+    )
+    parser.add_argument(
+        "--assume-outside", type=int, default=0, help="--role-totals: add N chars to each sum"
+    )
     args = parser.parse_args()
     repo = run(rule_loading.repo_root(args.root))
     if args.role_totals:
         home = Path(args.home) if args.home else None
-        for line in role_totals(repo, home, args.slack):
+        for line in role_totals(repo, home, args.slack, args.skip_absent, args.assume_outside):
             if not args.json:
                 print(f"  {line}")
     errors = [f for f in repo.findings if f.severity == "error"]

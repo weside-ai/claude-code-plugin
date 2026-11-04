@@ -1,0 +1,11 @@
+id: card-cornerstone
+role: machinery
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WESIDE_COMPANION: Kit}
+world: {}
+prompt: >
+  In one sentence: what is your cornerstone, and what do you do first at start?
+expect:
+  route: "(?is)^(?=.*\\b(ci|gates?|machinery|maschinerie|release path|release-pfad)\\b)(?=.*\\b(net verdict|main|quarantine|quarantäne)\\b)"
+  refire: compact
+judge: null
