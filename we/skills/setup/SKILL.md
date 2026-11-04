@@ -105,7 +105,7 @@ every lens is generic and still works." On yes:
 the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Crew; schema: `${CLAUDE_PLUGIN_ROOT}/scripts/crew.py`. On yes:
 
 1. Another repo holds the crew → only `.weside/config.json` → `"crew": "<relative path>"`, checked
-   with `crew.py show`; go to 4a.4.
+   with `crew.py validate --strict --from <target>`; go to 4a.4.
 2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
    (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
    who holds each role key (`crew.py` `ROLE_KEYS`; skippable), then one line per member (name,
@@ -115,7 +115,7 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    `roles` (role key → member slug), `members`, and only the keys whose value differs from
    `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. A goal file from
    question 1 → bind `files.goals` to its path, or the Ready gate's goal check stays off. Check it with
-   `crew.py show` (it names any key it refuses). Set `agents.worker_launch` to a command template
+   `crew.py validate --strict` (it names every key it refuses, an unknown one too). Set `agents.worker_launch` to a command template
    that starts each worker as a session of its own (ask for the launcher; § Worker launch backend of
    `references/worker-dispatch.md` lists the placeholders). A re-run shows the diff and asks before
    replacing.

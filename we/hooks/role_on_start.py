@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """SessionStart hook (every source: startup, resume, clear, compact): this session's role card (L1).
 
-Only in a repo with a crew (``scripts/crew.py find``); no crew or a crew ``crew.py`` refuses (the
-L0 hook ``process_on_start.py`` already names that fault) → nothing, exit 0. A session without a
-role (``crew.role_of_session`` → None) gets nothing either: the L0 from ``process_on_start.py`` is
-all it needs. Otherwise it prints, in this order, what
+Only in a repo with a crew (``scripts/crew.py find``); no crew → nothing, exit 0. A crew
+``crew.py`` refuses (``CrewError``) is never silence: the role comes from ``crew.fallback`` (the
+defaults: ``worker`` or ``master`` from the environment, a pin finds no member) and the line
+``<labels.crew_unreadable>: <reason>`` (``render_process.crew_notice``) leads the notes. A session
+without a role (``crew.role_of_session`` → None) gets nothing: the L0 from ``process_on_start.py``
+is all it needs; after a refused crew it gets that line alone. Otherwise it prints, in this order, what
 ``scripts/render_process.py`` composes (``card_parts``, ``compose``):
 
 1. the role card ``roles/<role>.md`` (a held role key, ``specialist``, ``master`` or ``worker``);
@@ -46,18 +48,22 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
     cwd = hook_input.get("cwd") or os.getcwd()
     try:
         crew_path, crew = crewlib.find_and_load(cwd)
-    except crewlib.CrewError:
-        return None, None
+    except crewlib.CrewError as exc:
+        crew_path = crewlib.find(cwd)
+        crew = crewlib.fallback(crew_path, str(exc))
     if crew_path is None or crew is None:
         return None, None
+    notice = render_process.crew_notice(crew) if crew.get("crew_error") else None
     role = crewlib.role_of_session(crew, env, hook_input)
     if role is None:
-        return None, None
+        return notice, None
     kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
     found = crewlib.member(crew, pin) if pin and kind != "worker" else None
     slug = found[0] if found else ""
     try:
         parts = render_process.card_parts(crew_path, crew, role, slug, hook_input)
+        if notice:
+            parts = parts._replace(notes=(notice, *parts.notes))
         text, _ = render_process.compose(parts)
     except (OSError, crewlib.CrewError, render_process.RenderError) as exc:
         return None, f"role_on_start: {exc}; not loaded, read it with the Read tool"

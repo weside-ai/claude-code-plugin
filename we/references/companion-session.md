@@ -174,7 +174,9 @@ on the hits.
 `.weside/crew.json` (version 2) is the repo's projection of who holds which role; the account's
 handbook stays the truth about people. `scripts/crew.py` is its one reader (schema, defaults and
 session kinds in its docstring); it refuses a file it cannot validate, naming the key, and a
-version-1 file with "in a worktree, merge the default branch; otherwise run /we:setup":
+version-1 file with "in a worktree, merge the default branch; otherwise run /we:setup". An unknown
+key only warns at read, so a binding may carry a key a newer reader knows; `crew.py validate
+--strict` refuses it where the crew is written (`/we:setup`, the repo's CI):
 `/we:setup` writes it, `wclaude` lists its members, `/we:council` seats its members by role key,
 `specialist` and lens `keeper` (`scripts/council_lens.py`), the SessionStart hooks read the roles
 and find each member's role skill through `workplace` (`crew.py workplace <slug>` adds

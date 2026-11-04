@@ -18,6 +18,8 @@ Usage:
   crew.py session-kind [--from DIR] [--session ID]
                                             this session's role (``role_of_session``): worker, master,
                                             a held role key, specialist, or none (with a hint)
+  crew.py validate [--strict] [--from DIR]  "ok <path>" for a usable crew; --strict also refuses an
+                                            unknown key (exit 1 naming every one)
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -32,8 +34,9 @@ in, relative to the repo holding the crew file), ``extra_repos`` (more repos the
 same base), ``on_call``, ``specialist`` (the field of a member woken on demand)). Every other key
 has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``question_label``
 (opens a question line to the human), ``labels`` (the words of a question line and of the
-parking signal in the crew's language: ``recommendation``, ``ready``; each one line of at most
-``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
+parking signal in the crew's language: ``recommendation``, ``ready``, and of the notice line a
+session reads when its crew is unreadable or carries unknown keys: ``crew_unreadable``,
+``crew_unknown_keys``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
 lowercased>``), ``weside_account`` (the members are weside companions: a pinned session loads its
 identity with ``/we:materialize``), ``lenses`` (per lens ``agent``, ``questions`` (the Ready
 question file), ``t2_questions`` (the T2 question file), ``registry``, ``keeper``, ``sample``;
@@ -44,9 +47,13 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 ``files``, ``coldstart``. A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
 stderr naming the file, never a ``CrewError``, so a crew file written for an older release loads.
 
-``load`` validates on every read and raises ``CrewError`` naming the dotted key: a version other
-than 2; an unknown key; a value of the wrong type (a null default takes a string or null); a
-``roles`` key outside ``ROLE_KEYS`` or a value, lens ``keeper`` or ``sla.t2_second_reviewer`` that
+``load`` reads an unknown key (a key the schema does not name, a ``roles`` or ``fallback`` key
+outside ``ROLE_KEYS``, a member or lens field it does not know) with a warning: one stderr line
+per key, the key dropped from the merged crew and named in its ``unknown_keys`` (file order), so a
+binding may carry a key a newer reader knows. ``load(..., strict=True)`` (``validate --strict``,
+run where a crew is written) refuses them instead. ``load`` raises ``CrewError`` naming the dotted
+key on every read for: a version other than 2; a value of the wrong type (a null default takes a
+string or null); a ``roles`` value, lens ``keeper`` or ``sla.t2_second_reviewer`` that
 is no member slug; a ``ready_lenses``/``t2_panel`` entry that is no lens (an undefined
 ``FORMER_DEFAULT_LENSES`` entry is left out of its set with a line on stderr instead); ``local_rules`` over
 ``LOCAL_RULES_MAX`` entries or one entry over ``LOCAL_RULE_CHARS`` characters or with a newline; a
@@ -137,7 +144,12 @@ FORMER_DEFAULT_LENSES = ("security", "premise")
 DEFAULTS: dict[str, Any] = {
     "human": {"name": "the human", "decides": []},
     "question_label": "QUESTION",
-    "labels": {"recommendation": "Recommendation", "ready": "ready"},
+    "labels": {
+        "recommendation": "Recommendation",
+        "ready": "ready",
+        "crew_unreadable": "crew.json not readable",
+        "crew_unknown_keys": "crew.json: unknown keys ignored",
+    },
     "skill_prefix": "weside",
     "weside_account": False,
     "lenses": {
@@ -308,9 +320,10 @@ def _is_process_worker(hook_input: dict | None) -> bool:
     return not recorded or not current or recorded == current
 
 
-def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
+def load(path: Path, notes: list[str] | None = None, *, strict: bool = False) -> dict[str, Any]:
     """The crew at ``path``, validated and merged over ``DEFAULTS``; ``notes`` collects the
-    transition keys found (``show`` prints them)."""
+    transition keys found (``show`` prints them). An unknown key prints one stderr line and lands
+    in ``unknown_keys``; ``strict`` raises ``CrewError`` naming every one instead."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -318,12 +331,21 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise CrewError(f"{path}: needs an object")
     version = data.get("version")
-    if version is None or version == 1:
+    if version is None or (version == 1 and not isinstance(version, bool)):
         raise CrewError(VERSION_1)
     if version != VERSION or isinstance(version, bool):
         raise CrewError(f"{path}: version {version!r} is not {VERSION}")
     _drop_retired(path, data)
+    unknown = [".".join(key) for key in _unknown_keys(data)]
+    data = _without(data, _unknown_keys(data))
     _validate(path, data)
+    if unknown and strict:
+        raise _fail(path, f"unknown key {', '.join(unknown)}")
+    for dotted in unknown:
+        print(
+            f"crew: {path}: unknown key {dotted} ignored (crew.py validate --strict refuses it)",
+            file=sys.stderr,
+        )
     _drop_former_lenses(path, data)
     found = _transition_keys(data)
     if notes is not None and found:
@@ -331,7 +353,79 @@ def load(path: Path, notes: list[str] | None = None) -> dict[str, Any]:
             f"v7 transition keys present ({', '.join(found)}): remove them at the switchover "
             f"cleanup, {V7_TRANSITION_ENDS}"
         )
-    return _merge(data)
+    return {**_merge(data), "unknown_keys": unknown}
+
+
+def fallback(path: Path | None, reason: str) -> dict[str, Any]:
+    """The crew a hook renders from when ``load`` refused ``path``: ``DEFAULTS`` with no roles and
+    no members, ``crew_error`` = ``reason``, and the file's own ``labels.crew_unreadable`` /
+    ``labels.crew_unknown_keys`` when its JSON parses and each is a valid label."""
+    crew = {**_merge({"roles": {}, "members": {}}), "unknown_keys": [], "crew_error": reason}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8")) if path is not None else None
+    except (OSError, ValueError):
+        raw = None
+    labels = raw.get("labels") if isinstance(raw, dict) else None
+    for key in ("crew_unreadable", "crew_unknown_keys"):
+        text = labels.get(key) if isinstance(labels, dict) else None
+        if isinstance(text, str) and _is_label(text):
+            crew["labels"][key] = text
+    return crew
+
+
+def _is_label(text: str) -> bool:
+    return (
+        bool(text.strip()) and len(text) <= LABEL_CHARS and "\n" not in text and "\r" not in text
+    )
+
+
+def _unknown_keys(data: dict[str, Any]) -> list[tuple[str, ...]]:
+    """Every key of ``data`` the schema does not name, as a path, in file order. A value of the
+    wrong shape is left to ``_validate``."""
+    found: list[tuple[str, ...]] = []
+    for key, value in data.items():
+        if key == "version":
+            continue
+        if key in ("roles", "fallback"):
+            known = (*ROLE_KEYS, *V7_TRANSITION) if key == "roles" else ROLE_KEYS
+            found += [(key, k) for k in _keys(value) if k not in known]
+        elif key == "members":
+            for slug, entry in value.items() if isinstance(value, dict) else ():
+                known = (*MEMBER_KEYS, *V7_MEMBER_KEYS)
+                found += [(key, slug, k) for k in _keys(entry) if k not in known]
+        elif key == "lenses":
+            for name, lens in value.items() if isinstance(value, dict) else ():
+                _walk(lens, _lens(name), (key, name), found)
+        elif key in DEFAULTS:
+            _walk(value, DEFAULTS[key], (key,), found)
+        else:
+            found.append((key,))
+    return found
+
+
+def _keys(value: Any) -> list[str]:
+    return list(value) if isinstance(value, dict) else []
+
+
+def _walk(value: Any, default: Any, prefix: tuple[str, ...], found: list) -> None:
+    if not isinstance(value, dict) or not isinstance(default, dict):
+        return
+    for key, item in value.items():
+        if key in default:
+            _walk(item, default[key], (*prefix, key), found)
+        else:
+            found.append((*prefix, key))
+
+
+def _without(data: dict[str, Any], paths: list[tuple[str, ...]]) -> dict[str, Any]:
+    """A copy of ``data`` without the keys at ``paths``."""
+    data = copy.deepcopy(data)
+    for path in paths:
+        node = data
+        for part in path[:-1]:
+            node = node[part]
+        node.pop(path[-1], None)
+    return data
 
 
 def _drop_retired(path: Path, data: dict[str, Any]) -> None:
@@ -361,13 +455,11 @@ def _fail(path: Path, message: str) -> CrewError:
 
 
 def _check(path: Path, value: Any, default: Any, dotted: str) -> None:
-    """``value`` has the shape of ``default``: the same keys (no new one) and types."""
+    """``value`` has the types of ``default`` (``_unknown_keys`` already took out a new key)."""
     if isinstance(default, dict):
         if not isinstance(value, dict):
             raise _fail(path, f"{dotted} must be an object")
         for key, item in value.items():
-            if key not in default:
-                raise _fail(path, f"unknown key {dotted}.{key}")
             _check(path, item, default[key], f"{dotted}.{key}")
     elif isinstance(default, list):
         _check_list(path, value, default, dotted)
@@ -408,9 +500,7 @@ def _check_list(path: Path, value: Any, default: list, dotted: str) -> None:
 
 
 def _validate(path: Path, data: dict[str, Any]) -> None:
-    for key in data:
-        if key not in DEFAULTS and key not in ("version", "roles", "members"):
-            raise _fail(path, f"unknown key {key}")
+    """The hard checks, on ``data`` without its unknown keys."""
     for key in ("roles", "members"):
         if not isinstance(data.get(key), dict):
             raise _fail(path, f"{key} must be an object")
@@ -427,7 +517,7 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
         raise _fail(path, f"sla.t2_second_reviewer {reviewer!r} is no member")
     _validate_local_rules(path, data.get("local_rules", []))
     for key, text in data.get("labels", {}).items():
-        if not text.strip() or len(text) > LABEL_CHARS or "\n" in text or "\r" in text:
+        if not _is_label(text):
             raise _fail(
                 path,
                 f"labels.{key} must be one non-empty line of at most {LABEL_CHARS} characters",
@@ -472,8 +562,6 @@ def _validate_members(path: Path, entries: dict[str, Any]) -> set[str]:
                 if not isinstance(value, str):
                     raise _fail(path, f"{dotted} must be a string")
                 continue
-            if key not in MEMBER_KEYS:
-                raise _fail(path, f"unknown key {dotted}")
             kind = MEMBER_KEYS[key]
             ok = isinstance(value, kind) and not (kind is not bool and isinstance(value, bool))
             if ok and kind is list:
@@ -490,8 +578,6 @@ _KIND_NAMES = {str: "a string", list: "a list of strings", bool: "true or false"
 
 def _validate_roles(path: Path, roles: dict[str, Any], slugs: set[str]) -> None:
     for key, slug in roles.items():
-        if key not in ROLE_KEYS and key not in V7_TRANSITION:
-            raise _fail(path, f"roles.{key} is no role key (one of {', '.join(ROLE_KEYS)})")
         if not isinstance(slug, str) or slug not in slugs:
             raise _fail(path, f"roles.{key} {slug!r} is no member")
     for old, new in V7_TRANSITION.items():
@@ -509,8 +595,6 @@ def _validate_fallback(path: Path, fallback: Any) -> None:
     if not isinstance(fallback, dict):
         raise _fail(path, "fallback must be an object")
     for key, target in fallback.items():
-        if key not in ROLE_KEYS:
-            raise _fail(path, f"unknown key fallback.{key}")
         if target not in FALLBACK_TARGETS:
             raise _fail(path, f"fallback.{key} {target!r} is no role key nor human_bundle")
 
@@ -813,11 +897,11 @@ def _print_members(crew: dict[str, Any]) -> None:
 
 
 def _load_cli(
-    argv: list[str], notes: list[str] | None = None
+    argv: list[str], notes: list[str] | None = None, strict: bool = False
 ) -> tuple[Path, dict[str, Any]] | None:
     try:
         crew_path = find(_opt(argv, "--from"))
-        crew = load(crew_path, notes) if crew_path is not None else None
+        crew = load(crew_path, notes, strict=strict) if crew_path is not None else None
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
         return None
@@ -841,6 +925,7 @@ VERBS = (
     "workplace",
     "lenses",
     "session-kind",
+    "validate",
 )
 
 
@@ -852,7 +937,7 @@ def main(argv: list[str]) -> int:
     if cmd in ("skill-path", "path"):
         return _skill_path_cli(argv) if cmd == "skill-path" else _path_cli(argv)
     notes: list[str] = []
-    loaded = _load_cli(argv, notes)
+    loaded = _load_cli(argv, notes, strict=cmd == "validate" and "--strict" in argv)
     if loaded is None:
         return 1
     crew_path, crew = loaded
@@ -912,7 +997,13 @@ def _session_kind_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -
     return 0
 
 
+def _validate_cli(_argv: list[str], crew_path: Path, _crew: dict[str, Any]) -> int:
+    print(f"ok {crew_path}")
+    return 0
+
+
 _READERS = {
+    "validate": _validate_cli,
     "show": _show_cli,
     "members": _members_cli,
     "workplace": _workplace_cli,
