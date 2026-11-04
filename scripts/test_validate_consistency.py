@@ -1,4 +1,4 @@
-"""Pins check 9 (retired) and the widened check 4 (dead mentions in code files) of
+"""Pins check 10 (retired) and the widened check 4 (dead mentions in code files) of
 scripts/validate-consistency.py, on fixture trees and on this repo.
 
 Every red case asserts the message, not only the exit code: a gate that fails for the wrong

@@ -3,7 +3,7 @@
 
 A row fails when its file still holds the forbidden phrase or lacks the required one. Text is
 compared with its whitespace collapsed, so a re-wrapped line keeps its case. Rows whose file was
-deleted are pinned by check 9 of validate-consistency.py; the ones whose content survives
+deleted are pinned by check 10 of validate-consistency.py; the ones whose content survives
 elsewhere get a case on the successor here (rows marked "successor").
 
 Red arm: `L0_LINES_REF=<ref> python3 -m pytest -q scripts/test_l0_lines.py` reads every file
@@ -221,7 +221,7 @@ def test_no_instruction_file_names_the_after_merge_key():
 
 
 def test_every_finding_row_is_covered():
-    """58 rows: the cases here plus the rows resolved by deleting their file (check 9)."""
+    """58 rows: the cases here plus the rows resolved by deleting their file (check 10)."""
     deleted_only = {"F11", "F46"}
     by_successor = {"F10", "F12", "F13", "F29", "F52", "F53"}
     covered = {r for c in CASES for r in re.findall(r"F\d\d", c[0])} | deleted_only | by_successor
