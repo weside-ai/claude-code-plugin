@@ -9,7 +9,8 @@ description: >
 
 1. Act only on what the store says, read from the default branch: the shared checkout often lags,
    and where memory disagrees, the files win. Store format: `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md`.
-2. No change without evidence and the user's approval. Evidence is a measured number, or a
+2. No change without evidence and the decider's yes: the HR role, which decides weekly (L0 §Changing
+   this); without a crew, the user. Evidence is a measured number, or a
    repository fact (a contradicted claim, a gate violation, a documented limit). Every applied
    change carries a review date and is removed again when it does not pay off (step 4).
 3. A product-owner decision (product, comfort, cost above a cap, deleting) is one question with a
@@ -71,13 +72,13 @@ inbox as it is.
 
 ## 5 · Decide
 
-Per candidate, top down, until the user stops or the inbox is empty. Every decided candidate ends
+Per candidate, top down, until the decider stops or the inbox is empty. Every decided candidate ends
 `applied` or `rejected`; nothing is put off, because a put-off entry comes back every run.
 
-- **Only what lasts goes to the user:** a gate, a hook, a script, a deletion, a fix of a contradicted
+- **Only what lasts goes to the decider:** a gate, a hook, a script, a deletion, a fix of a contradicted
   repo fact, or instruction text that passes admission. Everything else is `rejected` with its
   reason, unasked.
-- **Admission.** A candidate that adds or rewords instruction text goes to the user only when all
+- **Admission.** A candidate that adds or rewords instruction text goes to the decider only when all
   four hold; otherwise it is rejected with the condition that failed:
   1. it names the observed failure;
   2. the failure occurred at least twice (evidence lines), once in a high-damage area (money,
@@ -97,10 +98,10 @@ Per candidate, top down, until the user stops or the inbox is empty. Every decid
 - **Proposal.** The exact lines (NEW or EDIT) against `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md`,
   the number of lines it adds to always-loaded context (rules without `paths:`, `AGENTS.md`,
   `CLAUDE.md`), and the gate result after the edit.
-- **Batch the questions** with `AskUserQuestion`, `multiSelect: true`, two to four candidates per
-  call: the label names the change, the description its benefit in one sentence. Chosen → applied;
-  not chosen → `rejected` ("not chosen"). Say so in the question. A denied tool: plain text per
-  `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline.
+- **Batch the questions**, two to four candidates per batch, each one question line (L0 §Talking and
+  the board): the change, its benefit in one sentence, your recommendation. With a crew they go to the
+  HR role; without one, as plain text at the end of the message, the recommendation last. Chosen →
+  applied; not chosen → `rejected` ("not chosen"). Say so in the question.
 
 ## 6 · Apply
 

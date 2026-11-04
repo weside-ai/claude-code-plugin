@@ -32,7 +32,7 @@ Dated, with the source; deleted once the cause is fixed.
 - At most 80 lines / 6,000 characters (the orchestrator and the tester 110 / 8,000), in the
   repo's language. Frontmatter: name as above, description = the role in Claude Code + triggers.
 - Not in here: what an always-loaded instruction file, a rule without paths: or the we plugin
-  already says (working mode: references/working-mode.md); the companion's identity and the
+  already says (the crew process L0 and the role cards); the companion's identity and the
   account's content (team, priorities, rooms), which /we:materialize loads; epic and ticket
   state; future dates; self-reflection.
 - Upkeep: we plugin references/companion-session.md § Upkeep. -->

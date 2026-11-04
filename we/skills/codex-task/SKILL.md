@@ -10,7 +10,7 @@ allowed-tools: Bash(node:*), Bash(ls:*)
 # /we:codex-task
 
 Lives as long as the Codex subscription; Foxy decides its renewal (30.09.2026), delete this skill
-when it ends. Codex is no dispatch backend for `/we:orchestrate` (decision 27.09.2026).
+when it ends. Codex is no dispatch backend for `/we:master` (decision 27.09.2026).
 
 1. Resolve the runtime:
    `CODEX_COMPANION=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)`.
