@@ -108,9 +108,37 @@ def test_nothing_without_or_with_a_refused_crew_only_the_pointer_without_a_role(
     pointer = context(run(tmp_path, repo, {}))
     assert pointer is not None and pointer.startswith("Read "), "no role: only the pointer"
     assert "# Role card" not in pointer
+
+
+V1_LINE = (
+    "crew.json not readable: crew.json is version 1: in a worktree, merge the default branch; "
+    "otherwise run /we:setup"
+)
+
+
+def test_a_refused_crew_gets_the_default_card_with_the_reason_never_nothing(tmp_path):
+    repo, infra = workspace(tmp_path)
+    (repo / ".weside" / "roles").mkdir()
+    (repo / ".weside" / "roles" / "master.md").write_text("Repo addendum for masters.\n")
     (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 1, "roles": {}}))
-    done = run(tmp_path, repo, {"WE_ROLE": "master"})
-    assert context(done) is None and done.stderr == ""
+    for source in SOURCES:
+        master = context(run(tmp_path, repo, {"WE_ROLE": "master"}, source=source))
+        assert master.startswith("# Role card: master"), source
+        assert "Repo addendum for masters." in master
+        assert V1_LINE in master.split("\n") and master.endswith(render_process.POINTER)
+        assert master.index(V1_LINE) < master.index(render_process.POINTER)
+        worker = context(run(tmp_path, repo, {"WE_ROLE": "worker"}, source=source))
+        assert worker.startswith("# Role card: worker") and V1_LINE in worker.split("\n")
+        pin = context(run(tmp_path, repo, {"WESIDE_COMPANION": "Kit"}, source=source))
+        assert pin == f"{V1_LINE}\n\n{render_process.POINTER}", source
+    data = json.loads(GENERIC.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    data["limits"] = {"masters": "five"}
+    (repo / ".weside" / "crew.json").write_text(json.dumps(data))
+    text = context(run(tmp_path, infra, {"WE_ROLE": "master"}))
+    path = repo / ".weside" / "crew.json"
+    line = f"crew.json nicht lesbar: {path.resolve()}: limits.masters must be a number"
+    assert line in text.split("\n"), text[-400:]
 
 
 def test_card_plus_addendum_over_the_budget_prints_nothing_and_names_the_addendum(tmp_path):

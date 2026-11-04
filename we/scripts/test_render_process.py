@@ -147,8 +147,15 @@ def test_cli_role_and_all_roles(tmp_path):
     sizes = run("--all-roles", "--from", str(repo))
     assert sizes.returncode == 0
     rows = [line.split("\t") for line in sizes.stdout.splitlines()]
-    assert [r[0] for r in rows] == list(rp.all_roles())
+    assert [r[0] for r in rows] == [*rp.all_roles(), "fallback"]
     assert all(r[3] == "ok" and int(r[2]) > 0 for r in rows)
+    crew = generic()
+    master = next(r for r in rows if r[0] == "master")
+    assert int(master[1]) == len(rp.render_l0(crew)) + rp.NOTICE_CHARS
+    fallback = crewlib.fallback(repo / ".weside" / "crew.json", "")
+    assert rows[-1][1:3] == [
+        str(len(rp.render_l0(fallback, kind)) + rp.NOTICE_CHARS) for kind in ("full", "worker")
+    ]
 
 
 def test_serves_needs_a_crew_that_loads(tmp_path):
@@ -398,3 +405,76 @@ def test_totals_never_run_extra_hooks_and_count_the_recorded_output(tmp_path):
     rows = [(part, where, n) for part, where, n in t.rows]
     assert ("extra-hooks", f"touch {marker}; printf hello", len("hello")) in rows
     assert all(part != "note" for part, _, _ in rows)
+
+
+# --- crew notice (unknown keys, refused crew) -----------------------------------------------
+
+
+UNKNOWN_KEY = HERE / "fixtures" / "crew-v2-unknown-key.json"
+
+
+def _without_notice_token(kind: str) -> str:
+    name = "L0-worker.md" if kind == "worker" else "L0.md"
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    assert text.startswith("{crew_notice}\n\n")
+    return text[len("{crew_notice}\n\n") :]
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_a_clean_crew_renders_as_without_the_notice_token(kind):
+    crew = {**generic(), "unknown_keys": []}
+    assert rp.render_l0(crew, kind) == rp.render(_without_notice_token(kind), crew)
+    assert "crew.json" not in rp.render_l0(crew, kind).split("\n")[0]
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_unknown_keys_render_one_notice_line_first(tmp_path, kind, capsys):
+    repo = crew_repo(tmp_path, json.loads(UNKNOWN_KEY.read_text()))
+    crew = crewlib.load(repo / ".weside" / "crew.json")
+    text = rp.render_l0(crew, kind)
+    first, rest = text.split("\n\n", 1)
+    assert first == (
+        "crew.json: unknown keys ignored: limitz, limits.masterz, roles.security, "
+        "members.ada.titel, fallback.securty, lenses.product.keepr"
+    )
+    assert rest == rp.render(_without_notice_token(kind), crew)
+    assert text.count("unknown keys ignored") == 1
+
+
+def test_a_refused_crew_renders_the_reason_under_its_own_label(tmp_path):
+    repo = crew_repo(tmp_path)
+    path = repo / ".weside" / "crew.json"
+    data = json.loads(GENERIC.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    path.write_text(json.dumps(data))
+    crew = crewlib.fallback(path, f"{path}: limits.masters must be a number")
+    first = rp.render_l0(crew).split("\n\n", 1)[0]
+    assert first == f"crew.json nicht lesbar: {path}: limits.masters must be a number"
+    assert crewlib.fallback(path, "x")["crew_error"] == "x" and crew["members"] == {}
+
+
+def test_a_long_notice_is_cut_to_the_reserve():
+    crew = {**generic(), "crew_error": "x" * 400}
+    first = rp.render_l0(crew).split("\n\n", 1)[0]
+    assert len(first) + 2 == rp.NOTICE_CHARS and first.endswith("…")
+    short = {**generic(), "crew_error": "y"}
+    assert rp.render_l0(short).split("\n\n", 1)[0] == "crew.json not readable: y"
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_the_fallback_l0_fits_the_budget_with_the_reserve(kind):
+    fallback = crewlib.fallback(None, "x" * 400)
+    assert len(rp.render_l0({**fallback, "crew_error": None}, kind)) + rp.NOTICE_CHARS <= rp.BUDGET
+    assert len(rp.render_l0(fallback, kind)) <= rp.BUDGET
+    assert rp.l0_chars(fallback, kind) <= rp.BUDGET
+
+
+def test_serves_counts_the_reserve(tmp_path, monkeypatch):
+    repo = crew_repo(tmp_path)
+    assert run("--serves", "--from", str(repo)).returncode == 0
+    crew = crewlib.load(repo / ".weside" / "crew.json")
+    full = len(rp.render_l0(crew))
+    monkeypatch.setattr(rp, "BUDGET", full + rp.NOTICE_CHARS - 1)
+    assert rp.serves(repo) is False
+    monkeypatch.setattr(rp, "BUDGET", full + rp.NOTICE_CHARS)
+    assert rp.serves(repo) is True

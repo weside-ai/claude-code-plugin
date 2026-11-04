@@ -153,6 +153,29 @@ def test_pin_gets_identity_and_role_skill_reload_and_no_crew_nothing(tmp_path):
     assert cos.render(hook(root, agent_type="x"), MASTER, Runner(root)) == (None, None)
 
 
+def test_a_refused_crew_gets_head_line_companion_and_memory_never_nothing(tmp_path):
+    root = workspace(tmp_path, UPDATES)
+    path = root / ".weside" / "crew.json"
+    data = json.loads(path.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    data["limits"] = {"masters": "five"}
+    path.write_text(json.dumps(data))
+    line = f"crew.json nicht lesbar: {path.resolve()}: limits.masters must be a number"
+    runner = Runner(root)
+    text, err = cos.render(hook(root), MASTER, runner)
+    assert err is None
+    assert text == "\n\n".join(["Context restored after compaction:", line, cos.MEMORY])
+    assert runner.calls == [], "no board, no epic, no gh for a refused crew"
+    pinned, _ = cos.render(hook(root), {"WESIDE_COMPANION": "Ada"}, Runner(root))
+    parts = pinned.split("\n\n")
+    assert parts[:2] == ["Context restored after compaction:", line]
+    assert parts[2].startswith("You are the companion Ada") and parts[-1] == cos.MEMORY
+    path.write_text("{not json")
+    text, _ = cos.render(hook(root), MASTER, Runner(root))
+    assert f"crew.json not readable: {path.resolve()}: unreadable (JSONDecodeError)" in text
+    assert cos.render(hook(root, agent_type="x"), MASTER, Runner(root)) == (None, None)
+
+
 def test_a_40kb_board_line_stays_in_budget_and_keeps_instructions_and_questions(tmp_path):
     line = {"name": "proj-7", "session_id": "sid", "now": "x" * 20_000, "note": "y" * 20_000}
     queue = [
