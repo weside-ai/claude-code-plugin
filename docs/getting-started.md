@@ -13,11 +13,11 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 
 Run `/we:setup` in the repo. It detects the stack from marker files (`pyproject.toml`,
 `package.json`, `Cargo.toml`, `go.mod`) and the ticketing tool (Jira through an MCP server, GitHub
-Issues through `gh`, or none), then asks up to five skippable questions: vision, test discipline,
+Issues through `gh`, or none), then asks up to five skippable questions: goals, test discipline,
 verification, review gates, council. The answers go to `.weside/config.json`. A re-run shows the
 current value and asks before replacing it. When a crew works in the repo, setup also writes
-`.weside/crew.json` (who is Product Owner, Orchestrator, HR, Tester, who owns which component) and a
-stub role skill per member without one ([workflow.md](workflow.md#crew-and-working-mode)).
+`.weside/crew.json` (who is Product Owner, coordinator, HR, Tester, who owns which component) and a
+stub role skill per member without one ([workflow.md](workflow.md#crew)).
 
 Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`), the
 shipped statusline (model, branch, PR, context, background sessions, cost) and the companion launcher `wclaude`
@@ -37,18 +37,18 @@ Dry run: `node ~/.claude/we-statusline.js --feed-cswap --dry-run`.
 
 ## First story
 
-1. `/we:story` — describe the change. The skill writes a minimal ticket and a detailed plan at
-   `docs/plans/<KEY>-story.md` with acceptance criteria and phases.
-2. `/we:orchestrate <KEY>` — the Lead dispatches one `we:dev-medium` worker in its own worktree,
-   checks the report against the acceptance criteria and the DoD, pushes once, opens the PR and
-   runs `/we:ci-review` when CI concludes.
+1. `/we:epic` — describe the outcome. The skill writes the epic plan with its stories in
+   `## Sequencing`.
+2. `/we:master <epic>` — the epic's master starts a refiner worker (`/we:plan-story`) that writes the
+   story plan at `docs/plans/<KEY>-story.md`, then one `we:dev-medium` worker in its own worktree,
+   checks the report against the acceptance criteria and the DoD, pushes once, opens the story's PR
+   and runs `/we:ci-review` when CI concludes.
 3. `/flow <KEY>` — watch it: a pane with one light per step (plan, approval, build, PR, CI,
    review, merge), refreshed from git and GitHub. Its **Standup** button runs `/we:standup`.
-4. Once CI and the reviews are green, auto-merge is armed (unless a money path or another exception
-   applies; then you merge). Review the PR before it lands if you want to.
-5. `/we:merged` — removes the worktrees and branches and moves the ticket to Done (or In Review, per `ticketing.after_merge`).
-
-For a change too small for a worker, `/we:orchestrate --solo` builds it in the current session.
+4. Once CI and the reviews are green, auto-merge is armed (unless the diff falls in the computed
+   one-way class, such as a money path; then you merge). Review the PR before it lands if you want to.
+5. `/we:merged` — removes the worktrees and branches and moves the ticket to In Review once the PR
+   is linked; Done follows acceptance.
 
 ## Plugin settings
 

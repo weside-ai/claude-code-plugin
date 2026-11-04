@@ -75,17 +75,17 @@ def test_skill_runs_record_the_name_never_the_arguments(tmp_path):
         {
             "session_id": "s1",
             "hook_event_name": "UserPromptExpansion",
-            "command_name": "we:orchestrate",
+            "command_name": "we:master",
             "command_source": "plugin",
             "command_args": "private text",
-            "prompt": "/we:orchestrate private text",
+            "prompt": "/we:master private text",
         },
         tmp_path,
     )
     text = out.read_text()
     tool, typed = (json.loads(x) for x in text.splitlines())
     assert (tool["event"], tool["skill"]) == ("PreToolUse", "we:retro")
-    assert (typed["command_name"], typed["command_source"]) == ("we:orchestrate", "plugin")
+    assert (typed["command_name"], typed["command_source"]) == ("we:master", "plugin")
     assert "private text" not in text
 
 

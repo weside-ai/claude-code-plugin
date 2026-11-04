@@ -5,16 +5,15 @@ Only in a repo with a crew (``scripts/crew.py find``); no crew → nothing, exit
 ``crew.py`` refuses (``CrewError``) is never silence: the role comes from ``crew.fallback`` (the
 defaults: ``worker`` or ``master`` from the environment, a pin finds no member) and the line
 ``<labels.crew_unreadable>: <reason>`` (``render_process.crew_notice``) leads the notes. A session
-without a role (``crew.role_of_session`` → None) gets the one line ``render_process.POINTER``, the
-only pointer to ``references/working-mode.md`` (after a refused crew: the line, then the pointer). Otherwise it prints, in this order, what
+without a role (``crew.role_of_session`` → None) gets nothing: the L0 from ``process_on_start.py``
+is all it needs; after a refused crew it gets that line alone. Otherwise it prints, in this order, what
 ``scripts/render_process.py`` composes (``card_parts``, ``compose``):
 
 1. the role card ``roles/<role>.md`` (a held role key, ``specialist``, ``master`` or ``worker``);
 2. the repo addendum: a pinned member's ``<workplace>/.weside/roles/<slug>.md``, an unpinned
    master's or worker's ``<crew repo>/.weside/roles/<role>.md``, when present;
 3. the notes: per extra repo of the member that does not exist here, ``extra repo <value> not
-   found, skipped`` (``crew.extra_repos``; the card never depends on an extra repo), then
-   ``render_process.POINTER``;
+   found, skipped`` (``crew.extra_repos``; the card never depends on an extra repo);
 4. per extra repo that exists: its ``AGENTS.md`` up to the first level-2 heading;
 5. per extra repo: the output of each ``type: command`` SessionStart hook of its
    ``.claude/settings.json`` whose matcher takes this source, run there with this hook's input
@@ -57,7 +56,7 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
     notice = render_process.crew_notice(crew) if crew.get("crew_error") else None
     role = crewlib.role_of_session(crew, env, hook_input)
     if role is None:
-        return "\n\n".join(filter(None, (notice, render_process.POINTER))), None
+        return notice, None
     kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
     found = crewlib.member(crew, pin) if pin and kind != "worker" else None
     slug = found[0] if found else ""

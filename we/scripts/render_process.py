@@ -84,8 +84,6 @@ import rule_loading  # noqa: E402
 
 PROCESS = _HERE.parent / "process"
 ROLES = _HERE.parent / "roles"
-REFERENCE = _HERE.parent / "references" / "working-mode.md"
-POINTER = f"Read {REFERENCE} before routing, starting a session or moving a ticket."
 BUDGET = 9_500
 # the crew notice line, its two newlines included (reserved in every L0 measure); a longer notice
 # keeps NOTICE_HEAD leading characters, then "…", then its end
@@ -429,7 +427,7 @@ def card_parts(
     """The parts for a session of ``role`` (``slug``: the pinned member, empty for an unpinned
     master or worker). Extra repos are the member's ``crew.extra_repos`` that exist here; a
     missing one is the note ``extra repo <value> not found, skipped``, so the card never depends
-    on an extra repo. The notes end with ``POINTER``. Hooks run only with ``run_hooks``, all of
+    on an extra repo. Hooks run only with ``run_hooks``, all of
     them within ``EXTRA_HOOKS_CAP`` seconds together (a hook past it: ``extra hook skipped, total
     cap N s reached: <command>``); without, ``hooks`` holds the ``recorded_output`` of each
     command that has one. OSError and CrewError (unknown
@@ -462,7 +460,6 @@ def card_parts(
             recorded = recorded_output(repo, command)
             if recorded is not None:
                 hooks.append((repo, command, recorded))
-    notes.append(POINTER)
     return Parts(role, card, addendum, heads, hooks, tuple(notes))
 
 

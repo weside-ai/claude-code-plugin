@@ -2,38 +2,36 @@
 
 ## The whole loop
 
-From the first `/we:story` to `/we:merged`. Rounded boxes are skills, `[[…]]` agents, hexagons
+From an epic's first story to `/we:merged`. Rounded boxes are skills, `[[…]]` agents, hexagons
 human decisions, cylinders the records the loop writes. Every loop back is a dotted edge.
 
 ```mermaid
 flowchart TD
     %% ---------- Plan ----------
-    subgraph PLAN["Plan — /we:story (interactive) or the Lead's refine lane"]
-        S1("/we:story KEY<br/>load ticket, ADRs, rules, code")
-        S2{{"interview<br/>one question per turn"}}
-        S3[["we:dev-high refiner<br/>runs /we:refine"]]
+    subgraph PLAN["Plan — the master's refine lane"]
+        S1("Backlog story of an approved epic<br/>ticket, ADRs, rules, code")
+        S2{{"epic owner answers<br/>an ## Open Fork"}}
+        S3[["we:dev-high refiner worker<br/>runs /we:plan-story"]]
         S4("Ready gate (ready_gate.py)<br/>+ we:explore-medium checks code claims")
-        S5{{"owner approves plan"}}
-        S6[("plan on main<br/>ticket → plan-approved")]
-        S1 --> S2 --> S3 --> S4
+        S6[("plan on main<br/>story → Selected")]
+        S1 --> S3 --> S4
         S4 -. "scan fails / wrong claim" .-> S3
         S3 -. "## Open Fork" .-> S2
-        S4 --> S5
-        S5 -. "feedback" .-> S3
-        S5 --> S6
+        S2 --> S3
+        S4 --> S6
     end
 
-    %% ---------- Orchestrate ----------
-    subgraph LEAD["Build — /we:orchestrate (the Lead)"]
-        O1("read state per story<br/>git · gh · plan · ticket")
-        O2{{"Decision Queue<br/>batched, recommendation first"}}
+    %% ---------- Build ----------
+    subgraph LEAD["Build — /we:master (the epic's master)"]
+        O1("pull the next Selected story<br/>git · gh · plan · ticket")
+        O2{{"question line to its owner<br/>or one decision story"}}
         O3[["dev worker per chunk<br/>we:dev-medium | we:dev-high<br/>own worktree, runs /we:develop"]]
         O4("phases: tests + code + commit<br/>local deterministic gates")
         O5("finish: code-review only on<br/>money · auth · tenant · migration<br/>verification · plan deviations")
         O6{"SubagentStop hook:<br/>report present?"}
         O7("Lead checks report<br/>runs named tests · AC → evidence · DoD")
         O8("integration worktree<br/>merge each lane + after-merge checks")
-        O9("merge origin/main + after-merge check<br/>push once · open ONE PR, ready, not draft")
+        O9("merge origin/main + after-merge check<br/>push once · one PR per story, ready, linked")
         O1 --> O2
         O2 --> O3 --> O4 --> O5 --> O6
         O6 -. "no → back to work" .-> O5
@@ -56,12 +54,12 @@ flowchart TD
 
     %% ---------- Close ----------
     subgraph CLOSE["Close"]
-        C1("auto-merge armed<br/>(user merge: money, destructive migration, open question)")
+        C1("auto-merge armed<br/>(user merge: the computed one-way class)")
         C2{{"owner merges"}}
-        C3("/we:merged<br/>verify · tear down worktrees, branches, ports<br/>tickets → Done or In Review")
+        C3("/we:merged<br/>verify · tear down worktrees, branches, ports<br/>tickets → In Review")
         C4[["auto retro<br/>we:dev-medium runs /we:retro --auto"]]
         C5[("optimization inbox")]
-        C6("/we:optimize<br/>owner decides · ledger · review_by")
+        C6("/we:optimize<br/>HR decides · ledger · review_by")
         C1 --> C3
         C2 --> C3
         C3 --> C4 --> C5 --> C6
@@ -74,49 +72,48 @@ flowchart TD
     G5 -- "green, user merge" --> C2
     G5 -. "cap / blocked" .-> O2
     O7 -. "run not smooth" .-> C4
-    C6 -. "rules, skills, hooks" .-> NEXT(("next run<br/>starts at /we:story"))
+    C6 -. "rules, skills, hooks" .-> NEXT(("next run<br/>starts at the next story"))
 ```
 
-## Plan: four altitudes
+## Plan: epics and stories
 
-| Altitude | Artifact | Solo verb | Meeting |
-|---|---|---|---|
-| Vision | PRD at `docs/plans/<vision>/PRD.md` | `/we:vision` | `/we:meet vision` → Sagas |
-| Saga | theme | `/we:saga` | `/we:meet saga` → Epics |
-| Epic | initiative | `/we:epic` | `/we:meet epic` → Stories |
-| Story | build-ready plan at `docs/plans/<KEY>-story.md` | `/we:story` | `/we:meet story` |
+| Unit | Artifact | Verb |
+|---|---|---|
+| Goal file | goals with metrics, no epics | — (you and the escalation owner) |
+| Epic | one outcome, `serves: <metric>`, at `docs/plans/<epic>-epic.md` | `/we:epic` |
+| Story | one PR, build-ready plan at `docs/plans/<KEY>-story.md` | `/we:plan-story` (a refiner worker) |
 
-A Solo verb writes or sharpens its document and shows status by default. A meeting validates the
-artifact, optionally convenes the council, and decomposes it one altitude down. `/we:grill`
-stress-tests any plan one question at a time. Altitudes and rosters are defined in
-[we/references/apo-hierarchy.md](../we/references/apo-hierarchy.md).
+`/we:epic` writes or sharpens an epic and shows status by default; an epic too big for one outcome
+becomes linked epics. Approval is per epic: a story plan that passes the Ready gate is Selected
+without a per-story sign-off. `/we:council` convenes role lenses on any question; `/we:grill`
+stress-tests any plan one question at a time. Epic frontmatter and mirror block:
+[we/references/epic-plan.md](../we/references/epic-plan.md).
 
-## Build: one Lead, one PR
+## Build: one master per epic, one PR per story
 
-`/we:orchestrate` is the Lead. It reads each story's state from git, dispatches a refiner
-(`/we:refine`) for a story without a plan, and a dev worker (`/we:develop`) for a story with an
-approved plan. The worker implements the phases in its own worktree, runs the local gates, commits
+`/we:master` is the epic's master. It reads each story's state from git, starts a refiner worker
+(`/we:plan-story`) for a story without a plan, and a dev worker (`/we:develop`) for a Selected
+story. The worker implements the phases in its own worktree, runs the local gates, commits
 and reports; it opens no PR and runs no CI. Local review is deterministic (hooks, the affected
 tests); the only local LLM review is one `code-review` at `high` for money, auth, tenant isolation
 or a migration, because CI runs the Claude and Codex reviews on the PR. The Lead checks the report,
-merges the base, pushes once, opens one PR (`/we:pr` does the same by hand) and runs
+merges the base, pushes once, opens the story's PR (`/we:pr` does the same by hand) and runs
 `/we:ci-review` after CI concludes, up to three rounds.
 `/we:ac-review` checks a branch against its acceptance criteria and the DoD on demand.
 
 The dispatch contract: [we/references/worker-dispatch.md](../we/references/worker-dispatch.md).
-A worker runs as a subagent, which bills the Lead's account, unless `.weside/config.json` sets
-`agents.worker_launch` to a command that starts each worker as a session of its own (§ *Worker
-launch backend* there).
+With a crew, `.weside/config.json` sets `agents.worker_launch` to a command that starts each worker
+as a session of its own (§ *Worker launch backend* there); a subagent reads and reviews, never
+builds. Without a crew a worker may run as a subagent, which bills the Lead's account.
 
-## Crew and working mode
+## Crew
 
-With a crew (`/we:setup` § Crew writes `.weside/crew.json`), the build above runs inside a working
-mode: a Product Owner approves plans; an Orchestrator starts one build master per epic in progress
-(an unnamed session that runs `/we:orchestrate`) or a worker for a single story, and routes questions
-to you through the board (`/board`); component owners review and accept; a Tester accepts on staging
-and moves the story to Done. Each session gets a
-short note at start: its role, who the Product Owner and the Orchestrator are, where questions go.
-The rules: [we/references/working-mode.md](../we/references/working-mode.md).
+With a crew (`/we:setup` § Crew writes `.weside/crew.json`), the build above runs inside the crew
+process: you approve epics; a Product Owner orders them; a coordinator starts one master per epic in
+progress (a session that runs `/we:master`) and carries what goes to you through the board
+(`/board`); component owners judge the HOW; a Tester accepts on staging and moves the story to Done.
+Every session loads the crew process at start (`we/process/L0.md`) and its role card
+(`we/roles/`). The crew file: [we/references/companion-session.md](../we/references/companion-session.md) § Crew.
 
 ## The effort rule
 
@@ -137,8 +134,8 @@ a skill must respect*.
 *Plan* box, Build the dev worker, PR, CI and Review the *GitHub* box, Merge the *Close* box. It
 reads git and `gh` on its own every two minutes, so it shows the same state whether the Lead, a
 worker or you moved the story. Its buttons start the verb the state calls for (`/we:standup`,
-`/we:orchestrate`, `/we:ci-review`, `/we:epic`). Details: [flow.md](flow.md).
+`/we:master`, `/we:ci-review`, `/we:epic`). Details: [flow.md](flow.md).
 
 ## Deliver
 
-Claude arms auto-merge once the checks and the Codex verdict are in (exceptions: `/we:orchestrate` § Close the run); you review and merge the exceptions. `/we:merged` closes out: worktrees, branches, processes, tickets to Done (In Review with `ticketing.after_merge: "in_review"`).
+Claude arms auto-merge once the checks and the Codex verdict are in; the computed one-way class (`/we:master` § Close the run) waits for you. `/we:merged` closes out: worktrees, branches, processes, each landed story to In Review once its PR is linked; Done follows acceptance.

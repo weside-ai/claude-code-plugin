@@ -443,6 +443,7 @@ def test_a_holder_without_a_member_is_refused(tmp_path, changes, dotted):
         ({"files__dod": "docs/dod.md"}, "files.dod"),
         ({"lenses__architecture__registry": "docs/registry.md"}, "lenses.architecture.registry"),
         ({"lenses__product__questions": "docs/q.md"}, "lenses.product.questions"),
+        ({"lenses__product__t2_questions": "docs/q-t2.md"}, "lenses.product.t2_questions"),
     ],
 )
 @pytest.mark.parametrize("verb", [["show"], ["lenses"], ["workplace", "ada"]])
@@ -564,14 +565,15 @@ def test_lenses_prints_a_set_in_order_with_absolute_paths(tmp_path):
         "lens": "architecture",
         "agent": "we:lens-architecture",
         "questions": None,
+        "t2_questions": None,
         "registry": str((core / "docs" / "registry.md").resolve()),
         "keeper": "otto",
         "keeper_name": "Otto",
         "sample": 5,
     }
     t2 = json.loads(run(core, "lenses", "--set", "t2").stdout)
-    assert [lens["lens"] for lens in t2] == ["architecture", "security", "premise"]
-    assert len(json.loads(run(core, "lenses").stdout)) == 5
+    assert [lens["lens"] for lens in t2] == ["product", "architecture", "acceptance"]
+    assert len(json.loads(run(core, "lenses").stdout)) == 3
 
 
 def test_is_role_reads_v2_keys_and_refuses_a_v1_key(tmp_path):
@@ -731,3 +733,31 @@ def test_an_extra_card_or_a_missing_key_breaks_the_match(tmp_path):
     (tmp_path / "roles" / "auditor.md").unlink()
     (tmp_path / "roles" / "hr.md").unlink()
     assert card_stems(tmp_path / "roles") != expected
+
+
+@pytest.mark.parametrize("former", ["security", "premise"])
+def test_an_undefined_former_default_lens_is_missing_with_a_warning(tmp_path, former):
+    data = with_(t2_panel=["product", former, "acceptance"], ready_lenses=[former, "product"])
+    core, _ = workspace(tmp_path, data)
+    out = run(core, "lenses", "--set", "t2")
+    assert out.returncode == 0, out.stderr
+    assert [lens["lens"] for lens in json.loads(out.stdout)] == ["product", "acceptance"]
+    assert (
+        f"t2_panel: {former!r} is a former default lens no longer defined; "
+        "left out (define it under lenses or drop the entry)"
+    ) in out.stderr
+    ready = run(core, "lenses", "--set", "ready")
+    assert [lens["lens"] for lens in json.loads(ready.stdout)] == ["product"]
+    assert f"ready_lenses: {former!r} is a former default lens" in ready.stderr
+    assert run(core, "show").returncode == 0
+
+
+def test_a_defined_former_default_lens_is_kept_and_an_unknown_lens_stays_an_error(tmp_path):
+    core, _ = workspace(tmp_path, with_(lenses__security={}, t2_panel=["security"]))
+    out = run(core, "lenses", "--set", "t2")
+    assert out.returncode == 0 and out.stderr == ""
+    assert [lens["lens"] for lens in json.loads(out.stdout)] == ["security"]
+    core, _ = workspace(tmp_path / "u", with_(t2_panel=["product", "bogus"]))
+    out = run(core, "show")
+    assert out.returncode == 1
+    assert "t2_panel: 'bogus' is no lens" in out.stderr

@@ -25,7 +25,7 @@ Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the firs
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
 crew file (relative to that repo's root) counts as that file. A repo never inherits the crew of a
 directory above it. The crew is the repo's projection of the account's handbook; the handbook
-stays the truth about people. Contract: ``references/working-mode.md`` § Crew.
+stays the truth about people. Contract: ``references/companion-session.md`` § Crew.
 
 Schema (this docstring owns it). Required: ``version`` (2), ``roles`` (role key -> member slug;
 the role keys are ``ROLE_KEYS``, one per role card) and ``members.<slug>`` (``name`` required;
@@ -38,7 +38,10 @@ parking signal in the crew's language: ``recommendation``, ``ready``, and of the
 session reads when its crew is unreadable or carries unknown keys: ``crew_unreadable``,
 ``crew_unknown_keys``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
 lowercased>``), ``weside_account`` (the members are weside companions: a pinned session loads its
-identity with ``/we:materialize``), ``lenses``, ``ready_lenses``, ``t2_panel``, ``risk``,
+identity with ``/we:materialize``), ``lenses`` (per lens ``agent``, ``questions`` (the Ready
+question file), ``t2_questions`` (the T2 question file), ``registry``, ``keeper``, ``sample``;
+the defaults are the three lenses ``product``, ``architecture``, ``acceptance``, each an agent
+``we:lens-<key>``), ``ready_lenses``, ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
 ``capacity``, ``files``, ``coldstart``.
@@ -50,10 +53,11 @@ binding may carry a key a newer reader knows. ``load(..., strict=True)`` (``vali
 run where a crew is written) refuses them instead. ``load`` raises ``CrewError`` naming the dotted
 key on every read for: a version other than 2; a value of the wrong type (a null default takes a
 string or null); a ``roles`` value, lens ``keeper`` or ``sla.t2_second_reviewer`` that
-is no member slug; a ``ready_lenses``/``t2_panel`` entry that is no lens; ``local_rules`` over
+is no member slug; a ``ready_lenses``/``t2_panel`` entry that is no lens (an undefined
+``FORMER_DEFAULT_LENSES`` entry is left out of its set with a line on stderr instead); ``local_rules`` over
 ``LOCAL_RULES_MAX`` entries or one entry over ``LOCAL_RULE_CHARS`` characters or with a newline; a
-path under ``files``, ``lenses.*.questions`` or ``lenses.*.registry`` that does not exist relative
-to the repo holding the crew file. It then merges the file over ``DEFAULTS`` one level into each
+path under ``files``, ``lenses.*.questions``, ``lenses.*.t2_questions`` or ``lenses.*.registry``
+that does not exist relative to the repo holding the crew file. It then merges the file over ``DEFAULTS`` one level into each
 object (each lens over its default lens, ``board.states`` over the default states; a list
 replaces), so every reader sees the defaults without knowing them.
 
@@ -124,11 +128,17 @@ def _lens(key: str, sample: int | None = None) -> dict[str, Any]:
     return {
         "agent": f"we:lens-{key}",
         "questions": None,
+        "t2_questions": None,
         "registry": None,
         "keeper": None,
         "sample": sample,
     }
 
+
+# Default lenses of 7.56 and earlier. A crew that still names one in ``ready_lenses`` or
+# ``t2_panel`` without defining it under ``lenses`` loses it from that set with a stderr line
+# instead of failing every reader; any other undefined name stays a load error.
+FORMER_DEFAULT_LENSES = ("security", "premise")
 
 DEFAULTS: dict[str, Any] = {
     "human": {"name": "the human", "decides": []},
@@ -145,11 +155,9 @@ DEFAULTS: dict[str, Any] = {
         "product": _lens("product", 5),
         "architecture": _lens("architecture", 5),
         "acceptance": _lens("acceptance", 5),
-        "security": _lens("security"),
-        "premise": _lens("premise"),
     },
     "ready_lenses": ["product", "architecture", "acceptance"],
-    "t2_panel": ["architecture", "security", "premise"],
+    "t2_panel": ["product", "architecture", "acceptance"],
     "risk": {
         "command": None,
         "paths": None,
@@ -338,6 +346,7 @@ def load(path: Path, notes: list[str] | None = None, *, strict: bool = False) ->
             f"crew: {path}: unknown key {dotted} ignored (crew.py validate --strict refuses it)",
             file=sys.stderr,
         )
+    _drop_former_lenses(path, data)
     found = _transition_keys(data)
     if notes is not None and found:
         notes.append(
@@ -417,6 +426,21 @@ def _without(data: dict[str, Any], paths: list[tuple[str, ...]]) -> dict[str, An
             node = node[part]
         node.pop(path[-1], None)
     return data
+
+
+def _drop_former_lenses(path: Path, data: dict[str, Any]) -> None:
+    lens_keys = set(DEFAULTS["lenses"]) | set(data.get("lenses", {}))
+    for key in ("ready_lenses", "t2_panel"):
+        if key not in data:
+            continue
+        for lens in data[key]:
+            if lens not in lens_keys:
+                print(
+                    f"crew: {path}: {key}: {lens!r} is a former default lens no longer defined; "
+                    "left out (define it under lenses or drop the entry)",
+                    file=sys.stderr,
+                )
+        data[key] = [lens for lens in data[key] if lens in lens_keys]
 
 
 def _fail(path: Path, message: str) -> CrewError:
@@ -506,7 +530,7 @@ def _validate_lenses(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
     lens_keys = set(DEFAULTS["lenses"]) | set(lenses)
     for key in ("ready_lenses", "t2_panel"):
         for lens in data.get(key, []):
-            if lens not in lens_keys:
+            if lens not in lens_keys and lens not in FORMER_DEFAULT_LENSES:
                 raise _fail(path, f"{key}: {lens!r} is no lens")
 
 
@@ -568,12 +592,15 @@ def _validate_fallback(path: Path, fallback: Any) -> None:
             raise _fail(path, f"fallback.{key} {target!r} is no role key nor human_bundle")
 
 
+_LENS_PATHS = ("questions", "t2_questions", "registry")
+
+
 def _validate_paths(path: Path, data: dict[str, Any]) -> None:
     """Fail-closed: every path a reader will open exists now."""
     root = path.parent.parent
     named = [(f"files.{k}", v) for k, v in data.get("files", {}).items()]
     for key, lens in data.get("lenses", {}).items():
-        named += [(f"lenses.{key}.{f}", lens.get(f)) for f in ("questions", "registry")]
+        named += [(f"lenses.{key}.{f}", lens.get(f)) for f in _LENS_PATHS]
     for dotted, value in named:
         if value is not None and not (root / value).exists():
             raise _fail(path, f"{dotted} {value!r} does not exist in {root}")
@@ -810,6 +837,7 @@ def lenses(
                 "lens": key,
                 "agent": lens.get("agent"),
                 "questions": _absolute(root, lens.get("questions")),
+                "t2_questions": _absolute(root, lens.get("t2_questions")),
                 "registry": _absolute(root, lens.get("registry")),
                 "keeper": keeper,
                 "keeper_name": members(crew).get(keeper, {}).get("name") if keeper else None,

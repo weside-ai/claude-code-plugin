@@ -1,25 +1,26 @@
 ---
-name: orchestrate
+name: master
 description: >
-  The Lead: reads state from git, refines what has no plan, dispatches workers for what does,
-  integrates, runs CI once on one PR. Triggers: "/we:orchestrate", "orchestrate the epic",
+  The epic's master: pulls its Selected stories, starts a refiner worker where a plan is missing and
+  a build worker where one exists, one PR per story. Triggers: "/we:master", "master the epic",
   "dispatch the ready stories", "run the phases".
 ---
 
-# /we:orchestrate
+# /we:master
 
 Longer than 150 lines: the Lead's contract spans refine, build, finish, PR and CI, which four other verbs rely on.
 
-You are the Lead. You read each story's state from git, `gh`, the plan and the ticket; refine what
-has no approved plan; dispatch one implementer (`we:dev-medium` or `we:dev-high`, per
-`worker-dispatch.md` § Worker launch backend) for what has one; push once, open one PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
+You are the Lead, the epic's master (L0 §Sessions). You read each story's state from git, `gh`, the plan and the ticket; start a
+refiner worker for a story without a plan; start one build worker (`we:dev-medium` or `we:dev-high`) for a story with
+one, through `agents.worker_launch` as a session of its own in a repo with a crew (`worker-dispatch.md`
+§ Worker launch backend). You never build in your own session and never through a build subagent: a subagent reads
+and reviews, never builds. Each story is its own PR (L0 §Units): push once per story, open its PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
 § Close the run is the human's standing permission (owner 30.09.2026). You stop only for a protected
-action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); a Decision-Queue question parks only the chunk it blocks. Every other
-status note goes into the same message as your next tool call. While a worker, refiner or watch
-runs, a question to the human goes, in a repo with a crew, to the Orchestrator
-(`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Questions and milestones); without a crew through `AskUserQuestion`, recommendation first and marked
-"(Recommended)": plain text scrolls away under notifications (owner, 30.09.2026; hook `question_gate.py`).
-Phrase it, and route it where `permissions.deny` blocks the tool, per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
+action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); an open question parks only the chunk it blocks. Every other
+status note goes into the same message as your next tool call. A question for the human goes, in a
+repo with a crew, as one question line to the coordinator (L0 §Talking and the board); without a crew
+as plain text at the end of your message, your recommendation last.
+Phrase it per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
 
 Broad reading (a sweep over many files, "where is X") goes to `Agent(subagent_type="we:explore-medium")`, never the
@@ -28,20 +29,19 @@ Plan readiness ("the DoR scan"): `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_ga
 
 ## Invocation
 
-`<story-key>` (its phases, one implementer) · `<epic>` (its stories, serially onto one PR) ·
-`<key> <key> …` (ad-hoc roster; the first key names the run) · `<story-key> --solo` (no worker) ·
-no argument (the most recently active epic). Free text after the keys is an instruction; when it
-contradicts a risk class or a human signal, that is one Decision-Queue item, never a silent override.
+`<story-key>` (its phases, one implementer) · `<epic>` (its Selected stories, pulled one at a time,
+each its own PR) · `<key> <key> …` (ad-hoc roster; the first key names the run) · no argument (the
+most recently active epic). Free text after the keys is an instruction; when it contradicts a risk
+class or a human signal, that is one question line to its owner, never a silent override.
 
 ## Boot
 
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
-   A build master named by the working mode (`references/working-mode.md` § Build masters) keeps
-   its name; a bound companion session skips it (`references/companion-session.md` § Name and binding).
+   A master named by the crew (L0 §Sessions) keeps its name; a bound companion session skips it (`references/companion-session.md` § Name and binding).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
-   section (`## Success Criteria` or `## Success Metrics`, `apo-hierarchy.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
+   section (`## Success Criteria` or `## Success Metrics`, `${CLAUDE_PLUGIN_ROOT}/references/epic-plan.md` § Links). A comment that asks for a check is work: answer it by reading the repo now.
 4. Write the run's checklist into the PR body once the PR exists, and before that into your first
    status message: one line per story step (refine, build, finish, PR, CI green), ticked as you go.
    Run state lives in that checklist, git and the ticket (owner 25.09.2026: no `docs/plans/*-state.md`).
@@ -56,52 +56,56 @@ contradicts a risk class or a human signal, that is one Decision-Queue item, nev
 |---|---|---|
 | `shipped` | a PR for the key is merged, or open with CI concluded | — (`/we:ci-review` if red) |
 | `built` | a branch or worktree for the key has commits beyond `origin/<default>` | finish + PR |
-| `refined` | plan passes the DoR scan and is approved | build |
+| `refined` | plan on the default branch passes the Ready gate (Selected) | build |
 | `draft` / `idea` | plan fails the scan, or only a ticket or epic row exists | refine |
 
 Evidence: `git fetch origin`, `git branch -a --list '*<KEY>*'`, `git worktree list`,
-`gh pr list --search <KEY> --state all --json number,state,headRefName`. Approved means the ticket
-stands in the repo's plan-approved status or the plan is on the default branch from `/we:story`.
+`gh pr list --search <KEY> --state all --json number,state,headRefName`. A refined plan enters
+Selected by the Ready gate (and the lens panel once it ships), never by a person approving the story:
+approval is per epic (L0 §Units). The one exception is the master card's unconfirmed-fence rule.
 Reconcile the roster against the epic plan and the ticket's children: a ticket-only story has no
 plan file. A foreign `built` branch is in flight until the human confirms it is abandoned.
 
-## Human signals → Decision Queue
+## Human signals → questions and decision stories
 
 Before a story enters a lane, check: an open question in the ticket; the epic names it and nothing
 more; a caveat in the epic's notes (`TBD`, `open`, `blocked on`); it freezes an interface others
 consume (then it runs first, and dependents get `depends_on: [KEY]`); comments contradict the
-plan (a refined story goes back to refine). Any signal → Decision Queue with your recommendation.
+plan (a refined story goes back to refine). Any signal → one question line to its owner with your
+recommendation; a product question mid-run becomes one decision story (L0 §Units).
 
-The Decision Queue is one batch: signals, forks a worker reported, freshly refined plans waiting for
-approval, a risk-class call. In a repo with a crew it goes out by role (`references/working-mode.md`
-§ Questions and milestones): plans to the epic owner (label `owner-<slug>`, else the component owner) and the Product Owner, what only the human
-decides through the Orchestrator. A question never stops independent work: first dispatch everything that
-does not depend on an answer, then ask early and batched (at the start and at wave boundaries, two to
-four plans per batch at most), and park only the chunk an answer blocks. An important question is
+Questions go to their owner directly (L0 §Talking and the board): signals, forks a worker reported, a
+risk-class call. The WHAT goes to the Product Owner, the HOW to the epic owner (label `owner-<slug>`,
+else the component owner), what only the human decides as one question line to the coordinator. A
+question never stops independent work: first dispatch everything that does not depend on an answer,
+then ask early, and park only the chunk an answer blocks. An important question is
 still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase
 and push it to `wip/<KEY>-<slug>`. Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
-decision. A story with no answer yet is parked in the repo's backlog status. Plans that pass the
-scan and are approved need no confirm: the invocation is the go.
+decision. A story with no answer yet is parked in the repo's backlog status. A Selected plan needs
+no confirm: the invocation is the go.
 
 ## Refine lane
 
-A refiner is a `we:dev-high` worker `refiner-<KEY>`
-whose brief begins: "Use the Skill tool with skill `we:refine` and args `<KEY>`" (a bare `/we:refine` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
+A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start (L0 §Lifecycle: the epic's
+master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
 fork you cannot settle → write `## Open Fork` and stop".
 
 On return, run the DoR scan on the plan in the returned worktree, then one `we:explore-medium`
 checks every code claim in the plan (file:line, "only caller", "no reader", each named lever)
-against the code; a wrong claim goes back to the refiner. Pass → approval batch. Fail →
-re-dispatch once naming the missing item, then Decision Queue. An approved plan is committed per
-`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main checkout); then remove the
-refiner's worktree (step 6) and move the ticket to the plan-approved status.
+against the code; a wrong claim goes back to the refiner. Pass → set `status: approved` in the plan's
+frontmatter, then commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check
+file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main
+checkout). Fail → re-dispatch once naming the missing item, then one question line to the epic owner. Then remove the
+refiner's worktree (step 6). On the default branch and green under the Ready gate the story is
+Selected; move its ticket per `ticketing.md`, which names the mover for every state.
 
 ## Build
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
-move the ticket to In Progress and verify, check the brief's premises (`worker-dispatch.md`
+pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
+(L0 §Lifecycle; `board.py move` once it exists), check the brief's premises (`worker-dispatch.md`
 § Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
@@ -162,7 +166,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
    relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
    spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
-   `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Move every landed story to In Review and verify.
+   `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Link the PR to the ticket and move
+   no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed, and next to it one
    `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list
@@ -184,17 +189,19 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 
 ## Close the run
 
-- **Auto-merge is the default** (owner 30.09.2026): run `gh pr merge <PR> --auto --merge` right after
+- **Auto-merge is the default** (L0 §Risk tiers and who waits on whom): run `gh pr merge <PR> --auto --merge` right after
   `gh pr create` when the base branch requires the Codex check (`review.codex_check`, default
   `Codex Review`; GitHub then waits for Codex), else when `/we:ci-review` ends green with every Codex
   finding read (`--squash`/`--rebase` when `.weside/orchestrate.md`
-  names it; gh refuses `--auto` without a method outside a terminal). A human "automerge" or a standing
-  order changes who merges, not when: the hook `automerge_gate.py` refuses an early arm while that
-  check is not required, and refuses any merge from a worker. No auto-merge when the invocation
-  says `--user-merge`, the diff touches a money path or a destructive migration, a follow-up still
-  runs on the branch, a question to the human is open, or a repo-specific exception from the workspace
-  or repo instruction files applies (e.g. Terraform, secrets); the closing message then says
-  `user merge: <reason>`. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
+  names it; gh refuses `--auto` without a method outside a terminal). A T2 diff arms after the lens
+  panel's verdict once the panel ships. The hook `automerge_gate.py` refuses an early arm while that
+  check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
+  class**, computed by the crew's `risk.command` on the diff (money path, destructive migration,
+  Terraform or secrets, any loosening of tenant, auth or trust): only the human merges it, from a
+  board item with the PR link, the class and the panel verdict; until the merge hook computes the
+  class, run the command yourself before you arm. The closing message then says
+  `user merge: one-way (<class>)`. A draft reason (a follow-up still on the branch, an unmerged
+  dependency) keeps the PR a draft per `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round
   on an armed PR starts with `gh pr merge <PR> --disable-auto` and never drafts (`/we:ci-review` § 1).
@@ -208,14 +215,14 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   then at most three items someone owes. For a user merge it is the `/we:standup --branch` output. While a
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
   decided per finish-first and reported, never asked (final sim 28.09.2026), unless its fix replaces a design the
-  user approved in the plan (another mechanism, a dropped AC, a changed interface): that goes back to the user first. Knowledge goes into the
-  plan. No ticket during a run, and no question whether to create one: name the follow-ups (owner 25.09.2026).
+  plan fixed (another mechanism, a dropped AC, a changed interface): that goes back to the epic owner first. Knowledge goes into the
+  plan. A product question mid-run becomes one decision story (L0 §Units); every other follow-up is named,
+  never ticketed during the run (owner 25.09.2026).
 - Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,
-  the HOW to the epic owner (else the component owner), each milestone (plan approved, PR opened or merged, a blocker) as one line
-  to the Orchestrator, a question for the human through it (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`
-  § Questions and milestones). A Lead bound to a companion also writes back at those milestones per
+  the HOW to the epic owner (else the component owner), each milestone (plan on main, PR opened or merged, a blocker) as one line
+  to the coordinator, a question for the human as one question line through it (L0 §Talking and the board). A Lead bound to a companion also writes back at those milestones per
   `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward) and commit it before the next story starts. After a compact, rebuild state
@@ -223,11 +230,3 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   branch is the backup; no extra documentation pass (owner 01.10.2026).
 - After the merge, you run `/we:merged <PR>` yourself (§ Push, PR, CI step 5): it finds the run's branches
   and worktrees by `<KEY>` in git and the PR by number.
-
-## `--solo`
-
-For one straight-line phase, a config change, a one-function fix. `EnterWorktree(name=…)`, rename
-the branch (`git branch -m <type>/<KEY>-<slug>`), run the bootstrap explicitly, implement the phases
-in order with the local gates of the worker contract, run the finish sequence yourself, then
-§ Push, PR, CI. Stop only for a gap the code cannot close, three failures in one gate, or
-anything destructive.

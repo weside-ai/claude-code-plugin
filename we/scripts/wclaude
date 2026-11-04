@@ -46,7 +46,7 @@ fi
 export WE_ROLE=master
 
 # crew.py next to this script (the plugin's copy), else the newest in the plugin cache (the
-# installed copy in ~/.local/bin); references/working-mode.md § Crew.
+# installed copy in ~/.local/bin); references/companion-session.md § Crew.
 crew_script() {
   local here
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

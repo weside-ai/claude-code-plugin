@@ -48,7 +48,7 @@ def test_isolated_or_unnamed_worker_passes(tmp_path):
 
 
 def test_other_agent_types_pass(tmp_path):
-    assert run(tmp_path, {**WORKER, "subagent_type": "we:council-architect"}) is None
+    assert run(tmp_path, {**WORKER, "subagent_type": "we:council-member"}) is None
     assert run(tmp_path, {**WORKER, "subagent_type": "general-purpose"}) is None
 
 

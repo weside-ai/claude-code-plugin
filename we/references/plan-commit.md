@@ -1,12 +1,12 @@
 ---
 name: plan-commit
-description: Where and how a plan or planning doc (story plan, epic, saga, PRD, mirror refresh, optimization store) is committed — repo fact first, else a detached scratch worktree pushed to the default branch.
+description: Where and how a plan or planning doc (story plan, epic plan, mirror refresh, optimization store) is committed — repo fact first, else a detached scratch worktree pushed to the default branch.
 ---
 
 # Plan commit
 
-Every verb that commits a planning document follows this section: `/we:story`, `/we:vision`,
-`/we:saga`, `/we:epic` (also a mirror refresh), `/we:orchestrate` (refined plans), `/we:merged`,
+Every verb that commits a planning document follows this section: `/we:epic` (also a mirror
+refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
 `/we:retro`, `/we:instruction-audit`, `/we:optimize`.
 
 1. **Repo fact first.** `.weside/orchestrate.md` § *Where plan commits land*, else the instruction

@@ -21,10 +21,10 @@ we/                               plugin root
   AUTHORING.md                    authoring contract
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
-  agents/                         dev-medium, dev-high, council-<role> lenses
-  references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
+  agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens)
+  references/                     shared contracts (epic-plan, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring, companion-session,
-                                  context-engineering, working-mode)
+                                  context-engineering, story-plan)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,

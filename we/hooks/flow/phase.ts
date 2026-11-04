@@ -27,7 +27,7 @@ export const checksPhase = (checks: Check[]): 'ci' | 'ci-red' | 'ready' => {
   return isPending ? 'ci' : 'ready'
 }
 
-// First match wins, as in /we:orchestrate § State per story, with the PR state split into CI steps.
+// First match wins, as in /we:master § State per story, with the PR state split into CI steps.
 // An open PR outranks a merged one: a story's follow-up PR is work in flight.
 export const phaseOf = (ev: Evidence): FlowPhase => {
   const open = ev.prs.find(pr => pr.state === 'OPEN')
@@ -100,7 +100,7 @@ const noteOf = (t: Tally, total: number): string =>
     ? 'no checks yet'
     : [t.red.length && `✗ ${t.red.join(', ')}`, t.pending && `${t.pending} running`, `${t.pass}/${total} ✓`].filter(Boolean).join(' · ')
 
-// The steps /we:orchestrate walks a story through, each with what the evidence says about it.
+// The steps /we:master walks a story through, each with what the evidence says about it.
 export const stagesOf = (ev: Evidence & { ahead: number; branch?: string }): Stage[] => {
   const open = ev.prs.find(pr => pr.state === 'OPEN')
   const mergedPrs = ev.prs.filter(pr => pr.state === 'MERGED')
@@ -115,7 +115,7 @@ export const stagesOf = (ev: Evidence & { ahead: number; branch?: string }): Sta
     ? { name: 'Plan', light: 'done', note: 'story plan on the default branch' }
     : built
       ? { name: 'Plan', light: 'skip', note: 'built without a plan file' }
-      : { name: 'Plan', light: 'active', note: 'no plan yet; /we:orchestrate refines it' }
+      : { name: 'Plan', light: 'active', note: 'no plan yet; /we:master refines it' }
   const approval: Stage = isApproved
     ? { name: 'Approval', light: 'done', note: 'status: approved' }
     : ev.plan
