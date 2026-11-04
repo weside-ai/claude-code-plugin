@@ -1,6 +1,6 @@
 ---
 name: plan-commit
-description: Where and how a plan or planning doc (story plan, epic plan, mirror refresh, optimization store) is committed — repo fact first, else a detached scratch worktree pushed to the default branch.
+description: Where and how a plan or planning doc (story plan, epic plan, mirror refresh, optimization store) is committed — repo fact first, else a detached scratch worktree that lands by a docs PR with auto-merge.
 ---
 
 # Plan commit
@@ -39,10 +39,18 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
 
    A commit that did not move HEAD was aborted by an auto-fixing hook: `add` again and commit again,
    never `--amend`.
-5. **Push** `git -C <scratch> fetch origin && git -C <scratch> rebase origin/<default> && git -C <scratch> push origin HEAD:<default>`. Set a direct-commit variable (such as
-   `ALLOW_COMMIT_TO_MAIN=1`) only where the instruction files grant it for docs. A rejected push is
-   reported with its message, never forced. A repo that takes docs only through a PR gets a branch
-   and a PR instead.
-6. **Clean up** in a command of its own, only after the push exited 0: `git worktree remove <scratch>`
+5. **Land by PR.** A default branch under a ruleset takes no push, a bot's included, so docs reach
+   it through a PR that merges itself:
+   - a repo fact that names a docs-PR verb wins (one command that rebases, refuses non-docs and
+     arms auto-merge, often onto one rolling PR per session and day); run it in `<scratch>`;
+   - else `git -C <scratch> fetch origin && git -C <scratch> rebase origin/<default>`, then
+     `git -C <scratch> push origin HEAD:refs/heads/docs/<KEY>-<slug>`, `gh pr create --base
+     <default> --head docs/<KEY>-<slug>` with the key and the files in the body, and
+     `gh pr merge docs/<KEY>-<slug> --auto` with the repo's merge method.
+
+   A push straight to the default branch only where the instruction files grant it for docs. A
+   rejected push is reported with its message, never forced. The document is on the default branch
+   once the PR merged: a step that needs it there (a dispatch reading the plan) waits for that.
+6. **Clean up** in a command of its own, only after the push exited 0 and the PR is open: `git worktree remove <scratch>`
    (never `--force`, never chained to the commit or push: a rejected push then deleted the only
    copy twice, 29.09. and 01.10.2026). Remove a refiner's worktree with the repo's own worktree verb when it has one.
