@@ -1,6 +1,6 @@
 ---
 name: worker-dispatch
-description: How the Lead picks and dispatches a dev worker, the dev-only worker contract, the finish sequence before the first push, and the report. Shared by /we:orchestrate and /we:develop.
+description: How the Lead picks and dispatches a dev worker, the dev-only worker contract, the finish sequence before the first push, and the report. Shared by /we:master and /we:develop.
 ---
 
 # Worker dispatch
@@ -10,12 +10,13 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 Choosing the worker · Worker launch backend · Dev-only worker contract · Finish sequence · Lead checks around a worker
 (premise check, code graph in the brief, watchdog, lane merge) · Report.
 
-The Lead (`/we:orchestrate`) dispatches; the worker (`/we:develop`) obeys the contract below. A
+The Lead (`/we:master`) dispatches; the worker (`/we:develop`) obeys the contract below. A
 worker cannot rely on reading this file: the Lead's brief carries every rule the chunk needs.
 
 ## Choosing the worker
 
-- Dispatch shape: § Worker launch backend; the default is `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
+- Dispatch shape: § Worker launch backend. A repo with a crew starts every `we:dev-*` worker through
+  `agents.worker_launch` as a session of its own; only a repo without a crew uses `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
   A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
   `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
   Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
@@ -58,11 +59,15 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 
 `.weside/config.json` → `agents.worker_launch` decides how every `we:dev-*` worker starts:
 implementer, finisher, refiner, a ci-review worker. `we:explore-medium` readers and council lenses
-stay subagents. Who may start workers, how many and how they are named: `references/working-mode.md`
-§ Masters and workers. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
+stay subagents. Who may start workers, how many and how they are named: L0 §Sessions and the
+master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
 
-- `"subagent"` (the default, also when unset): the `Agent` call of § Choosing the worker. A
-  subagent bills the account of the session that calls it.
+- A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
+  workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
+  backend itself, the master checks the setting before the first dispatch and asks the coordinator
+  for a template when it is unset.
+- `"subagent"` (the default when unset), only in a repo without a crew: the `Agent` call of
+  § Choosing the worker. A subagent bills the account of the session that calls it.
 - A command template: each worker is a session of its own, billed to the login the command starts
   it on. Placeholders, each a token of its own: `{name}` (required), `{brief}` (required; becomes
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent

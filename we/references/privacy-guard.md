@@ -1,6 +1,6 @@
 # Privacy guard
 
-Applies to every skill that reads a session transcript (`retro`, `handoff`). What `retro` writes gets committed; a handoff stays on disk.
+Applies to every skill that reads a session transcript (`retro`). What `retro` writes gets committed.
 
 - Read and quote only engineering surfaces: tool calls and results, diffs, CI logs, PR comments, commit
   messages, and decisions about code, architecture or process. The user's engineering corrections count

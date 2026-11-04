@@ -4,7 +4,7 @@ export type FlowPhase = 'idea' | 'draft' | 'refined' | 'dev' | 'ci' | 'ci-red' |
 
 export type FlowLight = 'done' | 'active' | 'red' | 'todo' | 'skip'
 
-// One step /we:orchestrate walks a story through, its lamp and what the evidence says.
+// One step /we:master walks a story through, its lamp and what the evidence says.
 export type FlowStage = { name: string; light: FlowLight; note: string }
 
 export type FlowRow = {

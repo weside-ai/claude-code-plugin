@@ -9,7 +9,7 @@ GitHub itself and refreshes every two minutes; no agent feeds it and nothing has
 ██████████████████████████░░░░  13/15 merged · 1 open · 1 red
 
 Epic PROJ-10  Channels everywhere
-[ Epic status ] [ Orchestrate ]
+[ Epic status ] [ Master ]
 ╭──────────────────────────────────────────────────────────╮
 │ PROJ-14  CI red  #5090                                   │
 │ One bot identity per guild                               │
@@ -37,19 +37,19 @@ Epic PROJ-10  Channels everywhere
 | `/flow` | what this session works on, see below |
 
 Without a key, `/flow` takes the first source that names one: the statusline focus
-`/we:orchestrate` writes when it pushes (`~/.claude/we-focus/<session>.json`), the current branch
+`/we:master` writes when it pushes (`~/.claude/we-focus/<session>.json`), the current branch
 (`feat/PROJ-14-…`), the keys you typed or a skill ran on in this conversation (newest first), and
 last the keys the pane showed before. The pane says which source it used. With
 `ticketing.project_key` in `.weside/config.json` only keys of that project count, in any case.
 
 ## The lights
 
-Seven lamps, in the order `/we:orchestrate` walks a story through them:
+Seven lamps, in the order `/we:master` walks a story through them:
 
 | Lamp | Green when | Yellow (current) | Red (stuck) |
 |---|---|---|---|
 | Plan | `docs/plans/<KEY>-story.md` is on the default branch | no plan yet: the Lead's refine lane writes one | — |
-| Approval | the plan says `status: approved` | the plan waits for the owner's approval | — |
+| Approval | the plan says `status: approved` | the plan has not passed the Ready gate yet (`status: draft`) | — |
 | Build | a PR exists | commits on a branch, no PR yet | branch left after a closed PR |
 | PR | a PR is open (not a draft) or merged | a draft PR | closed without a merge |
 | CI | every required check except the reviews passed | checks running | a check failed |
@@ -68,11 +68,11 @@ A button runs its command as if you typed it, once the session is idle:
 | Button | Where | Runs |
 |---|---|---|
 | Standup | every open story | `/we:standup <KEY>` |
-| Refine | plan missing or not approved | `/we:orchestrate <KEY>` |
-| Build | approved, nothing built | `/we:orchestrate <KEY>` |
+| Refine | plan missing or not approved | `/we:master <KEY>` |
+| Build | approved, nothing built | `/we:master <KEY>` |
 | Fix CI | CI, review or merge red | `/we:ci-review <PR>` |
 | Epic status | epic header | `/we:epic <KEY>` |
-| Orchestrate | epic header, while a story is open | `/we:orchestrate <KEY>` |
+| Master | epic header, while a story is open | `/we:master <KEY>` |
 | Refresh (`r`) | footer | reads git and GitHub again |
 
 ## Data sources

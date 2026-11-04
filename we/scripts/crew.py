@@ -23,7 +23,7 @@ Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the firs
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
 crew file (relative to that repo's root) counts as that file. A repo never inherits the crew of a
 directory above it. The crew is the repo's projection of the account's handbook; the handbook
-stays the truth about people. Contract: ``references/working-mode.md`` § Crew.
+stays the truth about people. Contract: ``references/companion-session.md`` § Crew.
 
 Schema (this docstring owns it). Required: ``version`` (2), ``roles`` (role key -> member slug;
 the role keys are ``ROLE_KEYS``, one per role card) and ``members.<slug>`` (``name`` required;

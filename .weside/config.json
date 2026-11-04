@@ -26,28 +26,6 @@
       "product_owner",
       "architect",
       "scrum_master"
-    ],
-    "meetings": {
-      "vision": [
-        "product_owner",
-        "architect",
-        "ux_researcher",
-        "orchestrator"
-      ],
-      "saga": [
-        "product_owner",
-        "architect",
-        "orchestrator"
-      ],
-      "epic": [
-        "product_owner",
-        "architect",
-        "orchestrator"
-      ],
-      "story": [
-        "product_owner",
-        "architect"
-      ]
-    }
+    ]
   }
 }

@@ -17,11 +17,13 @@ Contract, finish sequence and report fields:
 
 ## 1. Locate the plan
 
-- A path argument is the plan. A key means `docs/plans/<KEY>-story.md`. No argument: ask the Lead
-  or, invoked by a human, the human.
+- A path argument is the plan. A key means `docs/plans/<KEY>-story.md`. You run only on a master's
+  or companion's brief that names a story key (L0 §Sessions: workers execute one chunk); without
+  one, stop and say so.
 - `--phases N,M` limits the chunk to those `### Phase` blocks; absent means all phases.
-- Invoked without a brief, run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>`
-  (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md` § Readiness) and stop on a failure line. A briefed worker skips it; the Lead ran it.
+- The Lead ran the Ready gate (`${CLAUDE_PLUGIN_ROOT}/references/story-plan.md` § Readiness) before
+  the brief; a brief that says it did not: run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>`
+  and stop on a failure line.
 - An unanswered `## Open Fork` stops you. When the brief or the plan already carries the answer,
   build on it and name it in the report.
 - With a ticket key, read the ticket with its comments (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`).
@@ -36,8 +38,6 @@ Contract, finish sequence and report fields:
 - A brief naming a base branch: `git merge <base>` first; your chunk builds on it.
 - Run the bootstrap the brief names (repo source: `.weside/orchestrate.md`) and check its result
   before the first gate; a missing venv or database surfaces later as an unrelated error.
-- Invoked by a human outside a worktree: `EnterWorktree(name="<type>/<KEY>-<slug>")`, then the same
-  rename and bootstrap.
 
 ## 3. Implement
 
@@ -69,7 +69,7 @@ and report it; it runs again only after a fix that answers the cause (the contra
 
 Run the finish sequence (the deterministic gates over the branch, `code-review` at `high` through the Skill tool only for
 money, auth, tenant isolation or a migration, the ordered verification, the deviations from the plan recorded in it, the
-affected gates again) and commit after each step. The brief says "not yours": skip it and say so. Invoked by a human: run it.
+affected gates again) and commit after each step. The brief says "not yours": skip it and say so.
 
 ## 6. Report
 

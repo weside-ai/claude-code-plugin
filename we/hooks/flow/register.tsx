@@ -1,4 +1,4 @@
-// /flow: a pane with a traffic light per /we:orchestrate step for a story, an epic's stories, or
+// /flow: a pane with a traffic light per /we:master step for a story, an epic's stories, or
 // what this session works on. Reads git and gh itself; no agent feeds it.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
@@ -74,7 +74,7 @@ async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
     const epicPath = strip(epicHit)
     const stem = epicPath.replace(/^docs\/plans\//, '').replace(/-epic\.md$/, '')
     const heading = lines(await git($, top, ['grep', '-h', '-m1', '-e', '^# ', base, '--', epicPath]))[0]
-    // A story names its epic by the ticket key or, without ticketing, by the epic's file stem (apo-hierarchy.md).
+    // A story names its epic by the ticket key or, without ticketing, by the epic's file stem (epic-plan.md § Links).
     const paths = lines(await git($, top, ['grep', '-l', '-E', `^epic: (${key}|${stem})$`, base, '--', 'docs/plans/*-story.md'])).map(strip)
     groups.push({ key, stem, epicTitle: heading?.replace(/^#\s*(Epic:\s*)?/, '') ?? key, storyKeys: [], paths })
   }
@@ -142,7 +142,7 @@ async function detect($: $): Promise<{ keys: string[]; source: string } | undefi
   const id = await $.session.id()
   if (home) {
     try {
-      // The statusline focus /we:orchestrate writes when it pushes (§ Push, PR, CI).
+      // The statusline focus /we:master writes when it pushes (§ Push, PR, CI).
       const focus = JSON.parse(String(await $.fs.read(`${home}/.claude/we-focus/${id}.json`))) as { branch?: string }
       const keys = keysIn(focus.branch ?? '', prefix)
       if (keys.length) return { keys: keys.slice(0, 1), source: `focus ${focus.branch}` }
@@ -227,7 +227,7 @@ const bar = (done: number, total: number, width: number) => {
 export async function startFlow($: $) {
   await $.command.register({
     name: 'flow',
-    description: 'Traffic lights per /we:orchestrate step for a story or an epic; no key: what this session works on',
+    description: 'Traffic lights per /we:master step for a story or an epic; no key: what this session works on',
     argumentHint: '[KEY …]',
   })
   const current = await read($, view)
@@ -267,14 +267,14 @@ export const registerFlow = (on: On, options: PluginOptions) => {
       <Button key={key} label={label} onPress={() => runCommand($, command, args)} />
     )
 
-    // The next step per /we:orchestrate § State per story, as a button that runs it.
+    // The next step per /we:master § State per story, as a button that runs it.
     const actionsOf = (row: FlowRow) => {
       const stages = row.stages ?? []
       const lit = (name: string) => stages.find(s => s.name === name)?.light
       if (row.phase === 'merged') return []
       const out = [action(`${row.key}-standup`, 'Standup', 'we:standup', row.key)]
-      if (lit('Plan') === 'active' || lit('Approval') === 'active') out.push(action(`${row.key}-refine`, 'Refine', 'we:orchestrate', row.key))
-      else if (lit('Build') === 'todo' && lit('Approval') === 'done') out.push(action(`${row.key}-build`, 'Build', 'we:orchestrate', row.key))
+      if (lit('Plan') === 'active' || lit('Approval') === 'active') out.push(action(`${row.key}-refine`, 'Refine', 'we:master', row.key))
+      else if (lit('Build') === 'todo' && lit('Approval') === 'done') out.push(action(`${row.key}-build`, 'Build', 'we:master', row.key))
       if (row.pr && (lit('CI') === 'red' || lit('Review') === 'red' || lit('Merge') === 'red')) {
         out.push(action(`${row.key}-ci`, 'Fix CI', 'we:ci-review', String(row.pr)))
       }
@@ -357,7 +357,7 @@ export const registerFlow = (on: On, options: PluginOptions) => {
                   </Text>
                   <Box flexDirection="row" gap={1}>
                     {action(`${group.key}-epic`, 'Epic status', 'we:epic', group.key)}
-                    {open.length > 0 && action(`${group.key}-orchestrate`, 'Orchestrate', 'we:orchestrate', group.key)}
+                    {open.length > 0 && action(`${group.key}-master`, 'Master', 'we:master', group.key)}
                   </Box>
                 </Box>
               )}

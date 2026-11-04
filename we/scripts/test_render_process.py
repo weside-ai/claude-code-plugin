@@ -140,10 +140,7 @@ def test_cli_role_and_all_roles(tmp_path):
         (tmp_path / workplace).mkdir()
     full = run("--role", "master", "--from", str(repo))
     card = rp.render_card(generic(), "master")
-    assert (
-        full.returncode == 0
-        and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n\n{rp.POINTER}\n"
-    )
+    assert full.returncode == 0 and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n"
     sizes = run("--all-roles", "--from", str(repo))
     assert sizes.returncode == 0
     rows = [line.split("\t") for line in sizes.stdout.splitlines()]

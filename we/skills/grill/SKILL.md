@@ -22,7 +22,7 @@ The grill ends when the user says so or no branch is left; then summarise the de
   recommendation and why.
 - **A denied question tool means plain text.** Where `permissions.deny` blocks `AskUserQuestion`, the question
   is the last paragraph of your message, your recommendation at its end; in a repo with a crew it goes to the
-  Orchestrator (`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md` § Questions and milestones).
+  coordinator as one question line (L0 §Talking and the board).
 - **A decision on record is cited, not asked.** "ADR-0065 decided X — I build on that." Ask only when two records
   disagree or the record predates the change under discussion. A wrong assumption about the environment or an
   earlier decision is the most frequent correction in past sessions.
@@ -39,7 +39,7 @@ The glossary is the file the repo's instruction file names (for example `GLOSSAR
 - A term that conflicts with the glossary is called out at once: "The glossary defines X as A; you mean B?"
 - A vague or overloaded term gets a proposed canonical term and the words to avoid.
 - A resolved term is written as soon as it is resolved, with a one-line note to the user. When you run inside
-  `/we:story`, hand the lines to its step 5 commit instead.
+  a plan run, hand the lines to the plan's commit instead.
 - The glossary holds definitions only: no implementation detail, no spec, no scratch notes.
 
 ## ADRs — offer sparingly
@@ -50,7 +50,7 @@ exists. Without either, one paragraph (context, decision, why) in `docs/adr/NNNN
 
 ## The summary
 
-At most five lines, one decision each, with who decided. Inside `/we:story` the summary becomes part of the
+At most five lines, one decision each, with who decided. Before a plan run the summary becomes part of the
 refiner's brief.
 
 ---
