@@ -1,0 +1,11 @@
+id: card-cornerstone
+role: hr
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WESIDE_COMPANION: Hana}
+world: {}
+prompt: >
+  In one sentence: what is your cornerstone, and what do you do first at start?
+expect:
+  route: "(?is)^(?=.*\\b(context|process|inbox)\\b)(?=.*\\b(woken|inbox|role totals|card sizes)\\b)"
+  refire: compact
+judge: null
