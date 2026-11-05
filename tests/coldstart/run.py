@@ -61,6 +61,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -88,6 +89,9 @@ MAX_JOBS = 2
 DEFAULT_RUN_BUDGET_USD = 1.0
 LOCK_ENV = "WESIDE_TESTS_LOCK"
 LOCK_DEFAULT = "/tmp/weside-tests.lock"
+ANON_LIMIT_ENV = "WESIDE_COLDSTART_MAX_ANON_GIB"
+ANON_LIMIT_GIB = 20.0
+MEMORY_STAT = Path("/sys/fs/cgroup/memory.stat")
 RELEASE_RUNS = 3
 GATE_HITS = 9  # of 10: a scenario at or above it is gated (its release runs must all hit)
 RECEIPT_MARKER = "<!-- coldstart-receipt -->"
@@ -338,18 +342,45 @@ def test_slot(out=None):
         os.close(fd)
 
 
+def anon_gib(path: Path = MEMORY_STAT) -> float | None:
+    """The cgroup's anonymous memory in GiB, None where the file is missing."""
+    try:
+        for line in path.read_text().splitlines():
+            key, _, value = line.partition(" ")
+            if key == "anon":
+                return int(value) / 2**30
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def run_many(
     scns: list[dict], jobs: int, budget_usd: float, deadline: float | None = None
-) -> list[Result | None]:
+) -> tuple[list[Result | None], str]:
     """Each scenario once, at most ``jobs`` at a time, in order; the caller holds the test slot.
-    A run whose turn comes after ``deadline`` (monotonic) does not start: its entry is None."""
+
+    A run does not start (its entry is None) when its turn comes after ``deadline`` (monotonic,
+    the wall cap) or once the memory guard tripped: the cgroup's anon memory above
+    ``WESIDE_COLDSTART_MAX_ANON_GIB`` (default 20) before a start stops every later start, and
+    running sessions end on their own. Returns (results, why the rest did not run or '')."""
+    limit = float(os.environ.get(ANON_LIMIT_ENV) or ANON_LIMIT_GIB)
+    stop = {"why": ""}
+    lock = threading.Lock()
 
     def one(scn: dict) -> Result | None:
+        with lock:
+            if not stop["why"]:
+                anon = anon_gib()
+                if anon is not None and anon > limit:
+                    stop["why"] = f"memory guard anon {anon:.1f} GiB > {limit:g} GiB"
+                    print(f"stopping: {stop['why']}", file=sys.stderr, flush=True)
+                elif deadline is not None and deadline - time.monotonic() <= 0:
+                    stop["why"] = "wall cap"
+            if stop["why"]:
+                return None
         if deadline is None:
             return run_one(scn, budget_usd)
-        left = deadline - time.monotonic()
-        if left <= 0:
-            return None
+        left = max(1.0, deadline - time.monotonic())
         return run_one(scn, budget_usd, timeout=min(TIMEOUT_S, left))
 
     with ThreadPoolExecutor(max_workers=jobs) as pool:
@@ -357,9 +388,9 @@ def run_many(
         results = []
         for scn, future in zip(scns, futures):
             result = future.result()
-            print(result.line() if result else f"{scn['sid']} not run (wall cap)", flush=True)
+            print(result.line() if result else f"{scn['sid']} not run ({stop['why']})", flush=True)
             results.append(result)
-    return results
+    return results, stop["why"]
 
 
 # --- release ---------------------------------------------------------------------------------
@@ -453,9 +484,9 @@ def release(base: str, jobs: int, budget: float, table: dict) -> int:
     wall_min = float(cap.get("wall_minutes", 0))
     with test_slot():
         deadline = time.monotonic() + wall_min * 60
-        results = run_many(scns, jobs, budget, deadline)
+        results, why = run_many(scns, jobs, budget, deadline)
     pairs = [(s["sid"], r) for s, r in zip(scns, results)]
-    cap_reason = f"cap wall {wall_min:g} min" if any(r is None for _, r in pairs) else ""
+    cap_reason = f"cap wall {wall_min:g} min" if why == "wall cap" else why
     block = receipt(base, ids, pairs, cap_reason, table)
     print_receipt(block)
     line = cost_line(block["tokens"], table)
@@ -473,7 +504,10 @@ def measure(runs: int, jobs: int, budget: float, table: dict) -> int:
     scns = [load(p) for p in scenario_paths()]
     batch = [s for s in scns for _ in range(runs)]
     with test_slot():
-        results = run_many(batch, jobs, budget)
+        results, why = run_many(batch, jobs, budget)
+    if why:
+        print(f"measure stopped: {why}; rates.json unchanged (the lines above are the runs done)")
+        return 1
     old = table.get("scenarios") or {}
     rows = {}
     for scn in scns:
@@ -555,7 +589,7 @@ def main(args: list[str] | None = None) -> int:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     with test_slot():
-        results = run_many(scns, ns.jobs, budget)
+        results, _ = run_many(scns, ns.jobs, budget)
     judged, total = grade.judge_share(scns)
     print(f"judge share: {judged}/{total}")
     return 0 if all(r and r.hit for r in results) else 1

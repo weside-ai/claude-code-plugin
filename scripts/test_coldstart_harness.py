@@ -422,3 +422,49 @@ def test_measure_writes_rates_and_keeps_caps_and_defects(fake, monkeypatch, tmp_
     assert written["measured"]["model"] == "claude-opus-5-5 medium"
     assert written["measured"]["digest"] == affected.digest({T2, "master/crew-unknown-key"})
     assert "master/crew-unknown-key 0/2 NOT gated" in capsys.readouterr().out
+
+
+# --- memory guard ----------------------------------------------------------------------------
+
+
+def test_anon_memory_is_read_from_the_cgroup_file(tmp_path):
+    stat = tmp_path / "memory.stat"
+    stat.write_text(f"file 5\nanon {21 * 2**30}\n")
+    assert run.anon_gib(stat) == 21.0
+    assert run.anon_gib(tmp_path / "missing") is None
+
+
+def _anon_after(monkeypatch, starts: int):
+    """anon reads 1 GiB for the first ``starts`` checks, then 25 GiB."""
+    reads = []
+
+    def anon():
+        reads.append(1)
+        return 1.0 if len(reads) <= starts else 25.0
+
+    monkeypatch.setattr(run, "anon_gib", anon)
+
+
+def test_the_memory_guard_stops_measure_without_writing_rates(fake, monkeypatch, tmp_path, capsys):
+    rates_file = tmp_path / "rates.json"
+    rates_file.write_text('{"release_cap": {"runs": 69, "wall_minutes": 30}}')
+    monkeypatch.setattr(run, "RATES", rates_file)
+    paths = [p for p in run.scenario_paths() if run.sid_of(p) == T2]
+    monkeypatch.setattr(run, "scenario_paths", lambda: paths)
+    _anon_after(monkeypatch, 2)
+    assert run.main(["measure", "--runs", "5"]) == 1
+    assert len([c for c in fake() if "-p" in c["argv"]]) == 2, "no start after the guard tripped"
+    captured = capsys.readouterr()
+    assert "stopping: memory guard anon 25.0 GiB > 20 GiB" in captured.err
+    assert f"{T2} not run (memory guard anon 25.0 GiB > 20 GiB)" in captured.out
+    assert "measure stopped: memory guard" in captured.out
+    assert rates_file.read_text() == '{"release_cap": {"runs": 69, "wall_minutes": 30}}'
+
+
+def test_the_memory_guard_turns_a_release_red(released, fake, monkeypatch):
+    _anon_after(monkeypatch, 1)
+    monkeypatch.setenv(run.ANON_LIMIT_ENV, "10")
+    code, _, block = released([T2])
+    assert code == 1 and len(fake()) == 1
+    assert block["reasons"][0] == "memory guard anon 25.0 GiB > 10 GiB"
+    assert f"not run {T2}" in block["reasons"]
