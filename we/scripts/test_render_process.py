@@ -111,15 +111,13 @@ def test_waits_names_the_human_as_the_only_merger_of_one_way():
 NOTICE_RESERVE = 160
 
 
-def test_owners_decide_cut_and_fence_and_the_manual_moves_line_closes_the_l0():
+def test_owners_decide_cut_and_fence_and_the_manual_rc_line_closes_the_l0():
     text = rp.render_l0(generic())
     assert (
         "- An owner decides cut and fence questions of their area unless a new outcome, money, law"
         " or the vision\n  is touched; a board line records it and Hal may overturn it.\n"
     ) in text
-    assert text.rstrip().endswith(
-        "Until `board.py move` and the RC train job ship, moves and RCs stay by hand."
-    )
+    assert text.rstrip().endswith("Until the RC train job ships, RCs are cut by hand.")
     assert "today's rules hold" not in text
 
 
