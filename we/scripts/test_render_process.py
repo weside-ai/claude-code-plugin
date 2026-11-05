@@ -4,6 +4,7 @@ and the ``--serves`` predicate."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ INBOX = (
 )
 ONE_WAY = (
     "Only Hal\n  merges it (user merge, enforced by the `one-way gate` check), from a board item "
-    "with the PR link,\n  the class and the panel verdict; the merge hook only warns early."
+    "with PR link,\n  class and panel verdict; the merge hook only warns early."
 )
 DECIDED_3 = "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge."
 
@@ -566,8 +567,11 @@ def test_serves_counts_the_reserve(tmp_path, monkeypatch):
 
 
 SECURITY = HERE / "fixtures" / "crew-v2-security.json"
-SECURITY_LINE = "  - {security} owns its label but runs on call."
-SIGNATURE_TEMPLATE = "  On a `trust-loosening` diff the item also carries {security}'s signature."
+# one line: on call (woken, not running) and the signature a `trust-loosening` board item carries
+SECURITY_LINE = (
+    "  - {security} owns its label, runs on call and signs each `trust-loosening` item."
+)
+BOUND_SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
 TRUST_LINE = (
     "- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges."
 )
@@ -590,8 +594,7 @@ def test_an_unbound_crew_renders_as_the_template_without_the_security_line(kind)
     crew = generic()
     name = "L0-worker.md" if kind == "worker" else "L0.md"
     text = (rp.PROCESS / name).read_text(encoding="utf-8")
-    for line in (SECURITY_LINE, SIGNATURE_TEMPLATE):
-        text = text.replace(line + "\n", "")
+    text = text.replace(SECURITY_LINE + "\n", "")
     expected = rp.render(text, crew)
     assert rp.render_l0(crew, kind) == expected
     assert "owns its label" not in rp.render_l0(crew, kind)
@@ -600,7 +603,7 @@ def test_an_unbound_crew_renders_as_the_template_without_the_security_line(kind)
 
 def test_a_bound_security_owner_gets_its_line_and_leaves_the_specialists():
     full = rp.render_l0(bound())
-    assert "\n  - Bo owns its label but runs on call.\n" in full
+    assert "\n" + BOUND_SECURITY_LINE + "\n" in full
     assert "Specialists woken on demand: Lex (legal)." in full
     assert "Bo (security)" not in full
 
@@ -612,7 +615,7 @@ def on_call_line(l0: str, name: str) -> str | None:
 
 def test_the_security_line_says_its_owner_is_woken_on_call():
     """The holder leaves the specialists line, so its own line carries "on call"."""
-    assert on_call_line(rp.render_l0(bound()), "Bo") == "  - Bo owns its label but runs on call."
+    assert on_call_line(rp.render_l0(bound()), "Bo") == BOUND_SECURITY_LINE
     assert on_call_line(rp.render_l0(generic()), "Bo") is None
 
 
@@ -678,3 +681,76 @@ def test_all_roles_prints_a_security_row(tmp_path):
     rows = {line.split("\t")[0]: line.split("\t") for line in out.stdout.splitlines()}
     assert rows["security"][-1] == "ok"
     assert all(r[-1] == "ok" for r in rows.values())
+
+
+ALL_BOUND = HERE / "fixtures" / "crew-v2-all-bound.json"
+# red arm: ``L0_BUDGET_REF=<ref>`` renders ``we/process/L0.md`` as it stood on that git ref
+L0_BUDGET_REF = os.environ.get("L0_BUDGET_REF", "")
+
+
+def all_bound() -> dict:
+    return crewlib._merge(json.loads(ALL_BOUND.read_text()))
+
+
+def _l0_from_ref(tmp_path: Path) -> Path:
+    """``rp.PROCESS``, or a copy of it holding ``L0.md`` from ``L0_BUDGET_REF``."""
+    if not L0_BUDGET_REF:
+        return rp.PROCESS
+    shown = subprocess.run(
+        ["git", "-C", str(HERE), "show", f"{L0_BUDGET_REF}:we/process/L0.md"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    process = tmp_path / "process"
+    shutil.copytree(rp.PROCESS, process)
+    (process / "L0.md").write_text(shown.stdout, encoding="utf-8")
+    return process
+
+
+def l0_overrun(crew: dict, process: Path) -> str | None:
+    """None when both L0 forms of ``crew``, measured as ``rp.l0_chars`` measures them (render
+    without the notice plus the ``NOTICE_CHARS`` reserve), fit ``rp.BUDGET``; else the overrun."""
+    clean = {**crew, "crew_error": None, "unknown_keys": []}
+    for kind in ("full", "worker"):
+        chars = len(rp.render_l0(clean, kind, process=process)) + rp.NOTICE_CHARS
+        if chars > rp.BUDGET:
+            return f"{kind} L0 with every role bound: {chars} > BUDGET {rp.BUDGET} chars"
+    return None
+
+
+def test_the_all_bound_fixture_binds_every_optional_line():
+    """Each line that drops or shrinks when a crew leaves something unbound renders here: every
+    role key (``OPTIONAL_ROLE_KEYS`` included), specialists, the T2 second reviewer, local rules
+    and a value for every ``{key|fallback}`` token, so no fallback text stands in."""
+    crew = all_bound()
+    for role in crewlib.ROLE_KEYS:
+        assert crewlib.holder_name(crew, role), role
+    assert set(crewlib.OPTIONAL_ROLE_KEYS) <= set(crewlib.ROLE_KEYS)
+    assert len(rp.specialist_members(crew)) >= 4
+    assert rp._second_reviewer(crew) and rp._local_rules(crew)
+    template = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    for match in rp.TOKEN.finditer(template):
+        key = match.group(1)
+        if key != "crew_notice":
+            assert rp._resolve(crew, key), key
+
+
+def test_the_l0_fits_the_budget_with_every_role_bound(tmp_path):
+    """A bound optional role adds its lines (7.71.0 put the security owner's L0 over ``BUDGET``,
+    and ``process_on_start`` then loads no L0 at all); the unbound fixtures cannot see that."""
+    overrun = l0_overrun(all_bound(), _l0_from_ref(tmp_path))
+    assert overrun is None, overrun
+
+
+def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
+    """Red arm: the L0 grown by one character past the fixture's headroom fails with the count."""
+    process = tmp_path / "process"
+    shutil.copytree(rp.PROCESS, process)
+    crew = all_bound()
+    headroom = rp.BUDGET - rp.l0_chars(crew, "full")
+    text = (process / "L0.md").read_text(encoding="utf-8")
+    (process / "L0.md").write_text(text + "x" * (headroom + 1), encoding="utf-8")
+    assert l0_overrun(crew, process) == (
+        f"full L0 with every role bound: {rp.BUDGET + 1} > BUDGET {rp.BUDGET} chars"
+    )

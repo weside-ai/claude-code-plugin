@@ -150,8 +150,8 @@ REVIEW_LINE = (
     " Bo's review."
 )
 ORDER_LINE = "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
-ON_CALL_LINE = "  - Bo owns its label but runs on call."
-SIGNATURE_LINE = "  On a `trust-loosening` diff the item also carries Bo's signature."
+# L0's one security line: the holder runs on call and signs the board item of a `trust-loosening` diff
+SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
 
 
 def _rendered(fixture: str) -> tuple[str, str]:
@@ -162,20 +162,20 @@ def _rendered(fixture: str) -> tuple[str, str]:
 
 def test_the_security_cases_crew_renders_the_routing_they_expect():
     """The security master cases route on lines the rendered process must carry: the master card's
-    order (panel, signature, human merge), L0's on-call line and the signature on the board item.
+    order (panel, signature, human merge), and L0's security line (on call, signs the
+    `trust-loosening` board item).
     Comparing the YAML with a table only checks it against itself; this renders what the master
     reads with the crew the cases name."""
     l0, card = _rendered(SECURITY_FIXTURE)
     lines = l0.split("\n")
     assert ORDER_LINE in card.split("\n"), "master card lacks the trust-loosening order line"
     assert REVIEW_LINE in card.split("\n"), "master card lacks the pre-8.0 security review wait"
-    assert ON_CALL_LINE in lines, "L0 lacks the security on-call line"
-    assert SIGNATURE_LINE in lines, "L0's one-way board item lacks the security signature"
+    assert SECURITY_LINE in lines, "L0 lacks the security line (on call, signs trust-loosening)"
 
 
 def test_the_generic_crew_renders_no_security_routing():
     l0, card = _rendered(GENERIC_FIXTURE)
     assert "trust-loosening` diff:" not in card
     assert "also waits for" not in card
-    assert "owns its label but runs on call" not in l0
-    assert "also carries" not in l0
+    assert "owns its label" not in l0
+    assert "signs each `trust-loosening`" not in l0
