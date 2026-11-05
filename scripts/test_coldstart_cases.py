@@ -127,3 +127,78 @@ def test_an_unknown_crew_key_keeps_the_full_l0_with_the_line_on_startup_and_comp
     assert re.search(route, first) and first.startswith("crew.json: unknown keys ignored: limitz")
     generic = json.loads((REPO / "we/scripts/fixtures/crew-v2-generic.json").read_text())
     assert rest == render_process.render_l0(crewlib._merge(generic))
+
+
+RATES = REPO / "tests" / "coldstart" / "rates.json"
+CASE_IDS = {f"{p.parent.name}/{p.stem}" for p in CASES}
+
+
+def rates_problems(table: dict, ids: set[str]) -> list[str]:
+    """What is wrong with a ``rates.json`` table for the suite ``ids``."""
+    problems = []
+    for key in ("model", "run_budget_usd", "release_cap", "cost_target_tokens", "scenarios"):
+        if key not in table:
+            problems.append(f"no {key}")
+    cap = table.get("release_cap") or {}
+    if not (isinstance(cap.get("runs"), int) and cap["runs"] > 0 and cap.get("wall_minutes")):
+        problems.append("release_cap needs runs and wall_minutes")
+    rows = table.get("scenarios") or {}
+    problems += [f"row for unknown scenario {sid}" for sid in sorted(set(rows) - ids)]
+    if not table.get("measured"):
+        return problems + (["rows without a measurement"] if rows else [])
+    for key in ("date", "model", "digest", "runs_per_scenario"):
+        if key not in table["measured"]:
+            problems.append(f"measured lacks {key}")
+    if not isinstance(table.get("suite_tokens_one_run"), int):
+        problems.append("no suite_tokens_one_run")
+    problems += [f"no row for {sid}" for sid in sorted(ids - set(rows))]
+    for sid, row in sorted(rows.items()):
+        runs, hits = row.get("runs", 0), row.get("hits", 0)
+        if runs < 10:
+            problems.append(f"{sid}: {runs} runs < 10")
+        if row.get("gated") != (hits * 10 >= 9 * runs):
+            problems.append(f"{sid}: gated is not hits >= 9/10")
+        if not row.get("gated") and not str(row.get("defect") or "").strip():
+            problems.append(f"{sid}: below 9/10 without a defect line")
+    return problems
+
+
+def test_rates_json_has_the_shape_the_harness_reads():
+    """Until the first measurement (a pod run) the table holds its caps and no rows; after it,
+    every scenario has a row with 10 runs, gated by the entry rule, and a defect when below."""
+    table = json.loads(RATES.read_text())
+    assert rates_problems(table, CASE_IDS) == []
+    assert table["model"] == "claude-opus-5-5 medium"
+
+
+GOOD = {
+    "model": "m",
+    "run_budget_usd": 1.0,
+    "release_cap": {"runs": 69, "wall_minutes": 30},
+    "cost_target_tokens": 1,
+    "measured": {"date": "d", "model": "m", "digest": "x", "runs_per_scenario": 10},
+    "suite_tokens_one_run": 5,
+    "scenarios": {
+        "a/x": {"runs": 10, "hits": 9, "gated": True},
+        "a/y": {"runs": 10, "hits": 8, "gated": False, "defect": "card line 3 is vague"},
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("patch", "problem"),
+    [
+        ({}, None),
+        (
+            {"a/y": {"runs": 10, "hits": 8, "gated": False}},
+            "a/y: below 9/10 without a defect line",
+        ),
+        ({"a/y": {"runs": 10, "hits": 8, "gated": True}}, "a/y: gated is not hits >= 9/10"),
+        ({"a/x": {"runs": 3, "hits": 3, "gated": True}}, "a/x: 3 runs < 10"),
+        ({"a/x": None}, "no row for a/x"),
+    ],
+)
+def test_the_rates_rules_refuse_each_defect(patch, problem):
+    rows = {k: v for k, v in {**GOOD["scenarios"], **patch}.items() if v is not None}
+    found = rates_problems({**GOOD, "scenarios": rows}, {"a/x", "a/y"})
+    assert found == ([problem] if problem else [])

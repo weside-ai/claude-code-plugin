@@ -30,6 +30,12 @@ a non-zero exit, the timeout, no parseable answer) is a miss naming the cause; n
 The crew's ``board.file`` is pointed into the run's temp directory, so a cold session never reads
 or writes the caller's board or served log. Grading: ``grade.py``.
 
+``measure --runs N`` runs every scenario N times (10 for the record) and writes ``rates.json``:
+per scenario ``runs``, ``hits``, ``gated`` (true at >= 9/10) and, below that, the ``defect`` line a
+human fills in (the process text, card or ``description`` the misses point at); plus the date,
+model pin, inputs digest and Claude Code version, and the tokens and wall time of one full run of
+the suite. Its caps (``run_budget_usd``, ``release_cap``, ``cost_target_tokens``) are kept.
+
 ``release --base <ref>`` runs each scenario ``affected.py`` names for ``<ref>...HEAD`` 3x fresh,
 keeps every other scenario's measured rate from ``rates.json``, and prints the receipt block
 (``RECEIPT_MARKER`` and a fenced JSON block) to paste into the PR body. Before the first session it
@@ -40,6 +46,7 @@ scenario is left out. Tokens over ``cost_target_tokens`` print ``cost over targe
 
 Usage:
   python3 tests/coldstart/run.py run <id>... [--jobs J]
+  python3 tests/coldstart/run.py measure --runs 10 [--jobs J]
   python3 tests/coldstart/run.py release --base <ref> [--jobs J]
 """
 
@@ -82,6 +89,7 @@ DEFAULT_RUN_BUDGET_USD = 1.0
 LOCK_ENV = "WESIDE_TESTS_LOCK"
 LOCK_DEFAULT = "/tmp/weside-tests.lock"
 RELEASE_RUNS = 3
+GATE_HITS = 9  # of 10: a scenario at or above it is gated (its release runs must all hit)
 RECEIPT_MARKER = "<!-- coldstart-receipt -->"
 
 
@@ -456,6 +464,55 @@ def release(base: str, jobs: int, budget: float, table: dict) -> int:
     return 0 if block["status"] == "green" else 1
 
 
+# --- measure ---------------------------------------------------------------------------------
+
+
+def measure(runs: int, jobs: int, budget: float, table: dict) -> int:
+    """Every scenario ``runs``x; writes the rates into ``rates.json``, keeping its caps and every
+    ``defect`` line of a scenario that is still below the entry rule."""
+    scns = [load(p) for p in scenario_paths()]
+    batch = [s for s in scns for _ in range(runs)]
+    with test_slot():
+        results = run_many(batch, jobs, budget)
+    old = table.get("scenarios") or {}
+    rows = {}
+    for scn in scns:
+        mine = [r for s, r in zip(batch, results) if s["sid"] == scn["sid"] and r is not None]
+        hits = sum(1 for r in mine if r.hit)
+        row = {"runs": len(mine), "hits": hits, "gated": hits * 10 >= GATE_HITS * len(mine)}
+        if not row["gated"]:
+            row["defect"] = (old.get(scn["sid"]) or {}).get("defect")
+        rows[scn["sid"]] = row
+    done = [r for r in results if r is not None]
+    table = dict(table)
+    table["measured"] = {
+        "date": time.strftime("%Y-%m-%d", time.gmtime()),
+        "model": f"{MODEL} {EFFORT}",
+        "digest": affected.digest(set(rows)),
+        "runs_per_scenario": runs,
+        "claude_code": claude_version(),
+    }
+    table["suite_tokens_one_run"] = round(sum(r.tokens for r in done) / runs)
+    table["suite_wall_s_one_run"] = round(sum(r.wall_s for r in done) / runs, 1)
+    table["scenarios"] = rows
+    RATES.write_text(json.dumps(table, indent=2) + "\n", encoding="utf-8")
+    for sid, row in rows.items():
+        flag = "gated" if row["gated"] else "NOT gated: name its defect in rates.json"
+        print(f"{sid} {row['hits']}/{row['runs']} {flag}")
+    print(f"suite tokens one run: {table['suite_tokens_one_run']}")
+    return 0
+
+
+def claude_version() -> str:
+    try:
+        proc = subprocess.run(
+            ["claude", "--version"], capture_output=True, text=True, timeout=30, check=False
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return "unknown"
+    return proc.stdout.split(" ", 1)[0].strip() or "unknown"
+
+
 # --- CLI -------------------------------------------------------------------------------------
 
 
@@ -465,6 +522,9 @@ def parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="one run of each named scenario")
     run.add_argument("ids", nargs="+")
     run.add_argument("--jobs", type=int, default=1)
+    mea = sub.add_parser("measure", help="every scenario N times, rates into rates.json")
+    mea.add_argument("--runs", type=int, default=10)
+    mea.add_argument("--jobs", type=int, default=1)
     rel = sub.add_parser("release", help="the affected scenarios 3x each, then the receipt")
     rel.add_argument("--base", required=True)
     rel.add_argument("--jobs", type=int, default=1)
@@ -488,6 +548,8 @@ def main(args: list[str] | None = None) -> int:
             if dirty:
                 raise RefusedError(f"uncommitted suite inputs: {', '.join(dirty)}")
             return release(ns.base, ns.jobs, budget, table)
+        if ns.verb == "measure":
+            return measure(ns.runs, ns.jobs, budget, table)
         scns = resolve(ns.ids)
     except (ScenarioError, RefusedError, affected.GitError) as exc:
         print(f"refused: {exc}", file=sys.stderr)

@@ -1,0 +1,14 @@
+{
+  "model": "claude-opus-5-5 medium",
+  "run_budget_usd": 1.0,
+  "release_cap": {
+    "runs": 69,
+    "wall_minutes": 30
+  },
+  "cost_target_tokens": 170000,
+  "provisional": "release_cap and cost_target_tokens come from the first harness runs (one session about 7000 tokens and 8 s); the first measurement replaces them",
+  "measured": null,
+  "suite_tokens_one_run": null,
+  "suite_wall_s_one_run": null,
+  "scenarios": {}
+}

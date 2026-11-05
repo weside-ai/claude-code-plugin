@@ -386,3 +386,29 @@ def test_release_refuses_uncommitted_suite_inputs(fake, monkeypatch, capsys):
     assert run.main(["release", "--base", "origin/main"]) == 2
     assert "uncommitted suite inputs: we/roles/master.md" in capsys.readouterr().err
     assert fake() == []
+
+
+# --- measure ---------------------------------------------------------------------------------
+
+
+def test_measure_writes_rates_and_keeps_caps_and_defects(fake, monkeypatch, tmp_path, capsys):
+    rates_file = tmp_path / "rates.json"
+    table = {
+        "release_cap": {"runs": 69, "wall_minutes": 30},
+        "scenarios": {"master/crew-unknown-key": {"defect": "kept"}},
+    }
+    rates_file.write_text(json.dumps(table))
+    monkeypatch.setattr(run, "RATES", rates_file)
+    paths = [p for p in run.scenario_paths() if run.sid_of(p) in (T2, "master/crew-unknown-key")]
+    monkeypatch.setattr(run, "scenario_paths", lambda: paths)
+    assert run.main(["measure", "--runs", "2", "--jobs", "2"]) == 0
+    assert len([c for c in fake() if "-p" in c["argv"]]) == 4  # plus one claude --version
+    written = json.loads(rates_file.read_text())
+    assert written["release_cap"] == table["release_cap"]
+    assert written["scenarios"][T2] == {"runs": 2, "hits": 2, "gated": True}
+    miss = written["scenarios"]["master/crew-unknown-key"]
+    assert (miss["hits"], miss["gated"], miss["defect"]) == (0, False, "kept")
+    assert written["suite_tokens_one_run"] == 2 * 7036
+    assert written["measured"]["model"] == "claude-opus-5-5 medium"
+    assert written["measured"]["digest"] == affected.digest({T2, "master/crew-unknown-key"})
+    assert "master/crew-unknown-key 0/2 NOT gated" in capsys.readouterr().out
