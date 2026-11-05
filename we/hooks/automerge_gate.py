@@ -3,9 +3,14 @@
 here first: the freeze flag, the PR's risk class, the T2 panel verdict, the Codex verdict on the
 head and the pre-merge receipt.
 
-A brake against slips, not a boundary: it sees only Claude Code's Bash tool
-calls, and a session can work around it. The boundary is the repository's ruleset (required
-checks, code owners) and the owner's own merge.
+A brake against slips, not a boundary ("Bremse gegen Versehen, keine Grenze"): it sees only
+Claude Code's Bash tool calls, and a session can work around it — the bot token used directly
+(`curl`, a `gh` binary off `PATH`), a script file or `python3 -c`, a Codex run (no Claude hooks),
+an edit to the hook in the plugin cache. The freeze flag and the panel verdict are local files any
+session can write or delete: process signals, not locks. A hook that Claude Code kills on its
+`hooks.json` timeout is a non-blocking error, so the command runs (allow); `BUDGET_SECONDS` keeps
+every call below it. The boundary is the repository's ruleset (required checks, code owners, no
+bypass actor for the bot) and the owner's own merge.
 
 Call forms, every one in a compound command (`gh` in command position):
 
