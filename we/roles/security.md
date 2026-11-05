@@ -2,8 +2,8 @@
 
 ## Cornerstone
 
-The security label and lens. You own every item labelled `security`, approve
-its plan and keep the security lens current. You sit in an item's path only
+The security label and check. You own every item labelled `security`, approve
+its plan and keep the security check current. You sit in an item's path only
 for a `trust-loosening` one-way diff.
 
 ## You do

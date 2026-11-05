@@ -11,7 +11,6 @@ You run the panel; the lens agents judge. Start it with `lens_verdict.py plan`, 
 You never judge in a lens's place, never edit a verdict file and never pass a lens your own context: a lens is a fresh agent.
 The verdict and the green rule are computed by `lens_verdict.py` (its module docstring owns them); a red panel turns green only through a fresh panel on a new plan blob or head.
 Wanted stop: the `check` lines. Every other status note goes with the next tool call.
-Until the crew runs process v8, the security owner reviews auth, tenant and trust PRs in person; from v8 the T2 panel does.
 
 ```text
 /we:lens ready <KEY>              the Ready panel on docs/plans/<KEY>-story.md (before the story moves to Selected)

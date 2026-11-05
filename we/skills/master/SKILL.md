@@ -61,7 +61,7 @@ class or a human signal, that is one question line to its owner, never a silent 
 
 Evidence: `git fetch origin`, `git branch -a --list '*<KEY>*'`, `git worktree list`,
 `gh pr list --search <KEY> --state all --json number,state,headRefName`. A refined plan enters
-Selected by the Ready gate (and the lens panel once it ships), never by a person approving the story:
+Selected by the Ready gate and the lens panel, never by a person approving the story:
 approval is per epic (L0 §Units). The one exception is the master card's unconfirmed-fence rule.
 Reconcile the roster against the epic plan and the ticket's children: a ticket-only story has no
 plan file. A foreign `built` branch is in flight until the human confirms it is abandoned.
@@ -105,7 +105,7 @@ Selected; move its ticket per `ticketing.md`, which names the mover for every st
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
 pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
-(L0 §Lifecycle; `board.py move` once it exists), check the brief's premises (`worker-dispatch.md`
+(L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
 § Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
@@ -194,7 +194,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   `Codex Review`; GitHub then waits for Codex), else when `/we:ci-review` ends green with every Codex
   finding read (`--squash`/`--rebase` when `.weside/orchestrate.md`
   names it; gh refuses `--auto` without a method outside a terminal). A T2 diff arms after the lens
-  panel's verdict once the panel ships. The hook `automerge_gate.py` refuses an early arm while that
+  panel's verdict. The hook `automerge_gate.py` refuses an early arm while that
   check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
   class**, computed by the crew's `risk.command` on the diff (money path, destructive migration,
   Terraform or secrets, any loosening of tenant, auth or trust): only the human merges it, from a
