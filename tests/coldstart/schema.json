@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "next_verb": {
+      "type": "string",
+      "description": "The one next verb or skill you would use, as a bare word (e.g. board, master, plan-story)."
+    },
+    "waits": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "The roles you wait on for this item, as role keys (human, product, architecture, acceptance, machinery, coordinator, escalation, hr); empty when nobody."
+    },
+    "route": {
+      "type": "string",
+      "description": "Where the item goes or which line of your process text decides it, in a few words."
+    },
+    "reason": {
+      "type": "string",
+      "description": "One sentence: why."
+    }
+  },
+  "required": ["next_verb", "waits", "route", "reason"],
+  "additionalProperties": false
+}
