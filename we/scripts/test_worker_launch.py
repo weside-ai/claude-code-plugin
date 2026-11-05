@@ -268,3 +268,16 @@ def test_stop_reports_a_session_that_keeps_running(env, monkeypatch):
 def test_read_marker_outside_a_repo_is_none(tmp_path):
     assert wl.read_marker(tmp_path) is None
     assert wl.read_marker(None) is None
+
+
+def test_a_hanging_claude_agents_times_out(monkeypatch):
+    seen = {}
+
+    def hang(argv, **kwargs):
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(wl.subprocess, "run", hang)
+    with pytest.raises(wl.LaunchError, match=r"claude agents --json timed out after 30 s"):
+        wl.sessions()
+    assert seen["timeout"] == wl.AGENTS_TIMEOUT_S

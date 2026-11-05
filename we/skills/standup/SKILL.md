@@ -16,17 +16,18 @@ files define a status form (a sentence cap, a language), that form wins over the
 ## 1 · Scope (first hit wins)
 
 1. A key or slug in the arguments (`/we:standup PROJ-123`). A story key narrows the story table, Running and
-   Your moves to that story; its epic and saga appear only in Working on. `--branch` → § 4.
+   Your moves to that story; its epic and the metric it serves appear only in Working on. `--branch` → § 4.
 2. The ticket key of the current branch (`<type>/<KEY>-…`).
 3. Story keys this conversation dispatched or opened PRs for (only from its own context; a fresh
    session or a subagent skips this step).
-4. Active epics (`selected`/`in-progress`), else active sagas (`active`): exactly one → it.
+4. Active epics (`selected`/`in-progress`): exactly one → it.
    Several → render no scope: one line each `<slug> · <ticket> · updated <date>`, then
    `/we:standup <KEY>`, and stop. None → § 4.
 
-Walk up from a story: its `epic:` → the epic plan → its `saga:` (omit the saga when `null`). A key
+Walk up from a story: its `epic:` → the epic plan → its `serves:` metric of the goal file (omit it
+when `null`). A key
 with no epic above it → § 4. Children of an epic: its mirror rows
-(`${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block) ∪ `docs/plans/*-story.md` whose
+(`${CLAUDE_PLUGIN_ROOT}/references/epic-plan.md` § Mirror block) ∪ `docs/plans/*-story.md` whose
 `epic:` names it (one `rg`) ∪ the keys from step 3. In scope: stories that are Active or In Review
 plus those this conversation touched. Backlog, blocked and parked children go into one row of Later / others.
 **current** = the story with an open PR or a running worker; with several, the one touched last.
@@ -45,6 +46,8 @@ plus those this conversation touched. Backlog, blocked and parked children go in
   no ticketing configured → one gap line, no `gh issue` for a non-numeric key.
 - Running: this session's agents and background tasks (the harness roster, where present); a
   worker's state is its last message. `git status -sb` when a story in scope is the checked-out branch.
+  With the crew's `flow.log_dir` set, `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sampler_age.py` adds its
+  verdict line here; exit 1 makes it an item for the human too.
 - Owed by the human: this conversation's unanswered asks to the user, the mirror rows'
   Notes column, each plan's `## Open Fork`, the epic's unanswered open questions that name
   the user, and due items in the repo's due-items file when its instruction files name one.
@@ -57,7 +60,7 @@ Markdown, rendered as tables: the product owner found the text-block layout hard
 Headings and column names follow the user's language; keys, tags and commands stay verbatim.
 
 ```markdown
-**Working on:** <Saga> › <Epic KEY title> — <what this slice delivers, why now>.
+**Working on:** <Epic KEY title> (serves <metric>) — <what this slice delivers, why now>.
 **Current:** <Story KEY title> — <one-line goal>.
 
 | Story | Where | Next step |
@@ -90,7 +93,7 @@ Headings and column names follow the user's language; keys, tags and commands st
 
 ## 4 · Branch view (`--branch`, a key without an epic, or no scope)
 
-`/we:orchestrate`'s user-merge close embeds this view.
+`/we:master`'s user-merge close embeds this view.
 
 ```text
 STANDUP — <KEY> · <branch> · PR #<n> <state> · CI <green|n red|pending> · tree <clean|n dirty>

@@ -1,12 +1,14 @@
 ---
 name: ticketing
-description: Reading a ticket with its comments and moving it safely. Shared by /we:orchestrate and /we:develop.
+description: Reading a ticket with its comments and moving it safely. Shared by /we:master and /we:develop.
 ---
 
 # Ticketing
 
 - Tool, in this order: the weside MCP (`execute_tool` with `JIRA_*`), an Atlassian MCP, `gh issue`,
-  else plan-only (no ticket, say so once). `.weside/config.json` `ticketing` names the project.
+  else plan-only (no ticket, say so once). `.weside/config.json` `ticketing` names the project the
+  skills read; the crew file's `board.ticketing` (`none` or `jira`) decides whether `board.py`
+  prints `carry:` (two keys until the ticketing rewrite makes `board.ticketing` the one owner).
 - An Atlassian MCP is recognised by its tool names, whatever the server prefix: Rovo
   (`getJiraIssue`, `searchJiraIssuesUsingJql`, `transitionJiraIssue`, `addOrEditJiraIssueComment`;
   e.g. the plugin `atlassian@claude-plugins-official`) is preferred, the community server
@@ -23,5 +25,13 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
 - A transition is verified by re-reading the status; retry once with another transition name, then
   warn and continue. Transition first, comment second, in two calls: a comment inside the
   transition (Rovo `update`, `jira_*` `comment`) is lost or fails the whole transition.
-- Status names per repo live in `.weside/orchestrate.md` § Ticket states.
-- Only `/we:merged` moves a ticket on after the merge: `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5.
+- Status names: the crew file's `board.states` where the repo has one (`board.py` reads them); else
+  the repo's `.weside/orchestrate.md` § Ticket states (transitional, until the ticketing rewrite).
+- Every move follows the entry rule of its state (L0 §Lifecycle). With a crew file that sets
+  `board.ticketing`, a move goes through `board.py select` or `board.py move` (`docs/board.md`
+  § Moves), and the session carries its `carry:` line with its ticketing tool, then verifies by
+  re-reading. The skills that still move by tool switch with the ticketing rewrite, and
+  `board.py check` shows the gap meanwhile: the master moves Selected → In Progress when it pulls a
+  story, `/we:merged` moves a merged and linked story to In Review
+  (`${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5), and Done comes only from a receipt report or an
+  acceptance comment.

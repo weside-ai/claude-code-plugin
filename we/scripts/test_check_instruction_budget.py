@@ -400,6 +400,29 @@ class ProcessRenderTest(unittest.TestCase):
         )
         self.assertNotIn("role worker has", out)
 
+    def test_an_l0_within_the_budget_but_not_its_notice_reserve_goes_red(self):
+        """The gate counts the crew notice reserve like ``--serves``: an L0 a notice line would
+        push over the budget fails here, not silently in a session."""
+        floor = render_process.BUDGET - render_process.NOTICE_CHARS
+        rules: list[str] = []
+        n = 0
+        while n <= floor:  # grow the local rules one character at a time past the floor
+            if not rules or len(rules[-1]) == 160:
+                rules.append("")
+            rules[-1] += "r"
+            self.crew["local_rules"] = rules
+            n = len(render_process.render_l0(crewlib._merge(self.crew)))
+        self.assertLessEqual(n, render_process.BUDGET, "the probe overshot the budget itself")
+        self.save()
+        code, out = self.gate()
+        counted = n + render_process.NOTICE_CHARS
+        self.assertEqual(
+            code, 1, f"an L0 of {n} chars ({counted} with the notice reserve) passed: {out}"
+        )
+        self.assertIn(
+            f"rendered L0 for role master has {counted} chars > {render_process.BUDGET}", out
+        )
+
     def test_a_refused_crew_is_an_error(self):
         self.crew["version"] = 1
         self.save()
@@ -548,9 +571,17 @@ class RoleCardTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertNotIn("[card-", out)
 
+    def test_the_security_card_has_no_card_finding(self):
+        for card in render_process.ROLES.glob("*.md"):
+            (self.cards / card.name).write_text(card.read_text(encoding="utf-8"))
+        self.assertTrue((self.cards / "security.md").is_file())
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("we/roles/security.md", out)
+
     def test_a_card_with_an_l0_line_copied_in_is_red(self):
         """Red arm of AC1: one L0 line pasted into the card."""
-        line = "- **Workers execute one chunk and end.** Masters and companions start them (`we-worker`); the name"
+        line = "  the worker watches it until green and ends, its starter until the merge. Masters and companions start them"
         text = self.card.replace("## You never\n", f"## You never\n\n{line}\n", 1)
         self.assertNotEqual(text, self.card)
         (self.cards / "master.md").write_text(text, encoding="utf-8")

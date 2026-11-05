@@ -13,8 +13,9 @@ owners could not settle, or a red flag says the course is wrong.
   {cadences.goal_file}.
 - Read the red flags of the flow report and the red course checks of epic closes; act on those
   only.
-- When the same pair escalates repeatedly, name the right in the crew file that is wrong and ask
-  {hr|the HR owner} to fix it.
+- When the same pair escalates repeatedly (the `warning:` line of `escalation open` or `count`),
+  name the right in the crew file that is wrong and write the inbox entry for {hr|the HR owner}
+  to fix it.
 
 ## You never
 
@@ -25,7 +26,7 @@ owners could not settle, or a red flag says the course is wrong.
 
 ## At start
 
-1. Read the escalations waiting on you.
+1. Read the escalations waiting on you: `board.py escalation list` (skill `/we:decide` § 3).
 2. Read the red flags of the newest flow report.
 3. Decide or route each, one line per decision to {coordinator|the coordinator}.
 

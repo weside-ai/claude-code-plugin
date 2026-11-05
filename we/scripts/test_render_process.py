@@ -4,6 +4,7 @@ and the ``--serves`` predicate."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ INBOX = (
 )
 ONE_WAY = (
     "Only Hal\n  merges it (user merge, enforced by the `one-way gate` check), from a board item "
-    "with the PR link,\n  the class and the panel verdict; the merge hook only warns early."
+    "with PR link,\n  class and panel verdict; the merge hook only warns early."
 )
 DECIDED_3 = "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge."
 
@@ -71,7 +72,8 @@ def test_every_role_renders_within_the_budget_with_crew_values():
     assert "Specialists woken on demand: Bo (security), Lex (legal)." in full
     assert "`ASK · <KEY> <title> · <question without context> · Advice: …`" in full
     assert "`done-for-now` before parking" in full
-    assert "pod 16 GiB minus gate lock (≤ 2), test slot (≤ 3) and devbox" in full
+    assert "- **Capacity:** a master's limit is its context: watch compactions" in full
+    assert "GiB" not in full, "the L0 names no host memory numbers"
     assert "\n## Local (this crew)\n\n- A draft PR names why it waits in its first line.\n" in full
 
 
@@ -105,6 +107,36 @@ def test_waits_names_the_human_as_the_only_merger_of_one_way():
         assert old not in text, old
 
 
+# the crew notice line a hook may print above the L0, its two newlines included
+NOTICE_RESERVE = 160
+
+
+def test_owners_decide_cut_and_fence_and_the_manual_moves_line_closes_the_l0():
+    text = rp.render_l0(generic())
+    assert (
+        "- An owner decides cut and fence questions of their area unless a new outcome, money, law"
+        " or the vision\n  is touched; a board line records it and Hal may overturn it.\n"
+    ) in text
+    assert text.rstrip().endswith(
+        "Until `board.py move` and the RC train job ship, moves and RCs stay by hand."
+    )
+    assert "today's rules hold" not in text
+
+
+def test_the_l0_keeps_room_for_the_notice_line():
+    for data in (None, DEFAULTS_ONLY):
+        crew = generic() if data is None else crewlib._merge(data)
+        assert len(rp.render_l0(crew)) + NOTICE_RESERVE <= rp.BUDGET
+
+
+def test_capacity_numbers_and_cadence_owners_left_the_l0():
+    template = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    assert "capacity_line" not in rp.SPECIAL and "{capacity" not in template
+    cadences = template.split("## Cadences", 1)[1].split("\n## ", 1)[0]
+    for gone in ("({machinery})", "({hr},", "({human} + {escalation})"):
+        assert gone not in cadences, gone
+
+
 def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
     """Red arm: the version-1 text (one word arms auto-merge, no inbox bullet) fails both."""
     process = tmp_path / "process"
@@ -126,6 +158,46 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
     assert "one word arms auto-merge" in text
 
 
+WORKER_ENDS = (
+    "- **Workers execute one chunk and end**; a PR chunk ends at its merge or a `user merge` {label};\n"
+    "  the worker watches it until green and ends, its starter until the merge."
+)
+REARM = (
+    "4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4"
+    " for every open PR you own.\n"
+)
+
+
+def test_whoever_opens_a_pr_watches_it_and_the_master_re_arms_after_a_compaction():
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) in rp.render_l0(crew)
+    assert REARM in rp.render_card(generic(), "master")
+
+
+def test_the_watch_phrases_go_red_on_the_previous_text(tmp_path):
+    """Red arm: the text before the watch rule (worker ends after its chunk, no re-arm step)."""
+    process, roles = tmp_path / "process", tmp_path / "roles"
+    process.mkdir()
+    roles.mkdir()
+    l0 = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    old_l0 = l0.replace(
+        WORKER_ENDS.format(label="{question_label}") + " Masters",
+        "- **Workers execute one chunk and end.** Masters",
+    )
+    assert old_l0 != l0
+    (process / "L0.md").write_text(old_l0, encoding="utf-8")
+    for card in rp.ROLES.glob("*.md"):
+        (roles / card.name).write_text(card.read_text(encoding="utf-8"), encoding="utf-8")
+    master = (roles / "master.md").read_text(encoding="utf-8")
+    assert REARM in master
+    (roles / "master.md").write_text(master.replace(REARM, ""), encoding="utf-8")
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) not in rp.render_l0(
+        crew, process=process
+    )
+    assert REARM not in rp.render_card(crew, "master", roles=roles)
+
+
 def test_worker_form_is_short_and_carries_the_crew_values():
     text = rp.role_text(generic(), "worker")
     assert len(text) <= 1_500
@@ -140,15 +212,19 @@ def test_cli_role_and_all_roles(tmp_path):
         (tmp_path / workplace).mkdir()
     full = run("--role", "master", "--from", str(repo))
     card = rp.render_card(generic(), "master")
-    assert (
-        full.returncode == 0
-        and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n\n{rp.POINTER}\n"
-    )
+    assert full.returncode == 0 and full.stdout == f"{rp.render_l0(generic())}\n\n{card}\n"
     sizes = run("--all-roles", "--from", str(repo))
     assert sizes.returncode == 0
     rows = [line.split("\t") for line in sizes.stdout.splitlines()]
-    assert [r[0] for r in rows] == list(rp.all_roles())
+    assert [r[0] for r in rows] == [*rp.all_roles(), "fallback"]
     assert all(r[3] == "ok" and int(r[2]) > 0 for r in rows)
+    crew = generic()
+    master = next(r for r in rows if r[0] == "master")
+    assert int(master[1]) == len(rp.render_l0(crew)) + rp.NOTICE_CHARS
+    fallback = crewlib.fallback(repo / ".weside" / "crew.json", "")
+    assert rows[-1][1:3] == [
+        str(len(rp.render_l0(fallback, kind)) + rp.NOTICE_CHARS) for kind in ("full", "worker")
+    ]
 
 
 def test_serves_needs_a_crew_that_loads(tmp_path):
@@ -278,6 +354,20 @@ def test_the_master_card_carries_the_fence_transition_line():
     assert "While `epic.fence_confirmed` is false on the board" in card
 
 
+def test_the_master_card_carries_the_effort_rule_and_the_epic_update():
+    card = rp.render_card(generic(), "master")
+    for phrase in (
+        "do it inline when it is a handful of tool calls",
+        "use a read-only\n  subagent for a wide read or a review",
+        "give a story to one worker (the default)",
+        "two to\n  four workers only for independent chunks",
+        "Multi-agent work costs ~15\u00d7 the tokens.",
+        "After every merged story: `/we:epic` update (Updates Log, ticket mirror) before you pull"
+        " the next one.",
+    ):
+        assert phrase in card, phrase
+
+
 def _member_ws(tmp_path: Path) -> tuple[Path, dict]:
     ws = tmp_path / "ws"
     repo = crew_repo(ws)
@@ -398,3 +488,269 @@ def test_totals_never_run_extra_hooks_and_count_the_recorded_output(tmp_path):
     rows = [(part, where, n) for part, where, n in t.rows]
     assert ("extra-hooks", f"touch {marker}; printf hello", len("hello")) in rows
     assert all(part != "note" for part, _, _ in rows)
+
+
+# --- crew notice (unknown keys, refused crew) -----------------------------------------------
+
+
+UNKNOWN_KEY = HERE / "fixtures" / "crew-v2-unknown-key.json"
+
+
+def _without_notice_token(kind: str) -> str:
+    name = "L0-worker.md" if kind == "worker" else "L0.md"
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    assert text.startswith("{crew_notice}\n\n")
+    return text[len("{crew_notice}\n\n") :]
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_a_clean_crew_renders_as_without_the_notice_token(kind):
+    crew = {**generic(), "unknown_keys": []}
+    assert rp.render_l0(crew, kind) == rp.render(_without_notice_token(kind), crew)
+    assert "crew.json" not in rp.render_l0(crew, kind).split("\n")[0]
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_unknown_keys_render_one_notice_line_first(tmp_path, kind, capsys):
+    repo = crew_repo(tmp_path, json.loads(UNKNOWN_KEY.read_text()))
+    crew = crewlib.load(repo / ".weside" / "crew.json")
+    text = rp.render_l0(crew, kind)
+    first, rest = text.split("\n\n", 1)
+    assert first == (
+        "crew.json: unknown keys ignored: limitz, limits.masterz, roles.auditor, "
+        "members.ada.titel, fallback.securty, lenses.product.keepr"
+    )
+    assert rest == rp.render(_without_notice_token(kind), crew)
+    assert text.count("unknown keys ignored") == 1
+
+
+def test_a_refused_crew_renders_the_reason_under_its_own_label(tmp_path):
+    repo = crew_repo(tmp_path)
+    path = repo / ".weside" / "crew.json"
+    data = json.loads(GENERIC.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    path.write_text(json.dumps(data))
+    crew = crewlib.fallback(path, f"{path}: limits.masters must be a number")
+    first = rp.render_l0(crew).split("\n\n", 1)[0]
+    assert first == f"crew.json nicht lesbar: {path}: limits.masters must be a number"
+    assert crewlib.fallback(path, "x")["crew_error"] == "x" and crew["members"] == {}
+
+
+def test_a_long_notice_is_cut_to_the_reserve_keeping_label_and_reason_end():
+    reason = "/" + "deep/" * 60 + ".weside/crew.json: limits.masters must be a number"
+    crew = {**generic(), "crew_error": reason}
+    first = rp.render_l0(crew).split("\n\n", 1)[0]
+    assert len(first) + 2 == rp.NOTICE_CHARS
+    assert first.startswith("crew.json not readable: /deep/") and "…" in first
+    assert first.endswith("crew.json: limits.masters must be a number")
+    short = {**generic(), "crew_error": "y"}
+    assert rp.render_l0(short).split("\n\n", 1)[0] == "crew.json not readable: y"
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_the_fallback_l0_fits_the_budget_with_the_reserve(kind):
+    fallback = crewlib.fallback(None, "x" * 400)
+    assert len(rp.render_l0({**fallback, "crew_error": None}, kind)) + rp.NOTICE_CHARS <= rp.BUDGET
+    assert len(rp.render_l0(fallback, kind)) <= rp.BUDGET
+    assert rp.l0_chars(fallback, kind) <= rp.BUDGET
+
+
+def test_serves_counts_the_reserve(tmp_path, monkeypatch):
+    repo = crew_repo(tmp_path)
+    assert run("--serves", "--from", str(repo)).returncode == 0
+    crew = crewlib.load(repo / ".weside" / "crew.json")
+    full = len(rp.render_l0(crew))
+    monkeypatch.setattr(rp, "BUDGET", full + rp.NOTICE_CHARS - 1)
+    assert rp.serves(repo) is False
+    monkeypatch.setattr(rp, "BUDGET", full + rp.NOTICE_CHARS)
+    assert rp.serves(repo) is True
+
+
+SECURITY = HERE / "fixtures" / "crew-v2-security.json"
+# one line: on call (woken, not running) and the signature a `trust-loosening` board item carries
+SECURITY_LINE = (
+    "  - {security} owns its label, runs on call and signs each `trust-loosening` item."
+)
+BOUND_SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
+TRUST_LINE = (
+    "- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges."
+)
+
+
+def bound() -> dict:
+    return crewlib._merge(json.loads(SECURITY.read_text()))
+
+
+def _template_without(name: str, line: str) -> str:
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    assert text.count(line + "\n") == 1, line
+    return text.replace(line + "\n", "")
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_an_unbound_crew_renders_as_the_template_without_the_security_line(kind):
+    """Without ``roles.security`` the line holding the bare token drops, so the render equals the
+    template without it: byte-identical to the release before the role key."""
+    crew = generic()
+    name = "L0-worker.md" if kind == "worker" else "L0.md"
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    text = text.replace(SECURITY_LINE + "\n", "")
+    expected = rp.render(text, crew)
+    assert rp.render_l0(crew, kind) == expected
+    assert "owns its label" not in rp.render_l0(crew, kind)
+    assert "Bo (security)" in rp.render_l0(crew, "full")
+
+
+def test_a_bound_security_owner_gets_its_line_and_leaves_the_specialists():
+    full = rp.render_l0(bound())
+    assert "\n" + BOUND_SECURITY_LINE + "\n" in full
+    assert "Specialists woken on demand: Lex (legal)." in full
+    assert "Bo (security)" not in full
+
+
+def on_call_line(l0: str, name: str) -> str | None:
+    """The L0 line naming ``name`` as an owner run on call (woken, not running all the time)."""
+    return next((x for x in l0.split("\n") if name in x and "on call" in x), None)
+
+
+def test_the_security_line_says_its_owner_is_woken_on_call():
+    """The holder leaves the specialists line, so its own line carries "on call"."""
+    assert on_call_line(rp.render_l0(bound()), "Bo") == BOUND_SECURITY_LINE
+    assert on_call_line(rp.render_l0(generic()), "Bo") is None
+
+
+def test_a_role_holder_is_never_listed_as_specialist_even_with_the_field():
+    data = json.loads(SECURITY.read_text())
+    data["members"]["bo"]["specialist"] = "security"
+    crew = crewlib._merge(data)
+    assert "Bo (security)" not in rp.render_l0(crew)
+    assert [slug for slug, _ in rp.specialist_members(crew)] == ["lex"]
+    assert [label for label, _, _ in rp._sessions(SECURITY, crew, "specialist")] == [
+        "specialist Lex"
+    ]
+
+
+def test_an_optional_role_token_with_a_fallback_keeps_its_line():
+    """Only the bare token drops its line; ``{security|…}`` renders its fallback."""
+    text = rp.render("a {security|nobody}\nb {security}\nc", generic())
+    assert text == "a nobody\nc"
+
+
+def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
+    assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
+    with_owner = rp.render_card(bound(), "master")
+    assert (
+        "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
+        in with_owner
+    )
+    assert "trust-loosening" not in rp.render_card(generic(), "master")
+
+
+@pytest.mark.parametrize("crew", [generic, bound], ids=["unbound", "bound"])
+def test_the_security_card_names_label_lens_review_and_signature(crew):
+    card = " ".join(rp.render_card(crew(), "security").split())
+    for phrase in (
+        "You own every item labelled `security`, approve its plan and keep the security lens",
+        "Until plugin `we` 8.0.0 ships the T2 panel, review every PR that touches auth, tenant "
+        "isolation or trust yourself.",
+        "From 8.0.0 the security lens runs in the T2 panel and you are its keeper",
+        "keep its question file current and sample every 5th verdict post hoc.",
+        "Sign a `trust-loosening` diff after the panel and before Hal merges it",
+    ):
+        assert phrase in card, phrase
+
+
+@pytest.mark.parametrize(
+    "data",
+    [None, json.loads(SECURITY.read_text()), DEFAULTS_ONLY],
+    ids=["generic", "bound", "defaults"],
+)
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_every_crew_keeps_the_l0_within_the_budget_with_the_reserve(data, kind):
+    crew = generic() if data is None else crewlib._merge(data)
+    assert rp.l0_chars(crew, kind) <= rp.BUDGET
+    assert rp.l0_chars(crewlib.fallback(None, "x"), kind) <= rp.BUDGET
+
+
+def test_all_roles_prints_a_security_row(tmp_path):
+    repo = crew_repo(tmp_path, json.loads(SECURITY.read_text()))
+    for workplace in ("biz", "infra"):
+        (tmp_path / workplace).mkdir()
+    out = run("--all-roles", "--from", str(repo))
+    assert out.returncode == 0, out.stderr
+    rows = {line.split("\t")[0]: line.split("\t") for line in out.stdout.splitlines()}
+    assert rows["security"][-1] == "ok"
+    assert all(r[-1] == "ok" for r in rows.values())
+
+
+ALL_BOUND = HERE / "fixtures" / "crew-v2-all-bound.json"
+# red arm: ``L0_BUDGET_REF=<ref>`` renders ``we/process/L0.md`` as it stood on that git ref
+L0_BUDGET_REF = os.environ.get("L0_BUDGET_REF", "")
+
+
+def all_bound() -> dict:
+    return crewlib._merge(json.loads(ALL_BOUND.read_text()))
+
+
+def _l0_from_ref(tmp_path: Path) -> Path:
+    """``rp.PROCESS``, or a copy of it holding ``L0.md`` from ``L0_BUDGET_REF``."""
+    if not L0_BUDGET_REF:
+        return rp.PROCESS
+    shown = subprocess.run(
+        ["git", "-C", str(HERE), "show", f"{L0_BUDGET_REF}:we/process/L0.md"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    process = tmp_path / "process"
+    shutil.copytree(rp.PROCESS, process)
+    (process / "L0.md").write_text(shown.stdout, encoding="utf-8")
+    return process
+
+
+def l0_overrun(crew: dict, process: Path) -> str | None:
+    """None when both L0 forms of ``crew``, measured as ``rp.l0_chars`` measures them (render
+    without the notice plus the ``NOTICE_CHARS`` reserve), fit ``rp.BUDGET``; else the overrun."""
+    clean = {**crew, "crew_error": None, "unknown_keys": []}
+    for kind in ("full", "worker"):
+        chars = len(rp.render_l0(clean, kind, process=process)) + rp.NOTICE_CHARS
+        if chars > rp.BUDGET:
+            return f"{kind} L0 with every role bound: {chars} > BUDGET {rp.BUDGET} chars"
+    return None
+
+
+def test_the_all_bound_fixture_binds_every_optional_line():
+    """Each line that drops or shrinks when a crew leaves something unbound renders here: every
+    role key (``OPTIONAL_ROLE_KEYS`` included), specialists, the T2 second reviewer, local rules
+    and a value for every ``{key|fallback}`` token, so no fallback text stands in."""
+    crew = all_bound()
+    for role in crewlib.ROLE_KEYS:
+        assert crewlib.holder_name(crew, role), role
+    assert set(crewlib.OPTIONAL_ROLE_KEYS) <= set(crewlib.ROLE_KEYS)
+    assert len(rp.specialist_members(crew)) >= 4
+    assert rp._second_reviewer(crew) and rp._local_rules(crew)
+    template = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    for match in rp.TOKEN.finditer(template):
+        key = match.group(1)
+        if key != "crew_notice":
+            assert rp._resolve(crew, key), key
+
+
+def test_the_l0_fits_the_budget_with_every_role_bound(tmp_path):
+    """A bound optional role adds its lines (7.71.0 put the security owner's L0 over ``BUDGET``,
+    and ``process_on_start`` then loads no L0 at all); the unbound fixtures cannot see that."""
+    overrun = l0_overrun(all_bound(), _l0_from_ref(tmp_path))
+    assert overrun is None, overrun
+
+
+def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
+    """Red arm: the L0 grown by one character past the fixture's headroom fails with the count."""
+    process = tmp_path / "process"
+    shutil.copytree(rp.PROCESS, process)
+    crew = all_bound()
+    headroom = rp.BUDGET - rp.l0_chars(crew, "full")
+    text = (process / "L0.md").read_text(encoding="utf-8")
+    (process / "L0.md").write_text(text + "x" * (headroom + 1), encoding="utf-8")
+    assert l0_overrun(crew, process) == (
+        f"full L0 with every role bound: {rp.BUDGET + 1} > BUDGET {rp.BUDGET} chars"
+    )

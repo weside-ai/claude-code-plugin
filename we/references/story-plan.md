@@ -8,7 +8,7 @@ Phases, Out of scope, Constraints and Pins, Design Decisions, Code Guidance, Sec
 Required, Documentation Impact, Updates Log) · Oracle-class marker · What the Ready gate reads ·
 Updates Log lines.
 
-The contract between the writers (`/we:story`, `/we:refine`) and the readers (`/we:orchestrate`,
+The contract between the writer (`/we:plan-story`, run by a refiner worker the epic's master starts) and the readers (`/we:master`,
 `/we:develop`, `scripts/ready_gate.py`). This file owns the grammar the gate parses; change a field
 here only together with every reader.
 
@@ -39,7 +39,7 @@ parallel_groups: []
 | `story` | Roster and branch key; the file name is the fallback. |
 | `epic` | An epic run rosters by it; without it the story is invisible there. Omit the line only for a standalone story. |
 | `depends_on` | Keys that must be built before this story is dispatched. |
-| `status` | `draft` until the user approved, and while an `## Open Fork` stands; `approved` after. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
+| `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the plan passes the Ready gate in an epic its owner approved: the master sets it after the Ready gate and the owner's approval, in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's unconfirmed-fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
 | `comments_read_through` | Id or timestamp of the newest ticket comment the plan answers, or `none`. A newer comment means the plan may be stale. |
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |
 | `type`, `created` | Informational. |
@@ -165,11 +165,11 @@ undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
 `**Staging checks:**` names the file of checks the Tester runs on staging after the deploy
-(`references/working-mode.md` § Roles). Its path, format, planned state and validate command are
+(L0 §Sessions, the acceptance role). Its path, format, planned state and validate command are
 the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it proves (`AC<n>`,
 more than one per AC `AC<n>-b`), so the run's report maps back to the ACs. The refiner writes the
 file next to the plan for every `receipt` AC, in the planned state, and runs the validate command;
-plan and file land on the default branch in one commit (`references/plan-commit.md`). The builder
+plan and file land on the default branch in one commit, by the repo's docs path (`references/plan-commit.md`). The builder
 arms it in the build branch (drops the planned state) and may correct seed, fields and assertions
 to the built code. Mechanical staging ACs (status code, field,
 label) belong there; the prose ACs keep the new and fuzzy ones. A repo whose `.weside/verify.md`

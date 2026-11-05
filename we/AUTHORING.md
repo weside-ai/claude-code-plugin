@@ -40,7 +40,7 @@ Where Claude Code does the job, point at it instead of re-implementing it:
 | Bug review before the first push | the CI review on the PR; locally only for money, auth, tenant isolation or a migration: Skill tool `code-review` with `args: "high <worktree path>"` (inside a subagent always via the Skill tool; a slash command in a prompt is not proven to run it) |
 | Cross-repo work that edits the other repo | a native session there (`claude --bg` in that directory) steered with `SendMessage` |
 | Cross-repo reading | `--add-dir` with `additionalDirectoriesForClaudeMd` |
-| Session continuation | `/resume`, `/fork`, `/recap` — `/we:resume` restarts work after a usage-limit stop, `handoff` only for a cross-session restart |
+| Session continuation | `/resume`, `/fork`, `/recap` — `/we:resume` restarts work after a usage-limit stop; after a compaction the session reloads its state from the plan, PR and ticket |
 
 ## Measured facts a skill must respect (Opus 5.5 bench, 26.–27.09.2026)
 
@@ -69,7 +69,8 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   the crew process stays gated at 9,500 chars per hook (`render_process.BUDGET`); a probe that
   finds a cut below 9,500 changes the gate, not the text.
 - Role cards (`roles/<role>.md`, one per `crew.ROLE_KEYS` key plus `master`, `worker`,
-  `specialist`) carry exactly the headings `Cornerstone`, `You do`, `You never`, `At start`,
+  `specialist`; an `OPTIONAL_ROLE_KEYS` key may stay unbound, and an L0 line holding its bare
+  token drops then) carry exactly the headings `Cornerstone`, `You do`, `You never`, `At start`,
   `You wait on / others wait on you`, in that order; ≤ 5,500 chars raw (`specialist` ≤ 1,800,
   `worker` ≤ 1,500), a repo addendum ≤ 3,500, card plus addendum ≤ 9,500 rendered; role tokens,
   never names; no line repeats the L0, every "never" names the move instead (gate:

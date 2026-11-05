@@ -100,17 +100,55 @@ def test_each_session_kind_gets_its_card(tmp_path):
         assert text is not None and text.startswith(head), env
 
 
-def test_nothing_without_or_with_a_refused_crew_only_the_pointer_without_a_role(tmp_path):
+def test_the_pinned_security_holder_gets_the_security_card(tmp_path):
+    data = json.loads((SCRIPTS / "fixtures" / "crew-v2-security.json").read_text())
+    _, infra = workspace(tmp_path, data)
+    repo = infra.parent / "repo"
+    for source in ("startup", "compact"):
+        text = context(run(tmp_path, repo, {"WESIDE_COMPANION": "Bo"}, source=source))
+        assert text is not None and text.startswith("# Role card: security"), source
+        assert "trust-loosening" in text and "# Role card: specialist" not in text
+
+
+def test_nothing_without_a_crew_or_without_a_role(tmp_path):
     bare = tmp_path / "bare"
     subprocess.run(["git", "init", "-q", str(bare)], check=True)
     assert context(run(tmp_path, bare, {"WE_ROLE": "master"})) is None
     repo, _ = workspace(tmp_path)
-    pointer = context(run(tmp_path, repo, {}))
-    assert pointer is not None and pointer.startswith("Read "), "no role: only the pointer"
-    assert "# Role card" not in pointer
+    assert context(run(tmp_path, repo, {})) is None, "no role: nothing"
+
+
+V1_LINE = (
+    "crew.json not readable: crew.json is version 1: in a worktree, merge the default branch; "
+    "otherwise run /we:setup"
+)
+
+
+def test_a_refused_crew_gets_the_default_card_with_the_reason_never_nothing(tmp_path):
+    repo, infra = workspace(tmp_path)
+    (repo / ".weside" / "roles").mkdir()
+    (repo / ".weside" / "roles" / "master.md").write_text("Repo addendum for masters.\n")
     (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 1, "roles": {}}))
-    done = run(tmp_path, repo, {"WE_ROLE": "master"})
-    assert context(done) is None and done.stderr == ""
+    for source in SOURCES:
+        master = context(run(tmp_path, repo, {"WE_ROLE": "master"}, source=source))
+        assert master is not None, f"{source}: a refused crew printed nothing"
+        assert master.startswith("# Role card: master"), source
+        assert "Repo addendum for masters." in master
+        assert V1_LINE in master.split("\n")
+        worker = context(run(tmp_path, repo, {"WE_ROLE": "worker"}, source=source))
+        assert worker.startswith("# Role card: worker") and V1_LINE in worker.split("\n")
+        pin = context(run(tmp_path, repo, {"WESIDE_COMPANION": "Kit"}, source=source))
+        assert pin == V1_LINE, source
+        unnamed = context(run(tmp_path, repo, {}, source=source))
+        assert unnamed == V1_LINE, source
+    data = json.loads(GENERIC.read_text())
+    data["labels"]["crew_unreadable"] = "crew.json nicht lesbar"
+    data["limits"] = {"masters": "five"}
+    (repo / ".weside" / "crew.json").write_text(json.dumps(data))
+    text = context(run(tmp_path, infra, {"WE_ROLE": "master"}))
+    path = repo / ".weside" / "crew.json"
+    line = f"crew.json nicht lesbar: {path.resolve()}: limits.masters must be a number"
+    assert line in text.split("\n"), text[-400:]
 
 
 def test_card_plus_addendum_over_the_budget_prints_nothing_and_names_the_addendum(tmp_path):
@@ -137,17 +175,17 @@ def test_a_missing_extra_repo_is_skipped_by_name_and_the_card_still_loads(tmp_pa
         assert "Head line one." in text and len(text) <= render_process.BUDGET, source
 
 
-def test_every_crew_session_is_pointed_at_the_working_mode_reference(tmp_path):
+def test_no_session_is_pointed_at_a_deleted_working_mode_reference(tmp_path):
+    """The working-mode reference is gone (its rules are the L0 and the cards): a session with a
+    role gets its card without a pointer line, a session without a role gets nothing."""
     repo, infra = workspace(tmp_path)
-    reference = (HOOK.parent.parent / "references" / "working-mode.md").resolve()
-    assert reference.is_file()
-    line = f"Read {reference} before routing, starting a session or moving a ticket."
     for cwd, env in (
         (infra, {"WESIDE_COMPANION": "Kit"}),
         (repo, {"WE_ROLE": "master"}),
         (repo, {"WE_ROLE": "worker"}),
-        (repo, {}),
     ):
         text = context(run(tmp_path, cwd, env))
-        assert text is not None and line in text.split("\n"), env
+        assert text is not None and text.startswith("# Role card:"), env
+        assert "working-mode" not in text and "before routing" not in text, env
         assert len(text) <= render_process.BUDGET, env
+    assert context(run(tmp_path, repo, {})) is None

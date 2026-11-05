@@ -60,11 +60,122 @@ def test_card_case_names_its_role_an_environment_and_a_route_regex(case: Path):
 def test_the_route_matches_the_cards_own_cornerstone_and_first_move(case: Path):
     """The expected answer is the card's own text: a route the card cannot satisfy is wrong."""
     role = case.parent.name
-    crew = crewlib._merge(
-        json.loads((REPO / "we/scripts/fixtures/crew-v2-generic.json").read_text())
-    )
+    top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
+    crew = crewlib._merge(json.loads((REPO / top["crew"]).read_text()))
     card = render_process.render_card(crew, role)
     cornerstone = card.split("## Cornerstone", 1)[1].split("## You do", 1)[0]
     first = card.split("## At start", 1)[1].split("## You wait on", 1)[0]
     [route] = ROUTE.findall(case.read_text(encoding="utf-8"))
     assert re.search(route.encode().decode("unicode_escape"), cornerstone + first)
+
+
+UNKNOWN_KEY_CASE = REPO / "tests" / "coldstart" / "master" / "crew-unknown-key.yaml"
+
+
+def test_an_unknown_crew_key_keeps_the_full_l0_with_the_line_on_startup_and_compact(
+    tmp_path, monkeypatch
+):
+    """The hook output the case's session sees: the full L0, one notice line, identical after
+    ``/compact`` (``refire: compact``)."""
+    sys.path.insert(0, str(REPO / "we" / "hooks"))
+    import process_on_start  # noqa: PLC0415
+
+    text = UNKNOWN_KEY_CASE.read_text(encoding="utf-8")
+    top = {k: v.strip() for k, v in TOP.findall(text)}
+    assert top["refire"] == "compact"
+    [route] = ROUTE.findall(text)
+    repo = tmp_path / "repo"
+    (repo / ".weside").mkdir(parents=True)
+    (repo / ".git").mkdir()
+    (repo / ".weside" / "crew.json").write_text((REPO / top["crew"]).read_text())
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))  # the served log, never the real one
+    env = {"WE_ROLE": "master"}
+    outs = [
+        process_on_start.output({"cwd": str(repo), "source": source, "session_id": "s"}, env)
+        for source in ("startup", "compact")
+    ]
+    assert outs[0] == outs[1] and outs[0][1] is None
+    first, rest = outs[0][0].split("\n\n", 1)
+    assert re.search(route, first) and first.startswith("crew.json: unknown keys ignored: limitz")
+    generic = json.loads((REPO / "we/scripts/fixtures/crew-v2-generic.json").read_text())
+    assert rest == render_process.render_l0(crewlib._merge(generic))
+
+
+LIST = re.compile(r"^  (waits|not_waits|forbidden): \[(.*)\]$", re.MULTILINE)
+SECURITY_FIXTURE = "we/scripts/fixtures/crew-v2-security.json"
+
+
+def _lists(case: Path) -> dict[str, list[str]]:
+    found = LIST.findall(case.read_text(encoding="utf-8"))
+    return {k: [x.strip().strip('"') for x in v.split(",") if x.strip()] for k, v in found}
+
+
+def top_prompt(case: Path) -> str:
+    """The case's prompt (a folded block), whitespace collapsed."""
+    text = case.read_text(encoding="utf-8")
+    block = text.split("prompt: >\n", 1)[1].split("\nexpect:", 1)[0]
+    return " ".join(block.split())
+
+
+@pytest.mark.parametrize(
+    ("name", "waits", "not_waits"),
+    [
+        ("security-twoway-panel-enough", [], ["security", "human"]),
+        ("security-twoway-before8-waits", ["security"], ["human"]),
+        ("security-oneway-owner-signs", ["security", "human"], ["product", "acceptance"]),
+    ],
+)
+def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
+    """A two-way auth diff with a green panel waits on the security holder's review before 8.0.0
+    and on nobody from 8.0.0; a ``trust-loosening`` one waits on the security holder's signature,
+    then the human's merge."""
+    case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
+    top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
+    assert top["role"] == "master" and top["crew"] == SECURITY_FIXTURE
+    lists = _lists(case)
+    assert lists["waits"] == waits and lists["not_waits"] == not_waits
+    assert ("gh pr merge --auto" in lists.get("forbidden", [])) == bool(waits)
+    assert ("8.0.0" in top_prompt(case)) == (name == "security-twoway-panel-enough")
+
+
+def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
+    case = REPO / "tests" / "coldstart" / "master" / "t2-oneway-human-merges.yaml"
+    assert "crew-v2-generic.json" in case.read_text(encoding="utf-8")
+    assert _lists(case)["waits"] == ["human"]
+
+
+GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
+REVIEW_LINE = (
+    "- Before plugin `we` 8.0.0, a PR touching auth, tenant isolation or trust also waits for"
+    " Bo's review."
+)
+ORDER_LINE = "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
+# L0's one security line: the holder runs on call and signs the board item of a `trust-loosening` diff
+SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
+
+
+def _rendered(fixture: str) -> tuple[str, str]:
+    """What a master reads at start: L0 and its card, rendered with the case's crew."""
+    crew = crewlib._merge(json.loads((REPO / fixture).read_text(encoding="utf-8")))
+    return render_process.render_l0(crew), render_process.render_card(crew, "master")
+
+
+def test_the_security_cases_crew_renders_the_routing_they_expect():
+    """The security master cases route on lines the rendered process must carry: the master card's
+    order (panel, signature, human merge), and L0's security line (on call, signs the
+    `trust-loosening` board item).
+    Comparing the YAML with a table only checks it against itself; this renders what the master
+    reads with the crew the cases name."""
+    l0, card = _rendered(SECURITY_FIXTURE)
+    lines = l0.split("\n")
+    assert ORDER_LINE in card.split("\n"), "master card lacks the trust-loosening order line"
+    assert REVIEW_LINE in card.split("\n"), "master card lacks the pre-8.0 security review wait"
+    assert SECURITY_LINE in lines, "L0 lacks the security line (on call, signs trust-loosening)"
+
+
+def test_the_generic_crew_renders_no_security_routing():
+    l0, card = _rendered(GENERIC_FIXTURE)
+    assert "trust-loosening` diff:" not in card
+    assert "also waits for" not in card
+    assert "owns its label" not in l0
+    assert "signs each `trust-loosening`" not in l0

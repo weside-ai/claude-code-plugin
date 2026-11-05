@@ -2,7 +2,7 @@
 name: merged
 description: >
   Close out a merged PR: verify the merge, tear down its worktrees, branches and processes, move
-  the landed tickets to Done or In Review, then name only what is still open. Triggers: "/we:merged", "merged",
+  each landed story to In Review once its PR is linked, then name only what is still open. Triggers: "/we:merged", "merged",
   "gemergt".
 ---
 
@@ -58,7 +58,7 @@ misled, a correction the user had to repeat. Review rounds alone are no reason (
 Otherwise skip it and write `retro: skipped (<reason>)` into the report, without asking.
 
 - covered, and dispatched when not: `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode, the
-  friction named in the brief. A retro `/we:orchestrate` dispatched for this PR has claimed it, even
+  friction named in the brief. A retro `/we:master` dispatched for this PR has claimed it, even
   while it still runs.
 
 Its working directory is the main checkout, never a tree that step 4 removes.
@@ -90,12 +90,10 @@ Its working directory is the main checkout, never a tree that step 4 removes.
 Move every story whose work landed in this PR. The branch name alone can miss some, so take the
 full list from step 2. A story whose work did not land stays where it is.
 
-The target comes from `.weside/config.json` `ticketing.after_merge`:
-
-- `"done"` (default, also when the key is missing): the Done state, whose name varies ("Done",
-  "Fertig", "Erledigt"). The human's "merged" is the word the DoD asks for, so Done is legitimate here.
-- `"in_review"`: the In Review state; Done is set later by an acceptance this verb does not run.
-  Report each ticket as `<KEY> In Review — Done follows acceptance (.weside/dod.md if present)`.
+The target is In Review, never Done (L0 §Lifecycle: In Review is "PR merged and linked"; Done comes
+only from a receipt report or an acceptance comment). Check the link first: the ticket names the PR
+(a remote link, a comment or the PR in its development panel); a missing link is added, then the
+move. Report each ticket as `<KEY> In Review — Done follows acceptance (.weside/dod.md if present)`.
 
 Ticketing follows `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md` (tool order, body format, transition before comment,
 read-back and retry). `gh issue` has no status, so skip the move; without a ticketing tool, skip
@@ -106,12 +104,12 @@ silently. If the workflow rejects the move, report it and continue.
 - **Plan:** if `docs/plans/{KEY}-story.md` still describes an intention rather than what was built, correct it.
   The next agent reads the plan, not the diff.
 - **Epic mirror:** if the story has an `epic:`, update that story's row in the epic's mirror block
-  per `${CLAUDE_PLUGIN_ROOT}/references/apo-hierarchy.md` § Mirror block (status bucket as the ticket now reads, `Plan` column,
+  per `${CLAUDE_PLUGIN_ROOT}/references/epic-plan.md` § Mirror block (status bucket as the ticket now reads, `Plan` column,
   `updated:`, one `## Updates Log` line), so the next roster does not offer a shipped story again.
 - **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
   the report (owner decision 2026-09-25).
 - **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
-- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Never push a tree that carries another session's unpushed commits.
+- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (a docs PR unless the repo grants a direct docs push). Never push a tree that carries another session's unpushed commits.
 
 ## 7 · Report what is still open
 

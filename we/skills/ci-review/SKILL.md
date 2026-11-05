@@ -182,7 +182,7 @@ Terminal states. Report exactly one:
 1. **Green.** The report is `merge-ready`, the PR link and each required check. Findings on the PR's own diff are
    decided per finish-first and reported; none becomes a question to the product owner. If auto-merge is armed, the main session keeps `watch-pr-checks.sh $PR --until-merged` running
    and on its `merged` exit runs `/we:merged $PR` itself, on red or a Codex exit the next round
-   (`/we:orchestrate` § Push, PR, CI step 5 and its bounds). On a green end the main session arms auto-merge as `/we:orchestrate` § Close the run says (method, exceptions, `user merge: <reason>`). Run as a subagent, you report `merge-ready` and leave the arm to the Lead: `automerge_gate.py` refuses every merge from a subagent. A plain `gh pr merge` without `--auto` still needs the user's word.
+   (`/we:master` § Push, PR, CI step 5 and its bounds). On a green end the main session arms auto-merge as `/we:master` § Close the run says (method, exceptions, `user merge: <reason>`). This verb runs in the master or in a worker, never as a subagent (L0 §Sessions: a subagent reads and reviews, never builds); run in a worker, you report `merge-ready` and leave the arm to the master: `automerge_gate.py` refuses every merge from a worker. A plain `gh pr merge` without `--auto` still needs the user's word.
 2. **Cap reached, still red.** Report what is open and what you tried.
 3. **Blocked.** Infrastructure is red after a re-run, a required BLOCKING was skipped as wrong, or there are two migration heads.
    The PR needs a human.

@@ -1,0 +1,11 @@
+id: card-cornerstone
+role: security
+crew: we/scripts/fixtures/crew-v2-security.json
+env: {WESIDE_COMPANION: Bo}
+world: {}
+prompt: >
+  In one sentence: what is your cornerstone, and what do you do first at start?
+expect:
+  route: "(?is)^(?=.*\\b(label\\w*|etikett\\w*)\\b)(?=.*\\b(lens|linse)\\b)(?=.*\\btrust-loosening\\b)"
+  refire: compact
+judge: null

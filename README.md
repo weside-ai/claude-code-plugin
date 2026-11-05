@@ -2,17 +2,17 @@
 
 `we` is a Claude Code plugin with two halves:
 
-- **APO (Agentic Product Ownership):** four plan altitudes — Vision (PRD), Saga (theme), Epic
-  (initiative), Story (feature slice) — each with a Solo verb that writes the document and a
-  Council meeting that decomposes it into the next altitude.
-- **Build pipeline:** a Lead (`/we:orchestrate`) that refines stories without a plan, dispatches one
-  dev worker per story, pushes once, opens one PR and works CI and review findings until green.
-- **Working mode (optional):** a crew of companions or people — Product Owner, Orchestrator, HR,
-  Tester, component owners — with build masters per epic and workers that build. `/we:setup` writes
-  the repo's crew; every session then starts knowing its role and where questions go.
-  [docs/workflow.md](docs/workflow.md#crew-and-working-mode)
+- **Plans:** an epic (one outcome, serving a metric of your goal file) and its stories, each story
+  one PR with a build-ready plan. `/we:epic` writes the epic; a refiner worker writes each story plan.
+- **Build pipeline:** an epic's master (`/we:master`) that starts a refiner worker for a story without
+  a plan and one dev worker per planned story, opens one PR per story and works CI and review
+  findings until green.
+- **Crew process (optional):** a crew of companions or people — Product Owner, coordinator, HR,
+  Tester, component owners — with one master per epic and workers that build. `/we:setup` writes
+  the repo's crew; every session then starts with the crew process and its role card.
+  [docs/workflow.md](docs/workflow.md#crew)
 
-Claude arms auto-merge once CI and the Codex review are through, unless an exception applies (money path, destructive migration, open question); you review before it lands and merge the exceptions. `/we:merged` cleans up afterwards.
+Claude arms auto-merge once CI and the Codex review are through, unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, a loosened tenant, auth or trust rule); you merge those. `/we:merged` cleans up afterwards.
 
 `/flow` shows where each story stands while this runs: a pane with one traffic light per pipeline
 step, refreshed from git and GitHub, with buttons for the next command.
@@ -33,37 +33,35 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 
 ## Verbs
 
-**Plan (APO)**
+**Plan**
 
-- `/we:vision` — writes or sharpens the PRD at `docs/plans/<vision>/PRD.md`.
-- `/we:saga` — status of a theme, refine or create it, or promote an overgrown epic.
-- `/we:epic` — status of an initiative from plan and ticket mirror, or refine or create it.
-- `/we:story` — one sprint-sized story with a build-ready plan; ticket minimal, plan detailed.
-- `/we:meet` — a council meeting at one altitude: validates the artifact and decomposes it.
+- `/we:epic` — status of an epic from plan and ticket mirror, or refine or create it.
 - `/we:council` — convenes role lenses in a live agent team; the lead writes agreement, tension, recommendation.
 - `/we:grill` — asks one question at a time until every branch of a plan is resolved.
 
 **Build**
 
-- `/we:orchestrate` — the Lead: refines what has no plan, dispatches workers for what does, runs CI once on one PR.
-- `/we:refine` — writes a build-ready plan without a user in the room; what a dispatched refiner runs.
+- `/we:master` — the epic's master: a refiner worker where a plan is missing, a build worker where one exists, one PR per story.
+- `/we:plan-story` — writes a build-ready story plan without a user in the room; what a refiner worker runs.
 - `/we:develop` — dev-only worker: implements its chunk, runs local gates, commits, reports.
 - `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence and the net test delta.
 - `/we:ci-review` — collects every CI and review finding, fixes by severity, resolves threads, pushes once.
 - `/we:ac-review` — checks a branch against its story's acceptance criteria and the DoD.
-- `/we:merged` — after your merge: tears down worktrees and branches, moves tickets to Done (or In Review, per `ticketing.after_merge`).
+- `/we:lens` — the lens panel: fresh lens agents judge a plan (`ready`) or a PR diff (`t2`) in parallel; one verdict file per subject, green only with every lens and no standing BLOCKING or WARNING.
+- `/we:merged` — after your merge: tears down worktrees and branches, moves each landed story to In Review once its PR is linked; Done follows acceptance.
 
 **Around the pipeline**
 
 - `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
 - `/board` — a pane with the workspace board an orchestrator session keeps in `~/.claude/we-state/board.json`: what waits for the owner, which sessions run and on what, with live and start-mode lamps. [we/docs/board.md](we/docs/board.md)
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
+- `/we:accept` — carries a receipts job's verdict for one release candidate: green stories to Done with a generated comment, walks queued for an acceptance worker, red findings routed to their owner.
+- `/we:decide` — escalation as one decision story: both owners' positions and costs, settled by the parties within the SLA, else routed to the escalation role or the human's bundle.
 - `/we:standup` — picks you back up: what we work on, where it stands, what you must do next; read-only (`--branch` for the branch view).
 - `/we:retro` — retrospective on a session or PR cycle; findings go to the optimization inbox.
 - `/we:instruction-audit` — audits rules, skills and AGENTS.md against fresh Anthropic sources and a budget gate.
 - `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.
 - `/we:resume` — after a usage-limit stop ("weiter"): resumes open items, workers and CI watches.
-- `/we:handoff` — a cross-session restart note under `docs/handoffs/`.
 - `/we:pin` — which account bills this master session; `on`/`off` restarts it on a fixed account or on the global login. [docs/companion.md](docs/companion.md)
 - `/we:sideload` — works in a neighbour repo from here.
 - `/we:find-dead-code` — finds and removes dead code in Python backends.

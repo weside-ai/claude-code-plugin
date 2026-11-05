@@ -283,20 +283,164 @@ def with_(**changes) -> dict:
     return data
 
 
+UNKNOWN_KEY = Path(__file__).resolve().parent / "fixtures" / "crew-v2-unknown-key.json"
+UNKNOWN_IN_FILE_ORDER = [
+    "limitz",
+    "limits.masterz",
+    "roles.auditor",
+    "members.ada.titel",
+    "fallback.securty",
+    "lenses.product.keepr",
+]
+
+
+def warning(core: Path, dotted: str) -> str:
+    path = core / ".weside" / "crew.json"
+    return f"crew: {path}: unknown key {dotted} ignored (crew.py validate --strict refuses it)"
+
+
 @pytest.mark.parametrize(
     ("changes", "dotted"),
     [
-        ({"limitz": 3}, "limitz"),
+        ({"limitz": {}}, "limitz"),
         ({"limits__masterz": 3}, "limits.masterz"),
-        ({"members__ada__colour": "red"}, "members.ada.colour"),
-        ({"lenses__product__questionz": "q.md"}, "lenses.product.questionz"),
+        ({"members__ada__titel": "x"}, "members.ada.titel"),
+        ({"roles__auditor": "ada"}, "roles.auditor"),
+        ({"fallback__securty": "human_bundle"}, "fallback.securty"),
+        ({"lenses__product__keepr": "ada"}, "lenses.product.keepr"),
+        ({"board__states__parked": "Parked"}, "board.states.parked"),
     ],
 )
-def test_an_unknown_key_is_refused_by_name(tmp_path, changes, dotted):
+def test_an_unknown_key_warns_by_name_and_validate_strict_refuses_it(tmp_path, changes, dotted):
     core, _ = workspace(tmp_path, with_(**changes))
     out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    assert out.stderr.strip() == warning(core, dotted)
+    shown = json.loads(out.stdout)
+    assert shown["unknown_keys"] == [dotted]
+    node = shown
+    for part in dotted.split(".")[:-1]:
+        node = node[part]
+    assert dotted.split(".")[-1] not in node
+    loose = run(core, "validate")
+    assert loose.returncode == 0 and loose.stdout.strip() == f"ok {core / '.weside' / 'crew.json'}"
+    assert loose.stderr.strip() == warning(core, dotted)
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 1 and strict.stdout == ""
+    assert strict.stderr.strip() == f"crew: {core / '.weside' / 'crew.json'}: unknown key {dotted}"
+
+
+def test_every_unknown_key_warns_in_file_order_and_the_known_ones_still_hold(tmp_path):
+    core, _ = workspace(tmp_path, json.loads(UNKNOWN_KEY.read_text()))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    assert out.stderr.splitlines() == [warning(core, d) for d in UNKNOWN_IN_FILE_ORDER]
+    shown = json.loads(out.stdout)
+    assert shown["unknown_keys"] == UNKNOWN_IN_FILE_ORDER
+    assert shown["limits"] == crew.DEFAULTS["limits"] and "limitz" not in shown
+    assert "auditor" not in shown["roles"] and shown["fallback"] == {}
+    assert shown["members"]["ada"] == {
+        "name": "Ada",
+        "title": "Product Owner",
+        "components": ["App"],
+        "workplace": ".",
+    }
+    assert shown["lenses"]["product"] == crew.DEFAULTS["lenses"]["product"]
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 1
+    assert strict.stderr.strip().endswith("unknown key " + ", ".join(UNKNOWN_IN_FILE_ORDER))
+
+
+def test_a_clean_crew_validates_strict_and_carries_no_unknown_keys(tmp_path):
+    core, _ = workspace(tmp_path)
+    out = run(core, "validate", "--strict")
+    assert (out.returncode, out.stdout.strip(), out.stderr) == (
+        0,
+        f"ok {core / '.weside' / 'crew.json'}",
+        "",
+    )
+    assert json.loads(run(core, "show").stdout)["unknown_keys"] == []
+
+
+def test_a_known_key_beside_an_unknown_one_is_still_checked(tmp_path):
+    core, _ = workspace(tmp_path, with_(limits__masterz=3, limits__masters="five"))
+    out = run(core, "show")
     assert out.returncode == 1
-    assert f"unknown key {dotted}" in out.stderr
+    assert out.stderr.strip() == (
+        f"crew: {core / '.weside' / 'crew.json'}: limits.masters must be a number"
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (with_(version=1), "crew.json is version 1: "),
+        (with_(version=3), "{path}: version 3 is not 2"),
+        (with_(version=True), "{path}: version True is not 2"),
+        (with_(limits__masters="five"), "{path}: limits.masters must be a number"),
+        (
+            with_(acceptance__done_sample="5"),
+            "{path}: acceptance.done_sample must be a number or null",
+        ),
+        (with_(members__ada__on_call="yes"), "{path}: members.ada.on_call must be true or false"),
+        (with_(roles__product="nobody"), "{path}: roles.product 'nobody' is no member"),
+        (with_(lenses__product__keeper="nobody"), "{path}: lenses.product.keeper 'nobody' is no"),
+        (with_(files__dod="docs/gone.md"), "{path}: files.dod 'docs/gone.md' does not exist"),
+        ("{not json", "{path}: unreadable (JSONDecodeError)"),
+    ],
+)
+def test_a_hard_error_keeps_its_message(tmp_path, raw, message):
+    core, _ = workspace(tmp_path)
+    path = core / ".weside" / "crew.json"
+    path.write_text(raw if isinstance(raw, str) else json.dumps(raw))
+    with pytest.raises(crew.CrewError) as exc:
+        crew.load(path)
+    assert str(exc.value).startswith(message.format(path=path))
+    out = run(core, "validate")
+    assert out.returncode == 1 and out.stderr.startswith("crew: " + message.format(path=path))
+
+
+def test_fallback_is_the_defaults_with_the_reason_and_the_file_s_own_labels(tmp_path):
+    core, _ = workspace(
+        tmp_path, with_(labels__crew_unreadable="nicht lesbar", limits__masters="x")
+    )
+    path = core / ".weside" / "crew.json"
+    found = crew.fallback(path, "why")
+    assert found["crew_error"] == "why" and found["unknown_keys"] == []
+    assert found["roles"] == {} and found["members"] == {}
+    assert found["labels"]["crew_unreadable"] == "nicht lesbar"
+    assert found["labels"]["crew_unknown_keys"] == "crew.json: unknown keys ignored"
+    assert found["limits"] == crew.DEFAULTS["limits"]
+    for bad in ("{not json", json.dumps(with_(labels__crew_unreadable="x" * 41))):
+        path.write_text(bad)
+        assert crew.fallback(path, "why")["labels"]["crew_unreadable"] == "crew.json not readable"
+    assert crew.fallback(None, "why")["labels"] == crew.DEFAULTS["labels"]
+
+
+def test_a_retired_capacity_key_loads_with_one_stderr_line(tmp_path):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16, "gate_lock_gib": 2}))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    crew_file = core / ".weside" / "crew.json"
+    assert out.stderr.count("crew: capacity is no longer read") == 1
+    assert f"crew: capacity is no longer read; remove it from {crew_file}" in out.stderr
+    assert "capacity" not in crew.load(crew_file)
+    assert crew.load(crew_file)["unknown_keys"] == [], "a retired key is not an unknown one"
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 0, "a retired key never fails validate --strict"
+
+
+def test_only_retired_keys_are_skipped_silently_for_strict_another_unknown_key_is_refused(
+    tmp_path,
+):
+    core, _ = workspace(tmp_path, with_(capacity={"pod_gib": 16}, capacityz=1))
+    out = run(core, "show")
+    assert out.returncode == 0, out.stderr
+    assert warning(core, "capacityz") in out.stderr.splitlines()
+    assert json.loads(out.stdout)["unknown_keys"] == ["capacityz"]
+    strict = run(core, "validate", "--strict")
+    assert strict.returncode == 1
+    assert strict.stderr.strip().endswith("unknown key capacityz")
 
 
 @pytest.mark.parametrize("version", [1, None])
@@ -315,11 +459,9 @@ def test_a_version_1_file_is_refused_by_every_reading_verb(tmp_path, version, ve
 
 @pytest.mark.parametrize(
     ("changes", "dotted"),
-    [({"roles__boss": "ada"}, "roles.boss"), ({"roles__product": "nobody"}, "roles.product")],
+    [({"roles__product": "nobody"}, "roles.product"), ({"roles__hr": 3}, "roles.hr")],
 )
-def test_a_role_key_without_a_card_or_a_holder_without_a_member_is_refused(
-    tmp_path, changes, dotted
-):
+def test_a_holder_without_a_member_is_refused(tmp_path, changes, dotted):
     core, _ = workspace(tmp_path, with_(**changes))
     out = run(core, "show")
     assert out.returncode == 1 and dotted in out.stderr
@@ -331,6 +473,7 @@ def test_a_role_key_without_a_card_or_a_holder_without_a_member_is_refused(
         ({"files__dod": "docs/dod.md"}, "files.dod"),
         ({"lenses__architecture__registry": "docs/registry.md"}, "lenses.architecture.registry"),
         ({"lenses__product__questions": "docs/q.md"}, "lenses.product.questions"),
+        ({"lenses__product__t2_questions": "docs/q-t2.md"}, "lenses.product.t2_questions"),
     ],
 )
 @pytest.mark.parametrize("verb", [["show"], ["lenses"], ["workplace", "ada"]])
@@ -404,8 +547,34 @@ def test_the_ready_gate_keys_default_and_are_typed(tmp_path):
             "oracles.receipt_check must be a string or null",
         ),
         ({"acceptance__boundary_terms": "tenant"}, "acceptance.boundary_terms must be a list"),
-        ({"acceptance__boundary_termz": []}, "unknown key acceptance.boundary_termz"),
-        ({"oracles__receipt_checks": "x"}, "unknown key oracles.receipt_checks"),
+    ]:
+        core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(**changes)))
+        out = run(core, "show")
+        assert out.returncode == 1 and message in out.stderr, (changes, out.stderr)
+
+
+def test_the_flow_block_defaults_merges_and_is_typed(tmp_path):
+    minimal = {"version": 2, "roles": CREW["roles"], "members": CREW["members"]}
+    core, _ = workspace(tmp_path, minimal)
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["flow"] == {
+        "log_dir": None,
+        "stale_min": 15,
+        "starter_wait_min": 30,
+        "urgent_commands": [],
+    }
+    bound = with_(flow__log_dir="~/flow", flow__urgent_commands=["gh secret", r"eas build"])
+    core.joinpath(".weside", "crew.json").write_text(json.dumps(bound))
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["flow"]["log_dir"] == "~/flow" and shown["flow"]["stale_min"] == 15
+    assert shown["flow"]["urgent_commands"] == ["gh secret", "eas build"]
+    for changes, message in [
+        ({"flow__stale_min": "15"}, "flow.stale_min must be a number"),
+        ({"flow__urgent_commands": "gh secret"}, "flow.urgent_commands must be a list"),
+        (
+            {"flow__urgent_commands": ["ok", "(open"]},
+            "flow.urgent_commands[1] '(open' is no regex",
+        ),
     ]:
         core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(**changes)))
         out = run(core, "show")
@@ -454,14 +623,15 @@ def test_lenses_prints_a_set_in_order_with_absolute_paths(tmp_path):
         "lens": "architecture",
         "agent": "we:lens-architecture",
         "questions": None,
+        "t2_questions": None,
         "registry": str((core / "docs" / "registry.md").resolve()),
         "keeper": "otto",
         "keeper_name": "Otto",
         "sample": 5,
     }
     t2 = json.loads(run(core, "lenses", "--set", "t2").stdout)
-    assert [lens["lens"] for lens in t2] == ["architecture", "security", "premise"]
-    assert len(json.loads(run(core, "lenses").stdout)) == 5
+    assert [lens["lens"] for lens in t2] == ["product", "architecture", "acceptance"]
+    assert len(json.loads(run(core, "lenses").stdout)) == 3
 
 
 def test_is_role_reads_v2_keys_and_refuses_a_v1_key(tmp_path):
@@ -529,20 +699,22 @@ def test_a_transition_key_without_its_v2_key_is_refused(tmp_path, old, new):
     assert f"roles.{old} needs roles.{new} beside it" in out.stderr
 
 
-def test_labels_default_merge_and_refuse_an_unknown_key(tmp_path):
+def test_labels_default_merge_and_warn_on_an_unknown_key(tmp_path):
     core, _ = workspace(tmp_path)
-    assert json.loads(run(core, "show").stdout)["labels"] == {
+    defaults = {
         "recommendation": "Recommendation",
         "ready": "ready",
+        "crew_unreadable": "crew.json not readable",
+        "crew_unknown_keys": "crew.json: unknown keys ignored",
+        "prompt_resolved": "prompt resolved at",
     }
+    assert json.loads(run(core, "show").stdout)["labels"] == defaults
     core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__ready="bereit")))
-    assert json.loads(run(core, "show").stdout)["labels"] == {
-        "recommendation": "Recommendation",
-        "ready": "bereit",
-    }
+    assert json.loads(run(core, "show").stdout)["labels"] == {**defaults, "ready": "bereit"}
     core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__readyz="x")))
     out = run(core, "show")
-    assert out.returncode == 1 and "unknown key labels.readyz" in out.stderr
+    assert out.returncode == 0 and out.stderr.strip() == warning(core, "labels.readyz")
+    assert json.loads(out.stdout)["labels"] == defaults
 
 
 @pytest.mark.parametrize("text", ["", "x" * 41, "two\nlines"])
@@ -620,3 +792,66 @@ def test_an_extra_card_or_a_missing_key_breaks_the_match(tmp_path):
     (tmp_path / "roles" / "auditor.md").unlink()
     (tmp_path / "roles" / "hr.md").unlink()
     assert card_stems(tmp_path / "roles") != expected
+
+
+@pytest.mark.parametrize("former", ["security", "premise"])
+def test_an_undefined_former_default_lens_is_missing_with_a_warning(tmp_path, former):
+    data = with_(t2_panel=["product", former, "acceptance"], ready_lenses=[former, "product"])
+    core, _ = workspace(tmp_path, data)
+    out = run(core, "lenses", "--set", "t2")
+    assert out.returncode == 0, out.stderr
+    assert [lens["lens"] for lens in json.loads(out.stdout)] == ["product", "acceptance"]
+    assert (
+        f"t2_panel: {former!r} is a former default lens no longer defined; "
+        "left out (define it under lenses or drop the entry)"
+    ) in out.stderr
+    ready = run(core, "lenses", "--set", "ready")
+    assert [lens["lens"] for lens in json.loads(ready.stdout)] == ["product"]
+    assert f"ready_lenses: {former!r} is a former default lens" in ready.stderr
+    assert run(core, "show").returncode == 0
+
+
+def test_a_defined_former_default_lens_is_kept_and_an_unknown_lens_stays_an_error(tmp_path):
+    core, _ = workspace(tmp_path, with_(lenses__security={}, t2_panel=["security"]))
+    out = run(core, "lenses", "--set", "t2")
+    assert out.returncode == 0 and out.stderr == ""
+    assert [lens["lens"] for lens in json.loads(out.stdout)] == ["security"]
+    core, _ = workspace(tmp_path / "u", with_(t2_panel=["product", "bogus"]))
+    out = run(core, "show")
+    assert out.returncode == 1
+    assert "t2_panel: 'bogus' is no lens" in out.stderr
+
+
+def test_security_is_an_optional_role_key():
+    assert crew.ROLE_KEYS[-1] == "security" and len(crew.ROLE_KEYS) == 8
+    assert crew.OPTIONAL_ROLE_KEYS == ("security",)
+    assert set(crew.OPTIONAL_ROLE_KEYS) <= set(crew.ROLE_KEYS)
+
+
+def test_a_crew_without_the_security_role_loads_silently(tmp_path):
+    core, _ = workspace(tmp_path)
+    out = run(core, "validate", "--strict")
+    assert out.returncode == 0 and out.stderr == "", out.stderr
+    assert crew.load(core / ".weside" / "crew.json")["unknown_keys"] == []
+
+
+def test_a_bound_security_role_and_fallback_are_known_keys(tmp_path):
+    data = with_(roles__security="lex", fallback__security="hr")
+    core, _ = workspace(tmp_path, data)
+    out = run(core, "validate", "--strict")
+    assert out.returncode == 0 and out.stderr == "", out.stderr
+    assert crew.holder_name(crew.load(core / ".weside" / "crew.json"), "security") == "Lex"
+
+
+def test_the_pinned_security_holder_is_security_even_with_a_specialist_field():
+    merged = crew._merge(with_(roles__security="lex"))
+    assert merged["members"]["lex"]["specialist"] == "legal"
+    assert crew.role_of_session(merged, {"WESIDE_COMPANION": "Lex"}) == "security"
+
+
+def test_is_role_accepts_security_for_its_holder(tmp_path):
+    core, _ = workspace(tmp_path, with_(roles__security="lex"))
+    lex = {"WESIDE_COMPANION": "Lex", "WE_ROLE": "master"}
+    assert run(core, "is-role", "security", "--session", "s", env=lex).returncode == 0
+    otto = {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"}
+    assert run(core, "is-role", "security", "--session", "s", env=otto).returncode == 1

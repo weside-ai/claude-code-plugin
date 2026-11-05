@@ -2,7 +2,10 @@
 """SessionStart hook (every source: startup, resume, clear, compact): the crew process L0.
 
 Only in a repo with a crew (``scripts/crew.py find``); no crew → nothing. A crew ``crew.py``
-refuses → only ``crew: <its message>``. Otherwise the session kind (``crew.session_kind``) picks
+refuses (``CrewError``) is never silence: the text renders from ``crew.fallback`` (the defaults)
+and its first line is ``<labels.crew_unreadable>: <reason>``; such a serve is not logged (the
+board path is a crew value). A crew with unknown keys renders with the line
+``<labels.crew_unknown_keys>: <keys>`` first. The session kind (``crew.session_kind``) picks
 the text ``scripts/render_process.py`` renders: a worker (``agent_type``, a process worker, or
 ``WE_ROLE=worker`` without a pin) the short form ``process/L0-worker.md``, every other session
 (a consultation too) the L0 ``process/L0.md``. ``source`` is not read, so every source gets the
@@ -76,7 +79,7 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
     try:
         _, crew = crewlib.find_and_load(cwd)
     except crewlib.CrewError as exc:
-        return f"crew: {exc}", None
+        crew = crewlib.fallback(crewlib.find(cwd), str(exc))
     if not crew:
         return None, None
     kind, _ = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
@@ -91,7 +94,8 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
             f"process_on_start: rendered L0 has {len(text)} chars > {render_process.BUDGET}; "
             f"not loaded, read {shown} (render_process.py --role master)"
         )
-    log_served(crew, hook_input)
+    if not crew.get("crew_error"):
+        log_served(crew, hook_input)
     return text, None
 
 

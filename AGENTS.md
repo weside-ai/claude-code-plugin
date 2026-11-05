@@ -21,17 +21,18 @@ we/                               plugin root
   AUTHORING.md                    authoring contract
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
-  agents/                         dev-medium, dev-high, council-<role> lenses
-  references/                     shared contracts (apo-hierarchy, plan-commit, worker-dispatch, ticketing, privacy-guard,
+  agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens)
+  references/                     shared contracts (epic-plan, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring, companion-session,
-                                  context-engineering, working-mode)
+                                  context-engineering, story-plan)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
                                   phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
                                   answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
                                   + SessionStart materialize, process L0, role card and optimization reminder, UserPromptSubmit
-                                  wake counter (news_on_prompt), Stop store-conversation, conflict gate
+                                  wake counter (news_on_prompt), sampler and blocked-worker line
+                                  (sampler_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),
                                   tmux attention (window title white while the session waits, grey at rest),
@@ -45,6 +46,7 @@ we/                               plugin root
                                   (path-rule classifier over .weside/risk-paths), board_freeze.py, rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
+                                  flow_log.py (the flow log's one owner), sampler_age.py (its pulse),
                                   wclaude + install_launcher.py (companion launcher),
                                   watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
                                   watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), worker_launch.py
@@ -74,10 +76,14 @@ pre-commit run --all-files
 python3 scripts/validate-frontmatter.py we/skills/*/SKILL.md we/agents/*.md
 bash scripts/validate-plugin-structure.sh
 python3 scripts/validate-consistency.py
-python3 -m pytest -q we scripts
+python3 scripts/full_test_run.py   # pytest we scripts under the host's test slot, prints its peak
 python3 we/scripts/check-instruction-budget.py
 claude plugin validate we && claude plugin test we   # the /flow and /board hooks module
 ```
+
+A full local test run goes through `scripts/full_test_run.py`: on a host shared by several sessions it
+waits for the test slot (`$WESIDE_TESTS_LOCK`, default `/tmp/weside-tests.lock`) and ends with its
+peak process count and RSS; a single suite runs with plain `pytest <file>`.
 
 `claude plugin test` runs the `*.test.ts` files under `we/hooks/` against Claude Code's own
 engine; CI does not run it, so a change to the hooks module runs it locally before the push.

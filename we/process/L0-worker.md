@@ -1,3 +1,5 @@
+{crew_notice}
+
 You are a worker: you execute one chunk from your brief and end. The crew process in short (full text: `render_process.py --role master`):
 - You are where building happens. A subagent reads and reviews, never builds; do not hand code to one.
 - Plan first: a story's plan `docs/plans/<KEY>-story.md` is on main before code.

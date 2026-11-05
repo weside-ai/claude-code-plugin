@@ -162,8 +162,8 @@ when it moved; every minute it re-reads the file and the live column whatever ha
 
 The option `boardAutoOpen` (`/plugin` → we → Configure) opens it at session start: `off` (default),
 `on` (every session), `orchestrator` (only the session whose companion pin holds `roles.coordinator`
-in the repo's crew, checked by `scripts/crew.py is-role coordinator`; working mode:
-`references/working-mode.md`). Opened unasked, the pane needs 144 terminal columns and waits
+in the repo's crew, checked by `scripts/crew.py is-role coordinator`; crew file:
+`references/companion-session.md` § Crew). Opened unasked, the pane needs 144 terminal columns and waits
 undrawn below that until you widen the terminal or run `/board`.
 
 ## The file
@@ -198,15 +198,21 @@ relative path count from the home folder). Without the file the pane says so and
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News) |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance) and `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
+| `staging` | optional, written by `board.py staging`, `book` and `unbook` only: `synced`, `repo`, `sla_hours`, `booking` (`issue`, `holder`, `until`) and `acceptance` (`issue`, `rc`, `opened`, `due`, `keys`, `past_sla`, `news`), each `null` when none is open; the pane draws one `◇ Staging` line per open one, a booking past its `until` as expired, and the past-SLA mark with the block's `sla_hours` (§ Staging) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
+| `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
+| `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
-| `sessions[].state` | `build` or `ci` (● runs), `wait-owner` (◉ waits, listed first), `idle` or `done` (○ rests); anything else `?` |
+| `sessions[].state` | `build`, `ci` or `active` (● runs), `wait-owner` (◉ waits, listed first), `idle`, `parked` or `done` (○ rests); anything else `?`. `board.py`'s `SESSION_STATES` owns this list; the pane draws `active` and `parked` as `?` until its lamps follow |
+| `sessions[].since` | `YYYY-MM-DDTHH:MMZ`: in this state since; a wait (`waiting_on`) is such a state, so `board.py set waiting_on=…` moves it |
+| `sessions[].waiting_on`, `.sla_due` | the role key (or `human`) the session waits on, and when that wait passes the SLA (`YYYY-MM-DDTHH:MMZ`, the crew's `sla.hours` counted only inside `sla.daytime` in `sla.tz`); written by `board.py set` and, for a blocked worker, `board.py blocked` only (§ Questions and decisions) |
+| `sessions[].blocked` | a worker waiting on a permission prompt or on a reply: `kind`, `starter`, `starter_session_id`, `key`, `since`, `waiting_for`, `command` (§ Blocked workers) |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
 | `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
 | `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
@@ -293,9 +299,11 @@ back, and the deliverer carries it like a press:
 python3 <plugin>/scripts/board.py answer Q1 accept --session lead --via chat --quote "go ahead"
 ```
 
-It refuses, writing nothing, an id in neither `owner_queue` nor `news`, an id an Accept or Deny
-closed, and a kind outside `accept`, `deny`, `discuss`, `info`, `update`; it opens `board.json`
-read-only and prints the line it wrote. `--board FILE` names another board file. Without that line
+It refuses, writing nothing, an id in neither `owner_queue` nor `news` and a kind outside `accept`,
+`deny`, `discuss`, `info`, `update`; it opens `board.json` read-only and prints the line it wrote. A
+second answer on an id an Accept or Deny already closed (the owner answered twice) is a duplicate:
+no answer line, so nothing is carried again, one `duplicate-answer` line in `board-questions.jsonl`,
+and exit 0 with `<id> is closed by <kind>; recorded as a duplicate, nothing runs again`. `--board FILE` names another board file. Without that line
 the question stays open on the pane.
 
 ## The freeze flag
@@ -309,6 +317,296 @@ that does not parse counts as standing. `board.py unfreeze` removes it and print
 to re-arm by hand through the hook; it re-arms none itself, so no PR comes back unchecked. The
 flag is a brake against slips, not a boundary: any session can delete it
 (`scripts/board_freeze.py`).
+
+## Questions and decisions
+
+`board.py` (in the plugin's `scripts/`) writes `board.json` only through one locked writer: an
+exclusive lock on `board.json.lock` beside it (10 s, then it gives up naming the file), a fresh
+read, then a temp file and `os.replace`. A hand write between that read and the replace is lost.
+The JSONL files beside the board only grow (`O_APPEND`, one whole line per write). A line that
+records a board change is appended after board.json was replaced, still under the lock, so a failed
+write leaves no line.
+
+**`set` — the session's own line.** `board.py set now="<step>" state=<state> waiting_on=<role>`
+writes the line whose `name` is the caller's, as `claude agents --json` lists it for its
+`CLAUDE_CODE_SESSION_ID` (a missing line is appended with `name` and `session_id`; a session without
+a name is told to `/rename` first). Only `waiting_on`, `state` and `now` are settable; `state` takes
+the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--for <name>` writes
+another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
+`since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting
+line clears all three and on any other line changes nothing, so a hand-written `since` survives.
+`state` and `now` never touch `since`, and `set` never writes `updated` or `updated_by`.
+
+**`ask` — a question for the owner.** Each session asks its own question with `board.py ask`;
+the coordinator owns the queue (answers, re-routing). The call is
+`board.py ask --session <asker> --key <KEY> --key-title "<title>" --ask "<question>"
+--recommendation "<recommendation>" --cause <cause>`. A missing or blank field, a key outside the
+crew's `naming.key` or a cause outside the six is refused, one line each, before anything runs.
+Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of
+`templates/cold-reader.md`) in an empty directory, with no tools, no MCP server, no settings files, hooks
+off, no session file and the global login, given only the question, the recommendation, the title
+and the crew's two labels. It must say what the owner decides and what happens on yes, and it names
+form findings: more than one decision, no recommendation, more than three options, another
+language than the labels. A question that passes lands in `owner_queue` as `Q<n>` (one above every
+`Q` number on the board, in the answers file and in the log), with `since` and `ts` stamped by the
+script, and prints `posted Q<n>`. One that does not comes back, never silently: exit 1 with
+`returned to <asker>: <reason>`, the same text as the asker's line's `note`, and a news item `R<n>`
+of kind `returned` for the coordinator. The asker's next posted question clears a `returned to`
+note; a note that does not start with `returned to` is never overwritten, and the news item alone
+carries the return. A reader that cannot run (no `claude`, 90 s, no parseable
+answer) posts nothing and exits 1 with `reader-error: <cause>`.
+
+Every `ask` past the field check appends one line to `board-questions.jsonl`:
+`{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
+`outcome` `posted` (only then `id`), `returned` or `reader-error`, and `reader` the reader's raw
+`decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
+chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
+questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
+`--urgent` adds `urgent: true` to the item and to its log line; the urgency changes only the order
+in `bundle`, never whether the question goes out.
+
+**Waits log.** Whenever a line's `waiting_on` ends or changes (`set`, `blocked`), one row
+`{key, session, waiting_on, since, ended, duration_s}` is appended to `board-waits.jsonl` after
+board.json was replaced: `key` is the line's first `keys` entry, its `blocked.key`, else the first
+`naming.key` match in its name, else null. It is the source of waits by role in the weekly flow
+report.
+
+**`log correction` — the human corrected a session.** `board.py log correction <session> <kind>`
+is the coordinator's: one line `{type: "correction", ts, session, kind, by}` in the flow log
+(`scripts/flow_log.py` owns its path `<flow.log_dir>/sampler-<day>.jsonl` and its line schema).
+`kind` is one lower-case token; another role, another kind or an unset `flow.log_dir` is refused and
+nothing is written.
+
+### Blocked workers
+
+A sampler outside every session (it holds no crew role) polls `claude agents --json` and marks a
+worker that sits on a permission prompt or idles on a question with `board.py blocked`. The verb is
+its own brake: it re-reads `claude agents --json` and refuses (exit 1, nothing written) unless the
+named session is blocked on a permission prompt right now (`--kind permission`) or idle right now
+(`--kind chat`), so a forged call writes nothing for a session that is not waiting.
+
+| Call | Writes on the session's line |
+|---|---|
+| `blocked <name> --kind permission [--starter S] [--key K] [--command T]` | `waiting_on: human`, `since`, `sla_due`, `blocked` |
+| `blocked <name> --kind chat --waiting-on <role\|human> …` | `waiting_on` (a role key or `human`), `since`, `sla_due`, `blocked` |
+| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands (only a permission wait reads `claude agents --json`, once, before the board lock) |
+
+`blocked` is `{kind, starter, starter_session_id, key, since, waiting_for, command}`: `starter` the
+session that started the worker and its id from `claude agents --json` (the prompt hook matches on
+it), `since` (ISO UTC) the start of the wait, kept while the same kind is called again, so a chat
+wait that moves from the starter's role to `human` keeps it; `waiting_for` the permission prompt as
+`claude agents` names it; `command` at most 200 characters the caller already filtered for secrets.
+A line that is missing is appended with `name` and `session_id`; no other field is written; a
+`--key` outside the crew's `naming.key` is refused. The same call again prints
+`board.py blocked: <name> unchanged` and writes nothing. A session that sets its own wait with
+`set waiting_on=…` ends the old wait and drops its `blocked` mark. The prompt hook
+`sampler_on_prompt.py` names a blocked line once per wait to its starter and the coordinator, the
+command JSON-quoted and labelled as data.
+
+`--clear` prints `{cleared, kind, key, since, duration_s, obsolete}`. For a permission wait it marks
+every open `owner_queue` question of that session with cause `access-click` posted during the wait
+`obsolete: "<labels.prompt_resolved> <HH:MM>"` (crew time zone): the question stays in the queue,
+so nobody answers a dead prompt and nothing vanishes silently.
+
+**`decision` — an owner's cut or fence.** `board.py decision <area> <cut|fence> --key <KEY> --text
+"<decision>"` needs the caller to hold `roles.<area>`. It writes the news item
+`{id: "D<n>", kind: "decision", title: "<area> <kind> <KEY>: <decision>", ts, by}`, then appends
+`{id, kind: "decision", title, ts, by, area, decision, key, text}` to `board-decisions.jsonl`.
+
+**`bundle` — the evening bundle.** The coordinator runs `board.py bundle` at its `bundle` cadence.
+It writes one news item `B-<YYYY-MM-DD>` (`-2`, `-3` for a further bundle that day) of kind `todo`,
+titled `Bundle <date>: <n> decisions · <m> open questions`, its body one line
+`<area>: <kind> <KEY> <text>` per decision since the last bundle, grouped by area, then
+`open: Q12 (urgent), Q15 …`, the questions no Accept or Deny closed, urgent ones first and oldest
+`since` first within each group, then `obsolete: Q9 (<reason>)` for questions whose prompt resolved
+(§ Blocked workers), which the coordinator removes from the queue. Then it appends
+the marker `{"bundle": "<id>", "ts": …}` to `board-decisions.jsonl`, so the next bundle shows only
+newer decisions. With nothing to show it prints `bundle: nothing` and writes nothing. Before it
+writes, `bundle` runs `escalation route`; each open record at stage `bundle` adds one line
+`escalation E<n> <KEY>: <question>` after the `open:` line (with `(advice pending)` or
+`(advice: <text>)` on a `--touches` record), and the title ends in `· <k> escalations`.
+
+## Escalations
+
+`board.py escalation` holds the decision story between two role holders (skill `/we:decide`). It
+appends events to `board-escalations.jsonl` beside the board (`O_APPEND`, only grows); a record is
+the fold of its events by `id` in log order (`fold_escalations`).
+
+| Event | Who | Fields |
+|---|---|---|
+| `open` | a holder of one of the two `--parties` roles | `id` `E<n>`, `ts`, `key`, `parties` (two different role keys), `by`, `question`, `a`, `a_cost`, `b`, `b_cost`, `reversible` (bool), `touches` (`vision`, `money`, `law`, `priority` or null), `stage: self`, `waiting_on` (both parties, comma-joined), `since`, `since_open`, `sla_due` |
+| `route` | the coordinator (`escalation route`, also inside `bundle`) | `from`, `stage`, `waiting_on`, `since`, `sla_due`, `advice_from` on a `--touches` record |
+| `advise` | the `roles.escalation` holder, `--touches` records only | `by`, `recommendation` |
+| `settle` | see below | `stage`, `by`, `outcome`; the record is closed |
+
+`since` and `sla_due` are UTC minutes; `sla_due` is the crew's `sla.hours` counted inside
+`sla.daytime` in `sla.tz` (`daytime_due`, the arithmetic of `set waiting_on`).
+
+**Stages.** `route` moves only an open record whose `sla_due` has passed:
+
+- `self` → `escalation` (`waiting_on: escalation`) while the `roles.escalation` holder has a board
+  line (`sessions[].name` equal to its slug or name) that is not `parked`; `idle` counts as there.
+- `self` → `crew.fallback.escalation` when that line is `parked` or missing: a role key gives stage
+  `escalation` waiting on that role; `human_bundle` or no fallback gives stage `bundle`.
+- `self` with `touches` → `bundle` with `advice_from: escalation`, whatever the holder's line says.
+- `escalation` → `bundle` (`waiting_on: human`).
+
+Entering `escalation` adds one `news` item `{id: "E<n>", kind: "escalation", for: <the role waited
+on>, title: "Escalation E<n> <KEY>: <question>", body, ts}`; entering `bundle` replaces it by the
+same item of kind `todo` without `for` (one item per id). A `--touches` record entering `bundle`
+with its advice pending gets a second item beside the todo, `{id: "E<n>a", kind: "escalation",
+for: "escalation", title: "Advice E<n> <KEY>: <question>", body, ts}`: the human's todo keeps
+`E<n>`, the holder's advice signal takes its own id, so each id still names one item. `advise`
+drops `E<n>a`; `settle` drops `E<n>` and `E<n>a`. Every one of these goes through the locked writer,
+and the event is appended after it; a failed board write appends none and changes no item. A
+record stays in `bundle` until it is settled.
+
+**List.** `escalation list [--waiting-on ROLE] [--stage STAGE]` (read-only) prints one line per open
+record waiting on the role, `E<n> <KEY> <role>/<role> <stage> since <since> due <sla_due>`, or
+`escalations: none waiting on <roles>`. A `--touches` record with its advice pending also waits on
+`escalation` (its `advice_from`) beside `human`, and its line ends in `(advice pending)`. Without `--waiting-on` it lists the records waiting on the
+roles the caller holds; a caller holding none is refused.
+
+**Settle.** `escalation settle E<n> --outcome T`: at `self` a party, at `escalation` the holder of the
+role in `waiting_on`, at `bundle` only the coordinator with `--via human` (the human answered on
+the board item). A `--touches` record refuses `--via human` with `waiting for the escalation role's
+recommendation` until `advise` is in. A settled record refuses every further settle.
+
+**Ticket.** With `board.ticketing: jira`, `open` and `settle` print as their last stdout line
+`carry: [{"op": "comment", "key": <KEY>, "text": …}]`: the decision story (question, both positions
+with their costs, reversibility, wait) or the outcome. The session posts it with its ticketing MCP.
+
+**Count.** `escalation count` prints `<role>/<role> <n> in <YYYY-Www>` per role pair (sorted, so
+A/B and B/A count together) over the records opened in this ISO week, and past two
+`warning: <pair>: more than two escalations this week; the right in crew.json is drawn wrong`.
+`open` prints the same two lines when its record is the third or later of its pair that week.
+
+## Moves
+
+`board.py select` and `board.py move` move a story between the six states. Each state's entry rule
+is the process template's §Lifecycle (`process/L0.md`); this section names only what the script
+adds. Every rule runs before any write; a refusal writes no row, calls no adapter and prints no
+`carry:` line, and exits 1.
+
+| Verb | Rule as the script checks it | Refusal |
+|---|---|---|
+| `select <KEY> [--plan PATH]` | `ENTRY_RULES["selected"]`, in order: the Ready gate's story checks on the checkout's plan (default `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`), the plan-only tier, a green `ready-<KEY>` lens verdict bound to the current plan blob | `board.py select <KEY>: refused (ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
+| `move <KEY> on_hold --reopen T` | a non-blank reopen trigger, kept in the row as `reopen` | `board.py move <KEY> <state>: refused: <reason>`, one line per failure |
+| `move <KEY> backlog --epic EPIC` | exactly one `*-epic.md` under `docs/plans/` names `EPIC` (`ticket:`, `epic:` or `linked_epics:`), and its `status:` starts `approved` | as above |
+| `move <KEY> selected` | always refused: `use board.py select` | as above |
+| `move <KEY> in_progress` | the key's last row in the transitions log is `selected` | as above |
+| `move <KEY> in_review --pr REF…` | every `REF` (a URL, `<owner>/<repo>#<n>`, or a bare number) is `MERGED` by `gh pr view` and carries `<KEY>` as a whole token in its head branch or title; a bare number is refused as ambiguous when the plan's phases name a `**Repo:**` other than the checkout's `origin` | as above |
+| `move <KEY> done --comment-file FILE` | the key's last row is `in_review` (`last move is <state>, not in_review`), and the file holds a line matching `^Not proven:\s*\S`; the row says `via: comment` and the file's text is the comment. A receipts verdict reaches `done` only through `accept.py` (§ Acceptance), which calls `move_done` in process with the entry; the CLI has no `--verdict` | as above |
+
+`select` has no option that waits for, asks
+for or records an approval: the gate, the tier and the lenses decide.
+
+**Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
+`HEAD`'s tree and the diff `<base>...HEAD`, prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs
+as its blob on `risk.rules_from` in a scratch `git worktree add --no-checkout --detach` tree at that
+ref, with base that ref: the caller's branch never reaches the plan's tier. `select` fetches
+`origin` first (a failed fetch is one warning). Line 1 outside `^T[0-3]( one-way \S+)?$`, a class
+outside `risk.one_way`, a non-zero exit or a plan missing on the ref refuses with `tier not
+computed: <reason>`. Without `risk.command` the gate warns `tier check off` and the row says
+`tier: none`. `ready_gate.py story` runs the same tier and prints `tier: <line 1>` on stderr.
+
+**Transitions log.** A passing move appends one row to `board-transitions.jsonl` beside the board
+(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, pr?, reopen?, epic?, ticket}`
+(`via` and `rc` on `done` rows only); `from` is
+the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
+`carried`).
+
+**Ticket.** `board.ticketing` picks the transport (`ticket_adapter.py`). `none`: nothing to carry.
+`jira`: the script holds no credential; its last stdout line is `carry: [{"op": "transition", "key":
+<KEY>, "status": <board.states.<state>>}]`, which the session executes with its ticketing tool and
+verifies by re-reading the status. A `done` move adds a `{"op": "comment", "key": <KEY>, "text":
+<the acceptance comment>}` after its transition. The row is written before the line, so an
+unexecuted `carry:` shows in `check`.
+
+**Check.** `board.py check --jira FILE` compares a snapshot the session reads with its ticketing
+tool (a JSON object key → status name; the caller picks the scope, e.g. Selected, In Progress,
+In Review and Done of the running epics; without Done an uncarried `done` move shows no drift) with the log and the board. It reads no ticketing system. Lines,
+sorted by key:
+
+- `drift: <KEY> jira "<status>" board <state>`: the status is not the last row's `to`;
+- `drift: <KEY> jira "<status>" board none`: no row, and the status is beyond `backlog`;
+- `drift: <KEY> session <name> still holds it (board in_review)`: a `sessions[].keys` entry whose
+  last row is `in_review`;
+- `error: <KEY> jira "<status>" is no board state`: the run goes on over the other keys.
+
+Any line exits 1; none prints `no drift (<n> keys)`. An unreadable or invalid snapshot exits 2.
+
+## Acceptance
+
+`accept.py` (skill `/we:accept`) carries the verdict a repo's receipts job writes for one release
+candidate. The job decides; the board re-checks and moves.
+
+**Verdict.** `accept.json`, version 1, in the run's artifact `staging-receipts-<rc>`: `{version, rc,
+run_id, run_url, stories: [{key, verdict, oracles: {receipt, ci, walk}, ci_tests, checks: [{id, ac,
+persona, status, observed}], walk: [{ac, persona, screen}], not_proven, owner, reason}]}`, `verdict`
+one of `done`, `walk`, `red`, `hold`. The contract fixture is `scripts/fixtures/accept/accept_verdict.json`;
+a writer pins a byte copy of it.
+
+**Provenance.** `accept.py run --run-id <id>` takes a run id, never a file, and reads before any
+download, through one `gh` seam: the run's `path` is `.weside/config.json` `acceptance.receipts_workflow`
+(a trailing `@<ref>` ignored) and that file exists on `origin/main`; its `event` is `push` and its
+`head_branch` matches `acceptance.rc_tag_glob`; its `head_sha` is the tag's peeled commit
+(`git ls-remote --tags origin`) and an ancestor of `origin/main`. Then the artifact must be listed
+and not `expired`, and the downloaded verdict must name that `rc` and `run_id`. A failure exits 1
+with `refused: run <id> <reason>` (`verdict expired, rerun receipts on the RC` for the artifact) and
+writes nothing. Without both config keys it exits 2.
+
+**Per entry.**
+
+| Verdict | What `run` does | Output |
+|---|---|---|
+| any, last row `done` | nothing | `skip: <KEY> already done` |
+| `done` | `move_done` with the entry: last row `in_review`, `verdict: done`, no walk, every check `PASS` and not `NOT TESTABLE`, every receipt AC checked, a non-empty `not_proven`; the row says `via: receipt` and `rc`; the comment is generated (`Accepted by the receipts job <rc> (<run_url>)`, `Oracle:`, `Persona:`, one `Observed:` per check, `Not proven:`) | the row; a refusal prints `board.py move <KEY> done: refused: <reason>` and the run goes on (exit 1) |
+| `walk` | one `board-accept.jsonl` line `{rc, key, outcome: walk, acs, persona, screen, ts}`, unless the key already has an open walk from any RC | `walk: <queue line>` or `skip: <KEY> walk already queued (rc <rc>)` |
+| `red` | one line `{rc, key, outcome: red, finding, owner, ts}`; `owner` is the entry's when it names a crew member, else `roles.coordinator` | `route: <member> <KEY> <check id> FAIL — <observed>` |
+| `hold` | one line `{rc, key, outcome: hold, reason, ts}` | `hold: <KEY> <reason>` |
+
+A (key, rc) already in `board-accept.jsonl` prints `skip: <KEY> <verdict> already recorded for <rc>`:
+a rerun writes nothing twice. Every op of the run goes into one `carry:` last line.
+
+**Queue.** `accept.py queue` prints one `<KEY> AC<n> <persona> · <screen> (rc <rc>)` per open walk
+(a walk line whose key's last transitions row is not `done`), else `queue: empty`. A walk closes with
+`board.py move <KEY> done --comment-file`.
+
+**Sample.** After a `via: receipt` row, every `acceptance.done_sample`-th such row in the log (the
+crew's `acceptance` block, default 5) adds one news item `{id: S<n>, kind: sample, title: "Sample
+<KEY>: accepted by the receipts job, <keeper> checks it post hoc", ts}` and prints
+`sample: <KEY> → <keeper>`; the keeper is `lenses.acceptance.keeper`, else `roles.acceptance`.
+`via: comment` rows never count; `done_sample: null` writes none. The count is the log's, so it
+survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_verdict.py`,
+`samples.jsonl`): neither key moves the other's counter.
+
+## Staging
+
+A booking reserves the staging environment for one session; an acceptance is a release candidate a
+tester is accepting there. Both live as GitHub issues in the crew's repo (the `origin` of the repo
+holding the crew file, else the cwd's), so a scheduled RC job on GitHub reads the same state the
+board does. `scripts/board_staging.py` owns the issue grammar, pinned by
+`scripts/fixtures/staging/issues.json`:
+
+| Issue | Label (crew `release.*`, default) | Title | Body lines |
+|---|---|---|---|
+| booking | `staging_booking_label`, `staging-booking` | `staging booked by <session>` | `holder: <session>`, `until: <YYYY-MM-DDTHH:MMZ>` |
+| acceptance | `staging_acceptance_label`, `staging-acceptance` | `<rc tag>` | `rc: <tag>`, `opened: <UTC>`, `keys: <keys>`; label `staging_past_sla_label` (`past-sla`) after `staging_sla_hours` (12) |
+
+| Verb | Does | Refuses (exit 1) |
+|---|---|---|
+| `board.py book staging --until <UTC>` | opens one booking issue for the caller's session (its name in `claude agents`), then syncs | `board.py book: refused: <rc> in acceptance since <UTC>` while an acceptance is open; `… booked by <holder> until <UTC> (issue #<n>)` while another booking holds; an `--until` not in the future; an issue list it cannot read |
+| `board.py unbook` | closes the caller's own bookings with `unbooked <UTC> by <session>` | `… <session> holds no open booking` |
+| `board.py unbook <rc>` | closes that RC's acceptance with `acceptance closed <UTC> by <caller>` (the acceptance run and the tester call it) | `… no open acceptance for <rc>` |
+| `board.py staging` | writes the `staging` block and prints `staging: booked by …`, `staging: <rc> in acceptance since … (#<n>)[, past <h> h]` or `staging: free` | an issue list it cannot read (the last block stays) |
+
+A booking whose `until` passed holds nothing; the RC job closes it with `expired <UTC>`. An
+acceptance counts as past its SLA by the label or by its `opened` time. The first sync that sees it
+past adds one `todo` news item `ST<issue>` for the coordinator (`staging acceptance <rc> past <h> h`);
+the block remembers it per issue number, so a hotfix RC that carries the acceptance over (new title
+and `rc:`, same issue and `opened:`) adds none. A booking is order, not security: whoever can write
+issues can forge or close one.
 
 ## The live column
 

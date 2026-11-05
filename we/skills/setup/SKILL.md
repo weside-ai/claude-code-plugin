@@ -20,7 +20,7 @@ never commit yourself.
 - Ticketing per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 - Tools, each by a check that actually runs, never by a path on disk:
   - `gh auth status` exits 0 (PRs, CI, review threads);
-  - graphify: `python3 -c "import graphify"` (code graph for story and refine);
+  - graphify: `python3 -c "import graphify"` (code graph for `/we:plan-story` and the build workers);
   - TurboVault: call `mcp__turbovault__list_vaults`; absent = not registered, error or hang =
     degraded (semantic doc search);
   - weside MCP: `mcp__plugin_we_weside-mcp__get_companion_identity` is listed (materialize,
@@ -34,8 +34,10 @@ never commit yourself.
 
 ## 2. Questions
 
-1. **Vision**: a PRD at `docs/plans/*/PRD.md` is used as is; else a link, file or short text →
-   `.weside/vision.md`, or `/we:vision` later writes the PRD. Skip → no vision check.
+1. **Goals**: the goal file above the epics (L0 §Units: goals with metrics, no epics; an epic
+   carries `serves: <metric>`): its path, or a link or short text → `.weside/goals.md`. The Ready
+   gate reads it only through the crew: step 4a.3 binds `files.goals` to this path. Without a crew,
+   the goal check needs a crew binding and stays off; skip → no goal file, no goal check.
 2. **Ticketing** tool confirmed; for Jira, the project key.
 3. **Stack** confirmed or corrected.
 4. **Tests**: when does a worker write them? `tdd` (failing test first) · `tests-after` (default,
@@ -54,7 +56,7 @@ exactly these. Default `["claude"]`. A Codex job named other than `Codex Review`
 requires it.
 
 Offer once: additive repo checks on top of the plugin's → `.weside/dor.md` and/or `.weside/dod.md`,
-seeded with the user's concrete check. `/we:story` reads the DoR file, `/we:orchestrate` the DoD
+seeded with the user's concrete check. `/we:plan-story` reads the DoR file, `/we:master` the DoD
 rows. Additive, never a replacement.
 
 ## 3. `.weside/config.json`
@@ -63,36 +65,42 @@ Written always, also when step 4 is declined. Only keys a verb reads:
 
 ```json
 {
-  "ticketing": { "tool": "jira|github-issues|none", "project_key": "<KEY or null>", "after_merge": "done" },
+  "ticketing": { "tool": "jira|github-issues|none", "project_key": "<KEY or null>" },
   "stack": ["python", "node"],
   "tools": { "graphify": false, "turbovault": false },
   "test_discipline": "tests-after",
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
-  "agents": { "visible_teammates": false, "worker_launch": "subagent" }
+  "agents": { "visible_teammates": false, "worker_launch": "subagent" },
+  "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",
+                  "rc_tag_glob": "<RC tag glob, e.g. v*-rc.*>" }
 }
 ```
 
-`ticketing.after_merge` is `"done"` (default) or `"in_review"`: `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5.
+The Done-row sample sits beside them but in the crew file's `acceptance` block (step 4a), which
+`board.py` reads: `acceptance.done_sample` (default 5, `null` = off) samples every n-th Done by
+receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sampler's
+(`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Acceptance).
 
-`agents.worker_launch` is `"subagent"` or a command template that starts each dev worker as a
-session of its own (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend).
+`/we:merged` moves a landed story to In Review, never to Done (L0 §Lifecycle;
+`${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5).
+
+`agents.worker_launch` is a command template that starts each dev worker as a session of its own
+(`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend). A repo with a crew
+gets one, written in step 4a (L0 §Sessions: build only in workers); `"subagent"` (shown above) is for
+a repo without a crew only.
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
-block (stack, ticketing, vision, test discipline, verification, review gates, missing tools).
+block (stack, ticketing, goals, test discipline, verification, review gates, missing tools).
 
 ## 4. Council (optional, ask once)
 
-"Set up this repo's council now? `/we:council` and `/we:meet` convene it; without a weside account
+"Set up this repo's council now? `/we:council` convenes it; without a weside account
 every lens is generic and still works." On yes:
 
 1. Extend `config.json` (never re-emit its keys) with `vault`, `framework_version: 1`, and the
-   meeting rosters `/we:meet` and `/we:council` read:
-   `"council": {"default": ["product_owner","architect","scrum_master"], "meetings": {"vision":
-   ["product_owner","architect","ux_researcher","marketing","orchestrator"], "saga":
-   ["product_owner","architect","orchestrator"], "epic": ["product_owner","architect","orchestrator"],
-   "story": ["product_owner","architect"]}}`.
+   roster `/we:council` reads: `"council": {"default": ["product_owner","architect","scrum_master"]}`.
 2. TurboVault: check whether this repo's vault is in `list_vaults` by name (another repo's vault
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
    Missing → `add_vault(name=<basename>, path=<root>)` and `set_active_vault`; write `vault` only
@@ -101,20 +109,24 @@ every lens is generic and still works." On yes:
 ## 4a. Crew (optional, ask once)
 
 "Does a crew work in this repo (Product Owner, Orchestrator, HR, Tester, component owners)?" Rules:
-`${CLAUDE_PLUGIN_ROOT}/references/working-mode.md`; schema: `${CLAUDE_PLUGIN_ROOT}/scripts/crew.py`. On yes:
+the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Crew; schema: `${CLAUDE_PLUGIN_ROOT}/scripts/crew.py`. On yes:
 
 1. Another repo holds the crew → only `.weside/config.json` → `"crew": "<relative path>"`, checked
-   with `crew.py show`; go to 4a.4.
+   with `crew.py validate --strict --from <target>`; go to 4a.4.
 2. Propose: with the weside MCP, `list_companions` plus the handbook's role notes
    (`references/companion-session.md` § Role owners) as one block the user corrects; without it, ask
-   who holds each role key (`crew.py` `ROLE_KEYS`; skippable), then one line per member (name,
-   title, components, workplace, on call, `specialist` for a member woken on demand). Ask the
+   who holds each role key (`crew.py` `ROLE_KEYS`; skippable, `OPTIONAL_ROLE_KEYS` such as
+   `security` may stay unbound), then one line per member (name, title, components, workplace, on
+   call, `specialist` for a member woken on demand that holds no role key). Ask the
    skill prefix once (default: the team's or repo's name).
 3. Write `.weside/crew.json` v2 (tracked; no identity text, no companion ids): `"version": 2`,
    `roles` (role key → member slug), `members`, and only the keys whose value differs from
-   `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. Check it with
-   `crew.py show` (it names any key it refuses). A holder of `acceptance` set →
-   `ticketing.after_merge: "in_review"`. A re-run shows the diff and asks before replacing.
+   `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. A goal file from
+   question 1 → bind `files.goals` to its path, or the Ready gate's goal check stays off. Check it with
+   `crew.py validate --strict` (it names every key it refuses, an unknown one too). Set `agents.worker_launch` to a command template
+   that starts each worker as a session of its own (ask for the launcher; § Worker launch backend of
+   `references/worker-dispatch.md` lists the placeholders). A re-run shows the diff and asks before
+   replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
    creates them from `templates/companion-skill/SKILL.md`, never overwriting.
 
@@ -125,7 +137,7 @@ every lens is generic and still works." On yes:
   `${CLAUDE_PLUGIN_ROOT}/templates/agents-skill/SKILL.md` there unchanged and name the instruction-file
   line that points at it. The template resolves `scripts/load-rules.py` from the plugin cache
   (`~/.claude/plugins/cache/weside-ai/we/*/`) at run time, so the repo carries no copy of the loader.
-- **Statusline** (model · branch · PR · context · cost; follows `/we:orchestrate`'s
+- **Statusline** (model · branch · PR · context · cost; follows `/we:master`'s
   `~/.claude/we-focus/<session>.json`): run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py --status`.
   `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`
   refreshes `~/.claude/we-statusline.js`. `keep theirs` → keep the user's statusline and
@@ -168,5 +180,5 @@ every lens is generic and still works." On yes:
 
 ## 7. Next
 
-`/we:story <KEY>` (plan) → `/we:orchestrate <KEY>` (build to a green PR; auto-merge unless a stop
-applies) → `/we:merged`.
+`/we:epic` (one epic plan) → `/we:master <epic>` (refiner worker per story without a plan
+(`/we:plan-story`), one PR per story; auto-merge unless the computed class is one-way) → `/we:merged`.

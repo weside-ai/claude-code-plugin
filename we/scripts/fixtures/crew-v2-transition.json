@@ -41,7 +41,6 @@
   "limits": {"special_slots": ["spike"]},
   "launch": {"worker": "start-worker {name} {brief}"},
   "release": {"runbook": "docs/runbook.md"},
-  "capacity": {"pod_gib": 16, "gate_lock_gib": 2, "test_slot_gib": 3},
   "files": {"dod": "docs/dod.md", "verify": "docs/verify.md"},
   "local_rules": ["Draft means: may not merge even when green.", "Any session may resolve an error report naming its fix."]
 }

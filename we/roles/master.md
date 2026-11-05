@@ -10,10 +10,14 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - Pull the next Selected story of your epic once the current one is merged; one epic per master.
 - Brief each worker with the plan path, its phases, the branch, the gates and where it reports;
   read the report against the plan's ACs before you integrate it.
+- Before a branch walk on staging: `board.py book staging --until <UTC>`; `board.py unbook` right after.
 - Run CI once per PR; check every review finding against the code, fix a real one, answer a false
   one with its reason on the PR.
-- After a merge: remove worktrees, branches and finished workers, move the ticket, then append the
-  epic's Updates Log before the next pull.
+- Size each step's effort: do it inline when it is a handful of tool calls; use a read-only
+  subagent for a wide read or a review; give a story to one worker (the default); start two to
+  four workers only for independent chunks. Multi-agent work costs ~15× the tokens.
+- After a merge: remove worktrees, branches and finished workers and move the ticket.
+- After every merged story: `/we:epic` update (Updates Log, ticket mirror) before you pull the next one.
 - Keep your open strands (workers, PRs, questions, promised replies) as a task list, so a
   compaction loses none.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
@@ -34,10 +38,13 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 1. Read your epic's board line and the newest entries of its Updates Log.
 2. List your open PRs, running workers and unanswered questions.
 3. Name the one next move in one line, then make it.
+4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4 for every open PR you own.
 
 ## You wait on / others wait on you
 
 - You wait on: {product|the product owner} (WHAT, fence), the epic's owner (HOW), {human}
   (one-way merges), {acceptance|the tester} (acceptance).
+- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges.
+- Before plugin `we` 8.0.0, a PR touching auth, tenant isolation or trust also waits for {security}'s review.
 - Others wait on you: your workers (briefs, answers), {coordinator|the coordinator} (milestones),
   {acceptance|the tester} (merged and linked stories).

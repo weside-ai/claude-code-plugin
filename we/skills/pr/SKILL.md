@@ -2,12 +2,12 @@
 name: pr
 description: >
   Opens the PR for the current branch: merge the base, push once, body with ticket, AC evidence and
-  the plan's verification receipt, ticket to In Review. Triggers: "/we:pr", "open the PR".
+  the plan's verification receipt, PR linked to the ticket. Triggers: "/we:pr", "open the PR".
 ---
 
 # /we:pr
 
-For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does the same inside a run.
+For a branch built outside `/we:master`; master § Push, PR, CI does the same inside a run.
 
 1. Run the repo's static gates and the affected tests by name first, unless this session already ran them green on
    the current HEAD; red → stop and report.
@@ -31,9 +31,14 @@ For a branch built outside `/we:orchestrate`; orchestrate § Push, PR, CI does t
    merge, and the Codex review skips drafts (owner, 30.10.2026). A draft's body starts with one line
    `**Draft:** <reason> — ready when <condition>` (hook `draft_reason_gate.py`); `gh pr ready <PR>` once the
    condition holds, with that line removed. A fix after the merge is a
-   follow-up PR from `origin/<base>`, never a push to the merged branch. Ticket: link the PR, move it to In
-   Review and read the status back (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); never to Done.
-5. Report the URL. When the base branch requires the Codex check, arm auto-merge on a ready PR right after
-   create, exceptions per orchestrate § Close the run; otherwise `/we:ci-review <PR>` arms it once green.
+   follow-up PR from `origin/<base>`, never a push to the merged branch. Ticket: link the PR to it and move
+   no status (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); In Review follows the merge through
+   `/we:merged` (L0 §Lifecycle).
+5. Report the URL. Auto-merge is the default: when the base branch requires the Codex check, arm it on a
+   ready PR right after create, otherwise `/we:ci-review <PR>` arms it once green. The one merge brake is
+   the one-way class (master § Close the run).
    A body with a `receipt red` line is not armed (`automerge_gate.py` refuses): rerun step 3 once the receipt is green.
-   An armed PR is watched to the merge per orchestrate § Push, PR, CI step 4.
+6. Arm the watcher as a background command: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <head>
+   --until-merged`. The watch follows L0 §Sessions (a worker until green, its starter until the merge).
+   Without auto-merge it ends at green with `auto-merge off`; whoever arms auto-merge later (e.g. `/we:ci-review`) re-arms it
+   with `--until-merged`.

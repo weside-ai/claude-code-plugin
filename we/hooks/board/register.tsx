@@ -13,7 +13,7 @@ import type {
 } from '../../types'
 import {
   ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
-  liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
+  liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, stagingLines, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
@@ -880,6 +880,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         )}
         {counts.masters > 0 && lines(counter, width, 'count', ' · ')}
         {board?.priorities && <Text dimColor>{board.priorities}</Text>}
+        {stagingLines(board?.staging, now).map((segs, i) => lines(segs, width, `staging-${i}`))}
         {news.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {frame('news', 'inactive', [
