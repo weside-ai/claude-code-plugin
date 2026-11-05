@@ -419,6 +419,58 @@ A/B and B/A count together) over the records opened in this ISO week, and past t
 `warning: <pair>: more than two escalations this week; the right in crew.json is drawn wrong`.
 `open` prints the same two lines when its record is the third or later of its pair that week.
 
+## Moves
+
+`board.py select` and `board.py move` move a story between the six states. Each state's entry rule
+is the process template's §Lifecycle (`process/L0.md`); this section names only what the script
+adds. Every rule runs before any write; a refusal writes no row, calls no adapter and prints no
+`carry:` line, and exits 1.
+
+| Verb | Rule as the script checks it | Refusal |
+|---|---|---|
+| `select <KEY> [--plan PATH]` | `ENTRY_RULES["selected"]`, in order: the Ready gate's story checks on the checkout's plan (default `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`), the plan-only tier, a green `ready-<KEY>` lens verdict bound to the current plan blob | `board.py select <KEY>: refused (ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
+| `move <KEY> on_hold --reopen T` | a non-blank reopen trigger, kept in the row as `reopen` | `board.py move <KEY> <state>: refused: <reason>`, one line per failure |
+| `move <KEY> backlog --epic EPIC` | exactly one `*-epic.md` under `docs/plans/` names `EPIC` (`ticket:`, `epic:` or `linked_epics:`), and its `status:` starts `approved` | as above |
+| `move <KEY> selected` | always refused: `use board.py select` | as above |
+| `move <KEY> in_progress` | the key's last row in the transitions log is `selected` | as above |
+| `move <KEY> in_review --pr REF…` | every `REF` (a URL, `<owner>/<repo>#<n>`, or a bare number) is `MERGED` by `gh pr view` and carries `<KEY>` as a whole token in its head branch or title; a bare number is refused as ambiguous when the plan's phases name a `**Repo:**` other than the checkout's `origin` | as above |
+
+`done` is no choice of `move` until its rule lands. `select` has no option that waits for, asks
+for or records an approval: the gate, the tier and the lenses decide.
+
+**Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
+`HEAD`'s tree and the diff `<base>...HEAD`, prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs
+as its blob on `risk.rules_from` in a scratch `git worktree add --no-checkout --detach` tree at that
+ref, with base that ref: the caller's branch never reaches the plan's tier. `select` fetches
+`origin` first (a failed fetch is one warning). Line 1 outside `^T[0-3]( one-way \S+)?$`, a class
+outside `risk.one_way`, a non-zero exit or a plan missing on the ref refuses with `tier not
+computed: <reason>`. Without `risk.command` the gate warns `tier check off` and the row says
+`tier: none`. `ready_gate.py story` runs the same tier and prints `tier: <line 1>` on stderr.
+
+**Transitions log.** A passing move appends one row to `board-transitions.jsonl` beside the board
+(`O_APPEND`, only grows): `{key, from, to, ts, by, tier?, pr?, reopen?, epic?, ticket}`; `from` is
+the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
+`carried`).
+
+**Ticket.** `board.ticketing` picks the transport (`ticket_adapter.py`). `none`: nothing to carry.
+`jira`: the script holds no credential; its last stdout line is `carry: [{"op": "transition", "key":
+<KEY>, "status": <board.states.<state>>}]`, which the session executes with its ticketing tool and
+verifies by re-reading the status. The row is written before the line, so an unexecuted `carry:`
+shows in `check`.
+
+**Check.** `board.py check --jira FILE` compares a snapshot the session reads with its ticketing
+tool (a JSON object key → status name; the caller picks the scope, e.g. Selected, In Progress and
+In Review of the running epics) with the log and the board. It reads no ticketing system. Lines,
+sorted by key:
+
+- `drift: <KEY> jira "<status>" board <state>`: the status is not the last row's `to`;
+- `drift: <KEY> jira "<status>" board none`: no row, and the status is beyond `backlog`;
+- `drift: <KEY> session <name> still holds it (board in_review)`: a `sessions[].keys` entry whose
+  last row is `in_review`;
+- `error: <KEY> jira "<status>" is no board state`: the run goes on over the other keys.
+
+Any line exits 1; none prints `no drift (<n> keys)`. An unreadable or invalid snapshot exits 2.
+
 ## The live column
 
 Every minute `hooks/board/probe.py` runs `claude agents --json` and reads, per running session,

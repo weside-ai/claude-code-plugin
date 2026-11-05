@@ -21,7 +21,14 @@ Ready gate reads); this docstring only lists the story checks in their order:
 6. ``receipt`` ACs: the crew's ``oracles.receipt_check`` runs on the plan, its lines pass through;
 7. boundary ACs hand ``--boundary-acs`` and ``--mock-persona`` to that check;
 8. the epic plan's ``fence:``, its ``serves:`` against the goal file, the goal file itself; each
-   source missing turns its check off with one warning, and the check arms when it lands.
+   source missing turns its check off with one warning, and the check arms when it lands;
+9. seams named: at least one path in some phase's ``**Files:**`` list;
+10. the plan's tier (``plan_tier.py``): the repo's ``risk.command`` on the plan alone, in a
+    scratch tree at ``risk.rules_from``. A success prints ``tier: <line 1>`` on stderr, a
+    failure is one stdout line ``<plan>: tier: tier not computed: <reason>``; without a
+    ``risk.command`` one warning. The epic mode computes no tier.
+
+``story_failures(plan)`` runs checks 1-9 for ``board.py select``, which runs the tier itself.
 
 Every repo value comes from the crew through ``crew.py``; a ``CrewError`` is a refusal. Python
 3.9, stdlib only.
@@ -41,6 +48,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew  # noqa: E402
+import plan_tier  # noqa: E402
 
 USAGE = "usage: ready_gate.py story <plan> | ready_gate.py epic <epic plan>"
 REQUIRED_SECTIONS = (
@@ -408,6 +416,38 @@ class Gate:
             self._goals(epic)
         else:
             self._phase_repos(found_phases)
+        if "Implementation Phases" in present and not any(ph.paths for ph in found_phases):
+            self.fail("Implementation Phases", "no seams named (no path in any Files list)")
+
+    def tier(self, text: str) -> None:
+        """Check 10: the plan-only tier; needs the ``story:`` key and a git checkout."""
+        key = frontmatter(text).get("story")
+        if not key:
+            return
+        if not self.crew.get("risk", {}).get("command"):
+            self.warnings.append(plan_tier.NO_COMMAND)
+            return
+        top = subprocess.run(
+            ["git", "-C", str(self.root), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if top.returncode != 0:
+            self.fail("tier", "tier not computed: not inside a git checkout")
+            return
+        root = Path(top.stdout.strip())
+        try:
+            rel = self.plan.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            self.fail("tier", f"tier not computed: the plan lies outside {root}")
+            return
+        result = plan_tier.plan_tier(self.crew, root, key, rel)
+        self.warnings.extend(result.warnings)
+        if result.failure is not None:
+            self.fail("tier", f"tier not computed: {result.failure}")
+        else:
+            self.warnings.append(f"tier: {result.line}")
 
     def epic(self, text: str) -> None:
         if "fence" not in frontmatter(text):
@@ -510,17 +550,7 @@ class Gate:
                 "to the story plan to arm the checks"
             )
             return None
-        hits = []
-        for candidate in sorted(self.plan.parent.glob("*-epic.md")):
-            try:
-                text = candidate.read_text(encoding="utf-8").replace("\r\n", "\n")
-            except OSError:
-                continue
-            meta = frontmatter(text)
-            if key in (meta.get("ticket"), meta.get("epic")) or key in inline_list(
-                meta.get("linked_epics")
-            ):
-                hits.append((candidate, text))
+        hits = find_epic_plan(self.plan.parent, key)
         if not hits:
             self.warnings.append(
                 f"warning: {self.plan}: fence and goal checks off: no *-epic.md next to the plan "
@@ -617,6 +647,23 @@ class Gate:
                 )
 
 
+def find_epic_plan(plans_dir: Path, key: str) -> list[tuple[Path, str]]:
+    """Every ``*-epic.md`` in ``plans_dir`` whose ``ticket:`` or ``epic:`` is ``key`` or whose
+    ``linked_epics:`` holds it, with its text; the one finder for the gate and ``board.py move``."""
+    hits = []
+    for candidate in sorted(plans_dir.glob("*-epic.md")):
+        try:
+            text = candidate.read_text(encoding="utf-8").replace("\r\n", "\n")
+        except OSError:
+            continue
+        meta = frontmatter(text)
+        if key in (meta.get("ticket"), meta.get("epic")) or key in inline_list(
+            meta.get("linked_epics")
+        ):
+            hits.append((candidate, text))
+    return hits
+
+
 def _fence_off(plan: Path, epic: Path) -> str:
     return (
         f"warning: {plan}: fence check off: {epic} has no fence: frontmatter; add it to the "
@@ -653,6 +700,19 @@ def _crew_for(plan: Path) -> tuple[dict[str, Any], Path]:
     return data, path.parent.parent
 
 
+def story_failures(plan: Path) -> tuple[list[str], list[str]]:
+    """(failures, warnings) of checks 1-9 on a story plan, as the CLI prints them; the tier is the
+    caller's. ``OSError`` on the plan propagates; a ``CrewError`` is one failure."""
+    text = plan.read_text(encoding="utf-8").replace("\r\n", "\n")
+    try:
+        crew_data, root = _crew_for(plan)
+    except crew.CrewError as exc:
+        return [f"crew: {exc}"], []
+    gate = Gate(plan, crew_data, root)
+    gate.story(text)
+    return gate.failures, gate.warnings
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2 or argv[0] not in ("story", "epic"):
         print(USAGE, file=sys.stderr)
@@ -670,6 +730,8 @@ def main(argv: list[str]) -> int:
         return 1
     gate = Gate(plan, crew_data, root)
     getattr(gate, mode)(text)
+    if mode == "story":
+        gate.tier(text)
     for line in gate.warnings:
         print(line, file=sys.stderr)
     for line in gate.failures:

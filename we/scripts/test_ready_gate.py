@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 import ready_gate
+import test_plan_tier
+from plan_tier import NO_COMMAND as TIER_OFF
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "ready_gate.py"
@@ -120,7 +122,8 @@ def test_a_standalone_story_warns_and_still_checks_repos(tmp_path):
     assert out.returncode == 0 and out.stdout == ""
     assert out.stderr.splitlines() == [
         f"warning: {path}: fence and goal checks off: no `epic:` frontmatter; add it to the story "
-        "plan to arm the checks"
+        "plan to arm the checks",
+        TIER_OFF,
     ]
     add_file(root, "green", "  - `lib/x.py` (other repo)", phase="### Phase 1")
     out = gate(root, "story", str(path))
@@ -439,7 +442,8 @@ def test_an_epic_without_a_plan_warns_and_two_plans_fail(tmp_path):
     assert out.returncode == 0 and out.stdout == ""
     assert out.stderr.splitlines() == [
         f"warning: {path}: fence and goal checks off: no *-epic.md next to the plan names "
-        "`PROJ-9`; add the epic plan to arm the checks"
+        "`PROJ-9`; add the epic plan to arm the checks",
+        TIER_OFF,
     ]
     path = add_file(root, "green", "  - `lib/x.py` (other repo)", phase="### Phase 1")
     out = gate(root, "story", path)
@@ -534,3 +538,87 @@ def test_a_ticket_key_in_a_metric_name_or_link_target_fails(tmp_path):
         f"{goals}:7: goal file names the ticket key PROJ-7",
         f"{goals}:8: goal file names the ticket key PROJ-8",
     ]
+
+
+# --- seams named and the plan-only tier (story check 9 and 10) ----------------------------
+
+
+def test_a_plan_whose_phases_name_no_path_has_no_seams(tmp_path):
+    root = repo(tmp_path)
+    path = root / plan(root, "green")
+    text = path.read_text()
+    for span in (
+        "`src/report/export.py`",
+        "`src/report/base.py:10-20`",
+        "`tests/test_export.py`",
+        "`docs/guides/export.md`",
+        "`format.csv`",
+        "`README.md`",
+        "`lib/csv/parse.py`",
+    ):
+        text = text.replace(span, "the writer")
+    path.write_text(text)
+    out = gate(root, "story", plan(root, "green"))
+    assert out.returncode == 1
+    assert out.stdout.splitlines() == [
+        f"{plan(root, 'green')}: Implementation Phases: no seams named (no path in any Files list)"
+    ]
+
+
+def test_one_path_in_one_phase_names_a_seam(tmp_path):
+    root = repo(tmp_path)
+    path = root / plan(root, "green")
+    path.write_text(path.read_text().replace("`src/report/export.py`", "the writer"))
+    assert gate(root, "story", plan(root, "green")).returncode == 0
+
+
+def tier_gate_repo(tmp_path: Path) -> Path:
+    """The fixture repo as a git repo whose origin/main carries the plan as PROJ-12-story.md and
+    the fake risk command; the checkout's branch touches `money/`."""
+    root = repo(tmp_path, risk__command="scripts/risk")
+    shutil.copy(root / plan(root, "green"), root / PLANS / "PROJ-12-story.md")
+    (root / ".git").rmdir()
+    (root / "scripts").mkdir()
+    shutil.copy(test_plan_tier.RISK, root / "scripts" / "risk")
+    g = test_plan_tier.git
+    g(root, "init", "-q", "-b", "main")
+    g(root, "config", "user.email", "t@example.org")
+    g(root, "config", "user.name", "t")
+    g(root, "add", "-A")
+    g(root, "commit", "-q", "-m", "base")
+    g(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    g(root, "checkout", "-q", "-b", "feature")
+    (root / "money").mkdir()
+    (root / "money" / "pay.py").write_text("x = 1\n")
+    g(root, "add", "-A")
+    g(root, "commit", "-q", "-m", "one-way diff")
+    return root
+
+
+@pytest.mark.parametrize(
+    "env, code, stdout, stderr",
+    [
+        ({}, 0, None, "tier: T0"),
+        ({"FAKE_RISK_LINE": "T2 one-way money"}, 0, None, "tier: T2 one-way money"),
+        ({"FAKE_RISK_EXIT": "2"}, 1, "tier: tier not computed: risk.command exit 2", None),
+        ({"FAKE_RISK_LINE": "standard"}, 1, "tier: tier not computed: line 1 'standard'", None),
+    ],
+)
+def test_the_story_gate_prints_the_plan_tier(tmp_path, monkeypatch, env, code, stdout, stderr):
+    root = tier_gate_repo(tmp_path)
+    for var in ("FAKE_RISK_EXIT", "FAKE_RISK_LINE", "FAKE_RISK_LOG"):
+        monkeypatch.delenv(var, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    out = gate(root, "story", f"{PLANS}/PROJ-12-story.md")
+    assert out.returncode == code, out.stdout + out.stderr
+    if stderr:
+        assert stderr in out.stderr.splitlines() and out.stdout == ""
+    if stdout:
+        assert out.stdout.startswith(f"{PLANS}/PROJ-12-story.md: {stdout}"), out.stdout
+
+
+def test_the_epic_gate_computes_no_tier(tmp_path):
+    root = tier_gate_repo(tmp_path)
+    out = gate(root, "epic", plan(root, "PROJ-1-epic"))
+    assert "tier" not in out.stdout + out.stderr
