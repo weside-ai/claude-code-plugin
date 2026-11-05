@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""A fake `gh` holding issues for test_board_staging.py.
+
+The JSON file $FAKE_GH_ISSUES is `{"repo": "<owner>/<name>", "next": n, "issues": [...]}`; each
+issue `{number, title, body, labels: [{name}], createdAt, state}`. Every call appends its argv to
+$FAKE_GH_LOG. $FAKE_GH_FAIL names a verb (`list`, `create`, `close`) that exits 1. A `--repo`
+other than the file's exits 4.
+
+  issue list --repo R --label L --state open --limit N --json F   prints the open issues with L
+  issue create --repo R --title T --label L --body B               adds one, prints its URL
+  issue close N --repo R --comment C                               closes it, keeps the comment
+  label create …                                                   exits 0
+"""
+
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+with open(os.environ["FAKE_GH_LOG"], "a") as fh:
+    fh.write(json.dumps(args) + "\n")
+path = os.environ["FAKE_GH_ISSUES"]
+with open(path) as fh:
+    data = json.load(fh)
+
+
+def opt(name):
+    return args[args.index(name) + 1] if name in args else None
+
+
+if args[:2] == ["label", "create"]:
+    sys.exit(0)
+if args[:1] != ["issue"]:
+    sys.exit(9)
+verb = args[1]
+if os.environ.get("FAKE_GH_FAIL") == verb:
+    print("HTTP 502: gh broke", file=sys.stderr)
+    sys.exit(1)
+if opt("--repo") != data["repo"]:
+    print(f"could not resolve to a Repository with the name '{opt('--repo')}'", file=sys.stderr)
+    sys.exit(4)
+issues = data["issues"]
+if verb == "list":
+    label = opt("--label")
+    found = [
+        {k: i[k] for k in ("number", "title", "body", "labels", "createdAt")}
+        for i in issues
+        if i.get("state", "open") == "open" and any(x["name"] == label for x in i["labels"])
+    ]
+    print(json.dumps(found))
+elif verb == "create":
+    number = data["next"]
+    data["next"] = number + 1
+    issues.append(
+        {
+            "number": number,
+            "title": opt("--title"),
+            "body": opt("--body"),
+            "labels": [{"name": opt("--label")}],
+            "createdAt": "2026-11-05T10:00:00Z",
+            "state": "open",
+        }
+    )
+    print(f"https://github.com/{data['repo']}/issues/{number}")
+elif verb == "close":
+    number = int(args[2])
+    issue = next(i for i in issues if i["number"] == number)
+    issue["state"] = "closed"
+    issue["comment"] = opt("--comment")
+else:
+    sys.exit(9)
+with open(path, "w") as fh:
+    json.dump(data, fh)

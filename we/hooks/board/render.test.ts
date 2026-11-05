@@ -265,3 +265,36 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
     expect(/\/home\/me\/work|0b5c1e2a|9e8d7c6b/.test(line)).toBe(false)
   }
 })
+
+// The staging block board.py mirrors from the issues: a booking, and an acceptance past its SLA.
+const STAGED = JSON.stringify({
+  updated: '2026-11-05T10:00:00+00:00',
+  updated_by: 'Orchestrator',
+  sessions: [],
+  staging: {
+    synced: '2026-11-05T10:00Z',
+    repo: 'acme/app',
+    sla_hours: 12,
+    booking: { issue: 30, holder: 'lead-12', until: '2026-11-05T14:00Z' },
+    acceptance: { issue: 21, rc: 'v8.1.0-rc.3', opened: '2026-11-04T20:00Z', due: '2026-11-05T08:00Z', keys: 'PROJ-12', past_sla: true, news: 'ST21' },
+  },
+})
+
+test('/board shows the staging booking and acceptance with holder, end and the past-SLA mark', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-11-05T10:00:00Z') })
+  mock.store(on)
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
+  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path).endsWith('.jsonl') ? '' : STAGED }))
+  on('process.run', () => RUN(JSON.stringify({ sessions: [] })))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 100 } as never })
+  const drawn = paint((await ui.drawn()) as never, 100)
+  await ui.unmount()
+  expect(drawn).toContain('◇ Staging  booked by lead-12 until 11-05 14:00 UTC')
+  expect(drawn).toContain('◇ Staging  v8.1.0-rc.3 in acceptance since 11-04 20:00 UTC  due 11-05 08:00 UTC  ⚠ past 12 h')
+})
