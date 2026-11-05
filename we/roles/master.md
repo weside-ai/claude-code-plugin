@@ -45,6 +45,5 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - You wait on: {product|the product owner} (WHAT, fence), the epic's owner (HOW), {human}
   (one-way merges), {acceptance|the tester} (acceptance).
 - On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges.
-- Before plugin `we` 8.0.0, a PR touching auth, tenant isolation or trust also waits for {security}'s review.
 - Others wait on you: your workers (briefs, answers), {coordinator|the coordinator} (milestones),
   {acceptance|the tester} (merged and linked stories).

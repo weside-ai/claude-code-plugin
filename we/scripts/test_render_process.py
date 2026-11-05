@@ -649,9 +649,8 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
     card = " ".join(rp.render_card(crew(), "security").split())
     for phrase in (
         "You own every item labelled `security`, approve its plan and keep the security lens",
-        "Until plugin `we` 8.0.0 ships the T2 panel, review every PR that touches auth, tenant "
-        "isolation or trust yourself.",
-        "From 8.0.0 the security lens runs in the T2 panel and you are its keeper",
+        "The security check runs in the T2 panel and you are its keeper",
+        "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
         "keep its question file current and sample every 5th verdict post hoc.",
         "Sign a `trust-loosening` diff after the panel and before Hal merges it",
     ):
