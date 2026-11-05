@@ -58,8 +58,13 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
 
    A push straight to the default branch only where the instruction files grant it for docs. A
    rejected push (non-fast-forward included) is reported with its message, never forced. The
-   document is on the default branch once the PR merged: a step that needs it there (a dispatch
-   reading the plan) waits for that.
-6. **Clean up** in a command of its own, only after the push exited 0 (and, on the PR path, the PR is open): `git worktree remove <scratch>`
+   document is on the default branch once the PR merged. A step that needs it there (a dispatch
+   reading the plan, Selected for Development) polls `gh pr view <url> --json state,mergedAt`
+   (or `gh pr checks <url> --watch`) until `state` is `MERGED`. If `gh pr merge --auto` is
+   refused (auto-merge off in the repo), a required review blocks, or the PR is not merged within
+   60 min: report the PR URL to the owner (in a crew: the Lead/Orchestrator line) and leave the
+   story unselected; never merge by hand, never force. The PR URL goes into your report before
+   step 6, it outlives the scratch tree.
+6. **Clean up** in a command of its own, only after the push exited 0 (and, on the PR path, the PR is open and its URL is in your report): `git worktree remove <scratch>`
    (never `--force`, never chained to the commit or push: a rejected push then deleted the only
    copy twice, 29.09. and 01.10.2026). Remove a refiner's worktree with the repo's own worktree verb when it has one.
