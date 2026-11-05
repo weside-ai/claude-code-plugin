@@ -159,7 +159,12 @@ CASES = [
     ("F55", STORY_PLAN, r"`draft` until the user approved", r"Approval is per epic"),
     ("F56", "desc:" + PLAN_COMMIT, r"\bsaga\b|\bPRD\b", None),
     ("F57", PLAN_COMMIT, r"/we:(vision|saga|story)\b", None),
-    ("F58", TICKETING, r"Only `/we:merged` moves a ticket", r"`board.py move` once it exists"),
+    (
+        "F58",
+        TICKETING,
+        r"Only `/we:merged` moves a ticket",
+        r"a move goes through `board.py select` or `board.py move`",
+    ),
     # successor cases for deleted rows whose content survives elsewhere
     ("F27/F42/F43 successor", STORY_PLAN, r"until the user approved", r"never per story"),
     ("F28/F44 successor", MASTER, r"plans to the epic owner", r"the owner judges, never starts"),
