@@ -2280,6 +2280,37 @@ class TestBlocked:
         assert go(crewed, "blocked", WORKER, "--clear") == 0
         assert "blocked" not in line_of(crewed, WORKER)
 
+    def test_clear_asks_claude_agents_outside_the_board_lock(self, crewed, monkeypatch, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission")
+        lock = crewed / "board.json.lock"
+        calls = []
+
+        def probe(fail):
+            def rows():
+                with open(lock, "w") as other:
+                    try:
+                        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        calls.append("free")
+                        fcntl.flock(other, fcntl.LOCK_UN)
+                    except BlockingIOError:
+                        calls.append("held")
+                if fail:
+                    raise board.BoardError("board.py blocked: claude agents --json timed out")
+                return []
+
+            return rows
+
+        monkeypatch.setattr(board, "_agent_rows", probe(fail=True))
+        before = (crewed / "board.json").read_bytes()
+        assert go(crewed, "blocked", WORKER, "--clear") == 1
+        assert "timed out" in capsys.readouterr().err
+        assert (crewed / "board.json").read_bytes() == before
+        monkeypatch.setattr(board, "_agent_rows", probe(fail=False))
+        assert go(crewed, "blocked", WORKER, "--clear") == 0
+        assert calls == ["free", "free"]
+        assert "blocked" not in line_of(crewed, WORKER)
+
     def test_set_by_the_session_itself_ends_the_blocked_mark(self, crewed, monkeypatch):
         agents(crewed, {**BLOCKED_ROW, "sessionId": "sid-12", "name": "lead-12"})
         go(crewed, "blocked", "lead-12", "--kind", "permission")

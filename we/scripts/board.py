@@ -694,23 +694,24 @@ def _resolved_label(crew, now):
 def _clear_blocked(state, args, crew, now):
     closed = {a.get("id") for a in state.answers() if a.get("answer") in CLOSING}
     ended, out = [], {}
+    # `claude agents --json` runs before the board lock, never under it: only a permission
+    # wait asks it, a chat wait clears without it
+    seen = _row_named(state.board().get("sessions") or [], args.name) or {}
+    seen_blocked = seen.get("blocked") if isinstance(seen.get("blocked"), dict) else {}
+    prompt_stands = None
+    if seen_blocked.get("kind") == "permission":
+        prompt_stands = _on_permission_prompt(_row_named(_agent_rows(), args.name))
 
     def mutate(board):
-        line = next(
-            (
-                s
-                for s in board.get("sessions") or []
-                if isinstance(s, dict) and s.get("name") == args.name
-            ),
-            None,
-        )
+        line = _row_named(board.get("sessions") or [], args.name)
         blocked = line.get("blocked") if line else None
         if not isinstance(blocked, dict):
             return UNCHANGED
-        # only a permission wait asks `claude agents --json`: a chat wait clears without it
-        if blocked.get("kind") == "permission" and _on_permission_prompt(
-            _row_named(_agent_rows(), args.name)
-        ):
+        if blocked.get("kind") == "permission" and prompt_stands is not False:
+            if prompt_stands is None:  # it became a permission wait after the read above
+                raise BoardError(
+                    f"board.py blocked: {args.name} changed meanwhile; run --clear again"
+                )
             raise BoardError(
                 f"board.py blocked: {args.name} is still blocked on a permission prompt; "
                 "--clear waits until it is answered"

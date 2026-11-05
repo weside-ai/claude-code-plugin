@@ -376,7 +376,7 @@ named session is blocked on a permission prompt right now (`--kind permission`) 
 |---|---|
 | `blocked <name> --kind permission [--starter S] [--key K] [--command T]` | `waiting_on: human`, `since`, `sla_due`, `blocked` |
 | `blocked <name> --kind chat --waiting-on <role\|human> …` | `waiting_on` (a role key or `human`), `since`, `sla_due`, `blocked` |
-| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands (only a permission wait reads `claude agents --json`) |
+| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands (only a permission wait reads `claude agents --json`, once, before the board lock) |
 
 `blocked` is `{kind, starter, starter_session_id, key, since, waiting_for, command}`: `starter` the
 session that started the worker and its id from `claude agents --json` (the prompt hook matches on

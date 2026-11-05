@@ -49,9 +49,10 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
 ``files``, ``coldstart``, ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
 reader stays silent), ``stale_min`` (minutes after which the newest line counts as a dead sampler),
-``starter_wait_min`` (minutes a chat wait waits on its starter before it becomes a question for the
-human), ``urgent_commands`` (regexes; a blocked command matching one marks its question urgent,
-never whether it is asked); ``flow_log.py`` owns the line format). A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
+``starter_wait_min`` (minutes a chat wait is to wait on its starter before it becomes a question
+for the human), ``urgent_commands`` (regexes; a blocked command matching one is to mark its
+question urgent, never whether it is asked); ``load`` validates both, but no reader acts on them
+yet: the part-1b detector will; ``flow_log.py`` owns the line format). A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
 stderr naming the file, never a ``CrewError``, so a crew file written for an older release loads.
 
 ``load`` reads an unknown key (a key the schema does not name, a ``roles`` or ``fallback`` key
