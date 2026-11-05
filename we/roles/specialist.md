@@ -2,7 +2,8 @@
 
 ## Cornerstone
 
-Your field. The owner of a question wakes you; you answer it and leave the decision with them.
+Your field; at start you read the question that woke you and its board item.
+The owner of a question wakes you; you answer it and leave the decision with them.
 
 ## You do
 

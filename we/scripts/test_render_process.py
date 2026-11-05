@@ -111,15 +111,13 @@ def test_waits_names_the_human_as_the_only_merger_of_one_way():
 NOTICE_RESERVE = 160
 
 
-def test_owners_decide_cut_and_fence_and_the_manual_moves_line_closes_the_l0():
+def test_owners_decide_cut_and_fence_and_the_manual_rc_line_closes_the_l0():
     text = rp.render_l0(generic())
     assert (
         "- An owner decides cut and fence questions of their area unless a new outcome, money, law"
         " or the vision\n  is touched; a board line records it and Hal may overturn it.\n"
     ) in text
-    assert text.rstrip().endswith(
-        "Until `board.py move` and the RC train job ship, moves and RCs stay by hand."
-    )
+    assert text.rstrip().endswith("Until the RC train job ships, RCs are cut by hand.")
     assert "today's rules hold" not in text
 
 
@@ -650,10 +648,9 @@ def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
 def test_the_security_card_names_label_lens_review_and_signature(crew):
     card = " ".join(rp.render_card(crew(), "security").split())
     for phrase in (
-        "You own every item labelled `security`, approve its plan and keep the security lens",
-        "Until plugin `we` 8.0.0 ships the T2 panel, review every PR that touches auth, tenant "
-        "isolation or trust yourself.",
-        "From 8.0.0 the security lens runs in the T2 panel and you are its keeper",
+        "You own every item labelled `security`, approve its plan and keep the security check",
+        "The security check runs in the T2 panel and you are its keeper",
+        "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
         "keep its question file current and sample every 5th verdict post hoc.",
         "Sign a `trust-loosening` diff after the panel and before Hal merges it",
     ):
