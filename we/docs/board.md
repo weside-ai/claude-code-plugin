@@ -198,7 +198,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on) and `returned`, which the pane draws as info until it has glyphs for them |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance) and `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
@@ -434,8 +434,9 @@ adds. Every rule runs before any write; a refusal writes no row, calls no adapte
 | `move <KEY> selected` | always refused: `use board.py select` | as above |
 | `move <KEY> in_progress` | the key's last row in the transitions log is `selected` | as above |
 | `move <KEY> in_review --pr REF…` | every `REF` (a URL, `<owner>/<repo>#<n>`, or a bare number) is `MERGED` by `gh pr view` and carries `<KEY>` as a whole token in its head branch or title; a bare number is refused as ambiguous when the plan's phases name a `**Repo:**` other than the checkout's `origin` | as above |
+| `move <KEY> done --comment-file FILE` | the key's last row is `in_review` (`last move is <state>, not in_review`), and the file holds a line matching `^Not proven:\s*\S`; the row says `via: comment` and the file's text is the comment. A receipts verdict reaches `done` only through `accept.py` (§ Acceptance), which calls `move_done` in process with the entry; the CLI has no `--verdict` | as above |
 
-`done` is no choice of `move` until its rule lands. `select` has no option that waits for, asks
+`select` has no option that waits for, asks
 for or records an approval: the gate, the tier and the lenses decide.
 
 **Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
@@ -448,19 +449,21 @@ computed: <reason>`. Without `risk.command` the gate warns `tier check off` and 
 `tier: none`. `ready_gate.py story` runs the same tier and prints `tier: <line 1>` on stderr.
 
 **Transitions log.** A passing move appends one row to `board-transitions.jsonl` beside the board
-(`O_APPEND`, only grows): `{key, from, to, ts, by, tier?, pr?, reopen?, epic?, ticket}`; `from` is
+(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, pr?, reopen?, epic?, ticket}`
+(`via` and `rc` on `done` rows only); `from` is
 the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
 `carried`).
 
 **Ticket.** `board.ticketing` picks the transport (`ticket_adapter.py`). `none`: nothing to carry.
 `jira`: the script holds no credential; its last stdout line is `carry: [{"op": "transition", "key":
 <KEY>, "status": <board.states.<state>>}]`, which the session executes with its ticketing tool and
-verifies by re-reading the status. The row is written before the line, so an unexecuted `carry:`
-shows in `check`.
+verifies by re-reading the status. A `done` move adds a `{"op": "comment", "key": <KEY>, "text":
+<the acceptance comment>}` after its transition. The row is written before the line, so an
+unexecuted `carry:` shows in `check`.
 
 **Check.** `board.py check --jira FILE` compares a snapshot the session reads with its ticketing
-tool (a JSON object key → status name; the caller picks the scope, e.g. Selected, In Progress and
-In Review of the running epics) with the log and the board. It reads no ticketing system. Lines,
+tool (a JSON object key → status name; the caller picks the scope, e.g. Selected, In Progress,
+In Review and Done of the running epics; without Done an uncarried `done` move shows no drift) with the log and the board. It reads no ticketing system. Lines,
 sorted by key:
 
 - `drift: <KEY> jira "<status>" board <state>`: the status is not the last row's `to`;
@@ -470,6 +473,49 @@ sorted by key:
 - `error: <KEY> jira "<status>" is no board state`: the run goes on over the other keys.
 
 Any line exits 1; none prints `no drift (<n> keys)`. An unreadable or invalid snapshot exits 2.
+
+## Acceptance
+
+`accept.py` (skill `/we:accept`) carries the verdict a repo's receipts job writes for one release
+candidate. The job decides; the board re-checks and moves.
+
+**Verdict.** `accept.json`, version 1, in the run's artifact `staging-receipts-<rc>`: `{version, rc,
+run_id, run_url, stories: [{key, verdict, oracles: {receipt, ci, walk}, ci_tests, checks: [{id, ac,
+persona, status, observed}], walk: [{ac, persona, screen}], not_proven, owner, reason}]}`, `verdict`
+one of `done`, `walk`, `red`, `hold`. The contract fixture is `scripts/fixtures/accept/accept_verdict.json`;
+a writer pins a byte copy of it.
+
+**Provenance.** `accept.py run --run-id <id>` takes a run id, never a file, and reads before any
+download, through one `gh` seam: the run's `path` is `.weside/config.json` `acceptance.receipts_workflow`
+(a trailing `@<ref>` ignored) and that file exists on `origin/main`; its `event` is `push` and its
+`head_branch` matches `acceptance.rc_tag_glob`; its `head_sha` is the tag's peeled commit
+(`git ls-remote --tags origin`) and an ancestor of `origin/main`. Then the artifact must be listed
+and not `expired`, and the downloaded verdict must name that `rc` and `run_id`. A failure exits 1
+with `refused: run <id> <reason>` (`verdict expired, rerun receipts on the RC` for the artifact) and
+writes nothing. Without both config keys it exits 2.
+
+**Per entry.**
+
+| Verdict | What `run` does | Output |
+|---|---|---|
+| any, last row `done` | nothing | `skip: <KEY> already done` |
+| `done` | `move_done` with the entry: last row `in_review`, `verdict: done`, no walk, every check `PASS` and not `NOT TESTABLE`, every receipt AC checked, a non-empty `not_proven`; the row says `via: receipt` and `rc`; the comment is generated (`Accepted by the receipts job <rc> (<run_url>)`, `Oracle:`, `Persona:`, one `Observed:` per check, `Not proven:`) | the row; a refusal prints `board.py move <KEY> done: refused: <reason>` and the run goes on (exit 1) |
+| `walk` | one `board-accept.jsonl` line `{rc, key, outcome: walk, acs, persona, screen, ts}`, unless the key already has an open walk from any RC | `walk: <queue line>` or `skip: <KEY> walk already queued (rc <rc>)` |
+| `red` | one line `{rc, key, outcome: red, finding, owner, ts}`; `owner` is the entry's when it names a crew member, else `roles.coordinator` | `route: <member> <KEY> <check id> FAIL — <observed>` |
+| `hold` | one line `{rc, key, outcome: hold, reason, ts}` | `hold: <KEY> <reason>` |
+
+A (key, rc) already in `board-accept.jsonl` prints `skip: <KEY> <verdict> already recorded for <rc>`:
+a rerun writes nothing twice. Every op of the run goes into one `carry:` last line.
+
+**Queue.** `accept.py queue` prints one `<KEY> AC<n> <persona> · <screen> (rc <rc>)` per open walk
+(a walk line whose key's last transitions row is not `done`), else `queue: empty`. A walk closes with
+`board.py move <KEY> done --comment-file`.
+
+**Sample.** After a `via: receipt` row, every `lenses.acceptance.sample`-th such row in the log adds
+one news item `{id: S<n>, kind: sample, title: "Sample <KEY>: accepted by the receipts job,
+<keeper> checks it post hoc", ts}` and prints `sample: <KEY> → <keeper>`; the keeper is
+`lenses.acceptance.keeper`, else `roles.acceptance`. `via: comment` rows never count; `sample: null`
+writes none. The count is the log's, so it survives restarts.
 
 ## The live column
 

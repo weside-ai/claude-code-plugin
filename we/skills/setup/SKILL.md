@@ -72,7 +72,9 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
-  "agents": { "visible_teammates": false, "worker_launch": "subagent" }
+  "agents": { "visible_teammates": false, "worker_launch": "subagent" },
+  "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",
+                  "rc_tag_glob": "<RC tag glob, e.g. v*-rc.*>" }
 }
 ```
 
