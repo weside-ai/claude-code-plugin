@@ -169,7 +169,7 @@ and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does
 the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it proves (`AC<n>`,
 more than one per AC `AC<n>-b`), so the run's report maps back to the ACs. The refiner writes the
 file next to the plan for every `receipt` AC, in the planned state, and runs the validate command;
-plan and file land on the default branch in one commit (`references/plan-commit.md`). The builder
+plan and file land on the default branch in one commit, by the repo's docs path (`references/plan-commit.md`). The builder
 arms it in the build branch (drops the planned state) and may correct seed, fields and assertions
 to the built code. Mechanical staging ACs (status code, field,
 label) belong there; the prose ACs keep the new and fuzzy ones. A repo whose `.weside/verify.md`
