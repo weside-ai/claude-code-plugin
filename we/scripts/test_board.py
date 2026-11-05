@@ -1235,3 +1235,455 @@ class TestEscalationSignal:
         argv = ["escalation", "settle", "E1", "--outcome", "a", "--via", "human"]
         assert go(escalating, *argv) == 0
         assert "E1" not in [i.get("id") for i in board_of(escalating)["news"]]
+
+
+# --- moves: select, move, check (the ticketing adapter, the transitions log, carry:) ---------
+
+import lens_verdict  # noqa: E402
+import test_plan_tier  # noqa: E402
+import ticket_adapter  # noqa: E402
+
+GATE_PLANS = HERE / "fixtures" / "ready_gate" / "plans"
+KEY = "PROJ-12"
+GREEN_LENS = '```json\n{"findings": []}\n```'
+
+
+def git(root, *args):
+    return test_plan_tier.git(root, *args)
+
+
+@pytest.fixture
+def moving(crewed, monkeypatch):
+    """`work` as a git repo: the generic crew with `risk.command` bound to the fake classifier,
+    a green story plan PROJ-12 (epic PROJ-1, a `lib-repo` phase), the gate's epic plans and a
+    draft epic PROJ-5, all on `origin/main`; the fake `gh` reads $FAKE_GH."""
+    work = crewed / "work"
+    (work / ".git").rmdir()
+    crew_path = work / ".weside" / "crew.json"
+    data = json.loads(crew_path.read_text(encoding="utf-8"))
+    data["risk"] = {"command": "scripts/risk"}
+    crew_path.write_text(json.dumps(data), encoding="utf-8")
+    plans = work / "docs" / "plans"
+    plans.mkdir(parents=True)
+    for name in ("PROJ-1-epic.md", "PROJ-2-epic.md"):
+        shutil.copy(GATE_PLANS / name, plans / name)
+    epic = (GATE_PLANS / "PROJ-1-epic.md").read_text(encoding="utf-8")
+    (plans / "PROJ-5-epic.md").write_text(
+        epic.replace("ticket: PROJ-1", "ticket: PROJ-5").replace(
+            "status: approved", "status: draft"
+        ),
+        encoding="utf-8",
+    )
+    story = (GATE_PLANS / "green.md").read_text(encoding="utf-8")
+    story = story.replace("[receipt]", "[`ci`: `tests/test_export.py`]")
+    (plans / f"{KEY}-story.md").write_text(story, encoding="utf-8")
+    (work / "scripts").mkdir()
+    shutil.copy(test_plan_tier.RISK, work / "scripts" / "risk")
+    git(work, "init", "-q", "-b", "main")
+    git(work, "config", "user.email", "t@example.org")
+    git(work, "config", "user.name", "t")
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "base")
+    git(work, "update-ref", "refs/remotes/origin/main", "HEAD")
+    for var in ("FAKE_RISK_EXIT", "FAKE_RISK_LINE", "FAKE_RISK_LOG"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("FAKE_GH", str(crewed / "gh.json"))
+    monkeypatch.setenv("FAKE_GH_LOG", str(crewed / "gh-calls.jsonl"))
+    (crewed / "gh.json").write_text("{}", encoding="utf-8")
+    return crewed
+
+
+def green_lenses(state_dir, key=KEY):
+    root = state_dir / "work"
+    vid = f"ready-{key}"
+    panel = lens_verdict.plan(root, "ready", key)
+    for entry in panel["entries"]:
+        lens_verdict.write(root, vid, entry["lens"], answer=GREEN_LENS)
+    return vid
+
+
+def gh_answers(state_dir, table):
+    (state_dir / "gh.json").write_text(json.dumps(table), encoding="utf-8")
+
+
+def gh_calls(state_dir):
+    return jsonl(state_dir / "gh-calls.jsonl")
+
+
+def transitions(state_dir):
+    return jsonl(state_dir / "board-transitions.jsonl")
+
+
+def act(state_dir, *argv, adapter=None, now=NOW):
+    return board.main(["--board", str(state_dir / "board.json"), *argv], now=now, adapter=adapter)
+
+
+def fake():
+    return ticket_adapter.FakeAdapter({KEY: "Backlog"})
+
+
+def assert_untouched(state_dir, before, out, adapter):
+    assert adapter.calls == [] and adapter.statuses == {KEY: "Backlog"}
+    assert not (state_dir / "board-transitions.jsonl").exists()
+    assert (state_dir / "board.json").read_bytes() == before
+    assert "carry:" not in out
+
+
+def with_row(state_dir, key, to):
+    board.StateDir(state_dir / "board.json").append_transition({"key": key, "to": to})
+
+
+class TestSelect:
+    def test_a_plan_failing_the_gate_is_refused_with_its_lines(self, moving, capsys):
+        plan = moving / "work" / "docs" / "plans" / f"{KEY}-story.md"
+        plan.write_text(plan.read_text().replace("**Then** it writes", "it writes"))
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        lines = [x for x in err.splitlines() if not x.startswith("warning:")]
+        assert lines == [
+            f"board.py select {KEY}: refused (ready gate)",
+            f"{moving / 'work' / 'docs' / 'plans' / f'{KEY}-story.md'}: AC2: no `**Then**`",
+        ]
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_tier_that_cannot_be_computed_is_refused(self, moving, monkeypatch, capsys):
+        monkeypatch.setenv("FAKE_RISK_EXIT", "2")
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.splitlines()[-2:] == [
+            f"board.py select {KEY}: refused (tier)",
+            "tier not computed: risk.command exit 2: risk: refused",
+        ]
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_green_story_selects_with_its_tier(self, moving, monkeypatch, capsys):
+        green_lenses(moving)
+        monkeypatch.setenv("FAKE_RISK_LINE", "T2 one-way money")
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 0
+        out = capsys.readouterr().out
+        assert out.splitlines()[0] == "tier: T2 one-way money"
+        [row] = transitions(moving)
+        assert {k: row[k] for k in ("key", "from", "to", "tier", "ticket", "by")} == {
+            "key": KEY,
+            "from": None,
+            "to": "selected",
+            "tier": "T2 one-way money",
+            "ticket": "fake",
+            "by": "lead-12",
+        }
+        assert adapter.calls == [("move", KEY, "Selected for Development")]
+
+    def test_select_never_asks(self, moving):
+        green_lenses(moving)
+        answers = moving / "board-answers.jsonl"
+        answers.write_text('{"id": "Q7", "answer": "info"}\n', encoding="utf-8")
+        before = (moving / "board.json").read_bytes(), answers.read_bytes()
+        assert act(moving, "select", KEY, adapter=fake()) == 0
+        after = (moving / "board.json").read_bytes(), answers.read_bytes()
+        assert after == before, "select wrote board.json or the answers file"
+        sub = board.parser()._subparsers._group_actions[0].choices["select"]
+        options = {s for a in sub._actions for s in a.option_strings} - {"-h", "--help"}
+        assert options == {"--plan"}
+        assert [g for g, _ in board.ENTRY_RULES["selected"]] == ["ready gate", "tier", "lenses"]
+
+
+class TestSelectLenses:
+    @pytest.mark.parametrize("verdict", ["missing", "red", "stale"])
+    def test_without_a_green_verdict_select_is_refused(self, moving, capsys, verdict):
+        root = moving / "work"
+        vid = f"ready-{KEY}"
+        if verdict != "missing":
+            panel = lens_verdict.plan(root, "ready", KEY)
+            for entry in panel["entries"]:
+                if verdict == "red" and entry["lens"] == "architecture":
+                    lens_verdict.write(root, vid, entry["lens"], failed="the agent stopped")
+                else:
+                    lens_verdict.write(root, vid, entry["lens"], answer=GREEN_LENS)
+        if verdict == "stale":
+            plan = root / "docs" / "plans" / f"{KEY}-story.md"
+            plan.write_text(plan.read_text() + "\n<!-- edited -->\n")
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        _, expected = lens_verdict.check(root, vid)
+        lines = err.splitlines()
+        head = lines.index(f"board.py select {KEY}: refused (lenses)")
+        assert lines[head + 1 :] == expected
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_failing_gate_never_reads_the_verdict(self, moving, monkeypatch, capsys):
+        plan = moving / "work" / "docs" / "plans" / f"{KEY}-story.md"
+        plan.write_text(plan.read_text().replace("**Then** it writes", "it writes"))
+        read = []
+        monkeypatch.setattr(lens_verdict, "check", lambda *a: read.append(a) or (True, []))
+        assert act(moving, "select", KEY, adapter=fake()) == 1
+        assert read == []
+        assert "refused (ready gate)" in capsys.readouterr().err
+
+
+class TestMove:
+    @pytest.mark.parametrize(
+        "argv, message",
+        [
+            (["on_hold"], 'on_hold needs --reopen "<trigger>"'),
+            (["on_hold", "--reopen", " "], 'on_hold needs --reopen "<trigger>"'),
+            (["backlog"], "backlog needs --epic <EPIC>"),
+            (["backlog", "--epic", "PROJ-5"], "epic PROJ-5 is not approved (PROJ-5-epic.md"),
+            (["backlog", "--epic", "PROJ-9"], "no epic plan under docs/plans names PROJ-9"),
+            (["selected"], "use board.py select"),
+            (["in_progress"], "in_progress needs the key's last row to be selected (no row)"),
+            (["in_review"], "in_review needs --pr <ref>"),
+        ],
+    )
+    def test_a_missing_entry_input_is_refused_naming_the_rule(self, moving, capsys, argv, message):
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "move", KEY, *argv, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.startswith(f"board.py move {KEY} {argv[0]}: refused: {message}"), err
+        assert_untouched(moving, before, out, adapter)
+
+    def test_two_epic_plans_naming_the_epic_are_both_named(self, moving, capsys):
+        plans = moving / "work" / "docs" / "plans"
+        shutil.copy(plans / "PROJ-1-epic.md", plans / "PROJ-1b-epic.md")
+        assert act(moving, "move", KEY, "backlog", "--epic", "PROJ-1", adapter=fake()) == 1
+        assert (
+            "PROJ-1 is named by more than one epic plan: PROJ-1-epic.md and PROJ-1b-epic.md"
+            in (capsys.readouterr().err)
+        )
+
+    def test_in_progress_after_another_state_is_refused(self, moving, capsys):
+        with_row(moving, KEY, "backlog")
+        assert act(moving, "move", KEY, "in_progress", adapter=fake()) == 1
+        assert "(its last row is backlog)" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "argv, extra",
+        [
+            (
+                ["on_hold", "--reopen", "after the store review"],
+                {"reopen": "after the store review"},
+            ),
+            (["backlog", "--epic", "PROJ-1"], {"epic": "PROJ-1"}),
+            (["backlog", "--epic", "PROJ-3"], {"epic": "PROJ-3"}),  # linked_epics of PROJ-2
+            (["in_progress"], {}),
+        ],
+    )
+    def test_a_held_rule_moves_once_and_writes_one_row(self, moving, capsys, argv, extra):
+        if argv[0] == "in_progress":
+            with_row(moving, KEY, "selected")
+        adapter = fake()
+        assert act(moving, "move", KEY, *argv, adapter=adapter) == 0
+        status = board.crew_mod.DEFAULTS["board"]["states"][argv[0]]
+        assert adapter.calls == [("move", KEY, status)]
+        row = transitions(moving)[-1]
+        assert {k: row[k] for k in ("key", "to", "ticket", "by")} == {
+            "key": KEY,
+            "to": argv[0],
+            "ticket": "fake",
+            "by": "lead-12",
+        }
+        assert row["ts"] == "2026-11-03T10:00:00Z"
+        assert {k: row[k] for k in extra} == extra
+        assert json.loads(capsys.readouterr().out.splitlines()[-1]) == row
+
+    def test_done_is_no_choice_of_move(self, moving, capsys):
+        with pytest.raises(SystemExit):
+            act(moving, "move", KEY, "done", adapter=fake())
+        err = capsys.readouterr().err
+        assert "invalid choice: 'done'" in err and "in_review" in err
+
+
+MERGED = {
+    "state": "MERGED",
+    "mergedAt": "2026-11-03T09:00:00Z",
+    "headRefName": f"feat/{KEY}-export",
+    "title": "feat: export",
+    "url": "https://github.com/acme/app/pull/7",
+}
+
+
+def pr(**changes):
+    return {"pr": {**MERGED, **changes}}
+
+
+class TestMoveInReview:
+    @pytest.mark.parametrize(
+        "answer, message",
+        [
+            (pr(headRefName="feat/export", title="feat: no key"), "PR acme/app#7 is not linked"),
+            (pr(headRefName="feat/PROJ-123-x", title="PROJ-123"), "PR acme/app#7 is not linked"),
+            (pr(state="OPEN"), "PR acme/app#7 is not merged"),
+            ({"exit": 1}, "PR acme/app#7: gh pr view failed: gh broke"),
+        ],
+    )
+    def test_each_pr_must_be_merged_and_linked(self, moving, capsys, answer, message):
+        gh_answers(moving, {"7 -R acme/app": answer})
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "move", KEY, "in_review", "--pr", "acme/app#7", adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        expected = message + (f" to {KEY}" if message.endswith("linked") else "")
+        assert err.strip() == f"board.py move {KEY} in_review: refused: {expected}"
+        assert_untouched(moving, before, out, adapter)
+
+    def test_linked_by_title_alone_passes(self, moving):
+        gh_answers(moving, {"7 -R acme/app": pr(headRefName="feat/x", title=f"{KEY}: export")})
+        assert act(moving, "move", KEY, "in_review", "--pr", "acme/app#7", adapter=fake()) == 0
+
+    def test_two_prs_with_one_unlinked_name_that_one(self, moving, capsys):
+        gh_answers(
+            moving,
+            {
+                "7 -R acme/app": pr(),
+                "https://github.com/acme/lib-repo/pull/3": pr(headRefName="x", title="y"),
+            },
+        )
+        argv = ["--pr", "acme/app#7", "--pr", "https://github.com/acme/lib-repo/pull/3"]
+        assert act(moving, "move", KEY, "in_review", *argv, adapter=fake()) == 1
+        assert capsys.readouterr().err.splitlines() == [
+            f"board.py move {KEY} in_review: refused: PR https://github.com/acme/lib-repo/pull/3 "
+            f"is not linked to {KEY}"
+        ]
+
+    def test_a_bare_number_is_ambiguous_when_the_plan_names_another_repo(self, moving, capsys):
+        assert act(moving, "move", KEY, "in_review", "--pr", "7", adapter=fake()) == 1
+        assert capsys.readouterr().err.strip() == (
+            f"board.py move {KEY} in_review: refused: PR 7 is ambiguous: "
+            "name it <owner>/<repo>#7 or by URL"
+        )
+        assert gh_calls(moving) == []
+
+    def test_qualified_refs_and_urls_reach_gh_as_given(self, moving):
+        url = "https://github.com/acme/lib-repo/pull/3"
+        gh_answers(moving, {"7 -R acme/app": pr(), url: pr(url=url)})
+        argv = ["--pr", "acme/app#7", "--pr", url]
+        assert act(moving, "move", KEY, "in_review", *argv, adapter=fake()) == 0
+        fields = ["--json", "state,mergedAt,headRefName,title,url"]
+        assert gh_calls(moving) == [
+            ["pr", "view", "7", "-R", "acme/app", *fields],
+            ["pr", "view", url, *fields],
+        ]
+        assert transitions(moving)[-1]["pr"] == [MERGED["url"], url]
+
+    def test_a_plan_of_its_own_repo_takes_a_bare_number(self, moving):
+        git(moving / "work", "remote", "add", "origin", "https://example.org/acme/lib-repo.git")
+        gh_answers(moving, {"7": pr()})
+        assert act(moving, "move", KEY, "in_review", "--pr", "7", adapter=fake()) == 0
+
+
+class TestJiraTransport:
+    def test_select_carries_the_bound_status_as_the_last_line(self, moving, capsys):
+        with_jira(moving)
+        green_lenses(moving)
+        assert act(moving, "select", KEY) == 0
+        out = capsys.readouterr().out
+        assert out.splitlines()[-1].startswith("carry: ")
+        assert carry_of(out) == [
+            {"op": "transition", "key": KEY, "status": "Selected for Development"}
+        ]
+        assert transitions(moving)[-1]["ticket"] == "carried"
+
+    def test_a_refused_move_carries_nothing(self, moving, capsys):
+        with_jira(moving)
+        assert act(moving, "move", KEY, "in_progress") == 1
+        out, err = capsys.readouterr()
+        assert "carry:" not in out + err
+
+    def test_ticketing_none_carries_nothing_and_says_so(self, moving, capsys):
+        with_row(moving, KEY, "selected")
+        assert act(moving, "move", KEY, "in_progress") == 0
+        assert "carry:" not in capsys.readouterr().out
+        assert transitions(moving)[-1]["ticket"] == "none"
+
+
+def snapshot(state_dir, data):
+    path = state_dir / "jira.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+class TestCheck:
+    def test_a_transition_without_a_row_is_drift(self, moving, capsys):
+        """The red arm of AC7: Jira moved on, the board's last row is still `selected`."""
+        with_row(moving, KEY, "selected")
+        assert act(moving, "check", "--jira", snapshot(moving, {KEY: "In Progress"})) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            f'drift: {KEY} jira "In Progress" board selected'
+        ]
+
+    def test_a_key_with_no_row_beyond_backlog_is_drift(self, moving, capsys):
+        jira = snapshot(moving, {"PROJ-2": "In Review", "PROJ-3": "Backlog", "PROJ-4": "On Hold"})
+        assert act(moving, "check", "--jira", jira) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            'drift: PROJ-2 jira "In Review" board none'
+        ]
+
+    def test_a_session_still_holding_a_reviewed_key_is_drift(self, moving, capsys):
+        with_row(moving, KEY, "in_review")
+
+        def hold(b):
+            b["sessions"][0]["keys"] = [KEY]
+
+        board.StateDir(moving / "board.json").write_board(hold)
+        assert act(moving, "check", "--jira", snapshot(moving, {KEY: "In Review"})) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            f"drift: {KEY} session lead-12 still holds it (board in_review)"
+        ]
+
+    def test_no_mismatch_is_exit_0_with_the_count(self, moving, capsys):
+        with_row(moving, KEY, "selected")
+        with_row(moving, KEY, "in_progress")
+        jira = snapshot(moving, {KEY: "In Progress", "PROJ-3": "Backlog"})
+        assert act(moving, "check", "--jira", jira) == 0
+        assert capsys.readouterr().out.strip() == "no drift (2 keys)"
+
+    def test_an_unknown_status_is_one_error_and_the_rest_is_judged(self, moving, capsys):
+        with_row(moving, "PROJ-3", "selected")
+        jira = snapshot(moving, {"PROJ-2": "Waiting for Godot", "PROJ-3": "In Review"})
+        assert act(moving, "check", "--jira", jira) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            'error: PROJ-2 jira "Waiting for Godot" is no board state',
+            'drift: PROJ-3 jira "In Review" board selected',
+        ]
+
+    @pytest.mark.parametrize("content", [None, "{not json", '["PROJ-1"]', '{"PROJ-1": 3}'])
+    def test_an_unusable_snapshot_is_exit_2(self, moving, capsys, content):
+        path = moving / "jira.json"
+        if content is not None:
+            path.write_text(content, encoding="utf-8")
+        assert act(moving, "check", "--jira", str(path)) == 2
+        assert "board.py check: --jira" in capsys.readouterr().err
+
+
+class TestTransitionsLog:
+    def test_transitions_only_grow(self, crewless):
+        state = board.StateDir(crewless / "board.json")
+        state.append_transition({"key": "PROJ-1", "to": "selected"})
+        first = state.transitions_path.read_bytes()
+        state.append_transition({"key": "PROJ-1", "to": "in_progress"})
+        assert state.transitions_path.read_bytes().startswith(first)
+        assert [r["to"] for r in state.transitions()] == ["selected", "in_progress"]
+
+
+class TestTicketAdapter:
+    def test_the_transports_by_ticketing(self):
+        assert isinstance(ticket_adapter.adapter_for({}), ticket_adapter.NoneAdapter)
+        jira = ticket_adapter.adapter_for({"board": {"ticketing": "jira"}})
+        assert isinstance(jira, ticket_adapter.SessionTransport)
+        assert [op.as_json() for op in jira.move("PROJ-1", "Done")] == [
+            {"op": "transition", "key": "PROJ-1", "status": "Done"}
+        ]
+        assert ticket_adapter.NoneAdapter().move("PROJ-1", "Done") == []
+
+    def test_an_unknown_transport_is_named(self):
+        with pytest.raises(
+            ValueError, match=r"board\.ticketing 'carrier-pigeon' has no transport"
+        ):
+            ticket_adapter.adapter_for({"board": {"ticketing": "carrier-pigeon"}})

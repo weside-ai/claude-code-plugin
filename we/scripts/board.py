@@ -15,6 +15,10 @@ Usage:
   board.py [--board FILE] escalation list [--waiting-on ROLE] [--stage STAGE]
   board.py [--board FILE] escalation advise E<n> --recommendation T
   board.py [--board FILE] escalation settle E<n> --outcome T [--via human]
+  board.py [--board FILE] select <KEY> [--plan PATH]
+  board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review>
+           [--reopen TRIGGER] [--epic EPIC] [--pr REF]…
+  board.py [--board FILE] check --jira FILE
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -58,6 +62,22 @@ escalation the decision story between two owners (docs/board.md § Escalations):
          `bundle` (a `--touches` record only once advised). `count` prints the records per role
          pair in this ISO week and warns past two. With `board.ticketing: jira`, `open` and
          `settle` print a `carry:` `comment` op on the story's ticket as the last line.
+select   moves a story to Selected when its `ENTRY_RULES["selected"]` hold, in order: the Ready
+         gate (`ready_gate.story_failures`), the plan-only tier (`plan_tier.py`) and a green
+         `ready-<KEY>` lens verdict (`lens_verdict.check`). The first failing group refuses with
+         `board.py select <KEY>: refused (<group>)` and its lines; no rule asks a human.
+move     moves a story to another state when that state's entry rule holds (docs/board.md
+         § Moves): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
+         after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`). A
+         refusal prints `board.py move <KEY> <state>: refused: <reason>` per failure.
+         Both write one row to board-transitions.jsonl after every rule passed, call the
+         ticketing adapter once (`ticket_adapter.py`, by `board.ticketing`) and, with
+         `board.ticketing: jira`, print `carry: <JSON list>` as the last line for the session
+         to execute with its ticketing tool. A refusal writes, calls and carries nothing.
+check    compares a ticketing snapshot (`--jira FILE`: a JSON object key → status name, read by
+         the session; the script reads no ticketing system) with the transitions log and the
+         board: one `drift:` line per mismatch, one `error:` line per unknown status, exit 1;
+         else `no drift (<n> keys)`. Exit 2 for an unusable snapshot.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
@@ -74,6 +94,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -87,6 +108,10 @@ if _HERE not in sys.path:
 
 import cold_reader  # noqa: E402
 import crew as crew_mod  # noqa: E402
+import lens_verdict  # noqa: E402
+import plan_tier  # noqa: E402
+import ready_gate  # noqa: E402
+import ticket_adapter  # noqa: E402
 import worker_launch as wl  # noqa: E402  (the one reader of `claude agents --json`)
 
 DEFAULT_BOARD = "~/.claude/we-state/board.json"
@@ -172,6 +197,7 @@ class StateDir:
         self.questions_path = self.board_path.with_name("board-questions.jsonl")
         self.decisions_path = self.board_path.with_name("board-decisions.jsonl")
         self.escalations_path = self.board_path.with_name("board-escalations.jsonl")
+        self.transitions_path = self.board_path.with_name("board-transitions.jsonl")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
 
     def board(self):
@@ -268,6 +294,20 @@ class StateDir:
 
     def append_escalation(self, line):
         return _append_jsonl(self.escalations_path, line)
+
+    def transitions(self):
+        return _read_jsonl(self.transitions_path)
+
+    def append_transition(self, row):
+        return _append_jsonl(self.transitions_path, row)
+
+    def last_rows(self):
+        """`{key: last transitions row}` in log order."""
+        out = {}
+        for row in self.transitions():
+            if isinstance(row.get("key"), str):
+                out[row["key"]] = row
+        return out
 
     def next_id(self, prefix, board):
         """`<prefix><n+1>` over every id the board, the answers file and the two logs carry."""
@@ -707,14 +747,11 @@ def fold_escalations(events):
     return records
 
 
-def _ticketing(crew):
-    return str((crew.get("board") or {}).get("ticketing") or "none")
-
-
-def _print_carry(crew, ops):
-    """The `carry:` last line for a session with `board.ticketing: jira`; nothing otherwise."""
-    if ops and _ticketing(crew) == "jira":
-        print("carry: " + json.dumps(ops, ensure_ascii=False))
+def _print_carry(ops):
+    """The `carry:` last stdout line naming what the session still carries; nothing to carry
+    prints nothing (ticket_adapter.py)."""
+    if ops:
+        print("carry: " + json.dumps([op.as_json() for op in ops], ensure_ascii=False))
 
 
 def _story_text(rec):
@@ -865,7 +902,7 @@ def cmd_escalation_open(state, args, crew, now):
     week = _week(rec["since_open"])
     for line in _count_lines(_pair_counts(records, week), week, only_warn=True):
         print(line)
-    _print_carry(crew, [{"op": "comment", "key": rec["key"], "text": _story_text(rec)}])
+    _print_carry(args.adapter.comment(rec["key"], _story_text(rec)))
     return 0
 
 
@@ -1046,7 +1083,7 @@ def cmd_escalation_settle(state, args, crew, now):
     state.write_board(drop, after=state.append_escalation)
     print(json.dumps(event, ensure_ascii=False))
     text = f"Escalation {args.id} settled at stage {rec['stage']} by {by}: {event['outcome']}"
-    _print_carry(crew, [{"op": "comment", "key": rec["key"], "text": text}])
+    _print_carry(args.adapter.comment(rec["key"], text))
     return 0
 
 
@@ -1094,6 +1131,349 @@ def cmd_escalation_count(state, args, crew, now):
     lines = _count_lines(_pair_counts(fold_escalations(state.escalations()), week), week)
     print("\n".join(lines) if lines else f"escalations: none in {week}")
     return 0
+
+
+# --- moves: select, move, check (docs/board.md § Moves) --------------------------------------
+
+MOVE_STATES = ("on_hold", "backlog", "in_progress", "in_review")  # `done` comes with its rule
+GH_TIMEOUT = 30
+_PR_URL = re.compile(r"^https?://[^/]+/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
+_PR_QUALIFIED = re.compile(r"^([\w.-]+)/([\w.-]+)#(\d+)$")
+
+
+class Move:
+    """What an entry rule reads: the key, the target state, the repo root, the plan, the crew,
+    the parsed arguments; `extra` collects the fields a passing rule adds to the row."""
+
+    def __init__(self, state, key, target, root, plan, crew, args):
+        self.state, self.key, self.target = state, key, target
+        self.root, self.plan, self.crew, self.args = root, plan, crew, args
+        self.extra = {}
+        self.warnings = []
+
+
+def _toplevel(verb):
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False
+        )
+    except OSError as exc:
+        raise BoardError(f"board.py {verb}: git not runnable: {exc.strerror}") from None
+    if done.returncode != 0:
+        raise BoardError(f"board.py {verb}: not inside a git checkout (no toplevel)")
+    return Path(done.stdout.strip())
+
+
+def _rel(root, plan):
+    try:
+        return plan.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+def rule_gate(m):
+    """The Ready gate's story checks on the checkout's plan."""
+    try:
+        failures, warnings = ready_gate.story_failures(m.plan)
+    except OSError as exc:
+        return [f"{m.plan}: unreadable ({type(exc).__name__})"]
+    m.warnings += warnings
+    return failures
+
+
+def rule_tier(m):
+    """The plan-only tier from `risk.command` on `risk.rules_from`; `none` without a command."""
+    rel = _rel(m.root, m.plan)
+    if rel is None:
+        return [f"tier not computed: the plan lies outside {m.root}"]
+    result = plan_tier.plan_tier(m.crew, m.root, m.key, rel, fetch=True)
+    m.warnings += result.warnings
+    if result.failure is not None:
+        return [f"tier not computed: {result.failure}"]
+    m.extra["tier"] = result.line
+    return []
+
+
+def rule_lenses(m):
+    """The `ready-<KEY>` lens verdict, green and bound to the current plan blob."""
+    try:
+        green, lines = lens_verdict.check(m.root, f"ready-{m.key}")
+    except (lens_verdict.UnusableError, OSError) as exc:
+        return [f"lens verdict unreadable: {exc}"]
+    return [] if green else lines
+
+
+def rule_reopen(m):
+    trigger = (m.args.reopen or "").strip()
+    if not trigger:
+        return ['on_hold needs --reopen "<trigger>" (what reopens it)']
+    m.extra["reopen"] = trigger
+    return []
+
+
+def rule_epic_approved(m):
+    epic = (m.args.epic or "").strip()
+    if not epic:
+        return ["backlog needs --epic <EPIC> (Backlog = the epic is approved)"]
+    hits = ready_gate.find_epic_plan(m.root / "docs" / "plans", epic)
+    if not hits:
+        return [f"no epic plan under docs/plans names {epic}"]
+    if len(hits) > 1:
+        return [
+            f"{epic} is named by more than one epic plan: " + " and ".join(p.name for p, _ in hits)
+        ]
+    path, text = hits[0]
+    status = ready_gate.frontmatter(text).get("status", "")
+    if not status.startswith("approved"):
+        return [f"epic {epic} is not approved ({path.name} status: {status or 'none'})"]
+    m.extra["epic"] = epic
+    return []
+
+
+SELECT_ONLY = "use board.py select (the Ready gate, the tier and the lenses decide Selected)"
+
+
+def rule_pulled(m):
+    last = m.state.last_rows().get(m.key)
+    if last is None or last.get("to") != "selected":
+        was = "no row" if last is None else f"its last row is {last.get('to')}"
+        return [f"in_progress needs the key's last row to be selected ({was})"]
+    return []
+
+
+def _own_repo(root):
+    done = subprocess.run(
+        ["git", "-C", str(root), "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    url = done.stdout.strip().rstrip("/") if done.returncode == 0 else ""
+    name = re.split(r"[/:]", url)[-1] if url else ""
+    return name[:-4] if name.endswith(".git") else name
+
+
+def _foreign_repos(m):
+    """The `**Repo:**` names of the story plan's phases other than the plan's own repo."""
+    try:
+        text = m.plan.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    own = _own_repo(m.root)
+    return sorted({p.repo for p in ready_gate.phases(text) if p.repo and p.repo != own})
+
+
+def _gh_argv(ref):
+    found = _PR_QUALIFIED.match(ref)
+    if found:
+        return [found.group(3), "-R", f"{found.group(1)}/{found.group(2)}"]
+    return [ref]
+
+
+def _linked(key, pr):
+    rx = re.compile(r"(?<![A-Z0-9-])" + re.escape(key) + r"(?![0-9])")
+    return any(rx.search(str(pr.get(f) or "")) for f in ("headRefName", "title"))
+
+
+def _view_pr(ref, root):
+    """(the PR's JSON, None) or (None, the failure) for one `gh pr view` of `ref`."""
+    argv = ["gh", "pr", "view", *_gh_argv(ref), "--json", "state,mergedAt,headRefName,title,url"]
+    try:
+        done = subprocess.run(
+            argv, capture_output=True, text=True, timeout=GH_TIMEOUT, check=False, cwd=root
+        )
+    except FileNotFoundError:
+        return None, f"PR {ref}: gh not found"
+    except subprocess.TimeoutExpired:
+        return None, f"PR {ref}: gh ran past {GH_TIMEOUT} s"
+    if done.returncode != 0:
+        why = (done.stderr.strip().splitlines() or [f"exit {done.returncode}"])[-1]
+        return None, f"PR {ref}: gh pr view failed: {why}"
+    try:
+        pr = json.loads(done.stdout)
+    except ValueError:
+        return None, f"PR {ref}: gh printed no JSON"
+    if not isinstance(pr, dict):
+        return None, f"PR {ref}: gh printed no JSON object"
+    return pr, None
+
+
+def rule_pr_merged_and_linked(m):
+    refs = [r.strip() for r in m.args.pr or [] if r.strip()]
+    if not refs:
+        return ["in_review needs --pr <ref> (a merged PR linked to the key)"]
+    failures, urls, foreign = [], [], None
+    for ref in refs:
+        if not (_PR_URL.match(ref) or _PR_QUALIFIED.match(ref) or ref.isdigit()):
+            failures.append(f"PR {ref} is no URL, <owner>/<repo>#<n> or number")
+            continue
+        if ref.isdigit():
+            foreign = _foreign_repos(m) if foreign is None else foreign
+            if foreign:
+                failures.append(f"PR {ref} is ambiguous: name it <owner>/<repo>#{ref} or by URL")
+                continue
+        pr, failure = _view_pr(ref, m.root)
+        if failure:
+            failures.append(failure)
+        elif pr.get("state") != "MERGED":
+            failures.append(f"PR {ref} is not merged")
+        elif not _linked(m.key, pr):
+            failures.append(f"PR {ref} is not linked to {m.key}")
+        else:
+            urls.append(pr.get("url") or ref)
+    if not failures:
+        m.extra["pr"] = urls
+    return failures
+
+
+# One list of (group, rule) per target state, run in order; the first failing group stops the
+# run. `selected` is exactly the Ready gate, the tier and the lenses: no rule asks a human.
+ENTRY_RULES = {
+    "on_hold": [("reopen", rule_reopen)],
+    "backlog": [("epic", rule_epic_approved)],
+    "selected": [("ready gate", rule_gate), ("tier", rule_tier), ("lenses", rule_lenses)],
+    "in_progress": [("pulled", rule_pulled)],
+    "in_review": [("pr", rule_pr_merged_and_linked)],
+}
+
+
+def _caller():
+    """The calling session's name for the row's `by`; its id or `unknown` when it has none."""
+    try:
+        return own_session_name()[0]
+    except BoardError:
+        return os.environ.get("CLAUDE_CODE_SESSION_ID") or "unknown"
+
+
+def _transition(state, args, crew, now, target, head):
+    """Run the target's entry rules, then write the row, call the adapter once and print the
+    row and the `carry:` line; a refusal writes, calls and carries nothing."""
+    key = args.key
+    failures = _key_failure(crew, key, head.split()[1])
+    if failures:
+        raise BoardError("\n".join(failures))
+    root = _toplevel(head.split()[1])
+    plan = (
+        Path(args.plan) if getattr(args, "plan", None) else root / "docs/plans" / f"{key}-story.md"
+    )
+    m = Move(state, key, target, root, plan, crew, args)
+    for group, rule in ENTRY_RULES[target]:
+        lines = rule(m)
+        if lines:
+            for line in m.warnings:
+                print(line, file=sys.stderr)
+            if target == "selected":
+                raise BoardError("\n".join([f"{head}: refused ({group})", *lines]))
+            raise BoardError("\n".join(f"{head}: refused: {line}" for line in lines))
+    for line in m.warnings:
+        print(line, file=sys.stderr)
+    status = (crew.get("board") or {}).get("states", {}).get(target) or (
+        crew_mod.DEFAULTS["board"]["states"][target]
+    )
+    adapter = args.adapter
+    last = state.last_rows().get(key)
+    row = {
+        "key": key,
+        "from": last.get("to") if last else None,
+        "to": target,
+        "ts": _iso(now),
+        "by": _caller(),
+        **m.extra,
+        "ticket": adapter.name,
+    }
+    state.append_transition(row)
+    ops = adapter.move(key, status)
+    if "tier" in m.extra:
+        print(f"tier: {m.extra['tier']}")
+    print(json.dumps(row, ensure_ascii=False))
+    _print_carry(ops)
+    return 0
+
+
+def cmd_select(state, args, crew, now):
+    return _transition(state, args, crew, now, "selected", f"board.py select {args.key}")
+
+
+def cmd_move(state, args, crew, now):
+    head = f"board.py move {args.key} {args.state}"
+    if args.state == "selected":
+        raise BoardError(f"{head}: refused: {SELECT_ONLY}")
+    return _transition(state, args, crew, now, args.state, head)
+
+
+def _jira_snapshot(path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BoardError(f"board.py check: --jira {path}: {exc.strerror}", code=2) from None
+    except ValueError:
+        raise BoardError(f"board.py check: --jira {path}: no valid JSON", code=2) from None
+    if not isinstance(data, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in data.items()
+    ):
+        raise BoardError(
+            f"board.py check: --jira {path}: needs an object of key → status name", code=2
+        )
+    return data
+
+
+def cmd_check(state, args, crew, now):
+    snapshot = _jira_snapshot(args.jira)
+    states = {
+        **crew_mod.DEFAULTS["board"]["states"],
+        **((crew.get("board") or {}).get("states") or {}),
+    }
+    by_name = {name: st for st, name in states.items()}
+    order = list(crew_mod.STATES)
+    last = state.last_rows()
+    found = []
+    for key, status in snapshot.items():
+        st = by_name.get(status)
+        if st is None:
+            found.append((key, f'error: {key} jira "{status}" is no board state'))
+            continue
+        row = last.get(key)
+        if row is None:
+            if order.index(st) > order.index("backlog"):
+                found.append((key, f'drift: {key} jira "{status}" board none'))
+        elif row.get("to") != st:
+            found.append((key, f'drift: {key} jira "{status}" board {row.get("to")}'))
+    for session in state.board().get("sessions") or []:
+        if not isinstance(session, dict):
+            continue
+        for key in session.get("keys") or []:
+            if isinstance(key, str) and (last.get(key) or {}).get("to") == "in_review":
+                found.append(
+                    (
+                        key,
+                        f"drift: {key} session {session.get('name')} still holds it (board in_review)",
+                    )
+                )
+    if not found:
+        print(f"no drift ({len(snapshot)} keys)")
+        return 0
+    for _key, line in sorted(found, key=lambda x: x[0]):
+        print(line)
+    return 1
+
+
+def _add_move_verbs(verbs):
+    sel = verbs.add_parser("select", help="move a story to Selected: Ready gate, tier, lenses")
+    sel.add_argument("key")
+    sel.add_argument("--plan", help="the story plan (default docs/plans/<KEY>-story.md)")
+    sel.set_defaults(run=cmd_select)
+
+    mv = verbs.add_parser("move", help="move a story to a state whose entry rule holds")
+    mv.add_argument("key")
+    mv.add_argument("state", choices=(*MOVE_STATES[:2], "selected", *MOVE_STATES[2:]))
+    mv.add_argument("--pr", action="append", metavar="REF", help="in_review: a merged PR (repeat)")
+    mv.add_argument("--reopen", metavar="TRIGGER", help="on_hold: what reopens it")
+    mv.add_argument("--epic", metavar="EPIC", help="backlog: the approved epic")
+    mv.set_defaults(run=cmd_move)
+
+    ck = verbs.add_parser("check", help="board-vs-ticketing drift over a snapshot")
+    ck.add_argument("--jira", required=True, metavar="FILE", help="JSON object key → status name")
+    ck.set_defaults(run=cmd_check)
 
 
 def parser():
@@ -1156,13 +1536,21 @@ def parser():
     el.set_defaults(run=cmd_escalation_list)
     ec = ev.add_parser("count", help="escalations per role pair this ISO week")
     ec.set_defaults(run=cmd_escalation_count)
+
+    _add_move_verbs(verbs)
     return p
 
 
-def main(argv=None, now=None):
+def main(argv=None, now=None, adapter=None):
+    """`adapter` is the tests' FakeAdapter; None means the crew's transport (`adapter_for`)."""
     args = parser().parse_args(argv)
     try:
         crew = None if args.verb == "answer" else load_crew()
+        if crew is not None:
+            try:
+                args.adapter = adapter or ticket_adapter.adapter_for(crew)
+            except ValueError as exc:
+                raise BoardError(f"crew: {exc}") from None
         return args.run(StateDir(args.board), args, crew, now or _now())
     except BoardError as exc:
         print(str(exc), file=sys.stderr)
