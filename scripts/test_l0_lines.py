@@ -159,7 +159,12 @@ CASES = [
     ("F55", STORY_PLAN, r"`draft` until the user approved", r"Approval is per epic"),
     ("F56", "desc:" + PLAN_COMMIT, r"\bsaga\b|\bPRD\b", None),
     ("F57", PLAN_COMMIT, r"/we:(vision|saga|story)\b", None),
-    ("F58", TICKETING, r"Only `/we:merged` moves a ticket", r"`board.py move` once it exists"),
+    (
+        "F58",
+        TICKETING,
+        r"Only `/we:merged` moves a ticket",
+        r"a move goes through `board.py select` or `board.py move`",
+    ),
     # successor cases for deleted rows whose content survives elsewhere
     ("F27/F42/F43 successor", STORY_PLAN, r"until the user approved", r"never per story"),
     ("F28/F44 successor", MASTER, r"plans to the epic owner", r"the owner judges, never starts"),
@@ -188,6 +193,19 @@ CASES = [
     ("R1 the refiner writes draft", PLAN_STORY, r"status: approved", r"`status: draft`"),
     ("R2 goals bound in the crew", SETUP, r"Skip → no goal check", r"bind `files\.goals`"),
     ("R2 no crew, no goal check", SETUP, None, r"the goal check needs a crew"),
+    # watch rows: the PR watcher rule has one owner, L0 §Sessions
+    (
+        "W1 pr watch follows the L0",
+        PR,
+        r"Whoever opens a PR watches it until the merge",
+        r"The watch follows L0 §Sessions",
+    ),
+    (
+        "W2 master arms after the worker's green",
+        MASTER,
+        r"the worker owns the watch and you arm none",
+        r"watches until green \(L0 §Sessions\), then you arm it `--until-merged`",
+    ),
 ]
 
 

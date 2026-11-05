@@ -72,9 +72,16 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
-  "agents": { "visible_teammates": false, "worker_launch": "subagent" }
+  "agents": { "visible_teammates": false, "worker_launch": "subagent" },
+  "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",
+                  "rc_tag_glob": "<RC tag glob, e.g. v*-rc.*>" }
 }
 ```
+
+The Done-row sample sits beside them but in the crew file's `acceptance` block (step 4a), which
+`board.py` reads: `acceptance.done_sample` (default 5, `null` = off) samples every n-th Done by
+receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sampler's
+(`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Acceptance).
 
 `/we:merged` moves a landed story to In Review, never to Done (L0 §Lifecycle;
 `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5).

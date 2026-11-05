@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import subprocess
@@ -744,3 +745,1212 @@ class TestLogFollowsTheBoard:
         assert jsonl(crewed / log) == before, (
             f"{verb}: {log} grew although board.json was not written"
         )
+
+
+# --- escalation (decision story) -------------------------------------------------------------
+
+LATER = datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc)  # past the 14:00Z self SLA
+NEXT_MORNING = datetime(2026, 11, 4, 8, 0, tzinfo=timezone.utc)  # past 19:00Z, across the night
+
+
+@pytest.fixture
+def escalating(crewed):
+    """The generic crew with `fallback.escalation: human_bundle`; the escalation holder `nora`."""
+    path = crewed / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["fallback"] = {"escalation": "human_bundle"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return crewed
+
+
+def with_jira(state_dir):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["board"] = {"ticketing": "jira"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def holder_line(state_dir, state):
+    def mutate(b):
+        b["sessions"] = [s for s in b["sessions"] if s["name"] != "nora"]
+        if state is not None:
+            b["sessions"].append({"name": "nora", "state": state})
+
+    board.StateDir(state_dir / "board.json").write_board(mutate)
+
+
+def open_argv(key="PROJ-4", parties="product,architecture", touches=None, **drop):
+    argv = {
+        "--key": key,
+        "--parties": parties,
+        "--question": "Ship the paywall in v1?",
+        "--a": "no paywall in v1",
+        "--a-cost": "two weeks of revenue",
+        "--b": "paywall in v1",
+        "--b-cost": "a second billing seam",
+        "--reversible": "yes",
+    }
+    if touches:
+        argv["--touches"] = touches
+    for flag in drop:
+        argv.pop("--" + flag.replace("_", "-"))
+    return ["escalation", "open", *[x for kv in argv.items() for x in kv]]
+
+
+def esc_log(state_dir):
+    return jsonl(state_dir / "board-escalations.jsonl")
+
+
+def record(state_dir, eid="E1"):
+    return board.fold_escalations(esc_log(state_dir))[eid]
+
+
+def carry_of(out):
+    last = out.strip().splitlines()[-1]
+    assert last.startswith("carry: "), out
+    return json.loads(last[len("carry: ") :])
+
+
+def opened(state_dir, monkeypatch, who="ada", now=NOW, **kw):
+    pin(monkeypatch, who)
+    assert go(state_dir, *open_argv(**kw), now=now) == 0
+
+
+class TestEscalation:
+    def test_open_writes_the_decision_story(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        out = capsys.readouterr().out
+        assert "carry:" not in out  # ticketing none
+        [line] = esc_log(escalating)
+        assert line["event"] == "open" and line["id"] == "E1"
+        rec = record(escalating)
+        assert rec.pop("since_open") == "2026-11-03T10:00Z"  # the week `count` files it under
+        assert {k: rec[k] for k in rec if k not in ("ts",)} == {
+            "id": "E1",
+            "key": "PROJ-4",
+            "parties": ["product", "architecture"],
+            "by": "product",
+            "question": "Ship the paywall in v1?",
+            "a": "no paywall in v1",
+            "a_cost": "two weeks of revenue",
+            "b": "paywall in v1",
+            "b_cost": "a second billing seam",
+            "reversible": True,
+            "touches": None,
+            "stage": "self",
+            "waiting_on": "product,architecture",
+            "since": "2026-11-03T10:00Z",
+            "sla_due": "2026-11-03T14:00Z",
+            "open": True,
+        }
+
+    def test_open_with_jira_carries_the_story_as_a_comment(self, escalating, monkeypatch, capsys):
+        with_jira(escalating)
+        opened(escalating, monkeypatch, who="vic")
+        [op] = carry_of(capsys.readouterr().out)
+        assert op["op"] == "comment" and op["key"] == "PROJ-4"
+        assert op["text"].splitlines() == [
+            "Escalation E1 (product/architecture): Ship the paywall in v1?",
+            "product: no paywall in v1 (cost: two weeks of revenue)",
+            "architecture: paywall in v1 (cost: a second billing seam)",
+            "Reversible: yes",
+            "Waiting on: product,architecture since 2026-11-03T10:00Z, due 2026-11-03T14:00Z",
+        ]
+
+    @pytest.mark.parametrize(
+        "who, argv, message",
+        [
+            (
+                "otto",
+                open_argv(),
+                "this session holds neither roles.product nor roles.architecture",
+            ),
+            ("ada", open_argv(question=1), "missing --question"),
+            ("ada", open_argv(b_cost=1), "missing --b-cost"),
+            ("ada", open_argv(reversible=1), "missing --reversible"),
+            ("ada", open_argv(parties="product,sales"), "party 'sales' is no role key"),
+            ("ada", open_argv(parties="product"), "--parties names two different role keys"),
+            ("ada", open_argv(parties="product,product"), "--parties names two different"),
+            ("ada", open_argv(key="nokey"), "does not match naming.key"),
+            ("ada", [*open_argv()[:-1], "maybe"], "--reversible 'maybe' is not yes or no"),
+            ("ada", open_argv(touches="taste"), "--touches 'taste' is not one of"),
+        ],
+    )
+    def test_open_refusals_write_nothing(
+        self, escalating, monkeypatch, capsys, who, argv, message
+    ):
+        pin(monkeypatch, who)
+        before = (escalating / "board.json").read_bytes()
+        assert go(escalating, *argv) == 1
+        assert message in capsys.readouterr().err
+        assert esc_log(escalating) == []
+        assert (escalating / "board.json").read_bytes() == before
+
+    def test_not_past_the_sla_does_not_move(self, escalating, monkeypatch):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "escalation", "route", now=NOW.replace(hour=13, minute=59)) == 0
+        assert record(escalating)["stage"] == "self"
+        assert len(esc_log(escalating)) == 1
+
+    def test_an_active_holder_gets_the_escalation(self, escalating, monkeypatch, capsys):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "escalation", "route", now=LATER) == 0
+        assert "route: E1 PROJ-4 self → escalation" in capsys.readouterr().out
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"], rec["since"], rec["sla_due"]) == (
+            "escalation",
+            "escalation",
+            "2026-11-03T15:00Z",
+            "2026-11-03T19:00Z",
+        )
+        assert [i["kind"] for i in board_of(escalating)["news"] if i.get("id") == "E1"] == [
+            "escalation"
+        ]
+
+    def test_idle_holder_gets_escalation(self, escalating, monkeypatch):
+        holder_line(escalating, "idle")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"]) == ("escalation", "escalation"), (
+            "an idle escalation holder can still decide; only parked or absent falls back"
+        )
+
+    @pytest.mark.parametrize("state", ["parked", None])
+    def test_parked_or_absent_holder_falls_back_to_the_bundle(
+        self, escalating, monkeypatch, state
+    ):
+        holder_line(escalating, state)
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"]) == ("bundle", "human")
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert item["kind"] == "todo"
+        assert item["title"] == "Escalation E1 PROJ-4: Ship the paywall in v1?"
+        # a second route leaves the bundle record and its single item alone
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        assert [i.get("id") for i in board_of(escalating)["news"]].count("E1") == 1
+        assert len(esc_log(escalating)) == 2
+
+    def test_a_past_sla_escalation_goes_to_the_bundle(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        evening = datetime(2026, 11, 3, 17, 0, tzinfo=timezone.utc)  # 18:00 Berlin
+        go(escalating, "escalation", "route", now=evening)
+        # two hours left today (to 20:00 Berlin), two more from 08:00 Berlin: due 09:00Z
+        assert record(escalating)["sla_due"] == "2026-11-04T09:00Z"
+        go(
+            escalating,
+            "escalation",
+            "route",
+            now=datetime(2026, 11, 4, 8, 59, tzinfo=timezone.utc),
+        )
+        assert record(escalating)["stage"] == "escalation"
+        go(escalating, "escalation", "route", now=datetime(2026, 11, 4, 9, 0, tzinfo=timezone.utc))
+        assert record(escalating)["stage"] == "bundle"
+
+    def test_route_is_the_coordinators(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        assert go(escalating, "escalation", "route", now=LATER) == 1
+        assert "only the coordinator routes" in capsys.readouterr().err
+
+    def test_bundle_routes_first_and_lists_the_record(self, escalating, monkeypatch):
+        holder_line(escalating, "parked")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "bundle", now=LATER) == 0
+        item = board_of(escalating)["news"][-1]
+        assert item["id"] == "B-2026-11-03"
+        assert item["title"] == "Bundle 2026-11-03: 0 decisions · 1 open questions · 1 escalations"
+        assert item["body"].splitlines() == [
+            "open: Q7",
+            "escalation E1 PROJ-4: Ship the paywall in v1?",
+        ]
+
+    def test_settle_by_a_party_at_self(self, escalating, monkeypatch, capsys):
+        with_jira(escalating)
+        opened(escalating, monkeypatch)
+        capsys.readouterr()
+        pin(monkeypatch, "vic")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "no paywall") == 0
+        [op] = carry_of(capsys.readouterr().out)
+        assert op == {
+            "op": "comment",
+            "key": "PROJ-4",
+            "text": "Escalation E1 settled at stage self by architecture: no paywall",
+        }
+        rec = record(escalating)
+        assert rec["open"] is False and rec["outcome"] == "no paywall"
+
+    @pytest.mark.parametrize(
+        "stage_now, who, via, message",
+        [
+            (NOW, "nora", None, "E1 is at stage self; only a party settles it"),
+            (NOW, "otto", "human", "--via human settles only a record at stage bundle"),
+            (LATER, "ada", None, "E1 is at stage escalation; only roles.escalation settles it"),
+            (LATER, "nora", "human", "--via human settles only a record at stage bundle"),
+        ],
+    )
+    def test_settle_refusals(self, escalating, monkeypatch, capsys, stage_now, who, via, message):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=stage_now)
+        before = esc_log(escalating)
+        pin(monkeypatch, who)
+        argv = ["escalation", "settle", "E1", "--outcome", "x"] + (["--via", via] if via else [])
+        assert go(escalating, *argv, now=stage_now) == 1
+        assert message in capsys.readouterr().err
+        assert esc_log(escalating) == before
+
+    def test_settle_by_the_holder_and_by_the_coordinator_for_the_human(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "a", now=LATER) == 0
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=NEXT_MORNING)  # past E2's 19:00Z
+        assert record(escalating, "E2")["stage"] == "bundle"
+        assert (
+            go(escalating, "escalation", "settle", "E2", "--outcome", "b", "--via", "human") == 0
+        )
+        assert not record(escalating, "E1")["open"] and not record(escalating, "E2")["open"]
+        assert (
+            go(escalating, "escalation", "settle", "E2", "--outcome", "c", "--via", "human") == 1
+        )
+        assert "E2 is settled" in capsys.readouterr().err
+
+    def test_touches_goes_to_bundle_with_advice(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="money")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["advice_from"], rec["touches"]) == (
+            "bundle",
+            "escalation",
+            "money",
+        ), "a money question goes to the human with the escalation role's advice"
+        assert any(i.get("id") == "E1" for i in board_of(escalating)["news"])
+
+    def test_settle_waits_for_advice(self, escalating, monkeypatch, capsys):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="vision")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        assert (
+            go(escalating, "escalation", "settle", "E1", "--outcome", "x", "--via", "human") == 1
+        )
+        assert "waiting for the escalation role's recommendation" in capsys.readouterr().err
+        go(escalating, "bundle", now=LATER)
+        assert (
+            "escalation E1 PROJ-4: Ship the paywall in v1? (advice pending)"
+            in (board_of(escalating)["news"][-1]["body"])
+        )
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "a") == 1
+        assert "only roles.escalation advises" in capsys.readouterr().err
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "take a") == 0
+        assert record(escalating)["recommendation"] == "take a"
+        pin(monkeypatch, "otto")
+        assert (
+            go(escalating, "escalation", "settle", "E1", "--outcome", "a", "--via", "human") == 0
+        )
+
+    def test_advise_needs_a_touches_record(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "a") == 1
+        assert "E1 asks for no advice" in capsys.readouterr().err
+
+    def test_count_per_pair(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, who="vic", parties="architecture,product", key="PROJ-5")
+        out = capsys.readouterr().out
+        assert "warning" not in out
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "count")
+        assert capsys.readouterr().out.splitlines() == ["architecture/product 2 in 2026-W45"]
+        opened(escalating, monkeypatch, key="PROJ-6")
+        out = capsys.readouterr().out.splitlines()
+        assert out[-2:] == [
+            "architecture/product 3 in 2026-W45",
+            "warning: architecture/product: more than two escalations this week; "
+            "the right in crew.json is drawn wrong",
+        ]
+        go(escalating, "escalation", "count")
+        assert capsys.readouterr().out.splitlines() == out[-2:]
+        # another week counts apart
+        go(escalating, "escalation", "count", now=datetime(2026, 11, 10, 10, tzinfo=timezone.utc))
+        assert capsys.readouterr().out.strip() == "escalations: none in 2026-W46"
+
+    def test_a_failed_board_write_appends_no_route_line(self, escalating, monkeypatch):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            go(escalating, "escalation", "route", now=LATER)
+        assert len(esc_log(escalating)) == 1
+
+
+class TestEscalationSignal:
+    """A record routed to stage `escalation` reaches its holder: a news item and `list`."""
+
+    def test_a_routed_record_shows_in_list_waiting_on_its_role(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5", now=LATER)  # still at self
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list", "--waiting-on", "escalation") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture escalation since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z"
+        ]
+        pin(monkeypatch, "nora")  # default: the caller's own role
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines()[0].startswith("E1 PROJ-4 ")
+        pin(monkeypatch, "ada")
+        assert go(escalating, "escalation", "list") == 0
+        assert [x.split()[0] for x in capsys.readouterr().out.splitlines()] == ["E2"]
+        argv = ["escalation", "list", "--waiting-on", "product", "--stage", "bundle"]
+        assert go(escalating, *argv) == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on product at bundle"
+
+    def test_list_refusals(self, escalating, monkeypatch, capsys):
+        pin(monkeypatch, "zed")
+        assert go(escalating, "escalation", "list") == 1
+        assert "holds no role; pass --waiting-on" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "sales") == 1
+        assert "--waiting-on 'sales' is no role key" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "human", "--stage", "x") == 1
+        assert "--stage 'x' is not one of self, escalation, bundle" in capsys.readouterr().err
+
+    def test_route_to_escalation_writes_one_news_item_for_the_holder(
+        self, escalating, monkeypatch
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert (item["kind"], item["for"], item["title"]) == (
+            "escalation",
+            "escalation",
+            "Escalation E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # moving on to the bundle replaces it: one item per id, now the human's todo
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert item["kind"] == "todo"
+
+    def test_a_failed_board_write_leaves_no_escalation_news(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        before = (escalating / "board.json").read_bytes()
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            go(escalating, "escalation", "route", now=LATER)
+        assert (escalating / "board.json").read_bytes() == before
+        assert len(esc_log(escalating)) == 1
+
+    def test_a_touches_record_waits_on_the_holder_until_advised(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="money")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture bundle since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z (advice pending)"
+        ]
+        news = {
+            i["id"]: i for i in board_of(escalating)["news"] if i.get("id", "").startswith("E1")
+        }
+        assert news["E1"]["kind"] == "todo" and "for" not in news["E1"]
+        assert (news["E1a"]["kind"], news["E1a"]["for"], news["E1a"]["title"]) == (
+            "escalation",
+            "escalation",
+            "Advice E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # a second route adds no second advice item
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert (ids.count("E1"), ids.count("E1a")) == (1, 1)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "take a") == 0
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on escalation"
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1a" not in ids and "E1" in ids, "advice drops the holder's item, not the todo"
+
+    def test_settle_drops_the_records_news_items(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert {"E1", "E2"} <= {i.get("id") for i in board_of(escalating)["news"]}
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "a") == 0
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1" not in ids and "E2" in ids
+
+    def test_settle_via_human_drops_the_todo(self, escalating, monkeypatch):
+        holder_line(escalating, "parked")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert "E1" in [i.get("id") for i in board_of(escalating)["news"]]
+        argv = ["escalation", "settle", "E1", "--outcome", "a", "--via", "human"]
+        assert go(escalating, *argv) == 0
+        assert "E1" not in [i.get("id") for i in board_of(escalating)["news"]]
+
+
+# --- moves: select, move, check (the ticketing adapter, the transitions log, carry:) ---------
+
+import lens_verdict  # noqa: E402
+import test_plan_tier  # noqa: E402
+import ticket_adapter  # noqa: E402
+
+GATE_PLANS = HERE / "fixtures" / "ready_gate" / "plans"
+KEY = "PROJ-12"
+GREEN_LENS = '```json\n{"findings": []}\n```'
+
+
+def git(root, *args):
+    return test_plan_tier.git(root, *args)
+
+
+@pytest.fixture
+def moving(crewed, monkeypatch):
+    """`work` as a git repo: the generic crew with `risk.command` bound to the fake classifier,
+    a green story plan PROJ-12 (epic PROJ-1, a `lib-repo` phase), the gate's epic plans and a
+    draft epic PROJ-5, all on `origin/main`; the fake `gh` reads $FAKE_GH."""
+    work = crewed / "work"
+    (work / ".git").rmdir()
+    crew_path = work / ".weside" / "crew.json"
+    data = json.loads(crew_path.read_text(encoding="utf-8"))
+    data["risk"] = {"command": "scripts/risk"}
+    crew_path.write_text(json.dumps(data), encoding="utf-8")
+    plans = work / "docs" / "plans"
+    plans.mkdir(parents=True)
+    for name in ("PROJ-1-epic.md", "PROJ-2-epic.md"):
+        shutil.copy(GATE_PLANS / name, plans / name)
+    epic = (GATE_PLANS / "PROJ-1-epic.md").read_text(encoding="utf-8")
+    (plans / "PROJ-5-epic.md").write_text(
+        epic.replace("ticket: PROJ-1", "ticket: PROJ-5").replace(
+            "status: approved", "status: draft"
+        ),
+        encoding="utf-8",
+    )
+    story = (GATE_PLANS / "green.md").read_text(encoding="utf-8")
+    story = story.replace("[receipt]", "[`ci`: `tests/test_export.py`]")
+    (plans / f"{KEY}-story.md").write_text(story, encoding="utf-8")
+    (work / "scripts").mkdir()
+    shutil.copy(test_plan_tier.RISK, work / "scripts" / "risk")
+    git(work, "init", "-q", "-b", "main")
+    git(work, "config", "user.email", "t@example.org")
+    git(work, "config", "user.name", "t")
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "base")
+    git(work, "update-ref", "refs/remotes/origin/main", "HEAD")
+    for var in ("FAKE_RISK_EXIT", "FAKE_RISK_LINE", "FAKE_RISK_LOG"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("FAKE_GH", str(crewed / "gh.json"))
+    monkeypatch.setenv("FAKE_GH_LOG", str(crewed / "gh-calls.jsonl"))
+    (crewed / "gh.json").write_text("{}", encoding="utf-8")
+    return crewed
+
+
+def green_lenses(state_dir, key=KEY):
+    root = state_dir / "work"
+    vid = f"ready-{key}"
+    panel = lens_verdict.plan(root, "ready", key)
+    for entry in panel["entries"]:
+        lens_verdict.write(root, vid, entry["lens"], answer=GREEN_LENS)
+    return vid
+
+
+def gh_answers(state_dir, table):
+    (state_dir / "gh.json").write_text(json.dumps(table), encoding="utf-8")
+
+
+def gh_calls(state_dir):
+    return jsonl(state_dir / "gh-calls.jsonl")
+
+
+def transitions(state_dir):
+    return jsonl(state_dir / "board-transitions.jsonl")
+
+
+def act(state_dir, *argv, adapter=None, now=NOW):
+    return board.main(["--board", str(state_dir / "board.json"), *argv], now=now, adapter=adapter)
+
+
+def fake():
+    return ticket_adapter.FakeAdapter({KEY: "Backlog"})
+
+
+def assert_untouched(state_dir, before, out, adapter):
+    assert adapter.calls == [] and adapter.statuses == {KEY: "Backlog"}
+    assert not (state_dir / "board-transitions.jsonl").exists()
+    assert (state_dir / "board.json").read_bytes() == before
+    assert "carry:" not in out
+
+
+def with_row(state_dir, key, to):
+    board.StateDir(state_dir / "board.json").append_transition({"key": key, "to": to})
+
+
+class TestSelect:
+    def test_a_plan_failing_the_gate_is_refused_with_its_lines(self, moving, capsys):
+        plan = moving / "work" / "docs" / "plans" / f"{KEY}-story.md"
+        plan.write_text(plan.read_text().replace("**Then** it writes", "it writes"))
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        lines = [x for x in err.splitlines() if not x.startswith("warning:")]
+        assert lines == [
+            f"board.py select {KEY}: refused (ready gate)",
+            f"{moving / 'work' / 'docs' / 'plans' / f'{KEY}-story.md'}: AC2: no `**Then**`",
+        ]
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_tier_that_cannot_be_computed_is_refused(self, moving, monkeypatch, capsys):
+        monkeypatch.setenv("FAKE_RISK_EXIT", "2")
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.splitlines()[-2:] == [
+            f"board.py select {KEY}: refused (tier)",
+            "tier not computed: risk.command exit 2: risk: refused",
+        ]
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_green_story_selects_with_its_tier(self, moving, monkeypatch, capsys):
+        green_lenses(moving)
+        monkeypatch.setenv("FAKE_RISK_LINE", "T2 one-way money")
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 0
+        out = capsys.readouterr().out
+        assert out.splitlines()[0] == "tier: T2 one-way money"
+        [row] = transitions(moving)
+        assert {k: row[k] for k in ("key", "from", "to", "tier", "ticket", "by")} == {
+            "key": KEY,
+            "from": None,
+            "to": "selected",
+            "tier": "T2 one-way money",
+            "ticket": "fake",
+            "by": "lead-12",
+        }
+        assert adapter.calls == [("move", KEY, "Selected for Development")]
+
+    def test_select_never_asks(self, moving):
+        green_lenses(moving)
+        answers = moving / "board-answers.jsonl"
+        answers.write_text('{"id": "Q7", "answer": "info"}\n', encoding="utf-8")
+        before = (moving / "board.json").read_bytes(), answers.read_bytes()
+        assert act(moving, "select", KEY, adapter=fake()) == 0
+        after = (moving / "board.json").read_bytes(), answers.read_bytes()
+        assert after == before, "select wrote board.json or the answers file"
+        sub = board.parser()._subparsers._group_actions[0].choices["select"]
+        options = {s for a in sub._actions for s in a.option_strings} - {"-h", "--help"}
+        assert options == {"--plan"}
+        assert [g for g, _ in board.ENTRY_RULES["selected"]] == ["ready gate", "tier", "lenses"]
+
+
+class TestSelectLenses:
+    @pytest.mark.parametrize("verdict", ["missing", "red", "stale"])
+    def test_without_a_green_verdict_select_is_refused(self, moving, capsys, verdict):
+        root = moving / "work"
+        vid = f"ready-{KEY}"
+        if verdict != "missing":
+            panel = lens_verdict.plan(root, "ready", KEY)
+            for entry in panel["entries"]:
+                if verdict == "red" and entry["lens"] == "architecture":
+                    lens_verdict.write(root, vid, entry["lens"], failed="the agent stopped")
+                else:
+                    lens_verdict.write(root, vid, entry["lens"], answer=GREEN_LENS)
+        if verdict == "stale":
+            plan = root / "docs" / "plans" / f"{KEY}-story.md"
+            plan.write_text(plan.read_text() + "\n<!-- edited -->\n")
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        _, expected = lens_verdict.check(root, vid)
+        lines = err.splitlines()
+        head = lines.index(f"board.py select {KEY}: refused (lenses)")
+        assert lines[head + 1 :] == expected
+        assert_untouched(moving, before, out, adapter)
+
+    def test_a_failing_gate_never_reads_the_verdict(self, moving, monkeypatch, capsys):
+        plan = moving / "work" / "docs" / "plans" / f"{KEY}-story.md"
+        plan.write_text(plan.read_text().replace("**Then** it writes", "it writes"))
+        read = []
+        monkeypatch.setattr(lens_verdict, "check", lambda *a: read.append(a) or (True, []))
+        assert act(moving, "select", KEY, adapter=fake()) == 1
+        assert read == []
+        assert "refused (ready gate)" in capsys.readouterr().err
+
+
+class TestMove:
+    @pytest.mark.parametrize(
+        "argv, message",
+        [
+            (["on_hold"], 'on_hold needs --reopen "<trigger>"'),
+            (["on_hold", "--reopen", " "], 'on_hold needs --reopen "<trigger>"'),
+            (["backlog"], "backlog needs --epic <EPIC>"),
+            (["backlog", "--epic", "PROJ-5"], "epic PROJ-5 is not approved (PROJ-5-epic.md"),
+            (["backlog", "--epic", "PROJ-9"], "no epic plan under docs/plans names PROJ-9"),
+            (["selected"], "use board.py select"),
+            (["in_progress"], "in_progress needs the key's last row to be selected (no row)"),
+            (["in_review"], "in_review needs --pr <ref>"),
+        ],
+    )
+    def test_a_missing_entry_input_is_refused_naming_the_rule(self, moving, capsys, argv, message):
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "move", KEY, *argv, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.startswith(f"board.py move {KEY} {argv[0]}: refused: {message}"), err
+        assert_untouched(moving, before, out, adapter)
+
+    def test_two_epic_plans_naming_the_epic_are_both_named(self, moving, capsys):
+        plans = moving / "work" / "docs" / "plans"
+        shutil.copy(plans / "PROJ-1-epic.md", plans / "PROJ-1b-epic.md")
+        assert act(moving, "move", KEY, "backlog", "--epic", "PROJ-1", adapter=fake()) == 1
+        assert (
+            "PROJ-1 is named by more than one epic plan: PROJ-1-epic.md and PROJ-1b-epic.md"
+            in (capsys.readouterr().err)
+        )
+
+    def test_in_progress_after_another_state_is_refused(self, moving, capsys):
+        with_row(moving, KEY, "backlog")
+        assert act(moving, "move", KEY, "in_progress", adapter=fake()) == 1
+        assert "(its last row is backlog)" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "argv, extra",
+        [
+            (
+                ["on_hold", "--reopen", "after the store review"],
+                {"reopen": "after the store review"},
+            ),
+            (["backlog", "--epic", "PROJ-1"], {"epic": "PROJ-1"}),
+            (["backlog", "--epic", "PROJ-3"], {"epic": "PROJ-3"}),  # linked_epics of PROJ-2
+            (["in_progress"], {}),
+        ],
+    )
+    def test_a_held_rule_moves_once_and_writes_one_row(self, moving, capsys, argv, extra):
+        if argv[0] == "in_progress":
+            with_row(moving, KEY, "selected")
+        adapter = fake()
+        assert act(moving, "move", KEY, *argv, adapter=adapter) == 0
+        status = board.crew_mod.DEFAULTS["board"]["states"][argv[0]]
+        assert adapter.calls == [("move", KEY, status)]
+        row = transitions(moving)[-1]
+        assert {k: row[k] for k in ("key", "to", "ticket", "by")} == {
+            "key": KEY,
+            "to": argv[0],
+            "ticket": "fake",
+            "by": "lead-12",
+        }
+        assert row["ts"] == "2026-11-03T10:00:00Z"
+        assert {k: row[k] for k in extra} == extra
+        assert json.loads(capsys.readouterr().out.splitlines()[-1]) == row
+
+
+MERGED = {
+    "state": "MERGED",
+    "mergedAt": "2026-11-03T09:00:00Z",
+    "headRefName": f"feat/{KEY}-export",
+    "title": "feat: export",
+    "url": "https://github.com/acme/app/pull/7",
+}
+
+
+def pr(**changes):
+    return {"pr": {**MERGED, **changes}}
+
+
+class TestMoveInReview:
+    @pytest.mark.parametrize(
+        "answer, message",
+        [
+            (pr(headRefName="feat/export", title="feat: no key"), "PR acme/app#7 is not linked"),
+            (pr(headRefName="feat/PROJ-123-x", title="PROJ-123"), "PR acme/app#7 is not linked"),
+            (pr(state="OPEN"), "PR acme/app#7 is not merged"),
+            ({"exit": 1}, "PR acme/app#7: gh pr view failed: gh broke"),
+        ],
+    )
+    def test_each_pr_must_be_merged_and_linked(self, moving, capsys, answer, message):
+        gh_answers(moving, {"7 -R acme/app": answer})
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "move", KEY, "in_review", "--pr", "acme/app#7", adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        expected = message + (f" to {KEY}" if message.endswith("linked") else "")
+        assert err.strip() == f"board.py move {KEY} in_review: refused: {expected}"
+        assert_untouched(moving, before, out, adapter)
+
+    def test_linked_by_title_alone_passes(self, moving):
+        gh_answers(moving, {"7 -R acme/app": pr(headRefName="feat/x", title=f"{KEY}: export")})
+        assert act(moving, "move", KEY, "in_review", "--pr", "acme/app#7", adapter=fake()) == 0
+
+    def test_two_prs_with_one_unlinked_name_that_one(self, moving, capsys):
+        gh_answers(
+            moving,
+            {
+                "7 -R acme/app": pr(),
+                "https://github.com/acme/lib-repo/pull/3": pr(headRefName="x", title="y"),
+            },
+        )
+        argv = ["--pr", "acme/app#7", "--pr", "https://github.com/acme/lib-repo/pull/3"]
+        assert act(moving, "move", KEY, "in_review", *argv, adapter=fake()) == 1
+        assert capsys.readouterr().err.splitlines() == [
+            f"board.py move {KEY} in_review: refused: PR https://github.com/acme/lib-repo/pull/3 "
+            f"is not linked to {KEY}"
+        ]
+
+    def test_a_bare_number_is_ambiguous_when_the_plan_names_another_repo(self, moving, capsys):
+        assert act(moving, "move", KEY, "in_review", "--pr", "7", adapter=fake()) == 1
+        assert capsys.readouterr().err.strip() == (
+            f"board.py move {KEY} in_review: refused: PR 7 is ambiguous: "
+            "name it <owner>/<repo>#7 or by URL"
+        )
+        assert gh_calls(moving) == []
+
+    def test_qualified_refs_and_urls_reach_gh_as_given(self, moving):
+        url = "https://github.com/acme/lib-repo/pull/3"
+        gh_answers(moving, {"7 -R acme/app": pr(), url: pr(url=url)})
+        argv = ["--pr", "acme/app#7", "--pr", url]
+        assert act(moving, "move", KEY, "in_review", *argv, adapter=fake()) == 0
+        fields = ["--json", "state,mergedAt,headRefName,title,url"]
+        assert gh_calls(moving) == [
+            ["pr", "view", "7", "-R", "acme/app", *fields],
+            ["pr", "view", url, *fields],
+        ]
+        assert transitions(moving)[-1]["pr"] == [MERGED["url"], url]
+
+    def test_a_plan_of_its_own_repo_takes_a_bare_number(self, moving):
+        git(moving / "work", "remote", "add", "origin", "https://example.org/acme/lib-repo.git")
+        gh_answers(moving, {"7": pr()})
+        assert act(moving, "move", KEY, "in_review", "--pr", "7", adapter=fake()) == 0
+
+
+class TestJiraTransport:
+    def test_select_carries_the_bound_status_as_the_last_line(self, moving, capsys):
+        with_jira(moving)
+        green_lenses(moving)
+        assert act(moving, "select", KEY) == 0
+        out = capsys.readouterr().out
+        assert out.splitlines()[-1].startswith("carry: ")
+        assert carry_of(out) == [
+            {"op": "transition", "key": KEY, "status": "Selected for Development"}
+        ]
+        assert transitions(moving)[-1]["ticket"] == "carried"
+
+    def test_a_refused_move_carries_nothing(self, moving, capsys):
+        with_jira(moving)
+        assert act(moving, "move", KEY, "in_progress") == 1
+        out, err = capsys.readouterr()
+        assert "carry:" not in out + err
+
+    def test_ticketing_none_carries_nothing_and_says_so(self, moving, capsys):
+        with_row(moving, KEY, "selected")
+        assert act(moving, "move", KEY, "in_progress") == 0
+        assert "carry:" not in capsys.readouterr().out
+        assert transitions(moving)[-1]["ticket"] == "none"
+
+
+def snapshot(state_dir, data):
+    path = state_dir / "jira.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+class TestCheck:
+    def test_a_transition_without_a_row_is_drift(self, moving, capsys):
+        """The red arm of AC7: Jira moved on, the board's last row is still `selected`."""
+        with_row(moving, KEY, "selected")
+        assert act(moving, "check", "--jira", snapshot(moving, {KEY: "In Progress"})) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            f'drift: {KEY} jira "In Progress" board selected'
+        ]
+
+    def test_a_key_with_no_row_beyond_backlog_is_drift(self, moving, capsys):
+        jira = snapshot(moving, {"PROJ-2": "In Review", "PROJ-3": "Backlog", "PROJ-4": "On Hold"})
+        assert act(moving, "check", "--jira", jira) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            'drift: PROJ-2 jira "In Review" board none'
+        ]
+
+    def test_a_session_still_holding_a_reviewed_key_is_drift(self, moving, capsys):
+        with_row(moving, KEY, "in_review")
+
+        def hold(b):
+            b["sessions"][0]["keys"] = [KEY]
+
+        board.StateDir(moving / "board.json").write_board(hold)
+        assert act(moving, "check", "--jira", snapshot(moving, {KEY: "In Review"})) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            f"drift: {KEY} session lead-12 still holds it (board in_review)"
+        ]
+
+    def test_no_mismatch_is_exit_0_with_the_count(self, moving, capsys):
+        with_row(moving, KEY, "selected")
+        with_row(moving, KEY, "in_progress")
+        jira = snapshot(moving, {KEY: "In Progress", "PROJ-3": "Backlog"})
+        assert act(moving, "check", "--jira", jira) == 0
+        assert capsys.readouterr().out.strip() == "no drift (2 keys)"
+
+    def test_an_unknown_status_is_one_error_and_the_rest_is_judged(self, moving, capsys):
+        with_row(moving, "PROJ-3", "selected")
+        jira = snapshot(moving, {"PROJ-2": "Waiting for Godot", "PROJ-3": "In Review"})
+        assert act(moving, "check", "--jira", jira) == 1
+        assert capsys.readouterr().out.splitlines() == [
+            'error: PROJ-2 jira "Waiting for Godot" is no board state',
+            'drift: PROJ-3 jira "In Review" board selected',
+        ]
+
+    @pytest.mark.parametrize("content", [None, "{not json", '["PROJ-1"]', '{"PROJ-1": 3}'])
+    def test_an_unusable_snapshot_is_exit_2(self, moving, capsys, content):
+        path = moving / "jira.json"
+        if content is not None:
+            path.write_text(content, encoding="utf-8")
+        assert act(moving, "check", "--jira", str(path)) == 2
+        assert "board.py check: --jira" in capsys.readouterr().err
+
+
+class TestTransitionsLog:
+    def test_transitions_only_grow(self, crewless):
+        state = board.StateDir(crewless / "board.json")
+        state.append_transition({"key": "PROJ-1", "to": "selected"})
+        first = state.transitions_path.read_bytes()
+        state.append_transition({"key": "PROJ-1", "to": "in_progress"})
+        assert state.transitions_path.read_bytes().startswith(first)
+        assert [r["to"] for r in state.transitions()] == ["selected", "in_progress"]
+
+
+class TestTicketAdapter:
+    def test_the_transports_by_ticketing(self):
+        assert isinstance(ticket_adapter.adapter_for({}), ticket_adapter.NoneAdapter)
+        jira = ticket_adapter.adapter_for({"board": {"ticketing": "jira"}})
+        assert isinstance(jira, ticket_adapter.SessionTransport)
+        assert [op.as_json() for op in jira.move("PROJ-1", "Done")] == [
+            {"op": "transition", "key": "PROJ-1", "status": "Done"}
+        ]
+        assert ticket_adapter.NoneAdapter().move("PROJ-1", "Done") == []
+
+    def test_an_unknown_transport_is_named(self):
+        with pytest.raises(
+            ValueError, match=r"board\.ticketing 'carrier-pigeon' has no transport"
+        ):
+            ticket_adapter.adapter_for({"board": {"ticketing": "carrier-pigeon"}})
+
+
+def with_ticketing(state_dir, name):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["board"] = {**(data.get("board") or {}), "ticketing": name}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+class TestUnknownTicketing:
+    """Only the verbs that call the adapter build it: an unknown `board.ticketing` leaves the
+    others working and stops `select`, `move` and `escalation open|settle` before any write."""
+
+    def test_verbs_without_the_adapter_work_with_an_unknown_ticketing(self, crewed, capsys):
+        with_ticketing(crewed, "github")
+        for argv in (("set", "now=phase 3", "state=ci"), ("escalation", "count")):
+            code = go(crewed, *argv)
+            assert capsys.readouterr().err == ""  # not "crew: board.ticketing 'github' …"
+            assert code == 0
+        assert line_of(crewed, "lead-12")["now"] == "phase 3"
+
+    def test_a_move_names_the_unknown_ticketing_and_writes_nothing(self, moving, capsys):
+        with_ticketing(moving, "github")
+        with_row(moving, KEY, "selected")
+        before = transitions(moving)
+        assert act(moving, "move", KEY, "in_progress") == 1
+        assert capsys.readouterr().err.strip() == (
+            "crew: board.ticketing 'github' has no transport (known: none, jira)"
+        )
+        assert transitions(moving) == before
+
+    def test_an_escalation_open_names_it_before_the_write(self, escalating, monkeypatch, capsys):
+        with_ticketing(escalating, "github")
+        pin(monkeypatch, "ada")
+        assert go(escalating, *open_argv()) == 1
+        assert capsys.readouterr().err.strip() == (
+            "crew: board.ticketing 'github' has no transport (known: none, jira)"
+        )
+        assert esc_log(escalating) == []
+
+
+# --- the done move (docs/board.md § Moves, § Acceptance) -------------------------------------
+
+VERDICT = HERE / "fixtures" / "accept" / "accept_verdict.json"
+DONE_KEY = "PROJ-1"
+
+
+def verdict_entry(key=DONE_KEY, **changes):
+    stories = json.loads(VERDICT.read_text(encoding="utf-8"))["stories"]
+    entry = copy.deepcopy(next(s for s in stories if s["key"] == key))
+    entry.update(changes)
+    return entry
+
+
+def comment_file(state_dir, text):
+    path = state_dir / "comment.md"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def done_in_process(state_dir, adapter, entry, key=DONE_KEY, now=NOW):
+    return board.move_done(
+        board.StateDir(state_dir / "board.json"),
+        key,
+        board.load_crew(),
+        now,
+        adapter,
+        entry=entry,
+        rc="v1.4.0-rc.2",
+        run_url="https://example.org/acme/app/actions/runs/4242",
+    )
+
+
+def set_sample(state_dir, sample, keeper=None, lens_sample=None):
+    """`acceptance.done_sample` drives the Done-row sample; `lenses.acceptance.sample` is the lens
+    sampler's (lens_verdict.py) and set apart so a test can show the two never mix."""
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["lenses"] = {"acceptance": {"sample": lens_sample, "keeper": keeper}}
+    data.setdefault("acceptance", {})["done_sample"] = sample
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def news_of(state_dir, kind):
+    return [n for n in board_of(state_dir).get("news") or [] if n.get("kind") == kind]
+
+
+class TestMoveDone:
+    @pytest.mark.parametrize(
+        "last, argv, message",
+        [
+            (None, ["--comment-file", "C"], "last move is none, not in_review"),
+            ("in_progress", ["--comment-file", "C"], "last move is in_progress, not in_review"),
+            ("done", ["--comment-file", "C"], "last move is done, not in_review"),
+            ("in_review", [], "done needs --comment-file FILE"),
+            ("in_review", ["--comment-file", "NONE"], "has no line `Not proven: <what>`"),
+            ("in_review", ["--comment-file", "EMPTY"], "has no line `Not proven: <what>`"),
+        ],
+    )
+    def test_the_cli_refuses_naming_the_rule(self, crewed, capsys, last, argv, message):
+        files = {
+            "C": comment_file(crewed, "Checked on staging.\nNot proven: the native device\n"),
+            "NONE": str(crewed / "none.md"),
+            "EMPTY": str(crewed / "empty.md"),
+        }
+        (crewed / "none.md").write_text("Checked on staging.\nnot proven: lower case\n")
+        (crewed / "empty.md").write_text("Checked.\nNot proven:   \n")
+        if last:
+            with_row(crewed, DONE_KEY, last)
+        before_rows = transitions(crewed)
+        adapter = ticket_adapter.FakeAdapter()
+        argv = [files.get(a, a) for a in argv]
+        assert act(crewed, "move", DONE_KEY, "done", *argv, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.startswith(f"board.py move {DONE_KEY} done: refused: "), err
+        assert message in err.splitlines()[0], err
+        assert transitions(crewed) == before_rows and adapter.calls == []
+        assert "carry:" not in out
+
+    def test_the_cli_has_no_verdict_flag(self, crewed, capsys):
+        with_row(crewed, DONE_KEY, "in_review")
+        with pytest.raises(SystemExit) as stop:
+            act(crewed, "move", DONE_KEY, "done", "--verdict", str(VERDICT))
+        assert stop.value.code == 2
+        assert "unrecognized arguments: --verdict" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "entry, message",
+        [
+            (verdict_entry("PROJ-2"), f"the verdict has no entry for {DONE_KEY}"),
+            (verdict_entry(verdict="walk"), "verdict is walk, not done"),
+            (
+                verdict_entry(walk=[{"ac": 4, "persona": "p", "screen": "s"}]),
+                "the entry still has a walk",
+            ),
+            (
+                verdict_entry(
+                    checks=[
+                        {"ac": 1, "persona": "p", "status": "FAIL", "observed": "500"},
+                        {"ac": 2, "persona": "p", "status": "PASS", "observed": "ok"},
+                    ]
+                ),
+                "receipt check AC1 is FAIL, not PASS",
+            ),
+            (
+                verdict_entry(
+                    checks=[
+                        {"ac": 1, "persona": "p", "status": "PASS", "observed": "NOT TESTABLE: x"},
+                        {"ac": 2, "persona": "p", "status": "PASS", "observed": "ok"},
+                    ]
+                ),
+                "receipt check AC1 is NOT TESTABLE",
+            ),
+            (
+                verdict_entry(checks=[{"ac": 1, "persona": "p", "status": "PASS"}]),
+                "receipt AC2 has no check",
+            ),
+            (verdict_entry(not_proven=" "), "the entry has no not_proven line"),
+            (
+                verdict_entry(oracles={"receipt": [], "ci": [], "walk": []}, checks=[]),
+                "the entry names no oracle",
+            ),
+        ],
+    )
+    def test_a_verdict_entry_that_proves_nothing_is_refused(self, crewed, entry, message):
+        with_row(crewed, DONE_KEY, "in_review")
+        before_rows = transitions(crewed)
+        adapter = ticket_adapter.FakeAdapter()
+        with pytest.raises(board.BoardError) as refused:
+            done_in_process(crewed, adapter, entry)
+        assert f"board.py move {DONE_KEY} done: refused: {message}" in str(refused.value)
+        assert transitions(crewed) == before_rows and adapter.calls == []
+
+    def test_a_comment_file_moves_via_comment_and_carries_its_text(self, crewed, capsys):
+        with_jira(crewed)
+        with_row(crewed, DONE_KEY, "in_review")
+        text = "Walked Settings as paid-user.\nNot proven: the small screen"
+        assert (
+            act(crewed, "move", DONE_KEY, "done", "--comment-file", comment_file(crewed, text))
+            == 0
+        )
+        out = capsys.readouterr().out
+        row = transitions(crewed)[-1]
+        assert {k: row[k] for k in ("key", "from", "to", "via", "ticket")} == {
+            "key": DONE_KEY,
+            "from": "in_review",
+            "to": "done",
+            "via": "comment",
+            "ticket": "carried",
+        }
+        assert carry_of(out) == [
+            {"op": "transition", "key": DONE_KEY, "status": "Done"},
+            {"op": "comment", "key": DONE_KEY, "text": text},
+        ]
+
+    def test_a_green_entry_moves_via_receipt_with_the_generated_comment(self, crewed):
+        with_row(crewed, DONE_KEY, "in_review")
+        row, ops, sample = done_in_process(
+            crewed, ticket_adapter.SessionTransport(), verdict_entry()
+        )
+        assert list(row) == ["key", "from", "to", "via", "rc", "ts", "by", "ticket"]
+        assert (row["via"], row["rc"], row["ticket"]) == ("receipt", "v1.4.0-rc.2", "carried")
+        assert transitions(crewed)[-1] == row and sample is None
+        assert [op.op for op in ops] == ["transition", "comment"]
+        assert ops[1].value.splitlines() == [
+            "Accepted by the receipts job v1.4.0-rc.2 "
+            "(https://example.org/acme/app/actions/runs/4242)",
+            "Oracle: receipt AC1, AC2 · ci AC3 (tests/test_export.py::test_export_csv)",
+            "Persona: free-user",
+            "Observed: AC1 PASS — 200 with a CSV of 3 rows",
+            "Observed: AC2 PASS — 429 after the 6th export",
+            "Not proven: the export on a native device",
+        ]
+
+    def test_sample_every_nth(self, crewed):
+        set_sample(crewed, 5, keeper="tess")
+        state = board.StateDir(crewed / "board.json")
+        samples = []
+        for i in range(1, 7):
+            key = f"PROJ-{10 + i}"
+            with_row(crewed, key, "in_review")
+            if i == 3:  # a comment move between them never counts
+                with_row(crewed, "PROJ-99", "in_review")
+                path = comment_file(crewed, "Not proven: the device")
+                board.move_done(
+                    state,
+                    "PROJ-99",
+                    board.load_crew(),
+                    NOW,
+                    ticket_adapter.FakeAdapter(),
+                    comment_file=path,
+                )
+            entry = verdict_entry(key=DONE_KEY)
+            entry["key"] = key
+            _row, _ops, sample = done_in_process(
+                crewed, ticket_adapter.FakeAdapter(), entry, key=key
+            )
+            samples.append(sample)
+        assert samples == [None, None, None, None, "sample: PROJ-15 → tess", None]
+        [item] = news_of(crewed, "sample")
+        assert item == {
+            "id": "S1",
+            "kind": "sample",
+            "title": "Sample PROJ-15: accepted by the receipts job, tess checks it post hoc",
+            "ts": "2026-11-03T10:00:00Z",
+        }
+
+    def test_the_keeper_defaults_to_the_acceptance_role(self, crewed):
+        set_sample(crewed, 1)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample == f"sample: {DONE_KEY} → tess"
+
+    @pytest.mark.parametrize(
+        "done_sample, lens_sample, expected", [(None, 1, None), (1, None, "x")]
+    )
+    def test_the_done_sample_reads_its_own_key_not_the_lens_one(
+        self, crewed, done_sample, lens_sample, expected
+    ):
+        set_sample(crewed, done_sample, lens_sample=lens_sample)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample == (expected and f"sample: {DONE_KEY} → tess")
+
+    def test_the_done_sample_defaults_to_every_fifth(self):
+        assert board.crew_mod.DEFAULTS["acceptance"]["done_sample"] == 5
+
+    def test_sample_null_writes_none(self, crewed):
+        set_sample(crewed, None)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample is None and news_of(crewed, "sample") == []

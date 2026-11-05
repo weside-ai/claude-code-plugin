@@ -157,6 +157,46 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
     assert "one word arms auto-merge" in text
 
 
+WORKER_ENDS = (
+    "- **Workers execute one chunk and end**; a PR chunk ends at its merge or a `user merge` {label};\n"
+    "  the worker watches it until green and ends, its starter until the merge."
+)
+REARM = (
+    "4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4"
+    " for every open PR you own.\n"
+)
+
+
+def test_whoever_opens_a_pr_watches_it_and_the_master_re_arms_after_a_compaction():
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) in rp.render_l0(crew)
+    assert REARM in rp.render_card(generic(), "master")
+
+
+def test_the_watch_phrases_go_red_on_the_previous_text(tmp_path):
+    """Red arm: the text before the watch rule (worker ends after its chunk, no re-arm step)."""
+    process, roles = tmp_path / "process", tmp_path / "roles"
+    process.mkdir()
+    roles.mkdir()
+    l0 = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
+    old_l0 = l0.replace(
+        WORKER_ENDS.format(label="{question_label}") + " Masters",
+        "- **Workers execute one chunk and end.** Masters",
+    )
+    assert old_l0 != l0
+    (process / "L0.md").write_text(old_l0, encoding="utf-8")
+    for card in rp.ROLES.glob("*.md"):
+        (roles / card.name).write_text(card.read_text(encoding="utf-8"), encoding="utf-8")
+    master = (roles / "master.md").read_text(encoding="utf-8")
+    assert REARM in master
+    (roles / "master.md").write_text(master.replace(REARM, ""), encoding="utf-8")
+    crew = generic()
+    assert WORKER_ENDS.format(label=crew["question_label"]) not in rp.render_l0(
+        crew, process=process
+    )
+    assert REARM not in rp.render_card(crew, "master", roles=roles)
+
+
 def test_worker_form_is_short_and_carries_the_crew_values():
     text = rp.role_text(generic(), "worker")
     assert len(text) <= 1_500
@@ -527,6 +567,7 @@ def test_serves_counts_the_reserve(tmp_path, monkeypatch):
 
 SECURITY = HERE / "fixtures" / "crew-v2-security.json"
 SECURITY_LINE = "  - {security} owns its label but runs on call."
+SIGNATURE_TEMPLATE = "  On a `trust-loosening` diff the item also carries {security}'s signature."
 TRUST_LINE = (
     "- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges."
 )
@@ -549,7 +590,9 @@ def test_an_unbound_crew_renders_as_the_template_without_the_security_line(kind)
     crew = generic()
     name = "L0-worker.md" if kind == "worker" else "L0.md"
     text = (rp.PROCESS / name).read_text(encoding="utf-8")
-    expected = rp.render(text.replace(SECURITY_LINE + "\n", ""), crew)
+    for line in (SECURITY_LINE, SIGNATURE_TEMPLATE):
+        text = text.replace(line + "\n", "")
+    expected = rp.render(text, crew)
     assert rp.render_l0(crew, kind) == expected
     assert "owns its label" not in rp.render_l0(crew, kind)
     assert "Bo (security)" in rp.render_l0(crew, "full")

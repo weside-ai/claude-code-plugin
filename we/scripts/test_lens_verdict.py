@@ -465,6 +465,21 @@ def test_every_nth_green_verdict_is_a_sample_until_read(repo):
     assert code == 1 and "sample ready-PROJ-2 architecture: none open" in err
 
 
+def test_the_done_sample_key_leaves_the_lens_counter_alone(repo):
+    """`acceptance.done_sample` is board.py's Done-row sample; the acceptance lens keeps
+    `lenses.acceptance.sample` (default 5), so a done_sample of 1 samples no lens verdict."""
+    crew = json.loads(json.dumps(CREW))
+    crew["acceptance"] = {"done_sample": 1}
+    (repo / ".weside" / "crew.json").write_text(json.dumps(crew))
+    for i in range(1, 5):
+        (repo / "docs" / "plans" / f"PROJ-{i}-story.md").write_text("# P\n")
+        run("plan", "ready", f"PROJ-{i}")
+        _, out, _ = run("write", f"ready-PROJ-{i}", "acceptance", stdin=GREEN)
+        assert out.strip() == "lens acceptance: green"
+        _, out, _ = run("write", f"ready-PROJ-{i}", "architecture", stdin=GREEN)
+        assert out.strip() == "lens architecture: green" + (" (sample)" if i % 2 == 0 else "")
+
+
 def test_a_rewrite_of_the_same_lens_counts_once_and_red_counts_never(repo):
     run("plan", "ready", KEY)
     run("write", f"ready-{KEY}", "architecture", stdin=GREEN)

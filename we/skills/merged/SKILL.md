@@ -109,7 +109,7 @@ silently. If the workflow rejects the move, report it and continue.
 - **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
   the report (owner decision 2026-09-25).
 - **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
-- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md`. Never push a tree that carries another session's unpushed commits.
+- **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (a docs PR unless the repo grants a direct docs push). Never push a tree that carries another session's unpushed commits.
 
 ## 7 · Report what is still open
 

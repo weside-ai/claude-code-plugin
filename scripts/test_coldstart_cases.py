@@ -110,25 +110,72 @@ def _lists(case: Path) -> dict[str, list[str]]:
     return {k: [x.strip().strip('"') for x in v.split(",") if x.strip()] for k, v in found}
 
 
+def top_prompt(case: Path) -> str:
+    """The case's prompt (a folded block), whitespace collapsed."""
+    text = case.read_text(encoding="utf-8")
+    block = text.split("prompt: >\n", 1)[1].split("\nexpect:", 1)[0]
+    return " ".join(block.split())
+
+
 @pytest.mark.parametrize(
     ("name", "waits", "not_waits"),
     [
         ("security-twoway-panel-enough", [], ["security", "human"]),
+        ("security-twoway-before8-waits", ["security"], ["human"]),
         ("security-oneway-owner-signs", ["security", "human"], ["product", "acceptance"]),
     ],
 )
 def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
-    """A two-way auth diff with a green panel waits on nobody; a ``trust-loosening`` one waits on
-    the security holder's signature, then the human's merge."""
+    """A two-way auth diff with a green panel waits on the security holder's review before 8.0.0
+    and on nobody from 8.0.0; a ``trust-loosening`` one waits on the security holder's signature,
+    then the human's merge."""
     case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
     top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
     assert top["role"] == "master" and top["crew"] == SECURITY_FIXTURE
     lists = _lists(case)
     assert lists["waits"] == waits and lists["not_waits"] == not_waits
     assert ("gh pr merge --auto" in lists.get("forbidden", [])) == bool(waits)
+    assert ("8.0.0" in top_prompt(case)) == (name == "security-twoway-panel-enough")
 
 
 def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
     case = REPO / "tests" / "coldstart" / "master" / "t2-oneway-human-merges.yaml"
     assert "crew-v2-generic.json" in case.read_text(encoding="utf-8")
     assert _lists(case)["waits"] == ["human"]
+
+
+GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
+REVIEW_LINE = (
+    "- Before plugin `we` 8.0.0, a PR touching auth, tenant isolation or trust also waits for"
+    " Bo's review."
+)
+ORDER_LINE = "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
+ON_CALL_LINE = "  - Bo owns its label but runs on call."
+SIGNATURE_LINE = "  On a `trust-loosening` diff the item also carries Bo's signature."
+
+
+def _rendered(fixture: str) -> tuple[str, str]:
+    """What a master reads at start: L0 and its card, rendered with the case's crew."""
+    crew = crewlib._merge(json.loads((REPO / fixture).read_text(encoding="utf-8")))
+    return render_process.render_l0(crew), render_process.render_card(crew, "master")
+
+
+def test_the_security_cases_crew_renders_the_routing_they_expect():
+    """The security master cases route on lines the rendered process must carry: the master card's
+    order (panel, signature, human merge), L0's on-call line and the signature on the board item.
+    Comparing the YAML with a table only checks it against itself; this renders what the master
+    reads with the crew the cases name."""
+    l0, card = _rendered(SECURITY_FIXTURE)
+    lines = l0.split("\n")
+    assert ORDER_LINE in card.split("\n"), "master card lacks the trust-loosening order line"
+    assert REVIEW_LINE in card.split("\n"), "master card lacks the pre-8.0 security review wait"
+    assert ON_CALL_LINE in lines, "L0 lacks the security on-call line"
+    assert SIGNATURE_LINE in lines, "L0's one-way board item lacks the security signature"
+
+
+def test_the_generic_crew_renders_no_security_routing():
+    l0, card = _rendered(GENERIC_FIXTURE)
+    assert "trust-loosening` diff:" not in card
+    assert "also waits for" not in card
+    assert "owns its label but runs on call" not in l0
+    assert "also carries" not in l0

@@ -178,7 +178,12 @@ DEFAULTS: dict[str, Any] = {
     },
     "fallback": {},
     "local_rules": [],
-    "acceptance": {"mock_persona": None, "mock_preset": None, "boundary_terms": []},
+    "acceptance": {
+        "mock_persona": None,
+        "mock_preset": None,
+        "boundary_terms": [],
+        "done_sample": 5,
+    },
     "oracles": {
         "receipt_dir": None,
         "receipt_schema": None,
@@ -225,6 +230,8 @@ NUMBER_OR_NULL = (
     "acceptance.mock_preset",
     "sample",
 )
+# a number default that also takes null (null = off)
+NUMBER_OR_OFF = ("acceptance.done_sample",)
 # keys no release reads any more: skipped with a stderr line instead of refused as unknown
 RETIRED_KEYS = ("capacity",)
 STUB_MARKER = "<!-- we:stub"
@@ -483,8 +490,11 @@ def _check_scalar(path: Path, value: Any, default: Any, dotted: str) -> None:
         if not isinstance(value, bool):
             raise _fail(path, f"{dotted} must be true or false")
     elif isinstance(default, int):
+        if dotted in NUMBER_OR_OFF and value is None:
+            return
         if not _is_int(value):
-            raise _fail(path, f"{dotted} must be a number")
+            kind = "a number or null" if dotted in NUMBER_OR_OFF else "a number"
+            raise _fail(path, f"{dotted} must be {kind}")
     elif isinstance(default, str):
         if not isinstance(value, str):
             raise _fail(path, f"{dotted} must be a string")

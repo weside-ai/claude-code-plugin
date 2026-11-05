@@ -98,7 +98,7 @@ against the code; a wrong claim goes back to the refiner. Pass → set `status: 
 frontmatter, then commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check
 file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main
 checkout). Fail → re-dispatch once naming the missing item, then one question line to the epic owner. Then remove the
-refiner's worktree (step 6). On the default branch and green under the Ready gate the story is
+refiner's worktree (step 6). On the default branch (its docs PR merged) and green under the Ready gate the story is
 Selected; move its ticket per `ticketing.md`, which names the mover for every state.
 
 ## Build
@@ -171,8 +171,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed, and next to it one
    `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list
-   the exit codes. One checks watcher per PR: once a worker runs `/we:ci-review` on it, the worker owns
-   the watch and you arm none. Meanwhile refine or prepare the next story.
+   the exit codes. One checks watcher per PR: a worker running `/we:ci-review` on it watches until green
+   (L0 §Sessions), then you arm it `--until-merged`. Meanwhile refine or prepare the next story.
 5. You stay on an auto-merge PR until it is merged; the user never runs `/we:ci-review` or
    `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit, without asking:
    - red, or exit 6 (Codex WARNING/BLOCKING on the head) → `/we:ci-review <PR>`, which disarms first

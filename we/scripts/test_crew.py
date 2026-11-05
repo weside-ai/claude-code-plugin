@@ -378,6 +378,10 @@ def test_a_known_key_beside_an_unknown_one_is_still_checked(tmp_path):
         (with_(version=3), "{path}: version 3 is not 2"),
         (with_(version=True), "{path}: version True is not 2"),
         (with_(limits__masters="five"), "{path}: limits.masters must be a number"),
+        (
+            with_(acceptance__done_sample="5"),
+            "{path}: acceptance.done_sample must be a number or null",
+        ),
         (with_(members__ada__on_call="yes"), "{path}: members.ada.on_call must be true or false"),
         (with_(roles__product="nobody"), "{path}: roles.product 'nobody' is no member"),
         (with_(lenses__product__keeper="nobody"), "{path}: lenses.product.keeper 'nobody' is no"),
