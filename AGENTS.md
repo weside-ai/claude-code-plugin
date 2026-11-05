@@ -31,7 +31,8 @@ we/                               plugin root
                                   phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
                                   answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
                                   + SessionStart materialize, process L0, role card and optimization reminder, UserPromptSubmit
-                                  wake counter (news_on_prompt), Stop store-conversation, conflict gate
+                                  wake counter (news_on_prompt), sampler and blocked-worker line
+                                  (sampler_on_prompt), Stop store-conversation, conflict gate
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),
                                   tmux attention (window title white while the session waits, grey at rest),
@@ -43,6 +44,7 @@ we/                               plugin root
   scripts/                        crew.py (the one reader of .weside/crew.json), rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
+                                  flow_log.py (the flow log's one owner), sampler_age.py (its pulse),
                                   wclaude + install_launcher.py (companion launcher),
                                   watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
                                   watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), worker_launch.py
