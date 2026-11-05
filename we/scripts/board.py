@@ -16,8 +16,8 @@ Usage:
   board.py [--board FILE] escalation advise E<n> --recommendation T
   board.py [--board FILE] escalation settle E<n> --outcome T [--via human]
   board.py [--board FILE] select <KEY> [--plan PATH]
-  board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review>
-           [--reopen TRIGGER] [--epic EPIC] [--pr REF]…
+  board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|done>
+           [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE]
   board.py [--board FILE] check --jira FILE
 
 answer   writes back an answer the owner gave in a session's chat: one line in
@@ -68,7 +68,11 @@ select   moves a story to Selected when its `ENTRY_RULES["selected"]` hold, in o
          `board.py select <KEY>: refused (<group>)` and its lines; no rule asks a human.
 move     moves a story to another state when that state's entry rule holds (docs/board.md
          § Moves): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
-         after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`). A
+         after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`),
+         `done` after an `in_review` row with --comment-file holding a `Not proven:` line (or, in
+         process from accept.py, a green verdict entry re-checked here: `move_done`); a `done`
+         move carries the transition and then the acceptance comment, and every
+         `lenses.acceptance.sample`-th `via: receipt` row adds a `sample` news item. A
          refusal prints `board.py move <KEY> <state>: refused: <reason>` per failure.
          Both write one row to board-transitions.jsonl after every rule passed, call the
          ticketing adapter once (`ticket_adapter.py`, by `board.ticketing`) and, with
@@ -1149,7 +1153,7 @@ def cmd_escalation_count(state, args, crew, now):
 
 # --- moves: select, move, check (docs/board.md § Moves) --------------------------------------
 
-MOVE_STATES = ("on_hold", "backlog", "in_progress", "in_review")  # `done` comes with its rule
+MOVE_STATES = ("on_hold", "backlog", "in_progress", "in_review", "done")
 GH_TIMEOUT = 30
 _PR_URL = re.compile(r"^https?://[^/]+/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
 _PR_QUALIFIED = re.compile(r"^([\w.-]+)/([\w.-]+)#(\d+)$")
@@ -1340,6 +1344,106 @@ def rule_pr_merged_and_linked(m):
     return failures
 
 
+NOT_PROVEN = re.compile(r"^Not proven:\s*\S", re.MULTILINE)
+DONE_VIA_ACCEPT = (
+    "done needs --comment-file FILE (an acceptance comment with a `Not proven:` line); "
+    "a receipts verdict reaches done only through accept.py run --run-id"
+)
+
+
+def rule_in_review(m):
+    last = m.state.last_rows().get(m.key)
+    was = last.get("to") if last else "none"
+    if was != "in_review":
+        return [f"last move is {was}, not in_review"]
+    return []
+
+
+def _ac_numbers(values):
+    return sorted({str(v) for v in values or []}, key=lambda n: (len(n), n))
+
+
+def verdict_failures(entry, key):
+    """Why a verdict entry does not prove `key` Done: the core classified it, the board re-checks
+    the invariant so that no hand-edited file sets Done (docs/board.md § Acceptance)."""
+    if not isinstance(entry, dict) or entry.get("key") != key:
+        return [f"the verdict has no entry for {key}"]
+    if entry.get("verdict") != "done":
+        return [f"verdict is {entry.get('verdict')}, not done"]
+    failures = []
+    oracles = entry.get("oracles") or {}
+    if oracles.get("walk") or entry.get("walk"):
+        failures.append("the entry still has a walk")
+    checks = [c for c in entry.get("checks") or [] if isinstance(c, dict)]
+    for c in checks:
+        observed = str(c.get("observed") or "")
+        if c.get("status") != "PASS" or observed.startswith("NOT TESTABLE"):
+            failures.append(f"receipt check AC{c.get('ac')} is {c.get('status')}, not PASS")
+    checked = {str(c.get("ac")) for c in checks}
+    for n in _ac_numbers(oracles.get("receipt")):
+        if n not in checked:
+            failures.append(f"receipt AC{n} has no check")
+    if not str(entry.get("not_proven") or "").strip():
+        failures.append("the entry has no not_proven line")
+    return failures
+
+
+def rule_done_evidence(m):
+    """Exactly one source of evidence: a verdict entry (in-process from accept.py) or a comment
+    file (the CLI) holding a `Not proven:` line."""
+    entry, path = m.args.verdict_entry, m.args.comment_file
+    if entry is None and not path:
+        return [DONE_VIA_ACCEPT]
+    if entry is not None:
+        failures = verdict_failures(entry, m.key)
+        if failures:
+            return failures
+        m.extra.update(via="receipt", rc=m.args.rc)
+        m.comment = done_comment(entry, m.args.rc, m.args.run_url)
+        return []
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"--comment-file {path}: {exc.strerror}"]
+    if not NOT_PROVEN.search(text):
+        return [f"--comment-file {path} has no line `Not proven: <what>`"]
+    m.extra["via"] = "comment"
+    m.comment = text.strip()
+    return []
+
+
+def done_comment(entry, rc, run_url):
+    """The acceptance comment of a job-accepted story: one generator (docs/board.md § Acceptance)."""
+    oracles = entry.get("oracles") or {}
+    ci_tests = entry.get("ci_tests") or {}
+    parts = []
+    receipt = _ac_numbers(oracles.get("receipt"))
+    if receipt:
+        parts.append("receipt " + ", ".join(f"AC{n}" for n in receipt))
+    ci = _ac_numbers(oracles.get("ci"))
+    if ci:
+        parts.append(
+            "ci "
+            + ", ".join(f"AC{n} ({ci_tests[n]})" if ci_tests.get(n) else f"AC{n}" for n in ci)
+        )
+    checks = [c for c in entry.get("checks") or [] if isinstance(c, dict)]
+    personas = []
+    for c in checks:
+        if c.get("persona") and c["persona"] not in personas:
+            personas.append(c["persona"])
+    lines = [
+        f"Accepted by the receipts job {rc} ({run_url})",
+        "Oracle: " + (" · ".join(parts) or "none"),
+        "Persona: " + (", ".join(personas) or "none"),
+    ]
+    lines += [
+        f"Observed: AC{c.get('ac')} {c.get('status')} — {c.get('observed') or ''}".rstrip()
+        for c in checks
+    ]
+    lines.append(f"Not proven: {str(entry.get('not_proven')).strip()}")
+    return "\n".join(lines)
+
+
 # One list of (group, rule) per target state, run in order; the first failing group stops the
 # run. `selected` is exactly the Ready gate, the tier and the lenses: no rule asks a human.
 ENTRY_RULES = {
@@ -1348,6 +1452,7 @@ ENTRY_RULES = {
     "selected": [("ready gate", rule_gate), ("tier", rule_tier), ("lenses", rule_lenses)],
     "in_progress": [("pulled", rule_pulled)],
     "in_review": [("pr", rule_pr_merged_and_linked)],
+    "done": [("in review", rule_in_review), ("evidence", rule_done_evidence)],
 }
 
 
@@ -1412,7 +1517,88 @@ def cmd_move(state, args, crew, now):
     head = f"board.py move {args.key} {args.state}"
     if args.state == "selected":
         raise BoardError(f"{head}: refused: {SELECT_ONLY}")
+    if args.state == "done":
+        row, ops, sample = move_done(
+            state, args.key, crew, now, _adapter(args, crew), comment_file=args.comment_file
+        )
+        print(json.dumps(row, ensure_ascii=False))
+        if sample:
+            print(sample)
+        _print_carry(ops)
+        return 0
     return _transition(state, args, crew, now, args.state, head)
+
+
+def _sample_keeper(crew):
+    lens = (crew.get("lenses") or {}).get("acceptance") or {}
+    return lens.get("keeper") or (crew.get("roles") or {}).get("acceptance") or "roles.acceptance"
+
+
+def _sample(state, crew, key, now):
+    """Every `lenses.acceptance.sample`-th row `to: done, via: receipt` adds one `sample` news
+    item for the acceptance keeper; the count is the log's, so it survives restarts."""
+    n = ((crew.get("lenses") or {}).get("acceptance") or {}).get("sample")
+    if not isinstance(n, int) or n <= 0:
+        return None
+    count = sum(
+        1 for r in state.transitions() if r.get("to") == "done" and r.get("via") == "receipt"
+    )
+    if count == 0 or count % n:
+        return None
+    keeper = _sample_keeper(crew)
+
+    def mutate(board):
+        board.setdefault("news", []).append(
+            {
+                "id": state.next_id("S", board),
+                "kind": "sample",
+                "title": f"Sample {key}: accepted by the receipts job, {keeper} checks it post hoc",
+                "ts": _iso(now),
+            }
+        )
+
+    state.write_board(mutate)
+    return f"sample: {key} → {keeper}"
+
+
+def move_done(
+    state, key, crew, now, adapter, *, entry=None, rc=None, run_url=None, comment_file=None
+):
+    """The `done` move: its entry rules, then the row, the adapter (transition, then comment) and
+    the sample. Returns (row, ops, sample line or None); a refusal raises `BoardError` with one
+    `board.py move <KEY> done: refused: <reason>` line per failure and writes nothing. `entry`
+    (a verdict entry) comes only from accept.py, after its provenance check; the CLI passes
+    `comment_file`."""
+    head = f"board.py move {key} done"
+    failures = _key_failure(crew, key, "move")
+    if failures:
+        raise BoardError("\n".join(failures))
+    args = argparse.Namespace(
+        verdict_entry=entry, comment_file=comment_file, rc=rc, run_url=run_url
+    )
+    m = Move(state, key, "done", None, None, crew, args)
+    m.comment = None
+    for _group, rule in ENTRY_RULES["done"]:
+        lines = rule(m)
+        if lines:
+            raise BoardError("\n".join(f"{head}: refused: {line}" for line in lines))
+    status = ((crew.get("board") or {}).get("states") or {}).get("done") or (
+        crew_mod.DEFAULTS["board"]["states"]["done"]
+    )
+    row = {
+        "key": key,
+        "from": "in_review",
+        "to": "done",
+        "via": m.extra["via"],
+        **({"rc": m.extra["rc"]} if m.extra.get("rc") else {}),
+        "ts": _iso(now),
+        "by": _caller(),
+        "ticket": adapter.name,
+    }
+    state.append_transition(row)
+    ops = adapter.move(key, status) + adapter.comment(key, m.comment)
+    sample = _sample(state, crew, key, now) if row["via"] == "receipt" else None
+    return row, ops, sample
 
 
 def _jira_snapshot(path):
@@ -1483,6 +1669,12 @@ def _add_move_verbs(verbs):
     mv.add_argument("--pr", action="append", metavar="REF", help="in_review: a merged PR (repeat)")
     mv.add_argument("--reopen", metavar="TRIGGER", help="on_hold: what reopens it")
     mv.add_argument("--epic", metavar="EPIC", help="backlog: the approved epic")
+    mv.add_argument(
+        "--comment-file",
+        dest="comment_file",
+        metavar="FILE",
+        help="done: an acceptance comment holding a `Not proven:` line",
+    )
     mv.set_defaults(run=cmd_move)
 
     ck = verbs.add_parser("check", help="board-vs-ticketing drift over a snapshot")

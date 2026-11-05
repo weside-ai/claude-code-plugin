@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "rc": "v1.4.0-rc.2",
+  "run_id": 4242,
+  "run_url": "https://example.org/acme/app/actions/runs/4242",
+  "stories": [
+    {
+      "key": "PROJ-1",
+      "verdict": "done",
+      "oracles": {"receipt": [1, 2], "ci": [3], "walk": []},
+      "ci_tests": {"3": "tests/test_export.py::test_export_csv"},
+      "checks": [
+        {"id": "AC1-export", "ac": 1, "persona": "free-user", "status": "PASS", "observed": "200 with a CSV of 3 rows"},
+        {"id": "AC2.limit", "ac": 2, "persona": "free-user", "status": "PASS", "observed": "429 after the 6th export"}
+      ],
+      "walk": [],
+      "not_proven": "the export on a native device",
+      "owner": "ada",
+      "reason": null
+    },
+    {
+      "key": "PROJ-2",
+      "verdict": "walk",
+      "oracles": {"receipt": [1], "ci": [], "walk": [4]},
+      "ci_tests": {},
+      "checks": [
+        {"id": "AC1-login", "ac": 1, "persona": "paid-user", "status": "PASS", "observed": "session token issued"}
+      ],
+      "walk": [{"ac": 4, "persona": "paid-user", "screen": "Settings"}],
+      "not_proven": "the copy on a small screen",
+      "owner": null,
+      "reason": null
+    },
+    {
+      "key": "PROJ-3",
+      "verdict": "red",
+      "oracles": {"receipt": [1, 2], "ci": [], "walk": []},
+      "ci_tests": {},
+      "checks": [
+        {"id": "AC1-quota", "ac": 1, "persona": "free-user", "status": "PASS", "observed": "quota shown"},
+        {"id": "AC2-refund", "ac": 2, "persona": "free-user", "status": "FAIL", "observed": "500 on POST /refund"}
+      ],
+      "walk": [],
+      "not_proven": "refunds over 100",
+      "owner": "vic",
+      "reason": null
+    },
+    {
+      "key": "PROJ-5",
+      "verdict": "hold",
+      "oracles": {"receipt": [1], "ci": [], "walk": []},
+      "ci_tests": {},
+      "checks": [
+        {"id": "AC1-feed", "ac": 1, "persona": "free-user", "status": "SKIP", "observed": "dev-only"}
+      ],
+      "walk": [],
+      "not_proven": "the feed under load",
+      "owner": null,
+      "reason": "AC1 receipt check SKIP"
+    }
+  ]
+}

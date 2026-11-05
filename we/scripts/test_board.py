@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import subprocess
@@ -1493,12 +1494,6 @@ class TestMove:
         assert {k: row[k] for k in extra} == extra
         assert json.loads(capsys.readouterr().out.splitlines()[-1]) == row
 
-    def test_done_is_no_choice_of_move(self, moving, capsys):
-        with pytest.raises(SystemExit):
-            act(moving, "move", KEY, "done", adapter=fake())
-        err = capsys.readouterr().err
-        assert "invalid choice: 'done'" in err and "in_review" in err
-
 
 MERGED = {
     "state": "MERGED",
@@ -1726,3 +1721,215 @@ class TestUnknownTicketing:
             "crew: board.ticketing 'github' has no transport (known: none, jira)"
         )
         assert esc_log(escalating) == []
+
+
+# --- the done move (docs/board.md § Moves, § Acceptance) -------------------------------------
+
+VERDICT = HERE / "fixtures" / "accept" / "accept_verdict.json"
+DONE_KEY = "PROJ-1"
+
+
+def verdict_entry(key=DONE_KEY, **changes):
+    stories = json.loads(VERDICT.read_text(encoding="utf-8"))["stories"]
+    entry = copy.deepcopy(next(s for s in stories if s["key"] == key))
+    entry.update(changes)
+    return entry
+
+
+def comment_file(state_dir, text):
+    path = state_dir / "comment.md"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def done_in_process(state_dir, adapter, entry, key=DONE_KEY, now=NOW):
+    return board.move_done(
+        board.StateDir(state_dir / "board.json"),
+        key,
+        board.load_crew(),
+        now,
+        adapter,
+        entry=entry,
+        rc="v1.4.0-rc.2",
+        run_url="https://example.org/acme/app/actions/runs/4242",
+    )
+
+
+def set_sample(state_dir, sample, keeper=None):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["lenses"] = {"acceptance": {"sample": sample, "keeper": keeper}}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def news_of(state_dir, kind):
+    return [n for n in board_of(state_dir).get("news") or [] if n.get("kind") == kind]
+
+
+class TestMoveDone:
+    @pytest.mark.parametrize(
+        "last, argv, message",
+        [
+            (None, ["--comment-file", "C"], "last move is none, not in_review"),
+            ("in_progress", ["--comment-file", "C"], "last move is in_progress, not in_review"),
+            ("done", ["--comment-file", "C"], "last move is done, not in_review"),
+            ("in_review", [], "done needs --comment-file FILE"),
+            ("in_review", ["--comment-file", "NONE"], "has no line `Not proven: <what>`"),
+            ("in_review", ["--comment-file", "EMPTY"], "has no line `Not proven: <what>`"),
+        ],
+    )
+    def test_the_cli_refuses_naming_the_rule(self, crewed, capsys, last, argv, message):
+        files = {
+            "C": comment_file(crewed, "Checked on staging.\nNot proven: the native device\n"),
+            "NONE": str(crewed / "none.md"),
+            "EMPTY": str(crewed / "empty.md"),
+        }
+        (crewed / "none.md").write_text("Checked on staging.\nnot proven: lower case\n")
+        (crewed / "empty.md").write_text("Checked.\nNot proven:   \n")
+        if last:
+            with_row(crewed, DONE_KEY, last)
+        before_rows = transitions(crewed)
+        adapter = ticket_adapter.FakeAdapter()
+        argv = [files.get(a, a) for a in argv]
+        assert act(crewed, "move", DONE_KEY, "done", *argv, adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.startswith(f"board.py move {DONE_KEY} done: refused: "), err
+        assert message in err.splitlines()[0], err
+        assert transitions(crewed) == before_rows and adapter.calls == []
+        assert "carry:" not in out
+
+    def test_the_cli_has_no_verdict_flag(self, crewed, capsys):
+        with_row(crewed, DONE_KEY, "in_review")
+        with pytest.raises(SystemExit) as stop:
+            act(crewed, "move", DONE_KEY, "done", "--verdict", str(VERDICT))
+        assert stop.value.code == 2
+        assert "unrecognized arguments: --verdict" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "entry, message",
+        [
+            (verdict_entry("PROJ-2"), f"the verdict has no entry for {DONE_KEY}"),
+            (verdict_entry(verdict="walk"), "verdict is walk, not done"),
+            (
+                verdict_entry(walk=[{"ac": 4, "persona": "p", "screen": "s"}]),
+                "the entry still has a walk",
+            ),
+            (
+                verdict_entry(
+                    checks=[
+                        {"ac": 1, "persona": "p", "status": "FAIL", "observed": "500"},
+                        {"ac": 2, "persona": "p", "status": "PASS", "observed": "ok"},
+                    ]
+                ),
+                "receipt check AC1 is FAIL, not PASS",
+            ),
+            (
+                verdict_entry(
+                    checks=[
+                        {"ac": 1, "persona": "p", "status": "PASS", "observed": "NOT TESTABLE: x"},
+                        {"ac": 2, "persona": "p", "status": "PASS", "observed": "ok"},
+                    ]
+                ),
+                "receipt check AC1 is PASS, not PASS",
+            ),
+            (
+                verdict_entry(checks=[{"ac": 1, "persona": "p", "status": "PASS"}]),
+                "receipt AC2 has no check",
+            ),
+            (verdict_entry(not_proven=" "), "the entry has no not_proven line"),
+        ],
+    )
+    def test_a_verdict_entry_that_proves_nothing_is_refused(self, crewed, entry, message):
+        with_row(crewed, DONE_KEY, "in_review")
+        before_rows = transitions(crewed)
+        adapter = ticket_adapter.FakeAdapter()
+        with pytest.raises(board.BoardError) as refused:
+            done_in_process(crewed, adapter, entry)
+        assert f"board.py move {DONE_KEY} done: refused: {message}" in str(refused.value)
+        assert transitions(crewed) == before_rows and adapter.calls == []
+
+    def test_a_comment_file_moves_via_comment_and_carries_its_text(self, crewed, capsys):
+        with_jira(crewed)
+        with_row(crewed, DONE_KEY, "in_review")
+        text = "Walked Settings as paid-user.\nNot proven: the small screen"
+        assert (
+            act(crewed, "move", DONE_KEY, "done", "--comment-file", comment_file(crewed, text))
+            == 0
+        )
+        out = capsys.readouterr().out
+        row = transitions(crewed)[-1]
+        assert {k: row[k] for k in ("key", "from", "to", "via", "ticket")} == {
+            "key": DONE_KEY,
+            "from": "in_review",
+            "to": "done",
+            "via": "comment",
+            "ticket": "carried",
+        }
+        assert carry_of(out) == [
+            {"op": "transition", "key": DONE_KEY, "status": "Done"},
+            {"op": "comment", "key": DONE_KEY, "text": text},
+        ]
+
+    def test_a_green_entry_moves_via_receipt_with_the_generated_comment(self, crewed):
+        with_row(crewed, DONE_KEY, "in_review")
+        row, ops, sample = done_in_process(
+            crewed, ticket_adapter.SessionTransport(), verdict_entry()
+        )
+        assert list(row) == ["key", "from", "to", "via", "rc", "ts", "by", "ticket"]
+        assert (row["via"], row["rc"], row["ticket"]) == ("receipt", "v1.4.0-rc.2", "carried")
+        assert transitions(crewed)[-1] == row and sample is None
+        assert [op.op for op in ops] == ["transition", "comment"]
+        assert ops[1].value.splitlines() == [
+            "Accepted by the receipts job v1.4.0-rc.2 "
+            "(https://example.org/acme/app/actions/runs/4242)",
+            "Oracle: receipt AC1, AC2 · ci AC3 (tests/test_export.py::test_export_csv)",
+            "Persona: free-user",
+            "Observed: AC1 PASS — 200 with a CSV of 3 rows",
+            "Observed: AC2 PASS — 429 after the 6th export",
+            "Not proven: the export on a native device",
+        ]
+
+    def test_sample_every_nth(self, crewed):
+        set_sample(crewed, 5, keeper="tess")
+        state = board.StateDir(crewed / "board.json")
+        samples = []
+        for i in range(1, 7):
+            key = f"PROJ-{10 + i}"
+            with_row(crewed, key, "in_review")
+            if i == 3:  # a comment move between them never counts
+                with_row(crewed, "PROJ-99", "in_review")
+                path = comment_file(crewed, "Not proven: the device")
+                board.move_done(
+                    state,
+                    "PROJ-99",
+                    board.load_crew(),
+                    NOW,
+                    ticket_adapter.FakeAdapter(),
+                    comment_file=path,
+                )
+            entry = verdict_entry(key=DONE_KEY)
+            entry["key"] = key
+            _row, _ops, sample = done_in_process(
+                crewed, ticket_adapter.FakeAdapter(), entry, key=key
+            )
+            samples.append(sample)
+        assert samples == [None, None, None, None, "sample: PROJ-15 → tess", None]
+        [item] = news_of(crewed, "sample")
+        assert item == {
+            "id": "S1",
+            "kind": "sample",
+            "title": "Sample PROJ-15: accepted by the receipts job, tess checks it post hoc",
+            "ts": "2026-11-03T10:00:00Z",
+        }
+
+    def test_the_keeper_defaults_to_the_acceptance_role(self, crewed):
+        set_sample(crewed, 1)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample == f"sample: {DONE_KEY} → tess"
+
+    def test_sample_null_writes_none(self, crewed):
+        set_sample(crewed, None)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample is None and news_of(crewed, "sample") == []
