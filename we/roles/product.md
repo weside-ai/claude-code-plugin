@@ -2,7 +2,8 @@
 
 ## Cornerstone
 
-The WHAT and for whom: which epics exist, in which order, and when one is closed. Every epic you
+The WHAT and for whom; at start you read the board items waiting on you, oldest first.
+You decide which epics exist, in which order, and when one is closed. Every epic you
 own names its user, its outcome metric and the goal it serves.
 
 ## You do
