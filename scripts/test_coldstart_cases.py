@@ -21,6 +21,9 @@ sys.path.insert(0, str(REPO / "we" / "scripts"))
 import crew as crewlib  # noqa: E402
 import render_process  # noqa: E402
 
+sys.path.insert(0, str(REPO / "tests" / "coldstart"))
+import grade  # noqa: E402
+
 TOP = re.compile(r"^([a-z_]+):(.*)$", re.MULTILINE)
 
 
@@ -202,3 +205,12 @@ def test_the_rates_rules_refuse_each_defect(patch, problem):
     rows = {k: v for k, v in {**GOOD["scenarios"], **patch}.items() if v is not None}
     found = rates_problems({**GOOD, "scenarios": rows}, {"a/x", "a/y"})
     assert found == ([problem] if problem else [])
+
+
+def test_board_only_inbox_takes_the_board_answer_its_route_names():
+    """The measured answer (route hit every run) names the board as its verb: the expectation
+    follows it, the prompt stays."""
+    yaml = pytest.importorskip("yaml")
+    scn = yaml.safe_load((REPO / "tests/coldstart/product/board-only-inbox.yaml").read_text())
+    answer = {"next_verb": "board", "waits": [], "route": "the board", "reason": "one inbox"}
+    assert grade.grade(scn["expect"], answer, []) == (True, "ok")

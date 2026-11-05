@@ -7,7 +7,7 @@ prompt: >
   Where does the human see what they must decide: the push line, the evening bundle and an
   escalation? Answer in the JSON schema.
 expect:
-  next_verb: [answer]
+  next_verb: [board]
   waits: []
   route: "board"
   forbidden: []

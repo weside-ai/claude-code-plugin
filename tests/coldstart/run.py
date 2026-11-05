@@ -9,14 +9,16 @@ file's text), ``mcp`` (``{name: server}``, the only way a session gets an MCP se
 ``routing`` and ``judge``.
 
 Per run, the session is isolated like ``we/scripts/cold_reader.py``'s reader, minus what a
-cold start needs (the plugin's own hooks, slash commands, Claude Code's prompt, three read tools):
+cold start needs (the plugin's own hooks, slash commands, Claude Code's prompt, three read tools and
+``Skill``, without which the session gets no skill listing):
 
 - a fresh ``git init`` repo under ``$TMPDIR`` (refused when it lies under ``$HOME``, so no
   ``AGENTS.md``/``CLAUDE.md`` ancestor), holding the scenario's ``crew`` as ``.weside/crew.json``
-  and its ``world`` files;
+  and its ``world`` files, and each member's workplace or extra repo that lies inside the temp root
+  (``../biz``) as an empty directory, so the role hook loads the card;
 - ``claude -p --plugin-dir <checkout>/we --setting-sources "" --strict-mcp-config --mcp-config
   <empty unless mcp:> --no-session-persistence --model MODEL --effort EFFORT --json-schema
-  <schema.json> --output-format stream-json --verbose --tools Read,Glob,Grep --max-budget-usd
+  <schema.json> --output-format stream-json --verbose --tools Read,Glob,Grep,Skill --max-budget-usd
   <rates.json run_budget_usd>``;
 - the caller's environment minus ``CLAUDE_CONFIG_DIR`` (the global login, as ``env -u
   CLAUDE_CONFIG_DIR`` does), ``WESIDE_COMPANION`` and ``WE_ROLE`` (a harness started from a worker
@@ -80,7 +82,7 @@ SCHEMA = SUITE / "schema.json"
 RATES = SUITE / "rates.json"
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
-TOOLS = "Read,Glob,Grep"
+TOOLS = "Read,Glob,Grep,Skill"
 STRIPPED_ENV = ("CLAUDE_CONFIG_DIR", "WESIDE_COMPANION", "WE_ROLE")
 SCENARIO_ENV = ("WE_ROLE", "WESIDE_COMPANION")
 REQUIRED = ("id", "role", "crew", "prompt", "expect")
@@ -203,6 +205,8 @@ def prepare(scn: dict, root: Path) -> tuple[Path, Path]:
     board["file"] = str(root / "state" / "board.json")  # never the caller's board or served log
     crew["board"] = board
     (repo / ".weside" / "crew.json").write_text(json.dumps(crew, indent=2), encoding="utf-8")
+    for place in member_places(crew, repo, root):
+        place.mkdir(parents=True, exist_ok=True)
     for rel, value in scn["world"].items():
         target = repo / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -214,6 +218,19 @@ def prepare(scn: dict, root: Path) -> tuple[Path, Path]:
     mcp = root / "mcp.json"
     mcp.write_text(json.dumps({"mcpServers": scn.get("mcp") or {}}), encoding="utf-8")
     return repo, mcp
+
+
+def member_places(crew: dict, repo: Path, root: Path) -> list[Path]:
+    """Each member's workplace and extra repo that resolves inside ``root``: the role hook refuses
+    a card whose workplace is no directory, so the run creates the siblings (``../biz``)."""
+    places = []
+    for entry in (crew.get("members") or {}).values():
+        values = [entry.get("workplace") or ".", *(entry.get("extra_repos") or [])]
+        for value in values:
+            place = (repo / str(value).strip()).resolve()
+            if place != root.resolve() and root.resolve() in place.parents:
+                places.append(place)
+    return places
 
 
 def argv(scn: dict, mcp: Path, budget_usd: float) -> list[str]:

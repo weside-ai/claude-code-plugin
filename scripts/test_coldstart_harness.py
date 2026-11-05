@@ -22,6 +22,9 @@ sys.path.insert(0, str(REPO / "tests" / "coldstart"))
 
 import run  # noqa: E402
 
+sys.path.insert(0, str(REPO / "we" / "hooks"))
+import role_on_start  # noqa: E402
+
 T2 = "master/t2-oneway-human-merges"
 HIT = {"next_verb": "board", "waits": ["human"], "route": "board item", "reason": "one-way"}
 
@@ -77,7 +80,7 @@ def test_the_argv_pins_every_isolation_flag(fake):
     assert argv[argv.index("--model") + 1] == "claude-opus-5-5"
     assert argv[argv.index("--effort") + 1] == "medium"
     assert argv[argv.index("--output-format") + 1] == "stream-json"
-    assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep"
+    assert argv[argv.index("--tools") + 1] == "Read,Glob,Grep,Skill"
     schema = json.loads(argv[argv.index("--json-schema") + 1])
     assert set(schema["required"]) == {"next_verb", "waits", "route", "reason"}
     assert float(argv[argv.index("--max-budget-usd") + 1]) > 0
@@ -127,6 +130,49 @@ def test_a_scenario_mcp_key_is_the_only_server_source(tmp_path):
     }
     _, mcp = run.prepare(scn, tmp_path)
     assert json.loads(mcp.read_text()) == {"mcpServers": {"x": {"command": "true"}}}
+
+
+def test_the_tools_carry_skill_so_the_session_gets_the_skill_listing():
+    """Without the Skill tool a cold session's init event lists no skills: no description routes."""
+    assert "Skill" in run.TOOLS.split(",")
+
+
+@pytest.mark.parametrize(
+    ("sid", "who", "places"),
+    [
+        ("hr/card-cornerstone", "Hana", ["biz"]),
+        ("machinery/card-cornerstone", "Kit", ["infra"]),
+    ],
+)
+def test_each_members_workplace_exists_beside_the_repo_so_the_card_loads(
+    tmp_path, sid, who, places
+):
+    repo, _ = run.prepare(run.load(run.SUITE / f"{sid}.yaml"), tmp_path)
+    for place in places:
+        assert (tmp_path / place).is_dir()
+    text, error = role_on_start.output(
+        {"cwd": str(repo), "source": "startup"}, {"WESIDE_COMPANION": who}
+    )
+    assert error is None and text and "Cornerstone" in text
+
+
+def test_a_workplace_outside_the_temp_root_is_never_created(tmp_path):
+    crew = tmp_path / "crew.json"
+    crew.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "members": {
+                    "x": {"name": "X", "workplace": "../../escape"},
+                    "y": {"name": "Y", "extra_repos": ["../side"]},
+                },
+            }
+        )
+    )
+    scn = {"crew": str(crew), "world": {}, "prompt": "p"}
+    run.prepare(scn, tmp_path / "root")
+    assert not (tmp_path / "escape").exists()
+    assert (tmp_path / "root" / "side").is_dir()
 
 
 def test_the_run_prints_one_result_line(fake, capsys):
