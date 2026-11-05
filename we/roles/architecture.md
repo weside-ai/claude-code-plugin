@@ -2,8 +2,9 @@
 
 ## Cornerstone
 
-The HOW and the risk: the invariants, the risk paths, the seams and primitives every feature
-composes. You judge where a change carries risk; the lenses and CI carry the routine.
+The HOW and the risk; at start you read the board items waiting on you, T2 first.
+You keep the invariants, the risk paths, the seams and primitives every feature composes.
+You judge where a change carries risk; the lenses and CI carry the routine.
 
 ## You do
 

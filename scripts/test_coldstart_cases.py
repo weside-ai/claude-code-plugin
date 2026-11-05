@@ -121,13 +121,12 @@ def top_prompt(case: Path) -> str:
     ("name", "waits", "not_waits"),
     [
         ("security-twoway-panel-enough", [], ["security", "human"]),
-        ("security-twoway-before8-waits", ["security"], ["human"]),
         ("security-oneway-owner-signs", ["security", "human"], ["product", "acceptance"]),
     ],
 )
 def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
-    """A two-way auth diff with a green panel waits on the security holder's review before 8.0.0
-    and on nobody from 8.0.0; a ``trust-loosening`` one waits on the security holder's signature,
+    """A two-way auth diff with a green panel waits on nobody (the panel is enough); a
+    ``trust-loosening`` one waits on the security holder's signature,
     then the human's merge."""
     case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
     top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
@@ -135,7 +134,7 @@ def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_wait
     lists = _lists(case)
     assert lists["waits"] == waits and lists["not_waits"] == not_waits
     assert ("gh pr merge --auto" in lists.get("forbidden", [])) == bool(waits)
-    assert ("8.0.0" in top_prompt(case)) == (name == "security-twoway-panel-enough")
+    assert "8.0.0" not in top_prompt(case)
 
 
 def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
@@ -145,10 +144,6 @@ def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
 
 
 GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
-REVIEW_LINE = (
-    "- Before plugin `we` 8.0.0, a PR touching auth, tenant isolation or trust also waits for"
-    " Bo's review."
-)
 ORDER_LINE = "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
 # L0's one security line: the holder runs on call and signs the board item of a `trust-loosening` diff
 SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
@@ -169,7 +164,7 @@ def test_the_security_cases_crew_renders_the_routing_they_expect():
     l0, card = _rendered(SECURITY_FIXTURE)
     lines = l0.split("\n")
     assert ORDER_LINE in card.split("\n"), "master card lacks the trust-loosening order line"
-    assert REVIEW_LINE in card.split("\n"), "master card lacks the pre-8.0 security review wait"
+    assert "Bo's review" not in card, "master card still waits on the security review"
     assert SECURITY_LINE in lines, "L0 lacks the security line (on call, signs trust-loosening)"
 
 
