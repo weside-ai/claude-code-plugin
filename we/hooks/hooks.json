@@ -60,6 +60,11 @@
           },
           {
             "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/sampler_on_prompt.py\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "[ -z \"$TMUX_PANE\" ] || python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tmux_attention.py\"",
             "timeout": 5
           }

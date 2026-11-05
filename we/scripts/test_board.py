@@ -1954,3 +1954,465 @@ class TestMoveDone:
         with_row(crewed, DONE_KEY, "in_review")
         _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
         assert sample is None and news_of(crewed, "sample") == []
+
+
+# ---------------------------------------------------------------------------------------------
+# the flow verbs: log correction, blocked, ask --urgent, the waits log
+
+WORKER = "proj-12-build"
+BLOCKED_ROW = {
+    "sessionId": "sid-w",
+    "name": WORKER,
+    "status": "idle",
+    "state": "blocked",
+    "waitingFor": "permission prompt",
+    "pid": 4242,
+}
+
+
+def bind_flow(state_dir, **flow):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    crew = json.loads(path.read_text(encoding="utf-8"))
+    crew["flow"] = {"log_dir": str(state_dir / "flow"), **flow}
+    path.write_text(json.dumps(crew), encoding="utf-8")
+
+
+def agents(state_dir, *rows):
+    base = [{"sessionId": "sid-12", "name": "lead-12", "status": "busy"}]
+    (state_dir / "agents.json").write_text(json.dumps(base + list(rows)), encoding="utf-8")
+
+
+def flow_lines(state_dir):
+    return (
+        [
+            json.loads(x)
+            for p in sorted((state_dir / "flow").glob("*.jsonl"))
+            for x in p.read_text(encoding="utf-8").splitlines()
+        ]
+        if (state_dir / "flow").exists()
+        else []
+    )
+
+
+def waits(state_dir):
+    return jsonl(state_dir / "board-waits.jsonl")
+
+
+class TestLogCorrection:
+    def test_the_coordinator_writes_one_correction_line(self, crewed, monkeypatch, capsys):
+        bind_flow(crewed)
+        pin(monkeypatch, "otto")
+        before = (crewed / "board.json").read_bytes()
+        assert go(crewed, "log", "correction", "lead-12", "scope") == 0
+        [line] = flow_lines(crewed)
+        assert line == {
+            "type": "correction",
+            "ts": "2026-11-03T10:00:00Z",
+            "session": "lead-12",
+            "kind": "scope",
+            "by": "otto",
+        }
+        assert (crewed / "flow" / "sampler-2026-11-03.jsonl").exists()  # Berlin day
+        assert json.loads(capsys.readouterr().out) == line
+        assert (crewed / "board.json").read_bytes() == before
+
+    def test_any_other_role_is_refused_and_nothing_written(self, crewed, monkeypatch, capsys):
+        bind_flow(crewed)
+        pin(monkeypatch, "ada")
+        assert go(crewed, "log", "correction", "lead-12", "scope") == 1
+        assert (
+            "board.py log correction: only the coordinator records a correction"
+            in capsys.readouterr().err
+        )
+        assert flow_lines(crewed) == []
+
+    @pytest.mark.parametrize("kind", ["Scope", "two words", "scope!", "", "1x"])
+    def test_a_kind_that_is_no_lower_case_token_is_refused(
+        self, crewed, monkeypatch, capsys, kind
+    ):
+        bind_flow(crewed)
+        pin(monkeypatch, "otto")
+        assert go(crewed, "log", "correction", "lead-12", kind) == 1
+        assert f"kind {kind!r} is no lower-case token" in capsys.readouterr().err
+        assert flow_lines(crewed) == []
+
+    def test_an_unbound_crew_is_refused_naming_the_key(self, crewed, monkeypatch, capsys):
+        pin(monkeypatch, "otto")
+        assert go(crewed, "log", "correction", "lead-12", "scope") == 1
+        assert (
+            "board.py log correction: flow.log_dir is unset in the crew" in capsys.readouterr().err
+        )
+
+
+class TestBlocked:
+    def test_a_permission_prompt_marks_the_line_waiting_on_human(self, crewed):
+        agents(crewed, BLOCKED_ROW)
+        before = board_of(crewed)
+        argv = [
+            "blocked",
+            WORKER,
+            "--kind",
+            "permission",
+            "--starter",
+            "lead-12",
+            "--key",
+            "PROJ-12",
+        ]
+        assert go(crewed, *argv, "--command", "x" * 300) == 0
+        after = board_of(crewed)
+        line = line_of(crewed, WORKER)
+        assert line == {
+            "name": WORKER,
+            "session_id": "sid-w",
+            "waiting_on": "human",
+            "since": "2026-11-03T10:00Z",
+            "sla_due": "2026-11-03T14:00Z",
+            "blocked": {
+                "kind": "permission",
+                "starter": "lead-12",
+                "starter_session_id": "sid-12",
+                "key": "PROJ-12",
+                "since": "2026-11-03T10:00:00Z",
+                "waiting_for": "permission prompt",
+                "command": "x" * 200,
+            },
+        }
+        assert after["sessions"][:2] == before["sessions"]  # no other line touched
+        assert {k: after[k] for k in after if k != "sessions"} == {
+            k: before[k] for k in before if k != "sessions"
+        }
+
+    def test_an_existing_line_gains_only_the_wait_fields(self, crewed):
+        agents(crewed, {**BLOCKED_ROW, "name": "other", "sessionId": "sid-o"})
+        old = line_of(crewed, "other")
+        assert go(crewed, "blocked", "other", "--kind", "permission") == 0
+        new = line_of(crewed, "other")
+        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due"}
+        assert {
+            k: v for k, v in new.items() if k not in ("blocked", "waiting_on", "since", "sla_due")
+        } == {k: v for k, v in old.items() if k != "since"}
+
+    @pytest.mark.parametrize(
+        "row, kind, message",
+        [
+            (
+                {**BLOCKED_ROW, "state": "working", "waitingFor": None},
+                "permission",
+                f"board.py blocked: {WORKER} is not blocked on a permission prompt right now",
+            ),
+            (
+                {**BLOCKED_ROW, "status": "busy", "state": "working"},
+                "chat",
+                f"board.py blocked: {WORKER} is not idle right now",
+            ),
+            (None, "permission", f"board.py blocked: {WORKER} is not running"),
+        ],
+    )
+    def test_it_refuses_unless_the_session_is_so_right_now(
+        self, crewed, capsys, row, kind, message
+    ):
+        agents(crewed, *([row] if row else []))
+        before = (crewed / "board.json").read_bytes()
+        extra = ["--waiting-on", "product"] if kind == "chat" else []
+        assert go(crewed, "blocked", WORKER, "--kind", kind, *extra) == 1
+        assert message in capsys.readouterr().err
+        assert (crewed / "board.json").read_bytes() == before
+
+    @pytest.mark.parametrize(
+        "kind, waiting_on, message",
+        [
+            ("chat", None, "board.py blocked: --kind chat needs --waiting-on <role key or human>"),
+            ("chat", "legal", "board.py blocked: waiting_on 'legal' is no role key"),
+            ("permission", "product", "board.py blocked: a permission prompt waits on human"),
+        ],
+    )
+    def test_waiting_on_stays_a_role_key_or_human(self, crewed, capsys, kind, waiting_on, message):
+        agents(crewed, {**BLOCKED_ROW, "state": "blocked" if kind == "permission" else "idle"})
+        extra = ["--waiting-on", waiting_on] if waiting_on else []
+        assert go(crewed, "blocked", WORKER, "--kind", kind, *extra) == 1
+        assert message in capsys.readouterr().err
+        assert WORKER not in [s["name"] for s in board_of(crewed)["sessions"]]
+
+    def test_the_same_wait_again_writes_nothing(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission", "--command", "make deploy")
+        before = (crewed / "board.json").read_bytes()
+        capsys.readouterr()
+        later = datetime(2026, 11, 3, 10, 1, tzinfo=timezone.utc)
+        assert (
+            go(
+                crewed,
+                "blocked",
+                WORKER,
+                "--kind",
+                "permission",
+                "--command",
+                "make deploy",
+                now=later,
+            )
+            == 0
+        )
+        assert capsys.readouterr().out.strip() == f"board.py blocked: {WORKER} unchanged"
+        assert (crewed / "board.json").read_bytes() == before
+
+    def test_a_chat_wait_moves_from_the_starter_to_human_keeping_its_start(self, crewed):
+        agents(crewed, {**BLOCKED_ROW, "state": "idle", "waitingFor": None})
+        go(
+            crewed,
+            "blocked",
+            WORKER,
+            "--kind",
+            "chat",
+            "--waiting-on",
+            "coordinator",
+            "--starter",
+            "lead-12",
+            "--key",
+            "PROJ-12",
+        )
+        later = datetime(2026, 11, 3, 10, 31, tzinfo=timezone.utc)
+        go(
+            crewed,
+            "blocked",
+            WORKER,
+            "--kind",
+            "chat",
+            "--waiting-on",
+            "human",
+            "--starter",
+            "lead-12",
+            now=later,
+        )
+        line = line_of(crewed, WORKER)
+        assert (line["waiting_on"], line["since"]) == ("human", "2026-11-03T10:31Z")
+        assert line["blocked"]["since"] == "2026-11-03T10:00:00Z"
+        assert waits(crewed) == [
+            {
+                "key": "PROJ-12",
+                "session": WORKER,
+                "waiting_on": "coordinator",
+                "since": "2026-11-03T10:00Z",
+                "ended": "2026-11-03T10:31:00Z",
+                "duration_s": 1860,
+            }
+        ]
+
+    def test_clear_removes_the_wait_once_and_logs_it(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission", "--key", "PROJ-12")
+        agents(crewed)  # the worker is gone
+        later = datetime(2026, 11, 3, 10, 5, tzinfo=timezone.utc)
+        capsys.readouterr()
+        assert go(crewed, "blocked", WORKER, "--clear", now=later) == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out == {
+            "cleared": WORKER,
+            "kind": "permission",
+            "key": "PROJ-12",
+            "since": "2026-11-03T10:00:00Z",
+            "duration_s": 300,
+            "obsolete": [],
+        }
+        assert not {"blocked", "waiting_on", "since", "sla_due"} & set(line_of(crewed, WORKER))
+        assert [(w["key"], w["waiting_on"], w["duration_s"]) for w in waits(crewed)] == [
+            ("PROJ-12", "human", 300)
+        ]
+        assert go(crewed, "blocked", WORKER, "--clear", now=later) == 0
+        assert (
+            capsys.readouterr().out.strip()
+            == f"board.py blocked: {WORKER} carries no wait to clear"
+        )
+        assert len(waits(crewed)) == 1
+
+    def test_clear_refuses_while_the_prompt_still_stands(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission")
+        before = (crewed / "board.json").read_bytes()
+        assert go(crewed, "blocked", WORKER, "--clear") == 1
+        assert (
+            f"board.py blocked: {WORKER} is still blocked on a permission prompt"
+            in capsys.readouterr().err
+        )
+        assert (crewed / "board.json").read_bytes() == before
+
+    def test_clear_marks_the_prompts_question_obsolete_never_deletes_it(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission")
+        answer_with(crewed, CLEAR)
+        go(crewed, *ask_argv(**{"--session": WORKER, "--cause": "access-click"}))
+        go(crewed, *ask_argv(**{"--session": WORKER, "--cause": "info"}))
+        agents(crewed, {**BLOCKED_ROW, "state": "working", "waitingFor": None})
+        capsys.readouterr()
+        later = datetime(2026, 11, 3, 10, 7, tzinfo=timezone.utc)
+        assert go(crewed, "blocked", WORKER, "--clear", now=later) == 0
+        assert json.loads(capsys.readouterr().out)["obsolete"] == ["Q8"]
+        queue = {q["id"]: q for q in board_of(crewed)["owner_queue"]}
+        assert sorted(queue) == ["Q7", "Q8", "Q9"]
+        assert queue["Q8"]["obsolete"] == "prompt resolved at 11:07"  # Berlin
+        assert "obsolete" not in queue["Q9"] and "obsolete" not in queue["Q7"]
+
+    def test_the_obsolete_reason_speaks_the_crews_label(self, crewed):
+        path = crewed / "work" / ".weside" / "crew.json"
+        crew = json.loads(path.read_text(encoding="utf-8"))
+        crew["labels"]["prompt_resolved"] = "Prompt erledigt um"
+        path.write_text(json.dumps(crew), encoding="utf-8")
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission")
+        answer_with(crewed, CLEAR)
+        go(crewed, *ask_argv(**{"--session": WORKER, "--cause": "access-click"}))
+        agents(crewed)
+        go(crewed, "blocked", WORKER, "--clear")
+        assert board_of(crewed)["owner_queue"][-1]["obsolete"] == "Prompt erledigt um 11:00"
+
+    def test_a_key_outside_naming_key_is_refused(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        assert go(crewed, "blocked", WORKER, "--kind", "permission", "--key", "proj-12") == 1
+        assert (
+            "board.py blocked: --key 'proj-12' does not match naming.key"
+            in capsys.readouterr().err
+        )
+        assert WORKER not in [s["name"] for s in board_of(crewed)["sessions"]]
+
+    def test_a_chat_wait_clears_without_asking_claude(self, crewed, monkeypatch):
+        agents(crewed, {**BLOCKED_ROW, "state": "idle", "waitingFor": None})
+        go(crewed, "blocked", WORKER, "--kind", "chat", "--waiting-on", "coordinator")
+        monkeypatch.setenv("FAKE_AGENTS_EXIT", "3")
+        assert go(crewed, "blocked", WORKER, "--clear") == 0
+        assert "blocked" not in line_of(crewed, WORKER)
+
+    def test_clear_asks_claude_agents_outside_the_board_lock(self, crewed, monkeypatch, capsys):
+        agents(crewed, BLOCKED_ROW)
+        go(crewed, "blocked", WORKER, "--kind", "permission")
+        lock = crewed / "board.json.lock"
+        calls = []
+
+        def probe(fail):
+            def rows():
+                with open(lock, "w") as other:
+                    try:
+                        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        calls.append("free")
+                        fcntl.flock(other, fcntl.LOCK_UN)
+                    except BlockingIOError:
+                        calls.append("held")
+                if fail:
+                    raise board.BoardError("board.py blocked: claude agents --json timed out")
+                return []
+
+            return rows
+
+        monkeypatch.setattr(board, "_agent_rows", probe(fail=True))
+        before = (crewed / "board.json").read_bytes()
+        assert go(crewed, "blocked", WORKER, "--clear") == 1
+        assert "timed out" in capsys.readouterr().err
+        assert (crewed / "board.json").read_bytes() == before
+        monkeypatch.setattr(board, "_agent_rows", probe(fail=False))
+        assert go(crewed, "blocked", WORKER, "--clear") == 0
+        assert calls == ["free", "free"]
+        assert "blocked" not in line_of(crewed, WORKER)
+
+    def test_set_by_the_session_itself_ends_the_blocked_mark(self, crewed, monkeypatch):
+        agents(crewed, {**BLOCKED_ROW, "sessionId": "sid-12", "name": "lead-12"})
+        go(crewed, "blocked", "lead-12", "--kind", "permission")
+        pin(monkeypatch, "")
+        assert go(crewed, "set", "waiting_on=architecture") == 0
+        line = line_of(crewed, "lead-12")
+        assert line["waiting_on"] == "architecture" and "blocked" not in line
+        assert go(crewed, "blocked", "lead-12", "--clear") == 0  # nothing left to clear
+        assert line_of(crewed, "lead-12")["waiting_on"] == "architecture"
+
+    def test_without_the_verb_argparse_refuses(self):
+        # the red arm of AC 13 against a board.py without `blocked`
+        assert "blocked" in board.parser()._subparsers._group_actions[0].choices
+
+
+class TestUrgent:
+    def test_ask_urgent_marks_the_item_and_the_log(self, crewless):
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv(), "--urgent") == 0
+        assert board_of(crewless)["owner_queue"][-1]["urgent"] is True
+        assert jsonl(crewless / "board-questions.jsonl")[-1]["urgent"] is True
+
+    def test_a_plain_ask_carries_no_urgent_field(self, crewless):
+        answer_with(crewless, CLEAR)
+        go(crewless, *ask_argv())
+        assert "urgent" not in board_of(crewless)["owner_queue"][-1]
+
+    def test_bundle_lists_urgent_first_oldest_first_within(self, crewed, monkeypatch):
+        queue = [
+            {"id": "Q1", "since": "2026-10-30", "ts": "2026-10-30T09:00:00Z"},
+            {"id": "Q2", "since": "2026-11-02", "ts": "2026-11-02T09:00:00Z", "urgent": True},
+            {"id": "Q3", "since": "2026-11-01", "ts": "2026-11-01T09:00:00Z", "urgent": True},
+            {
+                "id": "Q4",
+                "since": "2026-10-31",
+                "ts": "2026-10-31T09:00:00Z",
+                "obsolete": "prompt resolved at 09:10",
+            },
+        ]
+        board.StateDir(crewed / "board.json").write_board(lambda b: b.update(owner_queue=queue))
+        pin(monkeypatch, "otto")
+        assert go(crewed, "bundle") == 0
+        body = board_of(crewed)["news"][-1]["body"].splitlines()
+        assert body == [
+            "open: Q3 (urgent), Q2 (urgent), Q1",
+            "obsolete: Q4 (prompt resolved at 09:10)",
+        ]
+
+
+class TestWaitsLog:
+    def test_set_logs_a_wait_when_it_ends_or_changes(self, crewless):
+        go(crewless, "set", "waiting_on=architecture")
+        assert waits(crewless) == []
+        go(
+            crewless,
+            "set",
+            "waiting_on=architecture",
+            now=datetime(2026, 11, 3, 10, 20, tzinfo=timezone.utc),
+        )
+        assert waits(crewless) == []  # the same wait goes on
+        go(
+            crewless,
+            "set",
+            "waiting_on=product",
+            now=datetime(2026, 11, 3, 10, 30, tzinfo=timezone.utc),
+        )
+        go(crewless, "set", "waiting_on=", now=datetime(2026, 11, 3, 11, 0, tzinfo=timezone.utc))
+        assert waits(crewless) == [
+            {
+                "key": None,
+                "session": "lead-12",
+                "waiting_on": "architecture",
+                "since": "2026-11-03T10:00Z",
+                "ended": "2026-11-03T10:30:00Z",
+                "duration_s": 1800,
+            },
+            {
+                "key": None,
+                "session": "lead-12",
+                "waiting_on": "product",
+                "since": "2026-11-03T10:30Z",
+                "ended": "2026-11-03T11:00:00Z",
+                "duration_s": 1800,
+            },
+        ]
+
+    def test_the_key_comes_from_the_lines_keys(self, crewless):
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["sessions"][0].update(
+                keys=["PROJ-12"], waiting_on="human", since="2026-11-03T09:00Z"
+            )
+        )
+        go(crewless, "set", "waiting_on=")
+        assert [(w["key"], w["duration_s"]) for w in waits(crewless)] == [("PROJ-12", 3600)]
+
+    def test_a_failed_board_write_logs_no_wait(self, crewless, monkeypatch):
+        go(crewless, "set", "waiting_on=architecture")
+
+        def broken(*_a):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError):
+            go(crewless, "set", "waiting_on=")
+        assert waits(crewless) == []

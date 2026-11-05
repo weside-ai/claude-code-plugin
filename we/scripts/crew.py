@@ -38,7 +38,8 @@ has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``que
 (opens a question line to the human), ``labels`` (the words of a question line and of the
 parking signal in the crew's language: ``recommendation``, ``ready``, and of the notice line a
 session reads when its crew is unreadable or carries unknown keys: ``crew_unreadable``,
-``crew_unknown_keys``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
+``crew_unknown_keys``, and the reason ``board.py blocked --clear`` gives a question whose permission
+prompt was resolved, followed by the time: ``prompt_resolved``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
 lowercased>``), ``weside_account`` (the members are weside companions: a pinned session loads its
 identity with ``/we:materialize``), ``lenses`` (per lens ``agent``, ``questions`` (the Ready
 question file), ``t2_questions`` (the T2 question file), ``registry``, ``keeper``, ``sample``;
@@ -46,7 +47,12 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 ``we:lens-<key>``), ``ready_lenses``, ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
-``files``, ``coldstart``. A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
+``files``, ``coldstart``, ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
+reader stays silent), ``stale_min`` (minutes after which the newest line counts as a dead sampler),
+``starter_wait_min`` (minutes a chat wait is to wait on its starter before it becomes a question
+for the human), ``urgent_commands`` (regexes; a blocked command matching one is to mark its
+question urgent, never whether it is asked); ``load`` validates both, but no reader acts on them
+yet: the part-1b detector will; ``flow_log.py`` owns the line format). A key of ``RETIRED_KEYS`` (no reader left) is skipped with one line on
 stderr naming the file, never a ``CrewError``, so a crew file written for an older release loads.
 
 ``load`` reads an unknown key (a key the schema does not name, a ``roles`` or ``fallback`` key
@@ -154,6 +160,7 @@ DEFAULTS: dict[str, Any] = {
         "ready": "ready",
         "crew_unreadable": "crew.json not readable",
         "crew_unknown_keys": "crew.json: unknown keys ignored",
+        "prompt_resolved": "prompt resolved at",
     },
     "skill_prefix": "weside",
     "weside_account": False,
@@ -224,6 +231,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "files": {"goals": None, "dod": None, "verify": None},
     "coldstart": {"suite": None},
+    "flow": {"log_dir": None, "stale_min": 15, "starter_wait_min": 30, "urgent_commands": []},
 }
 # a null default takes a string or null; these take a number or null
 NUMBER_OR_NULL = (
@@ -531,6 +539,7 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
     if reviewer is not None and reviewer not in slugs:
         raise _fail(path, f"sla.t2_second_reviewer {reviewer!r} is no member")
     _validate_local_rules(path, data.get("local_rules", []))
+    _validate_urgent_commands(path, data.get("flow", {}).get("urgent_commands", []))
     for key, text in data.get("labels", {}).items():
         if not _is_label(text):
             raise _fail(
@@ -554,6 +563,16 @@ def _validate_lenses(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
         for lens in data.get(key, []):
             if lens not in lens_keys and lens not in FORMER_DEFAULT_LENSES:
                 raise _fail(path, f"{key}: {lens!r} is no lens")
+
+
+def _validate_urgent_commands(path: Path, patterns: list[str]) -> None:
+    for i, pattern in enumerate(patterns):
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise _fail(
+                path, f"flow.urgent_commands[{i}] {pattern!r} is no regex ({exc})"
+            ) from None
 
 
 def _validate_local_rules(path: Path, rules: list[str]) -> None:

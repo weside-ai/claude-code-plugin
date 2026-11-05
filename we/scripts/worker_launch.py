@@ -158,12 +158,21 @@ def backend(repo: Path) -> str:
     return value
 
 
+AGENTS_TIMEOUT_S = 30
+
+
 def sessions() -> list[dict]:
     """`claude agents --json`: interactive and background sessions on this machine."""
     try:
         out = subprocess.run(
-            ["claude", "agents", "--json"], capture_output=True, text=True, check=False
+            ["claude", "agents", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=AGENTS_TIMEOUT_S,
         )
+    except subprocess.TimeoutExpired:
+        raise LaunchError(f"claude agents --json timed out after {AGENTS_TIMEOUT_S} s") from None
     except OSError as exc:
         raise LaunchError(f"claude agents --json: {exc}") from exc
     if out.returncode != 0:

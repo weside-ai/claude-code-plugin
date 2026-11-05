@@ -46,6 +46,8 @@ plus those this conversation touched. Backlog, blocked and parked children go in
   no ticketing configured → one gap line, no `gh issue` for a non-numeric key.
 - Running: this session's agents and background tasks (the harness roster, where present); a
   worker's state is its last message. `git status -sb` when a story in scope is the checked-out branch.
+  With the crew's `flow.log_dir` set, `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sampler_age.py` adds its
+  verdict line here; exit 1 makes it an item for the human too.
 - Owed by the human: this conversation's unanswered asks to the user, the mirror rows'
   Notes column, each plan's `## Open Fork`, the epic's unanswered open questions that name
   the user, and due items in the repo's due-items file when its instruction files name one.
