@@ -5,16 +5,16 @@
     "runs": 69,
     "wall_minutes": 10
   },
-  "cost_target_tokens": 224000,
+  "cost_target_tokens": 322000,
   "measured": {
     "date": "2026-11-05",
     "model": "claude-opus-5-5 medium",
-    "digest": "0789589523ba4a39",
+    "digest": "7a1a343f7ab73c42",
     "runs_per_scenario": 10,
     "claude_code": "2.1.318"
   },
-  "suite_tokens_one_run": 311546,
-  "suite_wall_s_one_run": 170.5,
+  "suite_tokens_one_run": 348622,
+  "suite_wall_s_one_run": 154.9,
   "scenarios": {
     "acceptance/card-cornerstone": {
       "runs": 10,
@@ -23,15 +23,15 @@
     },
     "architecture/card-cornerstone": {
       "runs": 10,
-      "hits": 6,
+      "hits": 5,
       "gated": false,
-      "defect": "4/10 answer lacks the second half of the cornerstone route (board, T2 or waiting): we/roles/architecture.md Cornerstone"
+      "defect": "5/10 answer lacks the second half of the cornerstone route (board, T2 or waiting): we/roles/architecture.md Cornerstone"
     },
     "coordinator/card-cornerstone": {
       "runs": 10,
-      "hits": 7,
+      "hits": 4,
       "gated": false,
-      "defect": "3/10 answer lacks the board or open-questions half of the route: we/roles/coordinator.md Cornerstone"
+      "defect": "6/10 answer lacks the board or open-questions half of the route: we/roles/coordinator.md Cornerstone"
     },
     "escalation/card-cornerstone": {
       "runs": 10,
@@ -40,15 +40,13 @@
     },
     "hr/card-cornerstone": {
       "runs": 10,
-      "hits": 0,
-      "gated": false,
-      "defect": "harness, not the card: members.hana.workplace ../biz does not exist in the temp root, so role_on_start loads no card (tests/coldstart/run.py prepare)"
+      "hits": 10,
+      "gated": true
     },
     "machinery/card-cornerstone": {
       "runs": 10,
-      "hits": 0,
-      "gated": false,
-      "defect": "harness, not the card: members.kit.workplace ../infra does not exist in the temp root, so role_on_start loads no card (tests/coldstart/run.py prepare)"
+      "hits": 10,
+      "gated": true
     },
     "master/after-compaction-epic-state": {
       "runs": 10,
@@ -62,15 +60,14 @@
     },
     "master/crew-unknown-key": {
       "runs": 10,
-      "hits": 2,
+      "hits": 4,
       "gated": false,
-      "defect": "8/10 quote another crew.json line than the unknown-keys notice: we/hooks/process_on_start.py, where the notice sits in the process text"
+      "defect": "6/10 quote another crew.json line than the unknown-keys notice: we/hooks/process_on_start.py, where the notice sits in the process text"
     },
     "master/route-merged": {
       "runs": 10,
-      "hits": 0,
-      "gated": false,
-      "defect": "answers epic: we/roles/master.md \"After every merged story: /we:epic update\" wins; the cold session gets no skill listing (no Skill in --tools, tests/coldstart/run.py TOOLS), so no description can route it"
+      "hits": 10,
+      "gated": true
     },
     "master/t1-inside-fence": {
       "runs": 10,
@@ -89,9 +86,9 @@
     },
     "product/board-only-inbox": {
       "runs": 10,
-      "hits": 0,
+      "hits": 7,
       "gated": false,
-      "defect": "answers next_verb board with the route hit 10/10: the expectation next_verb [answer] in tests/coldstart/product/board-only-inbox.yaml, not the text"
+      "defect": "3/10 waits on someone (human 2, coordinator 1) where the question asks only where the human decides: we/process/L0.md Talking, the same line as product/human-in-session"
     },
     "product/card-cornerstone": {
       "runs": 10,
@@ -106,21 +103,21 @@
     },
     "product/human-in-session": {
       "runs": 10,
-      "hits": 2,
+      "hits": 4,
       "gated": false,
-      "defect": "8/10 waits on the coordinator: we/process/L0.md Talking, \"{coordinator} carries what goes to {human}\" without the case of the human in the session"
+      "defect": "6/10 waits on the coordinator: we/process/L0.md Talking, \"{coordinator} carries what goes to {human}\" without the case of the human in the session"
     },
     "product/t1-fence-new-outcome": {
       "runs": 10,
-      "hits": 5,
+      "hits": 2,
       "gated": false,
-      "defect": "5/10 next_verb shape: we/roles/product.md \"Shape an epic before approval\" reads as the next step"
+      "defect": "8/10 next_verb epic: we/roles/product.md \"Shape an epic before approval\" reads as the next step"
     },
     "specialist/card-cornerstone": {
       "runs": 10,
-      "hits": 8,
+      "hits": 7,
       "gated": false,
-      "defect": "2/10 answer lacks the field or woken half of the route: we/roles/specialist.md Cornerstone"
+      "defect": "3/10 answer lacks the field or woken half of the route: we/roles/specialist.md Cornerstone"
     },
     "worker/card-cornerstone": {
       "runs": 10,
@@ -131,7 +128,7 @@
       "runs": 10,
       "hits": 0,
       "gated": false,
-      "defect": "0/10 never names the oracle class: we/process/L0-worker.md carries no ready-gate line \"every AC has an oracle class\""
+      "defect": "10/10 never names the oracle class (9 route, 1 next_verb develop): we/process/L0-worker.md carries no ready-gate line \"every AC has an oracle class\""
     },
     "worker/question-for-human": {
       "runs": 10,
@@ -140,10 +137,9 @@
     },
     "worker/route-plan-story": {
       "runs": 10,
-      "hits": 0,
-      "gated": false,
-      "defect": "answers plan: the cold session gets no skill listing (no Skill in --tools, tests/coldstart/run.py TOOLS), so the plan-story description cannot route it"
+      "hits": 10,
+      "gated": true
     }
   },
-  "caps_basis": "release_cap: one full 3x suite (23 x 3 = 69 runs), its measured wall time 4.3 min x 1.5, rounded up to 10; cost_target_tokens: median of three sample PRs at the measured per-scenario cost (routing description 158k, master card 224k, L0 935k)"
+  "caps_basis": "release_cap: one full 3x suite (23 x 3 = 69 runs), its measured wall time 3.9 min x 1.5, rounded up to 10; cost_target_tokens: median of three sample PRs at the measured per-scenario cost (routing description 80k, master card 322k, L0 1046k)"
 }
