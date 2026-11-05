@@ -744,3 +744,494 @@ class TestLogFollowsTheBoard:
         assert jsonl(crewed / log) == before, (
             f"{verb}: {log} grew although board.json was not written"
         )
+
+
+# --- escalation (decision story) -------------------------------------------------------------
+
+LATER = datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc)  # past the 14:00Z self SLA
+NEXT_MORNING = datetime(2026, 11, 4, 8, 0, tzinfo=timezone.utc)  # past 19:00Z, across the night
+
+
+@pytest.fixture
+def escalating(crewed):
+    """The generic crew with `fallback.escalation: human_bundle`; the escalation holder `nora`."""
+    path = crewed / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["fallback"] = {"escalation": "human_bundle"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return crewed
+
+
+def with_jira(state_dir):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["board"] = {"ticketing": "jira"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def holder_line(state_dir, state):
+    def mutate(b):
+        b["sessions"] = [s for s in b["sessions"] if s["name"] != "nora"]
+        if state is not None:
+            b["sessions"].append({"name": "nora", "state": state})
+
+    board.StateDir(state_dir / "board.json").write_board(mutate)
+
+
+def open_argv(key="PROJ-4", parties="product,architecture", touches=None, **drop):
+    argv = {
+        "--key": key,
+        "--parties": parties,
+        "--question": "Ship the paywall in v1?",
+        "--a": "no paywall in v1",
+        "--a-cost": "two weeks of revenue",
+        "--b": "paywall in v1",
+        "--b-cost": "a second billing seam",
+        "--reversible": "yes",
+    }
+    if touches:
+        argv["--touches"] = touches
+    for flag in drop:
+        argv.pop("--" + flag.replace("_", "-"))
+    return ["escalation", "open", *[x for kv in argv.items() for x in kv]]
+
+
+def esc_log(state_dir):
+    return jsonl(state_dir / "board-escalations.jsonl")
+
+
+def record(state_dir, eid="E1"):
+    return board.fold_escalations(esc_log(state_dir))[eid]
+
+
+def carry_of(out):
+    last = out.strip().splitlines()[-1]
+    assert last.startswith("carry: "), out
+    return json.loads(last[len("carry: ") :])
+
+
+def opened(state_dir, monkeypatch, who="ada", now=NOW, **kw):
+    pin(monkeypatch, who)
+    assert go(state_dir, *open_argv(**kw), now=now) == 0
+
+
+class TestEscalation:
+    def test_open_writes_the_decision_story(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        out = capsys.readouterr().out
+        assert "carry:" not in out  # ticketing none
+        [line] = esc_log(escalating)
+        assert line["event"] == "open" and line["id"] == "E1"
+        rec = record(escalating)
+        assert rec.pop("since_open") == "2026-11-03T10:00Z"  # the week `count` files it under
+        assert {k: rec[k] for k in rec if k not in ("ts",)} == {
+            "id": "E1",
+            "key": "PROJ-4",
+            "parties": ["product", "architecture"],
+            "by": "product",
+            "question": "Ship the paywall in v1?",
+            "a": "no paywall in v1",
+            "a_cost": "two weeks of revenue",
+            "b": "paywall in v1",
+            "b_cost": "a second billing seam",
+            "reversible": True,
+            "touches": None,
+            "stage": "self",
+            "waiting_on": "product,architecture",
+            "since": "2026-11-03T10:00Z",
+            "sla_due": "2026-11-03T14:00Z",
+            "open": True,
+        }
+
+    def test_open_with_jira_carries_the_story_as_a_comment(self, escalating, monkeypatch, capsys):
+        with_jira(escalating)
+        opened(escalating, monkeypatch, who="vic")
+        [op] = carry_of(capsys.readouterr().out)
+        assert op["op"] == "comment" and op["key"] == "PROJ-4"
+        assert op["text"].splitlines() == [
+            "Escalation E1 (product/architecture): Ship the paywall in v1?",
+            "product: no paywall in v1 (cost: two weeks of revenue)",
+            "architecture: paywall in v1 (cost: a second billing seam)",
+            "Reversible: yes",
+            "Waiting on: product,architecture since 2026-11-03T10:00Z, due 2026-11-03T14:00Z",
+        ]
+
+    @pytest.mark.parametrize(
+        "who, argv, message",
+        [
+            (
+                "otto",
+                open_argv(),
+                "this session holds neither roles.product nor roles.architecture",
+            ),
+            ("ada", open_argv(question=1), "missing --question"),
+            ("ada", open_argv(b_cost=1), "missing --b-cost"),
+            ("ada", open_argv(reversible=1), "missing --reversible"),
+            ("ada", open_argv(parties="product,sales"), "party 'sales' is no role key"),
+            ("ada", open_argv(parties="product"), "--parties names two different role keys"),
+            ("ada", open_argv(parties="product,product"), "--parties names two different"),
+            ("ada", open_argv(key="nokey"), "does not match naming.key"),
+            ("ada", [*open_argv()[:-1], "maybe"], "--reversible 'maybe' is not yes or no"),
+            ("ada", open_argv(touches="taste"), "--touches 'taste' is not one of"),
+        ],
+    )
+    def test_open_refusals_write_nothing(
+        self, escalating, monkeypatch, capsys, who, argv, message
+    ):
+        pin(monkeypatch, who)
+        before = (escalating / "board.json").read_bytes()
+        assert go(escalating, *argv) == 1
+        assert message in capsys.readouterr().err
+        assert esc_log(escalating) == []
+        assert (escalating / "board.json").read_bytes() == before
+
+    def test_not_past_the_sla_does_not_move(self, escalating, monkeypatch):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "escalation", "route", now=NOW.replace(hour=13, minute=59)) == 0
+        assert record(escalating)["stage"] == "self"
+        assert len(esc_log(escalating)) == 1
+
+    def test_an_active_holder_gets_the_escalation(self, escalating, monkeypatch, capsys):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "escalation", "route", now=LATER) == 0
+        assert "route: E1 PROJ-4 self → escalation" in capsys.readouterr().out
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"], rec["since"], rec["sla_due"]) == (
+            "escalation",
+            "escalation",
+            "2026-11-03T15:00Z",
+            "2026-11-03T19:00Z",
+        )
+        assert [i["kind"] for i in board_of(escalating)["news"] if i.get("id") == "E1"] == [
+            "escalation"
+        ]
+
+    def test_idle_holder_gets_escalation(self, escalating, monkeypatch):
+        holder_line(escalating, "idle")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"]) == ("escalation", "escalation"), (
+            "an idle escalation holder can still decide; only parked or absent falls back"
+        )
+
+    @pytest.mark.parametrize("state", ["parked", None])
+    def test_parked_or_absent_holder_falls_back_to_the_bundle(
+        self, escalating, monkeypatch, state
+    ):
+        holder_line(escalating, state)
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["waiting_on"]) == ("bundle", "human")
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert item["kind"] == "todo"
+        assert item["title"] == "Escalation E1 PROJ-4: Ship the paywall in v1?"
+        # a second route leaves the bundle record and its single item alone
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        assert [i.get("id") for i in board_of(escalating)["news"]].count("E1") == 1
+        assert len(esc_log(escalating)) == 2
+
+    def test_a_past_sla_escalation_goes_to_the_bundle(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        evening = datetime(2026, 11, 3, 17, 0, tzinfo=timezone.utc)  # 18:00 Berlin
+        go(escalating, "escalation", "route", now=evening)
+        # two hours left today (to 20:00 Berlin), two more from 08:00 Berlin: due 09:00Z
+        assert record(escalating)["sla_due"] == "2026-11-04T09:00Z"
+        go(
+            escalating,
+            "escalation",
+            "route",
+            now=datetime(2026, 11, 4, 8, 59, tzinfo=timezone.utc),
+        )
+        assert record(escalating)["stage"] == "escalation"
+        go(escalating, "escalation", "route", now=datetime(2026, 11, 4, 9, 0, tzinfo=timezone.utc))
+        assert record(escalating)["stage"] == "bundle"
+
+    def test_route_is_the_coordinators(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        assert go(escalating, "escalation", "route", now=LATER) == 1
+        assert "only the coordinator routes" in capsys.readouterr().err
+
+    def test_bundle_routes_first_and_lists_the_record(self, escalating, monkeypatch):
+        holder_line(escalating, "parked")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        assert go(escalating, "bundle", now=LATER) == 0
+        item = board_of(escalating)["news"][-1]
+        assert item["id"] == "B-2026-11-03"
+        assert item["title"] == "Bundle 2026-11-03: 0 decisions · 1 open questions · 1 escalations"
+        assert item["body"].splitlines() == [
+            "open: Q7",
+            "escalation E1 PROJ-4: Ship the paywall in v1?",
+        ]
+
+    def test_settle_by_a_party_at_self(self, escalating, monkeypatch, capsys):
+        with_jira(escalating)
+        opened(escalating, monkeypatch)
+        capsys.readouterr()
+        pin(monkeypatch, "vic")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "no paywall") == 0
+        [op] = carry_of(capsys.readouterr().out)
+        assert op == {
+            "op": "comment",
+            "key": "PROJ-4",
+            "text": "Escalation E1 settled at stage self by architecture: no paywall",
+        }
+        rec = record(escalating)
+        assert rec["open"] is False and rec["outcome"] == "no paywall"
+
+    @pytest.mark.parametrize(
+        "stage_now, who, via, message",
+        [
+            (NOW, "nora", None, "E1 is at stage self; only a party settles it"),
+            (NOW, "otto", "human", "--via human settles only a record at stage bundle"),
+            (LATER, "ada", None, "E1 is at stage escalation; only roles.escalation settles it"),
+            (LATER, "nora", "human", "--via human settles only a record at stage bundle"),
+        ],
+    )
+    def test_settle_refusals(self, escalating, monkeypatch, capsys, stage_now, who, via, message):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=stage_now)
+        before = esc_log(escalating)
+        pin(monkeypatch, who)
+        argv = ["escalation", "settle", "E1", "--outcome", "x"] + (["--via", via] if via else [])
+        assert go(escalating, *argv, now=stage_now) == 1
+        assert message in capsys.readouterr().err
+        assert esc_log(escalating) == before
+
+    def test_settle_by_the_holder_and_by_the_coordinator_for_the_human(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "a", now=LATER) == 0
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=NEXT_MORNING)  # past E2's 19:00Z
+        assert record(escalating, "E2")["stage"] == "bundle"
+        assert (
+            go(escalating, "escalation", "settle", "E2", "--outcome", "b", "--via", "human") == 0
+        )
+        assert not record(escalating, "E1")["open"] and not record(escalating, "E2")["open"]
+        assert (
+            go(escalating, "escalation", "settle", "E2", "--outcome", "c", "--via", "human") == 1
+        )
+        assert "E2 is settled" in capsys.readouterr().err
+
+    def test_touches_goes_to_bundle_with_advice(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="money")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        rec = record(escalating)
+        assert (rec["stage"], rec["advice_from"], rec["touches"]) == (
+            "bundle",
+            "escalation",
+            "money",
+        ), "a money question goes to the human with the escalation role's advice"
+        assert any(i.get("id") == "E1" for i in board_of(escalating)["news"])
+
+    def test_settle_waits_for_advice(self, escalating, monkeypatch, capsys):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="vision")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        assert (
+            go(escalating, "escalation", "settle", "E1", "--outcome", "x", "--via", "human") == 1
+        )
+        assert "waiting for the escalation role's recommendation" in capsys.readouterr().err
+        go(escalating, "bundle", now=LATER)
+        assert (
+            "escalation E1 PROJ-4: Ship the paywall in v1? (advice pending)"
+            in (board_of(escalating)["news"][-1]["body"])
+        )
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "a") == 1
+        assert "only roles.escalation advises" in capsys.readouterr().err
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "take a") == 0
+        assert record(escalating)["recommendation"] == "take a"
+        pin(monkeypatch, "otto")
+        assert (
+            go(escalating, "escalation", "settle", "E1", "--outcome", "a", "--via", "human") == 0
+        )
+
+    def test_advise_needs_a_touches_record(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "a") == 1
+        assert "E1 asks for no advice" in capsys.readouterr().err
+
+    def test_count_per_pair(self, escalating, monkeypatch, capsys):
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, who="vic", parties="architecture,product", key="PROJ-5")
+        out = capsys.readouterr().out
+        assert "warning" not in out
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "count")
+        assert capsys.readouterr().out.splitlines() == ["architecture/product 2 in 2026-W45"]
+        opened(escalating, monkeypatch, key="PROJ-6")
+        out = capsys.readouterr().out.splitlines()
+        assert out[-2:] == [
+            "architecture/product 3 in 2026-W45",
+            "warning: architecture/product: more than two escalations this week; "
+            "the right in crew.json is drawn wrong",
+        ]
+        go(escalating, "escalation", "count")
+        assert capsys.readouterr().out.splitlines() == out[-2:]
+        # another week counts apart
+        go(escalating, "escalation", "count", now=datetime(2026, 11, 10, 10, tzinfo=timezone.utc))
+        assert capsys.readouterr().out.strip() == "escalations: none in 2026-W46"
+
+    def test_a_failed_board_write_appends_no_route_line(self, escalating, monkeypatch):
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            go(escalating, "escalation", "route", now=LATER)
+        assert len(esc_log(escalating)) == 1
+
+
+class TestEscalationSignal:
+    """A record routed to stage `escalation` reaches its holder: a news item and `list`."""
+
+    def test_a_routed_record_shows_in_list_waiting_on_its_role(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5", now=LATER)  # still at self
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list", "--waiting-on", "escalation") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture escalation since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z"
+        ]
+        pin(monkeypatch, "nora")  # default: the caller's own role
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines()[0].startswith("E1 PROJ-4 ")
+        pin(monkeypatch, "ada")
+        assert go(escalating, "escalation", "list") == 0
+        assert [x.split()[0] for x in capsys.readouterr().out.splitlines()] == ["E2"]
+        argv = ["escalation", "list", "--waiting-on", "product", "--stage", "bundle"]
+        assert go(escalating, *argv) == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on product at bundle"
+
+    def test_list_refusals(self, escalating, monkeypatch, capsys):
+        pin(monkeypatch, "zed")
+        assert go(escalating, "escalation", "list") == 1
+        assert "holds no role; pass --waiting-on" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "sales") == 1
+        assert "--waiting-on 'sales' is no role key" in capsys.readouterr().err
+        assert go(escalating, "escalation", "list", "--waiting-on", "human", "--stage", "x") == 1
+        assert "--stage 'x' is not one of self, escalation, bundle" in capsys.readouterr().err
+
+    def test_route_to_escalation_writes_one_news_item_for_the_holder(
+        self, escalating, monkeypatch
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert (item["kind"], item["for"], item["title"]) == (
+            "escalation",
+            "escalation",
+            "Escalation E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # moving on to the bundle replaces it: one item per id, now the human's todo
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        [item] = [i for i in board_of(escalating)["news"] if i.get("id") == "E1"]
+        assert item["kind"] == "todo"
+
+    def test_a_failed_board_write_leaves_no_escalation_news(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        before = (escalating / "board.json").read_bytes()
+
+        def broken(*_a, **_k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(board.os, "replace", broken)
+        with pytest.raises(OSError, match="disk full"):
+            go(escalating, "escalation", "route", now=LATER)
+        assert (escalating / "board.json").read_bytes() == before
+        assert len(esc_log(escalating)) == 1
+
+    def test_a_touches_record_waits_on_the_holder_until_advised(
+        self, escalating, monkeypatch, capsys
+    ):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch, touches="money")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        capsys.readouterr()
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.splitlines() == [
+            "E1 PROJ-4 product/architecture bundle since 2026-11-03T15:00Z "
+            "due 2026-11-03T19:00Z (advice pending)"
+        ]
+        news = {
+            i["id"]: i for i in board_of(escalating)["news"] if i.get("id", "").startswith("E1")
+        }
+        assert news["E1"]["kind"] == "todo" and "for" not in news["E1"]
+        assert (news["E1a"]["kind"], news["E1a"]["for"], news["E1a"]["title"]) == (
+            "escalation",
+            "escalation",
+            "Advice E1 PROJ-4: Ship the paywall in v1?",
+        )
+        # a second route adds no second advice item
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=NEXT_MORNING)
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert (ids.count("E1"), ids.count("E1a")) == (1, 1)
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "advise", "E1", "--recommendation", "take a") == 0
+        capsys.readouterr()
+        assert go(escalating, "escalation", "list") == 0
+        assert capsys.readouterr().out.strip() == "escalations: none waiting on escalation"
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1a" not in ids and "E1" in ids, "advice drops the holder's item, not the todo"
+
+    def test_settle_drops_the_records_news_items(self, escalating, monkeypatch):
+        holder_line(escalating, "active")
+        opened(escalating, monkeypatch)
+        opened(escalating, monkeypatch, key="PROJ-5")
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert {"E1", "E2"} <= {i.get("id") for i in board_of(escalating)["news"]}
+        pin(monkeypatch, "nora")
+        assert go(escalating, "escalation", "settle", "E1", "--outcome", "a") == 0
+        ids = [i.get("id") for i in board_of(escalating)["news"]]
+        assert "E1" not in ids and "E2" in ids
+
+    def test_settle_via_human_drops_the_todo(self, escalating, monkeypatch):
+        holder_line(escalating, "parked")
+        opened(escalating, monkeypatch)
+        pin(monkeypatch, "otto")
+        go(escalating, "escalation", "route", now=LATER)
+        assert "E1" in [i.get("id") for i in board_of(escalating)["news"]]
+        argv = ["escalation", "settle", "E1", "--outcome", "a", "--via", "human"]
+        assert go(escalating, *argv) == 0
+        assert "E1" not in [i.get("id") for i in board_of(escalating)["news"]]
