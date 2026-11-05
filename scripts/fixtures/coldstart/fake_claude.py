@@ -18,6 +18,7 @@ log = Path(os.environ["FAKE_CLAUDE_LOG"])
 cwd = Path.cwd()
 rels = (p.relative_to(cwd).as_posix() for p in cwd.rglob("*") if p.is_file())
 files = sorted(r for r in rels if not r.startswith(".git/"))
+crew = cwd / ".weside" / "crew.json"
 mcp = sys.argv[sys.argv.index("--mcp-config") + 1] if "--mcp-config" in sys.argv else None
 with (log / "calls.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(
@@ -28,6 +29,7 @@ with (log / "calls.jsonl").open("a", encoding="utf-8") as fh:
                 "cwd": str(cwd),
                 "files": files,
                 "git": (cwd / ".git").is_dir(),
+                "crew": json.loads(crew.read_text()) if crew.is_file() else None,
                 "mcp": json.loads(Path(mcp).read_text()) if mcp else None,
             }
         )

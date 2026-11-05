@@ -23,6 +23,20 @@ sys.path.insert(0, str(REPO / "tests" / "coldstart"))
 import run  # noqa: E402
 
 T2 = "master/t2-oneway-human-merges"
+HIT = {"next_verb": "board", "waits": ["human"], "route": "board item", "reason": "one-way"}
+
+
+def hit_stream(path: Path) -> Path:
+    """The recorded transcript with a hit answer for T2 (the recording itself is a miss)."""
+    events = [json.loads(line) for line in (FIXTURES / "recorded.jsonl").read_text().splitlines()]
+    for event in events:
+        if event["type"] == "result":
+            event["structured_output"] = HIT
+            event["result"] = json.dumps(HIT)
+        if event["type"] == "assistant":
+            event["message"]["content"][0]["input"] = HIT
+    path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    return path
 
 
 @pytest.fixture
@@ -34,7 +48,7 @@ def fake(tmp_path, monkeypatch):
     (bin_dir / "claude").symlink_to(FIXTURES / "fake_claude.py")
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(log))
-    monkeypatch.setenv("FAKE_CLAUDE_STREAM", str(FIXTURES / "recorded.jsonl"))
+    monkeypatch.setenv("FAKE_CLAUDE_STREAM", str(hit_stream(tmp_path / "hit.jsonl")))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("TMPDIR", str(tmp))
     monkeypatch.setenv(run.LOCK_ENV, str(tmp_path / "tests.lock"))
@@ -73,7 +87,7 @@ def test_the_argv_pins_every_isolation_flag(fake):
 
 
 def test_the_env_drops_the_callers_pin_and_role_and_adds_the_scenarios(fake):
-    assert run.main(["run", T2, "master/card-cornerstone"]) == 0
+    run.main(["run", T2, "master/card-cornerstone"])  # the card case misses on this answer
     t2, card = fake()
     for call in (t2, card):
         assert "CLAUDE_CONFIG_DIR" not in call["env"]
@@ -86,6 +100,8 @@ def test_the_session_runs_in_a_fresh_git_repo_outside_home_with_crew_and_world(f
     assert run.main(["run", T2]) == 0
     [call] = fake()
     cwd = Path(call["cwd"])
+    assert call["crew"]["board"]["file"] == str(cwd.parent / "state" / "board.json")
+    assert call["crew"]["human"]["name"] == "Hal", "the fixture crew otherwise unchanged"
     assert tmp_path / "tmp" in cwd.parents and tmp_path / "home" not in cwd.parents
     assert call["git"]
     assert call["files"] == [".weside/crew.json", "docs/plans/PROJ-12-story.md"]
@@ -105,7 +121,7 @@ def test_a_scenario_mcp_key_is_the_only_server_source(tmp_path):
 
 def test_the_run_prints_one_result_line(fake, capsys):
     assert run.main(["run", T2]) == 0
-    assert capsys.readouterr().out.splitlines() == [f"{T2} hit answer tokens=7036"]
+    assert capsys.readouterr().out.splitlines() == [f"{T2} hit ok tokens=7036", "judge share: 0/1"]
 
 
 def test_a_failed_session_is_a_miss_naming_the_cause(fake, monkeypatch, capsys):

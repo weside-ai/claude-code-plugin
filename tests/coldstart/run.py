@@ -27,6 +27,8 @@ The harness refuses to start while ``~/.claude/CLAUDE.md`` exists (Claude Code l
 ``WESIDE_TESTS_LOCK``, default ``/tmp/weside-tests.lock``) from before its first session to its
 end, and runs at most ``MAX_JOBS`` sessions in parallel inside it. A run that fails (no ``claude``,
 a non-zero exit, the timeout, no parseable answer) is a miss naming the cause; nothing retries.
+The crew's ``board.file`` is pointed into the run's temp directory, so a cold session never reads
+or writes the caller's board or served log. Grading: ``grade.py``.
 
 Usage:
   python3 tests/coldstart/run.py run <id>... [--jobs J]
@@ -49,6 +51,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import grade
 
 SUITE = Path(__file__).resolve().parent
 REPO = SUITE.parent.parent
@@ -83,7 +88,7 @@ class Result:
     reason: str
     tokens: int
     wall_s: float
-    events: list | None = None
+    uses: list | None = None
 
     def line(self) -> str:
         return f"{self.sid} {'hit' if self.hit else 'miss'} {self.reason} tokens={self.tokens}"
@@ -169,7 +174,11 @@ def prepare(scn: dict, root: Path) -> tuple[Path, Path]:
     repo = root / "repo"
     (repo / ".weside").mkdir(parents=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    shutil.copyfile(REPO / scn["crew"], repo / ".weside" / "crew.json")
+    crew = json.loads((REPO / scn["crew"]).read_text(encoding="utf-8"))
+    board = dict(crew.get("board") or {})
+    board["file"] = str(root / "state" / "board.json")  # never the caller's board or served log
+    crew["board"] = board
+    (repo / ".weside" / "crew.json").write_text(json.dumps(crew, indent=2), encoding="utf-8")
     for rel, value in scn["world"].items():
         target = repo / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -220,43 +229,6 @@ def child_env(scn: dict, environ: dict | None = None) -> dict:
     return env
 
 
-# --- stream-json -----------------------------------------------------------------------------
-
-
-def parse_stream(text: str) -> tuple[dict | None, list[dict], int, str]:
-    """(answer, tool_use events, tokens, error) of one stream-json transcript."""
-    events, answer, tokens, error = [], None, 0, "no result event"
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        events.append(event)
-        if event.get("type") != "result":
-            continue
-        usage = event.get("usage") or {}
-        tokens = sum(
-            int(usage.get(k) or 0)
-            for k in (
-                "input_tokens",
-                "output_tokens",
-                "cache_creation_input_tokens",
-                "cache_read_input_tokens",
-            )
-        )
-        answer = event.get("structured_output")
-        if not isinstance(answer, dict):
-            with contextlib.suppress(json.JSONDecodeError, TypeError):
-                answer = json.loads(event.get("result") or "")
-        error = "" if isinstance(answer, dict) else "no parseable answer"
-        if not isinstance(answer, dict):
-            answer = None
-    return answer, events, tokens, error
-
-
 # --- one session -----------------------------------------------------------------------------
 
 
@@ -282,13 +254,20 @@ def run_one(scn: dict, budget_usd: float, timeout: float = TIMEOUT_S) -> Result:
             return Result(
                 scn["sid"], False, f"timeout {timeout:.0f}s", 0, time.monotonic() - start
             )
-        answer, events, tokens, error = parse_stream(proc.stdout)
-        wall = time.monotonic() - start
+        answer, uses, tokens, error = grade.parse_stream(proc.stdout)
         if proc.returncode != 0:
-            return Result(scn["sid"], False, f"exit {proc.returncode}", tokens, wall, events)
-        if answer is None:
-            return Result(scn["sid"], False, error, tokens, wall, events)
-        return Result(scn["sid"], True, "answer", tokens, wall, events)
+            reason = f"exit {proc.returncode}"
+            return Result(scn["sid"], False, reason, tokens, time.monotonic() - start, uses)
+        prefix = str(json.loads((REPO / scn["crew"]).read_text()).get("skill_prefix") or "")
+        hit, reason = grade.grade(scn["expect"] or {}, answer, uses, prefix)
+        if answer is None and error:
+            reason = error
+        if hit and grade.refires(scn):
+            diff = grade.refire_diff(repo, child_env(scn))
+            hit, reason = (False, diff) if diff else (hit, reason)
+        if hit and scn.get("judge"):
+            hit, reason = grade.judge(str(scn["judge"]), answer)
+        return Result(scn["sid"], hit, reason, tokens, time.monotonic() - start, uses)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -380,6 +359,8 @@ def main(args: list[str] | None = None) -> int:
         return 2
     with test_slot():
         results = run_many(scns, ns.jobs, budget)
+    judged, total = grade.judge_share(scns)
+    print(f"judge share: {judged}/{total}")
     return 0 if all(r.hit for r in results) else 1
 
 
