@@ -57,13 +57,14 @@ def run_gh(args):
 
 
 def settings(crew):
-    """Labels and SLA hours from the crew's `release` block (crew.DEFAULTS holds the defaults)."""
-    release = crew.get("release") or {}
+    """Labels and SLA hours from the merged crew's `release` block; crew.DEFAULTS is their one
+    owner (board.load_crew always merges over it), so a crew's `staging_sla_hours: 0` stays 0."""
+    release = crew["release"]
     return {
-        "booking": release.get("staging_booking_label") or "staging-booking",
-        "acceptance": release.get("staging_acceptance_label") or "staging-acceptance",
-        "past_sla": release.get("staging_past_sla_label") or "past-sla",
-        "sla_hours": release.get("staging_sla_hours") or 12,
+        "booking": release["staging_booking_label"],
+        "acceptance": release["staging_acceptance_label"],
+        "past_sla": release["staging_past_sla_label"],
+        "sla_hours": release["staging_sla_hours"],
     }
 
 

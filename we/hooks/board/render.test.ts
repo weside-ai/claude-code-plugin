@@ -298,3 +298,37 @@ test('/board shows the staging booking and acceptance with holder, end and the p
   expect(drawn).toContain('◇ Staging  booked by lead-12 until 11-05 14:00 UTC')
   expect(drawn).toContain('◇ Staging  v8.1.0-rc.3 in acceptance since 11-04 20:00 UTC  due 11-05 08:00 UTC  ⚠ past 12 h')
 })
+
+// A booking whose `until` passed is no hold any more; the SLA hours come from the block, never a pane default.
+const EXPIRED = JSON.stringify({
+  updated: '2026-11-05T10:00:00+00:00',
+  updated_by: 'Orchestrator',
+  sessions: [],
+  staging: {
+    synced: '2026-11-05T10:00Z',
+    repo: 'acme/app',
+    sla_hours: 0,
+    booking: { issue: 30, holder: 'lead-12', until: '2026-11-05T09:00Z' },
+    acceptance: { issue: 21, rc: 'v8.1.0-rc.3', opened: '2026-11-05T09:30Z', due: '2026-11-05T09:30Z', keys: 'PROJ-12', past_sla: true },
+  },
+})
+
+test('/board shows a booking past its end as expired and the block\'s own SLA hours', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-11-05T10:00:00Z') })
+  mock.store(on)
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
+  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path).endsWith('.jsonl') ? '' : EXPIRED }))
+  on('process.run', () => RUN(JSON.stringify({ sessions: [] })))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 100 } as never })
+  const drawn = paint((await ui.drawn()) as never, 100)
+  await ui.unmount()
+  expect(drawn).toContain('◇ Staging  booking of lead-12 expired 11-05 09:00 UTC')
+  expect(drawn.some(line => line.includes('booked by'))).toBe(false)
+  expect(drawn).toContain('◇ Staging  v8.1.0-rc.3 in acceptance since 11-05 09:30 UTC  due 11-05 09:30 UTC  ⚠ past 0 h')
+})

@@ -73,14 +73,21 @@ const utcShort = (ts: string | undefined) => {
   return m ? `${m[1]} ${m[2]} UTC` : (ts ?? '?')
 }
 
-// The pane's staging lines: who holds staging until when, and an acceptance with its due time and past-SLA mark.
-export const stagingLines = (staging: BoardStaging | undefined): Part[][][] => {
+// The pane's staging lines: who holds staging until when (a booking whose `until` is before `now` shows as expired),
+// and an acceptance with its due time and past-SLA mark; the hours are the block's own, board.py writes them.
+export const stagingLines = (staging: BoardStaging | undefined, now: number): Part[][][] => {
   if (!staging) return []
   const head: Part[] = [{ text: '◇ Staging', bold: true }]
   const out: Part[][][] = []
   if (staging.booking) {
     const b = staging.booking
-    out.push([head, [{ text: 'booked by ' }, { text: b.holder, bold: true }, { text: ` until ${utcShort(b.until)}` }]])
+    const end = b.until ? Date.parse(b.until) : NaN
+    out.push([
+      head,
+      end <= now
+        ? [{ text: `booking of ${b.holder} expired ${utcShort(b.until)}`, dim: true }]
+        : [{ text: 'booked by ' }, { text: b.holder, bold: true }, { text: ` until ${utcShort(b.until)}` }],
+    ])
   }
   if (staging.acceptance) {
     const a = staging.acceptance
@@ -88,7 +95,9 @@ export const stagingLines = (staging: BoardStaging | undefined): Part[][][] => {
       head,
       [{ text: a.rc, bold: true }, { text: ` in acceptance since ${utcShort(a.opened)}` }],
       a.due ? [{ text: `due ${utcShort(a.due)}`, dim: true }] : [],
-      a.pastSla ? [{ text: `⚠ past ${staging.slaHours ?? 12} h`, color: 'warning', bold: true }] : [],
+      a.pastSla
+        ? [{ text: staging.slaHours === undefined ? '⚠ past SLA' : `⚠ past ${staging.slaHours} h`, color: 'warning', bold: true }]
+        : [],
     ])
   }
   return out

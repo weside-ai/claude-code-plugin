@@ -880,7 +880,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         )}
         {counts.masters > 0 && lines(counter, width, 'count', ' · ')}
         {board?.priorities && <Text dimColor>{board.priorities}</Text>}
-        {stagingLines(board?.staging).map((segs, i) => lines(segs, width, `staging-${i}`))}
+        {stagingLines(board?.staging, now).map((segs, i) => lines(segs, width, `staging-${i}`))}
         {news.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {frame('news', 'inactive', [

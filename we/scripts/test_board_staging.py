@@ -308,11 +308,19 @@ class TestGrammar:
         )
 
     def test_crew_defaults_are_the_labels_and_hours_the_job_uses(self):
-        cfg = board_staging.settings({"release": {}})
-        assert cfg == {
+        assert board_staging.settings(board.crew_mod.DEFAULTS) == {
             "booking": "staging-booking",
             "acceptance": "staging-acceptance",
             "past_sla": "past-sla",
             "sla_hours": 12,
         }
-        assert board_staging.settings(board.crew_mod.DEFAULTS) == cfg
+
+    def test_a_crew_sla_of_zero_hours_stays_zero(self, env):
+        crew_path = Path.cwd() / ".weside" / "crew.json"
+        data = json.loads(crew_path.read_text())
+        data["release"] = {**data.get("release", {}), "staging_sla_hours": 0}
+        crew_path.write_text(json.dumps(data))
+        assert run(env, "staging") == 0
+        block = board_file(env)["staging"]
+        assert block["sla_hours"] == 0
+        assert block["acceptance"]["due"] == block["acceptance"]["opened"]
