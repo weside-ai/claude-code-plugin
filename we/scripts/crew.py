@@ -28,10 +28,12 @@ directory above it. The crew is the repo's projection of the account's handbook;
 stays the truth about people. Contract: ``references/companion-session.md`` § Crew.
 
 Schema (this docstring owns it). Required: ``version`` (2), ``roles`` (role key -> member slug;
-the role keys are ``ROLE_KEYS``, one per role card) and ``members.<slug>`` (``name`` required;
+the role keys are ``ROLE_KEYS``, one per role card; those of ``OPTIONAL_ROLE_KEYS`` may stay unbound,
+and a line holding their bare token then drops from the L0) and ``members.<slug>`` (``name`` required;
 ``title``, ``components`` (backlogs the member orders), ``workplace`` (the repo the member starts
 in, relative to the repo holding the crew file), ``extra_repos`` (more repos the member works in,
-same base), ``on_call``, ``specialist`` (the field of a member woken on demand)). Every other key
+same base), ``on_call``, ``specialist`` (the field of a member woken on demand; a member
+holding a role key is that role, never a specialist)). Every other key
 has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``question_label``
 (opens a question line to the human), ``labels`` (the words of a question line and of the
 parking signal in the crew's language: ``recommendation``, ``ready``, and of the notice line a
@@ -100,7 +102,10 @@ ROLE_KEYS = (
     "coordinator",
     "escalation",
     "hr",
+    "security",
 )
+# role keys a crew may leave unbound: a template line holding the bare token drops then
+OPTIONAL_ROLE_KEYS = ("security",)
 V7_TRANSITION = {"product_owner": "product", "orchestrator": "coordinator", "tester": "acceptance"}
 V7_MEMBER_KEYS = ("role", "lens")
 V7_TRANSITION_ENDS = "switchover day + 7"

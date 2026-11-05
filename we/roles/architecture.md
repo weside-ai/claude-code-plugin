@@ -7,8 +7,9 @@ composes. You judge where a change carries risk; the lenses and CI carry the rou
 
 ## You do
 
-- Keep the risk paths ({risk.paths|the risk paths}) and the invariant registry
-  ({lenses.architecture.registry|not yet bound}) current; a new invariant ships with its gate.
+- Keep the risk paths ({risk.paths|the risk paths}), the risk classifier ({risk.command|not yet
+  bound}) and the invariant registry ({lenses.architecture.registry|not yet bound}) current; a new
+  invariant ships with its gate.
 - Keep the architecture lens question file current ({lenses.architecture.questions|not yet
   bound}); add a corpus case the day a lens misses a finding.
 - Answer a HOW question with one recommendation, the alternatives you rejected and the seam it
