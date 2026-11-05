@@ -72,7 +72,7 @@ move     moves a story to another state when that state's entry rule holds (docs
          `done` after an `in_review` row with --comment-file holding a `Not proven:` line (or, in
          process from accept.py, a green verdict entry re-checked here: `move_done`); a `done`
          move carries the transition and then the acceptance comment, and every
-         `lenses.acceptance.sample`-th `via: receipt` row adds a `sample` news item. A
+         `acceptance.done_sample`-th `via: receipt` row adds a `sample` news item. A
          refusal prints `board.py move <KEY> <state>: refused: <reason>` per failure.
          Both write one row to board-transitions.jsonl after every rule passed, call the
          ticketing adapter once (`ticket_adapter.py`, by `board.ticketing`) and, with
@@ -1372,13 +1372,17 @@ def verdict_failures(entry, key):
         return [f"verdict is {entry.get('verdict')}, not done"]
     failures = []
     oracles = entry.get("oracles") or {}
+    if not oracles.get("receipt") and not oracles.get("ci"):
+        failures.append("the entry names no oracle")
     if oracles.get("walk") or entry.get("walk"):
         failures.append("the entry still has a walk")
     checks = [c for c in entry.get("checks") or [] if isinstance(c, dict)]
     for c in checks:
         observed = str(c.get("observed") or "")
-        if c.get("status") != "PASS" or observed.startswith("NOT TESTABLE"):
+        if c.get("status") != "PASS":
             failures.append(f"receipt check AC{c.get('ac')} is {c.get('status')}, not PASS")
+        elif observed.startswith("NOT TESTABLE"):
+            failures.append(f"receipt check AC{c.get('ac')} is NOT TESTABLE")
     checked = {str(c.get("ac")) for c in checks}
     for n in _ac_numbers(oracles.get("receipt")):
         if n not in checked:
@@ -1535,9 +1539,10 @@ def _sample_keeper(crew):
 
 
 def _sample(state, crew, key, now):
-    """Every `lenses.acceptance.sample`-th row `to: done, via: receipt` adds one `sample` news
-    item for the acceptance keeper; the count is the log's, so it survives restarts."""
-    n = ((crew.get("lenses") or {}).get("acceptance") or {}).get("sample")
+    """Every `acceptance.done_sample`-th row `to: done, via: receipt` adds one `sample` news
+    item for the acceptance keeper; the count is the log's, so it survives restarts.
+    `lenses.acceptance.sample` is the lens sampler's (lens_verdict.py) and not read here."""
+    n = (crew.get("acceptance") or {}).get("done_sample")
     if not isinstance(n, int) or n <= 0:
         return None
     count = sum(

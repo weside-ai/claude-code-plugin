@@ -78,6 +78,11 @@ Written always, also when step 4 is declined. Only keys a verb reads:
 }
 ```
 
+The Done-row sample sits beside them but in the crew file's `acceptance` block (step 4a), which
+`board.py` reads: `acceptance.done_sample` (default 5, `null` = off) samples every n-th Done by
+receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sampler's
+(`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Acceptance).
+
 `/we:merged` moves a landed story to In Review, never to Done (L0 §Lifecycle;
 `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5).
 

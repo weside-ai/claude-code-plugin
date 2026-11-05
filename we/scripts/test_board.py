@@ -1755,10 +1755,13 @@ def done_in_process(state_dir, adapter, entry, key=DONE_KEY, now=NOW):
     )
 
 
-def set_sample(state_dir, sample, keeper=None):
+def set_sample(state_dir, sample, keeper=None, lens_sample=None):
+    """`acceptance.done_sample` drives the Done-row sample; `lenses.acceptance.sample` is the lens
+    sampler's (lens_verdict.py) and set apart so a test can show the two never mix."""
     path = state_dir / "work" / ".weside" / "crew.json"
     data = json.loads(path.read_text(encoding="utf-8"))
-    data["lenses"] = {"acceptance": {"sample": sample, "keeper": keeper}}
+    data["lenses"] = {"acceptance": {"sample": lens_sample, "keeper": keeper}}
+    data.setdefault("acceptance", {})["done_sample"] = sample
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
@@ -1830,13 +1833,17 @@ class TestMoveDone:
                         {"ac": 2, "persona": "p", "status": "PASS", "observed": "ok"},
                     ]
                 ),
-                "receipt check AC1 is PASS, not PASS",
+                "receipt check AC1 is NOT TESTABLE",
             ),
             (
                 verdict_entry(checks=[{"ac": 1, "persona": "p", "status": "PASS"}]),
                 "receipt AC2 has no check",
             ),
             (verdict_entry(not_proven=" "), "the entry has no not_proven line"),
+            (
+                verdict_entry(oracles={"receipt": [], "ci": [], "walk": []}, checks=[]),
+                "the entry names no oracle",
+            ),
         ],
     )
     def test_a_verdict_entry_that_proves_nothing_is_refused(self, crewed, entry, message):
@@ -1927,6 +1934,20 @@ class TestMoveDone:
         with_row(crewed, DONE_KEY, "in_review")
         _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
         assert sample == f"sample: {DONE_KEY} → tess"
+
+    @pytest.mark.parametrize(
+        "done_sample, lens_sample, expected", [(None, 1, None), (1, None, "x")]
+    )
+    def test_the_done_sample_reads_its_own_key_not_the_lens_one(
+        self, crewed, done_sample, lens_sample, expected
+    ):
+        set_sample(crewed, done_sample, lens_sample=lens_sample)
+        with_row(crewed, DONE_KEY, "in_review")
+        _row, _ops, sample = done_in_process(crewed, ticket_adapter.FakeAdapter(), verdict_entry())
+        assert sample == (expected and f"sample: {DONE_KEY} → tess")
+
+    def test_the_done_sample_defaults_to_every_fifth(self):
+        assert board.crew_mod.DEFAULTS["acceptance"]["done_sample"] == 5
 
     def test_sample_null_writes_none(self, crewed):
         set_sample(crewed, None)

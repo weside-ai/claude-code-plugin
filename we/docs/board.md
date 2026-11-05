@@ -511,11 +511,13 @@ a rerun writes nothing twice. Every op of the run goes into one `carry:` last li
 (a walk line whose key's last transitions row is not `done`), else `queue: empty`. A walk closes with
 `board.py move <KEY> done --comment-file`.
 
-**Sample.** After a `via: receipt` row, every `lenses.acceptance.sample`-th such row in the log adds
-one news item `{id: S<n>, kind: sample, title: "Sample <KEY>: accepted by the receipts job,
-<keeper> checks it post hoc", ts}` and prints `sample: <KEY> → <keeper>`; the keeper is
-`lenses.acceptance.keeper`, else `roles.acceptance`. `via: comment` rows never count; `sample: null`
-writes none. The count is the log's, so it survives restarts.
+**Sample.** After a `via: receipt` row, every `acceptance.done_sample`-th such row in the log (the
+crew's `acceptance` block, default 5) adds one news item `{id: S<n>, kind: sample, title: "Sample
+<KEY>: accepted by the receipts job, <keeper> checks it post hoc", ts}` and prints
+`sample: <KEY> → <keeper>`; the keeper is `lenses.acceptance.keeper`, else `roles.acceptance`.
+`via: comment` rows never count; `done_sample: null` writes none. The count is the log's, so it
+survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_verdict.py`,
+`samples.jsonl`): neither key moves the other's counter.
 
 ## The live column
 
