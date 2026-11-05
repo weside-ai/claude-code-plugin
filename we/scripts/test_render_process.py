@@ -563,3 +563,118 @@ def test_serves_counts_the_reserve(tmp_path, monkeypatch):
     assert rp.serves(repo) is False
     monkeypatch.setattr(rp, "BUDGET", full + rp.NOTICE_CHARS)
     assert rp.serves(repo) is True
+
+
+SECURITY = HERE / "fixtures" / "crew-v2-security.json"
+SECURITY_LINE = "  - {security} owns its label but runs on call."
+SIGNATURE_TEMPLATE = "  On a `trust-loosening` diff the item also carries {security}'s signature."
+TRUST_LINE = (
+    "- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges."
+)
+
+
+def bound() -> dict:
+    return crewlib._merge(json.loads(SECURITY.read_text()))
+
+
+def _template_without(name: str, line: str) -> str:
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    assert text.count(line + "\n") == 1, line
+    return text.replace(line + "\n", "")
+
+
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_an_unbound_crew_renders_as_the_template_without_the_security_line(kind):
+    """Without ``roles.security`` the line holding the bare token drops, so the render equals the
+    template without it: byte-identical to the release before the role key."""
+    crew = generic()
+    name = "L0-worker.md" if kind == "worker" else "L0.md"
+    text = (rp.PROCESS / name).read_text(encoding="utf-8")
+    for line in (SECURITY_LINE, SIGNATURE_TEMPLATE):
+        text = text.replace(line + "\n", "")
+    expected = rp.render(text, crew)
+    assert rp.render_l0(crew, kind) == expected
+    assert "owns its label" not in rp.render_l0(crew, kind)
+    assert "Bo (security)" in rp.render_l0(crew, "full")
+
+
+def test_a_bound_security_owner_gets_its_line_and_leaves_the_specialists():
+    full = rp.render_l0(bound())
+    assert "\n  - Bo owns its label but runs on call.\n" in full
+    assert "Specialists woken on demand: Lex (legal)." in full
+    assert "Bo (security)" not in full
+
+
+def on_call_line(l0: str, name: str) -> str | None:
+    """The L0 line naming ``name`` as an owner run on call (woken, not running all the time)."""
+    return next((x for x in l0.split("\n") if name in x and "on call" in x), None)
+
+
+def test_the_security_line_says_its_owner_is_woken_on_call():
+    """The holder leaves the specialists line, so its own line carries "on call"."""
+    assert on_call_line(rp.render_l0(bound()), "Bo") == "  - Bo owns its label but runs on call."
+    assert on_call_line(rp.render_l0(generic()), "Bo") is None
+
+
+def test_a_role_holder_is_never_listed_as_specialist_even_with_the_field():
+    data = json.loads(SECURITY.read_text())
+    data["members"]["bo"]["specialist"] = "security"
+    crew = crewlib._merge(data)
+    assert "Bo (security)" not in rp.render_l0(crew)
+    assert [slug for slug, _ in rp.specialist_members(crew)] == ["lex"]
+    assert [label for label, _, _ in rp._sessions(SECURITY, crew, "specialist")] == [
+        "specialist Lex"
+    ]
+
+
+def test_an_optional_role_token_with_a_fallback_keeps_its_line():
+    """Only the bare token drops its line; ``{security|…}`` renders its fallback."""
+    text = rp.render("a {security|nobody}\nb {security}\nc", generic())
+    assert text == "a nobody\nc"
+
+
+def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
+    assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
+    with_owner = rp.render_card(bound(), "master")
+    assert (
+        "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
+        in with_owner
+    )
+    assert "trust-loosening" not in rp.render_card(generic(), "master")
+
+
+@pytest.mark.parametrize("crew", [generic, bound], ids=["unbound", "bound"])
+def test_the_security_card_names_label_lens_review_and_signature(crew):
+    card = " ".join(rp.render_card(crew(), "security").split())
+    for phrase in (
+        "You own every item labelled `security`, approve its plan and keep the security lens",
+        "Until plugin `we` 8.0.0 ships the T2 panel, review every PR that touches auth, tenant "
+        "isolation or trust yourself.",
+        "From 8.0.0 the security lens runs in the T2 panel and you are its keeper",
+        "keep its question file current and sample every 5th verdict post hoc.",
+        "Sign a `trust-loosening` diff after the panel and before Hal merges it",
+    ):
+        assert phrase in card, phrase
+
+
+@pytest.mark.parametrize(
+    "data",
+    [None, json.loads(SECURITY.read_text()), DEFAULTS_ONLY],
+    ids=["generic", "bound", "defaults"],
+)
+@pytest.mark.parametrize("kind", ["full", "worker"])
+def test_every_crew_keeps_the_l0_within_the_budget_with_the_reserve(data, kind):
+    crew = generic() if data is None else crewlib._merge(data)
+    assert rp.l0_chars(crew, kind) <= rp.BUDGET
+    assert rp.l0_chars(crewlib.fallback(None, "x"), kind) <= rp.BUDGET
+
+
+def test_all_roles_prints_a_security_row(tmp_path):
+    repo = crew_repo(tmp_path, json.loads(SECURITY.read_text()))
+    for workplace in ("biz", "infra"):
+        (tmp_path / workplace).mkdir()
+    out = run("--all-roles", "--from", str(repo))
+    assert out.returncode == 0, out.stderr
+    rows = {line.split("\t")[0]: line.split("\t") for line in out.stdout.splitlines()}
+    assert rows["security"][-1] == "ok"
+    assert all(r[-1] == "ok" for r in rows.values())
