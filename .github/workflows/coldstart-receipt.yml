@@ -1,0 +1,35 @@
+name: Cold-start receipt
+
+# A PR that touches a cold-start suite input carries in its body the receipt
+# block the harness's `release` verb printed in the pod (see AGENTS.md).
+# No model and no secret: the job recomputes the affected set and the inputs
+# digest on the head and compares them with the block (tests/coldstart/receipt_gate.py).
+# The body is untrusted text: it reaches the script only through env, never
+# through an expression inside `run:`. `edited` lives here only, so a body edit
+# does not rerun ci.yml.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  coldstart-receipt:
+    name: coldstart-receipt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+      - name: Check the receipt against the head
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.base_ref }}
+        run: python3 tests/coldstart/receipt_gate.py --base "origin/$BASE_REF"

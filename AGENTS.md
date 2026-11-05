@@ -55,6 +55,9 @@ we/                               plugin root
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
 scripts/                          repo validators (frontmatter, structure, consistency), claude_review_gate.py
+tests/coldstart/<role>/*.yaml     cold-start scenarios (one cold session each, graded by script)
+tests/coldstart/*.py, rates.json  the harness: run.py (run, measure, release), grade.py, affected.py
+                                  (affected set, inputs digest), receipt_gate.py (the CI check), rates.json
 ```
 
 ## Conventions
@@ -64,6 +67,20 @@ scripts/                          repo validators (frontmatter, structure, consi
 - Tool commands are detected from the project's marker files, never hard-coded.
 - No weside application paths, internal ticket keys or internal URLs in `we/`.
 - A shared fact lives in one file under `we/references/`; skills point at it.
+
+### Cold-start receipt
+
+A PR that touches a cold-start suite input (the L0, a role card, a SessionStart hook that renders
+them, `crew.py`, `render_process.py`, a crew fixture, the harness, a scenario, or a skill's
+`description`) carries a receipt in its body. Before the push, run
+`python3 tests/coldstart/run.py release --base origin/main` with everything committed. It runs each
+affected scenario three times as a cold `claude -p` session on your own login (no API key; it holds
+the test slot, `--jobs` at most 2, and never restarts a run). Paste the block it prints, from
+`<!-- coldstart-receipt -->` to the closing fence, into the PR body. The `coldstart-receipt` check
+runs no model: it recomputes the affected set and the inputs digest on the head and fails on a
+missing, red or stale receipt. A push that changes an input needs a new receipt. A routing scenario
+that misses is fixed in the skill's `description`, never in the scenario's prompt.
+`run.py measure --runs 10` re-measures the rates in `rates.json` when the model pin changes.
 
 ## Checks before a commit
 
