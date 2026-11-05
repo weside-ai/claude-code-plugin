@@ -98,7 +98,7 @@ against the code; a wrong claim goes back to the refiner. Pass → set `status: 
 frontmatter, then commit it per `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (plan and staging-check
 file copied out of the refiner's worktree, step 3, and committed together, step 4; never the shared main
 checkout). Fail → re-dispatch once naming the missing item, then one question line to the epic owner. Then remove the
-refiner's worktree (step 6). On the default branch and green under the Ready gate the story is
+refiner's worktree (step 6). On the default branch (its docs PR merged) and green under the Ready gate the story is
 Selected; move its ticket per `ticketing.md`, which names the mover for every state.
 
 ## Build
