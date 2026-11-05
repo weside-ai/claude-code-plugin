@@ -204,12 +204,14 @@ relative path count from the home folder). Without the file the pane says so and
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
+| `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
 | `sessions[].parent` | the master a worker reports to; workers are listed under it |
 | `sessions[].state` | `build`, `ci` or `active` (● runs), `wait-owner` (◉ waits, listed first), `idle`, `parked` or `done` (○ rests); anything else `?`. `board.py`'s `SESSION_STATES` owns this list; the pane draws `active` and `parked` as `?` until its lamps follow |
 | `sessions[].since` | `YYYY-MM-DDTHH:MMZ`: in this state since; a wait (`waiting_on`) is such a state, so `board.py set waiting_on=…` moves it |
-| `sessions[].waiting_on`, `.sla_due` | the role key (or `human`) the session waits on, and when that wait passes the SLA (`YYYY-MM-DDTHH:MMZ`, the crew's `sla.hours` counted only inside `sla.daytime` in `sla.tz`); written by `board.py set` only (§ Questions and decisions) |
+| `sessions[].waiting_on`, `.sla_due` | the role key (or `human`) the session waits on, and when that wait passes the SLA (`YYYY-MM-DDTHH:MMZ`, the crew's `sla.hours` counted only inside `sla.daytime` in `sla.tz`); written by `board.py set` and, for a blocked worker, `board.py blocked` only (§ Questions and decisions) |
+| `sessions[].blocked` | a worker waiting on a permission prompt or on a reply: `kind`, `starter`, `starter_session_id`, `key`, `since`, `waiting_for`, `command` (§ Blocked workers) |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
 | `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
 | `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
@@ -347,6 +349,47 @@ Every `ask` past the field check appends one line to `board-questions.jsonl`:
 `decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
 chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
+`--urgent` adds `urgent: true` to the item and to its log line; the urgency changes only the order
+in `bundle`, never whether the question goes out.
+
+**Waits log.** Whenever a line's `waiting_on` ends or changes (`set`, `blocked`), one row
+`{key, session, waiting_on, since, ended, duration_s}` is appended to `board-waits.jsonl` after
+board.json was replaced: `key` is the line's first `keys` entry, its `blocked.key`, else the first
+`naming.key` match in its name, else null. It is the source of waits by role in the weekly flow
+report.
+
+**`log correction` — the human corrected a session.** `board.py log correction <session> <kind>`
+is the coordinator's: one line `{type: "correction", ts, session, kind, by}` in the flow log
+(`scripts/flow_log.py` owns its path `<flow.log_dir>/sampler-<day>.jsonl` and its line schema).
+`kind` is one lower-case token; another role, another kind or an unset `flow.log_dir` is refused and
+nothing is written.
+
+### Blocked workers
+
+A sampler outside every session (it holds no crew role) polls `claude agents --json` and marks a
+worker that sits on a permission prompt or idles on a question with `board.py blocked`. The verb is
+its own brake: it re-reads `claude agents --json` and refuses (exit 1, nothing written) unless the
+named session is blocked on a permission prompt right now (`--kind permission`) or idle right now
+(`--kind chat`), so a forged call writes nothing for a session that is not waiting.
+
+| Call | Writes on the session's line |
+|---|---|
+| `blocked <name> --kind permission [--starter S] [--key K] [--command T]` | `waiting_on: human`, `since`, `sla_due`, `blocked` |
+| `blocked <name> --kind chat --waiting-on <role\|human> …` | `waiting_on` (a role key or `human`), `since`, `sla_due`, `blocked` |
+| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands |
+
+`blocked` is `{kind, starter, starter_session_id, key, since, waiting_for, command}`: `starter` the
+session that started the worker and its id from `claude agents --json` (the prompt hook matches on
+it), `since` (ISO UTC) the start of the wait, kept while the same kind is called again, so a chat
+wait that moves from the starter's role to `human` keeps it; `waiting_for` the permission prompt as
+`claude agents` names it; `command` at most 200 characters the caller already filtered for secrets.
+A line that is missing is appended with `name` and `session_id`; no other field is written. The
+same call again prints `board.py blocked: <name> unchanged` and writes nothing.
+
+`--clear` prints `{cleared, kind, key, since, duration_s, obsolete}`. For a permission wait it marks
+every open `owner_queue` question of that session with cause `access-click` posted during the wait
+`obsolete: "<labels.prompt_resolved> <HH:MM>"` (crew time zone): the question stays in the queue,
+so nobody answers a dead prompt and nothing vanishes silently.
 
 **`decision` — an owner's cut or fence.** `board.py decision <area> <cut|fence> --key <KEY> --text
 "<decision>"` needs the caller to hold `roles.<area>`. It writes the news item
@@ -357,7 +400,9 @@ questions per day and answer times come from this log joined with `board-answers
 It writes one news item `B-<YYYY-MM-DD>` (`-2`, `-3` for a further bundle that day) of kind `todo`,
 titled `Bundle <date>: <n> decisions · <m> open questions`, its body one line
 `<area>: <kind> <KEY> <text>` per decision since the last bundle, grouped by area, then
-`open: Q12, Q15 …`, the questions no Accept or Deny closed, oldest `since` first. Then it appends
+`open: Q12 (urgent), Q15 …`, the questions no Accept or Deny closed, urgent ones first and oldest
+`since` first within each group, then `obsolete: Q9 (<reason>)` for questions whose prompt resolved
+(§ Blocked workers), which the coordinator removes from the queue. Then it appends
 the marker `{"bundle": "<id>", "ts": …}` to `board-decisions.jsonl`, so the next bundle shows only
 newer decisions. With nothing to show it prints `bundle: nothing` and writes nothing. Before it
 writes, `bundle` runs `escalation route`; each open record at stage `bundle` adds one line

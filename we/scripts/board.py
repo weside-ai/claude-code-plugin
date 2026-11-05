@@ -6,7 +6,11 @@ Usage:
            [--quote "<the owner's words>"]
   board.py [--board FILE] set [--for NAME] <field>=<value> …       fields: waiting_on, state, now
   board.py [--board FILE] ask --session NAME --key KEY --key-title T --ask Q --recommendation R
-           --cause <merge-go|plan|prod|cut-fence|access-click|info>
+           --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
+  board.py [--board FILE] log correction <session> <kind>
+  board.py [--board FILE] blocked <name> --kind <permission|chat> [--waiting-on ROLE]
+           [--starter NAME] [--key KEY] [--command TEXT]
+  board.py [--board FILE] blocked <name> --clear
   board.py [--board FILE] decision <area> <cut|fence> --key KEY --text T
   board.py [--board FILE] bundle
   board.py [--board FILE] escalation open --key KEY --parties ROLE,ROLE --question Q --a T --a-cost C
@@ -36,7 +40,19 @@ set      writes the caller's own session line (found by `name` through `claude a
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
          without context; otherwise the reader's reason goes back as a `note` on the asking
          session's line and a `returned` news item. Every run past the field check leaves one line
-         in board-questions.jsonl, text included. Prints `posted Q<n>`.
+         in board-questions.jsonl, text included. Prints `posted Q<n>`. `--urgent` stamps
+         `urgent: true` on the item and the log line; `bundle` lists urgent questions first.
+         A wait that ends or changes on a line (`set`, `blocked`) appends one row
+         `{key, session, waiting_on, since, ended, duration_s}` to board-waits.jsonl.
+log      `log correction <session> <kind>` (the coordinator): one `correction` line in the flow log
+         (`flow_log.py`, `flow.log_dir`); `kind` is one lower-case token.
+blocked  marks another session's line as blocked (docs/board.md § Blocked workers) after re-reading
+         `claude agents --json`: `permission` only while that session is blocked on a permission
+         prompt (`waiting_on: human`), `chat` only while it is idle (`--waiting-on` a role key or
+         human). It writes `blocked`, `waiting_on`, `since`, `sla_due` of that one line and nothing
+         else; the same wait again writes nothing. `--clear` removes them once (refused while the
+         permission prompt still stands) and marks the session's open `access-click` questions
+         posted during the wait `obsolete` (`labels.prompt_resolved` and the time), never deleted.
 decision records an owner's cut or fence decision of their area (`roles.<area>`): one news item
          `D<n>` of kind `decision`, then one line in board-decisions.jsonl.
 bundle   the coordinator's evening bundle: one news item `B-<date>` of kind `todo` listing the
@@ -112,6 +128,7 @@ if _HERE not in sys.path:
 
 import cold_reader  # noqa: E402
 import crew as crew_mod  # noqa: E402
+import flow_log  # noqa: E402  (the one writer of the flow log)
 import lens_verdict  # noqa: E402
 import plan_tier  # noqa: E402
 import ready_gate  # noqa: E402
@@ -135,6 +152,10 @@ NEWS_KIND_BY_STAGE = {"escalation": "escalation", "bundle": "todo"}
 PAIR_WARN_AFTER = 2  # escalations per role pair and ISO week before the crew's rights look wrong
 LOCK_WAIT_S = 10.0
 MINUTE_FMT = "%Y-%m-%dT%H:%MZ"
+ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
+BLOCKED_KINDS = ("permission", "chat")
+EXCERPT_CHARS = 200  # a blocked command or question excerpt on the board line
+TOKEN = re.compile(r"[a-z][a-z0-9_-]*")  # a correction's kind: one lower-case token
 UNCHANGED = object()  # a `write_board` mutation returning this leaves board.json untouched
 
 
@@ -202,6 +223,7 @@ class StateDir:
         self.decisions_path = self.board_path.with_name("board-decisions.jsonl")
         self.escalations_path = self.board_path.with_name("board-escalations.jsonl")
         self.transitions_path = self.board_path.with_name("board-transitions.jsonl")
+        self.waits_path = self.board_path.with_name("board-waits.jsonl")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
 
     def board(self):
@@ -304,6 +326,9 @@ class StateDir:
 
     def append_transition(self, row):
         return _append_jsonl(self.transitions_path, row)
+
+    def append_wait(self, row):
+        return _append_jsonl(self.waits_path, row)
 
     def last_rows(self):
         """`{key: last transitions row}` in log order."""
@@ -438,14 +463,50 @@ def _wait(crew, now, waiting_on):
 
 
 def _apply_wait(line, role, crew, now):
+    """Set (or with an empty `role` end) the line's wait; returns the waits-log row of the wait
+    that ended or changed (`_wait_row`), else None."""
+    old = line.get("waiting_on")
+    ended = _wait_row(line, crew, now) if old and old != role else None
     if not role:
-        if line.get("waiting_on"):
+        if old:
             for key in ("waiting_on", "since", "sla_due"):
                 line.pop(key, None)
-        return
-    if line.get("waiting_on") == role:
-        return
+        return ended
+    if old == role:
+        return None
     line.update(_wait(crew, now, role))
+    return ended
+
+
+def _line_key(line, crew):
+    """The story key of a board line: its first `keys` entry, its `blocked.key`, else the first
+    `naming.key` match in its name, else None."""
+    keys = line.get("keys")
+    if isinstance(keys, list) and keys and isinstance(keys[0], str):
+        return keys[0]
+    blocked = line.get("blocked")
+    if isinstance(blocked, dict) and isinstance(blocked.get("key"), str):
+        return blocked["key"]
+    key_rx = (crew.get("naming") or {}).get("key") or crew_mod.DEFAULTS["naming"]["key"]
+    found = re.search(key_rx, str(line.get("name") or ""))
+    return found.group(0) if found else None
+
+
+def _wait_row(line, crew, now):
+    """One `board-waits.jsonl` row for the line's current wait, ended at `now`."""
+    try:
+        since = datetime.strptime(str(line.get("since")), MINUTE_FMT).replace(tzinfo=timezone.utc)
+        duration = int((now - since).total_seconds())
+    except ValueError:
+        duration = None
+    return {
+        "key": _line_key(line, crew),
+        "session": line.get("name"),
+        "waiting_on": line.get("waiting_on"),
+        "since": line.get("since"),
+        "ended": _iso(now),
+        "duration_s": duration,
+    }
 
 
 def cmd_set(state, args, crew, now):
@@ -460,23 +521,236 @@ def cmd_set(state, args, crew, now):
         name, session_id = args.for_, None
     else:
         name, session_id = own_session_name()
+    ended = []
 
     def mutate(board):
-        sessions = board.setdefault("sessions", [])
-        line = next((s for s in sessions if isinstance(s, dict) and s.get("name") == name), None)
-        if line is None:
-            line = {"name": name}
-            if session_id:
-                line["session_id"] = session_id
-            sessions.append(line)
+        line = _session_line(board, name, session_id)
         if "waiting_on" in fields:
-            _apply_wait(line, fields["waiting_on"], crew, now)
+            ended.append(_apply_wait(line, fields["waiting_on"], crew, now))
         for key in ("state", "now"):
             if key in fields:
                 line[key] = fields[key]
         return dict(line)
 
-    print(json.dumps(state.write_board(mutate), ensure_ascii=False))
+    print(
+        json.dumps(
+            state.write_board(mutate, after=lambda _r: _log_waits(state, ended)),
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+def _session_line(board, name, session_id):
+    """The board line named `name`, appended with `name` and `session_id` when absent."""
+    sessions = board.setdefault("sessions", [])
+    line = next((s for s in sessions if isinstance(s, dict) and s.get("name") == name), None)
+    if line is None:
+        line = {"name": name}
+        if session_id:
+            line["session_id"] = session_id
+        sessions.append(line)
+    return line
+
+
+def _log_waits(state, rows):
+    for row in rows:
+        if row is not None:
+            state.append_wait(row)
+
+
+def _crew_flow(crew):
+    return {**crew_mod.DEFAULTS["flow"], **(crew.get("flow") or {})}
+
+
+def cmd_log(state, args, crew, now):
+    verb = f"board.py log {args.what}"
+    failures = []
+    if not crew_mod.holds_role(crew, "coordinator", os.environ):
+        failures.append(f"{verb}: only the coordinator records a correction")
+    if not TOKEN.fullmatch(args.kind):
+        failures.append(f"{verb}: kind {args.kind!r} is no lower-case token")
+    if not args.session.strip() or args.session != args.session.strip():
+        failures.append(f"{verb}: session {args.session!r} is no session name")
+    log_dir = _crew_flow(crew).get("log_dir")
+    if not log_dir:
+        failures.append(f"{verb}: flow.log_dir is unset in the crew")
+    if failures:
+        raise BoardError("\n".join(failures))
+    record = {
+        "type": "correction",
+        "ts": _iso(now),
+        "session": args.session,
+        "kind": args.kind,
+        "by": (crew.get("roles") or {}).get("coordinator"),
+    }
+    tz = (crew.get("sla") or {}).get("tz") or crew_mod.DEFAULTS["sla"]["tz"]
+    try:
+        flow_log.append(log_dir, record, tz)
+    except (flow_log.FlowLogError, OSError) as exc:
+        raise BoardError(f"{verb}: {exc}") from None
+    print(json.dumps(record, ensure_ascii=False))
+    return 0
+
+
+def _agent_rows():
+    try:
+        return wl.sessions()
+    except wl.LaunchError as exc:
+        raise BoardError(f"board.py blocked: {exc}") from None
+
+
+def _row_named(rows, name):
+    return next((r for r in rows if isinstance(r, dict) and r.get("name") == name), None)
+
+
+def _on_permission_prompt(row):
+    return (
+        row is not None
+        and row.get("state") == "blocked"
+        and "permission" in str(row.get("waitingFor") or "").lower()
+    )
+
+
+def _blocked_failures(args, row):
+    name, kind = args.name, args.kind
+    failures = []
+    roles = set(crew_mod.ROLE_KEYS) | {"human"}
+    if kind == "permission" and args.waiting_on not in (None, "human"):
+        failures.append("board.py blocked: a permission prompt waits on human")
+    if kind == "chat" and not args.waiting_on:
+        failures.append("board.py blocked: --kind chat needs --waiting-on <role key or human>")
+    elif args.waiting_on and args.waiting_on not in roles:
+        failures.append(
+            f"board.py blocked: waiting_on {args.waiting_on!r} is no role key "
+            f"({', '.join(crew_mod.ROLE_KEYS)} or human)"
+        )
+    if row is None:
+        failures.append(f"board.py blocked: {name} is not running (claude agents --json)")
+    elif kind == "permission" and not _on_permission_prompt(row):
+        failures.append(
+            f"board.py blocked: {name} is not blocked on a permission prompt right now "
+            f"(state {row.get('state')!r}, waitingFor {row.get('waitingFor')!r})"
+        )
+    elif kind == "chat" and row.get("status") != "idle":
+        failures.append(
+            f"board.py blocked: {name} is not idle right now (status {row.get('status')!r})"
+        )
+    return failures
+
+
+def cmd_blocked(state, args, crew, now):
+    if args.clear:
+        return _clear_blocked(state, args, crew, now)
+    if args.kind is None:
+        raise BoardError("board.py blocked: give --kind permission|chat, or --clear")
+    rows = _agent_rows()
+    row = _row_named(rows, args.name)
+    failures = _blocked_failures(args, row)
+    if failures:
+        raise BoardError("\n".join(failures))
+    starter = _row_named(rows, args.starter) if args.starter else None
+    waiting_on = args.waiting_on or "human"
+    fresh = {
+        "kind": args.kind,
+        "starter": args.starter,
+        "starter_session_id": (starter or {}).get("sessionId"),
+        "key": args.key,
+        "since": _iso(now),
+        "waiting_for": row.get("waitingFor") if args.kind == "permission" else None,
+        "command": (args.command or "")[:EXCERPT_CHARS] or None,
+    }
+    fresh = {k: v for k, v in fresh.items() if v is not None}
+    ended = []
+
+    def mutate(board):
+        line = _session_line(board, args.name, row.get("sessionId"))
+        old = line.get("blocked") if isinstance(line.get("blocked"), dict) else None
+        blocked = dict(fresh)
+        if old and old.get("kind") == args.kind and old.get("since"):
+            blocked["since"] = old["since"]  # the same wait goes on
+        if old == blocked and line.get("waiting_on") == waiting_on:
+            return UNCHANGED
+        ended.append(_apply_wait(line, waiting_on, crew, now))  # the ended wait keeps its key
+        line["blocked"] = blocked
+        return dict(line)
+
+    result = state.write_board(mutate, after=lambda _r: _log_waits(state, ended))
+    if result is UNCHANGED:
+        print(f"board.py blocked: {args.name} unchanged")
+    else:
+        print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def _resolved_label(crew, now):
+    label = (crew.get("labels") or {}).get("prompt_resolved") or crew_mod.DEFAULTS["labels"][
+        "prompt_resolved"
+    ]
+    tz = (crew.get("sla") or {}).get("tz") or crew_mod.DEFAULTS["sla"]["tz"]
+    return f"{label} {now.astimezone(ZoneInfo(tz)).strftime('%H:%M')}"
+
+
+def _clear_blocked(state, args, crew, now):
+    row = _row_named(_agent_rows(), args.name)
+    closed = {a.get("id") for a in state.answers() if a.get("answer") in CLOSING}
+    ended, out = [], {}
+
+    def mutate(board):
+        line = next(
+            (
+                s
+                for s in board.get("sessions") or []
+                if isinstance(s, dict) and s.get("name") == args.name
+            ),
+            None,
+        )
+        blocked = line.get("blocked") if line else None
+        if not isinstance(blocked, dict):
+            return UNCHANGED
+        if blocked.get("kind") == "permission" and _on_permission_prompt(row):
+            raise BoardError(
+                f"board.py blocked: {args.name} is still blocked on a permission prompt; "
+                "--clear waits until it is answered"
+            )
+        key = _line_key(line, crew)
+        del line["blocked"]
+        ended.append(_apply_wait(line, "", crew, now))
+        obsolete = []
+        if blocked.get("kind") == "permission":
+            reason = _resolved_label(crew, now)
+            for item in board.get("owner_queue") or []:
+                if (
+                    isinstance(item, dict)
+                    and item.get("session") == args.name
+                    and item.get("cause") == "access-click"
+                    and not item.get("obsolete")
+                    and item.get("id") not in closed
+                    and str(item.get("ts") or "") >= str(blocked.get("since") or "")
+                ):
+                    item["obsolete"] = reason
+                    obsolete.append(item.get("id"))
+        since = blocked.get("since")
+        try:
+            start = datetime.strptime(str(since), ISO_FMT).replace(tzinfo=timezone.utc)
+            duration = int((now - start).total_seconds())
+        except ValueError:
+            duration = None
+        out.update(
+            cleared=args.name,
+            kind=blocked.get("kind"),
+            key=key,
+            since=since,
+            duration_s=duration,
+            obsolete=obsolete,
+        )
+        return out
+
+    result = state.write_board(mutate, after=lambda _r: _log_waits(state, ended))
+    if result is UNCHANGED:
+        print(f"board.py blocked: {args.name} carries no wait to clear")
+    else:
+        print(json.dumps(result, ensure_ascii=False))
     return 0
 
 
@@ -551,6 +825,8 @@ def cmd_ask(state, args, crew, now):
         raise BoardError("\n".join(failures))
 
     fields = {f: getattr(args, f).strip() for f in ASK_FIELDS}
+    if args.urgent:
+        fields["urgent"] = True
     base = {"ts": _iso(now), **fields}
     labels = crew.get("labels") or {}
     question = {
@@ -657,15 +933,22 @@ def cmd_decision(state, args, crew, now):
 
 
 def _open_questions(state, board):
-    """Ids of `owner_queue` questions no Accept or Deny closed, oldest `since` first."""
+    """`owner_queue` questions no Accept or Deny closed: (open, obsolete). Open ones urgent first,
+    each group oldest `since` first; obsolete ones (a resolved prompt, `blocked --clear`) apart."""
     closed = {a.get("id") for a in state.answers() if a.get("answer") in CLOSING}
     items = [
         q
         for q in board.get("owner_queue") or []
         if isinstance(q, dict) and isinstance(q.get("id"), str) and q["id"] not in closed
     ]
-    items.sort(key=lambda q: (str(q.get("since") or ""), str(q.get("ts") or "")))
-    return [q["id"] for q in items]
+    items.sort(
+        key=lambda q: (
+            q.get("urgent") is not True,
+            str(q.get("since") or ""),
+            str(q.get("ts") or ""),
+        )
+    )
+    return [q for q in items if not q.get("obsolete")], [q for q in items if q.get("obsolete")]
 
 
 def cmd_bundle(state, args, crew, now):
@@ -678,13 +961,14 @@ def cmd_bundle(state, args, crew, now):
         lines = state.decisions()
         last_marker = max((i for i, d in enumerate(lines) if "bundle" in d), default=-1)
         fresh = [d for d in lines[last_marker + 1 :] if d.get("kind") == "decision"]
-        open_ids = _open_questions(state, board)
+        open_items, obsolete = _open_questions(state, board)
+        open_ids = [q["id"] for q in open_items]
         escalations = [
             r
             for r in fold_escalations(state.escalations()).values()
             if r["open"] and r["stage"] == "bundle"
         ]
-        if not fresh and not open_ids and not escalations:
+        if not fresh and not open_ids and not obsolete and not escalations:
             return UNCHANGED
         body = [
             f"{area}: {d.get('decision')} {d.get('key')} {d.get('text')}"
@@ -692,8 +976,15 @@ def cmd_bundle(state, args, crew, now):
             for d in fresh
             if d.get("area") == area
         ]
-        if open_ids:
-            body.append("open: " + ", ".join(open_ids))
+        if open_items:
+            body.append(
+                "open: "
+                + ", ".join(
+                    q["id"] + (" (urgent)" if q.get("urgent") is True else "") for q in open_items
+                )
+            )
+        if obsolete:
+            body.append("obsolete: " + ", ".join(f"{q['id']} ({q['obsolete']})" for q in obsolete))
         body += [_bundle_line(r) for r in escalations]
         taken = {i.get("id") for i in board.get("news") or [] if isinstance(i, dict)}
         taken |= {d.get("bundle") for d in lines}
@@ -1687,6 +1978,27 @@ def _add_move_verbs(verbs):
     ck.set_defaults(run=cmd_check)
 
 
+def _add_flow_verbs(verbs):
+    lg = verbs.add_parser("log", help="a line in the flow log (the coordinator)")
+    lv = lg.add_subparsers(dest="what", required=True)
+    lc = lv.add_parser("correction", help="the human corrected a session")
+    lc.add_argument("session")
+    lc.add_argument("kind", help="one lower-case token")
+    lc.set_defaults(run=cmd_log)
+
+    bl = verbs.add_parser("blocked", help="mark or clear a session's blocked wait (self-checked)")
+    bl.add_argument("name")
+    bl.add_argument("--kind", choices=BLOCKED_KINDS)
+    bl.add_argument("--waiting-on", dest="waiting_on", metavar="ROLE")
+    bl.add_argument("--starter", metavar="NAME", help="the session that started it")
+    bl.add_argument("--key", metavar="KEY")
+    bl.add_argument(
+        "--command", metavar="TEXT", help="the pending command, filtered by the caller"
+    )
+    bl.add_argument("--clear", action="store_true", help="end the wait")
+    bl.set_defaults(run=cmd_blocked)
+
+
 def parser():
     p = argparse.ArgumentParser(prog="board.py", description="The board's verbs for a session.")
     p.add_argument(
@@ -1711,7 +2023,9 @@ def parser():
     q = verbs.add_parser("ask", help="post a question for the owner after the cold reader")
     for field in ASK_FIELDS:
         q.add_argument("--" + field.replace("_", "-"), dest=field)
+    q.add_argument("--urgent", action="store_true", help="bundle lists it before the others")
     q.set_defaults(run=cmd_ask)
+    _add_flow_verbs(verbs)
 
     d = verbs.add_parser("decision", help="record a cut or fence decision of the caller's area")
     d.add_argument("area")
@@ -1720,8 +2034,9 @@ def parser():
     d.add_argument("--text", required=True)
     d.set_defaults(run=cmd_decision)
 
-    b = verbs.add_parser("bundle", help="the coordinator's evening bundle as one news item")
-    b.set_defaults(run=cmd_bundle)
+    verbs.add_parser(
+        "bundle", help="the coordinator's evening bundle as one news item"
+    ).set_defaults(run=cmd_bundle)
 
     e = verbs.add_parser("escalation", help="the decision story between two owners")
     ev = e.add_subparsers(dest="step", required=True)

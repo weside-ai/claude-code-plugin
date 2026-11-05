@@ -553,6 +553,34 @@ def test_the_ready_gate_keys_default_and_are_typed(tmp_path):
         assert out.returncode == 1 and message in out.stderr, (changes, out.stderr)
 
 
+def test_the_flow_block_defaults_merges_and_is_typed(tmp_path):
+    minimal = {"version": 2, "roles": CREW["roles"], "members": CREW["members"]}
+    core, _ = workspace(tmp_path, minimal)
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["flow"] == {
+        "log_dir": None,
+        "stale_min": 15,
+        "starter_wait_min": 30,
+        "urgent_commands": [],
+    }
+    bound = with_(flow__log_dir="~/flow", flow__urgent_commands=["gh secret", r"eas build"])
+    core.joinpath(".weside", "crew.json").write_text(json.dumps(bound))
+    shown = json.loads(run(core, "show").stdout)
+    assert shown["flow"]["log_dir"] == "~/flow" and shown["flow"]["stale_min"] == 15
+    assert shown["flow"]["urgent_commands"] == ["gh secret", "eas build"]
+    for changes, message in [
+        ({"flow__stale_min": "15"}, "flow.stale_min must be a number"),
+        ({"flow__urgent_commands": "gh secret"}, "flow.urgent_commands must be a list"),
+        (
+            {"flow__urgent_commands": ["ok", "(open"]},
+            "flow.urgent_commands[1] '(open' is no regex",
+        ),
+    ]:
+        core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(**changes)))
+        out = run(core, "show")
+        assert out.returncode == 1 and message in out.stderr, (changes, out.stderr)
+
+
 def test_workplace_prints_the_start_repo_then_the_extra_repos(tmp_path):
     data = with_(members__ada__workplace="../infra", members__ada__extra_repos=["."])
     core, _ = workspace(tmp_path, data)
@@ -678,6 +706,7 @@ def test_labels_default_merge_and_warn_on_an_unknown_key(tmp_path):
         "ready": "ready",
         "crew_unreadable": "crew.json not readable",
         "crew_unknown_keys": "crew.json: unknown keys ignored",
+        "prompt_resolved": "prompt resolved at",
     }
     assert json.loads(run(core, "show").stdout)["labels"] == defaults
     core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__ready="bereit")))
