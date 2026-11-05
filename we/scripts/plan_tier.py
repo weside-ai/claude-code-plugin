@@ -48,9 +48,14 @@ class TierResult(NamedTuple):
 
 
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    done = subprocess.run(
-        ["git", "-C", str(root), *args], capture_output=True, check=False, timeout=RUN_TIMEOUT
-    )
+    """A git call past `RUN_TIMEOUT` is a non-zero result whose stderr names the timeout."""
+    argv = ["git", "-C", str(root), *args]
+    try:
+        done = subprocess.run(argv, capture_output=True, check=False, timeout=RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        done = subprocess.CompletedProcess(
+            argv, 124, b"", f"timed out after {RUN_TIMEOUT} s".encode()
+        )
     if check and done.returncode != 0:
         raise TierError(
             f"git {' '.join(args)}: {done.stderr.decode(errors='replace').strip() or 'failed'}"

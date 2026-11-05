@@ -866,10 +866,23 @@ def _open_failures(args, crew):
     return failures, parties
 
 
+def _adapter(args, crew):
+    """The ticketing adapter, built only by the verbs that call it (`select`, `move`,
+    `escalation open|settle`) and before their first write; an unknown `board.ticketing`
+    leaves every other verb working. `args.adapter_given` is the tests' FakeAdapter."""
+    if args.adapter_given is not None:
+        return args.adapter_given
+    try:
+        return ticket_adapter.adapter_for(crew)
+    except ValueError as exc:
+        raise BoardError(f"crew: {exc}") from None
+
+
 def cmd_escalation_open(state, args, crew, now):
     failures, parties = _open_failures(args, crew)
     if failures:
         raise BoardError("\n".join(failures))
+    adapter = _adapter(args, crew)
     by = next(p for p in parties if crew_mod.holds_role(crew, p, os.environ))
     wait = _wait(crew, now, ",".join(parties))
 
@@ -902,7 +915,7 @@ def cmd_escalation_open(state, args, crew, now):
     week = _week(rec["since_open"])
     for line in _count_lines(_pair_counts(records, week), week, only_warn=True):
         print(line)
-    _print_carry(args.adapter.comment(rec["key"], _story_text(rec)))
+    _print_carry(adapter.comment(rec["key"], _story_text(rec)))
     return 0
 
 
@@ -1067,6 +1080,7 @@ def cmd_escalation_settle(state, args, crew, now):
     by = _settler(rec, args, crew)
     if not args.outcome.strip():
         raise BoardError("board.py escalation settle: missing --outcome")
+    adapter = _adapter(args, crew)
     event = {
         "id": args.id,
         "event": "settle",
@@ -1083,7 +1097,7 @@ def cmd_escalation_settle(state, args, crew, now):
     state.write_board(drop, after=state.append_escalation)
     print(json.dumps(event, ensure_ascii=False))
     text = f"Escalation {args.id} settled at stage {rec['stage']} by {by}: {event['outcome']}"
-    _print_carry(args.adapter.comment(rec["key"], text))
+    _print_carry(adapter.comment(rec["key"], text))
     return 0
 
 
@@ -1348,6 +1362,7 @@ def _caller():
 def _transition(state, args, crew, now, target, head):
     """Run the target's entry rules, then write the row, call the adapter once and print the
     row and the `carry:` line; a refusal writes, calls and carries nothing."""
+    adapter = _adapter(args, crew)
     key = args.key
     failures = _key_failure(crew, key, head.split()[1])
     if failures:
@@ -1370,7 +1385,6 @@ def _transition(state, args, crew, now, target, head):
     status = (crew.get("board") or {}).get("states", {}).get(target) or (
         crew_mod.DEFAULTS["board"]["states"][target]
     )
-    adapter = args.adapter
     last = state.last_rows().get(key)
     row = {
         "key": key,
@@ -1546,11 +1560,7 @@ def main(argv=None, now=None, adapter=None):
     args = parser().parse_args(argv)
     try:
         crew = None if args.verb == "answer" else load_crew()
-        if crew is not None:
-            try:
-                args.adapter = adapter or ticket_adapter.adapter_for(crew)
-            except ValueError as exc:
-                raise BoardError(f"crew: {exc}") from None
+        args.adapter_given = adapter
         return args.run(StateDir(args.board), args, crew, now or _now())
     except BoardError as exc:
         print(str(exc), file=sys.stderr)

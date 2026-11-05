@@ -173,3 +173,35 @@ class TestPlanTier:
 
 def test_the_fake_risk_command_is_executable():
     assert os.access(RISK, os.X_OK)
+
+
+def hang_on(monkeypatch, *verb):
+    """`subprocess.run` raises TimeoutExpired for `git <verb…>`; every other call runs."""
+    real = subprocess.run
+
+    def run(argv, *a, **kw):
+        if argv[0] == "git" and tuple(argv[3 : 3 + len(verb)]) == verb:
+            raise subprocess.TimeoutExpired(argv, plan_tier.RUN_TIMEOUT)
+        return real(argv, *a, **kw)
+
+    monkeypatch.setattr(plan_tier.subprocess, "run", run)
+
+
+class TestGitTimeout:
+    def test_a_hanging_fetch_is_the_one_line_warning(self, tmp_path, monkeypatch):
+        root = tier_repo(tmp_path)
+        hang_on(monkeypatch, "fetch")
+        result = tier(root, "PROJ-12", fetch=True)
+        assert result.line == "T2 one-way money"
+        assert result.warnings == [
+            f"warning: git fetch origin failed (timed out after {plan_tier.RUN_TIMEOUT} s); "
+            "the tier reads the local origin/main"
+        ]
+
+    def test_a_hanging_worktree_add_is_a_failure(self, tmp_path, monkeypatch):
+        root = tier_repo(tmp_path)
+        hang_on(monkeypatch, "worktree", "add")
+        result = tier(root, "PROJ-12")
+        assert result.line is None
+        assert result.failure.startswith("git worktree add --no-checkout --detach ")
+        assert result.failure.endswith(f": timed out after {plan_tier.RUN_TIMEOUT} s")

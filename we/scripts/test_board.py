@@ -1687,3 +1687,42 @@ class TestTicketAdapter:
             ValueError, match=r"board\.ticketing 'carrier-pigeon' has no transport"
         ):
             ticket_adapter.adapter_for({"board": {"ticketing": "carrier-pigeon"}})
+
+
+def with_ticketing(state_dir, name):
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["board"] = {**(data.get("board") or {}), "ticketing": name}
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+class TestUnknownTicketing:
+    """Only the verbs that call the adapter build it: an unknown `board.ticketing` leaves the
+    others working and stops `select`, `move` and `escalation open|settle` before any write."""
+
+    def test_verbs_without_the_adapter_work_with_an_unknown_ticketing(self, crewed, capsys):
+        with_ticketing(crewed, "github")
+        for argv in (("set", "now=phase 3", "state=ci"), ("escalation", "count")):
+            code = go(crewed, *argv)
+            assert capsys.readouterr().err == ""  # not "crew: board.ticketing 'github' …"
+            assert code == 0
+        assert line_of(crewed, "lead-12")["now"] == "phase 3"
+
+    def test_a_move_names_the_unknown_ticketing_and_writes_nothing(self, moving, capsys):
+        with_ticketing(moving, "github")
+        with_row(moving, KEY, "selected")
+        before = transitions(moving)
+        assert act(moving, "move", KEY, "in_progress") == 1
+        assert capsys.readouterr().err.strip() == (
+            "crew: board.ticketing 'github' has no transport (known: none, jira)"
+        )
+        assert transitions(moving) == before
+
+    def test_an_escalation_open_names_it_before_the_write(self, escalating, monkeypatch, capsys):
+        with_ticketing(escalating, "github")
+        pin(monkeypatch, "ada")
+        assert go(escalating, *open_argv()) == 1
+        assert capsys.readouterr().err.strip() == (
+            "crew: board.ticketing 'github' has no transport (known: none, jira)"
+        )
+        assert esc_log(escalating) == []
