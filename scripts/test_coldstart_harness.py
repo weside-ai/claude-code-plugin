@@ -180,3 +180,209 @@ def test_a_bad_scenario_stops_before_any_model_call(tmp_path):
     bad.write_text("id: [\n")
     with pytest.raises(run.ScenarioError, match="does not parse"):
         run.load(bad)
+
+
+# --- affected set and digest (throwaway repos, one diff per mapping row) ---------------------
+
+import subprocess  # noqa: E402
+
+import affected  # noqa: E402
+
+SKILL = "---\nname: x\ndescription: >\n  Close out a merged PR.\n---\n\n# x\n"
+
+
+def _scenario(role: str, routing: bool = False) -> str:
+    extra = "routing: true\n" if routing else ""
+    return f"id: a\nrole: {role}\ncrew: fx/crew.json\n{extra}prompt: p\nexpect:\n  route: x\n"
+
+
+@pytest.fixture
+def tree(tmp_path):
+    """A repo with one master, one worker and one routing scenario on ``base``."""
+    root = tmp_path / "r"
+    files = {
+        "we/process/L0.md": "l0\n",
+        "we/hooks/role_on_start.py": "#\n",
+        "we/scripts/crew.py": "#\n",
+        "we/roles/master.md": "m\n",
+        "we/roles/worker.md": "w\n",
+        "we/skills/merged/SKILL.md": SKILL,
+        "we/skills/other.md": "o\n",
+        "fx/crew.json": "{}\n",
+        "tests/coldstart/run.py": "#\n",
+        "tests/coldstart/schema.json": "{}\n",
+        "tests/coldstart/master/a.yaml": _scenario("master"),
+        "tests/coldstart/worker/b.yaml": _scenario("worker"),
+        "tests/coldstart/worker/route.yaml": _scenario("worker", routing=True),
+    }
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "main")
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "base")
+    git("branch", "base")
+
+    def change(rel: str, text: str) -> set[str]:
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+        git("add", rel)
+        git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", rel)
+        return affected.affected("base", root)
+
+    change.root = root
+    return change
+
+
+ALL = {"master/a", "worker/b", "worker/route"}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "we/process/L0.md",
+        "we/hooks/role_on_start.py",
+        "we/scripts/crew.py",
+        "fx/crew.json",
+        "tests/coldstart/run.py",
+        "tests/coldstart/schema.json",
+    ],
+)
+def test_a_global_input_affects_every_scenario(tree, path):
+    assert tree(path, "changed\n") == ALL
+
+
+def test_a_role_card_affects_the_scenarios_of_its_role(tree):
+    assert tree("we/roles/worker.md", "w2\n") == {"worker/b", "worker/route"}
+
+
+def test_a_skill_description_affects_the_routing_scenarios(tree):
+    assert tree("we/skills/merged/SKILL.md", SKILL.replace("Close out", "Wrap up")) == {
+        "worker/route"
+    }
+
+
+def test_a_skill_body_edit_affects_nothing(tree):
+    assert tree("we/skills/merged/SKILL.md", SKILL + "more body\n") == set()
+
+
+def test_a_scenario_file_affects_itself(tree):
+    assert tree("tests/coldstart/master/a.yaml", _scenario("master") + "judge: null\n") == {
+        "master/a"
+    }
+
+
+def test_an_unrelated_file_affects_nothing(tree):
+    assert tree("we/skills/other.md", "o2\n") == set()
+
+
+def test_the_digest_follows_the_inputs_not_the_commit(tree):
+    root = tree.root
+    tree("we/roles/master.md", "m2\n")
+    first = affected.digest({"master/a"}, root)
+    tree("we/skills/other.md", "o3\n")  # a new commit, no input of master/a changed
+    assert affected.digest({"master/a"}, root) == first
+    tree("we/roles/master.md", "m3\n")
+    assert affected.digest({"master/a"}, root) != first
+    assert affected.digest({"worker/b"}, root) != affected.digest({"master/a"}, root)
+
+
+def test_uncommitted_suite_inputs_are_named(tree):
+    root = tree.root
+    (root / "we/roles/master.md").write_text("dirty\n")
+    (root / "notes.txt").write_text("not an input\n")
+    assert affected.dirty_inputs(root) == ["we/roles/master.md"]
+
+
+def test_the_model_pin_is_one_value():
+    assert f"{run.MODEL} {run.EFFORT}" == affected.MODEL_PIN
+
+
+# --- release: caps and the receipt (fake claude) ---------------------------------------------
+
+CAPS = {"release_cap": {"runs": 9, "wall_minutes": 5}, "cost_target_tokens": 10**9}
+
+
+@pytest.fixture
+def released(fake, monkeypatch, capsys):
+    """``release`` on a fixed affected set with the given rates table; returns (code, out, block)."""
+
+    def go(ids, table=CAPS):
+        monkeypatch.setattr(affected, "affected", lambda _base: set(ids))
+        monkeypatch.setattr(affected, "dirty_inputs", list)
+        monkeypatch.setattr(run, "rates", lambda: table)
+        code = run.main(["release", "--base", "origin/main"])
+        out = capsys.readouterr().out
+        block = json.loads(
+            out.split(run.RECEIPT_MARKER, 1)[1].split("```json", 1)[1].split("```")[0]
+        )
+        return code, out, block
+
+    return go
+
+
+def test_release_runs_each_affected_scenario_three_times_and_prints_the_receipt(released, fake):
+    code, _, block = released([T2])
+    assert code == 0 and len(fake()) == 3
+    assert block["status"] == "green" and block["affected"] == [T2]
+    row = next(r for r in block["scenarios"] if r["id"] == T2)
+    assert row == {"id": T2, "runs": 3, "hits": 3, "gated": True, "status": "run"}
+    assert block["digest"] == affected.digest({T2})
+    assert block["tokens"] == 3 * 7036 and block["runs"] == 3
+    others = [r for r in block["scenarios"] if r["id"] != T2]
+    assert len(others) == len(run.scenario_paths()) - 1, "no scenario is left out"
+    assert {r["status"] for r in others} == {"unmeasured"}
+    for key in ("plugin_version", "model", "wall_s", "base"):
+        assert key in block
+
+
+def test_a_gated_miss_turns_the_receipt_red(released, fake, monkeypatch):
+    monkeypatch.setenv("FAKE_CLAUDE_STREAM", str(FIXTURES / "recorded.jsonl"))  # a miss
+    code, _, block = released([T2])
+    assert code == 1 and block["status"] == "red"
+    assert block["reasons"] == [f"gated miss {T2} 0/3"]
+
+
+def test_an_affected_set_over_the_run_cap_starts_no_session(released, fake):
+    code, _, block = released(
+        [T2, "master/card-cornerstone", "worker/card-cornerstone", "master/route-merged"]
+    )
+    assert code == 1 and fake() == []
+    assert block["status"] == "red" and block["reasons"][0] == "cap runs 12 > 9"
+    assert all(
+        r["status"] == "not run" for r in block["scenarios"] if r["id"] in block["affected"]
+    )
+
+
+def test_the_wall_cap_stops_and_marks_the_rest_not_run(released, fake, monkeypatch):
+    monkeypatch.setenv("FAKE_CLAUDE_SLEEP", "1")
+    table = {"release_cap": {"runs": 9, "wall_minutes": 0.01}}
+    code, out, block = released([T2, "master/card-cornerstone"], table)
+    assert code == 1 and 1 <= len(fake()) < 6
+    assert block["reasons"][0] == "cap wall 0.01 min"
+    assert "not run master/card-cornerstone" in block["reasons"]
+    assert "not run (wall cap)" in out
+
+
+def test_no_suite_input_changed_prints_a_receipt_with_zero_runs(released, fake):
+    code, out, block = released([])
+    assert code == 0 and fake() == []
+    assert out.startswith("no suite input changed\n")
+    assert (block["status"], block["runs"], block["affected"]) == ("green", 0, [])
+
+
+def test_tokens_over_the_cost_target_print_one_line_and_do_not_fail(released):
+    code, out, _ = released([T2], dict(CAPS, cost_target_tokens=1000))
+    assert code == 0
+    assert "cost over target: 21108 > 1000" in out.splitlines()
+
+
+def test_release_refuses_uncommitted_suite_inputs(fake, monkeypatch, capsys):
+    monkeypatch.setattr(affected, "dirty_inputs", lambda: ["we/roles/master.md"])
+    assert run.main(["release", "--base", "origin/main"]) == 2
+    assert "uncommitted suite inputs: we/roles/master.md" in capsys.readouterr().err
+    assert fake() == []

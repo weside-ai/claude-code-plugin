@@ -30,8 +30,17 @@ a non-zero exit, the timeout, no parseable answer) is a miss naming the cause; n
 The crew's ``board.file`` is pointed into the run's temp directory, so a cold session never reads
 or writes the caller's board or served log. Grading: ``grade.py``.
 
+``release --base <ref>`` runs each scenario ``affected.py`` names for ``<ref>...HEAD`` 3x fresh,
+keeps every other scenario's measured rate from ``rates.json``, and prints the receipt block
+(``RECEIPT_MARKER`` and a fenced JSON block) to paste into the PR body. Before the first session it
+refuses uncommitted suite inputs (the digest reads HEAD) and an affected set whose runs exceed
+``release_cap.runs``; a session whose turn comes after ``release_cap.wall_minutes`` does not start
+and its scenario is ``not run``. Either cap makes the receipt ``status: red`` with the reason; no
+scenario is left out. Tokens over ``cost_target_tokens`` print ``cost over target: <n> > <t>``.
+
 Usage:
   python3 tests/coldstart/run.py run <id>... [--jobs J]
+  python3 tests/coldstart/run.py release --base <ref> [--jobs J]
 """
 
 from __future__ import annotations
@@ -53,6 +62,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import affected
 import grade
 
 SUITE = Path(__file__).resolve().parent
@@ -71,6 +81,8 @@ MAX_JOBS = 2
 DEFAULT_RUN_BUDGET_USD = 1.0
 LOCK_ENV = "WESIDE_TESTS_LOCK"
 LOCK_DEFAULT = "/tmp/weside-tests.lock"
+RELEASE_RUNS = 3
+RECEIPT_MARKER = "<!-- coldstart-receipt -->"
 
 
 class ScenarioError(Exception):
@@ -318,16 +330,130 @@ def test_slot(out=None):
         os.close(fd)
 
 
-def run_many(scns: list[dict], jobs: int, budget_usd: float) -> list[Result]:
-    """Every scenario once, at most ``jobs`` at a time; the caller holds the test slot."""
+def run_many(
+    scns: list[dict], jobs: int, budget_usd: float, deadline: float | None = None
+) -> list[Result | None]:
+    """Each scenario once, at most ``jobs`` at a time, in order; the caller holds the test slot.
+    A run whose turn comes after ``deadline`` (monotonic) does not start: its entry is None."""
+
+    def one(scn: dict) -> Result | None:
+        if deadline is None:
+            return run_one(scn, budget_usd)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return None
+        return run_one(scn, budget_usd, timeout=min(TIMEOUT_S, left))
+
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [pool.submit(run_one, scn, budget_usd) for scn in scns]
+        futures = [pool.submit(one, scn) for scn in scns]
         results = []
-        for future in futures:
+        for scn, future in zip(scns, futures):
             result = future.result()
-            print(result.line(), flush=True)
+            print(result.line() if result else f"{scn['sid']} not run (wall cap)", flush=True)
             results.append(result)
     return results
+
+
+# --- release ---------------------------------------------------------------------------------
+
+
+def plugin_version() -> str:
+    return json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())["version"]
+
+
+def receipt(base: str, ids: set[str], results: list, cap_reason: str, table: dict) -> dict:
+    """The receipt of a ``release`` run: affected scenarios with their runs, the rest by rate."""
+    rows, tokens, wall = [], 0, 0.0
+    measured = table.get("scenarios") or {}
+    for sid in sorted(affected.scenarios()):
+        rate = measured.get(sid) or {}
+        if sid in ids:
+            mine = [r for s, r in results if s == sid]
+            done = [r for r in mine if r is not None]
+            tokens += sum(r.tokens for r in done)
+            wall += sum(r.wall_s for r in done)
+            rows.append(
+                {
+                    "id": sid,
+                    "runs": len(done),
+                    "hits": sum(1 for r in done if r.hit),
+                    "gated": bool(rate.get("gated", True)),
+                    "status": "run" if len(done) == RELEASE_RUNS else "not run",
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "id": sid,
+                    "runs": int(rate.get("runs", 0)),
+                    "hits": int(rate.get("hits", 0)),
+                    "gated": bool(rate.get("gated", False)),
+                    "status": "rate" if rate else "unmeasured",
+                }
+            )
+    reasons = [cap_reason] if cap_reason else []
+    for row in rows:
+        if row["id"] not in ids:
+            continue
+        if row["status"] == "not run":
+            reasons.append(f"not run {row['id']}")
+        elif row["gated"] and row["hits"] < RELEASE_RUNS:
+            reasons.append(f"gated miss {row['id']} {row['hits']}/{row['runs']}")
+    return {
+        "status": "red" if reasons else "green",
+        "reasons": reasons,
+        "digest": affected.digest(ids),
+        "base": base,
+        "plugin_version": plugin_version(),
+        "model": f"{MODEL} {EFFORT}",
+        "affected": sorted(ids),
+        "runs": sum(r["runs"] for r in rows if r["id"] in ids),
+        "tokens": tokens,
+        "wall_s": round(wall, 1),
+        "scenarios": rows,
+    }
+
+
+def print_receipt(block: dict) -> None:
+    print(RECEIPT_MARKER)
+    print("```json")
+    print(json.dumps(block, indent=1))
+    print("```")
+
+
+def cost_line(tokens: int, table: dict) -> str:
+    target = table.get("cost_target_tokens")
+    if target and tokens > int(target):
+        return f"cost over target: {tokens} > {target}"
+    return ""
+
+
+def release(base: str, jobs: int, budget: float, table: dict) -> int:
+    ids = affected.affected(base)
+    if not ids:
+        print("no suite input changed")
+        print_receipt(receipt(base, ids, [], "", table))
+        return 0
+    cap = table.get("release_cap") or {}
+    needed = len(ids) * RELEASE_RUNS
+    cap_runs = int(cap.get("runs", 0))
+    if needed > cap_runs:
+        print_receipt(receipt(base, ids, [], f"cap runs {needed} > {cap_runs}", table))
+        return 1
+    scns = [s for s in resolve(sorted(ids)) for _ in range(RELEASE_RUNS)]
+    print(f"affected: {', '.join(sorted(ids))} ({needed} runs)")
+    wall_min = float(cap.get("wall_minutes", 0))
+    with test_slot():
+        deadline = time.monotonic() + wall_min * 60
+        results = run_many(scns, jobs, budget, deadline)
+    pairs = [(s["sid"], r) for s, r in zip(scns, results)]
+    cap_reason = f"cap wall {wall_min:g} min" if any(r is None for _, r in pairs) else ""
+    block = receipt(base, ids, pairs, cap_reason, table)
+    print_receipt(block)
+    line = cost_line(block["tokens"], table)
+    if line:
+        print(line)
+    return 0 if block["status"] == "green" else 1
 
 
 # --- CLI -------------------------------------------------------------------------------------
@@ -339,6 +465,9 @@ def parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="one run of each named scenario")
     run.add_argument("ids", nargs="+")
     run.add_argument("--jobs", type=int, default=1)
+    rel = sub.add_parser("release", help="the affected scenarios 3x each, then the receipt")
+    rel.add_argument("--base", required=True)
+    rel.add_argument("--jobs", type=int, default=1)
     return p
 
 
@@ -351,17 +480,23 @@ def main(args: list[str] | None = None) -> int:
         return 2
     try:
         check_host()
-        scns = resolve(ns.ids)
-        budget = float(rates().get("run_budget_usd", DEFAULT_RUN_BUDGET_USD))
+        table = rates()
+        budget = float(table.get("run_budget_usd", DEFAULT_RUN_BUDGET_USD))
         temp_root().rmdir()  # refuses a TMPDIR under HOME before the slot is taken
-    except (ScenarioError, RefusedError) as exc:
+        if ns.verb == "release":
+            dirty = affected.dirty_inputs()
+            if dirty:
+                raise RefusedError(f"uncommitted suite inputs: {', '.join(dirty)}")
+            return release(ns.base, ns.jobs, budget, table)
+        scns = resolve(ns.ids)
+    except (ScenarioError, RefusedError, affected.GitError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     with test_slot():
         results = run_many(scns, ns.jobs, budget)
     judged, total = grade.judge_share(scns)
     print(f"judge share: {judged}/{total}")
-    return 0 if all(r.hit for r in results) else 1
+    return 0 if all(r and r.hit for r in results) else 1
 
 
 if __name__ == "__main__":
