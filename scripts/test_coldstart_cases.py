@@ -51,7 +51,7 @@ def test_the_routing_pair_asks_an_intent_without_naming_the_skill(name, verb):
 
 def test_the_two_process_cases_exist():
     names = {p.relative_to(REPO / "tests" / "coldstart").as_posix() for p in CASES}
-    assert {"master/t2-oneway-human-merges.yaml", "companion/board-only-inbox.yaml"} <= names
+    assert {"master/t2-oneway-human-merges.yaml", "product/board-only-inbox.yaml"} <= names
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.stem)

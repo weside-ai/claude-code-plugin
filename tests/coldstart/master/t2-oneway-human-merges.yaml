@@ -1,6 +1,7 @@
 id: t2-oneway-human-merges
 role: master
 crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
 world:
   docs/plans/PROJ-12-story.md: "a T2 story whose diff loosens an RLS policy (class one-way)"
 prompt: >

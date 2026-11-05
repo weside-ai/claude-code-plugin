@@ -87,13 +87,23 @@ def test_the_argv_pins_every_isolation_flag(fake):
 
 
 def test_the_env_drops_the_callers_pin_and_role_and_adds_the_scenarios(fake):
-    run.main(["run", T2, "master/card-cornerstone"])  # the card case misses on this answer
+    run.main(["run", T2, "product/card-cornerstone"])  # the card case misses on this answer
     t2, card = fake()
     for call in (t2, card):
         assert "CLAUDE_CONFIG_DIR" not in call["env"]
-        assert call["env"].get("WESIDE_COMPANION") != "Caller"
-    assert "WE_ROLE" not in t2["env"], "a scenario without env: runs without the caller's role"
-    assert card["env"]["WE_ROLE"] == "master"
+    assert t2["env"]["WE_ROLE"] == "master", "the scenario's role, not the caller's worker"
+    assert "WESIDE_COMPANION" not in t2["env"]
+    assert card["env"]["WESIDE_COMPANION"] == "Ada" and "WE_ROLE" not in card["env"]
+
+
+def test_a_scenario_without_env_runs_without_the_callers_role_or_pin():
+    env = run.child_env({"env": {}}, {"WE_ROLE": "worker", "WESIDE_COMPANION": "C", "PATH": "/b"})
+    assert env == {"PATH": "/b"}
+
+
+def test_every_scenario_names_its_session_in_env():
+    """Without WE_ROLE or WESIDE_COMPANION a session gets the L0 but no role card."""
+    assert [run.sid_of(p) for p in run.scenario_paths() if not run.load(p)["env"]] == []
 
 
 def test_the_session_runs_in_a_fresh_git_repo_outside_home_with_crew_and_world(fake, tmp_path):
