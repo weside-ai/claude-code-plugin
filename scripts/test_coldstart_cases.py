@@ -1,6 +1,8 @@
 """Every cold-start case (`tests/coldstart/<dir>/<id>.yaml`) has the scenario keys the harness
-reads (epic format § 5.1): `id` (= the file name), `role`, `crew` (an existing fixture), `prompt`,
-`expect`. The harness itself replaces this check when it lands."""
+(`tests/coldstart/run.py`) reads (epic format § 5.1): `id` (= the file name), `role`, `crew` (an
+existing fixture), `prompt`, `expect`; the suite holds at least 20 cases, at most a fifth of them
+judged by a model, and the routing pair. These checks are regex-only: the 3.9 floor lane has no
+PyYAML."""
 
 from __future__ import annotations
 
@@ -20,6 +22,31 @@ import crew as crewlib  # noqa: E402
 import render_process  # noqa: E402
 
 TOP = re.compile(r"^([a-z_]+):(.*)$", re.MULTILINE)
+
+
+MIN_CASES = 20
+MAX_JUDGE_SHARE = 0.2
+ROUTING = {"worker/route-plan-story.yaml": "plan-story", "master/route-merged.yaml": "merged"}
+
+
+def test_the_suite_holds_at_least_twenty_cases():
+    assert len(CASES) >= MIN_CASES, len(CASES)
+
+
+def test_at_most_a_fifth_of_the_cases_have_a_judge():
+    judged = [
+        p.name for p in CASES if re.search(r"^judge: (?!null\s*$)\S", p.read_text(), re.MULTILINE)
+    ]
+    assert len(judged) <= MAX_JUDGE_SHARE * len(CASES), judged
+
+
+@pytest.mark.parametrize(("name", "verb"), sorted(ROUTING.items()))
+def test_the_routing_pair_asks_an_intent_without_naming_the_skill(name, verb):
+    text = (REPO / "tests" / "coldstart" / name).read_text(encoding="utf-8")
+    assert re.search(r"^routing: true$", text, re.MULTILINE)
+    assert re.search(rf"^  next_verb: \[{verb}\]$", text, re.MULTILINE)
+    prompt = text.split("\nprompt:", 1)[1].split("\nexpect:", 1)[0]
+    assert verb not in prompt, "the prompt names the skill it should route to"
 
 
 def test_the_two_process_cases_exist():

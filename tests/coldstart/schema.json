@@ -3,12 +3,12 @@
   "properties": {
     "next_verb": {
       "type": "string",
-      "description": "The one next verb or skill you would use, as a bare word (e.g. board, master, plan-story)."
+      "description": "The one next verb or skill you would use, as a bare word (e.g. board, master)."
     },
     "waits": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "The roles you wait on for this item, as role keys (human, product, architecture, acceptance, machinery, coordinator, escalation, hr); empty when nobody."
+      "description": "The roles you wait on for this item, as role keys (human, product, architecture, acceptance, machinery, coordinator, escalation, hr, master, worker); empty when nobody."
     },
     "route": {
       "type": "string",

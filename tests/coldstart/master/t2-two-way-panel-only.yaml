@@ -1,0 +1,19 @@
+# L0 Risk tiers, T2 row: "auto after the panel; a **one-way** diff waits for {human}";
+# "{architecture} signs only a new primitive or seam"; "Two-way doors the master decides and
+# records in the PR."
+id: t2-two-way-panel-only
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
+world: {}
+prompt: >
+  PROJ-14 is computed tier T2, class two-way: it adds an index to a busy table, no new primitive
+  and no new seam. The T2 lens panel is green with a red arm for every finding, the PR is open and
+  every required check is green. What do you do next and who do you wait on? Answer in the JSON
+  schema.
+expect:
+  next_verb: [merge, auto-merge, pr, master]
+  waits: []
+  not_waits: [human, architecture]
+  route: "(?i)panel"
+judge: null

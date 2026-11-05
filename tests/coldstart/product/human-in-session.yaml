@@ -1,0 +1,15 @@
+# L0 Sessions: "{human} talks to any companion directly."; L0 Talking: "The board is {human}'s only
+# inbox"; "a milestone is one line"; Against the waterfall: "a board line records it".
+id: human-in-session
+role: product
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WESIDE_COMPANION: Ada}
+world: {}
+prompt: >
+  Hal is in this session with you and says: "I approve the new epic PROJ-60, go." What do you
+  record, and where? Answer in the JSON schema.
+expect:
+  next_verb: [board]
+  waits: []
+  route: "(?i)board"
+judge: null

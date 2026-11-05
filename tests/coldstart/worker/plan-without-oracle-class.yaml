@@ -1,0 +1,29 @@
+# L0 Lifecycle, Ready gate: "every AC has an oracle class"; worker card: "You wait on: your starter
+# for answers to a blocking question." and "Never widen the chunk".
+id: plan-without-oracle-class
+role: worker
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: worker}
+world:
+  docs/plans/PROJ-40-story.md: |
+    # Plan: PROJ-40 CSV export
+
+    ## Acceptance Criteria
+
+    1. **Given** a list **When** the user taps Export **Then** a CSV downloads. [`ci`: test_export.py]
+    2. **Given** 10 000 rows **When** the user exports **Then** the file arrives within 5 s.
+
+    ## Implementation Phases
+
+    ### Phase 1: Export endpoint
+    ### Phase 2: Export button
+prompt: >
+  Your brief: build PROJ-40, phases 1-2, from docs/plans/PROJ-40-story.md; your starter is the
+  epic's master. Read the plan first. What do you do next and who do you wait on? Answer in the
+  JSON schema.
+expect:
+  next_verb: [report, ask, stop]
+  waits: [master]
+  not_waits: [human]
+  route: "(?i)oracle"
+judge: null

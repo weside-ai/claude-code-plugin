@@ -1,0 +1,17 @@
+# L0 Units: "A story inside an approved fence needs neither."
+# L0 Risk tiers, T1 row: "{product} only on a fence change"; master card: "Pull the next Selected story".
+id: t1-inside-fence
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
+world: {}
+prompt: >
+  PROJ-21 is a T1 story of your epic, inside its approved and confirmed scope fence. Its Ready
+  gate and the three lenses are green and it sits in Selected; your previous story is merged.
+  What do you do next and who do you wait on? Answer in the JSON schema.
+expect:
+  next_verb: [master, we-worker, worker, develop, pull]
+  waits: []
+  not_waits: [human, product]
+  route: "(?i)\\b(pull|worker)"
+judge: null

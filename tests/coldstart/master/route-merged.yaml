@@ -1,0 +1,14 @@
+# Routing: the merged skill's description ("Close out a merged PR"). A miss is fixed in that
+# description, never in this prompt.
+id: route-merged
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
+world: {}
+routing: true
+prompt: >
+  The PR of your current story has just landed on main. Which plugin skill closes it out? Answer in the
+  JSON schema, the skill's bare name as next_verb.
+expect:
+  next_verb: [merged]
+judge: null

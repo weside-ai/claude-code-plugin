@@ -1,0 +1,14 @@
+# Routing: the plan-story skill's description ("Writes a build-ready story plan ... with no user in
+# the room"). A miss is fixed in that description, never in this prompt.
+id: route-plan-story
+role: worker
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: worker}
+world: {}
+routing: true
+prompt: >
+  A story has no plan yet and nobody is in the room to answer questions. Which plugin skill writes
+  its plan? Answer in the JSON schema, the skill's bare name as next_verb.
+expect:
+  next_verb: [plan-story]
+judge: null

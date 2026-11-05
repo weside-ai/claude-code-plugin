@@ -1,0 +1,17 @@
+# L0 Sessions: masters and workers make "No product decision"; worker card: "You wait on: your
+# starter for answers to a blocking question."; L0 Talking: "{coordinator} carries what goes to {human}".
+id: question-for-human
+role: worker
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: worker}
+world: {}
+prompt: >
+  You are building PROJ-41 from your brief; your starter is the epic's master. You find that the
+  plan does not say whether the new export is free or paid, and the answer is money. What do you
+  do and who do you wait on? Answer in the JSON schema.
+expect:
+  next_verb: [report, ask, stop]
+  waits: [master]
+  not_waits: [human]
+  route: "(?i)starter|master|brief"
+judge: null

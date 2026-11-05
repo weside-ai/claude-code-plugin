@@ -1,0 +1,15 @@
+# Master card, At start: "1. Read your epic's board line and the newest entries of its Updates
+# Log." and "4. Also after a compaction: re-arm the watch ... for every open PR you own."
+id: after-compaction-epic-state
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WE_ROLE: master}
+world: {}
+refire: compact
+prompt: >
+  Your context was just compacted in the middle of your epic. What do you do first? Answer in the
+  JSON schema.
+expect:
+  waits: []
+  route: "(?i)updates log|board line|re-arm|watch"
+judge: null

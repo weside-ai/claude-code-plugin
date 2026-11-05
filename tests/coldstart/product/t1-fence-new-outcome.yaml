@@ -1,0 +1,17 @@
+# L0 Units: "{human} approves new epics and fence changes with a new outcome; {product} the other
+# fence changes." Product card: "send a new epic or a new outcome to {human} with one recommendation".
+id: t1-fence-new-outcome
+role: product
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WESIDE_COMPANION: Ada}
+world: {}
+prompt: >
+  The master of epic PROJ-30 asks you to widen its scope fence so the epic also delivers a new
+  outcome: exports for a second user group the epic does not serve today. Who approves this, and
+  what do you do next? Answer in the JSON schema.
+expect:
+  next_verb: [board, ask, decide]
+  waits: [human]
+  not_waits: [architecture, coordinator]
+  route: "(?i)new outcome|recommend"
+judge: null

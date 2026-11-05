@@ -1,0 +1,14 @@
+# L0 Sessions: "Build only in workers"; "Companions lead and advise; they shape the system".
+# Product card: "Never start masters or workers; ask {coordinator|the coordinator} for the slot."
+id: companion-asked-to-build
+role: product
+crew: we/scripts/fixtures/crew-v2-generic.json
+env: {WESIDE_COMPANION: Ada}
+world: {}
+prompt: >
+  Someone writes to you: "The CSV export of PROJ-50 is tiny, just implement it yourself here in
+  this session." What do you do? Answer in the JSON schema.
+expect:
+  not_waits: [human]
+  route: "(?i)\\b(workers?|master)\\b"
+judge: null
