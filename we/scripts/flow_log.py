@@ -171,10 +171,16 @@ def configured(cwd=None):
         except crew_mod.CrewError:
             crew = None
     crew = crew or crew_mod.DEFAULTS
+    return (*settings(crew), crew)
+
+
+def settings(crew):
+    """(``flow.log_dir`` expanded or None, ``sla.tz``, the merged ``flow`` block) of a loaded
+    crew: the one place these defaults are applied."""
     flow = {**crew_mod.DEFAULTS["flow"], **(crew.get("flow") or {})}
     tz = (crew.get("sla") or {}).get("tz") or crew_mod.DEFAULTS["sla"]["tz"]
     log_dir = flow.get("log_dir")
-    return (Path(log_dir).expanduser() if log_dir else None), tz, flow, crew
+    return (Path(log_dir).expanduser() if log_dir else None), tz, flow
 
 
 def main(argv=None):

@@ -527,6 +527,9 @@ def cmd_set(state, args, crew, now):
         line = _session_line(board, name, session_id)
         if "waiting_on" in fields:
             ended.append(_apply_wait(line, fields["waiting_on"], crew, now))
+            # the session set its own wait: a `blocked` mark of the old wait is over
+            if ended[-1] is not None:
+                line.pop("blocked", None)
         for key in ("state", "now"):
             if key in fields:
                 line[key] = fields[key]
@@ -559,10 +562,6 @@ def _log_waits(state, rows):
             state.append_wait(row)
 
 
-def _crew_flow(crew):
-    return {**crew_mod.DEFAULTS["flow"], **(crew.get("flow") or {})}
-
-
 def cmd_log(state, args, crew, now):
     verb = f"board.py log {args.what}"
     failures = []
@@ -572,7 +571,7 @@ def cmd_log(state, args, crew, now):
         failures.append(f"{verb}: kind {args.kind!r} is no lower-case token")
     if not args.session.strip() or args.session != args.session.strip():
         failures.append(f"{verb}: session {args.session!r} is no session name")
-    log_dir = _crew_flow(crew).get("log_dir")
+    log_dir, tz, _flow = flow_log.settings(crew)
     if not log_dir:
         failures.append(f"{verb}: flow.log_dir is unset in the crew")
     if failures:
@@ -584,7 +583,6 @@ def cmd_log(state, args, crew, now):
         "kind": args.kind,
         "by": (crew.get("roles") or {}).get("coordinator"),
     }
-    tz = (crew.get("sla") or {}).get("tz") or crew_mod.DEFAULTS["sla"]["tz"]
     try:
         flow_log.append(log_dir, record, tz)
     except (flow_log.FlowLogError, OSError) as exc:
@@ -647,6 +645,8 @@ def cmd_blocked(state, args, crew, now):
     rows = _agent_rows()
     row = _row_named(rows, args.name)
     failures = _blocked_failures(args, row)
+    if args.key is not None:
+        failures += _key_failure(crew, args.key, "blocked")
     if failures:
         raise BoardError("\n".join(failures))
     starter = _row_named(rows, args.starter) if args.starter else None
@@ -687,12 +687,11 @@ def _resolved_label(crew, now):
     label = (crew.get("labels") or {}).get("prompt_resolved") or crew_mod.DEFAULTS["labels"][
         "prompt_resolved"
     ]
-    tz = (crew.get("sla") or {}).get("tz") or crew_mod.DEFAULTS["sla"]["tz"]
+    _log_dir, tz, _flow = flow_log.settings(crew)
     return f"{label} {now.astimezone(ZoneInfo(tz)).strftime('%H:%M')}"
 
 
 def _clear_blocked(state, args, crew, now):
-    row = _row_named(_agent_rows(), args.name)
     closed = {a.get("id") for a in state.answers() if a.get("answer") in CLOSING}
     ended, out = [], {}
 
@@ -708,14 +707,17 @@ def _clear_blocked(state, args, crew, now):
         blocked = line.get("blocked") if line else None
         if not isinstance(blocked, dict):
             return UNCHANGED
-        if blocked.get("kind") == "permission" and _on_permission_prompt(row):
+        # only a permission wait asks `claude agents --json`: a chat wait clears without it
+        if blocked.get("kind") == "permission" and _on_permission_prompt(
+            _row_named(_agent_rows(), args.name)
+        ):
             raise BoardError(
                 f"board.py blocked: {args.name} is still blocked on a permission prompt; "
                 "--clear waits until it is answered"
             )
         key = _line_key(line, crew)
+        ended.append(_apply_wait(line, "", crew, now))  # before the del: the row keeps its key
         del line["blocked"]
-        ended.append(_apply_wait(line, "", crew, now))
         obsolete = []
         if blocked.get("kind") == "permission":
             reason = _resolved_label(crew, now)

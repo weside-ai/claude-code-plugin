@@ -376,15 +376,19 @@ named session is blocked on a permission prompt right now (`--kind permission`) 
 |---|---|
 | `blocked <name> --kind permission [--starter S] [--key K] [--command T]` | `waiting_on: human`, `since`, `sla_due`, `blocked` |
 | `blocked <name> --kind chat --waiting-on <role\|human> …` | `waiting_on` (a role key or `human`), `since`, `sla_due`, `blocked` |
-| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands |
+| `blocked <name> --clear` | removes all four once; refused while the permission prompt still stands (only a permission wait reads `claude agents --json`) |
 
 `blocked` is `{kind, starter, starter_session_id, key, since, waiting_for, command}`: `starter` the
 session that started the worker and its id from `claude agents --json` (the prompt hook matches on
 it), `since` (ISO UTC) the start of the wait, kept while the same kind is called again, so a chat
 wait that moves from the starter's role to `human` keeps it; `waiting_for` the permission prompt as
 `claude agents` names it; `command` at most 200 characters the caller already filtered for secrets.
-A line that is missing is appended with `name` and `session_id`; no other field is written. The
-same call again prints `board.py blocked: <name> unchanged` and writes nothing.
+A line that is missing is appended with `name` and `session_id`; no other field is written; a
+`--key` outside the crew's `naming.key` is refused. The same call again prints
+`board.py blocked: <name> unchanged` and writes nothing. A session that sets its own wait with
+`set waiting_on=…` ends the old wait and drops its `blocked` mark. The prompt hook
+`sampler_on_prompt.py` names a blocked line once per wait to its starter and the coordinator, the
+command JSON-quoted and labelled as data.
 
 `--clear` prints `{cleared, kind, key, since, duration_s, obsolete}`. For a permission wait it marks
 every open `owner_queue` question of that session with cause `access-click` posted during the wait

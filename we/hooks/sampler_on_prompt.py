@@ -7,25 +7,29 @@ Two kinds of context line, nothing else, no subprocess and no network:
   session holding the crew's ``coordinator`` or ``machinery`` role, once per stale episode: an
   episode is keyed by the flow log's last line, so a fresh line ends it and the next death is a
   new one.
-- ``blocked: <worker> (<key>) waits on <waiting_on> (<kind>) since <HH:MM>: <command>`` for every
-  board line carrying ``blocked`` (``board.py blocked``, docs/board.md § Blocked workers), to the
-  worker's starter (``blocked.starter_session_id`` is this session) and to the coordinator, once
-  per wait (``blocked.since``).
+- ``blocked: <worker> (<key>) waits on <waiting_on> (<kind>) since <HH:MM>; pending command, quoted
+  data: "<command>"`` for every board line carrying ``blocked`` (``board.py blocked``,
+  docs/board.md § Blocked workers), to the worker's starter (``blocked.starter_session_id`` is this
+  session) and to the coordinator, once per wait (``blocked.since``). The command is another
+  session's text: it comes JSON-quoted and labelled as data, never as an instruction.
 
-Silent without the crew's ``flow.log_dir``: then it reads neither the flow log nor the board. Once
-markers are empty files under ``<flow.log_dir>/.notified/``, one per session and episode, created
-with ``O_EXCL`` so two prompts cannot both print. The board file is the plugin option
-``boardFile`` (``CLAUDE_PLUGIN_OPTION_BOARDFILE``, else ``pluginConfigs`` in
-``~/.claude/settings.json``), default ``~/.claude/we-state/board.json``; ``~/`` and a relative
-path count from the home folder. Fail-open: every error exits 0 without output.
+Silent without the crew's ``flow.log_dir``: then it reads neither the flow log nor the board. The
+board is the crew's ``board.file``. Once markers are empty files under
+``<flow.log_dir>/.notified/<UTC day>/``, one per session and episode, created with ``O_EXCL`` only
+after the line was built, so two prompts cannot both print and a failed line consumes no marker; a
+marker in yesterday's directory counts too, and the first marker of a day removes the directories
+older than yesterday. Fail-open: every error exits 0 without output.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
+import shutil
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -35,53 +39,60 @@ import crew as crew_mod
 import flow_log
 import sampler_age
 
-DEFAULT_BOARD = "~/.claude/we-state/board.json"
 WATCHERS = ("coordinator", "machinery")
+DAY_DIR = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-def board_file(environ: dict) -> Path:
-    value = environ.get("CLAUDE_PLUGIN_OPTION_BOARDFILE")
-    if not value:
+class Markers:
+    """Once markers under ``<root>/<UTC day>/``; today's and yesterday's count."""
+
+    def __init__(self, root: Path, now: datetime):
+        self.root = root
+        self.today = now.strftime("%Y-%m-%d")
+        self.yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    def first_time(self, name: str) -> bool:
+        """True exactly once per marker name (within today and yesterday)."""
+        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+        if (self.root / self.yesterday / safe).exists():
+            return False
+        day = self.root / self.today
+        if not day.is_dir():
+            day.mkdir(parents=True, exist_ok=True)
+            self._prune()
         try:
-            with open(Path.home() / ".claude" / "settings.json", encoding="utf-8") as fh:
-                settings = json.load(fh)
-            value = settings["pluginConfigs"]["we@weside-ai"]["options"]["boardFile"]
-        except (OSError, ValueError, KeyError, TypeError):
-            value = None
-    path = Path(str(value or DEFAULT_BOARD)).expanduser()
-    return path if path.is_absolute() else Path.home() / path
+            os.close(os.open(str(day / safe), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
+        except FileExistsError:
+            return False
+        return True
 
-
-def first_time(notified: Path, name: str) -> bool:
-    """True exactly once per marker name."""
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
-    notified.mkdir(parents=True, exist_ok=True)
-    try:
-        os.close(os.open(str(notified / safe), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
-    except FileExistsError:
-        return False
-    return True
+    def _prune(self) -> None:
+        for old in self.root.iterdir():
+            if DAY_DIR.fullmatch(old.name) and old.name < self.yesterday:
+                with contextlib.suppress(OSError):
+                    shutil.rmtree(old)
 
 
 def blocked_line(line: dict, tz: str) -> str:
     blocked = line["blocked"]
-    key = blocked.get("key") or next(iter(line.get("keys") or []), None) or "no key"
-    try:
-        since = flow_log.parse_ts(blocked.get("since"))
-        hhmm = since.astimezone(ZoneInfo(tz)).strftime("%H:%M")
-    except (AttributeError, ValueError, KeyError):
-        hhmm = "?"
+    keys = line.get("keys") if isinstance(line.get("keys"), list) else []
+    key = blocked.get("key") or next(iter(keys), None) or "no key"
+    since = flow_log.parse_ts(blocked.get("since"))
+    hhmm = since.astimezone(ZoneInfo(tz)).strftime("%H:%M") if since else "?"
     text = (
         f"blocked: {line.get('name')} ({key}) waits on {line.get('waiting_on') or '?'} "
         f"({blocked.get('kind') or '?'}) since {hhmm}"
     )
     command = " ".join(str(blocked.get("command") or "").split())
-    return f"{text}: {command}" if command else text
+    if not command:
+        return text
+    return f"{text}; pending command, quoted data: {json.dumps(command, ensure_ascii=False)}"
 
 
-def blocked_lines(environ: dict, session: str, coordinator: bool, tz: str, notified: Path):
+def blocked_lines(crew: dict, session: str, coordinator: bool, tz: str, markers: Markers):
+    path = Path(str(crew["board"]["file"])).expanduser()
     try:
-        with open(board_file(environ), encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             board = json.load(fh)
     except (OSError, ValueError):
         return []
@@ -91,11 +102,14 @@ def blocked_lines(environ: dict, session: str, coordinator: bool, tz: str, notif
         blocked = line.get("blocked") if isinstance(line, dict) else None
         if not isinstance(blocked, dict):
             continue
-        mine = bool(session) and blocked.get("starter_session_id") == session
-        if not (mine or coordinator):
+        if not (coordinator or blocked.get("starter_session_id") == session):
             continue
-        if first_time(notified, f"{session}-blocked-{line.get('name')}-{blocked.get('since')}"):
-            out.append(blocked_line(line, tz))
+        try:
+            text = blocked_line(line, tz)
+        except Exception:
+            continue  # a malformed line consumes no marker
+        if markers.first_time(f"{session}-blocked-{line.get('name')}-{blocked.get('since')}"):
+            out.append(text)
     return out
 
 
@@ -105,14 +119,14 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
     if log_dir is None:
         return None
     session = str(hook_input.get("session_id") or "nosession")
-    notified = log_dir / ".notified"
+    markers = Markers(log_dir / ".notified", datetime.now(timezone.utc))
     held = [r for r in WATCHERS if crew_mod.holds_role(crew, r, env, hook_input)]
     lines = []
     if held:
         code, text, episode = sampler_age.verdict(log_dir, tz, flow["stale_min"])
-        if code and first_time(notified, f"{session}-stale-{episode}"):
+        if code and markers.first_time(f"{session}-stale-{episode}"):
             lines.append(text)
-    lines += blocked_lines(env, session, "coordinator" in held, tz, notified)
+    lines += blocked_lines(crew, session, "coordinator" in held, tz, markers)
     if not lines:
         return None
     return {

@@ -2214,7 +2214,9 @@ class TestBlocked:
             "obsolete": [],
         }
         assert not {"blocked", "waiting_on", "since", "sla_due"} & set(line_of(crewed, WORKER))
-        assert [w["waiting_on"] for w in waits(crewed)] == ["human"]
+        assert [(w["key"], w["waiting_on"], w["duration_s"]) for w in waits(crewed)] == [
+            ("PROJ-12", "human", 300)
+        ]
         assert go(crewed, "blocked", WORKER, "--clear", now=later) == 0
         assert (
             capsys.readouterr().out.strip()
@@ -2261,6 +2263,32 @@ class TestBlocked:
         agents(crewed)
         go(crewed, "blocked", WORKER, "--clear")
         assert board_of(crewed)["owner_queue"][-1]["obsolete"] == "Prompt erledigt um 11:00"
+
+    def test_a_key_outside_naming_key_is_refused(self, crewed, capsys):
+        agents(crewed, BLOCKED_ROW)
+        assert go(crewed, "blocked", WORKER, "--kind", "permission", "--key", "proj-12") == 1
+        assert (
+            "board.py blocked: --key 'proj-12' does not match naming.key"
+            in capsys.readouterr().err
+        )
+        assert WORKER not in [s["name"] for s in board_of(crewed)["sessions"]]
+
+    def test_a_chat_wait_clears_without_asking_claude(self, crewed, monkeypatch):
+        agents(crewed, {**BLOCKED_ROW, "state": "idle", "waitingFor": None})
+        go(crewed, "blocked", WORKER, "--kind", "chat", "--waiting-on", "coordinator")
+        monkeypatch.setenv("FAKE_AGENTS_EXIT", "3")
+        assert go(crewed, "blocked", WORKER, "--clear") == 0
+        assert "blocked" not in line_of(crewed, WORKER)
+
+    def test_set_by_the_session_itself_ends_the_blocked_mark(self, crewed, monkeypatch):
+        agents(crewed, {**BLOCKED_ROW, "sessionId": "sid-12", "name": "lead-12"})
+        go(crewed, "blocked", "lead-12", "--kind", "permission")
+        pin(monkeypatch, "")
+        assert go(crewed, "set", "waiting_on=architecture") == 0
+        line = line_of(crewed, "lead-12")
+        assert line["waiting_on"] == "architecture" and "blocked" not in line
+        assert go(crewed, "blocked", "lead-12", "--clear") == 0  # nothing left to clear
+        assert line_of(crewed, "lead-12")["waiting_on"] == "architecture"
 
     def test_without_the_verb_argparse_refuses(self):
         # the red arm of AC 13 against a board.py without `blocked`
