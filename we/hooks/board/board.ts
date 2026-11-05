@@ -1,8 +1,9 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
 import type {
   BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession,
-  LiveSession,
+  BoardStaging, LiveSession,
 } from '../../types'
+import type { Part } from './work'
 
 const MIN = 60_000
 const DAY = 86_400_000
@@ -47,6 +48,61 @@ const newsOf = (raw: unknown): BoardNewsItem[] => {
   return out
 }
 
+const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined)
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+
+// `staging`: a booking needs a holder, an acceptance an rc; without either the block is left out.
+const stagingOf = (raw: unknown): BoardStaging | undefined => {
+  const s = obj(raw)
+  if (!s) return undefined
+  const b = obj(s.booking)
+  const a = obj(s.acceptance)
+  const holder = str(b?.holder)
+  const rc = str(a?.rc)
+  if (!holder && !rc) return undefined
+  return {
+    booking: holder ? { holder, until: str(b?.until), issue: num(b?.issue) } : undefined,
+    acceptance: rc ? { rc, opened: str(a?.opened), due: str(a?.due), pastSla: a?.past_sla === true, issue: num(a?.issue) } : undefined,
+    slaHours: num(s.sla_hours),
+  }
+}
+
+// `2026-11-05T14:00Z` → `11-05 14:00 UTC`; anything else as written.
+const utcShort = (ts: string | undefined) => {
+  const m = ts ? /^\d{4}-(\d\d-\d\d)T(\d\d:\d\d)/.exec(ts) : null
+  return m ? `${m[1]} ${m[2]} UTC` : (ts ?? '?')
+}
+
+// The pane's staging lines: who holds staging until when (a booking whose `until` is before `now` shows as expired),
+// and an acceptance with its due time and past-SLA mark; the hours are the block's own, board.py writes them.
+export const stagingLines = (staging: BoardStaging | undefined, now: number): Part[][][] => {
+  if (!staging) return []
+  const head: Part[] = [{ text: '◇ Staging', bold: true }]
+  const out: Part[][][] = []
+  if (staging.booking) {
+    const b = staging.booking
+    const end = b.until ? Date.parse(b.until) : NaN
+    out.push([
+      head,
+      end <= now
+        ? [{ text: `booking of ${b.holder} expired ${utcShort(b.until)}`, dim: true }]
+        : [{ text: 'booked by ' }, { text: b.holder, bold: true }, { text: ` until ${utcShort(b.until)}` }],
+    ])
+  }
+  if (staging.acceptance) {
+    const a = staging.acceptance
+    out.push([
+      head,
+      [{ text: a.rc, bold: true }, { text: ` in acceptance since ${utcShort(a.opened)}` }],
+      a.due ? [{ text: `due ${utcShort(a.due)}`, dim: true }] : [],
+      a.pastSla
+        ? [{ text: staging.slaHours === undefined ? '⚠ past SLA' : `⚠ past ${staging.slaHours} h`, color: 'warning', bold: true }]
+        : [],
+    ])
+  }
+  return out
+}
+
 // The news the owner has not marked read: an item whose newest line in the answers file is `read` drops out.
 export const unreadNews = (news: readonly BoardNewsItem[], answers: Record<string, BoardAnswer>) =>
   news.filter(n => answers[n.id]?.answer !== 'read')
@@ -64,6 +120,7 @@ export const parseBoard = (text: string): BoardFile => {
     news: newsOf(file.news),
     notes: str(file.notes),
     answerPrompts: promptsOf(file.answer_prompts),
+    staging: stagingOf(file.staging),
   }
 }
 

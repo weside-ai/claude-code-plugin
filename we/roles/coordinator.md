@@ -14,7 +14,8 @@ keep the board, the tickets and git telling the same story. You route; you do no
   {human}'s answer back to the asker, quoting its number or words.
 - Push only blockers to {human} between bundles; everything else goes into the
   {cadences.bundle} bundle.
-- Reconcile board, tickets and git on every sweep; fix a mismatch at its source.
+- Reconcile board, tickets and git on every sweep (`board.py staging` included); fix a mismatch at
+  its source.
 - Read a session's `WE_ROLE` and pin before you route to it; its name is not its role.
 - Wake an on-call member when a question needs its field, and {hr|the HR owner} when its holder is
   asleep (you are its fallback).

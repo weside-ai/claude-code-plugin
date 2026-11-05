@@ -200,6 +200,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance) and `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
+| `staging` | optional, written by `board.py staging`, `book` and `unbook` only: `synced`, `repo`, `sla_hours`, `booking` (`issue`, `holder`, `until`) and `acceptance` (`issue`, `rc`, `opened`, `due`, `keys`, `past_sla`, `news`), each `null` when none is open; the pane draws one `◇ Staging` line per open one, a booking past its `until` as expired, and the past-SLA mark with the block's `sla_hours` (§ Staging) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
@@ -567,6 +568,33 @@ crew's `acceptance` block, default 5) adds one news item `{id: S<n>, kind: sampl
 `via: comment` rows never count; `done_sample: null` writes none. The count is the log's, so it
 survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_verdict.py`,
 `samples.jsonl`): neither key moves the other's counter.
+
+## Staging
+
+A booking reserves the staging environment for one session; an acceptance is a release candidate a
+tester is accepting there. Both live as GitHub issues in the crew's repo (the `origin` of the repo
+holding the crew file, else the cwd's), so a scheduled RC job on GitHub reads the same state the
+board does. `scripts/board_staging.py` owns the issue grammar, pinned by
+`scripts/fixtures/staging/issues.json`:
+
+| Issue | Label (crew `release.*`, default) | Title | Body lines |
+|---|---|---|---|
+| booking | `staging_booking_label`, `staging-booking` | `staging booked by <session>` | `holder: <session>`, `until: <YYYY-MM-DDTHH:MMZ>` |
+| acceptance | `staging_acceptance_label`, `staging-acceptance` | `<rc tag>` | `rc: <tag>`, `opened: <UTC>`, `keys: <keys>`; label `staging_past_sla_label` (`past-sla`) after `staging_sla_hours` (12) |
+
+| Verb | Does | Refuses (exit 1) |
+|---|---|---|
+| `board.py book staging --until <UTC>` | opens one booking issue for the caller's session (its name in `claude agents`), then syncs | `board.py book: refused: <rc> in acceptance since <UTC>` while an acceptance is open; `… booked by <holder> until <UTC> (issue #<n>)` while another booking holds; an `--until` not in the future; an issue list it cannot read |
+| `board.py unbook` | closes the caller's own bookings with `unbooked <UTC> by <session>` | `… <session> holds no open booking` |
+| `board.py unbook <rc>` | closes that RC's acceptance with `acceptance closed <UTC> by <caller>` (the acceptance run and the tester call it) | `… no open acceptance for <rc>` |
+| `board.py staging` | writes the `staging` block and prints `staging: booked by …`, `staging: <rc> in acceptance since … (#<n>)[, past <h> h]` or `staging: free` | an issue list it cannot read (the last block stays) |
+
+A booking whose `until` passed holds nothing; the RC job closes it with `expired <UTC>`. An
+acceptance counts as past its SLA by the label or by its `opened` time. The first sync that sees it
+past adds one `todo` news item `ST<issue>` for the coordinator (`staging acceptance <rc> past <h> h`);
+the block remembers it per issue number, so a hotfix RC that carries the acceptance over (new title
+and `rc:`, same issue and `opened:`) adds none. A booking is order, not security: whoever can write
+issues can forge or close one.
 
 ## The live column
 

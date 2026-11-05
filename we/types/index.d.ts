@@ -99,6 +99,13 @@ export type BoardNewsItem = {
   kind?: BoardNewsKind
 }
 
+// `staging`: the booking and acceptance board.py mirrors from the crew repo's issues (docs/board.md § Staging).
+export type BoardStaging = {
+  booking?: { holder: string; until?: string; issue?: number }
+  acceptance?: { rc: string; opened?: string; due?: string; pastSla: boolean; issue?: number }
+  slaHours?: number
+}
+
 export type BoardFile = {
   updated?: string
   updatedBy?: string
@@ -112,6 +119,7 @@ export type BoardFile = {
   notes?: string
   // `answer_prompts`: the orchestrator's own wording of the prompts a press sends.
   answerPrompts?: Partial<Record<BoardPromptKind, string>>
+  staging?: BoardStaging
 }
 
 // What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.

@@ -220,7 +220,15 @@ DEFAULTS: dict[str, Any] = {
     },
     "naming": {"key": "[A-Z]+-\\d+", "master": "<word>-<number>", "worker": "<key>-<chunk>"},
     "launch": {"worker": None},
-    "release": {"rc_job": None, "runbook": None, "prod_on": "human"},
+    "release": {
+        "rc_job": None,
+        "runbook": None,
+        "prod_on": "human",
+        "staging_booking_label": "staging-booking",
+        "staging_acceptance_label": "staging-acceptance",
+        "staging_past_sla_label": "past-sla",
+        "staging_sla_hours": 12,
+    },
     "cadences": {
         "rc_train": "2x daily",
         "bundle": "daily evening",

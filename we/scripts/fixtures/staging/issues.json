@@ -1,0 +1,22 @@
+{
+  "repo": "acme/app",
+  "next": 30,
+  "issues": [
+    {
+      "number": 21,
+      "title": "v8.1.0-rc.3",
+      "body": "rc: v8.1.0-rc.3\nopened: 2026-11-04T20:00Z\nkeys: PROJ-12 PROJ-14\n",
+      "labels": [{"name": "staging-acceptance"}],
+      "createdAt": "2026-11-04T20:00:41Z",
+      "state": "open"
+    },
+    {
+      "number": 22,
+      "title": "staging booked by lead-7",
+      "body": "holder: lead-7\nuntil: 2026-11-05T09:00Z\n",
+      "labels": [{"name": "staging-booking"}],
+      "createdAt": "2026-11-05T07:00:12Z",
+      "state": "open"
+    }
+  ]
+}

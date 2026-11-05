@@ -23,6 +23,9 @@ Usage:
   board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|done>
            [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE]
   board.py [--board FILE] check --jira FILE
+  board.py [--board FILE] book staging --until <YYYY-MM-DDTHH:MMZ>
+  board.py [--board FILE] unbook [<rc tag>]
+  board.py [--board FILE] staging
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -98,6 +101,14 @@ check    compares a ticketing snapshot (`--jira FILE`: a JSON object key → sta
          the session; the script reads no ticketing system) with the transitions log and the
          board: one `drift:` line per mismatch, one `error:` line per unknown status, exit 1;
          else `no drift (<n> keys)`. Exit 2 for an unusable snapshot.
+book     books staging for the caller's session until a UTC minute (docs/board.md § Staging): one
+         issue in the crew's repo (`board_staging.py` owns the issue grammar), refused with
+         `board.py book: refused: <rc> in acceptance since <UTC>` while an acceptance is open and
+         naming the holder while another booking runs. Then it syncs like `staging`.
+unbook   closes the caller's own booking early; `unbook <rc>` closes the acceptance of that RC.
+staging  reads the booking and acceptance issues into board.json's `staging` block and prints one
+         line each (`staging: free` without either); an acceptance past the crew's
+         `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
@@ -126,6 +137,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import board_staging  # noqa: E402
 import cold_reader  # noqa: E402
 import crew as crew_mod  # noqa: E402
 import flow_log  # noqa: E402  (the one writer of the flow log)
@@ -1956,6 +1968,106 @@ def cmd_check(state, args, crew, now):
     return 1
 
 
+def _staging(crew):
+    repo = board_staging.crew_repo(crew_mod.find())
+    if not repo:
+        raise BoardError("board.py staging: no GitHub origin for the crew's repo or the cwd")
+    return board_staging.Staging(crew, repo)
+
+
+def _sync_staging(state, staging, now):
+    """Read the issues, write the `staging` block (and a past-SLA news item), print its lines."""
+    try:
+        block = board_staging.snapshot(staging, now)
+    except board_staging.StagingError as exc:
+        raise BoardError(f"board.py staging: {exc}") from None
+    item = state.write_board(lambda board: board_staging.merge_block(board, block, now))
+    for line in board_staging.status_lines(block):
+        print(line)
+    if item:
+        print(f"news: {item['id']} {item['title']}")
+    return 0
+
+
+def _holder(verb):
+    try:
+        return own_session_name()[0]
+    except BoardError as exc:
+        raise BoardError(
+            str(exc).replace("board.py set:", f"board.py {verb}:"), exc.code
+        ) from None
+
+
+def cmd_book(state, args, crew, now):
+    until = board_staging.parse_time(args.until)
+    if until is None:
+        raise BoardError(f"board.py book: refused: --until {args.until!r} is no UTC time")
+    holder = _holder("book")
+    staging = _staging(crew)
+    try:
+        url = board_staging.book(staging, holder, until, now)
+    except board_staging.StagingError as exc:
+        raise BoardError(str(exc), exc.code) from None
+    print(f"booked staging for {holder} until {board_staging.minute(until)}: {url}")
+    return _sync_staging(state, staging, now)
+
+
+def cmd_unbook(state, args, crew, now):
+    holder = _caller() if args.rc else _holder("unbook")
+    staging = _staging(crew)
+    try:
+        closed = board_staging.unbook(staging, holder, args.rc, now)
+    except board_staging.StagingError as exc:
+        raise BoardError(str(exc), exc.code) from None
+    what = f"acceptance of {args.rc}" if args.rc else f"booking of {holder}"
+    print(f"closed {what}: " + " ".join(f"#{n}" for n in closed))
+    return _sync_staging(state, staging, now)
+
+
+def cmd_staging(state, args, crew, now):
+    return _sync_staging(state, _staging(crew), now)
+
+
+def _add_escalation_verbs(verbs):
+    e = verbs.add_parser("escalation", help="the decision story between two owners")
+    ev = e.add_subparsers(dest="step", required=True)
+    eo = ev.add_parser("open", help="open the decision story (a party)")
+    for field in OPEN_FIELDS:
+        eo.add_argument("--" + field.replace("_", "-"), dest=field)
+    eo.add_argument("--touches", help=f"one of {', '.join(TOUCHES)}: the human decides")
+    eo.set_defaults(run=cmd_escalation_open)
+    er = ev.add_parser("route", help="move records past their SLA (the coordinator)")
+    er.set_defaults(run=cmd_escalation_route)
+    ea = ev.add_parser("advise", help="the escalation role's recommendation on a --touches record")
+    ea.add_argument("id")
+    ea.add_argument("--recommendation", required=True)
+    ea.set_defaults(run=cmd_escalation_advise)
+    es = ev.add_parser("settle", help="close a record with its outcome")
+    es.add_argument("id")
+    es.add_argument("--outcome", required=True)
+    es.add_argument("--via", choices=("human",))
+    es.set_defaults(run=cmd_escalation_settle)
+    el = ev.add_parser("list", help="open records waiting on a role (default: the caller's)")
+    el.add_argument("--waiting-on", dest="waiting_on", metavar="ROLE")
+    el.add_argument("--stage", help=f"one of {', '.join(STAGES)}")
+    el.set_defaults(run=cmd_escalation_list)
+    ec = ev.add_parser("count", help="escalations per role pair this ISO week")
+    ec.set_defaults(run=cmd_escalation_count)
+
+
+def _add_staging_verbs(verbs):
+    bk = verbs.add_parser("book", help="book staging for this session until a UTC minute")
+    bk.add_argument("target", choices=("staging",))
+    bk.add_argument("--until", required=True, metavar="UTC", help="YYYY-MM-DDTHH:MMZ")
+    bk.set_defaults(run=cmd_book)
+    ub = verbs.add_parser("unbook", help="close this session's booking, or an RC's acceptance")
+    ub.add_argument("rc", nargs="?", help="the RC tag whose acceptance closes")
+    ub.set_defaults(run=cmd_unbook)
+    verbs.add_parser(
+        "staging", help="mirror booking and acceptance into the board file"
+    ).set_defaults(run=cmd_staging)
+
+
 def _add_move_verbs(verbs):
     sel = verbs.add_parser("select", help="move a story to Selected: Ready gate, tier, lenses")
     sel.add_argument("key")
@@ -2041,32 +2153,10 @@ def parser():
         "bundle", help="the coordinator's evening bundle as one news item"
     ).set_defaults(run=cmd_bundle)
 
-    e = verbs.add_parser("escalation", help="the decision story between two owners")
-    ev = e.add_subparsers(dest="step", required=True)
-    eo = ev.add_parser("open", help="open the decision story (a party)")
-    for field in OPEN_FIELDS:
-        eo.add_argument("--" + field.replace("_", "-"), dest=field)
-    eo.add_argument("--touches", help=f"one of {', '.join(TOUCHES)}: the human decides")
-    eo.set_defaults(run=cmd_escalation_open)
-    er = ev.add_parser("route", help="move records past their SLA (the coordinator)")
-    er.set_defaults(run=cmd_escalation_route)
-    ea = ev.add_parser("advise", help="the escalation role's recommendation on a --touches record")
-    ea.add_argument("id")
-    ea.add_argument("--recommendation", required=True)
-    ea.set_defaults(run=cmd_escalation_advise)
-    es = ev.add_parser("settle", help="close a record with its outcome")
-    es.add_argument("id")
-    es.add_argument("--outcome", required=True)
-    es.add_argument("--via", choices=("human",))
-    es.set_defaults(run=cmd_escalation_settle)
-    el = ev.add_parser("list", help="open records waiting on a role (default: the caller's)")
-    el.add_argument("--waiting-on", dest="waiting_on", metavar="ROLE")
-    el.add_argument("--stage", help=f"one of {', '.join(STAGES)}")
-    el.set_defaults(run=cmd_escalation_list)
-    ec = ev.add_parser("count", help="escalations per role pair this ISO week")
-    ec.set_defaults(run=cmd_escalation_count)
+    _add_escalation_verbs(verbs)
 
     _add_move_verbs(verbs)
+    _add_staging_verbs(verbs)
     return p
 
 
