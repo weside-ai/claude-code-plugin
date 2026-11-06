@@ -216,7 +216,7 @@ class MaterializeOnStartTest(unittest.TestCase):
             self.assertIn("Skill tool with weside-vyra", out["additionalContext"])
             self.assertNotIn("materialize", out["additionalContext"])
 
-    def crew_workspace(self, skill_text, account=False):
+    def crew_workspace(self, skill_text, account=False, deny_mcp=True):
         core, biz = self.home / "core", self.home / "biz"
         (core / ".weside").mkdir(parents=True)
         crew = {
@@ -229,10 +229,48 @@ class MaterializeOnStartTest(unittest.TestCase):
             },
         }
         (core / ".weside" / "crew.json").write_text(json.dumps(crew))
+        if deny_mcp:
+            (core / ".claude").mkdir()
+            denied = {"deniedMcpServers": [{"serverName": "plugin:we:weside-mcp"}]}
+            (core / ".claude" / "settings.json").write_text(json.dumps(denied))
         skill = biz / ".claude" / "skills" / "weside-lex" / "SKILL.md"
         skill.parent.mkdir(parents=True)
         skill.write_text(skill_text)
         return core, skill
+
+    def test_crew_without_account_and_without_the_mcp_deny_warns_once(self):
+        """WA-2930 AC2: the weside MCP stays off only through the project's deny entry."""
+        core, _skill = self.crew_workspace("x", deny_mcp=False)
+        out = self.run_hook(hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)})
+        self.assertEqual(list(out), ["systemMessage"])
+        line = out["systemMessage"]
+        self.assertIn('"deniedMcpServers": [{"serverName": "plugin:we:weside-mcp"}]', line)
+        self.assertIn(str(core / ".claude" / "settings.json"), line)
+        for source in ("compact", "clear"):
+            hook_input = {"session_id": "s1", "source": source, "cwd": str(core)}
+            self.assertIsNone(self.run_hook(hook_input=hook_input))
+
+    def test_the_mcp_warning_joins_a_pinned_answer(self):
+        core, _skill = self.crew_workspace("x", deny_mcp=False)
+        skill_dir = _skill.parent
+        _skill.unlink()
+        skill_dir.rmdir()
+        out = self.run_hook(
+            pin="Lex", hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)}
+        )
+        self.assertEqual(out["hookSpecificOutput"]["sessionTitle"], "Lex")
+        self.assertIn("deniedMcpServers", out["systemMessage"])
+
+    def test_no_mcp_warning_with_an_account_with_the_deny_or_without_a_crew(self):
+        core, _skill = self.crew_workspace("x", account=True, deny_mcp=False)
+        hook_input = {"session_id": "s1", "source": "startup", "cwd": str(core)}
+        self.assertIsNone(self.run_hook(hook_input=hook_input))
+        (core / ".weside" / "crew.json").unlink()
+        self.assertIsNone(self.run_hook(hook_input=hook_input))
+        plain = self.home / "plain"
+        plain.mkdir()
+        hook_input["cwd"] = str(plain)
+        self.assertIsNone(self.run_hook(hook_input=hook_input))
 
     def test_skill_only_in_the_workplace_is_read_not_invoked(self):
         core, skill = self.crew_workspace("---\nname: weside-lex\n---\n")

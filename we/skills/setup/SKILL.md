@@ -129,6 +129,10 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
    creates them from `templates/companion-skill/SKILL.md`, never overwriting.
+5. A crew without `weside_account: true` → merge `"deniedMcpServers": [{"serverName":
+   "plugin:we:weside-mcp"}]` into the tracked `.claude/settings.json` (other keys kept): the only
+   per-repo switch that keeps the plugin's weside MCP from connecting (a `permissions.deny` blocks
+   its tools only). The SessionStart hook warns while it is missing.
 
 ## 5. Rule bridge and statusline
 
