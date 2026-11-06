@@ -565,7 +565,7 @@ ASK = {
     "--key-title": "Checkout flow",
     "--ask": "Should the new checkout page go live for all users tonight?",
     "--recommendation": "Yes, tonight; a rollback takes minutes.",
-    "--cause": "merge-go",
+    "--cause": "prod",
 }
 CLEAR = {
     "decides": "whether the checkout page goes live tonight",
@@ -625,13 +625,13 @@ class TestAsk:
             "key_title": "Checkout flow",
             "ask": ASK["--ask"],
             "recommendation": ASK["--recommendation"],
-            "cause": "merge-go",
+            "cause": "prod",
             "since": "2026-11-03",
             "ts": "2026-11-03T10:00:00Z",
         }
         [line] = jsonl(crewless / "board-questions.jsonl")
         assert line["id"] == "Q272" and line["outcome"] == "posted"
-        assert line["ask"] == ASK["--ask"] and line["cause"] == "merge-go"
+        assert line["ask"] == ASK["--ask"] and line["cause"] == "prod"
         assert line["reader"] == CLEAR
 
     def test_the_reader_runs_cold_with_only_the_question(self, crewless, monkeypatch):
@@ -775,7 +775,7 @@ class TestAsk:
             "Q8",
             ASK["--ask"],
             ASK["--recommendation"],
-            "merge-go",
+            "prod",
         )
 
     def test_the_next_id_counts_the_log_too(self, crewless, capsys):
@@ -784,6 +784,83 @@ class TestAsk:
         board.StateDir(crewless / "board.json").write_board(lambda b: b.update(owner_queue=[]))
         go(crewless, *ask_argv())
         assert capsys.readouterr().out.split() == ["posted", "Q8", "posted", "Q9"]
+
+
+PR_URL = "https://github.com/o/r/pull/5"
+
+
+@pytest.fixture
+def merge_gh(crewless, monkeypatch):
+    """The fake `gh` on PATH, answering `pr view` from gh.json (FAKE_BIN's `gh`)."""
+    monkeypatch.setenv("FAKE_GH", str(crewless / "gh.json"))
+    monkeypatch.setenv("FAKE_GH_LOG", str(crewless / "gh-calls.jsonl"))
+
+    def answers(state):
+        pr = {"state": state, "url": PR_URL, "headRefName": "feat/PROJ-12-x", "title": "t"}
+        (crewless / "gh.json").write_text(
+            json.dumps({PR_URL: {"pr": pr}, "5 -R o/r": {"pr": pr}}), encoding="utf-8"
+        )
+
+    answers("OPEN")
+    return answers
+
+
+class TestMergeQuestion:
+    def merge_argv(self, *extra):
+        return [*ask_argv(**{"--cause": "merge-go"}), *extra]
+
+    def test_a_merge_question_without_a_pr_is_refused_before_the_reader(self, crewless, capsys):
+        assert go(crewless, *self.merge_argv()) == 1
+        assert "a merge-go question needs --pr" in capsys.readouterr().err
+        assert not (crewless / "reader-calls.jsonl").exists()
+
+    @pytest.mark.parametrize("state", ["MERGED", "CLOSED"])
+    def test_a_merge_question_on_a_pr_that_is_not_open_is_refused(
+        self, crewless, merge_gh, capsys, state
+    ):
+        merge_gh(state)
+        before = (crewless / "board.json").read_bytes()
+        assert go(crewless, *self.merge_argv("--pr", "o/r#5")) == 1
+        assert f"PR o/r#5 is {state}" in capsys.readouterr().err
+        assert not (crewless / "reader-calls.jsonl").exists()
+        assert (crewless / "board.json").read_bytes() == before
+
+    @pytest.mark.usefixtures("merge_gh")
+    def test_an_open_one_way_pr_is_posted_with_its_url_and_class(self, crewless):
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *self.merge_argv("--pr", "o/r#5", "--one-way", "money")) == 0
+        item = board_of(crewless)["owner_queue"][-1]
+        assert (item["cause"], item["pr_url"], item["one_way"]) == ("merge-go", PR_URL, "money")
+
+    def test_one_way_without_merge_go_is_refused(self, crewless, capsys):
+        assert go(crewless, *ask_argv(), "--one-way", "money") == 1
+        assert "--one-way belongs to a merge-go question" in capsys.readouterr().err
+
+    def test_close_merged_drops_the_question_once_its_pr_merged(self, crewless, merge_gh, capsys):
+        answer_with(crewless, CLEAR)
+        go(crewless, *self.merge_argv("--pr", PR_URL, "--one-way", "money"))
+        go(crewless, "close-merged")
+        assert capsys.readouterr().out.strip().endswith("closed: none")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7", "Q8"]
+        merge_gh("MERGED")
+        assert go(crewless, "close-merged") == 0
+        assert capsys.readouterr().out.strip() == "closed: Q8"
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        closed = jsonl(crewless / "board-questions.jsonl")[-1]
+        assert (closed["id"], closed["outcome"], closed["reason"]) == ("Q8", "closed", "PR MERGED")
+
+    def test_close_merged_leaves_other_causes_and_questions_without_a_pr(self, crewless, merge_gh):
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["owner_queue"].extend(
+                [
+                    {"id": "Q20", "cause": "prod", "pr_url": PR_URL},
+                    {"id": "Q21", "cause": "merge-go"},
+                ]
+            )
+        )
+        merge_gh("MERGED")
+        go(crewless, "close-merged")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7", "Q20", "Q21"]
 
 
 def decide(state_dir, area="product", kind="fence", key="PROJ-40", text="no paywall in v1"):

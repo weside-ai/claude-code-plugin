@@ -168,14 +168,14 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 - After the push, run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh $PR --sha "$(git rev-parse HEAD)" --fail-fast`
   as a background command, plus `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh $PR` when none runs for it.
   `--fail-fast` and exit 6 (Codex WARNING/BLOCKING on the head) wake you on a review without waiting for the
-  test job. End the turn and act on the notification. Do not poll in the foreground.
+  test job; on exit 6 or a red review check the watcher has already disarmed auto-merge. End the turn and act on the notification. Do not poll in the foreground.
 - Each round runs sections 1 to 3 again in full, including the thread resolve.
 - The default is at most three rounds. A budget the user states replaces that default, and you never raise it yourself.
 - **A repeat** is the same finding text on the same `file:line` after a fix aimed at it. It means the fix
   does not land where the reviewer looks: stop and report it. A new finding caused by your fix is a new row.
-- **A chain**: a second fix in a row that produces a new finding in the same function means the
-  contract is wrong. Change it (the verb, the signature, a parser instead of a regex) instead of
-  patching again, and say so in the report.
+- **A chain**: a second round that brings new findings at the same spot means the contract is
+  wrong. Stop before the third round: the master asks the HOW owner for a coarser cut (the verb,
+  the signature, a parser instead of a regex) or a round limit, and the report says so.
 
 Terminal states. Report exactly one:
 

@@ -108,6 +108,8 @@ silently. If the workflow rejects the move, report it and continue.
   `updated:`, one `## Updates Log` line), so the next roster does not offer a shipped story again.
 - **No state file.** Run state lives in the PR and the ticket, and what is still open lives in
   the report (owner decision 2026-09-25).
+- **Board:** in a repo with a crew, `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py close-merged` drops the merge
+  question on this PR from the owner's queue.
 - **Repo close-out:** run whatever the repo's `.weside/orchestrate.md` § *Close-out after a merge* names.
 - **Where these commits land:** `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (a docs PR unless the repo grants a direct docs push). Never push a tree that carries another session's unpushed commits.
 

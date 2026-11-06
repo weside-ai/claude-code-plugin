@@ -44,6 +44,11 @@ export type BoardQueueItem = {
   ask?: string | null
   since?: string | null
   recommendation?: string | null
+  // `merge-go`, `plan`, … (`board.py ask --cause`).
+  cause?: string | null
+  // The open PR a merge question is about, and its one-way class: then no Accept, only the link.
+  pr_url?: string | null
+  one_way?: string | null
 }
 
 export type BoardSession = {

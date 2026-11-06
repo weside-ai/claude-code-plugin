@@ -8,6 +8,10 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 ## You do
 
 - Pull the next Selected story of your epic once the current one is merged; one epic per master.
+- While the critical path waits on a device, a measurement or a person, fill the free worker
+  slots: the next story on top of that branch, a refiner for a story without a plan.
+- Weekly between epic closes, check the whole plan (this epic, its follow-ups, the next cut)
+  against what merged; send drift to its owner.
 - Brief each worker with the plan path, its phases, the branch, the gates and where it reports;
   read the report against the plan's ACs before you integrate it.
 - Before a branch walk on staging: `board.py book staging --until <UTC>`; `board.py unbook` right after.
@@ -29,7 +33,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 
 - Never settle a product question yourself; write it as one `{question_label}` line or a decision
   story and build what it does not block.
-- Never write the story's code in your own session; dispatch a worker and review its diff.
+- Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
+  text excepted); dispatch a worker and review its diff.
 - Never arm auto-merge on a one-way diff; leave it waiting for {human} with its board item linked.
 - Never restart a gate run that ended without a verdict; read why it ended and report that.
 

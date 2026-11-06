@@ -67,6 +67,7 @@ def run(
         "#!/usr/bin/env bash\n"
         f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
         'if [ "$1 $2" = "repo view" ]; then echo o/r; exit 0; fi\n'
+        'if [ "$1 $2" = "pr merge" ]; then [ -n "$GH_MERGE_FAIL" ] && { echo "$GH_MERGE_FAIL" >&2; exit 1; }; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
         + '; elif [[ " $* " == *" comments "* ]]; then '
@@ -318,10 +319,45 @@ def test_codex_warning_on_the_head_returns_before_the_merge(tmp_path, verdict):
     armed = {**_with_codex(_pending(_green())), "autoMergeRequest": {"enabledAt": "x"}}
     code, out = run(tmp_path, [armed], "--until-merged", comments=[_codex(verdict)])
     assert code == 6
+    assert out == [f"final {SHA}: codex {verdict} · auto-merge disarmed — then /we:ci-review"]
+    assert "pr merge 57 -R o/r --disable-auto" in (tmp_path / "calls.log").read_text()
+
+
+def test_codex_warning_on_an_unarmed_pr_disarms_nothing(tmp_path):
+    code, out = run(tmp_path, [_with_codex(_pending(_green()))], comments=[_codex("WARNING")])
+    assert (code, out) == (
+        6,
+        [f"final {SHA}: codex WARNING · auto-merge off — then /we:ci-review"],
+    )
+    assert "pr merge" not in (tmp_path / "calls.log").read_text()
+
+
+def test_a_failed_disarm_names_the_command(tmp_path):
+    armed = {**_with_codex(_pending(_green())), "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(
+        tmp_path, [armed], comments=[_codex("BLOCKING")], env_extra={"GH_MERGE_FAIL": "HTTP 403"}
+    )
+    assert code == 6
     assert out == [
-        f"final {SHA}: codex {verdict} · auto-merge on — run `gh pr merge 57 --disable-auto`, "
-        "then /we:ci-review"
+        f"final {SHA}: codex BLOCKING · auto-merge on (disarm failed: HTTP 403) — run "
+        "`gh pr merge 57 --disable-auto` — then /we:ci-review"
     ]
+
+
+def test_a_red_review_check_on_an_armed_pr_disarms_it(tmp_path):
+    armed = {**REAL, "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(tmp_path, [armed], "--fail-fast")
+    assert code == 1
+    assert out[-1].endswith("· auto-merge disarmed"), out
+    assert "pr merge 57 -R o/r --disable-auto" in (tmp_path / "calls.log").read_text()
+
+
+def test_a_red_check_that_is_no_review_leaves_auto_merge_armed(tmp_path):
+    armed = {**REAL, "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(tmp_path, [armed], env_extra={"WATCH_REVIEW_RX": "^lint$"})
+    assert code == 1
+    assert "disarm" not in out[-1]
+    assert "pr merge" not in (tmp_path / "calls.log").read_text()
 
 
 def test_codex_pass_or_an_older_heads_warning_does_not_stop(tmp_path):

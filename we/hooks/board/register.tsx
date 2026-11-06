@@ -683,9 +683,12 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         q.session ? [{ text: q.session, dim: struck }] : [],
         q.key ? [{ text: q.key, dim: true }] : [],
       ]
+      // A one-way merge waits for the owner's hand merge: no Accept, the PR link instead (board.py close-merged
+      // drops the question once the PR merged).
+      const handMerge = q.one_way && q.pr_url ? `merge by hand (${q.one_way}): ${q.pr_url}` : undefined
       const buttons = q.id && !struck
         ? [
-            ...(q.recommendation ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
+            ...(q.recommendation && !handMerge ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
             { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
             { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
             { key: `info-${q.id}`, label: 'More info', on: press('info') },
@@ -702,6 +705,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           {lines(head, inner, `q-${i}-head`)}
           {q.ask && <Text dimColor={struck} strikethrough={struck}>{q.ask}</Text>}
           {q.recommendation && !struck && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
+          {handMerge && !struck && <Text key={`hand-${q.id}`} color="warning">{handMerge}</Text>}
           {pack(row, r => r.width, inner, 1).map((line, j) => (
             <Box key={`q-${i}-row-${j}`} flexDirection="row" gap={1}>
               {line.map(r =>

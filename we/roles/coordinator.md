@@ -11,7 +11,11 @@ You own the question queue and keep the board, the tickets and git telling the s
   than {limits.masters} run; name it `{naming.master}`; park it when its epic closes or waits.
 - Start a worker for a single story that has no epic master.
 - Turn every `{question_label}` line into a board item with asker, recommendation and since; bring
-  {human}'s answer back to the asker, quoting its number or words.
+  {human}'s answer back to the asker, quoting its number or words. Exception: a prod release or
+  native build needs {human}'s word in the executing session's window; route the question there
+  and relay no go.
+- A recommendation that rests on a number names source, period and n, recounted by its sender;
+  send a line without them back.
 - Push only blockers to {human} between bundles; everything else goes into the
   {cadences.bundle} bundle.
 - Reconcile board, tickets and git on every sweep (`board.py staging` included); fix a mismatch at
@@ -21,7 +25,8 @@ You own the question queue and keep the board, the tickets and git telling the s
   asleep (you are its fallback).
 - Keep your strands (questions, sessions, promised replies) as a task list, so a compaction loses
   none.
-- Announce a restart for the next natural break of each session; never mid-story.
+- After a release that changes the L0, a role card or a hook: roll-call each session's plugin
+  version and restart each one behind at its next natural break, never mid-story.
 
 ## You never
 

@@ -10,16 +10,20 @@
 #   --max-hours <h>   lifetime cap, default 6.
 # Prints a failed or cancelled check once, when it concludes, and one final line:
 #   final <sha>: green · merge: <state>                     exit 0
-#   final <sha>: red · failed: <names> · merge: <state>     exit 1  (also on the first failure with --fail-fast)
+#   final <sha>: red · failed: <names> · merge: <state>     exit 1  (also on the first failure with --fail-fast;
+#       a failed check matching WATCH_REVIEW_RX on an armed PR adds ` · auto-merge disarmed`)
 #   gh failed <n> times in a row: <error>                   exit 2  (wrong PR, not logged in, offline)
 #   head moved <old> -> <new>                               exit 3  (a push landed: watch again, never "green")
 #   no checks on <sha> after <n>s                           exit 4
 #   head never reached <expected> (still <sha>) after <n>s  exit 5
-#   final <sha>: codex <WARNING|BLOCKING> · auto-merge <on|off> — …   exit 6  (the head's
-#       `<!-- codex-review -->` comment judged it: `gh pr merge --disable-auto`, then /we:ci-review)
+#   final <sha>: codex <WARNING|BLOCKING> · auto-merge <disarmed|off> — then /we:ci-review   exit 6
+#       (the head's `<!-- codex-review -->` comment judged it)
 #   final <sha>: merged                                     exit 7
 #   final <sha>: closed                                     exit 8
 #   gave up after <n>s on <sha>                             exit 9  (--max-hours reached)
+# On exit 6, and on exit 1 with a failed review check, an armed PR is disarmed here
+# (`gh pr merge --disable-auto`), so it cannot merge before its fix round; a failed disarm says
+# `auto-merge on (disarm failed: <error>) — run gh pr merge <PR> --disable-auto`.
 # <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); a conflict with the base
 # reads `DIRTY/CONFLICTING — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind
 # the base: merge it`.
@@ -34,7 +38,8 @@
 # Env: WATCH_INTERVAL (s, default 30), WATCH_QUIET (s, default 60), WATCH_REGISTER_TIMEOUT (s,
 # default 900), WATCH_HEAD_TIMEOUT (s, default 300), WATCH_MAX_ERRORS (default 10),
 # WATCH_CODEX_CHECK (default `Codex Review`), WATCH_CODEX_READS (comment reads per head after that
-# check completed, default 10), WATCH_MAX_LIFETIME (s, overrides --max-hours).
+# check completed, default 10), WATCH_MAX_LIFETIME (s, overrides --max-hours), WATCH_REVIEW_RX
+# (extended regex, case-insensitive, of the check names that count as a review, default `review`).
 set -uo pipefail
 
 USAGE="usage: watch-pr-checks.sh <PR> [--fail-fast] [--sha <expected>] [--until-merged] [--max-hours <h>] [-R <owner/repo>]"
@@ -65,6 +70,7 @@ MAX_ERRORS=${WATCH_MAX_ERRORS:-10}
 BLOCKED_GRACE=${WATCH_BLOCKED_GRACE:-900}
 CODEX_CHECK=${WATCH_CODEX_CHECK:-Codex Review}
 CODEX_READS=${WATCH_CODEX_READS:-10}
+REVIEW_RX=${WATCH_REVIEW_RX:-review}
 LIFETIME=${WATCH_MAX_LIFETIME:-$((MAX_HOURS * 3600))}
 BORN=$(date +%s)
 
@@ -142,6 +148,22 @@ merge_stuck() {  # green, but GitHub will not merge it by itself
     || [ "$(field 2)" = CONFLICTING ] \
     || { [ "$(field 1)" = BLOCKED ] && [ $(($(date +%s) - STABLE_SINCE)) -ge "$BLOCKED_GRACE" ]; }
 }
+disarm() {  # prints the auto-merge note after disarming an armed PR; never exits
+  local out
+  if [ "$(field 4)" != on ]; then echo "auto-merge off"; return; fi
+  if out=$(gh pr merge "$PR" -R "$REPO" --disable-auto 2>&1); then
+    echo "auto-merge disarmed"
+  else
+    echo "auto-merge on (disarm failed: $(tail -n 1 <<<"$out")) — run \`gh pr merge $PR --disable-auto\`"
+  fi
+}
+red_exit() {  # red_exit <failed names>: the red final line; a failed review check disarms first
+  local note=""
+  if grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$1")" && [ "$(field 4)" = on ]; then
+    note=" · $(disarm)"
+  fi
+  echo "final $SHA: red · failed: $1 · $(merge_note)$note"; exit 1
+}
 codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or BLOCKING
   local reviewed verdict
   gh_try BODY pr view "$PR" -R "$REPO" --json comments --jq "$CODEX_BODY" || return 0
@@ -151,7 +173,7 @@ codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or
   verdict=$(grep -o 'VERDICT:[A-Z]*' <<<"$BODY" | head -n 1 | cut -d: -f2)
   case "$verdict" in
     WARNING|BLOCKING)
-      echo "final $SHA: codex $verdict · auto-merge $(field 4) — run \`gh pr merge $PR --disable-auto\`, then /we:ci-review"
+      echo "final $SHA: codex $verdict · $(disarm) — then /we:ci-review"
       exit 6 ;;
   esac
 }
@@ -206,7 +228,7 @@ while :; do
             *$'\n'"$name $url"$'\n'*) ;;
             *) echo "$verdict: $name"; SEEN="$SEEN"$'\n'"$name $url"
                if [ -n "$FAIL_FAST" ]; then
-                 echo "final $SHA: red · failed: $name · $(merge_note)"; exit 1
+                 red_exit "$name"
                fi ;;
           esac ;;
       esac
@@ -225,7 +247,7 @@ while :; do
     SNAP="$(sort <<<"$STATE")"$'\n--\n'"$(sort <<<"$RUNROWS")"
     if [ "$SNAP" != "$LAST" ]; then LAST=$SNAP; STABLE_SINCE=$NOW; READS=1; else READS=$((READS + 1)); fi
     if [ -n "$ROWS" ] && [ -z "$PENDING" ] && [ "$READS" -ge 2 ] && [ $((NOW - STABLE_SINCE)) -ge "$QUIET" ]; then
-      if [ -n "$FAILED" ]; then echo "final $SHA: red · failed: $FAILED · $(merge_note)"; exit 1; fi
+      if [ -n "$FAILED" ]; then red_exit "$FAILED"; fi
       if [ -z "$UNTIL_MERGED" ] || merge_stuck; then echo "final $SHA: green · $(merge_note)"; exit 0; fi
     fi
   fi

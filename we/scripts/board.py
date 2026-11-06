@@ -9,6 +9,8 @@ Usage:
   board.py [--board FILE] set [--for NAME] <field>=<value> …       fields: waiting_on, state, now
   board.py [--board FILE] ask --session NAME --key KEY --key-title T --ask Q --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
+           [--pr REF [--one-way CLASS]]
+  board.py [--board FILE] close-merged
   board.py [--board FILE] log correction <session> <kind>
   board.py [--board FILE] blocked <name> --kind <permission|chat> [--waiting-on ROLE]
            [--starter NAME] [--key KEY] [--command TEXT]
@@ -47,6 +49,13 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          session's line and a `returned` news item. Every run past the field check leaves one line
          in board-questions.jsonl, text included. Prints `posted Q<n>`. `--urgent` stamps
          `urgent: true` on the item and the log line; `bundle` lists urgent questions first.
+         A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
+         PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
+         `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then shows no Accept,
+         only the PR link to merge by hand.
+close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
+         `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
+         `bundle` runs it first.
          A wait that ends or changes on a line (`set`, `blocked`) appends one row
          `{key, session, waiting_on, since, ended, duration_s}` to board-waits.jsonl.
 log      `log correction <session> <kind>` (the coordinator): one `correction` line in the flow log
@@ -892,6 +901,35 @@ def _ask_failures(args, crew):
     return failures
 
 
+def _pr_arg_refusal(ref, cause, one_way):
+    """The refusal of a question's `--pr`/`--one-way` before any `gh` call, or None."""
+    if one_way and cause != "merge-go":
+        return "board.py ask: --one-way belongs to a merge-go question"
+    if not ref:
+        return (
+            "board.py ask: a merge-go question needs --pr <ref>" if cause == "merge-go" else None
+        )
+    if not (_PR_URL.match(ref) or _PR_QUALIFIED.match(ref) or ref.isdigit()):
+        return f"board.py ask: PR {ref} is no URL, <owner>/<repo>#<n> or number"
+    return None
+
+
+def _pr_failure(args):
+    """(the open PR's URL, None) or (None, the refusal) for a question's `--pr`; (None, None)
+    when the question names no PR and needs none."""
+    ref = (args.pr or "").strip()
+    refusal = _pr_arg_refusal(ref, (args.cause or "").strip(), args.one_way)
+    if refusal or not ref:
+        return None, refusal
+    pr, failure = _view_pr(ref, None)
+    if failure:
+        return None, f"board.py ask: {failure}"
+    if pr.get("state") != "OPEN":
+        state = pr.get("state") or "not open"
+        return None, f"board.py ask: PR {ref} is {state}; a question on a PR needs an open one"
+    return str(pr.get("url") or ref), None
+
+
 def _reader_verdict(answer):
     """The reason to return the question, or None when the reader passed it."""
     reasons = []
@@ -914,10 +952,17 @@ def cmd_ask(state, args, crew, now):
     failures = _ask_failures(args, crew)
     if failures:
         raise BoardError("\n".join(failures))
+    pr_url, refusal = _pr_failure(args)
+    if refusal:
+        raise BoardError(refusal)
 
     fields = {f: getattr(args, f).strip() for f in ASK_FIELDS}
     if args.urgent:
         fields["urgent"] = True
+    if pr_url:
+        fields["pr_url"] = pr_url
+    if args.one_way and args.one_way.strip():
+        fields["one_way"] = args.one_way.strip()
     base = {"ts": _iso(now), **fields}
     labels = crew.get("labels") or {}
     question = {
@@ -1042,10 +1087,50 @@ def _open_questions(state, board):
     return [q for q in items if not q.get("obsolete")], [q for q in items if q.get("obsolete")]
 
 
+def close_merged(state, now):
+    """Drop every open `merge-go` question whose PR is MERGED or CLOSED; returns the ids.
+    `gh` runs before the board lock, never under it."""
+    board = state.board()
+    open_items, _obsolete = _open_questions(state, board)
+    done = {}
+    for q in open_items:
+        if q.get("cause") != "merge-go" or not q.get("pr_url"):
+            continue
+        pr, failure = _view_pr(str(q["pr_url"]), None)
+        if failure is None and pr.get("state") in ("MERGED", "CLOSED"):
+            done[q["id"]] = pr["state"]
+    if not done:
+        return []
+
+    def mutate(b):
+        queue = b.get("owner_queue") or []
+        gone = [q.get("id") for q in queue if isinstance(q, dict) and q.get("id") in done]
+        if not gone:
+            return UNCHANGED
+        b["owner_queue"] = [q for q in queue if not (isinstance(q, dict) and q.get("id") in done)]
+        return gone
+
+    def log(gone):
+        for qid in gone:
+            state.append_question(
+                {"id": qid, "ts": _iso(now), "outcome": "closed", "reason": f"PR {done[qid]}"}
+            )
+
+    gone = state.write_board(mutate, after=log)
+    return [] if gone is UNCHANGED else gone
+
+
+def cmd_close_merged(state, _args, _crew, now):
+    gone = close_merged(state, now)
+    print("closed: " + (", ".join(gone) if gone else "none"))
+    return 0
+
+
 def cmd_bundle(state, args, crew, now):
     if not crew_mod.holds_role(crew, "coordinator", os.environ):
         raise BoardError("board.py bundle: only the coordinator bundles")
     _route(state, crew, now)
+    close_merged(state, now)
     date = now.strftime("%Y-%m-%d")
 
     def mutate(board):
@@ -2222,7 +2307,12 @@ def parser():
     for field in ASK_FIELDS:
         q.add_argument("--" + field.replace("_", "-"), dest=field)
     q.add_argument("--urgent", action="store_true", help="bundle lists it before the others")
+    q.add_argument("--pr", metavar="REF", help="the open PR a merge-go question is about")
+    q.add_argument("--one-way", metavar="CLASS", help="merge-go on a one-way PR: no Accept")
     q.set_defaults(run=cmd_ask)
+    verbs.add_parser(
+        "close-merged", help="drop merge-go questions whose PR merged or closed"
+    ).set_defaults(run=cmd_close_merged)
     _add_flow_verbs(verbs)
 
     d = verbs.add_parser("decision", help="record a cut or fence decision of the caller's area")
