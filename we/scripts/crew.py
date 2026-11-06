@@ -1046,8 +1046,8 @@ def _validate_cli(_argv: list[str], crew_path: Path, crew: dict[str, Any]) -> in
     if not has_command and not (crew_path.parent / "risk-paths").is_file():
         print(
             "warning: no risk rules: the crew sets no `risk.command` and "
-            f"{crew_path.parent / 'risk-paths'} is missing; the merge hook refuses every "
-            "merge until one lands on the default branch",
+            f"{crew_path.parent / 'risk-paths'} is missing; the merge hook reads the rules from "
+            "origin/main only and refuses every merge until a rules file lands there",
             file=sys.stderr,
         )
     print(f"ok {crew_path}")

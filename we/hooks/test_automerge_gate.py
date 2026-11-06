@@ -1006,6 +1006,58 @@ def test_a_freeze_on_another_repo_still_refuses_a_target_it_names(
     assert reason is not None and "Merges are frozen" in reason
 
 
+@pytest.mark.parametrize(
+    "selector",
+    ["-R github.com/o/r", "-R https://github.com/o/r.git", "https://github.com/o/r/pull/7"],
+)
+def test_a_host_or_url_form_target_still_meets_its_freeze(
+    repo: Path, monkeypatch, _isolated_state: Path, selector: str
+) -> None:
+    flag = {"since": "s", "by": "ops", "reason": "incident", "repos": ["o/r"]}
+    _freeze(_isolated_state, json.dumps(flag))
+    sel = f"7 {selector}" if selector.startswith("-R") else selector
+    command = f"gh pr merge {sel} --squash"
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize("how", ["env", "command", "set-default"])
+def test_a_merge_gh_may_route_elsewhere_meets_every_freeze(
+    repo: Path, monkeypatch, _isolated_state: Path, how: str
+) -> None:
+    """Without `-R`, `gh` may target `GH_REPO` or a `gh repo set-default` remote, not origin."""
+    flag = {"since": "s", "by": "ops", "reason": "incident", "repos": ["other/repo"]}
+    _freeze(_isolated_state, json.dumps(flag))
+    command = MERGE
+    if how == "env":
+        monkeypatch.setenv("GH_REPO", "other/repo")
+    elif how == "command":
+        command = f"GH_REPO=other/repo {MERGE}"
+    else:
+        _git(repo, "config", "remote.origin.gh-resolved", "base")
+    if how != "env":
+        monkeypatch.delenv("GH_REPO", raising=False)
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {".weside/crew.json": "{not json"},
+        {".weside/config.json": json.dumps({"crew": "../shared/crew.json"})},
+    ],
+)
+def test_a_broken_or_pointed_crew_without_rules_refuses_too(
+    repo: Path, monkeypatch, files: dict
+) -> None:
+    main = _commit(repo, files, "crew, no rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "no risk rules" in reason
+
+
 def test_a_crew_without_its_own_board_reads_the_default_board(
     repo: Path, monkeypatch, _isolated_state: Path
 ) -> None:

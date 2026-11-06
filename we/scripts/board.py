@@ -854,7 +854,14 @@ def cmd_freeze(state, args, _crew, _now):
         return 1
     # Without --repo the freeze covers every repo (`*`): a freeze from the wrong checkout must not
     # silently miss the repo it is for (owner 06.11.2026); it disarms the current repo's PRs.
-    repos = args.repo or ["*"]
+    bad = [r for r in args.repo or [] if r != "*" and bf.norm_slug(r) is None]
+    if bad:
+        print(
+            f"board.py freeze: --repo takes OWNER/REPO or '*', not {', '.join(bad)}",
+            file=sys.stderr,
+        )
+        return 1
+    repos = [r if r == "*" else bf.norm_slug(r) for r in args.repo or []] or ["*"]
     disarm = None if args.repo else [r for r in [_current_repo()] if r]
     by = args.by or os.environ.get("WESIDE_COMPANION") or os.environ.get("USER") or "unknown"
     try:

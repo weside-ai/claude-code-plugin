@@ -74,13 +74,32 @@ def watched_board_files(start: str | Path | None, default: str = DEFAULT_BOARD) 
     return [default_file]
 
 
+def norm_slug(value: object) -> str | None:
+    """`owner/repo` from a slug, `HOST/OWNER/REPO` or a GitHub URL (lower case, no `.git`), else
+    None: a bare name or anything else names no repo."""
+    text = str(value or "").strip().lower()
+    text = text.split("://", 1)[-1].split("#", 1)[0].split("?", 1)[0].rstrip("/")
+    text = text.removesuffix(".git")
+    parts = [p for p in text.replace(":", "/").split("/") if p]
+    if "pull" in parts:
+        parts = parts[: parts.index("pull")]
+    if len(parts) < 2:
+        return None
+    return f"{parts[-2]}/{parts[-1]}"
+
+
 def covers(flag: dict, slug: str | None) -> bool:
-    """Whether a standing `flag` freezes a merge in repo `slug` (`owner/repo`; None when the hook
-    cannot name it). Fail closed: no `repos` list, `*`, or an unknown slug count as covered."""
+    """Whether a standing `flag` freezes a merge in repo `slug` (None when the hook cannot name
+    it). Fail closed: no `repos` list, `*`, an entry that names no repo, or an unknown slug count
+    as covered. Both sides are normalised (`norm_slug`): `-R github.com/o/r` is `o/r`."""
     repos = flag.get("repos")
-    if not isinstance(repos, list) or not repos or "*" in repos or not slug:
+    if not isinstance(repos, list) or not repos or "*" in repos:
         return True
-    return slug.lower() in {str(r).lower() for r in repos}
+    named = [norm_slug(r) for r in repos]
+    target = norm_slug(slug)
+    if target is None or None in named:
+        return True
+    return target in named
 
 
 def read_flag(path: Path) -> dict | None:
@@ -173,7 +192,12 @@ def freeze(
         "not_disarmed": list(standing.get("not_disarmed") or []),
     }
     _write_atomic(path, flag)
-    for repo in disarm if disarm is not None else [r for r in repos if r != "*"]:
+    targets = disarm if disarm is not None else [r for r in repos if r != "*"]
+    if "*" in repos and not targets:
+        flag["not_disarmed"].append(
+            {"repo": "*", "why": "no repo here to disarm; armed PRs elsewhere still auto-merge"}
+        )
+    for repo in targets:
         armed = _armed(repo, gh)
         if armed is None:
             flag["not_disarmed"].append({"repo": repo, "why": "listing the open PRs failed"})

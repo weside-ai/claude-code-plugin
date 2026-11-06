@@ -52,6 +52,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -158,14 +159,34 @@ def mcp_warning(cwd: str) -> str | None:
         return None
     if crew_file is None or members is None or members.get("weside_account") is True:
         return None
-    settings = crew_file.parent.parent / ".claude" / "settings.json"
-    try:
-        denied = json.loads(settings.read_text(encoding="utf-8")).get("deniedMcpServers") or []
-    except (OSError, ValueError, AttributeError):
-        denied = []
-    if any(isinstance(d, dict) and d.get("serverName") == MCP_SERVER for d in denied):
-        return None
+    root = _project_root(cwd) or crew_file.parent.parent
+    settings = root / ".claude" / "settings.json"
+    for name in ("settings.json", "settings.local.json"):
+        try:
+            denied = json.loads((root / ".claude" / name).read_text(encoding="utf-8"))
+            denied = denied.get("deniedMcpServers") if isinstance(denied, dict) else None
+        except (OSError, ValueError):
+            denied = None
+        if isinstance(denied, list) and any(
+            isinstance(d, dict) and d.get("serverName") == MCP_SERVER for d in denied
+        ):
+            return None
     return MCP_WARNING.replace("{settings}", str(settings))
+
+
+def _project_root(cwd: str) -> Path | None:
+    """The git top level of ``cwd`` (where the project's ``.claude/`` lives), or None."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
 
 
 def with_mcp_warning(answer: dict | None, hook_input: dict) -> dict | None:

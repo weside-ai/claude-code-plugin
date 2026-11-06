@@ -6,7 +6,8 @@ cards), a skill or the crew schema reader must carry, outside fenced code, one l
 
     Compat repo checked: yes|no, <why>
 
-The PR template asks for it; this check is the gate (CI job `compat-line`). Other diffs pass.
+The PR template asks for it; this check is the gate (workflow `compat-line.yml`, which also runs
+when the PR body is edited). Other diffs pass.
 
 Usage: check_compat_line.py [--event <event.json>] [--base <ref>]
 Reads the PR body from the GitHub event (`GITHUB_EVENT_PATH` by default) and the changed files
@@ -57,8 +58,9 @@ def check(body: str, files: list[str]) -> str | None:
             f"this PR changes {', '.join(touched[:3])}{' …' if len(touched) > 3 else ''}; "
             "add the line `Compat repo checked: yes|no, <why>` to the PR body"
         )
-    if not (m.group(2) or "").strip():
-        return "`Compat repo checked:` needs its reason after yes/no"
+    reason = (m.group(2) or "").strip()
+    if not reason or reason.startswith("|") or "<why>" in reason:
+        return "`Compat repo checked:` needs one of yes/no and its reason (the template's placeholder is not one)"
     return None
 
 

@@ -36,7 +36,13 @@ def test_the_line_with_a_reason_passes():
 
 def test_the_line_without_a_reason_fails():
     why = ccl.check("Compat repo checked: yes\n", ["we/process/L0.md"])
-    assert why == "`Compat repo checked:` needs its reason after yes/no"
+    assert why is not None and "needs one of yes/no and its reason" in why
+
+
+def test_the_templates_placeholder_fails():
+    template = Path(__file__).resolve().parent.parent / ".github" / "pull_request_template.md"
+    why = ccl.check(template.read_text(encoding="utf-8"), ["we/skills/x/SKILL.md"])
+    assert why is not None and "placeholder" in why
 
 
 def test_the_line_inside_fenced_code_does_not_count():

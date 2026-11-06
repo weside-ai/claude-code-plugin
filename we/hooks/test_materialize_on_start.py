@@ -261,6 +261,21 @@ class MaterializeOnStartTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["sessionTitle"], "Lex")
         self.assertIn("deniedMcpServers", out["systemMessage"])
 
+    def test_a_malformed_deny_warns_and_never_crashes_the_start(self):
+        core, _skill = self.crew_workspace("x", deny_mcp=False)
+        (core / ".claude").mkdir()
+        (core / ".claude" / "settings.json").write_text(json.dumps({"deniedMcpServers": 5}))
+        out = self.run_hook(hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)})
+        self.assertIn("deniedMcpServers", out["systemMessage"])
+
+    def test_the_deny_in_settings_local_counts(self):
+        core, _skill = self.crew_workspace("x", deny_mcp=False)
+        (core / ".claude").mkdir()
+        denied = {"deniedMcpServers": [{"serverName": "plugin:we:weside-mcp"}]}
+        (core / ".claude" / "settings.local.json").write_text(json.dumps(denied))
+        hook_input = {"session_id": "s1", "source": "startup", "cwd": str(core)}
+        self.assertIsNone(self.run_hook(hook_input=hook_input))
+
     def test_no_mcp_warning_with_an_account_with_the_deny_or_without_a_crew(self):
         core, _skill = self.crew_workspace("x", account=True, deny_mcp=False)
         hook_input = {"session_id": "s1", "source": "startup", "cwd": str(core)}

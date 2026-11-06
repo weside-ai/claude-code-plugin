@@ -258,6 +258,17 @@ class TestFreezeVerbs:
         assert {"repo": "o/here", "number": 5} in flag["disarmed"]
         assert board_freeze.covers(flag, "acme/core")
 
+    def test_a_repo_that_names_no_repo_is_refused(self, state_dir, capsys):
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "core") == 1
+        assert "--repo takes OWNER/REPO or '*'" in capsys.readouterr().err
+        assert not (state_dir / "freeze.json").exists()
+
+    def test_a_url_repo_is_stored_as_its_slug(self, state_dir):
+        assert (
+            run(state_dir, "freeze", "--reason", "r", "--repo", "https://github.com/O/R.git") == 0
+        )
+        assert json.loads((state_dir / "freeze.json").read_text())["repos"] == ["o/r"]
+
     def test_an_explicit_repo_narrows_the_freeze(self, state_dir):
         assert run(state_dir, "freeze", "--reason", "r", "--repo", "acme/workspace") == 0
         flag = json.loads((state_dir / "freeze.json").read_text())
@@ -2674,3 +2685,13 @@ class TestWaitsLog:
         with pytest.raises(OSError):
             go(crewless, "set", "waiting_on=")
         assert waits(crewless) == []
+
+
+def test_a_star_freeze_without_a_repo_here_records_what_it_could_not_disarm(tmp_path):
+    flag = board_freeze.freeze(
+        tmp_path / "freeze.json", "r", ["*"], "k", gh=lambda _args: None, disarm=[]
+    )
+    assert flag["repos"] == ["*"]
+    assert flag["not_disarmed"] == [
+        {"repo": "*", "why": "no repo here to disarm; armed PRs elsewhere still auto-merge"}
+    ]

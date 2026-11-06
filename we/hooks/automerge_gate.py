@@ -91,6 +91,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import board_freeze
 import crew
+import risk_paths
 import verification_gate as vg
 from worker_launch import worker_marker
 
@@ -120,8 +121,7 @@ _FENCE = re.compile(r"^(`{3,}|~{3,})")
 _API_MERGE = re.compile(r"(?:^|/)repos/([^/\s]+/[^/\s]+)/pulls/(\d+)/merge/?(?:\?|$)")
 _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
 _ONE_WAY_SECTION = re.compile(
-    r"^\s*\[\s*(brake-change|money|destructive-migration|terraform-secrets|trust-loosening)\s*\]",
-    re.MULTILINE,
+    r"^\s*\[\s*(" + "|".join(re.escape(c) for c in risk_paths.ONE_WAY) + r")\s*\]", re.MULTILINE
 )
 _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
@@ -494,9 +494,35 @@ def _git(root: str, *args: str, timeout: int = 20) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
+def _freeze_slug(call: MergeCall, argv: list[str], root: str | None) -> str | None:
+    """The repo a merge lands in, for the freeze: the explicit target, else the checkout's
+    `origin`; None (frozen when any flag stands) where `gh` may pick another repo: `GH_REPO` in
+    the environment or the command, or a `gh repo set-default` (`remote.*.gh-resolved`)."""
+    target = _pr_target(call)
+    if target:
+        return target
+    if root is None or os.environ.get("GH_REPO") or any("GH_REPO=" in a for a in argv):
+        return None
+    if _git(root, "config", "--get-regexp", r"^remote\..*\.gh-resolved$"):
+        return None
+    return _local_slug(root)
+
+
 def _local_slug(root: str) -> str | None:
     m = _SLUG.search((_git(root, "config", "--get", "remote.origin.url") or "").strip())
     return m.group(1).lower() if m else None
+
+
+def _crew_present_on_main(root: str, ref: str = RULES_FROM) -> bool:
+    """`ref` carries a crew: `.weside/crew.json` (parsing or not) or a `crew` pointer in
+    `.weside/config.json`. A broken or pointed-to crew still uses the crew process."""
+    if _git(root, "cat-file", "-e", f"{ref}:.weside/crew.json") is not None:
+        return True
+    try:
+        config = json.loads(_git(root, "show", f"{ref}:.weside/config.json") or "")
+    except ValueError:
+        return False
+    return isinstance(config, dict) and bool(config.get("crew"))
 
 
 def _crew_on_main(root: str) -> dict:
@@ -535,7 +561,7 @@ def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
         parts = command.split()
         return ["{file}", *parts[1:]], f"{rules_from}:{parts[0]}", rules_from
     if _git(root, "cat-file", "-e", f"{rules_from}:.weside/risk-paths") is None:
-        if crew_doc:
+        if crew_doc or _crew_present_on_main(root, rules_from):
             return (
                 f"this repo has a crew (`.weside/crew.json` on {rules_from}) but no risk rules: "
                 f"neither `risk.command` in the crew nor `.weside/risk-paths` on {rules_from}, "
@@ -785,8 +811,7 @@ def _call_refusal(
         )
     cwd, cwd_known = _cwd_at(argv, command_cwd, call.at)
     root = vg._repo_root(cwd) if cwd_known else None
-    slug = _pr_target(call) or (_local_slug(root) if root else None)
-    frozen = _freeze_refusal(root, slug)
+    frozen = _freeze_refusal(root, _freeze_slug(call, argv, root))
     if frozen:
         return frozen
     refusal, go_on = _class_refusal(root, call, cwd, cwd_known, command_cwd)
