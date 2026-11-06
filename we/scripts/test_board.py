@@ -272,7 +272,7 @@ class TestFreezeVerbs:
     def test_an_explicit_repo_narrows_the_freeze(self, state_dir):
         assert run(state_dir, "freeze", "--reason", "r", "--repo", "acme/workspace") == 0
         flag = json.loads((state_dir / "freeze.json").read_text())
-        assert flag["repos"] == ["acme/workspace"]
+        assert flag["repos"] == ["acme/workspace"] and flag["scoped"] is True
         assert not board_freeze.covers(flag, "acme/core")
         assert board_freeze.covers(flag, "acme/workspace")
 

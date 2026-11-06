@@ -90,9 +90,11 @@ def norm_slug(value: object) -> str | None:
 
 def covers(flag: dict, slug: str | None) -> bool:
     """Whether a standing `flag` freezes a merge in repo `slug` (None when the hook cannot name
-    it). Fail closed: no `repos` list, `*`, an entry that names no repo, or an unknown slug count
-    as covered. Both sides are normalised (`norm_slug`): `-R github.com/o/r` is `o/r`."""
+    it). Fail closed: a flag without `scoped: true` (written before per-repo scope), no `repos`
+    list, `*`, an entry that names no repo, or an unknown slug count as covered. Both sides are normalised (`norm_slug`): `-R github.com/o/r` is `o/r`."""
     repos = flag.get("repos")
+    if flag.get("scoped") is not True:
+        return True  # a flag from a writer before per-repo scope: `repos` was a disarm list only
     if not isinstance(repos, list) or not repos or "*" in repos:
         return True
     named = [norm_slug(r) for r in repos]
@@ -187,6 +189,7 @@ def freeze(
         "by": by,
         "reason": reason,
         "repos": sorted(set(standing.get("repos") or []) | set(repos)),
+        "scoped": True,
         # A second freeze keeps what the first disarmed: `unfreeze` must list every PR.
         "disarmed": list(standing.get("disarmed") or []),
         "not_disarmed": list(standing.get("not_disarmed") or []),

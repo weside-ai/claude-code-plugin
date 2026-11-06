@@ -497,7 +497,8 @@ def _git(root: str, *args: str, timeout: int = 20) -> str | None:
 def _freeze_slug(call: MergeCall, argv: list[str], root: str | None) -> str | None:
     """The repo a merge lands in, for the freeze: the explicit target, else the checkout's
     `origin`; None (frozen when any flag stands) where `gh` may pick another repo: `GH_REPO` in
-    the environment or the command, or a `gh repo set-default` (`remote.*.gh-resolved`)."""
+    the environment or the command, a `gh repo set-default` (`remote.*.gh-resolved`) or an
+    `upstream` remote, which `gh` prefers over `origin`."""
     target = _pr_target(call)
     if target:
         return target
@@ -505,6 +506,8 @@ def _freeze_slug(call: MergeCall, argv: list[str], root: str | None) -> str | No
         return None
     if _git(root, "config", "--get-regexp", r"^remote\..*\.gh-resolved$"):
         return None
+    if _git(root, "config", "--get", "remote.upstream.url"):
+        return None  # gh prefers an `upstream` remote over `origin`
     return _local_slug(root)
 
 
@@ -514,15 +517,10 @@ def _local_slug(root: str) -> str | None:
 
 
 def _crew_present_on_main(root: str, ref: str = RULES_FROM) -> bool:
-    """`ref` carries a crew: `.weside/crew.json` (parsing or not) or a `crew` pointer in
-    `.weside/config.json`. A broken or pointed-to crew still uses the crew process."""
-    if _git(root, "cat-file", "-e", f"{ref}:.weside/crew.json") is not None:
-        return True
-    try:
-        config = json.loads(_git(root, "show", f"{ref}:.weside/config.json") or "")
-    except ValueError:
-        return False
-    return isinstance(config, dict) and bool(config.get("crew"))
+    """`ref` carries a crew file of its own, parsing or not: a broken crew still uses the crew
+    process. A repo that only points at another repo's crew (`.weside/config.json` `crew`) is not
+    one: it keeps T0 without rules, as before."""
+    return _git(root, "cat-file", "-e", f"{ref}:.weside/crew.json") is not None
 
 
 def _crew_on_main(root: str) -> dict:
@@ -567,7 +565,8 @@ def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
                 f"neither `risk.command` in the crew nor `.weside/risk-paths` on {rules_from}, "
                 "so the hook cannot tell a one-way PR from a two-way one. Land a "
                 "`.weside/risk-paths` (`/we:setup` writes a starter; without one-way sections it "
-                "brakes nothing, on purpose) or a `risk.command` first"
+                "brakes nothing, on purpose) or a `risk.command` first; the PR that lands it is "
+                "refused here too, so the owner merges that one by hand"
             )
         return None
     own = f"{rules_from}:we/scripts/risk_paths.py"

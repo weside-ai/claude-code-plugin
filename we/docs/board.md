@@ -319,8 +319,9 @@ file's directory), else beside the default board, so `freeze` and `unfreeze` ref
 `--board`, naming the path. `*` means every repo of the crews reading that board, not every crew:
 a crew with a `board.file` of its own does not see a freeze on the default board. While the file
 stands, the merge hook (`hooks/automerge_gate.py`) refuses every merge and arm in the repos it
-names, naming the reason; a file that does not parse, a flag without `repos` and a merge whose repo
-the hook cannot name count as frozen. `board.py unfreeze` removes it and prints the disarmed PRs
+names, naming the reason; a file that does not parse, a flag without `repos` or without
+`scoped: true` (written before per-repo scope) and a merge whose repo the hook cannot name count
+as frozen for every repo. `board.py unfreeze` removes it and prints the disarmed PRs
 to re-arm by hand through the hook; it re-arms none itself, so no PR comes back unchecked. The
 flag is a brake against slips, not a boundary: any session can delete it
 (`scripts/board_freeze.py`).
