@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """PreToolUse hook: the session-side merge brake. Every merge and every auto-merge arm of a PR passes
-here first: the freeze flag, the PR's risk class, the T2 panel verdict, the Codex verdict on the
-head and the pre-merge receipt.
+here first: the freeze flag, the PR's risk class, the T2 panel verdict, the security card verdict,
+the Codex verdict on the head and the pre-merge receipt.
 
 A brake against slips, not a boundary ("Bremse gegen Versehen, keine Grenze"): it sees only
 Claude Code's Bash tool calls, and a session can work around it — the bot token used directly
 (`curl`, a `gh` binary off `PATH`), a script file or `python3 -c`, a Codex run (no Claude hooks),
 an edit to the hook in the plugin cache. The freeze flag and the panel verdict are local files any
-session can write or delete: process signals, not locks. A hook that Claude Code kills on its
-`hooks.json` timeout is a non-blocking error, so the command runs (allow); `BUDGET_SECONDS` keeps
-every call below it. The boundary is the repository's ruleset (required checks, code owners, no
-bypass actor for the bot) and the owner's own merge.
+session can write or delete, the card verdict a PR comment any session can post: process signals,
+not locks. A hook that Claude Code kills on its `hooks.json` timeout is a non-blocking error, so
+the command runs (allow); `BUDGET_SECONDS` keeps every call below it. The boundary is the
+repository's ruleset (required checks, code owners, no bypass actor for the bot) and the owner's
+own merge.
 
 Call forms, every one in a compound command (`gh` in command position):
 
@@ -33,10 +34,23 @@ Refusals, in this order (the first one wins):
      `check(root, "t2-pr<N>")` must be green (missing or red refuses; the verdict file carries no
      skip field). Without the module the check is off with one stderr line. The panel verdict is a
      process signal, not a boundary: any session can write that file, so it never lifts 3.
-  5. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
+  5. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
+     (line 3 on, `<file>\t<section>: <why>`) in `trust-loosening`, `money-path` or `brake-review`
+     needs, besides the green panel, a PR comment of the security card worker
+     (`references/worker-dispatch.md` § Card worker) in this form:
+
+         <!-- security-card-review -->
+         ## Security card review — #<N> @ `<head sha, at least 7 hex chars>`
+         **Overall: PASS**
+
+     Only comments whose `@ <sha>` is a prefix of the PR's current head count; the last of those
+     decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head (missing, or
+     only on an older head) refuses, and so does a comment read that fails. 4 runs first, so this
+     check holds only once the panel is green or the panel check is off.
+  6. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
      `.weside/config.json`, default `Codex Review`), unless the base branch requires that check
      itself (rulesets or classic protection); a repo whose workflows name no such job has none.
-  6. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
+  7. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
      `.weside/config.json` names `verification.pre_merge_receipt`.
 
 The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/crew.json` is read as
@@ -50,9 +64,9 @@ no-checkout worktree of the head; without a `risk.command`, the plugin's `script
 Before classifying, the hook fetches the rules branch (`origin/main`), so a stale local ref neither
 misses a new rule nor drags main's own commits into the diff.
 
-Fail closed on the class, the freeze and the panel: a classifier failure, a `gh` or fetch failure
-while classifying, a command that does not parse as shell words, a GraphQL query piped in from
-stdin or from an unreadable file, and a repo that uses rules but has no `origin/main` all refuse
+Fail closed on the class, the freeze, the panel and the card verdict: a classifier failure, a `gh`
+or fetch failure while classifying, a command that does not parse as shell words, a GraphQL query
+piped in from stdin or from an unreadable file, and a repo that uses rules but has no `origin/main` all refuse
 with the reason. Where the command starts in a checkout that uses rules (a crew file, or
 `.weside/risk-paths` in the tree or on `origin/main`), a PR in a repo other than the local
 checkout's (`-R`, a URL selector, an origin that is no plain github.com URL) and a `cd` the hook
@@ -63,7 +77,7 @@ one resolved against the crew file's directory. Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
 from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
 short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
-receipt read (5, 6) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
+receipt read (6, 7) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
 Pinned by `test_automerge_gate.py`.
 """
 
@@ -117,6 +131,12 @@ _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
 _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
+# The two-way sections whose hit needs a security card verdict besides the panel (brake stage 2).
+CARD_SECTIONS = ("trust-loosening", "money-path", "brake-review")
+_CARD_HIT = re.compile(r"(?:^|\t)(" + "|".join(CARD_SECTIONS) + r"):")
+CARD_MARKER = "<!-- security-card-review -->"
+_CARD_HEAD = re.compile(r"^#+\s*Security card review\b.*?@\s*`?([0-9a-f]{7,40})`?", re.MULTILINE)
+_CARD_OVERALL = re.compile(r"\bOverall:\**\s*([A-Z]+)")
 _LOOKS_LIKE_MERGE = re.compile(
     r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
     re.DOTALL,
@@ -458,6 +478,8 @@ class ClassResult:
     reason: str | None = None
     number: int | None = None
     url: str | None = None
+    head: str | None = None
+    hits: list[str] = field(default_factory=list)  # line 3 on: `<file>\t<section>: <why>`
 
     @property
     def one_way(self) -> str | None:
@@ -555,7 +577,7 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
         number, head, url = int(pr["number"]), pr["headRefOid"], pr["url"]
     except (ValueError, TypeError, KeyError):
         return ClassResult(reason="`gh pr view` did not name the PR's head")
-    result = ClassResult(number=number, url=url)
+    result = ClassResult(number=number, url=url, head=head)
     if rules_from != RULES_FROM and not _fetch_rules(root, rules_from):
         result.reason = f"`git fetch` of {rules_from} failed; the rules must be current"
         return result
@@ -565,15 +587,17 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
     if not base:
         result.reason = f"no merge base of {head[:9]} and {rules_from} (fetch origin)"
         return result
-    result.line, result.reason = _run_classifier(root, prefix, blob, head, base)
+    lines, result.reason = _run_classifier(root, prefix, blob, head, base)
+    if lines:
+        result.line, result.hits = lines[0], lines[2:]
     return result
 
 
 def _run_classifier(
     root: str, prefix: list[str], blob: str | None, head: str, base: str
-) -> tuple[str | None, str | None]:
-    """(class line, None) or (None, why): the classifier run as a file in a no-checkout
-    worktree of `head`, on `base`; the worktree is removed whatever happens."""
+) -> tuple[list[str] | None, str | None]:
+    """(output lines with the class as line 1, None) or (None, why): the classifier run as a file
+    in a no-checkout worktree of `head`, on `base`; the worktree is removed whatever happens."""
     tmp = tempfile.mkdtemp(prefix="we-merge-class.")
     tree = os.path.join(tmp, "head")
     try:
@@ -605,11 +629,12 @@ def _run_classifier(
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             return None, f"the classifier did not finish ({type(exc).__name__})"
-        line = (out.stdout.splitlines() or [""])[0].strip()
+        lines = out.stdout.splitlines() or [""]
+        line = lines[0].strip()
         if out.returncode != 0 or not _CLASS_LINE.match(line):
             last = (out.stderr.strip().splitlines() or [line or "no output"])[-1]
             return None, f"the classifier exited {out.returncode}: {last}"
-        return line, None
+        return [line, *lines[1:]], None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
         _git(root, "worktree", "prune")
@@ -673,6 +698,75 @@ def _panel_refusal(root: str, number: int) -> str | None:
     )
 
 
+def _card_hits(hits: list[str]) -> list[str]:
+    """The sections of `CARD_SECTIONS` the hit lines name, in that order."""
+    named = {m.group(1) for h in hits for m in [_CARD_HIT.search(h)] if m}
+    return [s for s in CARD_SECTIONS if s in named]
+
+
+def _card_verdict(bodies: list[str], head: str) -> tuple[str | None, str | None]:
+    """(the last card verdict word on `head` or None, the head of the last card comment at all)."""
+    verdict, last_head = None, None
+    for body in bodies:
+        if CARD_MARKER not in body:
+            continue
+        m = _CARD_HEAD.search(body)
+        if m is None:
+            continue
+        last_head = m.group(1)
+        if head.startswith(m.group(1)):
+            word = _CARD_OVERALL.search(body)
+            verdict = word.group(1) if word else "UNREADABLE"
+    return verdict, last_head
+
+
+def _security_skill(root: str) -> str:
+    """`/<skill>` of the crew's security holder on `origin/main`, or a placeholder."""
+    main = _crew_on_main(root)
+    name = crew.holder_name(main, "security")
+    skill = crew.skill_name(name, main) if name else None
+    return f"/{skill}" if skill else "/<security holder's skill>"
+
+
+def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
+    """Why a two-way T2 PR with a card hit may not merge yet; None when the card verdict on the
+    head is PASS or no hit needs one. A failed comment read refuses (fail closed)."""
+    sections = _card_hits(cls.hits)
+    if not sections or cls.number is None:
+        return None
+    head = cls.head or ""
+    slug = (_URL_SLUG.search(cls.url or "") or [None, None])[1]
+    raw = _gh(
+        ["pr", "view", str(cls.number), *(["-R", slug] if slug else []), "--json", "comments"], cwd
+    )
+    try:
+        bodies = [c.get("body") or "" for c in json.loads(raw or "")["comments"]]
+    except (ValueError, TypeError, KeyError, AttributeError):
+        bodies = None
+    hit = ", ".join(f"`{s}`" for s in sections)
+    start = (
+        f"PR #{cls.number} is T2 with a {hit} hit and needs a security card verdict PASS on its "
+        f"head {head[:10]}"
+    )
+    how = (
+        f'Start a card worker: `we-worker <KEY>-card --bg "{_security_skill(root)} security card '
+        f'review of PR #{cls.number} on {head[:10]}"`; its comment carries `{CARD_MARKER}`, '
+        f"`@ {head[:10]}` and `Overall: PASS` (worker-dispatch.md § Card worker)."
+    )
+    if bodies is None:
+        return f"{start}: the PR comments could not be read, which counts as no verdict. {how}"
+    verdict, last_head = _card_verdict(bodies, head)
+    if verdict == "PASS":
+        return None
+    if verdict is not None:
+        why = f"the card verdict on this head is {verdict}"
+    elif last_head is not None:
+        why = f"the last card verdict is on the older head {last_head}"
+    else:
+        why = "no card verdict is on the PR"
+    return f"{start}: {why}. {how}"
+
+
 def _pr_target(call: MergeCall) -> str | None:
     """The `owner/repo` a call names explicitly (`-R`, a URL selector, an API path), lower case."""
     if call.repo:
@@ -704,7 +798,8 @@ def _class_refusal(
     cwd_known: bool = True,
     home: str | None = None,
 ) -> tuple[str | None, bool]:
-    """(refusal, go on): the class and panel refusals; go on is False when nothing is to merge.
+    """(refusal, go on): the class, panel and card refusals; go on is False when nothing is to
+    merge.
     `home` is the directory the command starts in, read for rules when `root` is unknown."""
     if call.unresolved:
         return f"Merge refused, class not computed: {call.unresolved}.", False
@@ -732,7 +827,7 @@ def _class_refusal(
             False,
         )
     if cls.line == "T2" and cls.number is not None:
-        red = _panel_refusal(root, cls.number)
+        red = _panel_refusal(root, cls.number) or _card_refusal(root, cls, cwd)
         if red:
             return red, False
     return None, True

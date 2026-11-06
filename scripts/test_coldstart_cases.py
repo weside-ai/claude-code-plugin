@@ -122,16 +122,16 @@ def top_prompt(case: Path) -> str:
     [
         ("security-twoway-panel-enough", [], ["security", "human"]),
         (
-            "security-oneway-card-worker-signs",
-            ["worker", "human"],
-            ["product", "acceptance", "security"],
+            "security-card-hit-card-worker-signs",
+            ["worker"],
+            ["human", "product", "acceptance", "security"],
         ),
     ],
 )
 def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
     """A two-way auth diff with a green panel waits on nobody (the panel is enough); a
-    ``trust-loosening`` one waits on the signature of a fresh worker with the security card
-    (the holder decides only a case without precedent), then the human's merge."""
+    ``trust-loosening`` hit (a card hit, T2 two-way) waits on the signature of a fresh worker with
+    the security card (the holder decides only a case without precedent), then auto-merges."""
     case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
     top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
     assert top["role"] == "master" and top["crew"] == SECURITY_FIXTURE
@@ -148,11 +148,12 @@ def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
 
 
 GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
-ORDER_LINE = "- On a `trust-loosening` diff: the panel, then a fresh worker with Bo's card signs, then Hal merges."
-# L0's one security line: the holder runs on call; a worker with its card signs a `trust-loosening` diff
-SECURITY_LINE = (
-    "  - Bo owns its label, runs on call; a worker with its card signs `trust-loosening` items."
+ORDER_LINE = (
+    "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
+    "worker with Bo's card signs on the head, then auto-merge."
 )
+# L0's one security line: the holder runs on call; a worker with its card signs the card hits
+SECURITY_LINE = "  - Bo owns its label, runs on call; a worker with its card signs card hits."
 
 
 def _rendered(fixture: str) -> tuple[str, str]:
@@ -163,15 +164,14 @@ def _rendered(fixture: str) -> tuple[str, str]:
 
 def test_the_security_cases_crew_renders_the_routing_they_expect():
     """The security master cases route on lines the rendered process must carry: the master card's
-    order (panel, signature, human merge), and L0's security line (on call, signs the
-    `trust-loosening` board item).
+    order (panel, signature, auto-merge), and L0's security line (on call, signs the card hits).
     Comparing the YAML with a table only checks it against itself; this renders what the master
     reads with the crew the cases name."""
     l0, card = _rendered(SECURITY_FIXTURE)
     lines = l0.split("\n")
-    assert ORDER_LINE in card.split("\n"), "master card lacks the trust-loosening order line"
+    assert ORDER_LINE in card.split("\n"), "master card lacks the card-hit order line"
     assert "Bo's review" not in card, "master card still waits on the security review"
-    assert SECURITY_LINE in lines, "L0 lacks the security line (on call, signs trust-loosening)"
+    assert SECURITY_LINE in lines, "L0 lacks the security line (on call, signs card hits)"
 
 
 def test_the_generic_crew_renders_no_security_routing():

@@ -774,7 +774,7 @@ def test_t2_with_green_panel_passes(classed: dict, monkeypatch, lens: Path) -> N
 
 
 # Regression: a core classifier's two-way `[brake-review]` section prints line 1 `T2` with a
-# `brake-review:` hit line. The hook reads line 1 only, so such a PR goes to the panel and is
+# `brake-review:` hit line. Such a PR goes to the panel (and the card, below) and is
 # never refused as one-way; it passed before the split and must keep passing.
 BRAKE_REVIEW = (
     "T2\nreview: high\n"
@@ -788,7 +788,11 @@ def test_a_brake_review_hit_is_two_way(classed: dict, monkeypatch, lens: Path) -
     assert red is not None and "one-way" not in red
     assert "PR #7 is T2 and its lens panel is not green" in red
     (classed["repo"] / ".lens-green").write_text("")
-    assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
+    red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
+    assert red is not None and "one-way" not in red and "`brake-review` hit" in red
+    card = [_card(classed["head"][:10])]
+    fake = FakeGh([run()], head=classed["head"], comments=card)
+    assert refuse(classed["repo"], ARM, fake, monkeypatch) is None
 
 
 def test_a_green_panel_never_lifts_one_way(classed: dict, monkeypatch, lens: Path) -> None:
@@ -961,3 +965,113 @@ def test_every_call_takes_its_timeout_from_one_budget(monkeypatch) -> None:
     assert gate._left(20) <= 5
     monkeypatch.setattr(gate, "_DEADLINE", [gate.time.monotonic() - 1])
     assert gate._left(20) == 0.1
+
+
+# The security card verdict (brake stage 2): a T2 hit in `trust-loosening`, `money-path` or
+# `brake-review` waits for the green panel AND a card PASS on the current head. Red arms ran
+# against the 8.4.0 hook (git show origin/main), which reads line 1 only and let all three
+# cases through on the panel.
+
+
+def _hit(section: str) -> str:
+    return f"T2\nreview: high\napps/x.py\t{section}: path apps/x.py (rules: origin/main abc)"
+
+
+def _card(sha: str, overall: str = "PASS", number: int = 7) -> str:
+    return (
+        "<!-- security-card-review -->\n"
+        f"## Security card review — #{number} @ `{sha}`\n\n"
+        f"**Card:** `roles/security.md` · **Overall: {overall}**\n"
+    )
+
+
+@pytest.fixture()
+def green(classed: dict, lens: Path) -> dict:
+    (classed["repo"] / ".lens-green").write_text("")
+    return classed
+
+
+@pytest.mark.parametrize("section", ["trust-loosening", "money-path", "brake-review"])
+def test_a_card_hit_without_card_verdict_is_refused(green: dict, monkeypatch, section) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit(section))
+    for command in (ARM, "gh pr merge 7 --squash"):
+        red = refuse(green["repo"], command, FakeGh([run()], head=green["head"]), monkeypatch)
+        assert red is not None, command
+        assert f"PR #7 is T2 with a `{section}` hit" in red
+        assert "no card verdict is on the PR" in red
+        assert "we-worker <KEY>-card --bg \"/<security holder's skill> security card" in red
+        assert "<!-- security-card-review -->" in red
+
+
+def test_a_card_pass_on_an_older_head_is_refused(green: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    old = green["main"][:10]
+    fake = FakeGh([run()], head=green["head"], comments=[_card(old)])
+    red = refuse(green["repo"], ARM, fake, monkeypatch)
+    assert red is not None and f"the last card verdict is on the older head {old}" in red
+
+
+def test_a_card_pass_on_the_head_lets_it_merge(green: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    comments = [_card(green["main"][:10]), _card(green["head"][:10])]
+    fake = FakeGh([run()], head=green["head"], comments=comments)
+    assert refuse(green["repo"], ARM, fake, monkeypatch) is None
+    assert refuse(green["repo"], "gh pr merge 7 --squash", fake, monkeypatch) is None
+
+
+def test_a_later_blocking_on_the_head_beats_a_pass(green: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("money-path"))
+    head = green["head"][:10]
+    fake = FakeGh([run()], head=green["head"], comments=[_card(head), _card(head, "BLOCKING")])
+    red = refuse(green["repo"], ARM, fake, monkeypatch)
+    assert red is not None and "the card verdict on this head is BLOCKING" in red
+
+
+def test_a_comment_without_the_marker_is_no_card_verdict(green: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("brake-review"))
+    forged = _card(green["head"][:10]).replace("<!-- security-card-review -->\n", "")
+    fake = FakeGh([run()], head=green["head"], comments=[forged])
+    assert "no card verdict is on the PR" in refuse(green["repo"], ARM, fake, monkeypatch)
+
+
+def test_an_unreadable_comment_list_refuses(green: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+
+    class NoComments(FakeGh):
+        def __call__(self, args, cwd):
+            return None if "comments" in args else super().__call__(args, cwd)
+
+    red = refuse(green["repo"], ARM, NoComments([run()], head=green["head"]), monkeypatch)
+    assert red is not None and "the PR comments could not be read" in red
+
+
+def test_the_crews_security_holder_names_the_skill(
+    repo: Path, monkeypatch, lens, tmp_path_factory
+):
+    crew = {**CREW, "members": {"lars": {"name": "Lars"}}, "roles": {"security": "lars"}}
+    main = _commit(
+        repo,
+        {".weside/crew.json": json.dumps(crew), "bin/classify.sh": FAKE_CLASSIFIER},
+        "main",
+    )
+    _publish_main(repo, main)
+    head = _commit(repo, {"README.md": "y\n"}, "pr")
+    monkeypatch.setenv("FAKE_LOG", str(tmp_path_factory.mktemp("log") / "c.log"))
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    (repo / ".lens-green").write_text("")
+    red = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
+    assert red is not None and '--bg "/weside-lars security card review of PR #7' in red
+
+
+def test_t2_without_a_card_hit_merges_on_the_panel_alone(green: dict, monkeypatch) -> None:
+    for out in ("T2", "T2\nreview: high\napps/x.py\tt2: path apps/x.py"):
+        monkeypatch.setenv("FAKE_CLASS", out)
+        fake = FakeGh([run()], head=green["head"])
+        assert refuse(green["repo"], ARM, fake, monkeypatch) is None
+        assert not any("comments" in c for c in fake.calls), fake.calls
+
+
+def test_the_panel_refuses_before_the_card(classed: dict, monkeypatch, lens: Path) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
+    assert red is not None and "lens panel is not green" in red
