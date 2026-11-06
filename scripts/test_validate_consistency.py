@@ -147,3 +147,44 @@ def test_retired_paths():
 def test_retired_and_dead_references_pass_on_this_repo():
     done = run(REPO, "retired", "dead-references")
     assert done.returncode == 0, done.stdout
+
+
+def test_an_orchestrate_section_without_a_template_heading_fails(tmp_path):
+    files = {
+        "we/templates/orchestrate.md": "# x\n\n## Ticket states\n",
+        "we/references/plan-commit.md": "Read `.weside/orchestrate.md` § *Where plan commits land*.\n",
+        "we/references/epic-plan.md": "Map through `.weside/orchestrate.md` § Ticket states.\n",
+    }
+    done = run(tree(tmp_path, files), "orchestrate-template")
+    assert done.returncode == 1, done.stdout
+    assert "we/references/plan-commit.md:1: names `.weside/orchestrate.md` § Where plan" in (
+        done.stdout
+    )
+    assert "epic-plan.md" not in done.stdout
+
+
+def test_a_missing_orchestrate_template_fails(tmp_path):
+    done = run(tree(tmp_path, {}), "orchestrate-template")
+    assert done.returncode == 1
+    assert "we/templates/orchestrate.md: missing" in done.stdout
+
+
+def test_this_repos_template_covers_every_named_section():
+    done = run(REPO, "orchestrate-template")
+    assert done.returncode == 0, done.stdout
+
+
+def test_a_person_or_a_foreign_command_in_a_skill_fails(tmp_path):
+    files = {
+        "we/skills/x/SKILL.md": "Ok (owner 01.10.).\nNo (Foxy 01.10.).\nRun `a release prod`.\n"
+    }
+    done = run(tree(tmp_path, files), "neutral-skills")
+    assert done.returncode == 1
+    assert "we/skills/x/SKILL.md:2: 'Foxy'" in done.stdout
+    assert "we/skills/x/SKILL.md:3: '`a release'" in done.stdout
+    assert ":1:" not in done.stdout
+
+
+def test_this_repos_skills_are_neutral():
+    done = run(REPO, "neutral-skills")
+    assert done.returncode == 0, done.stdout
