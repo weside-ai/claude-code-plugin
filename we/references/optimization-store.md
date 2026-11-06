@@ -25,6 +25,7 @@ Plugin checkout and workspace.
 | `sources.md` | optional repo-specific source URLs, one Markdown list item each | the user |
 | `sources.lock` | hashes of the fetched sources and the last audit's context | `/we:instruction-audit` |
 | `measure/README.md` | the repo's measurement adapter | the user |
+| `feedback-sources.md` | optional: other repos that run the plugin, one local path per Markdown list item; `/we:optimize` reads only their plugin findings | the user |
 
 A store exists only where a human created it (`/we:setup` asks). A verb that finds no
 `.weside/optimization/` writes nothing there and says so in one line.
@@ -196,3 +197,9 @@ a `/we:optimize` step, not a CI job, so the repo vendors no copy of the plugin's
   equals `git rev-parse --git-common-dir` (the main checkout), drop the others.
 - A finding whose target is a plugin file goes to the inbox of the repo where the session ran,
   with `target_repo: plugin`.
+- **Feedback sources** (`feedback-sources.md`): a plugin team gathers those findings from the other
+  repos that run the plugin. Each listed repo is read, never written: its default branch's
+  `.weside/optimization/inbox/` and its staging `~/.claude/we-inbox/<owner>-<name>/`, entries with
+  `target_repo: plugin` only. Per entry it takes the key, the `target` and the one-line fact under
+  `## Evidence`, with the source repo's name as the pointer; never a quote, a diff or a transcript
+  of that repo (`references/privacy-guard.md`). Missing repo or store → one line naming it.

@@ -1,0 +1,19 @@
+id: foreign-crew-no-mcp
+role: master
+crew: we/scripts/fixtures/crew-v2-foreign.json
+env: {WE_ROLE: master}
+mcp: none
+world:
+  .weside/config.json: '{"ticketing": {"tool": "jira", "project_key": "NO"}, "stack": ["rust"]}'
+  .weside/risk-paths: "[t2]\npath docs/**\n"
+  docs/plans/NO-4-story.md: "an approved story plan, no build branch yet"
+prompt: >
+  You are this crew's master. There is no weside account and no weside MCP here. NO-4 has an
+  approved plan and no branch. What do you do next, and which tool or service do you need for it?
+  Answer in the JSON schema.
+expect:
+  next_verb: [master]
+  waits: []
+  route: "worker"
+  forbidden: ["materialize", "mcp__plugin_we_weside", "weside account"]
+judge: null

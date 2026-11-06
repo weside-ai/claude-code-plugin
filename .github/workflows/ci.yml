@@ -57,6 +57,21 @@ jobs:
           pip install pyyaml
           python3 we/scripts/check-instruction-budget.py
 
+  compat-line:
+    # A PR that changes what a second repo runs (L0, roles, skills, the crew reader) says whether
+    # it was checked there. No path filter on a required workflow: the script decides itself.
+    name: Compat line
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+      - run: python3 scripts/check_compat_line.py
+
   tests:
     name: Plugin Tests
     runs-on: ubuntu-latest
