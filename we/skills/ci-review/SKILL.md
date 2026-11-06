@@ -153,9 +153,10 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
    ```
 
    The count covers threads only. Check the Action column for open `—` rows.
-3. **Merge `origin/$BASE` only on a conflict**, never rebase: a merge is a code change, and CI tests the PR's merge ref,
-   so the base's gates judge it there. `git fetch && git merge-tree --write-tree origin/$BASE HEAD` exits non-zero
-   on a conflict; behind the base without one, push as is. A rebase of pushed commits needs a force-push, the user's call.
+3. **Merge `origin/$BASE` only on a conflict**, or when GitHub reports the PR `BEHIND` (the base requires an up-to-date
+   branch), never rebase: a merge is a code change, and CI tests the PR's merge ref, so the base's gates judge it there.
+   `git fetch && git merge-tree --write-tree origin/$BASE HEAD` exits 1 on a conflict; any other non-zero code means the
+   check is unavailable (git < 2.38): merge. Behind the base without a conflict, push as is. A rebase of pushed commits needs a force-push, the user's call.
    After a merge, the after-merge check: the post-merge command `.weside/orchestrate.md` names (an environment repair,
    not a gate run; its full local gates only when CI cannot judge the change), else, when the repo has a manual
    pre-commit stage, `pre-commit run --hook-stage manual --from-ref origin/$BASE --to-ref HEAD`; red → fix, commit, run it again.
