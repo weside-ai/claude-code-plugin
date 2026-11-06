@@ -855,3 +855,16 @@ def test_is_role_accepts_security_for_its_holder(tmp_path):
     assert run(core, "is-role", "security", "--session", "s", env=lex).returncode == 0
     otto = {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"}
     assert run(core, "is-role", "security", "--session", "s", env=otto).returncode == 1
+
+
+def test_launch_subagent_fallback_is_a_known_bool_default_off(tmp_path):
+    """A crew may let its master fall back to build subagents where its launcher is missing; the
+    default keeps L0's "build only in workers"."""
+    assert crew.DEFAULTS["launch"]["subagent_fallback"] is False
+    core, _ = workspace(
+        tmp_path, {**CREW, "launch": {"worker": "w {name} {brief}", "subagent_fallback": True}}
+    )
+    assert run(core, "validate", "--strict").returncode == 0
+    core2, _ = workspace(tmp_path / "b", {**CREW, "launch": {"subagent_fallback": "yes"}})
+    out = run(core2, "validate")
+    assert out.returncode == 1 and "launch.subagent_fallback" in out.stderr
