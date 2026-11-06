@@ -54,3 +54,22 @@ class NothingIsPutOffTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FeedbackSourcesContractTest(unittest.TestCase):
+    """Other repos that run the plugin are named sources: plugin findings only, no foreign text."""
+
+    def test_skill_reads_the_listed_repos_read_only(self):
+        text = " ".join(SKILL.read_text(encoding="utf-8").split())
+        self.assertIn("feedback-sources.md", text)
+        self.assertIn("read-only, key, target and fact only", text)
+
+    def test_store_filters_plugin_findings_under_the_privacy_guard(self):
+        text = " ".join(STORE.read_text(encoding="utf-8").split())
+        for fragment in (
+            "`target_repo: plugin` only",
+            "never a quote, a diff or a transcript",
+            "references/privacy-guard.md",
+            "read, never written",
+        ):
+            self.assertIn(fragment, text)

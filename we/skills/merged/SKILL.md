@@ -54,7 +54,7 @@ like yours (`otherrepo-PROJ-136-p1` next to `PROJ-139`). Leave it and say in the
 
 Dispatch one only when you can name a concrete, new friction of this PR that an instruction change
 would prevent: a wrong assumption the instruction files should have held, a script or hook that
-misled, a correction the user had to repeat. Review rounds alone are no reason (Foxy 28.10.2026).
+misled, a correction the user had to repeat. Review rounds alone are no reason (owner 28.10.2026).
 Otherwise skip it and write `retro: skipped (<reason>)` into the report, without asking.
 
 - covered, and dispatched when not: `${CLAUDE_PLUGIN_ROOT}/skills/retro/SKILL.md` § Auto mode, the
@@ -118,7 +118,7 @@ silently. If the workflow rejects the move, report it and continue.
 One line per item, and only what someone has to do:
 
 - rounds a receipt names as owed, such as a live round, a staging round or a device round;
-- a deploy or release that the merge does not trigger on its own (`a release <env> <bump>` is the user's word);
+- a deploy or release that the merge does not trigger on its own (the repo's release command is the user's word);
 - a decision the PR put to the user;
 - follow-ups found along the way, named with a recommendation. They are never filed without the user asking;
 - trees, branches or processes left standing, and why.

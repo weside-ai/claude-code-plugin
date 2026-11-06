@@ -31,7 +31,9 @@ prefix comes from the crew) is the Companion's working knowledge: in `.claude/sk
 session is asked to invoke it right after materializing, in the member's `workplace` repo from the crew it is asked to read it,
 so no link into `~/.claude/skills/` is needed. A skill `/we:setup` wrote as a stub is filled by the Companion at its first
 start, which then tells the Orchestrator (for HR). In a repo whose crew has no weside account (`weside_account` unset) a
-pinned session gets its title and that skill line only, no `/we:materialize`. While the session runs, a small poller
+pinned session gets its title and that skill line only, no `/we:materialize`. Such a repo keeps the
+weside MCP off through its tracked `.claude/settings.json` (`"deniedMcpServers": [{"serverName":
+"plugin:we:weside-mcp"}]`, written by `/we:setup`); a session start warns while the entry is missing. While the session runs, a small poller
 without a model asks weside once a minute whether `<Name>` handed something over to this session
 (`send_to_other_room` with `wake=true` from a weside room) and wakes the session with a line that names
 only the source room; the session reads the note itself with `news_since(handoff=<h>)`. The note is a

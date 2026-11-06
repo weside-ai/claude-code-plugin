@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "human": {"name": "Rio", "decides": ["product", "money", "prod"]},
+  "question_label": "ASK",
+  "skill_prefix": "north",
+  "roles": {
+    "product": "pam",
+    "coordinator": "sol",
+    "hr": "sol",
+    "escalation": "sol",
+    "architecture": "art",
+    "machinery": "mo",
+    "acceptance": "tam"
+  },
+  "members": {
+    "pam": {"name": "Pam", "title": "Product Owner", "components": ["Product"], "workplace": "."},
+    "sol": {"name": "Sol", "title": "Scrum Master", "components": ["Process"], "workplace": "."},
+    "art": {"name": "Art", "title": "Architect", "components": ["Architecture"], "workplace": "."},
+    "mo": {"name": "Mo", "title": "Build Manager", "components": ["Platform"], "workplace": "."},
+    "tam": {"name": "Tam", "title": "Test Manager", "components": ["Quality"], "workplace": "."}
+  },
+  "board": {"file": "~/.claude/we-state/north-board.json", "ticketing": "jira"},
+  "launch": {"worker": "north-worker {name} --bg {brief}"}
+}
