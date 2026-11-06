@@ -136,7 +136,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
 6. Copy `${CLAUDE_PLUGIN_ROOT}/templates/orchestrate.md` to `.weside/orchestrate.md` and
    `${CLAUDE_PLUGIN_ROOT}/templates/risk-paths` to `.weside/risk-paths`, each only when absent, and fill
    the `TODO` lines you detected (bootstrap, ticket states); name the rest to the user. A crew
-   without risk rules on its default branch cannot merge: the merge hook refuses until one lands.
+   without risk rules on its default branch cannot merge: the merge hook refuses until one lands,
+   so the owner merges the PR that lands the first rules file by hand.
    A team that wants no one-way class deletes the sections and keeps the file.
 
 ## 5. Rule bridge and statusline
