@@ -773,6 +773,24 @@ def test_t2_with_green_panel_passes(classed: dict, monkeypatch, lens: Path) -> N
     assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
 
 
+# Regression: a core classifier's two-way `[brake-review]` section prints line 1 `T2` with a
+# `brake-review:` hit line. The hook reads line 1 only, so such a PR goes to the panel and is
+# never refused as one-way; it passed before the split and must keep passing.
+BRAKE_REVIEW = (
+    "T2\nreview: high\n"
+    ".github/workflows/main-autofix.yml\tbrake-review: path .github/workflows/main-autofix.yml"
+)
+
+
+def test_a_brake_review_hit_is_two_way(classed: dict, monkeypatch, lens: Path) -> None:
+    monkeypatch.setenv("FAKE_CLASS", BRAKE_REVIEW)
+    red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
+    assert red is not None and "one-way" not in red
+    assert "PR #7 is T2 and its lens panel is not green" in red
+    (classed["repo"] / ".lens-green").write_text("")
+    assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
+
+
 def test_a_green_panel_never_lifts_one_way(classed: dict, monkeypatch, lens: Path) -> None:
     (classed["repo"] / ".lens-green").write_text("")
     reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)

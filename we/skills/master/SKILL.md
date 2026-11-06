@@ -165,12 +165,11 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    review: CI runs the Claude and Codex reviews (`worker-dispatch.md` § Finish sequence). A missing
    AC, a DoD `Fail` or a red gate goes back to the same worker by `SendMessage`.
 2. A migration gets `upgrade → downgrade → upgrade` on a real database. Run
-   `git -C <wt> merge origin/<default>` and the after-merge check (`/we:ci-review` § 3), then push once from the PR branch's worktree
+   the conflict check of `/we:ci-review` § 3 in `<wt>` (merge `origin/<default>` only on a conflict), then push once from the PR branch's worktree
    (`git -C <wt> push -u origin <branch>`); the pre-push hooks run once over the whole diff.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
-3. A PR opened later than that push first merges `origin/<default>` again and pushes. A "push now"
-   relay to a worker says "merge `origin/<default>`, then push". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
+3. A "push now" relay to a worker says "push; merge `origin/<default>` first only on a conflict". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
    spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
    `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
@@ -203,11 +202,14 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   panel's verdict. The hook `automerge_gate.py` refuses an early arm while that
   check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
   class**, computed by the crew's `risk.command` on the diff (money path, destructive migration,
-  Terraform or secrets, any loosening of tenant, auth or trust): only the human merges it, from a
+  Terraform or secrets, any loosening of tenant, auth or trust, the brake's core `brake-change`): only the human merges it, from a
   board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
   --one-way <class>`); until the merge hook computes the
   class, run the command yourself before you arm. The closing message then says
-  `user merge: one-way (<class>)`. A draft reason (a follow-up still on the branch, an unmerged
+  `user merge: one-way (<class>)`. A `T2` line 1 with a `brake-review:` hit line is no merge brake:
+  send the PR link and the hit lines to the machinery owner (the security owner when the hit is a
+  review workflow that gates trust findings), write their answer into the PR body as
+  `brake-review: <reviewer> <head sha> <verdict>`, and arm after the panel. A draft reason (a follow-up still on the branch, an unmerged
   dependency) keeps the PR a draft per `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round

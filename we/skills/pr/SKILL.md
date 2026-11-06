@@ -1,7 +1,7 @@
 ---
 name: pr
 description: >
-  Opens the PR for the current branch: merge the base, push once, body with ticket, AC evidence and
+  Opens the PR for the current branch: merge the base on a conflict, push once, body with ticket, AC evidence and
   the plan's verification receipt, PR linked to the ticket. Triggers: "/we:pr", "open the PR".
 ---
 
@@ -11,8 +11,8 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
 
 1. Run the repo's static gates and the affected tests by name first, unless this session already ran them green on
    the current HEAD; red → stop and report.
-2. `git fetch && git merge origin/<base>` (never rebase: that needs a force-push, the user's call).
-   A conflict goes to the user. Then `git push -u origin <branch>` once.
+2. `git fetch`; merge `origin/<base>` only on a conflict (`/we:ci-review` § 3; never rebase: that needs a
+   force-push, the user's call). A merge conflict goes to the user. Then `git push -u origin <branch>` once.
 3. Body in a file, passed as `--body-file` (a `--body "$(…)"` cannot be read by the verification
    hook): summary, the ticket key on its own line, AC → evidence, and a `## Verification` block. A plan
    with that block: splice it with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>`.
