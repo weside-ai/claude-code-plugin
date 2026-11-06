@@ -159,7 +159,6 @@ def test_star_stays_in_one_directory(repo: Path) -> None:
         ("[nope]\npath x\n", "unknown section [nope]"),
         ("path x\n", "rule before the first section"),
         ("[money]\nglob x\n", "not a rule: glob x"),
-        ("# nothing\n", "holds no section"),
     ],
 )
 def test_rules_outside_the_grammar_exit_2(repo: Path, rules: str, message: str) -> None:
@@ -168,6 +167,15 @@ def test_rules_outside_the_grammar_exit_2(repo: Path, rules: str, message: str) 
     assert out.returncode == 2
     assert out.stdout == ""
     assert message in out.stderr
+
+
+@pytest.mark.parametrize("rules", ["", "# no brake here, on purpose\n"])
+def test_a_rules_file_without_sections_classifies_t0(repo: Path, rules: str) -> None:
+    _mains_rules(repo, rules)
+    write(repo, "pay.py", "x\n")
+    commit(repo, "anything")
+    out = classify(repo)
+    assert out.returncode == 0 and out.stdout.splitlines()[0] == "T0"
 
 
 def test_without_origin_main_exit_2(repo: Path) -> None:

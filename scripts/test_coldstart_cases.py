@@ -27,6 +27,20 @@ def test_the_two_process_cases_exist():
     assert {"master/t2-oneway-human-merges.yaml", "companion/board-only-inbox.yaml"} <= names
 
 
+def test_a_foreign_crew_case_runs_without_the_weside_mcp():
+    """A crew of another team: no weside account, no weside MCP, a board and a launcher of its
+    own, a minimal `.weside/config.json`. The plugin must work there from a cold start."""
+    case = REPO / "tests" / "coldstart" / "master" / "foreign-crew-no-mcp.yaml"
+    text = case.read_text(encoding="utf-8")
+    top = {k: v.strip() for k, v in TOP.findall(text)}
+    assert top["mcp"] == "none"
+    assert ".weside/config.json:" in text
+    data = json.loads((REPO / top["crew"]).read_text(encoding="utf-8"))
+    assert data.get("weside_account") is not True
+    assert data["board"]["file"] and data["launch"]["worker"]
+    assert "weside" not in json.dumps(data).lower()
+
+
 @pytest.mark.parametrize("case", CASES, ids=lambda p: p.stem)
 def test_case_has_the_scenario_keys(case: Path):
     top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}

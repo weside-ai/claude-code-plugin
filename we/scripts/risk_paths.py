@@ -20,7 +20,9 @@ Grammar, a subset of the rules file the core classifier reads:
 `money`, `destructive-migration`, `terraform-secrets`, `trust-loosening`; or `t2` (two-way).
 A glob: `**/` matches zero or more whole directories, a bare `**` anything, `*` and `?` stay
 inside one directory, `{a,b}` expands. A `line` or `from` rule, an unknown keyword or section, a
-section without a rule, or a rule before the first section exits 2 naming it.
+section without a rule, or a rule before the first section exits 2 naming it. A file without any
+section (empty or comments only) is valid and classifies every diff `T0`: a crew that wants no brake
+says so in a file (the merge hook then says it once per merge); a missing file is not that.
 
 Diff: `git diff --name-only --no-renames <base>...HEAD`; `<base>` must be an ancestor of
 `origin/main` (a base ahead of main would hide main's own changes), else exit 2.
@@ -125,8 +127,6 @@ def parse_rules(text: str) -> dict[str, list[tuple[str, re.Pattern[str]]]]:
         glob = rest.strip()
         for one in _expand(glob):
             rules[section].append((glob, _glob_regex(one)))
-    if not rules:
-        raise RiskError(f"{RULES_FILE} on {RULES_FROM} holds no section")
     for name, items in rules.items():
         if not items:
             raise RiskError(f"{RULES_FILE}: section [{name}] has no rule")

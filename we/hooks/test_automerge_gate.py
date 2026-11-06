@@ -640,6 +640,65 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
     assert "The owner merges one-way PRs by hand" in reason
 
 
+MERGE = "gh pr merge 7 --squash"
+
+
+def test_a_crew_without_rules_refuses_every_merge(repo: Path, monkeypatch) -> None:
+    """A crew on main with neither `risk.command` nor `.weside/risk-paths` cannot
+    tell one-way from two-way; it refuses instead of deciding T0 in silence."""
+    main = _commit(repo, {".weside/crew.json": json.dumps({"version": 2})}, "crew, no rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    for command in (MERGE, ARM):
+        reason = refuse(repo, command, FakeGh([run()], head=head), monkeypatch)
+        assert reason is not None, command
+        assert "class not computed" in reason
+        assert "no risk rules" in reason and "`.weside/risk-paths`" in reason
+        assert "`risk.command`" in reason
+
+
+@pytest.mark.parametrize("rules", ["", "# no brake, on purpose\n", "[t2]\npath docs/**\n"])
+def test_risk_paths_without_a_one_way_section_merges_and_says_so(
+    repo: Path, monkeypatch, capsys, rules: str
+) -> None:
+    """A rules file without a one-way section brakes nothing on purpose (a crew's
+    choice) and the allowed merge carries one line saying so."""
+    files = {".weside/crew.json": json.dumps({"version": 2}), ".weside/risk-paths": rules}
+    main = _commit(repo, files, "crew, empty brake")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    fake = FakeGh([run()], head=head)
+    assert refuse(repo, MERGE, fake, monkeypatch) is None
+    assert gate.NOTICES == [
+        "risk-paths: no one-way classes configured (`.weside/risk-paths` on origin/main has no "
+        "one-way section), so no PR here waits for the owner's merge."
+    ]
+    payload = {"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": MERGE}}
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
+    gate.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"systemMessage": gate.NOTICES[0]}
+
+
+def test_risk_paths_with_a_one_way_section_say_nothing(repo: Path, monkeypatch) -> None:
+    main = _commit(repo, {".weside/risk-paths": "[money]\npath pay.py\n"}, "rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"README.md": "y\n"}, "pr")
+    assert refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch) is None
+    assert gate.NOTICES == []
+
+
+def test_deleting_a_one_way_section_stays_a_user_merge(repo: Path, monkeypatch) -> None:
+    """owner 06.11.2026: emptying the rules is no way out of a user merge, because main's rules
+    classify the PR that empties them."""
+    rules = "[brake-change]\npath .weside/risk-paths\n[money]\npath pay.py\n"
+    main = _commit(repo, {".weside/risk-paths": rules}, "rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {".weside/risk-paths": "# no brake\n"}, "drop every section")
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "`T2 one-way brake-change`" in reason
+
+
 def test_mains_own_risk_paths_blob_is_preferred(repo: Path, monkeypatch) -> None:
     own = "import sys\nprint('T2 one-way terraform-secrets')\nprint('review: high')\n"
     main = _commit(
@@ -889,22 +948,154 @@ def test_a_failed_rules_fetch_refuses(classed: dict, monkeypatch) -> None:
     assert reason is not None and "`git fetch origin main` failed" in reason
 
 
-def test_the_default_freeze_counts_beside_a_crew_board(
+def _crew_board(repo: Path, board_file: Path) -> None:
+    (repo / ".weside").mkdir(exist_ok=True)
+    (repo / ".weside" / "crew.json").write_text(
+        json.dumps({"version": 2, "roles": {}, "members": {}, "board": {"file": str(board_file)}})
+    )
+
+
+def test_the_default_freeze_does_not_reach_a_crew_with_its_own_board(
     repo: Path, monkeypatch, _isolated_state: Path, tmp_path_factory
 ) -> None:
-    _freeze(_isolated_state)
+    """A crew with its own `board.file` is a separate team; a freeze on the default
+    board, `*` included, does not stop it. Its own board's freeze does."""
+    flag = {
+        "since": "s",
+        "by": "ops",
+        "reason": "incident on main",
+        "repos": ["*"],
+        "scoped": True,
+    }
+    _freeze(_isolated_state, json.dumps(flag))
     other = tmp_path_factory.mktemp("board")
+    _crew_board(repo, other / "board.json")
+    (repo / ".weside" / "risk-paths").write_text("[t2]\npath docs/**\n")
+    main = _commit(repo, {}, "crew + rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"README.md": "y\n"}, "pr")
+    assert refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch) is None
+    _freeze(other, json.dumps(flag))
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize(
+    ("repos", "frozen"),
+    [
+        (["o/r"], True),
+        (["O/R"], True),
+        (["acme/core"], False),
+        (["*"], True),
+        ([], True),
+        (None, True),
+    ],
+)
+def test_a_freeze_counts_only_for_the_repos_it_names(
+    repo: Path, monkeypatch, _isolated_state: Path, repos, frozen: bool
+) -> None:
+    """`repos` scopes the flag; `*`, an empty or missing list fail closed."""
+    flag = {"since": "s", "by": "ops", "reason": "incident on main", "scoped": True}
+    if repos is not None:
+        flag["repos"] = repos
+    _freeze(_isolated_state, json.dumps(flag))
+    reason = refuse(repo, MERGE, FakeGh([run()]), monkeypatch)
+    assert (reason is not None and "Merges are frozen" in reason) is frozen, reason
+
+
+def test_a_flag_from_an_older_writer_freezes_every_repo(
+    repo: Path, monkeypatch, _isolated_state: Path
+) -> None:
+    """Before per-repo scope, `repos` was only the disarm list: such a flag still stops all."""
+    flag = {"since": "s", "by": "ops", "reason": "incident", "repos": ["other/repo"]}
+    _freeze(_isolated_state, json.dumps(flag))
+    reason = refuse(repo, MERGE, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+def test_a_freeze_on_another_repo_still_refuses_a_target_it_names(
+    repo: Path, monkeypatch, _isolated_state: Path
+) -> None:
+    flag = {
+        "since": "s",
+        "by": "ops",
+        "reason": "core incident",
+        "repos": ["other/repo"],
+        "scoped": True,
+    }
+    _freeze(_isolated_state, json.dumps(flag))
+    reason = refuse(repo, "gh pr merge 7 -R other/repo --squash", FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize(
+    "selector",
+    ["-R github.com/o/r", "-R https://github.com/o/r.git", "https://github.com/o/r/pull/7"],
+)
+def test_a_host_or_url_form_target_still_meets_its_freeze(
+    repo: Path, monkeypatch, _isolated_state: Path, selector: str
+) -> None:
+    flag = {"since": "s", "by": "ops", "reason": "incident", "repos": ["o/r"], "scoped": True}
+    _freeze(_isolated_state, json.dumps(flag))
+    sel = f"7 {selector}" if selector.startswith("-R") else selector
+    command = f"gh pr merge {sel} --squash"
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize("how", ["env", "command", "set-default", "upstream"])
+def test_a_merge_gh_may_route_elsewhere_meets_every_freeze(
+    repo: Path, monkeypatch, _isolated_state: Path, how: str
+) -> None:
+    """Without `-R`, `gh` may target `GH_REPO` or a `gh repo set-default` remote, not origin."""
+    flag = {
+        "since": "s",
+        "by": "ops",
+        "reason": "incident",
+        "repos": ["other/repo"],
+        "scoped": True,
+    }
+    _freeze(_isolated_state, json.dumps(flag))
+    command = MERGE
+    if how == "env":
+        monkeypatch.setenv("GH_REPO", "other/repo")
+    elif how == "command":
+        command = f"GH_REPO=other/repo {MERGE}"
+    elif how == "set-default":
+        _git(repo, "config", "remote.origin.gh-resolved", "base")
+    else:
+        _git(repo, "remote", "add", "upstream", "https://github.com/other/repo.git")
+    if how != "env":
+        monkeypatch.delenv("GH_REPO", raising=False)
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+def test_a_broken_crew_without_rules_refuses_too(repo: Path, monkeypatch) -> None:
+    main = _commit(repo, {".weside/crew.json": "{not json"}, "crew, no rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "no risk rules" in reason
+    assert "the owner merges that one by hand" in reason
+
+
+def test_a_repo_that_only_points_at_another_crew_merges_as_before(repo: Path, monkeypatch) -> None:
+    """A workspace repo whose `.weside/config.json` points at a crew elsewhere has no rules of
+    its own to read; it keeps T0 as before (whether it should get rules is its owner's call)."""
+    config = {".weside/config.json": json.dumps({"crew": "../shared/crew.json"})}
+    main = _commit(repo, config, "pointer, no rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    assert refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch) is None
+
+
+def test_a_crew_without_its_own_board_reads_the_default_board(
+    repo: Path, monkeypatch, _isolated_state: Path
+) -> None:
     (repo / ".weside").mkdir()
-    (repo / ".weside" / "crew.json").write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "roles": {},
-                "members": {},
-                "board": {"file": str(other / "board.json")},
-            }
-        )
-    )
+    (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 2}))
+    _freeze(_isolated_state)
     reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
     assert reason is not None and "Merges are frozen" in reason
 

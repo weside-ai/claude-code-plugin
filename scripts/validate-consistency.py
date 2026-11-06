@@ -491,7 +491,56 @@ def check_retired(root: Path = REPO) -> None:
                 fail(f"{rel}:{lineno}: retired name '{m.group(0)}' — name its successor")
 
 
-ROOT_CHECKS = {"dead-references": check_dead_references, "retired": check_retired}
+ORCHESTRATE_TEMPLATE = "we/templates/orchestrate.md"
+_ORCHESTRATE_REF = re.compile(r"orchestrate\.md`?\s*§\s*\*?([A-Z][a-z]+(?:[ -][a-z-]+)*)")
+
+
+def check_orchestrate_template(root: Path = REPO) -> None:
+    """Every `.weside/orchestrate.md` § section a plugin file names is a heading of the template
+    `/we:setup` copies, so a fresh crew repo has a place for each fact a skill reads."""
+    template = root / ORCHESTRATE_TEMPLATE
+    if not template.is_file():
+        fail(f"{ORCHESTRATE_TEMPLATE}: missing — /we:setup copies it into a crew repo")
+        return
+    headings = {
+        line.lstrip("#").strip().lower()
+        for line in template.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    }
+    for path in sorted((root / "we").rglob("*.md")):
+        rel = path.relative_to(root).as_posix()
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for m in _ORCHESTRATE_REF.finditer(line):
+                if m.group(1).strip().lower() not in headings:
+                    fail(
+                        f"{rel}:{lineno}: names `.weside/orchestrate.md` § {m.group(1).strip()}, "
+                        f"which {ORCHESTRATE_TEMPLATE} has no heading for"
+                    )
+
+
+# The skills run in every repo that installs the plugin: a decision stamp names its role, not a
+# person, and a command the plugin does not ship stays out.
+_NOT_NEUTRAL = re.compile(r"\bFoxy\b|`a release\b")
+
+
+def check_neutral_skills(root: Path = REPO) -> None:
+    """No skill names the plugin author's own owner or a command only their repo has."""
+    for path in sorted((root / "we" / "skills").rglob("*.md")):
+        rel = path.relative_to(root).as_posix()
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            m = _NOT_NEUTRAL.search(line)
+            if m:
+                fail(
+                    f"{rel}:{lineno}: '{m.group(0)}' is one team's history — write `owner` or drop it"
+                )
+
+
+ROOT_CHECKS = {
+    "dead-references": check_dead_references,
+    "retired": check_retired,
+    "orchestrate-template": check_orchestrate_template,
+    "neutral-skills": check_neutral_skills,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -513,6 +562,8 @@ def main(argv: list[str] | None = None) -> int:
         check_lens_skill()
         check_no_indiscretions()
         check_retired()
+        check_orchestrate_template()
+        check_neutral_skills()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

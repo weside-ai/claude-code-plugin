@@ -26,7 +26,8 @@ Refusals, in this order (the first one wins):
      (`references/worker-dispatch.md` § Dev-only worker contract). A worker is a subagent
      (`agent_id` in the payload) or a process worker (the marker of `scripts/worker_launch.py`).
   2. Freeze: while `freeze.json` stands beside the board file (`scripts/board_freeze.py`), every
-     merge and arm is refused, naming its reason; an unreadable flag counts as standing.
+     merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
+     reason; an unreadable flag counts as standing.
   3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; the owner (`human.name` in the
      crew) merges it by hand, whatever a command or a chat quote says.
   4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
@@ -44,7 +45,10 @@ The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/cre
 default `origin/main`) is written to a temp file and run on `merge-base..<PR head>` in a
 no-checkout worktree of the head; without a `risk.command`, the plugin's `scripts/risk_paths.py`
 (`origin/main`'s blob of `we/scripts/risk_paths.py` when the repo carries it) reads `origin/main`'s
-`.weside/risk-paths`; with neither the class is `T0`, decided offline. Line 1 must match
+`.weside/risk-paths`; with neither the class is `T0`, decided offline, unless `origin/main` carries a
+crew file: a crew without rules refuses every merge and arm (a brake that cannot judge must not
+stay silently open). A `.weside/risk-paths` without a one-way section brakes nothing on purpose; the
+allowed merge then carries one `systemMessage` line saying so. Line 1 must match
 `^T[02]( one-way \\S+)?$`.
 
 Before classifying, the hook fetches the rules branch (`origin/main`), so a stale local ref neither
@@ -58,8 +62,9 @@ with the reason. Where the command starts in a checkout that uses rules (a crew 
 checkout's (`-R`, a URL selector, an origin that is no plain github.com URL) and a `cd` the hook
 cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded) refuse too; without rules
 those merges go on unclassed, as before the class brake. The freeze flag counts beside the board
-files of `board_freeze.watched_board_files`: the default and the crew's `board.file`, a relative
-one resolved against the crew file's directory. Any exception while checking a
+file of `board_freeze.watched_board_files` (the crew's `board.file`, else the default) and only
+for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
+count as covered). Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
 from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
 short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -86,6 +91,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import board_freeze
 import crew
+import risk_paths
 import verification_gate as vg
 from worker_launch import worker_marker
 
@@ -114,6 +120,9 @@ _RECEIPT_RED = re.compile(r"^receipt red\b")
 _FENCE = re.compile(r"^(`{3,}|~{3,})")
 _API_MERGE = re.compile(r"(?:^|/)repos/([^/\s]+/[^/\s]+)/pulls/(\d+)/merge/?(?:\?|$)")
 _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
+_ONE_WAY_SECTION = re.compile(
+    r"^\s*\[\s*(" + "|".join(re.escape(c) for c in risk_paths.ONE_WAY) + r")\s*\]", re.MULTILINE
+)
 _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
@@ -126,6 +135,9 @@ RULES_FROM = "origin/main"
 # on its timeout is a non-blocking error, and the command would run unbraked.
 BUDGET_SECONDS = 540
 _DEADLINE = [time.monotonic() + BUDGET_SECONDS]
+# Lines the session must see on an allowed merge (a deliberately empty brake says so, once per
+# call); `main` prints them as `systemMessage`. Reset by `_refusal`.
+NOTICES: list[str] = []
 
 
 def _left(wanted: float) -> float:
@@ -458,6 +470,7 @@ class ClassResult:
     reason: str | None = None
     number: int | None = None
     url: str | None = None
+    notice: str | None = None
 
     @property
     def one_way(self) -> str | None:
@@ -481,9 +494,33 @@ def _git(root: str, *args: str, timeout: int = 20) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
+def _freeze_slug(call: MergeCall, argv: list[str], root: str | None) -> str | None:
+    """The repo a merge lands in, for the freeze: the explicit target, else the checkout's
+    `origin`; None (frozen when any flag stands) where `gh` may pick another repo: `GH_REPO` in
+    the environment or the command, a `gh repo set-default` (`remote.*.gh-resolved`) or an
+    `upstream` remote, which `gh` prefers over `origin`."""
+    target = _pr_target(call)
+    if target:
+        return target
+    if root is None or os.environ.get("GH_REPO") or any("GH_REPO=" in a for a in argv):
+        return None
+    if _git(root, "config", "--get-regexp", r"^remote\..*\.gh-resolved$"):
+        return None
+    if _git(root, "config", "--get", "remote.upstream.url"):
+        return None  # gh prefers an `upstream` remote over `origin`
+    return _local_slug(root)
+
+
 def _local_slug(root: str) -> str | None:
     m = _SLUG.search((_git(root, "config", "--get", "remote.origin.url") or "").strip())
     return m.group(1).lower() if m else None
+
+
+def _crew_present_on_main(root: str, ref: str = RULES_FROM) -> bool:
+    """`ref` carries a crew file of its own, parsing or not: a broken crew still uses the crew
+    process. A repo that only points at another repo's crew (`.weside/config.json` `crew`) is not
+    one: it keeps T0 without rules, as before."""
+    return _git(root, "cat-file", "-e", f"{ref}:.weside/crew.json") is not None
 
 
 def _crew_on_main(root: str) -> dict:
@@ -514,13 +551,23 @@ def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
         return (
             f"`git fetch origin {RULES_FROM.split('/', 1)[1]}` failed; the rules must be current"
         )
-    risk = _crew_on_main(root).get("risk") or {}
+    crew_doc = _crew_on_main(root)
+    risk = crew_doc.get("risk") or {}
     rules_from = risk.get("rules_from") if isinstance(risk.get("rules_from"), str) else RULES_FROM
     command = risk.get("command")
     if isinstance(command, str) and command.strip():
         parts = command.split()
         return ["{file}", *parts[1:]], f"{rules_from}:{parts[0]}", rules_from
     if _git(root, "cat-file", "-e", f"{rules_from}:.weside/risk-paths") is None:
+        if crew_doc or _crew_present_on_main(root, rules_from):
+            return (
+                f"this repo has a crew (`.weside/crew.json` on {rules_from}) but no risk rules: "
+                f"neither `risk.command` in the crew nor `.weside/risk-paths` on {rules_from}, "
+                "so the hook cannot tell a one-way PR from a two-way one. Land a "
+                "`.weside/risk-paths` (`/we:setup` writes a starter; without one-way sections it "
+                "brakes nothing, on purpose) or a `risk.command` first; the PR that lands it is "
+                "refused here too, so the owner merges that one by hand"
+            )
         return None
     own = f"{rules_from}:we/scripts/risk_paths.py"
     blob = own if _git(root, "cat-file", "-e", own) is not None else None
@@ -566,6 +613,13 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
         result.reason = f"no merge base of {head[:9]} and {rules_from} (fetch origin)"
         return result
     result.line, result.reason = _run_classifier(root, prefix, blob, head, base)
+    if blob is None or blob.endswith(":we/scripts/risk_paths.py"):
+        rules = _git(root, "show", f"{rules_from}:.weside/risk-paths") or ""
+        if not _ONE_WAY_SECTION.search(rules):
+            result.notice = (
+                f"risk-paths: no one-way classes configured (`.weside/risk-paths` on {rules_from}"
+                " has no one-way section), so no PR here waits for the owner's merge."
+            )
     return result
 
 
@@ -630,16 +684,19 @@ def _human(root: str) -> str:
     return name.strip() if isinstance(name, str) and name.strip() else "The owner"
 
 
-def _freeze_refusal(root: str | None) -> str | None:
+def _freeze_refusal(root: str | None, slug: str | None = None) -> str | None:
+    """The freeze refusal for a merge in repo `slug`, or None. A flag counts only for the repos
+    it names (`board_freeze.covers`; fail closed on `*`, no list or an unknown slug)."""
     flag = None
     for board_file in _board_files(root):
         try:
-            flag = board_freeze.read_flag(board_freeze.flag_path(board_file))
+            found = board_freeze.read_flag(board_freeze.flag_path(board_file))
         except board_freeze.FreezeError as exc:
             return (
                 f"Merges are frozen: the freeze flag is unreadable ({exc}); it counts as standing."
             )
-        if flag is not None:
+        if found is not None and board_freeze.covers(found, slug):
+            flag = found
             break
     if flag is None:
         return None
@@ -721,6 +778,8 @@ def _class_refusal(
             False,
         )
     cls = pr_class(root, call, cwd)
+    if cls.notice and cls.notice not in NOTICES:
+        NOTICES.append(cls.notice)
     if cls.line is None:
         return f"Merge refused, class not computed: {cls.reason}.", False
     if cls.one_way:
@@ -751,7 +810,7 @@ def _call_refusal(
         )
     cwd, cwd_known = _cwd_at(argv, command_cwd, call.at)
     root = vg._repo_root(cwd) if cwd_known else None
-    frozen = _freeze_refusal(root)
+    frozen = _freeze_refusal(root, _freeze_slug(call, argv, root))
     if frozen:
         return frozen
     refusal, go_on = _class_refusal(root, call, cwd, cwd_known, command_cwd)
@@ -779,6 +838,7 @@ def _call_refusal(
 
 
 def _refusal(payload: dict) -> str | None:
+    NOTICES.clear()
     if payload.get("tool_name") != "Bash":
         return None
     command = (payload.get("tool_input") or {}).get("command", "")
@@ -819,6 +879,8 @@ def main() -> None:
             "Fix the cause or run the merge by hand."
         )
     if reason is None:
+        if NOTICES:
+            print(json.dumps({"systemMessage": " ".join(NOTICES)}))
         return
     print(
         json.dumps(

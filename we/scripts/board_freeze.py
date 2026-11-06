@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The freeze flag: while it stands, the merge hook (`hooks/automerge_gate.py`) refuses every merge
-and every auto-merge arm, in every repo, naming the reason.
+and every auto-merge arm in the repos the flag names (`repos`; `*` names every repo), naming the
+reason.
 
 The flag is `freeze.json` in the board's state directory (beside `board.json`, `board.file` in the
 crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.py freeze` and
@@ -15,9 +16,14 @@ crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.
     so a one-way PR armed before the freeze would come back unchecked.
   * A flag file that exists but does not parse is a standing freeze (`FreezeError`; the hook
     refuses): a torn write must not lift it.
-  * The hook reads a flag only beside the board files `watched_board_files` names: the default
-    board and the crew's `board.file` (a relative one resolved against the crew file's
-    directory). `freeze` and `unfreeze` refuse any other `--board`, so no flag stands where no
+  * `repos` scopes the flag: a merge in a repo the flag does not name passes it. `*`
+    names every repo of the crews reading this board; `board.py freeze` without `--repo` writes
+    it (a freeze from the wrong checkout must not silently miss the repo it is for) and disarms
+    the current repo's armed PRs. A flag without a `repos` list counts for every repo.
+  * The hook reads a flag only beside the board file `watched_board_files` names: the crew's
+    `board.file` when the crew names one (a relative one resolved against the crew file's
+    directory), else the default board. A crew with a board of its own is a separate team: a
+    freeze on the default board does not reach it, `*` included. `freeze` and `unfreeze` refuse any other `--board`, so no flag stands where no
     hook sees it.
 
 A brake against slips, not a boundary: any session can delete the file. The
@@ -53,19 +59,49 @@ def flag_path(board_file: str | Path) -> Path:
 
 
 def watched_board_files(start: str | Path | None, default: str = DEFAULT_BOARD) -> list[Path]:
-    """Every board file the merge hook reads a freeze beside, for a command run in `start`: the
-    default board, then the crew's `board.file` (relative to the crew file's directory). A missing
-    or broken crew file names no second board."""
-    files = [Path(default).expanduser()]
+    """The board file the merge hook reads a freeze beside, for a command run in `start`, as a
+    one-item list: the crew's `board.file` (relative to the crew file's directory) when the crew
+    names one, else the default board. A missing or broken crew file names the default board."""
+    default_file = Path(default).expanduser()
     try:
         crew_file, crew_data = crew.find_and_load(start)
     except crew.CrewError:
-        return files
+        return [default_file]
     board = (crew_data or {}).get("board")
     name = board.get("file") if isinstance(board, dict) else None
     if crew_file is not None and isinstance(name, str) and name.strip():
-        files.append(crew_file.parent / Path(name.strip()).expanduser())
-    return files
+        return [crew_file.parent / Path(name.strip()).expanduser()]
+    return [default_file]
+
+
+def norm_slug(value: object) -> str | None:
+    """`owner/repo` from a slug, `HOST/OWNER/REPO` or a GitHub URL (lower case, no `.git`), else
+    None: a bare name or anything else names no repo."""
+    text = str(value or "").strip().lower()
+    text = text.split("://", 1)[-1].split("#", 1)[0].split("?", 1)[0].rstrip("/")
+    text = text.removesuffix(".git")
+    parts = [p for p in text.replace(":", "/").split("/") if p]
+    if "pull" in parts:
+        parts = parts[: parts.index("pull")]
+    if len(parts) < 2:
+        return None
+    return f"{parts[-2]}/{parts[-1]}"
+
+
+def covers(flag: dict, slug: str | None) -> bool:
+    """Whether a standing `flag` freezes a merge in repo `slug` (None when the hook cannot name
+    it). Fail closed: a flag without `scoped: true` (written before per-repo scope), no `repos`
+    list, `*`, an entry that names no repo, or an unknown slug count as covered. Both sides are normalised (`norm_slug`): `-R github.com/o/r` is `o/r`."""
+    repos = flag.get("repos")
+    if flag.get("scoped") is not True:
+        return True  # a flag from a writer before per-repo scope: `repos` was a disarm list only
+    if not isinstance(repos, list) or not repos or "*" in repos:
+        return True
+    named = [norm_slug(r) for r in repos]
+    target = norm_slug(slug)
+    if target is None or None in named:
+        return True
+    return target in named
 
 
 def read_flag(path: Path) -> dict | None:
@@ -131,9 +167,16 @@ def _armed(repo: str, gh: GhRunner) -> list[int] | None:
 
 
 def freeze(
-    path: Path, reason: str, repos: list[str], by: str, gh: GhRunner = _gh, now: str | None = None
+    path: Path,
+    reason: str,
+    repos: list[str],
+    by: str,
+    gh: GhRunner = _gh,
+    now: str | None = None,
+    disarm: list[str] | None = None,
 ) -> dict:
-    """Write the flag, disarm the armed PRs of `repos`, record them; returns the flag."""
+    """Write the flag, disarm the armed PRs of `disarm` (default: `repos` without `*`), record
+    them; returns the flag."""
     if not reason.strip():
         raise FreezeError("a freeze needs a reason")
     stamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -146,12 +189,18 @@ def freeze(
         "by": by,
         "reason": reason,
         "repos": sorted(set(standing.get("repos") or []) | set(repos)),
+        "scoped": True,
         # A second freeze keeps what the first disarmed: `unfreeze` must list every PR.
         "disarmed": list(standing.get("disarmed") or []),
         "not_disarmed": list(standing.get("not_disarmed") or []),
     }
     _write_atomic(path, flag)
-    for repo in repos:
+    targets = disarm if disarm is not None else [r for r in repos if r != "*"]
+    if "*" in repos and not targets:
+        flag["not_disarmed"].append(
+            {"repo": "*", "why": "no repo here to disarm; armed PRs elsewhere still auto-merge"}
+        )
+    for repo in targets:
         armed = _armed(repo, gh)
         if armed is None:
             flag["not_disarmed"].append({"repo": repo, "why": "listing the open PRs failed"})
