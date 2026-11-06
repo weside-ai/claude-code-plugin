@@ -24,8 +24,8 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "Only Hal\n  merges it (user merge, enforced by the `one-way gate` check), from a board item "
-    "with PR link,\n  class and panel verdict; the merge hook only warns early."
+    "Only Hal\n  merges it (user merge, `one-way gate` check), from a board item; a `brake-review` "
+    "hit (T2) waits\n  for Kit or the security owner."
 )
 DECIDED_3 = "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge."
 

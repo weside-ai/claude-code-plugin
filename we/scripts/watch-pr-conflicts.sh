@@ -4,7 +4,8 @@
 #
 # Usage: watch-pr-conflicts.sh [-R <owner/repo>] <PR> [<PR>…]
 # Polls `mergeStateStatus`/`mergeable` per PR and exits on the first PR that is DIRTY, CONFLICTING
-# or BEHIND (already so at start counts; UNKNOWN is GitHub still computing and waits). One line:
+# or BEHIND (GitHub reports it only where the base requires an up-to-date branch, the merge case of
+# `/we:ci-review` § 3; already so at start counts; UNKNOWN is GitHub still computing and waits). One line:
 #   <PR> <state> — merge origin/<base>, run the after-merge check, push   exit 1
 #   gh failed <n> times in a row: <error>                                 exit 2
 #   all merged or closed: <PR>…                                           exit 7
