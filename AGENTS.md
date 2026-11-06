@@ -100,7 +100,9 @@ release that touches rule loading; a fixture the matcher disagrees with means th
 ## Versioning
 
 `/plugin update` compares `version` in `we/.claude-plugin/plugin.json`; a push to `main` without a
-bump stays invisible to users. Patch for fixes and docs, minor for new or changed behaviour, major
+bump stays invisible to users. Workers do not bump: the master sets the version as the last commit
+before it arms auto-merge; `scripts/check-version-bump.sh` checks it is above `main`, and with
+`--armed` also against every open PR with auto-merge armed. Patch for fixes and docs, minor for new or changed behaviour, major
 for removed or renamed verbs. After a pushed bump: `claude plugins update we@weside-ai`.
 
 ## Plugin and weside backend

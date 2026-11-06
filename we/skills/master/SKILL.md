@@ -2,7 +2,7 @@
 name: master
 description: >
   The epic's master: pulls its Selected stories, starts a refiner worker where a plan is missing and
-  a build worker where one exists, one PR per story. Triggers: "/we:master", "master the epic",
+  a build worker where one exists, one PR per story and repo. Triggers: "/we:master", "master the epic",
   "dispatch the ready stories", "run the phases".
 ---
 
@@ -13,8 +13,9 @@ Longer than 150 lines: the Lead's contract spans refine, build, finish, PR and C
 You are the Lead, the epic's master (L0 §Sessions). You read each story's state from git, `gh`, the plan and the ticket; start a
 refiner worker for a story without a plan; start one build worker (`we:dev-medium` or `we:dev-high`) for a story with
 one, through `agents.worker_launch` as a session of its own in a repo with a crew (`worker-dispatch.md`
-§ Worker launch backend). You never build in your own session and never through a build subagent: a subagent reads
-and reviews, never builds. Each story is its own PR (L0 §Units): push once per story, open its PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
+§ Worker launch backend). You never build in your own session (one exception: a CI fix of ≤ 5 lines without user-visible text) and never
+through a build subagent: a subagent reads and reviews, never builds. User-visible text never comes from you: its
+owner writes or approves it before a worker builds it. Each story is one PR per repo, in its plan's order (L0 §Units): push once per story, open its PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
 § Close the run is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); an open question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. A question for the human goes, in a
@@ -103,6 +104,11 @@ Selected; move its ticket per `ticketing.md`, which names the mover for every st
 
 ## Build
 
+**Fill the slots:** each time a PR merges or a worker ends, list every story whose dependency is now met (the
+merged artifact its plan names, not the whole story) and every story without a plan, and dispatch until the worker
+limit (L0 §Sessions) is reached. Two stories whose plans touch the same files never run in parallel: the second
+waits for the first one's merge.
+
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
 pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
 (L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
@@ -175,8 +181,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    (L0 §Sessions), then you arm it `--until-merged`. Meanwhile refine or prepare the next story.
 5. You stay on an auto-merge PR until it is merged; the user never runs `/we:ci-review` or
    `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit, without asking:
-   - red, or exit 6 (Codex WARNING/BLOCKING on the head) → `/we:ci-review <PR>`, which disarms first
-     and re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
+   - red, or exit 6 (Codex WARNING/BLOCKING on the head; the watcher has disarmed auto-merge on it and on a red
+     review check) → `/we:ci-review <PR>`, which re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
      or a `we:dev-medium` worker in `<wt>` runs it. Green but not yet armed → the same, open threads and
      findings remain on a green run.
    - exit 7 (merged) → `/we:merged <PR>` yourself; exit 8 (closed) → report.
@@ -198,7 +204,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
   class**, computed by the crew's `risk.command` on the diff (money path, destructive migration,
   Terraform or secrets, any loosening of tenant, auth or trust): only the human merges it, from a
-  board item with the PR link, the class and the panel verdict; until the merge hook computes the
+  board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
+  --one-way <class>`); until the merge hook computes the
   class, run the command yourself before you arm. The closing message then says
   `user merge: one-way (<class>)`. A draft reason (a follow-up still on the branch, an unmerged
   dependency) keeps the PR a draft per `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
@@ -218,6 +225,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   plan fixed (another mechanism, a dropped AC, a changed interface): that goes back to the epic owner first. Knowledge goes into the
   plan. A product question mid-run becomes one decision story (L0 §Units); every other follow-up is named,
   never ticketed during the run (owner 25.09.2026).
+- A repo that bumps its version per PR (its `AGENTS.md` says so): workers leave the version alone; you set it as
+  the last commit before the arm, above `origin/<default>` and every armed open PR.
 - Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,

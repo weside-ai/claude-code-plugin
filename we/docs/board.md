@@ -205,6 +205,7 @@ relative path count from the home folder). Without the file the pane says so and
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
+| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `merge by hand (<class>): <url>` instead of **Accept**, and `board.py close-merged` drops the question once the PR is merged or closed |
 | `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
@@ -344,6 +345,12 @@ the coordinator owns the queue (answers, re-routing). The call is
 `board.py ask --session <asker> --key <KEY> --key-title "<title>" --ask "<question>"
 --recommendation "<recommendation>" --cause <cause>`. A missing or blank field, a key outside the
 crew's `naming.key` or a cause outside the six is refused, one line each, before anything runs.
+A `merge-go` question also needs `--pr <ref>` (a URL, `<owner>/<repo>#<n>` or a number) on a PR
+`gh pr view` reads as `OPEN`; a merged or closed one is refused before the reader, so no question
+asks about a merge that already happened. `--one-way <class>` (merge-go only) marks a one-way PR:
+the owner merges it by hand, so the card offers the link and no **Accept**. `board.py close-merged`
+(also run by `bundle` and `/we:merged`) removes every open merge question whose PR
+merged or closed and logs one `closed` line each in `board-questions.jsonl`.
 Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of
 `templates/cold-reader.md`) in an empty directory, with no tools, no MCP server, no settings files, hooks
 off, no session file and the global login, given only the question, the recommendation, the title
@@ -360,7 +367,7 @@ answer) posts nothing and exits 1 with `reader-error: <cause>`.
 
 Every `ask` past the field check appends one line to `board-questions.jsonl`:
 `{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
-`outcome` `posted` (only then `id`), `returned` or `reader-error`, and `reader` the reader's raw
+`outcome` `posted` (only then `id`), `returned`, `reader-error` or `closed` (`close-merged`), and `reader` the reader's raw
 `decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
 chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.

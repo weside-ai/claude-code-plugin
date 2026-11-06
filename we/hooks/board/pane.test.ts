@@ -163,7 +163,7 @@ test('before /board only the deliverer reads the board, once; the pane re-reads 
 })
 
 // A fake home: board.json, and board-answers.jsonl once answer.py appended to it.
-function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }) {
+function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }, board = BOARD) {
   const answersPath = '/home/me/.claude/we-state/board-answers.jsonl'
   let lines = ''
   let mtimeMs = 1
@@ -172,7 +172,7 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
   on('env.get', () => ({ value: '/home/me' }))
   on('fs.exists', (_$, e) => ({ value: String((e as { path?: unknown }).path) !== answersPath || lines !== '' }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs, isLink: false } }))
-  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path) === answersPath ? lines : BOARD }))
+  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path) === answersPath ? lines : board }))
   on('session.id', () => ({ value: self.sessionId }))
   on('process.run', (_$, e) => {
     if (String(e.argv[2]).endsWith('/answer.py')) {
@@ -223,6 +223,23 @@ test('Accept in the orchestrator session appends one line, sends nothing itself 
   await clock.settle()
   expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ more info asked/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a one-way merge question shows the PR link to merge by hand and no Accept', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const url = 'https://github.com/o/r/pull/5'
+  const file = JSON.parse(BOARD)
+  file.owner_queue[0] = { ...file.owner_queue[0], cause: 'merge-go', pr_url: url, one_way: 'money' }
+  answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' }, JSON.stringify(file))
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ key: 'accept-Q1' })).toBeUndefined()
+  expect(await ui.find({ key: 'deny-Q1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: `merge by hand (money): ${url}` })).toBeDefined()
   await ui.unmount()
 })
 
