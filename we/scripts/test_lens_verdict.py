@@ -502,3 +502,14 @@ def test_the_cli_runs_isolated(repo):
     )
     assert out.returncode == 0, out.stderr
     assert len(json.loads(out.stdout)["entries"]) == 3
+
+
+def test_plan_without_a_crew_file_uses_the_generic_lenses(repo):
+    """A repo without a crew (the plugin's users outside a crew) gets the default panel with the
+    agents' generic questions instead of a crash on the empty crew."""
+    (repo / ".weside" / "crew.json").unlink()
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    shown = json.loads(out)
+    assert [e["lens"] for e in shown["entries"]] == ["product", "architecture", "acceptance"]
+    assert all(e["agent"].startswith("we:lens-") for e in shown["entries"])
