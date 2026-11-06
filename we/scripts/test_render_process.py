@@ -565,13 +565,14 @@ def test_serves_counts_the_reserve(tmp_path, monkeypatch):
 
 
 SECURITY = HERE / "fixtures" / "crew-v2-security.json"
-# one line: on call (woken, not running) and the signature a `trust-loosening` board item carries
-SECURITY_LINE = (
-    "  - {security} owns its label, runs on call and signs each `trust-loosening` item."
+# one line: on call (woken, not running); a worker with its card signs a `trust-loosening` item
+SECURITY_LINE = "  - {security} owns its label, runs on call; a worker with its card signs `trust-loosening` items."
+BOUND_SECURITY_LINE = (
+    "  - Bo owns its label, runs on call; a worker with its card signs `trust-loosening` items."
 )
-BOUND_SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
 TRUST_LINE = (
-    "- On a `trust-loosening` diff: the panel, then {security}'s signature, then {human} merges."
+    "- On a `trust-loosening` diff: the panel, then a fresh worker with {security}'s card signs, "
+    "then {human} merges."
 )
 
 
@@ -638,8 +639,8 @@ def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
     assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
     with_owner = rp.render_card(bound(), "master")
     assert (
-        "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
-        in with_owner
+        "- On a `trust-loosening` diff: the panel, then a fresh worker with Bo's card signs, "
+        "then Hal merges." in with_owner
     )
     assert "trust-loosening" not in rp.render_card(generic(), "master")
 
@@ -652,7 +653,10 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
         "The security check runs in the T2 panel and you are its keeper",
         "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
         "keep its question file current and sample every 5th verdict post hoc.",
-        "Sign a `trust-loosening` diff after the panel and before Hal merges it",
+        "A `trust-loosening` diff is signed after the panel and before Hal merges it by a fresh "
+        "worker its master starts with this card",
+        "the card version (`worker-dispatch.md` § Card worker). A case without precedent it "
+        "escalates to you undecided",
     ):
         assert phrase in card, phrase
 
