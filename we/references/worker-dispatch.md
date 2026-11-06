@@ -65,10 +65,7 @@ master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backen
 - A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
   workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
   backend itself, the master checks the setting before the first dispatch and asks the coordinator
-  for a template when it is unset. One opt-in exception: a crew with `launch.subagent_fallback: true`
-  lets the master start `Agent(we:dev-*)` when the template's command is not on the host's `PATH`
-  (a colleague's machine without the launcher); default `false`, then the master stops and names
-  the missing launcher.
+  for a template when it is unset.
 - `"subagent"` (the default when unset), only in a repo without a crew: the `Agent` call of
   § Choosing the worker. A subagent bills the account of the session that calls it.
 - A command template: each worker is a session of its own, billed to the login the command starts

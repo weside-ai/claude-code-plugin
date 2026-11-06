@@ -268,13 +268,14 @@ class MaterializeOnStartTest(unittest.TestCase):
         out = self.run_hook(hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)})
         self.assertIn("deniedMcpServers", out["systemMessage"])
 
-    def test_the_deny_in_settings_local_counts(self):
+    def test_a_deny_only_in_settings_local_still_warns(self):
+        """The local file holds on one machine; teammates' clones lack it."""
         core, _skill = self.crew_workspace("x", deny_mcp=False)
         (core / ".claude").mkdir()
         denied = {"deniedMcpServers": [{"serverName": "plugin:we:weside-mcp"}]}
         (core / ".claude" / "settings.local.json").write_text(json.dumps(denied))
-        hook_input = {"session_id": "s1", "source": "startup", "cwd": str(core)}
-        self.assertIsNone(self.run_hook(hook_input=hook_input))
+        out = self.run_hook(hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)})
+        self.assertIn("deniedMcpServers", out["systemMessage"])
 
     def test_no_mcp_warning_with_an_account_with_the_deny_or_without_a_crew(self):
         core, _skill = self.crew_workspace("x", account=True, deny_mcp=False)

@@ -161,16 +161,17 @@ def mcp_warning(cwd: str) -> str | None:
         return None
     root = _project_root(cwd) or crew_file.parent.parent
     settings = root / ".claude" / "settings.json"
-    for name in ("settings.json", "settings.local.json"):
-        try:
-            denied = json.loads((root / ".claude" / name).read_text(encoding="utf-8"))
-            denied = denied.get("deniedMcpServers") if isinstance(denied, dict) else None
-        except (OSError, ValueError):
-            denied = None
-        if isinstance(denied, list) and any(
-            isinstance(d, dict) and d.get("serverName") == MCP_SERVER for d in denied
-        ):
-            return None
+    # Only the tracked file counts: a deny in `settings.local.json` holds on one machine and would
+    # hide the warning from the teammates whose clone lacks it.
+    try:
+        denied = json.loads(settings.read_text(encoding="utf-8"))
+        denied = denied.get("deniedMcpServers") if isinstance(denied, dict) else None
+    except (OSError, ValueError):
+        denied = None
+    if isinstance(denied, list) and any(
+        isinstance(d, dict) and d.get("serverName") == MCP_SERVER for d in denied
+    ):
+        return None
     return MCP_WARNING.replace("{settings}", str(settings))
 
 
