@@ -26,7 +26,8 @@ Refusals, in this order (the first one wins):
      (`references/worker-dispatch.md` § Dev-only worker contract). A worker is a subagent
      (`agent_id` in the payload) or a process worker (the marker of `scripts/worker_launch.py`).
   2. Freeze: while `freeze.json` stands beside the board file (`scripts/board_freeze.py`), every
-     merge and arm is refused, naming its reason; an unreadable flag counts as standing.
+     merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
+     reason; an unreadable flag counts as standing.
   3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; the owner (`human.name` in the
      crew) merges it by hand, whatever a command or a chat quote says.
   4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
@@ -61,8 +62,9 @@ with the reason. Where the command starts in a checkout that uses rules (a crew 
 checkout's (`-R`, a URL selector, an origin that is no plain github.com URL) and a `cd` the hook
 cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded) refuse too; without rules
 those merges go on unclassed, as before the class brake. The freeze flag counts beside the board
-files of `board_freeze.watched_board_files`: the default and the crew's `board.file`, a relative
-one resolved against the crew file's directory. Any exception while checking a
+file of `board_freeze.watched_board_files` (the crew's `board.file`, else the default) and only
+for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
+count as covered). Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
 from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
 short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -657,16 +659,19 @@ def _human(root: str) -> str:
     return name.strip() if isinstance(name, str) and name.strip() else "The owner"
 
 
-def _freeze_refusal(root: str | None) -> str | None:
+def _freeze_refusal(root: str | None, slug: str | None = None) -> str | None:
+    """The freeze refusal for a merge in repo `slug`, or None. A flag counts only for the repos
+    it names (`board_freeze.covers`; fail closed on `*`, no list or an unknown slug)."""
     flag = None
     for board_file in _board_files(root):
         try:
-            flag = board_freeze.read_flag(board_freeze.flag_path(board_file))
+            found = board_freeze.read_flag(board_freeze.flag_path(board_file))
         except board_freeze.FreezeError as exc:
             return (
                 f"Merges are frozen: the freeze flag is unreadable ({exc}); it counts as standing."
             )
-        if flag is not None:
+        if found is not None and board_freeze.covers(found, slug):
+            flag = found
             break
     if flag is None:
         return None
@@ -780,7 +785,8 @@ def _call_refusal(
         )
     cwd, cwd_known = _cwd_at(argv, command_cwd, call.at)
     root = vg._repo_root(cwd) if cwd_known else None
-    frozen = _freeze_refusal(root)
+    slug = _pr_target(call) or (_local_slug(root) if root else None)
+    frozen = _freeze_refusal(root, slug)
     if frozen:
         return frozen
     refusal, go_on = _class_refusal(root, call, cwd, cwd_known, command_cwd)

@@ -309,14 +309,18 @@ the question stays open on the pane.
 
 ## The freeze flag
 
-`board.py freeze --reason "<why>" [--repo OWNER/REPO ...]` stops every merge: it writes
+`board.py freeze --reason "<why>" [--repo OWNER/REPO ...]` stops merges: it writes
 `freeze.json` beside the board file (`since`, `by`, `reason`, `repos`, `disarmed`,
-`not_disarmed`), then disarms every open PR with auto-merge armed in the named repos (default: the
-current directory's) and records each one. The hook reads the flag only beside the default board
-and the crew's `board.file` (a relative one resolves against the crew file's directory), so
-`freeze` and `unfreeze` refuse any other `--board`, naming the path. While the file stands, the merge hook
-(`hooks/automerge_gate.py`) refuses every merge and arm in every repo, naming the reason; a file
-that does not parse counts as standing. `board.py unfreeze` removes it and prints the disarmed PRs
+`not_disarmed`), then disarms every open PR with auto-merge armed in the named repos and records
+each one. Without `--repo` the flag names `*` (every repo) and disarms the current directory's repo:
+a freeze from the wrong checkout must not miss the repo it is for. The hook reads the flag only
+beside the crew's `board.file` when the crew names one (a relative one resolves against the crew
+file's directory), else beside the default board, so `freeze` and `unfreeze` refuse any other
+`--board`, naming the path. `*` means every repo of the crews reading that board, not every crew:
+a crew with a `board.file` of its own does not see a freeze on the default board. While the file
+stands, the merge hook (`hooks/automerge_gate.py`) refuses every merge and arm in the repos it
+names, naming the reason; a file that does not parse, a flag without `repos` and a merge whose repo
+the hook cannot name count as frozen. `board.py unfreeze` removes it and prints the disarmed PRs
 to re-arm by hand through the hook; it re-arms none itself, so no PR comes back unchecked. The
 flag is a brake against slips, not a boundary: any session can delete it
 (`scripts/board_freeze.py`).

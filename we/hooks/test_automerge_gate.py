@@ -948,22 +948,70 @@ def test_a_failed_rules_fetch_refuses(classed: dict, monkeypatch) -> None:
     assert reason is not None and "`git fetch origin main` failed" in reason
 
 
-def test_the_default_freeze_counts_beside_a_crew_board(
+def _crew_board(repo: Path, board_file: Path) -> None:
+    (repo / ".weside").mkdir(exist_ok=True)
+    (repo / ".weside" / "crew.json").write_text(
+        json.dumps({"version": 2, "roles": {}, "members": {}, "board": {"file": str(board_file)}})
+    )
+
+
+def test_the_default_freeze_does_not_reach_a_crew_with_its_own_board(
     repo: Path, monkeypatch, _isolated_state: Path, tmp_path_factory
 ) -> None:
-    _freeze(_isolated_state)
+    """WA-2930 K1: a crew with its own `board.file` is a separate team; a freeze on the default
+    board, `*` included, does not stop it. Its own board's freeze does."""
+    flag = {"since": "s", "by": "ops", "reason": "incident on main", "repos": ["*"]}
+    _freeze(_isolated_state, json.dumps(flag))
     other = tmp_path_factory.mktemp("board")
+    _crew_board(repo, other / "board.json")
+    (repo / ".weside" / "risk-paths").write_text("[t2]\npath docs/**\n")
+    main = _commit(repo, {}, "crew + rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"README.md": "y\n"}, "pr")
+    assert refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch) is None
+    _freeze(other, json.dumps(flag))
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+@pytest.mark.parametrize(
+    ("repos", "frozen"),
+    [
+        (["o/r"], True),
+        (["O/R"], True),
+        (["weside-ai/weside-core"], False),
+        (["*"], True),
+        ([], True),
+        (None, True),
+    ],
+)
+def test_a_freeze_counts_only_for_the_repos_it_names(
+    repo: Path, monkeypatch, _isolated_state: Path, repos, frozen: bool
+) -> None:
+    """WA-2930 AC3: `repos` scopes the flag; `*`, an empty or missing list fail closed."""
+    flag = {"since": "s", "by": "ops", "reason": "incident on main"}
+    if repos is not None:
+        flag["repos"] = repos
+    _freeze(_isolated_state, json.dumps(flag))
+    reason = refuse(repo, MERGE, FakeGh([run()]), monkeypatch)
+    assert (reason is not None and "Merges are frozen" in reason) is frozen, reason
+
+
+def test_a_freeze_on_another_repo_still_refuses_a_target_it_names(
+    repo: Path, monkeypatch, _isolated_state: Path
+) -> None:
+    flag = {"since": "s", "by": "ops", "reason": "core incident", "repos": ["other/repo"]}
+    _freeze(_isolated_state, json.dumps(flag))
+    reason = refuse(repo, "gh pr merge 7 -R other/repo --squash", FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
+def test_a_crew_without_its_own_board_reads_the_default_board(
+    repo: Path, monkeypatch, _isolated_state: Path
+) -> None:
     (repo / ".weside").mkdir()
-    (repo / ".weside" / "crew.json").write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "roles": {},
-                "members": {},
-                "board": {"file": str(other / "board.json")},
-            }
-        )
-    )
+    (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 2}))
+    _freeze(_isolated_state)
     reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
     assert reason is not None and "Merges are frozen" in reason
 

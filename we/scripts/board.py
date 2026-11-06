@@ -122,9 +122,10 @@ staging  reads the booking and acceptance issues into board.json's `staging` blo
          `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
 
 freeze   writes the freeze flag `freeze.json` beside the board file (only one the merge hook reads:
-         the default or the crew's `board.file`), then disarms every open PR with
-         auto-merge armed in the named repos (default: the current directory's repo) and prints
-         the flag; while it stands the merge hook refuses every merge and arm (scripts/board_freeze.py).
+         the crew's `board.file`, else the default), then disarms every open PR with
+         auto-merge armed in the named repos (without --repo the flag names `*`, every repo, and
+         the current directory's repo is disarmed) and prints the flag; while it stands the merge
+         hook refuses every merge and arm in those repos (scripts/board_freeze.py).
 unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
@@ -851,13 +852,13 @@ def cmd_freeze(state, args, _crew, _now):
     if why:
         print(why, file=sys.stderr)
         return 1
-    repos = args.repo or [r for r in [_current_repo()] if r]
-    if not repos:
-        print("board.py freeze: name a repo with --repo; none found here", file=sys.stderr)
-        return 1
+    # Without --repo the freeze covers every repo (`*`): a freeze from the wrong checkout must not
+    # silently miss the repo it is for (Kiska, WA-2930); it disarms the current repo's PRs.
+    repos = args.repo or ["*"]
+    disarm = None if args.repo else [r for r in [_current_repo()] if r]
     by = args.by or os.environ.get("WESIDE_COMPANION") or os.environ.get("USER") or "unknown"
     try:
-        flag = bf.freeze(bf.flag_path(state.board_path), args.reason, repos, by)
+        flag = bf.freeze(bf.flag_path(state.board_path), args.reason, repos, by, disarm=disarm)
     except bf.FreezeError as exc:
         print(f"board.py freeze: {exc}", file=sys.stderr)
         return 1

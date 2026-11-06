@@ -237,7 +237,7 @@ class TestFreezeTarget:
         )
         flag_file = work / ".weside" / "state" / "freeze.json"
         assert json.loads(flag_file.read_text())["reason"] == "r"
-        assert board_freeze.watched_board_files(work / "sub", board.DEFAULT_BOARD)[-1] == target
+        assert board_freeze.watched_board_files(work / "sub", board.DEFAULT_BOARD) == [target]
 
 
 @pytest.mark.usefixtures("fake_gh", "watched")
@@ -249,9 +249,21 @@ class TestFreezeVerbs:
         flag = json.loads((state_dir / "freeze.json").read_text())
         assert flag["not_disarmed"] == [{"repo": "o/broken", "why": "listing the open PRs failed"}]
 
-    def test_the_default_repo_is_the_current_one(self, state_dir):
+    def test_without_repo_the_freeze_covers_every_repo_and_disarms_the_current(self, state_dir):
+        """Kiska 06.11. (WA-2930): a freeze without --repo, run from the workspace checkout,
+        must still stop a merge in core; it disarms the current repo's armed PRs."""
         assert run(state_dir, "freeze", "--reason", "r") == 0
-        assert json.loads((state_dir / "freeze.json").read_text())["repos"] == ["o/here"]
+        flag = json.loads((state_dir / "freeze.json").read_text())
+        assert flag["repos"] == ["*"]
+        assert {"repo": "o/here", "number": 5} in flag["disarmed"]
+        assert board_freeze.covers(flag, "weside-ai/weside-core")
+
+    def test_an_explicit_repo_narrows_the_freeze(self, state_dir):
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "weside-ai/weside") == 0
+        flag = json.loads((state_dir / "freeze.json").read_text())
+        assert flag["repos"] == ["weside-ai/weside"]
+        assert not board_freeze.covers(flag, "weside-ai/weside-core")
+        assert board_freeze.covers(flag, "weside-ai/weside")
 
     def test_a_blank_reason_is_refused(self, state_dir, capsys):
         assert run(state_dir, "freeze", "--reason", " ", "--repo", "o/r") == 1
