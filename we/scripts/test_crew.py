@@ -41,6 +41,7 @@ def workspace(tmp_path: Path, crew_data: dict | None = None) -> tuple[Path, Path
     (core / ".weside" / "crew.json").write_text(
         json.dumps(CREW if crew_data is None else crew_data)
     )
+    (core / ".weside" / "risk-paths").write_text("[t2]\npath docs/**\n")
     (biz / ".weside" / "config.json").write_text(json.dumps({"crew": "../core/.weside/crew.json"}))
     return core, biz
 
@@ -360,6 +361,18 @@ def test_a_clean_crew_validates_strict_and_carries_no_unknown_keys(tmp_path):
         "",
     )
     assert json.loads(run(core, "show").stdout)["unknown_keys"] == []
+
+
+def test_validate_warns_when_the_crew_has_no_risk_rules(tmp_path):
+    """The merge hook refuses a crew repo without rules; validate says so first."""
+    core, _ = workspace(tmp_path)
+    rules = core / ".weside" / "risk-paths"
+    rules.unlink(missing_ok=True)
+    out = run(core, "validate")
+    assert out.returncode == 0
+    assert out.stderr.startswith("warning: no risk rules: the crew sets no `risk.command`")
+    rules.write_text("# no brake, on purpose\n")
+    assert run(core, "validate").stderr == ""
 
 
 def test_a_known_key_beside_an_unknown_one_is_still_checked(tmp_path):

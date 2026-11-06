@@ -237,7 +237,7 @@ class TestFreezeTarget:
         )
         flag_file = work / ".weside" / "state" / "freeze.json"
         assert json.loads(flag_file.read_text())["reason"] == "r"
-        assert board_freeze.watched_board_files(work / "sub", board.DEFAULT_BOARD)[-1] == target
+        assert board_freeze.watched_board_files(work / "sub", board.DEFAULT_BOARD) == [target]
 
 
 @pytest.mark.usefixtures("fake_gh", "watched")
@@ -249,9 +249,32 @@ class TestFreezeVerbs:
         flag = json.loads((state_dir / "freeze.json").read_text())
         assert flag["not_disarmed"] == [{"repo": "o/broken", "why": "listing the open PRs failed"}]
 
-    def test_the_default_repo_is_the_current_one(self, state_dir):
+    def test_without_repo_the_freeze_covers_every_repo_and_disarms_the_current(self, state_dir):
+        """owner 06.11.2026: a freeze without --repo, run from the workspace checkout,
+        must still stop a merge in core; it disarms the current repo's armed PRs."""
         assert run(state_dir, "freeze", "--reason", "r") == 0
-        assert json.loads((state_dir / "freeze.json").read_text())["repos"] == ["o/here"]
+        flag = json.loads((state_dir / "freeze.json").read_text())
+        assert flag["repos"] == ["*"]
+        assert {"repo": "o/here", "number": 5} in flag["disarmed"]
+        assert board_freeze.covers(flag, "acme/core")
+
+    def test_a_repo_that_names_no_repo_is_refused(self, state_dir, capsys):
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "core") == 1
+        assert "--repo takes OWNER/REPO or '*'" in capsys.readouterr().err
+        assert not (state_dir / "freeze.json").exists()
+
+    def test_a_url_repo_is_stored_as_its_slug(self, state_dir):
+        assert (
+            run(state_dir, "freeze", "--reason", "r", "--repo", "https://github.com/O/R.git") == 0
+        )
+        assert json.loads((state_dir / "freeze.json").read_text())["repos"] == ["o/r"]
+
+    def test_an_explicit_repo_narrows_the_freeze(self, state_dir):
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "acme/workspace") == 0
+        flag = json.loads((state_dir / "freeze.json").read_text())
+        assert flag["repos"] == ["acme/workspace"] and flag["scoped"] is True
+        assert not board_freeze.covers(flag, "acme/core")
+        assert board_freeze.covers(flag, "acme/workspace")
 
     def test_a_blank_reason_is_refused(self, state_dir, capsys):
         assert run(state_dir, "freeze", "--reason", " ", "--repo", "o/r") == 1
@@ -2662,3 +2685,13 @@ class TestWaitsLog:
         with pytest.raises(OSError):
             go(crewless, "set", "waiting_on=")
         assert waits(crewless) == []
+
+
+def test_a_star_freeze_without_a_repo_here_records_what_it_could_not_disarm(tmp_path):
+    flag = board_freeze.freeze(
+        tmp_path / "freeze.json", "r", ["*"], "k", gh=lambda _args: None, disarm=[]
+    )
+    assert flag["repos"] == ["*"]
+    assert flag["not_disarmed"] == [
+        {"repo": "*", "why": "no repo here to disarm; armed PRs elsewhere still auto-merge"}
+    ]

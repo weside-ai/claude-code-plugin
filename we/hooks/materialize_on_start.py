@@ -36,6 +36,13 @@ A crew ``crew.py`` refuses (``CrewError``) is never silence for a pin: its conte
 the line ``<labels.crew_unreadable>: <reason> — load the identity with /we:materialize``
 (``render_process.crew_notice`` over ``crew.fallback``), on every source, bound or not.
 
+MCP guard: in a repo whose crew has no ``weside_account: true``, the plugin's
+``weside-mcp`` server must not connect. The one per-repo switch that keeps it from connecting is the
+project's tracked ``.claude/settings.json`` entry ``deniedMcpServers: [{"serverName":
+"plugin:we:weside-mcp"}]`` (measured 06.11.2026 on Claude Code 2.1.319; ``disabledMcp*`` keys, a
+failing ``headersHelper`` and ``permissions.deny`` do not stop the connection). ``/we:setup`` writes
+it; on ``startup`` and ``resume`` this hook prints one ``systemMessage`` line when it is missing.
+
 Wake: a session already bound to its pin starts its wake poller here on ``startup`` and
 ``resume`` (``scripts/wake_poller.py``; a fresh session starts it at its bind).
 """
@@ -45,6 +52,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -132,6 +140,68 @@ def weside_backed(cwd: str) -> bool:
     except crew.CrewError:
         return True
     return members is None or members.get("weside_account") is True
+
+
+MCP_SERVER = "plugin:we:weside-mcp"
+MCP_ENTRY = '"deniedMcpServers": [{"serverName": "plugin:we:weside-mcp"}]'
+MCP_WARNING = (
+    "we: this repo's crew has no weside account, but {settings} does not deny the weside MCP: add "
+    f"{MCP_ENTRY} there (`/we:setup` writes it), or the server keeps asking for a sign-in."
+)
+
+
+def mcp_warning(cwd: str) -> str | None:
+    """The warning line when the crew here has no weside account and the project's tracked
+    settings do not deny the weside MCP; None otherwise (no crew, an account, a refused crew)."""
+    try:
+        crew_file, members = crew.find_and_load(cwd)
+    except crew.CrewError:
+        return None
+    if crew_file is None or members is None or members.get("weside_account") is True:
+        return None
+    root = _project_root(cwd) or crew_file.parent.parent
+    settings = root / ".claude" / "settings.json"
+    # Only the tracked file counts: a deny in `settings.local.json` holds on one machine and would
+    # hide the warning from the teammates whose clone lacks it.
+    try:
+        denied = json.loads(settings.read_text(encoding="utf-8"))
+        denied = denied.get("deniedMcpServers") if isinstance(denied, dict) else None
+    except (OSError, ValueError):
+        denied = None
+    if isinstance(denied, list) and any(
+        isinstance(d, dict) and d.get("serverName") == MCP_SERVER for d in denied
+    ):
+        return None
+    return MCP_WARNING.replace("{settings}", str(settings))
+
+
+def _project_root(cwd: str) -> Path | None:
+    """The git top level of ``cwd`` (where the project's ``.claude/`` lives), or None."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+
+
+def with_mcp_warning(answer: dict | None, hook_input: dict) -> dict | None:
+    """``answer`` plus the MCP guard's ``systemMessage`` on ``startup``/``resume``."""
+    if hook_input.get("source") not in ("startup", "resume") or hook_input.get("agent_type"):
+        return answer
+    line = mcp_warning(hook_input.get("cwd") or os.getcwd())
+    if line is None:
+        return answer
+    answer = dict(answer or {})
+    answer["systemMessage"] = (
+        f"{answer['systemMessage']}\n{line}" if answer.get("systemMessage") else line
+    )
+    return answer
 
 
 def refused_line(cwd: str) -> str | None:
@@ -233,7 +303,7 @@ def wake_companion(hook_input: dict, environ: dict | None = None) -> str | None:
 
 if __name__ == "__main__":
     hook_input = read_input()
-    answer = output(hook_input)
+    answer = with_mcp_warning(output(hook_input), hook_input)
     if answer is not None:
         print(json.dumps(answer))
     companion = wake_companion(hook_input)
