@@ -68,7 +68,7 @@ def test_every_role_renders_within_the_budget_with_crew_values():
         assert len(text) <= rp.BUDGET, role
         assert "{" not in text.replace("{name}", ""), role
     full = rp.render_l0(crew)
-    assert "Ada: the WHAT" in full and "Otto adds Bo as second reviewer" in full
+    assert "Ada: the WHAT" in full and "Otto adds a worker with Bo's card to review" in full
     assert "Specialists woken on demand: Bo (security), Lex (legal)." in full
     assert "`ASK · <KEY> <title> · <question without context> · Advice: …`" in full
     assert "`done-for-now` before parking" in full
