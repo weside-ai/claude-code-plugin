@@ -7,7 +7,7 @@ description: How the Lead picks and dispatches a dev worker, the dev-only worker
 
 ## Contents
 
-Choosing the worker · Worker launch backend · Dev-only worker contract · Finish sequence · Lead checks around a worker
+Choosing the worker · Worker launch backend · Dev-only worker contract · Finish sequence · Card worker · Lead checks around a worker
 (premise check, code graph in the brief, watchdog, lane merge) · Report.
 
 The Lead (`/we:master`) dispatches; the worker (`/we:develop`) obeys the contract below. A
@@ -172,6 +172,21 @@ Before starting a server, check who owns the single-owner ports (`ss -ltnp`, the
 is yours; a live cwd in another worktree belongs to another session, and you ask instead of
 killing. PPID 1 is normal for a detached dev server and proves nothing. Stop your server by PID,
 children included, the moment verification ends.
+
+## Card worker
+
+A check an owner's card assigns to a fresh worker (a `trust-loosening` signature, a seam or migration check, an
+acceptance walk; L0 § Against the waterfall) runs as a read-only worker the master starts like any other
+(§ Worker launch backend). Its brief carries:
+
+- **The card:** the output of `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/render_process.py --role <role>` in the repo, pasted
+  verbatim; the worker reads no other copy.
+- **The card version:** `we <version>` from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`. A card changes only
+  with a plugin release, so the version names the revision the verdict was judged by; the verdict quotes it.
+- **The case:** the diff or the screen, the relevant ADRs, and precedent PRs with their verdicts.
+- **The exit:** a case without precedent is reported to the owner undecided; the worker never decides it.
+
+The verdict goes on the PR or the board item, never into a ticket the worker files.
 
 ## Lead checks around a worker
 

@@ -655,7 +655,8 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
         "keep its question file current and sample every 5th verdict post hoc.",
         "A `trust-loosening` diff is signed after the panel and before Hal merges it by a fresh "
         "worker its master starts with this card",
-        "this card's version. A case without precedent it escalates to you undecided",
+        "the card version (`worker-dispatch.md` § Card worker). A case without precedent it "
+        "escalates to you undecided",
     ):
         assert phrase in card, phrase
 

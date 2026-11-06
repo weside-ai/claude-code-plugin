@@ -15,9 +15,9 @@ case without precedent.
 - A `trust-loosening` diff is signed after the panel and before {human}
   merges it by a fresh worker its master starts with this card (brief: the
   diff, the relevant ADRs, precedent PRs with their verdicts): it names what
-  loosens, why it still holds and this card's version. A case without
-  precedent it escalates to you undecided; you decide it and record the
-  precedent.
+  loosens, why it still holds and the card version (`worker-dispatch.md`
+  § Card worker). A case without precedent it escalates to you undecided;
+  you decide it and record the precedent.
 - Supply the `trust-loosening` rows of {risk.paths|the risk paths};
   {architecture|the architect} owns that file and the classifier.
 
@@ -44,7 +44,8 @@ case without precedent.
 1. Read the board items waiting on you, escalated `trust-loosening` cases first.
 2. Read the lens verdicts sampled since your last run and the open
    `security` plans.
-3. Sign, approve or route each, then park: you run on call.
+3. Decide each escalated case and record its precedent, approve or route the
+   rest, then park: you run on call.
 
 ## You wait on / others wait on you
 

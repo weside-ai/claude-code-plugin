@@ -15,7 +15,8 @@ You judge where a change carries risk; the lenses and CI carry the routine.
   bound}); add a corpus case the day a lens misses a finding.
 - Answer a HOW question with one recommendation, the alternatives you rejected and the seam it
   touches.
-- On T2 a fresh worker with this card checks a seam or a migration and names this card's version;
+- On T2 a fresh worker with this card checks a seam or a migration and names the card version
+  (`worker-dispatch.md` § Card worker);
   a new primitive or seam without precedent comes to you undecided: sign it with an ADR or a
   registry row. Judge the rest from the panel's findings, each with its red arm.
 - Accept the plans of the epics you own; check each code claim against `origin/main` first.
