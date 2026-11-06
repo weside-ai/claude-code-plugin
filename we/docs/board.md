@@ -306,6 +306,20 @@ no answer line, so nothing is carried again, one `duplicate-answer` line in `boa
 and exit 0 with `<id> is closed by <kind>; recorded as a duplicate, nothing runs again`. `--board FILE` names another board file. Without that line
 the question stays open on the pane.
 
+## The freeze flag
+
+`board.py freeze --reason "<why>" [--repo OWNER/REPO ...]` stops every merge: it writes
+`freeze.json` beside the board file (`since`, `by`, `reason`, `repos`, `disarmed`,
+`not_disarmed`), then disarms every open PR with auto-merge armed in the named repos (default: the
+current directory's) and records each one. The hook reads the flag only beside the default board
+and the crew's `board.file` (a relative one resolves against the crew file's directory), so
+`freeze` and `unfreeze` refuse any other `--board`, naming the path. While the file stands, the merge hook
+(`hooks/automerge_gate.py`) refuses every merge and arm in every repo, naming the reason; a file
+that does not parse counts as standing. `board.py unfreeze` removes it and prints the disarmed PRs
+to re-arm by hand through the hook; it re-arms none itself, so no PR comes back unchecked. The
+flag is a brake against slips, not a boundary: any session can delete it
+(`scripts/board_freeze.py`).
+
 ## Questions and decisions
 
 `board.py` (in the plugin's `scripts/`) writes `board.json` only through one locked writer: an

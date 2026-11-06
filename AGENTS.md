@@ -36,12 +36,14 @@ we/                               plugin root
                                   (own DIRTY PRs), reply-language gate and question gate
                                   (AskUserQuestion while background work runs),
                                   tmux attention (window title white while the session waits, grey at rest),
-                                  PreToolUse verification gate, auto-merge gate (Codex verdict
-                                  on the head first), draft-reason gate and teammate gate
+                                  PreToolUse verification gate, merge gate (every merge form:
+                                  freeze, risk class, T2 panel, Codex verdict on the head),
+                                  draft-reason gate and teammate gate
                                   (no worker panes by default), SubagentStart/Stop timing,
                                   SubagentStop report gate (dev workers), Stop report gate (process
                                   workers, worker_report_gate), InstructionsLoaded + skill-run telemetry
-  scripts/                        crew.py (the one reader of .weside/crew.json), rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
+  scripts/                        crew.py (the one reader of .weside/crew.json), risk_paths.py
+                                  (path-rule classifier over .weside/risk-paths), board_freeze.py, rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
                                   flow_log.py (the flow log's one owner), sampler_age.py (its pulse),

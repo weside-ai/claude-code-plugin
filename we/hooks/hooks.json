@@ -113,7 +113,8 @@
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/automerge_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/automerge_gate.py\"",
+            "timeout": 600
           },
           {
             "type": "command",
