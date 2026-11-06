@@ -311,7 +311,9 @@ the question stays open on the pane.
 `board.py freeze --reason "<why>" [--repo OWNER/REPO ...]` stops every merge: it writes
 `freeze.json` beside the board file (`since`, `by`, `reason`, `repos`, `disarmed`,
 `not_disarmed`), then disarms every open PR with auto-merge armed in the named repos (default: the
-current directory's) and records each one. While the file stands, the merge hook
+current directory's) and records each one. The hook reads the flag only beside the default board
+and the crew's `board.file` (a relative one resolves against the crew file's directory), so
+`freeze` and `unfreeze` refuse any other `--board`, naming the path. While the file stands, the merge hook
 (`hooks/automerge_gate.py`) refuses every merge and arm in every repo, naming the reason; a file
 that does not parse counts as standing. `board.py unfreeze` removes it and prints the disarmed PRs
 to re-arm by hand through the hook; it re-arms none itself, so no PR comes back unchecked. The

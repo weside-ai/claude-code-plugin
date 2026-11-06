@@ -448,7 +448,9 @@ def test_one_way_is_refused_in_every_call_form(classed: dict, monkeypatch, comma
     reason = refuse(classed["repo"], command, fake, monkeypatch)
     assert reason is not None
     assert "`T2 one-way money`: one-way (money)" in reason
-    assert "Ada merges one-way herself" in reason
+    assert "Ada merges one-way PRs by hand" in reason
+    assert "hand over the link and the class" in reason
+    assert "herself" not in reason and " her " not in reason
     assert "PR #7 (https://github.com/o/r/pull/7)" in reason
     assert not any(c[:2] == ["pr", "merge"] for c in fake.calls), fake.calls
 
@@ -523,6 +525,47 @@ def test_a_repo_without_local_checkout_refuses(classed: dict, monkeypatch, comma
     assert reason is not None and "no local checkout of other/repo" in reason
 
 
+FOREIGN = [
+    "gh pr merge 7 -R other/repo --squash",
+    "gh -R other/repo pr merge 7 --squash",
+    "gh pr merge https://github.com/other/repo/pull/7 --squash",
+    "gh api -X PUT repos/other/repo/pulls/7/merge",
+    'cd "$(git rev-parse --show-toplevel)" && gh pr merge 7 --squash',
+]
+
+
+@pytest.mark.parametrize("command", FOREIGN)
+def test_without_rules_a_foreign_target_merges_as_before(
+    repo: Path, monkeypatch, command: str
+) -> None:
+    """No `.weside/risk-paths`, no crew file: the hook classifies nothing, so it refuses no
+    merge for want of a checkout (the plugin's users outside weside)."""
+    assert refuse(repo, command, FakeGh([run()]), monkeypatch) is None
+
+
+def test_without_rules_a_non_github_origin_merges_as_before(repo: Path, monkeypatch) -> None:
+    _git(repo, "remote", "set-url", "origin", "git@git.example.org:o/r.git")
+    reason = refuse(repo, "gh pr merge 7 -R o/r --squash", FakeGh([run()]), monkeypatch)
+    assert reason is None
+
+
+@pytest.mark.parametrize("command", FOREIGN[:4])
+def test_risk_paths_alone_keep_a_foreign_target_refused(
+    repo: Path, monkeypatch, command: str
+) -> None:
+    main = _commit(repo, {".weside/risk-paths": "[money]\npath pay.py\n"}, "rules")
+    _publish_main(repo, main)
+    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "no local checkout of other/repo" in reason
+
+
+def test_a_crew_file_alone_keeps_a_foreign_target_refused(repo: Path, monkeypatch) -> None:
+    (repo / ".weside").mkdir()
+    (repo / ".weside" / "crew.json").write_text(json.dumps({"version": 2}))
+    reason = refuse(repo, "gh pr merge 7 -R other/repo --squash", FakeGh([run()]), monkeypatch)
+    assert reason is not None and "no local checkout of other/repo" in reason
+
+
 def test_the_named_repo_is_its_own_checkout(classed: dict, monkeypatch) -> None:
     monkeypatch.setenv("FAKE_CLASS", "T0")
     fake = FakeGh([run()], head=classed["head"])
@@ -594,7 +637,7 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
     reason = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None
     assert "`T2 one-way brake-change`" in reason
-    assert "The owner merges one-way herself" in reason
+    assert "The owner merges one-way PRs by hand" in reason
 
 
 def test_mains_own_risk_paths_blob_is_preferred(repo: Path, monkeypatch) -> None:
@@ -675,6 +718,21 @@ def test_the_crews_board_file_names_the_state_dir(
     assert reason is not None and "Merges are frozen" in reason
 
 
+def test_a_relative_crew_board_file_resolves_beside_the_crew_file(
+    repo: Path, monkeypatch, tmp_path_factory
+) -> None:
+    (repo / ".weside" / "state").mkdir(parents=True)
+    _freeze(repo / ".weside" / "state")
+    (repo / ".weside" / "crew.json").write_text(
+        json.dumps(
+            {"version": 2, "roles": {}, "members": {}, "board": {"file": "state/board.json"}}
+        )
+    )
+    monkeypatch.chdir(tmp_path_factory.mktemp("elsewhere"))
+    reason = refuse(repo, ARM, FakeGh([run()]), monkeypatch)
+    assert reason is not None and "Merges are frozen" in reason
+
+
 # The T2 panel (lens_verdict.py; faked here).
 
 FAKE_LENS = """
@@ -746,9 +804,9 @@ def test_cd_with_tilde_reaches_the_checkout(classed: dict, monkeypatch, tmp_path
     assert reason is not None and "one-way (money)" in reason
 
 
-def test_a_cd_the_hook_cannot_resolve_refuses(repo: Path, monkeypatch) -> None:
+def test_a_cd_the_hook_cannot_resolve_refuses(classed: dict, monkeypatch) -> None:
     command = 'cd "$(git rev-parse --show-toplevel)" && gh pr merge 7 --squash'
-    reason = refuse(repo, command, FakeGh([run()]), monkeypatch)
+    reason = refuse(classed["repo"], command, FakeGh([run()]), monkeypatch)
     assert reason is not None
     assert "no local checkout of the repository this command runs in" in reason
 

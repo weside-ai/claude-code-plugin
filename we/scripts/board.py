@@ -112,7 +112,8 @@ staging  reads the booking and acceptance issues into board.json's `staging` blo
          line each (`staging: free` without either); an acceptance past the crew's
          `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
 
-freeze   writes the freeze flag `freeze.json` beside the board file, then disarms every open PR with
+freeze   writes the freeze flag `freeze.json` beside the board file (only one the merge hook reads:
+         the default or the crew's `board.file`), then disarms every open PR with
          auto-merge armed in the named repos (default: the current directory's repo) and prints
          the flag; while it stands the merge hook refuses every merge and arm (scripts/board_freeze.py).
 unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
@@ -823,8 +824,24 @@ def _current_repo():
     return out.stdout.strip() if out.returncode == 0 else None
 
 
+def _unwatched(bf, state, verb):
+    """Why `verb` must not touch `state`'s flag (the hook reads none beside it), or None."""
+    target = bf.flag_path(state.board_path)
+    watched = bf.watched_board_files(Path.cwd(), DEFAULT_BOARD)
+    if any(bf.flag_path(w).resolve() == target.resolve() for w in watched):
+        return None
+    return (
+        f"board.py {verb}: the merge hook reads no freeze beside {state.board_path}; it reads "
+        f"beside {', '.join(str(w) for w in watched)}. Drop --board or name one of those."
+    )
+
+
 def cmd_freeze(state, args, _crew, _now):
     bf = _freeze_module()
+    why = _unwatched(bf, state, "freeze")
+    if why:
+        print(why, file=sys.stderr)
+        return 1
     repos = args.repo or [r for r in [_current_repo()] if r]
     if not repos:
         print("board.py freeze: name a repo with --repo; none found here", file=sys.stderr)
@@ -841,6 +858,10 @@ def cmd_freeze(state, args, _crew, _now):
 
 def cmd_unfreeze(state, _args, _crew, _now):
     bf = _freeze_module()
+    why = _unwatched(bf, state, "unfreeze")
+    if why:
+        print(why, file=sys.stderr)
+        return 1
     flag = bf.unfreeze(bf.flag_path(state.board_path))
     if flag is None:
         print("board.py unfreeze: no freeze stands", file=sys.stderr)

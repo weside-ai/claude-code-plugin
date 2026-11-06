@@ -15,6 +15,10 @@ crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.
     so a one-way PR armed before the freeze would come back unchecked.
   * A flag file that exists but does not parse is a standing freeze (`FreezeError`; the hook
     refuses): a torn write must not lift it.
+  * The hook reads a flag only beside the board files `watched_board_files` names: the default
+    board and the crew's `board.file` (a relative one resolved against the crew file's
+    directory). `freeze` and `unfreeze` refuse any other `--board`, so no flag stands where no
+    hook sees it.
 
 A brake against slips, not a boundary: any session can delete the file. The
 boundary is the repository's ruleset and the owner's own merge. Pinned by `test_board.py`
@@ -26,12 +30,17 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import crew
+
 FLAG_NAME = "freeze.json"
+DEFAULT_BOARD = "~/.claude/we-state/board.json"
 GhRunner = Callable[[list], Optional[str]]
 
 
@@ -41,6 +50,22 @@ class FreezeError(Exception):
 
 def flag_path(board_file: str | Path) -> Path:
     return Path(board_file).expanduser().with_name(FLAG_NAME)
+
+
+def watched_board_files(start: str | Path | None, default: str = DEFAULT_BOARD) -> list[Path]:
+    """Every board file the merge hook reads a freeze beside, for a command run in `start`: the
+    default board, then the crew's `board.file` (relative to the crew file's directory). A missing
+    or broken crew file names no second board."""
+    files = [Path(default).expanduser()]
+    try:
+        crew_file, crew_data = crew.find_and_load(start)
+    except crew.CrewError:
+        return files
+    board = (crew_data or {}).get("board")
+    name = board.get("file") if isinstance(board, dict) else None
+    if crew_file is not None and isinstance(name, str) and name.strip():
+        files.append(crew_file.parent / Path(name.strip()).expanduser())
+    return files
 
 
 def read_flag(path: Path) -> dict | None:

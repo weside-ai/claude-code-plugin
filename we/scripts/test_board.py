@@ -184,7 +184,63 @@ def fake_gh(tmp_path, monkeypatch):
     return lambda: [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
 
 
+@pytest.fixture
+def watched(state_dir, tmp_path, monkeypatch):
+    """`state_dir/board.json` is the default board the merge hook reads; the cwd has no crew."""
+    work = tmp_path / "work"
+    (work / ".git").mkdir(parents=True)
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(board, "DEFAULT_BOARD", str(state_dir / "board.json"))
+    return state_dir
+
+
 @pytest.mark.usefixtures("fake_gh")
+class TestFreezeTarget:
+    """`freeze`/`unfreeze` write only where the merge hook reads (`board_freeze.watched_board_files`)."""
+
+    def test_freeze_refuses_a_board_the_hook_does_not_read(
+        self, state_dir, tmp_path, monkeypatch, capsys
+    ):
+        work = tmp_path / "work"
+        (work / ".git").mkdir(parents=True)
+        monkeypatch.chdir(work)
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "o/r") == 1
+        err = capsys.readouterr().err
+        assert f"the merge hook reads no freeze beside {state_dir / 'board.json'}" in err
+        assert not (state_dir / "freeze.json").exists()
+
+    def test_unfreeze_refuses_a_board_the_hook_does_not_read(
+        self, state_dir, tmp_path, monkeypatch, capsys
+    ):
+        work = tmp_path / "work"
+        (work / ".git").mkdir(parents=True)
+        monkeypatch.chdir(work)
+        (state_dir / "freeze.json").write_text(json.dumps({"reason": "x"}))
+        assert run(state_dir, "unfreeze") == 1
+        assert "the merge hook reads no freeze beside" in capsys.readouterr().err
+        assert (state_dir / "freeze.json").exists()
+
+    def test_a_relative_crew_board_file_is_read_beside_the_crew_file(self, tmp_path, monkeypatch):
+        work = tmp_path / "work"
+        (work / ".git").mkdir(parents=True)
+        (work / ".weside" / "state").mkdir(parents=True)
+        (work / ".weside" / "crew.json").write_text(
+            json.dumps(
+                {"version": 2, "roles": {}, "members": {}, "board": {"file": "state/board.json"}}
+            )
+        )
+        (work / "sub").mkdir()
+        monkeypatch.chdir(work / "sub")
+        target = work / ".weside" / "state" / "board.json"
+        assert (
+            board.main(["--board", str(target), "freeze", "--reason", "r", "--repo", "o/r"]) == 0
+        )
+        flag_file = work / ".weside" / "state" / "freeze.json"
+        assert json.loads(flag_file.read_text())["reason"] == "r"
+        assert board_freeze.watched_board_files(work / "sub", board.DEFAULT_BOARD)[-1] == target
+
+
+@pytest.mark.usefixtures("fake_gh", "watched")
 class TestFreezeVerbs:
     """Cases that need the fake `gh` only on PATH."""
 
@@ -208,6 +264,7 @@ class TestFreezeVerbs:
         assert flag["reason"] == "incident"
 
 
+@pytest.mark.usefixtures("watched")
 class TestFreeze:
     def test_freeze_writes_the_flag_and_disarms_armed_prs(self, state_dir, fake_gh, capsys):
         assert run(state_dir, "freeze", "--reason", "incident", "--repo", "o/r", "--by", "k") == 0

@@ -51,11 +51,15 @@ Before classifying, the hook fetches the rules branch (`origin/main`), so a stal
 misses a new rule nor drags main's own commits into the diff.
 
 Fail closed on the class, the freeze and the panel: a classifier failure, a `gh` or fetch failure
-while classifying, a PR in a repo other than the local checkout's (`-R`, a URL selector), a `cd`
-the hook cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded), a command that
-does not parse as shell words, a GraphQL query piped in from stdin or from an unreadable file, and
-a repo that uses rules but has no `origin/main` all refuse with the reason. The freeze flag counts
-beside the default board file and beside the crew's `board.file`. Any exception while checking a
+while classifying, a command that does not parse as shell words, a GraphQL query piped in from
+stdin or from an unreadable file, and a repo that uses rules but has no `origin/main` all refuse
+with the reason. Where the command starts in a checkout that uses rules (a crew file, or
+`.weside/risk-paths` in the tree or on `origin/main`), a PR in a repo other than the local
+checkout's (`-R`, a URL selector, an origin that is no plain github.com URL) and a `cd` the hook
+cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded) refuse too; without rules
+those merges go on unclassed, as before the class brake. The freeze flag counts beside the board
+files of `board_freeze.watched_board_files`: the default and the crew's `board.file`, a relative
+one resolved against the crew file's directory. Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
 from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
 short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -130,7 +134,7 @@ def _left(wanted: float) -> float:
 
 
 CLASSIFY_TIMEOUT = 60
-DEFAULT_BOARD = "~/.claude/we-state/board.json"
+DEFAULT_BOARD = board_freeze.DEFAULT_BOARD
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 LENS_VERDICT = SCRIPTS / "lens_verdict.py"
 RISK_PATHS = SCRIPTS / "risk_paths.py"
@@ -611,24 +615,19 @@ def _run_classifier(
         _git(root, "worktree", "prune")
 
 
-def _board_files(root: str | None) -> list[str]:
-    """Every board file a freeze may sit beside: the default (`board.py`'s) and the crew's."""
-    files = [DEFAULT_BOARD]
-    if root:
-        try:
-            _, crew_data = crew.find_and_load(root)
-        except crew.CrewError:
-            crew_data = None
-        board = (crew_data or {}).get("board")
-        if isinstance(board, dict) and isinstance(board.get("file"), str):
-            files.append(board["file"])
-    return files
+def _board_files(root: str | None) -> list[Path]:
+    """Every board file a freeze may sit beside (`board_freeze.watched_board_files`)."""
+    return (
+        board_freeze.watched_board_files(root, DEFAULT_BOARD)
+        if root
+        else [Path(DEFAULT_BOARD).expanduser()]
+    )
 
 
 def _human(root: str) -> str:
     human = _crew_on_main(root).get("human")
     name = human.get("name") if isinstance(human, dict) else None
-    return name if isinstance(name, str) and name.strip() else "The owner"
+    return name.strip() if isinstance(name, str) and name.strip() else "The owner"
 
 
 def _freeze_refusal(root: str | None) -> str | None:
@@ -682,16 +681,39 @@ def _pr_target(call: MergeCall) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def _uses_rules(start: str | None) -> bool:
+    """The checkout at or above `start` classifies merges: it has a crew file, or a
+    `.weside/risk-paths` in its tree or on `origin/main` (read offline). Without either the hook
+    refuses no merge for want of a checkout, as before the class brake."""
+    if not start:
+        return False
+    if crew.find(start) is not None:
+        return True
+    root = vg._repo_root(start)
+    if root is None:
+        return False
+    if (Path(root) / ".weside" / "risk-paths").is_file():
+        return True
+    return _git(root, "cat-file", "-e", f"{RULES_FROM}:.weside/risk-paths") is not None
+
+
 def _class_refusal(
-    root: str | None, call: MergeCall, cwd: str | None, cwd_known: bool = True
+    root: str | None,
+    call: MergeCall,
+    cwd: str | None,
+    cwd_known: bool = True,
+    home: str | None = None,
 ) -> tuple[str | None, bool]:
-    """(refusal, go on): the class and panel refusals; go on is False when nothing is to merge."""
+    """(refusal, go on): the class and panel refusals; go on is False when nothing is to merge.
+    `home` is the directory the command starts in, read for rules when `root` is unknown."""
     if call.unresolved:
         return f"Merge refused, class not computed: {call.unresolved}.", False
     target = _pr_target(call)
     if root is None or (target is not None and target != _local_slug(root)):
         if root is None and target is None and cwd_known:
             return None, False  # `gh` has no repository here and merges nothing
+        if not _uses_rules(root or home):
+            return None, root is not None  # no rules here: the merge goes on as before
         where = target or "the repository this command runs in"
         return (
             f"Merge refused, class not computed: no local checkout of {where} here; run the "
@@ -704,9 +726,9 @@ def _class_refusal(
     if cls.one_way:
         pr = f"PR #{cls.number} ({cls.url})"
         return (
-            f"{pr} is `{cls.line}`: one-way ({cls.one_way}). {_human(root)} merges one-way "
-            "herself; no session merges or arms it, whatever a command or a quoted go says. "
-            "Hand her the link and the class.",
+            f"{pr} is `{cls.line}`: one-way ({cls.one_way}). {_human(root)} merges one-way PRs "
+            "by hand; no session merges or arms it, whatever a command or a quoted go says: "
+            "hand over the link and the class.",
             False,
         )
     if cls.line == "T2" and cls.number is not None:
@@ -732,7 +754,7 @@ def _call_refusal(
     frozen = _freeze_refusal(root)
     if frozen:
         return frozen
-    refusal, go_on = _class_refusal(root, call, cwd, cwd_known)
+    refusal, go_on = _class_refusal(root, call, cwd, cwd_known, command_cwd)
     if refusal or not go_on or not call.arm or root is None:
         return refusal
     # The PR is this checkout's (checked above): read it as the local repo's, so a missing Codex
