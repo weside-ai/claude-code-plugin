@@ -174,7 +174,7 @@ def load_crew(root: Path) -> tuple[Path, dict[str, Any]]:
     except crew_mod.CrewError as exc:
         raise UnusableError(f"crew: {exc}") from exc
     if path is None:
-        return root / ".weside" / "crew.json", crew_mod._merge({})
+        return root / ".weside" / "crew.json", crew_mod._merge({"roles": {}, "members": {}})
     return path, crew
 
 
