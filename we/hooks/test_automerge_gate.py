@@ -62,10 +62,13 @@ class FakeGh:
         head: str = SHA,
         node: dict | None = None,
         view_fail: bool = False,
+        cards: list | None = None,
     ):
         self.runs, self.comments, self.fail, self.calls = runs, list(comments), fail, []
         self.body, self.head, self.node, self.view_fail = body, head, node, view_fail
         self.rules, self.protection, self.rules_fail = rules or [], protection, rules_fail
+        # issue comments for the card read: a body (by a MEMBER) or (body, association, user type)
+        self.cards = [c if isinstance(c, tuple) else (c, "MEMBER", "User") for c in cards or []]
 
     def __call__(self, args: list[str], _cwd: str | None) -> str | None:  # noqa: PLR0911
         self.calls.append(args)
@@ -83,6 +86,9 @@ class FakeGh:
             url = "https://github.com/o/r/pull/7"
             pr = {"headRefOid": self.head, "number": 7, "url": url, "baseRefName": "main"}
             return json.dumps(pr)
+        if args[0] == "api" and args[1] == "repos/o/r/issues/7/comments":
+            rows = [{"body": b, "assoc": a, "type": t} for b, a, t in self.cards]
+            return "".join(json.dumps(r) + "\n" for r in rows)
         if args[0] == "api" and args[1].endswith("branches/main"):
             checks = {"contexts": self.protection or []}
             protection = {"protection": {"required_status_checks": checks}}
@@ -850,7 +856,7 @@ def test_a_brake_review_hit_is_two_way(classed: dict, monkeypatch, lens: Path) -
     red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
     assert red is not None and "one-way" not in red and "`brake-review` hit" in red
     card = [_card(classed["head"][:10])]
-    fake = FakeGh([run()], head=classed["head"], comments=card)
+    fake = FakeGh([run()], head=classed["head"], cards=card)
     assert refuse(classed["repo"], ARM, fake, monkeypatch) is None
 
 
@@ -1197,7 +1203,7 @@ def test_a_card_hit_without_card_verdict_is_refused(green: dict, monkeypatch, se
 def test_a_card_pass_on_an_older_head_is_refused(green: dict, monkeypatch) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
     old = green["main"][:10]
-    fake = FakeGh([run()], head=green["head"], comments=[_card(old)])
+    fake = FakeGh([run()], head=green["head"], cards=[_card(old)])
     red = refuse(green["repo"], ARM, fake, monkeypatch)
     assert red is not None and f"the last card verdict is on the older head {old}" in red
 
@@ -1205,7 +1211,7 @@ def test_a_card_pass_on_an_older_head_is_refused(green: dict, monkeypatch) -> No
 def test_a_card_pass_on_the_head_lets_it_merge(green: dict, monkeypatch) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
     comments = [_card(green["main"][:10]), _card(green["head"][:10])]
-    fake = FakeGh([run()], head=green["head"], comments=comments)
+    fake = FakeGh([run()], head=green["head"], cards=comments)
     assert refuse(green["repo"], ARM, fake, monkeypatch) is None
     assert refuse(green["repo"], "gh pr merge 7 --squash", fake, monkeypatch) is None
 
@@ -1213,7 +1219,7 @@ def test_a_card_pass_on_the_head_lets_it_merge(green: dict, monkeypatch) -> None
 def test_a_later_blocking_on_the_head_beats_a_pass(green: dict, monkeypatch) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit("money-path"))
     head = green["head"][:10]
-    fake = FakeGh([run()], head=green["head"], comments=[_card(head), _card(head, "BLOCKING")])
+    fake = FakeGh([run()], head=green["head"], cards=[_card(head), _card(head, "BLOCKING")])
     red = refuse(green["repo"], ARM, fake, monkeypatch)
     assert red is not None and "the card verdict on this head is BLOCKING" in red
 
@@ -1221,7 +1227,7 @@ def test_a_later_blocking_on_the_head_beats_a_pass(green: dict, monkeypatch) -> 
 def test_a_comment_without_the_marker_is_no_card_verdict(green: dict, monkeypatch) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit("brake-review"))
     forged = _card(green["head"][:10]).replace("<!-- security-card-review -->\n", "")
-    fake = FakeGh([run()], head=green["head"], comments=[forged])
+    fake = FakeGh([run()], head=green["head"], cards=[forged])
     assert "no card verdict is on the PR" in refuse(green["repo"], ARM, fake, monkeypatch)
 
 
@@ -1230,7 +1236,11 @@ def test_an_unreadable_comment_list_refuses(green: dict, monkeypatch) -> None:
 
     class NoComments(FakeGh):
         def __call__(self, args, cwd):
-            return None if "comments" in args else super().__call__(args, cwd)
+            return (
+                None
+                if args[1:2] == ["repos/o/r/issues/7/comments"]
+                else super().__call__(args, cwd)
+            )
 
     red = refuse(green["repo"], ARM, NoComments([run()], head=green["head"]), monkeypatch)
     assert red is not None and "the PR comments could not be read" in red
@@ -1259,10 +1269,31 @@ def test_t2_without_a_card_hit_merges_on_the_panel_alone(green: dict, monkeypatc
         monkeypatch.setenv("FAKE_CLASS", out)
         fake = FakeGh([run()], head=green["head"])
         assert refuse(green["repo"], ARM, fake, monkeypatch) is None
-        assert not any("comments" in c for c in fake.calls), fake.calls
+        assert not any("repos/o/r/issues/7/comments" in c for c in fake.calls), fake.calls
 
 
 def test_the_panel_refuses_before_the_card(classed: dict, monkeypatch, lens: Path) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
     red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
     assert red is not None and "lens panel is not green" in red
+
+
+@pytest.mark.parametrize(
+    ("assoc", "kind", "counts"),
+    [
+        ("NONE", "User", False),
+        ("CONTRIBUTOR", "User", False),
+        ("FIRST_TIMER", "User", False),
+        ("NONE", "Bot", True),
+        ("COLLABORATOR", "User", True),
+        ("OWNER", "User", True),
+    ],
+)
+def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc, kind, counts):
+    """An outside account's PASS on the head never lifts the brake (Claude Review on #181)."""
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    card = (_card(green["head"][:10]), assoc, kind)
+    red = refuse(
+        green["repo"], ARM, FakeGh([run()], head=green["head"], cards=[card]), monkeypatch
+    )
+    assert (red is None) is counts, red

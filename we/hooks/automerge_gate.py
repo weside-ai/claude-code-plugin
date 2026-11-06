@@ -7,7 +7,7 @@ A brake against slips, not a boundary ("Bremse gegen Versehen, keine Grenze"): i
 Claude Code's Bash tool calls, and a session can work around it — the bot token used directly
 (`curl`, a `gh` binary off `PATH`), a script file or `python3 -c`, a Codex run (no Claude hooks),
 an edit to the hook in the plugin cache. The freeze flag and the panel verdict are local files any
-session can write or delete, the card verdict a PR comment any session can post: process signals,
+session can write or delete, the card verdict a PR comment any crew member or the bot can post: process signals,
 not locks. A hook that Claude Code kills on its `hooks.json` timeout is a non-blocking error, so
 the command runs (allow); `BUDGET_SECONDS` keeps every call below it. The boundary is the
 repository's ruleset (required checks, code owners, no bypass actor for the bot) and the owner's
@@ -44,7 +44,9 @@ Refusals, in this order (the first one wins):
          ## Security card review — #<N> @ `<head sha, at least 7 hex chars>`
          **Overall: PASS**
 
-     Only comments whose `@ <sha>` is a prefix of the PR's current head count; the last of those
+     Only comments by a repo OWNER, MEMBER or COLLABORATOR or by an installed GitHub App (user
+     type `Bot`, how a worker's bot token posts) count, read through the REST issue comments;
+     among them only those whose `@ <sha>` is a prefix of the PR's current head; the last of those
      decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head (missing, or
      only on an older head) refuses, and so does a comment read that fails. 4 runs first, so this
      check holds only once the panel is green or the panel check is off.
@@ -141,11 +143,12 @@ _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
 # The two-way sections whose hit needs a security card verdict besides the panel (brake stage 2).
-CARD_SECTIONS = ("trust-loosening", "money-path", "brake-review")
+CARD_SECTIONS = risk_paths.CARD
 _CARD_HIT = re.compile(r"(?:^|\t)(" + "|".join(CARD_SECTIONS) + r"):")
 CARD_MARKER = "<!-- security-card-review -->"
 _CARD_HEAD = re.compile(r"^#+\s*Security card review\b.*?@\s*`?([0-9a-f]{7,40})`?", re.MULTILINE)
 _CARD_OVERALL = re.compile(r"\bOverall:\**\s*([A-Z]+)")
+_CARD_AUTHORS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 _LOOKS_LIKE_MERGE = re.compile(
     r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
     re.DOTALL,
@@ -777,6 +780,24 @@ def _card_verdict(bodies: list[str], head: str) -> tuple[str | None, str | None]
     return verdict, last_head
 
 
+def _card_bodies(slug: str, number: int, cwd: str | None) -> list[str] | None:
+    """Bodies of the PR's issue comments whose author may sign (`_CARD_AUTHORS` or an installed
+    App), oldest first; None when the read fails."""
+    jq = ".[] | {body, assoc: .author_association, type: .user.type}"
+    raw = _gh(["api", f"repos/{slug}/issues/{number}/comments", "--paginate", "--jq", jq], cwd)
+    if raw is None:
+        return None
+    try:
+        rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        return [
+            r.get("body") or ""
+            for r in rows
+            if r.get("assoc") in _CARD_AUTHORS or r.get("type") == "Bot"
+        ]
+    except (ValueError, AttributeError):
+        return None
+
+
 def _security_skill(root: str) -> str:
     """`/<skill>` of the crew's security holder on `origin/main`, or a placeholder."""
     main = _crew_on_main(root)
@@ -793,13 +814,7 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
         return None
     head = cls.head or ""
     slug = (_URL_SLUG.search(cls.url or "") or [None, None])[1]
-    raw = _gh(
-        ["pr", "view", str(cls.number), *(["-R", slug] if slug else []), "--json", "comments"], cwd
-    )
-    try:
-        bodies = [c.get("body") or "" for c in json.loads(raw or "")["comments"]]
-    except (ValueError, TypeError, KeyError, AttributeError):
-        bodies = None
+    bodies = _card_bodies(slug, cls.number, cwd) if slug else None
     hit = ", ".join(f"`{s}`" for s in sections)
     start = (
         f"PR #{cls.number} is T2 with a {hit} hit and needs a security card verdict PASS on its "
