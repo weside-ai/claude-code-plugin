@@ -58,15 +58,20 @@ if [[ -n "$ARMED" ]]; then
     self=${VERSION_SELF_PR:-$(gh pr view --json number --jq .number 2>/dev/null || true)}
     repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
     clash=""
-    while IFS=$'\t' read -r number head; do
+    while IFS=$'\t' read -r number sha; do
         [[ -z "$number" || "$number" == "$self" ]] && continue
-        other=$(gh api "repos/$repo/contents/$PLUGIN_JSON?ref=$head" --jq .content | base64 -d | jq -r .version)
+        # by head SHA: a fork's or a deleted branch's head stays readable, no ref to encode
+        if ! other=$(gh api "repos/$repo/contents/$PLUGIN_JSON?ref=$sha" --jq .content \
+            | base64 -d | jq -r .version) || [[ -z "$other" ]]; then
+            clash="${clash}  #$number: version unreadable"$'\n'
+            continue
+        fi
         if [[ "$(vercmp "$pr_version" "$other")" != 1 ]]; then
             clash="${clash}  #$number carries $other"$'\n'
         fi
     done < <(gh pr list -R "$repo" --state open --limit 100 \
-        --json number,headRefName,autoMergeRequest \
-        --jq '.[] | select(.autoMergeRequest != null) | "\(.number)\t\(.headRefName)"')
+        --json number,headRefOid,autoMergeRequest \
+        --jq '.[] | select(.autoMergeRequest != null) | "\(.number)\t\(.headRefOid)"')
     if [[ -n "$clash" ]]; then
         echo "ERROR: Version $pr_version is not above every armed open PR:"
         printf '%s' "$clash"
