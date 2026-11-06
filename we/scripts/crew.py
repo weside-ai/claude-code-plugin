@@ -219,7 +219,7 @@ DEFAULTS: dict[str, Any] = {
         "story_days": 1,
     },
     "naming": {"key": "[A-Z]+-\\d+", "master": "<word>-<number>", "worker": "<key>-<chunk>"},
-    "launch": {"worker": None},
+    "launch": {"worker": None, "subagent_fallback": False},
     "release": {
         "rc_job": None,
         "runbook": None,

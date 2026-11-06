@@ -9,7 +9,7 @@ allowed-tools: Bash(node:*), Bash(ls:*)
 
 # /we:codex-task
 
-Lives as long as the Codex subscription; Foxy decides its renewal (30.09.2026), delete this skill
+Lives as long as the Codex subscription; the owner decides its renewal (30.09.2026), delete this skill
 when it ends. Codex is no dispatch backend for `/we:master` (decision 27.09.2026).
 
 1. Resolve the runtime:
