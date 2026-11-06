@@ -121,13 +121,17 @@ def top_prompt(case: Path) -> str:
     ("name", "waits", "not_waits"),
     [
         ("security-twoway-panel-enough", [], ["security", "human"]),
-        ("security-oneway-owner-signs", ["security", "human"], ["product", "acceptance"]),
+        (
+            "security-oneway-card-worker-signs",
+            ["worker", "human"],
+            ["product", "acceptance", "security"],
+        ),
     ],
 )
 def test_the_security_master_cases_name_who_waits_in_order(name, waits, not_waits):
     """A two-way auth diff with a green panel waits on nobody (the panel is enough); a
-    ``trust-loosening`` one waits on the security holder's signature,
-    then the human's merge."""
+    ``trust-loosening`` one waits on the signature of a fresh worker with the security card
+    (the holder decides only a case without precedent), then the human's merge."""
     case = REPO / "tests" / "coldstart" / "master" / f"{name}.yaml"
     top = {k: v.strip() for k, v in TOP.findall(case.read_text(encoding="utf-8"))}
     assert top["role"] == "master" and top["crew"] == SECURITY_FIXTURE
@@ -144,9 +148,11 @@ def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
 
 
 GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
-ORDER_LINE = "- On a `trust-loosening` diff: the panel, then Bo's signature, then Hal merges."
-# L0's one security line: the holder runs on call and signs the board item of a `trust-loosening` diff
-SECURITY_LINE = "  - Bo owns its label, runs on call and signs each `trust-loosening` item."
+ORDER_LINE = "- On a `trust-loosening` diff: the panel, then a fresh worker with Bo's card signs, then Hal merges."
+# L0's one security line: the holder runs on call; a worker with its card signs a `trust-loosening` diff
+SECURITY_LINE = (
+    "  - Bo owns its label, runs on call; a worker with its card signs `trust-loosening` items."
+)
 
 
 def _rendered(fixture: str) -> tuple[str, str]:
@@ -173,4 +179,4 @@ def test_the_generic_crew_renders_no_security_routing():
     assert "trust-loosening` diff:" not in card
     assert "also waits for" not in card
     assert "owns its label" not in l0
-    assert "signs each `trust-loosening`" not in l0
+    assert "signs `trust-loosening`" not in l0

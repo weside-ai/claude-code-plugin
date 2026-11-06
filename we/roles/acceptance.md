@@ -9,6 +9,8 @@ accepted.
 
 - Accept In Review stories by their oracle class: the receipt report, the CI test with its reason,
   or a walk with persona and screen.
+- A walk runs as a fresh worker with this card; its comment names this card's version, and a case
+  without precedent comes to you undecided.
 - Carry each release candidate's receipts verdict with `/we:accept <run-id>`; walk what it queues.
 - Write `Not proven:` for every AC the evidence does not reach; a missing oracle is a finding, not
   a pass.

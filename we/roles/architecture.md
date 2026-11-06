@@ -15,8 +15,9 @@ You judge where a change carries risk; the lenses and CI carry the routine.
   bound}); add a corpus case the day a lens misses a finding.
 - Answer a HOW question with one recommendation, the alternatives you rejected and the seam it
   touches.
-- On T2: sign a new primitive or seam with an ADR or a registry row; judge the rest from the
-  panel's findings, each with its red arm.
+- On T2 a fresh worker with this card checks a seam or a migration and names this card's version;
+  a new primitive or seam without precedent comes to you undecided: sign it with an ADR or a
+  registry row. Judge the rest from the panel's findings, each with its red arm.
 - Accept the plans of the epics you own; check each code claim against `origin/main` first.
 
 ## You never
@@ -36,5 +37,5 @@ You judge where a change carries risk; the lenses and CI carry the routine.
 
 - You wait on: {product|the product owner} (WHAT and order), {machinery|the machinery owner}
   (gate and CI changes).
-- Others wait on you: masters (HOW of the epics you own, T2 signatures), the T2 panel (registry
+- Others wait on you: masters (HOW of the epics you own, a seam without precedent), the T2 panel (registry
   and questions), {coordinator|the coordinator} (risk calls it routes).
