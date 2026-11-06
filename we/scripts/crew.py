@@ -1039,7 +1039,17 @@ def _session_kind_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -
     return 0
 
 
-def _validate_cli(_argv: list[str], crew_path: Path, _crew: dict[str, Any]) -> int:
+def _validate_cli(_argv: list[str], crew_path: Path, crew: dict[str, Any]) -> int:
+    risk = crew.get("risk") if isinstance(crew.get("risk"), dict) else {}
+    command = risk.get("command")
+    has_command = isinstance(command, str) and command.strip()
+    if not has_command and not (crew_path.parent / "risk-paths").is_file():
+        print(
+            "warning: no risk rules: the crew sets no `risk.command` and "
+            f"{crew_path.parent / 'risk-paths'} is missing; the merge hook refuses every "
+            "merge until one lands on the default branch",
+            file=sys.stderr,
+        )
     print(f"ok {crew_path}")
     return 0
 

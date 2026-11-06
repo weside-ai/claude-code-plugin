@@ -44,7 +44,10 @@ The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/cre
 default `origin/main`) is written to a temp file and run on `merge-base..<PR head>` in a
 no-checkout worktree of the head; without a `risk.command`, the plugin's `scripts/risk_paths.py`
 (`origin/main`'s blob of `we/scripts/risk_paths.py` when the repo carries it) reads `origin/main`'s
-`.weside/risk-paths`; with neither the class is `T0`, decided offline. Line 1 must match
+`.weside/risk-paths`; with neither the class is `T0`, decided offline, unless `origin/main` carries a
+crew file: a crew without rules refuses every merge and arm (a brake that cannot judge must not
+stay silently open). A `.weside/risk-paths` without a one-way section brakes nothing on purpose; the
+allowed merge then carries one `systemMessage` line saying so. Line 1 must match
 `^T[02]( one-way \\S+)?$`.
 
 Before classifying, the hook fetches the rules branch (`origin/main`), so a stale local ref neither
@@ -114,6 +117,10 @@ _RECEIPT_RED = re.compile(r"^receipt red\b")
 _FENCE = re.compile(r"^(`{3,}|~{3,})")
 _API_MERGE = re.compile(r"(?:^|/)repos/([^/\s]+/[^/\s]+)/pulls/(\d+)/merge/?(?:\?|$)")
 _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
+_ONE_WAY_SECTION = re.compile(
+    r"^\s*\[\s*(brake-change|money|destructive-migration|terraform-secrets|trust-loosening)\s*\]",
+    re.MULTILINE,
+)
 _CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
@@ -126,6 +133,9 @@ RULES_FROM = "origin/main"
 # on its timeout is a non-blocking error, and the command would run unbraked.
 BUDGET_SECONDS = 540
 _DEADLINE = [time.monotonic() + BUDGET_SECONDS]
+# Lines the session must see on an allowed merge (a deliberately empty brake says so, once per
+# call); `main` prints them as `systemMessage`. Reset by `_refusal`.
+NOTICES: list[str] = []
 
 
 def _left(wanted: float) -> float:
@@ -458,6 +468,7 @@ class ClassResult:
     reason: str | None = None
     number: int | None = None
     url: str | None = None
+    notice: str | None = None
 
     @property
     def one_way(self) -> str | None:
@@ -514,13 +525,22 @@ def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
         return (
             f"`git fetch origin {RULES_FROM.split('/', 1)[1]}` failed; the rules must be current"
         )
-    risk = _crew_on_main(root).get("risk") or {}
+    crew_doc = _crew_on_main(root)
+    risk = crew_doc.get("risk") or {}
     rules_from = risk.get("rules_from") if isinstance(risk.get("rules_from"), str) else RULES_FROM
     command = risk.get("command")
     if isinstance(command, str) and command.strip():
         parts = command.split()
         return ["{file}", *parts[1:]], f"{rules_from}:{parts[0]}", rules_from
     if _git(root, "cat-file", "-e", f"{rules_from}:.weside/risk-paths") is None:
+        if crew_doc:
+            return (
+                f"this repo has a crew (`.weside/crew.json` on {rules_from}) but no risk rules: "
+                f"neither `risk.command` in the crew nor `.weside/risk-paths` on {rules_from}, "
+                "so the hook cannot tell a one-way PR from a two-way one. Land a "
+                "`.weside/risk-paths` (`/we:setup` writes a starter; without one-way sections it "
+                "brakes nothing, on purpose) or a `risk.command` first"
+            )
         return None
     own = f"{rules_from}:we/scripts/risk_paths.py"
     blob = own if _git(root, "cat-file", "-e", own) is not None else None
@@ -566,6 +586,13 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
         result.reason = f"no merge base of {head[:9]} and {rules_from} (fetch origin)"
         return result
     result.line, result.reason = _run_classifier(root, prefix, blob, head, base)
+    if blob is None or blob.endswith(":we/scripts/risk_paths.py"):
+        rules = _git(root, "show", f"{rules_from}:.weside/risk-paths") or ""
+        if not _ONE_WAY_SECTION.search(rules):
+            result.notice = (
+                f"risk-paths: no one-way classes configured (`.weside/risk-paths` on {rules_from}"
+                " has no one-way section), so no PR here waits for the owner's merge."
+            )
     return result
 
 
@@ -721,6 +748,8 @@ def _class_refusal(
             False,
         )
     cls = pr_class(root, call, cwd)
+    if cls.notice and cls.notice not in NOTICES:
+        NOTICES.append(cls.notice)
     if cls.line is None:
         return f"Merge refused, class not computed: {cls.reason}.", False
     if cls.one_way:
@@ -779,6 +808,7 @@ def _call_refusal(
 
 
 def _refusal(payload: dict) -> str | None:
+    NOTICES.clear()
     if payload.get("tool_name") != "Bash":
         return None
     command = (payload.get("tool_input") or {}).get("command", "")
@@ -819,6 +849,8 @@ def main() -> None:
             "Fix the cause or run the merge by hand."
         )
     if reason is None:
+        if NOTICES:
+            print(json.dumps({"systemMessage": " ".join(NOTICES)}))
         return
     print(
         json.dumps(

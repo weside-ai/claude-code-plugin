@@ -640,6 +640,65 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
     assert "The owner merges one-way PRs by hand" in reason
 
 
+MERGE = "gh pr merge 7 --squash"
+
+
+def test_a_crew_without_rules_refuses_every_merge(repo: Path, monkeypatch) -> None:
+    """WA-2930 AC1: a crew on main with neither `risk.command` nor `.weside/risk-paths` cannot
+    tell one-way from two-way; it refuses instead of deciding T0 in silence."""
+    main = _commit(repo, {".weside/crew.json": json.dumps({"version": 2})}, "crew, no rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    for command in (MERGE, ARM):
+        reason = refuse(repo, command, FakeGh([run()], head=head), monkeypatch)
+        assert reason is not None, command
+        assert "class not computed" in reason
+        assert "no risk rules" in reason and "`.weside/risk-paths`" in reason
+        assert "`risk.command`" in reason
+
+
+@pytest.mark.parametrize("rules", ["", "# no brake, on purpose\n", "[t2]\npath docs/**\n"])
+def test_risk_paths_without_a_one_way_section_merges_and_says_so(
+    repo: Path, monkeypatch, capsys, rules: str
+) -> None:
+    """WA-2930 AC1: a rules file without a one-way section brakes nothing on purpose (a crew's
+    choice) and the allowed merge carries one line saying so."""
+    files = {".weside/crew.json": json.dumps({"version": 2}), ".weside/risk-paths": rules}
+    main = _commit(repo, files, "crew, empty brake")
+    _publish_main(repo, main)
+    head = _commit(repo, {"pay.py": "x\n"}, "pr")
+    fake = FakeGh([run()], head=head)
+    assert refuse(repo, MERGE, fake, monkeypatch) is None
+    assert gate.NOTICES == [
+        "risk-paths: no one-way classes configured (`.weside/risk-paths` on origin/main has no "
+        "one-way section), so no PR here waits for the owner's merge."
+    ]
+    payload = {"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": MERGE}}
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(payload)))
+    gate.main()
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"systemMessage": gate.NOTICES[0]}
+
+
+def test_risk_paths_with_a_one_way_section_say_nothing(repo: Path, monkeypatch) -> None:
+    main = _commit(repo, {".weside/risk-paths": "[money]\npath pay.py\n"}, "rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {"README.md": "y\n"}, "pr")
+    assert refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch) is None
+    assert gate.NOTICES == []
+
+
+def test_deleting_a_one_way_section_stays_a_user_merge(repo: Path, monkeypatch) -> None:
+    """Kiska 06.11.: emptying the rules is no way out of a user merge, because main's rules
+    classify the PR that empties them."""
+    rules = "[brake-change]\npath .weside/risk-paths\n[money]\npath pay.py\n"
+    main = _commit(repo, {".weside/risk-paths": rules}, "rules")
+    _publish_main(repo, main)
+    head = _commit(repo, {".weside/risk-paths": "# no brake\n"}, "drop every section")
+    reason = refuse(repo, MERGE, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "`T2 one-way brake-change`" in reason
+
+
 def test_mains_own_risk_paths_blob_is_preferred(repo: Path, monkeypatch) -> None:
     own = "import sys\nprint('T2 one-way terraform-secrets')\nprint('review: high')\n"
     main = _commit(
