@@ -208,3 +208,23 @@ def test_bad_arguments_exit_2(repo: Path, argv: list[str]) -> None:
         [sys.executable, str(SCRIPT), *argv], cwd=repo, capture_output=True, text=True, check=False
     )
     assert out.returncode == 2 and "usage" in out.stderr
+
+
+def test_a_card_section_is_two_way_with_a_high_review(repo: Path) -> None:
+    """Brake stage 2: `trust-loosening` left the one-way classes (red arm: 8.5.0 printed
+    `T2 one-way trust-loosening`); a card hit prints `T2`, `review: high` and its section, which
+    the merge hook reads to wait for the security card verdict. A one-way hit still wins."""
+    _mains_rules(
+        repo,
+        "[trust-loosening]\npath auth/**\n[money-path]\npath bill/**\n[brake-review]\n"
+        "path .weside/lenses/**\n[money]\npath pay.py\n[t2]\npath docs/**\n",
+    )
+    write(repo, "auth/x.py", "x\n")
+    write(repo, "docs/a.md", "x\n")
+    commit(repo, "trust")
+    lines = classify(repo).stdout.splitlines()
+    assert lines[:2] == ["T2", "review: high"]
+    assert "auth/x.py\ttrust-loosening: path auth/**" in lines
+    write(repo, "pay.py", "x\n")
+    commit(repo, "money wins")
+    assert classify(repo).stdout.splitlines()[0] == "T2 one-way money"

@@ -15,3 +15,7 @@ path we/scripts/lens_verdict.py
 path we/scripts/board_freeze.py
 path we/scripts/risk_paths.py
 path we/scripts/worker_launch.py
+
+# Two-way T2: the crew process every session loads; a change goes through the T2 lens panel.
+[t2]
+path we/process/**
