@@ -250,20 +250,20 @@ class TestFreezeVerbs:
         assert flag["not_disarmed"] == [{"repo": "o/broken", "why": "listing the open PRs failed"}]
 
     def test_without_repo_the_freeze_covers_every_repo_and_disarms_the_current(self, state_dir):
-        """Kiska 06.11. (WA-2930): a freeze without --repo, run from the workspace checkout,
+        """owner 06.11.2026: a freeze without --repo, run from the workspace checkout,
         must still stop a merge in core; it disarms the current repo's armed PRs."""
         assert run(state_dir, "freeze", "--reason", "r") == 0
         flag = json.loads((state_dir / "freeze.json").read_text())
         assert flag["repos"] == ["*"]
         assert {"repo": "o/here", "number": 5} in flag["disarmed"]
-        assert board_freeze.covers(flag, "weside-ai/weside-core")
+        assert board_freeze.covers(flag, "acme/core")
 
     def test_an_explicit_repo_narrows_the_freeze(self, state_dir):
-        assert run(state_dir, "freeze", "--reason", "r", "--repo", "weside-ai/weside") == 0
+        assert run(state_dir, "freeze", "--reason", "r", "--repo", "acme/workspace") == 0
         flag = json.loads((state_dir / "freeze.json").read_text())
-        assert flag["repos"] == ["weside-ai/weside"]
-        assert not board_freeze.covers(flag, "weside-ai/weside-core")
-        assert board_freeze.covers(flag, "weside-ai/weside")
+        assert flag["repos"] == ["acme/workspace"]
+        assert not board_freeze.covers(flag, "acme/core")
+        assert board_freeze.covers(flag, "acme/workspace")
 
     def test_a_blank_reason_is_refused(self, state_dir, capsys):
         assert run(state_dir, "freeze", "--reason", " ", "--repo", "o/r") == 1

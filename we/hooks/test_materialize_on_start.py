@@ -239,7 +239,7 @@ class MaterializeOnStartTest(unittest.TestCase):
         return core, skill
 
     def test_crew_without_account_and_without_the_mcp_deny_warns_once(self):
-        """WA-2930 AC2: the weside MCP stays off only through the project's deny entry."""
+        """The weside MCP stays off only through the project's deny entry."""
         core, _skill = self.crew_workspace("x", deny_mcp=False)
         out = self.run_hook(hook_input={"session_id": "s1", "source": "startup", "cwd": str(core)})
         self.assertEqual(list(out), ["systemMessage"])

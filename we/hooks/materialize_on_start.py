@@ -36,7 +36,7 @@ A crew ``crew.py`` refuses (``CrewError``) is never silence for a pin: its conte
 the line ``<labels.crew_unreadable>: <reason> — load the identity with /we:materialize``
 (``render_process.crew_notice`` over ``crew.fallback``), on every source, bound or not.
 
-MCP guard (WA-2930): in a repo whose crew has no ``weside_account: true``, the plugin's
+MCP guard: in a repo whose crew has no ``weside_account: true``, the plugin's
 ``weside-mcp`` server must not connect. The one per-repo switch that keeps it from connecting is the
 project's tracked ``.claude/settings.json`` entry ``deniedMcpServers: [{"serverName":
 "plugin:we:weside-mcp"}]`` (measured 06.11.2026 on Claude Code 2.1.319; ``disabledMcp*`` keys, a

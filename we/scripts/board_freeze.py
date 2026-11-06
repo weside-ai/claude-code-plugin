@@ -16,7 +16,7 @@ crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.
     so a one-way PR armed before the freeze would come back unchecked.
   * A flag file that exists but does not parse is a standing freeze (`FreezeError`; the hook
     refuses): a torn write must not lift it.
-  * `repos` scopes the flag (WA-2930): a merge in a repo the flag does not name passes it. `*`
+  * `repos` scopes the flag: a merge in a repo the flag does not name passes it. `*`
     names every repo of the crews reading this board; `board.py freeze` without `--repo` writes
     it (a freeze from the wrong checkout must not silently miss the repo it is for) and disarms
     the current repo's armed PRs. A flag without a `repos` list counts for every repo.

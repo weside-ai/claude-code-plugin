@@ -644,7 +644,7 @@ MERGE = "gh pr merge 7 --squash"
 
 
 def test_a_crew_without_rules_refuses_every_merge(repo: Path, monkeypatch) -> None:
-    """WA-2930 AC1: a crew on main with neither `risk.command` nor `.weside/risk-paths` cannot
+    """A crew on main with neither `risk.command` nor `.weside/risk-paths` cannot
     tell one-way from two-way; it refuses instead of deciding T0 in silence."""
     main = _commit(repo, {".weside/crew.json": json.dumps({"version": 2})}, "crew, no rules")
     _publish_main(repo, main)
@@ -661,7 +661,7 @@ def test_a_crew_without_rules_refuses_every_merge(repo: Path, monkeypatch) -> No
 def test_risk_paths_without_a_one_way_section_merges_and_says_so(
     repo: Path, monkeypatch, capsys, rules: str
 ) -> None:
-    """WA-2930 AC1: a rules file without a one-way section brakes nothing on purpose (a crew's
+    """A rules file without a one-way section brakes nothing on purpose (a crew's
     choice) and the allowed merge carries one line saying so."""
     files = {".weside/crew.json": json.dumps({"version": 2}), ".weside/risk-paths": rules}
     main = _commit(repo, files, "crew, empty brake")
@@ -689,7 +689,7 @@ def test_risk_paths_with_a_one_way_section_say_nothing(repo: Path, monkeypatch) 
 
 
 def test_deleting_a_one_way_section_stays_a_user_merge(repo: Path, monkeypatch) -> None:
-    """Kiska 06.11.: emptying the rules is no way out of a user merge, because main's rules
+    """owner 06.11.2026: emptying the rules is no way out of a user merge, because main's rules
     classify the PR that empties them."""
     rules = "[brake-change]\npath .weside/risk-paths\n[money]\npath pay.py\n"
     main = _commit(repo, {".weside/risk-paths": rules}, "rules")
@@ -958,7 +958,7 @@ def _crew_board(repo: Path, board_file: Path) -> None:
 def test_the_default_freeze_does_not_reach_a_crew_with_its_own_board(
     repo: Path, monkeypatch, _isolated_state: Path, tmp_path_factory
 ) -> None:
-    """WA-2930 K1: a crew with its own `board.file` is a separate team; a freeze on the default
+    """A crew with its own `board.file` is a separate team; a freeze on the default
     board, `*` included, does not stop it. Its own board's freeze does."""
     flag = {"since": "s", "by": "ops", "reason": "incident on main", "repos": ["*"]}
     _freeze(_isolated_state, json.dumps(flag))
@@ -979,7 +979,7 @@ def test_the_default_freeze_does_not_reach_a_crew_with_its_own_board(
     [
         (["o/r"], True),
         (["O/R"], True),
-        (["weside-ai/weside-core"], False),
+        (["acme/core"], False),
         (["*"], True),
         ([], True),
         (None, True),
@@ -988,7 +988,7 @@ def test_the_default_freeze_does_not_reach_a_crew_with_its_own_board(
 def test_a_freeze_counts_only_for_the_repos_it_names(
     repo: Path, monkeypatch, _isolated_state: Path, repos, frozen: bool
 ) -> None:
-    """WA-2930 AC3: `repos` scopes the flag; `*`, an empty or missing list fail closed."""
+    """`repos` scopes the flag; `*`, an empty or missing list fail closed."""
     flag = {"since": "s", "by": "ops", "reason": "incident on main"}
     if repos is not None:
         flag["repos"] = repos

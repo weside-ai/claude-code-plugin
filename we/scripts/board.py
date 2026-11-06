@@ -853,7 +853,7 @@ def cmd_freeze(state, args, _crew, _now):
         print(why, file=sys.stderr)
         return 1
     # Without --repo the freeze covers every repo (`*`): a freeze from the wrong checkout must not
-    # silently miss the repo it is for (Kiska, WA-2930); it disarms the current repo's PRs.
+    # silently miss the repo it is for (owner 06.11.2026); it disarms the current repo's PRs.
     repos = args.repo or ["*"]
     disarm = None if args.repo else [r for r in [_current_repo()] if r]
     by = args.by or os.environ.get("WESIDE_COMPANION") or os.environ.get("USER") or "unknown"
