@@ -44,7 +44,11 @@ lowercased>``), ``weside_account`` (the members are weside companions: a pinned 
 identity with ``/we:materialize``), ``lenses`` (per lens ``agent``, ``questions`` (the Ready
 question file), ``t2_questions`` (the T2 question file), ``registry``, ``keeper``, ``sample``;
 the defaults are the three lenses ``product``, ``architecture``, ``acceptance``, each an agent
-``we:lens-<key>``), ``ready_lenses``, ``t2_panel``, ``risk``,
+``we:lens-<key>``), ``ready_lenses``, ``ready_panel`` (``warning_ok_after_rounds``: null, the
+default, keeps every standing WARNING red; a number N of at least 1 lets a Ready panel in round N
+or later whose red lenses stand on WARNINGs alone count green with those warnings carried onto the
+Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdict.py`` owns the
+round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
 ``files``, ``coldstart``, ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
@@ -170,6 +174,7 @@ DEFAULTS: dict[str, Any] = {
         "acceptance": _lens("acceptance", 5),
     },
     "ready_lenses": ["product", "architecture", "acceptance"],
+    "ready_panel": {"warning_ok_after_rounds": None},
     "t2_panel": ["product", "architecture", "acceptance"],
     "risk": {
         "command": None,
@@ -243,6 +248,7 @@ DEFAULTS: dict[str, Any] = {
 # a null default takes a string or null; these take a number or null
 NUMBER_OR_NULL = (
     "acceptance.mock_preset",
+    "ready_panel.warning_ok_after_rounds",
     "sample",
 )
 # a number default that also takes null (null = off)
@@ -541,6 +547,11 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
             continue
         _check(path, value, DEFAULTS[key], key)
     _validate_lenses(path, data, slugs)
+    rounds = data.get("ready_panel", {}).get("warning_ok_after_rounds")
+    if rounds is not None and not (_is_int(rounds) and rounds >= 1):
+        raise _fail(
+            path, "ready_panel.warning_ok_after_rounds must be a number of at least 1 or null"
+        )
     _validate_fallback(path, data.get("fallback", {}))
     reviewer = data.get("sla", {}).get("t2_second_reviewer")
     if reviewer is not None and reviewer not in slugs:

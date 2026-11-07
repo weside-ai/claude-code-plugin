@@ -543,7 +543,7 @@ adds. Every rule runs before any write; a refusal writes no row, calls no adapte
 
 | Verb | Rule as the script checks it | Refusal |
 |---|---|---|
-| `select <KEY> [--plan PATH]` | `ENTRY_RULES["selected"]`, in order: the Ready gate's story checks on the checkout's plan (default `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`), the plan-only tier, a green `ready-<KEY>` lens verdict bound to the current plan blob | `board.py select <KEY>: refused (ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
+| `select <KEY> [--plan PATH]` | `ENTRY_RULES["selected"]`, in order: the Ready gate's story checks on the checkout's plan (default `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`), the plan-only tier, a green `ready-<KEY>` lens verdict bound to the current plan blob (green with carried warnings counts, `lens_verdict.py` § Carried warnings) | `board.py select <KEY>: refused (ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
 | `move <KEY> on_hold --reopen T` | a non-blank reopen trigger, kept in the row as `reopen` | `board.py move <KEY> <state>: refused: <reason>`, one line per failure |
 | `move <KEY> backlog --epic EPIC` | exactly one `*-epic.md` under `docs/plans/` names `EPIC` (`ticket:`, `epic:` or `linked_epics:`), and its `status:` starts `approved` | as above |
 | `move <KEY> selected` | always refused: `use board.py select` | as above |
@@ -564,8 +564,11 @@ computed: <reason>`. Without `risk.command` the gate warns `tier check off` and 
 `tier: none`. `ready_gate.py story` runs the same tier and prints `tier: <line 1>` on stderr.
 
 **Transitions log.** A passing move appends one row to `board-transitions.jsonl` beside the board
-(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, pr?, reopen?, epic?, ticket}`
-(`via` and `rc` on `done` rows only); `from` is
+(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, carried?, pr?, reopen?, epic?, ticket}`
+(`via` and `rc` on `done` rows only; `carried` on a `selected` row only: the WARNINGs a green
+Ready panel carries under `ready_panel.warning_ok_after_rounds`, each `{lens, claim, where}`, also
+printed as `carried: <lens>: <claim> (<where>)` lines; the master's worker brief copies them as
+must-dos, `skills/master/SKILL.md` § Worker brief); `from` is
 the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
 `carried`).
 

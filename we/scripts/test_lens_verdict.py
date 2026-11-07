@@ -635,3 +635,141 @@ def test_post_reports_a_failed_comment(repo, gh_comment, monkeypatch):
 def test_post_refuses_a_ready_panel(repo):
     code, _, err = run("post", f"ready-{KEY}")
     assert code == 2 and "is no T2 panel" in err
+
+
+# --- carried warnings: ready_panel.warning_ok_after_rounds -----------------------------------
+
+
+def set_rounds(root: Path, rounds: int | None) -> None:
+    crew = json.loads(json.dumps(CREW))
+    if rounds is not None:
+        crew["ready_panel"] = {"warning_ok_after_rounds": rounds}
+    (root / ".weside" / "crew.json").write_text(json.dumps(crew))
+
+
+def new_plan_version(root: Path) -> None:
+    plan = root / "docs" / "plans" / f"{KEY}-story.md"
+    plan.write_text(plan.read_text() + "\nrevised\n")
+
+
+def panel_in_round(root: Path, rounds: int, *severities: str) -> str:
+    """A Ready panel in round ``rounds``: product carries one finding per severity, the other
+    lenses are green."""
+    vid = f"ready-{KEY}"
+    for i in range(rounds):
+        if i:
+            new_plan_version(root)
+        assert run("plan", "ready", KEY)[0] == 0
+    assert json.loads(verdict_file(root, vid).read_text())["round"] == rounds
+    findings = [blocking(severity=s) for s in severities]
+    assert run("write", vid, "product", stdin=answer(*findings))[0] == 0
+    for lens in ("architecture", "acceptance"):
+        assert run("write", vid, lens, stdin=GREEN)[0] == 0
+    return vid
+
+
+def test_a_round_is_a_new_plan_version_never_a_restart(repo):
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    run("plan", "ready", KEY)
+    assert json.loads(verdict_file(repo, vid).read_text())["round"] == 1
+    new_plan_version(repo)
+    run("plan", "ready", KEY)
+    assert json.loads(verdict_file(repo, vid).read_text())["round"] == 2
+
+
+def test_a_file_without_round_counts_as_round_one(repo):
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    path = verdict_file(repo, vid)
+    doc = json.loads(path.read_text())
+    del doc["round"]
+    path.write_text(json.dumps(doc))
+    assert "lens product: missing" in run("check", vid)[1]
+    new_plan_version(repo)
+    run("plan", "ready", KEY)
+    assert json.loads(path.read_text())["round"] == 2
+
+
+@pytest.mark.parametrize("value", [0, "2", True])
+def test_a_round_that_is_no_number_of_at_least_one_is_refused(repo, value):
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    path = verdict_file(repo, vid)
+    doc = json.loads(path.read_text())
+    doc["round"] = value
+    path.write_text(json.dumps(doc))
+    code, out, _ = run("check", vid)
+    assert code == 1 and "round needs a number of at least 1" in out
+
+
+def test_without_the_key_a_warning_stays_red_in_any_round(repo):
+    set_rounds(repo, None)
+    vid = panel_in_round(repo, 3, "WARNING")
+    green, lines, carried = lv.check_panel(repo, vid)
+    assert not green and carried == []
+    assert lines[-1] == f"panel {vid}: red"
+
+
+def test_from_round_n_a_warning_only_panel_is_green_with_its_warnings_carried(repo):
+    set_rounds(repo, 2)
+    vid = panel_in_round(repo, 2, "WARNING", "NOTE")
+    code, out, _ = run("check", vid)
+    assert code == 0
+    assert "lens product: green (warnings carried: WARNING a.py:1)" in out
+    assert out.splitlines()[-1] == f"panel {vid}: green (warnings carried)"
+    assert lv.check_panel(repo, vid)[2] == [{"lens": "product", "claim": "c", "where": "a.py:1"}]
+    assert (
+        json.loads(verdict_file(repo, vid).read_text())["verdicts"]["product"]["verdict"] == "red"
+    )
+
+
+def test_before_round_n_a_warning_only_panel_stays_red(repo):
+    set_rounds(repo, 2)
+    vid = panel_in_round(repo, 1, "WARNING")
+    green, lines, carried = lv.check_panel(repo, vid)
+    assert not green and carried == []
+    assert "lens product: red (WARNING a.py:1)" in lines
+
+
+@pytest.mark.parametrize("severities", [("BLOCKING",), ("WARNING", "BLOCKING")])
+def test_a_blocking_stays_red_after_round_n(repo, severities):
+    set_rounds(repo, 2)
+    vid = panel_in_round(repo, 3, *severities)
+    green, lines, carried = lv.check_panel(repo, vid)
+    assert not green and carried == []
+    assert lines[-1] == f"panel {vid}: red"
+
+
+def test_a_failed_lens_stays_red_after_round_n(repo):
+    set_rounds(repo, 1)
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    run("write", vid, "product", "--failed", "the agent stopped")
+    for lens in ("architecture", "acceptance"):
+        run("write", vid, lens, stdin=GREEN)
+    assert lv.check_panel(repo, vid)[:1] == (False,)
+
+
+def test_carried_warnings_are_cleared_when_the_panel_is_red_elsewhere(repo):
+    set_rounds(repo, 1)
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    run("write", vid, "product", stdin=answer(blocking(severity="WARNING")))
+    run("write", vid, "architecture", stdin=answer(blocking()))
+    run("write", vid, "acceptance", stdin=GREEN)
+    assert lv.check_panel(repo, vid)[0::2] == (False, [])
+
+
+def test_a_t2_panel_never_carries_a_warning(repo):
+    set_rounds(repo, 1)
+    vid = "t2-pr7"
+    run("plan", "t2", "7")
+    assert "round" not in json.loads(verdict_file(repo, vid).read_text())
+    warning = blocking({"command": "pytest tests/test_x.py::test_y", "exit": 1}, "WARNING")
+    run("write", vid, "product", stdin=answer(warning))
+    for lens in ("architecture", "acceptance"):
+        run("write", vid, lens, stdin=GREEN)
+    green, lines, carried = lv.check_panel(repo, vid)
+    assert not green and carried == []
+    assert "lens product: red (WARNING a.py:1)" in lines
