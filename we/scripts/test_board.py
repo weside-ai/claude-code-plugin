@@ -1888,10 +1888,42 @@ class TestSelectLenses:
         plan = moving / "work" / "docs" / "plans" / f"{KEY}-story.md"
         plan.write_text(plan.read_text().replace("**Then** it writes", "it writes"))
         read = []
-        monkeypatch.setattr(lens_verdict, "check", lambda *a: read.append(a) or (True, []))
+        monkeypatch.setattr(
+            lens_verdict, "check_panel", lambda *a: read.append(a) or (True, [], [])
+        )
         assert act(moving, "select", KEY, adapter=fake()) == 1
         assert read == []
         assert "refused (ready gate)" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("rounds", [None, 2])
+    def test_select_carries_the_warnings_of_round_n_into_the_row(self, moving, capsys, rounds):
+        root = moving / "work"
+        crew_path = root / ".weside" / "crew.json"
+        data = json.loads(crew_path.read_text(encoding="utf-8"))
+        if rounds is not None:
+            data["ready_panel"] = {"warning_ok_after_rounds": rounds}
+        crew_path.write_text(json.dumps(data), encoding="utf-8")
+        vid = f"ready-{KEY}"
+        plan = root / "docs" / "plans" / f"{KEY}-story.md"
+        lens_verdict.plan(root, "ready", KEY)
+        plan.write_text(plan.read_text() + "\n<!-- round 2 -->\n")
+        panel = lens_verdict.plan(root, "ready", KEY)
+        warning = {"severity": "WARNING", "claim": "name the error", "where": "plan:AC3"}
+        warning["question"] = "q"
+        for entry in panel["entries"]:
+            body = {"findings": [warning] if entry["lens"] == "acceptance" else []}
+            lens_verdict.write(root, vid, entry["lens"], answer=json.dumps(body))
+        adapter = fake()
+        code = act(moving, "select", KEY, adapter=adapter)
+        out, err = capsys.readouterr()
+        if rounds is None:
+            assert code == 1 and "refused (lenses)" in err
+            assert "lens acceptance: red (WARNING plan:AC3)" in err
+            return
+        assert code == 0, err
+        carried = [{"lens": "acceptance", "claim": "name the error", "where": "plan:AC3"}]
+        assert transitions(moving)[-1]["carried"] == carried
+        assert "carried: acceptance: name the error (plan:AC3)" in out.splitlines()
 
 
 class TestMove:

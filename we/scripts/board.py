@@ -1787,12 +1787,17 @@ def rule_tier(m):
 
 
 def rule_lenses(m):
-    """The `ready-<KEY>` lens verdict, green and bound to the current plan blob."""
+    """The `ready-<KEY>` lens verdict, green and bound to the current plan blob; the warnings a
+    green panel carries (`ready_panel.warning_ok_after_rounds`) go into the row as `carried`."""
     try:
-        green, lines = lens_verdict.check(m.root, f"ready-{m.key}")
+        green, lines, carried = lens_verdict.check_panel(m.root, f"ready-{m.key}")
     except (lens_verdict.UnusableError, OSError) as exc:
         return [f"lens verdict unreadable: {exc}"]
-    return [] if green else lines
+    if not green:
+        return lines
+    if carried:
+        m.extra["carried"] = carried
+    return []
 
 
 def rule_reopen(m):
@@ -2082,6 +2087,8 @@ def _transition(state, args, crew, now, target, head):
     ops = adapter.move(key, status)
     if "tier" in m.extra:
         print(f"tier: {m.extra['tier']}")
+    for item in m.extra.get("carried", []):
+        print(f"carried: {item['lens']}: {item['claim']} ({item['where'] or '-'})")
     print(json.dumps(row, ensure_ascii=False))
     _print_carry(ops)
     return 0

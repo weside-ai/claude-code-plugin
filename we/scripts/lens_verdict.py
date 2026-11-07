@@ -30,7 +30,9 @@ File: ``version``, ``kind`` (ready|t2), ``subject``, ``bound_to`` (``plan_blob``
 output of ``git hash-object`` on the plan; ``head`` for t2, the PR's head SHA), ``expected`` (the
 lenses copied from the crew when the panel started, so a crew edit cannot shrink a running panel),
 optional ``plan`` (ready only: the plan's path relative to the repo root when ``--plan`` named
-one, so ``write`` and ``check`` re-hash that file) and ``verdicts.<lens>``: ``verdict``
+one, so ``write`` and ``check`` re-hash that file), ``round`` (ready only: the panel's round, 1 for
+the first plan version; ``plan ready`` on a new plan blob writes the stored round plus one, on the
+same blob it keeps it, so a restart is no round; a file without ``round`` counts as round 1) and ``verdicts.<lens>``: ``verdict``
 (green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``, ``findings``, and ``failure`` (why a
 lens was recorded red without findings). A finding:
 ``severity`` (BLOCKING|WARNING|NOTE), ``claim``, ``where``, ``question`` (the question-file line it
@@ -45,6 +47,13 @@ every expected lens has a verdict, every verdict is green, and the binding is to
 PR head; a missing lens, a red lens and a stale binding each print a line and count red. The
 verdict and the status are computed here from the findings, never taken from the caller, and
 ``check`` recomputes them from the stored findings.
+
+Carried warnings (Ready only, crew ``ready_panel.warning_ok_after_rounds`` = N): from round N on,
+a lens that is red only through standing WARNINGs (no BLOCKING, no ``failure``) prints ``lens
+<lens>: green (warnings carried: …)`` and counts green; the panel line then reads ``green
+(warnings carried)`` and ``check_panel`` returns the warnings (lens, claim, where) for the board's
+Selected row. A BLOCKING stays red in every round; without the key, and on every T2 panel, a
+WARNING stays red. The verdict file keeps the lens ``red``: carrying is decided by ``check``.
 
 Red arm (T2): a BLOCKING or WARNING finding needs ``red_arm.command`` and ``red_arm.exit``, or the
 answer is refused naming the finding. The skill runs the arm (never this script: lens output is
@@ -107,7 +116,7 @@ NO_PROOF_EXITS = (124, 126, 127)
 ARM_FORMS = ("pytest ", "python3 -m pytest ", "bash scripts/", "python3 scripts/")
 ARM_FORBIDDEN = (";", "|", "&", "$(", "`", ">", "<", "\n", "\r")
 ID_RE = re.compile(r"\A(?:ready-(?P<key>[A-Za-z][A-Za-z0-9_]*-\d+)|t2-pr(?P<pr>\d+))\Z")
-FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts", "plan")
+FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts", "plan", "round")
 VERDICT_KEYS = ("verdict", "agent", "ran_at", "sample", "sampled", "findings", "failure")
 FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm", "status")
 ANSWER_FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm")
@@ -336,6 +345,11 @@ def read_file(path: Path) -> dict[str, Any]:
     bound = _closed(
         doc.get("bound_to"), ("plan_blob",) if kind == "ready" else ("head",), "bound_to"
     )
+    round_ = doc.get("round", 1)
+    if (kind != "ready" and "round" in doc) or not (
+        isinstance(round_, int) and not isinstance(round_, bool) and round_ >= 1
+    ):
+        raise RefusedError(f"panel {path.stem}: round needs a number of at least 1 (ready only)")
     expected = doc.get("expected")
     if not isinstance(expected, list) or not all(isinstance(x, str) for x in expected):
         raise RefusedError(f"panel {path.stem}: expected needs a list of lenses")
@@ -388,6 +402,7 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     except crew_mod.CrewError as exc:
         raise UnusableError(f"crew: {exc}") from exc
     bound = current_binding(root, kind, subject, rel)
+    path = verdict_dir(root) / f"{vid}.json"
     doc: dict[str, Any] = {
         "version": VERSION,
         "kind": kind,
@@ -398,7 +413,9 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     }
     if rel is not None:
         doc["plan"] = rel
-    _write_atomic(verdict_dir(root) / f"{vid}.json", doc)
+    if kind == "ready":
+        doc["round"] = next_round(path, bound)
+    _write_atomic(path, doc)
     entries = []
     for lens in chosen:
         entry = {
@@ -416,6 +433,17 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
             entry["head"] = bound["head"]
         entries.append(entry)
     return {"id": vid, "kind": kind, "bound_to": bound, "entries": entries}
+
+
+def next_round(path: Path, bound: dict[str, str]) -> int:
+    """The round of a Ready panel started on ``bound``: 1 without a readable earlier panel, the
+    stored round on the same plan blob (a restart), the stored round plus one on a new blob."""
+    try:
+        old = read_file(path)
+    except (RefusedError, UnusableError):
+        return 1
+    stored = old.get("round", 1)
+    return stored if old["bound_to"] == bound else stored + 1
 
 
 def parse_answer(text: str) -> dict[str, Any]:
@@ -524,12 +552,26 @@ def _append(path: Path, obj: dict[str, Any]) -> None:
 
 def check(root: Path, vid: str) -> tuple[bool, list[str]]:
     """(green, lines): one line per lens, a stale line when the binding moved, the panel line."""
+    green, lines, _carried = check_panel(root, vid)
+    return green, lines
+
+
+def _carry_after(root: Path) -> int | None:
+    _path, crew = load_crew(root)
+    rounds = (crew.get("ready_panel") or {}).get("warning_ok_after_rounds")
+    return rounds if isinstance(rounds, int) and not isinstance(rounds, bool) else None
+
+
+def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """``check`` plus the warnings a green Ready panel carries (``lens``, ``claim``, ``where``);
+    the list is empty whenever the panel is red."""
     kind, subject = parse_id(vid)
     try:
         doc = read_file(verdict_dir(root) / f"{vid}.json")
     except RefusedError as exc:
-        return False, [str(exc), f"panel {vid}: red"]
-    lines, green = [], True
+        return False, [str(exc), f"panel {vid}: red"], []
+    lines, green, carried = [], True, []
+    carry_after: int | None = None
     try:
         now = current_binding(root, kind, subject, doc.get("plan"))
     except RefusedError as exc:
@@ -548,7 +590,19 @@ def check(root: Path, vid: str) -> tuple[bool, list[str]]:
         standing = [
             f for f in v["findings"] if f["severity"] in COUNTING and f["status"] == "standing"
         ]
-        if v["verdict"] == "red":
+        only_warnings = (
+            kind == "ready"
+            and v["verdict"] == "red"
+            and not v["failure"]
+            and all(f["severity"] == "WARNING" for f in standing)
+        )
+        if only_warnings and carry_after is None:
+            carry_after = _carry_after(root) or 0
+        if only_warnings and carry_after and doc.get("round", 1) >= carry_after:
+            carried += [{"lens": lens, "claim": f["claim"], "where": f["where"]} for f in standing]
+            why = ", ".join(f"WARNING {f['where'] or ''}".strip() for f in standing)
+            lines.append(f"lens {lens}: green (warnings carried: {why})")
+        elif v["verdict"] == "red":
             green = False
             why = v["failure"] or ", ".join(
                 f"{f['severity']} {f['where'] or ''}".strip() for f in standing
@@ -557,8 +611,11 @@ def check(root: Path, vid: str) -> tuple[bool, list[str]]:
         else:
             notes = sum(1 for f in v["findings"] if f["severity"] == "NOTE")
             lines.append(f"lens {lens}: green" + (f" ({notes} note)" if notes else ""))
-    lines.append(f"panel {vid}: {'green' if green else 'red'}")
-    return green, lines
+    if not green:
+        carried = []
+    state = "red" if not green else "green (warnings carried)" if carried else "green"
+    lines.append(f"panel {vid}: {state}")
+    return green, lines, carried
 
 
 def samples(root: Path, keeper: str | None = None) -> list[dict[str, Any]]:
