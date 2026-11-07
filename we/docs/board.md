@@ -216,7 +216,7 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
-| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `merge by hand (<class>): <url>` instead of **Accept**, and `board.py close-merged` drops the question once the PR is merged or closed |
+| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` instead of **Accept** (approve where the merge hook's one-way refusal names the approve as the go, else merge by hand), and `board.py close-merged` drops the question once the PR is merged or closed |
 | `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
@@ -392,7 +392,8 @@ crew's `naming.key` or a cause outside the six is refused, one line each, before
 A `merge-go` question also needs `--pr <ref>` (a URL, `<owner>/<repo>#<n>` or a number) on a PR
 `gh pr view` reads as `OPEN`; a merged or closed one is refused before the reader, so no question
 asks about a merge that already happened. `--one-way <class>` (merge-go only) marks a one-way PR:
-the owner merges it by hand, so the card offers the link and no **Accept**. `board.py close-merged`
+the owner approves it where the merge hook's refusal names the approve as the go, else merges it
+by hand, so the card offers the link and no **Accept**. `board.py close-merged`
 (also run by `bundle` and `/we:merged`) removes every open merge question whose PR
 merged or closed and logs one `closed` line each in `board-questions.jsonl`.
 Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of

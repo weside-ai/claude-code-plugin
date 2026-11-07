@@ -253,7 +253,7 @@ test('Accept in the orchestrator session appends one line, sends nothing itself 
   await ui.unmount()
 })
 
-test('a one-way merge question shows the PR link to merge by hand and no Accept', async ($, on) => {
+test('a one-way merge question shows the PR link to approve or merge and no Accept', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)
   const url = 'https://github.com/o/r/pull/5'
@@ -266,7 +266,7 @@ test('a one-way merge question shows the PR link to merge by hand and no Accept'
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ key: 'accept-Q1' })).toBeUndefined()
   expect(await ui.find({ key: 'deny-Q1' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: `merge by hand (money): ${url}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: `approve or merge (money): ${url}` })).toBeDefined()
   await ui.unmount()
 })
 

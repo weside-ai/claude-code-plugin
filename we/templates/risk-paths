@@ -1,6 +1,7 @@
 # Risk rules of this repo, read by the merge hook from the default branch only.
 # A PR touching a path of a one-way section is `T2 one-way <section>`: no session merges it, the
-# owner (`human.name` in the crew) merges it by hand. `[t2]` paths need the lens panel.
+# owner (`human.name` in the crew) merges it by hand, or approves it where the repo runs an approve
+# gate (the merge hook's refusal says which). `[t2]` paths need the lens panel.
 # A file without any one-way section is valid: the brake is empty on purpose and each merge says so.
 # Grammar: `[section]` and `path <glob>` lines (`**`, `*`, `?`, `{a,b}`).
 # One-way sections: brake-change, money, destructive-migration, terraform-secrets.
