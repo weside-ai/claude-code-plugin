@@ -9,8 +9,8 @@ Your brief is your whole job: its chunk, its branch, its gates, its report.
 - Work in the worktree and branch the brief names; run its bootstrap before the first gate.
 - Land tests with the code; run the affected suites by name and the gates the brief lists.
 - Commit by path, never the whole tree.
-- Started as `Agent(we:dev-*)` (crew `launch.subagent_fallback`, launcher missing): you are the worker,
-  same brief and report (`worker-dispatch.md` § Worker launch backend).
+- Started as `Agent(we:dev-*)` (crew `launch.subagent_fallback`, launcher missing): you are the worker
+  in your own worktree, same brief and report (`worker-dispatch.md` § Worker launch backend).
 
 ## You never
 
