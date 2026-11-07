@@ -657,6 +657,82 @@ class TestAsk:
         assert line["ask"] == ASK["--ask"] and line["cause"] == "prod"
         assert line["reader"] == CLEAR
 
+    def test_a_plan_slug_stands_for_a_key_before_the_ticket_exists(self, crewless, capsys):
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv(**{"--key": "onboarding-v2"})) == 0
+        assert capsys.readouterr().out.strip() == f"posted {LIVE_NEXT_Q}"
+        assert board_of(crewless)["owner_queue"][-1]["key"] == "onboarding-v2"
+
+
+# The id `ask` posts on a fresh LIVE board with no logs: one past LIVE's own highest Q.
+LIVE_NEXT_Q = board.StateDir("/nonexistent/board.json").next_id("Q", LIVE)
+
+
+class TestSecondCrew:
+    """A second crew's board keeps its own logs and ids; board.json keeps its names."""
+
+    def test_a_named_board_logs_beside_itself_under_its_stem(self, crewless, capsys):
+        (crewless / "board-answers.jsonl").write_text('{"id": "Q407", "answer": "accept"}\n')
+        (crewless / "board-questions.jsonl").write_text('{"id": "Q408", "outcome": "posted"}\n')
+        other = crewless / "acme-board.json"
+        other.write_text(json.dumps(LIVE), encoding="utf-8")
+        answer_with(crewless, CLEAR)
+        assert board.main(["--board", str(other), *ask_argv()], now=NOW) == 0
+        assert capsys.readouterr().out.strip() == f"posted {LIVE_NEXT_Q}"
+        [line] = jsonl(crewless / "acme-board-questions.jsonl")
+        assert line["id"] == LIVE_NEXT_Q
+        assert len(jsonl(crewless / "board-questions.jsonl")) == 1
+
+    def test_the_default_board_keeps_its_log_names(self, tmp_path):
+        state = board.StateDir(tmp_path / "board.json")
+        names = [state.answers_path, state.questions_path, state.decisions_path]
+        names += [state.escalations_path, state.transitions_path, state.waits_path]
+        assert [p.name for p in names] == [
+            f"board-{k}.jsonl"
+            for k in ("answers", "questions", "decisions", "escalations", "transitions", "waits")
+        ]
+
+    def test_without_board_a_verb_writes_the_crews_board_file(self, crewed, capsys, monkeypatch):
+        # Without the fix the verb writes DEFAULT_BOARD: keep that in tmp, never the real board.
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewed / "board.json"))
+        crew_file = crewed / "work" / ".weside" / "crew.json"
+        data = json.loads(crew_file.read_text())
+        data["board"] = {**(data.get("board") or {}), "file": "../../acme-board.json"}
+        crew_file.write_text(json.dumps(data))
+        (crewed / "acme-board.json").write_text(json.dumps(LIVE), encoding="utf-8")
+        before = (crewed / "board.json").read_bytes()
+        answer_with(crewed, CLEAR)
+        assert board.main(ask_argv(), now=NOW) == 0
+        assert capsys.readouterr().out.strip() == f"posted {LIVE_NEXT_Q}"
+        assert (
+            json.loads((crewed / "acme-board.json").read_text())["owner_queue"][-1]["id"]
+            == LIVE_NEXT_Q
+        )
+        assert jsonl(crewed / "acme-board-questions.jsonl")[0]["id"] == LIVE_NEXT_Q
+        assert (crewed / "board.json").read_bytes() == before
+
+    def test_without_board_or_crew_file_the_default_board_is_written(self, crewless, monkeypatch):
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewless / "board.json"))
+        answer_with(crewless, CLEAR)
+        assert board.main(ask_argv(), now=NOW) == 0
+        assert board_of(crewless)["owner_queue"][-1]["id"] == LIVE_NEXT_Q
+        assert jsonl(crewless / "board-questions.jsonl")[0]["id"] == LIVE_NEXT_Q
+
+    def test_path_names_the_crews_board_and_crew_only_fails_without_one(
+        self, crewed, capsys, monkeypatch
+    ):
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewed / "board.json"))
+        assert board.main(["path", "--crew-only"]) == 1
+        assert capsys.readouterr().out == ""
+        crew_file = crewed / "work" / ".weside" / "crew.json"
+        data = json.loads(crew_file.read_text())
+        data["board"] = {**(data.get("board") or {}), "file": "../../acme-board.json"}
+        crew_file.write_text(json.dumps(data))
+        assert board.main(["path", "--crew-only"]) == 0
+        assert capsys.readouterr().out.strip() == str((crewed / "acme-board.json").resolve())
+
+
+class TestAskReader:
     def test_the_reader_runs_cold_with_only_the_question(self, crewless, monkeypatch):
         monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(crewless / "pinned-profile"))
         pin(monkeypatch, "otto")

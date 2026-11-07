@@ -168,8 +168,17 @@ undrawn below that until you widen the terminal or run `/board`.
 
 ## The file
 
-Default `~/.claude/we-state/board.json`; the plugin option `boardFile` names another one (`~/` and a
-relative path count from the home folder). Without the file the pane says so and points here.
+The board is the crew's `board.file` for the session's repo (`.weside/crew.json`, relative to the
+crew file), else the plugin option `boardFile` (`~/` and a relative path count from the home folder),
+else `~/.claude/we-state/board.json`. The crew file wins because a plugin option counts only from user
+or managed settings: a second crew on the same machine names its own board there. `board.py` without
+`--board` writes the same file (crew, else default); `board.py path --crew-only` prints the crew's.
+Without the file the pane says so and points here.
+
+**Logs per board.** Every JSONL file beside the board carries the board file's stem: `board.json`
+keeps `board-answers.jsonl`, `board-questions.jsonl` and the rest; `acme-board.json` writes
+`acme-board-answers.jsonl` and so on, and counts its `Q`/`D`/`E` ids on its own. Below, the
+names are those of the default board. `freeze.json` stays one per folder.
 
 ```json
 {

@@ -197,11 +197,11 @@ def fetch_verdict(gh, run_id, tag):
 
 
 class Log:
-    """board-accept.jsonl beside the board: one line per (key, rc) outcome that is not a move."""
+    """<stem>-accept.jsonl beside the board (`board-accept.jsonl` for board.json): one line per (key, rc) outcome that is not a move."""
 
     def __init__(self, state):
         self.state = state
-        self.path = state.board_path.with_name("board-accept.jsonl")
+        self.path = state.log_path("accept")
 
     def lines(self):
         return board._read_jsonl(self.path)

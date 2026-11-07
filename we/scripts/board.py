@@ -6,6 +6,7 @@ Usage:
            [--quote "<the owner's words>"]
   board.py [--board FILE] freeze --reason "<why>" [--repo OWNER/REPO ...] [--by NAME]
   board.py [--board FILE] unfreeze
+  board.py [--board FILE] path [--crew-only]
   board.py [--board FILE] set [--for NAME] <field>=<value> …       fields: waiting_on, state, now
   board.py [--board FILE] ask --session NAME --key KEY --key-title T --ask Q --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
@@ -45,7 +46,8 @@ set      writes the caller's own session line (found by `name` through `claude a
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
          `since`. It never writes `updated` or `updated_by`.
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
-         without context; otherwise the reader's reason goes back as a `note` on the asking
+         without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
+         lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
          session's line and a `returned` news item. Every run past the field check leaves one line
          in board-questions.jsonl, text included. Prints `posted Q<n>`. `--urgent` stamps
          `urgent: true` on the item and the log line; `bundle` lists urgent questions first.
@@ -126,12 +128,16 @@ freeze   writes the freeze flag `freeze.json` beside the board file (only one th
          auto-merge armed in the named repos (without --repo the flag names `*`, every repo, and
          the current directory's repo is disarmed) and prints the flag; while it stands the merge
          hook refuses every merge and arm in those repos (scripts/board_freeze.py).
+path     prints the board file a verb writes (absolute); `--crew-only` prints the crew's
+         `board.file` and exits 1 when the crew names none (the /board pane's lookup).
 unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
-only grow (O_APPEND). FILE defaults to ~/.claude/we-state/board.json (the pane's option
-`boardFile` names another).
+only grow (O_APPEND). FILE defaults to the crew's `board.file` (relative to the crew file), else
+~/.claude/we-state/board.json. The JSONL files are named after the board file's stem:
+`board.json` keeps `board-questions.jsonl` and the rest, `acme-board.json` writes
+`acme-board-questions.jsonl`, so two crews count their ids apart.
 """
 
 from __future__ import annotations
@@ -179,6 +185,8 @@ TOUCHES = ("vision", "money", "law", "priority")
 OPEN_FIELDS = ("key", "parties", "question", "a", "a_cost", "b", "b_cost", "reversible")
 STAGES = ("self", "escalation", "bundle")
 NEWS_KIND_BY_STAGE = {"escalation": "escalation", "bundle": "todo"}
+# A question about an epic before its ticket exists names the plan slug (`ask --key`).
+PLAN_SLUG = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 PAIR_WARN_AFTER = 2  # escalations per role pair and ISO week before the crew's rights look wrong
 LOCK_WAIT_S = 10.0
 MINUTE_FMT = "%Y-%m-%dT%H:%MZ"
@@ -248,13 +256,18 @@ class StateDir:
 
     def __init__(self, board_file):
         self.board_path = Path(board_file).expanduser()
-        self.answers_path = self.board_path.with_name("board-answers.jsonl")
-        self.questions_path = self.board_path.with_name("board-questions.jsonl")
-        self.decisions_path = self.board_path.with_name("board-decisions.jsonl")
-        self.escalations_path = self.board_path.with_name("board-escalations.jsonl")
-        self.transitions_path = self.board_path.with_name("board-transitions.jsonl")
-        self.waits_path = self.board_path.with_name("board-waits.jsonl")
+        self.answers_path = self.log_path("answers")
+        self.questions_path = self.log_path("questions")
+        self.decisions_path = self.log_path("decisions")
+        self.escalations_path = self.log_path("escalations")
+        self.transitions_path = self.log_path("transitions")
+        self.waits_path = self.log_path("waits")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
+
+    def log_path(self, kind):
+        """`<stem>-<kind>.jsonl` beside the board file: `board.json` keeps `board-<kind>.jsonl`, a
+        second crew's `acme-board.json` gets `acme-board-<kind>.jsonl` and its own ids."""
+        return self.board_path.with_name(f"{self.board_path.stem}-{kind}.jsonl")
 
     def board(self):
         """The board file as a dict, read only; a missing file is an empty board."""
@@ -834,6 +847,26 @@ def _current_repo():
     return out.stdout.strip() if out.returncode == 0 else None
 
 
+def cmd_path(state, args, _crew, _now):
+    """Print the board file a verb writes; --crew-only: the crew's `board.file`, exit 1 without."""
+    if args.crew_only:
+        default = Path(DEFAULT_BOARD).expanduser()
+        named = _freeze_module().watched_board_files(Path.cwd(), str(default))[0]
+        # The crew's merged defaults carry the default file too: that names no board of its own.
+        if named in (default, Path(crew_mod.DEFAULTS["board"]["file"]).expanduser()):
+            return 1
+        print(named.resolve())
+        return 0
+    print(state.board_path.resolve())
+    return 0
+
+
+def default_board(start=None):
+    """The board file a verb without --board writes: the crew's `board.file` for `start` (default
+    the cwd), else DEFAULT_BOARD; the same file the merge hook reads a freeze beside."""
+    return _freeze_module().watched_board_files(start or Path.cwd(), DEFAULT_BOARD)[0]
+
+
 def _unwatched(bf, state, verb):
     """Why `verb` must not touch `state`'s flag (the hook reads none beside it), or None."""
     target = bf.flag_path(state.board_path)
@@ -896,14 +929,22 @@ def _key_failure(crew, key, verb):
     return []
 
 
+def _is_plan_slug(crew, key):
+    """A plan slug in place of a ticket key; one that upper-cased is a key (`proj-12`) is a typo."""
+    if not re.fullmatch(PLAN_SLUG, key):
+        return False
+    return bool(_key_failure(crew, key.upper(), "ask"))
+
+
 def _ask_failures(args, crew):
     failures = []
     for field in ASK_FIELDS:
         value = getattr(args, field)
         if value is None or not value.strip():
             failures.append(f"board.py ask: missing --{field.replace('_', '-')}")
-    if args.key and args.key.strip():
-        failures += _key_failure(crew, args.key.strip(), "ask")
+    key = (args.key or "").strip()
+    if key and not _is_plan_slug(crew, key):
+        failures += _key_failure(crew, key, "ask")
     if args.cause and args.cause.strip() and args.cause.strip() not in CAUSES:
         failures.append(f"board.py ask: --cause {args.cause!r} is not one of {', '.join(CAUSES)}")
     return failures
@@ -2286,7 +2327,8 @@ def _add_flow_verbs(verbs):
 def parser():
     p = argparse.ArgumentParser(prog="board.py", description="The board's verbs for a session.")
     p.add_argument(
-        "--board", default=DEFAULT_BOARD, help=f"the board file (default {DEFAULT_BOARD})"
+        "--board",
+        help=f"the board file (default: the crew's board.file, else {DEFAULT_BOARD})",
     )
     verbs = p.add_subparsers(dest="verb", required=True)
     a = verbs.add_parser("answer", help="write back an answer the owner gave in a chat")
@@ -2301,6 +2343,9 @@ def parser():
     f.add_argument("--repo", action="append", help="OWNER/REPO whose armed PRs to disarm")
     f.add_argument("--by", help="who freezes (default: the companion or the user)")
     f.set_defaults(run=cmd_freeze)
+    pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
+    pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")
+    pa.set_defaults(run=cmd_path)
     u = verbs.add_parser("unfreeze", help="lift the freeze; prints the PRs to re-arm by hand")
     u.set_defaults(run=cmd_unfreeze)
 
@@ -2342,7 +2387,7 @@ def parser():
 
 
 # A freeze must work where the crew file is missing or broken: the brake reads no crew.
-CREWLESS_VERBS = ("answer", "freeze", "unfreeze")
+CREWLESS_VERBS = ("answer", "freeze", "unfreeze", "path")
 
 
 def main(argv=None, now=None, adapter=None):
@@ -2351,7 +2396,7 @@ def main(argv=None, now=None, adapter=None):
     try:
         crew = None if args.verb in CREWLESS_VERBS else load_crew()
         args.adapter_given = adapter
-        return args.run(StateDir(args.board), args, crew, now or _now())
+        return args.run(StateDir(args.board or default_board()), args, crew, now or _now())
     except BoardError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code

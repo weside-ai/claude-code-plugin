@@ -1,6 +1,6 @@
-// /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json,
-// option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
-// question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to board-answers.jsonl beside it.
+// /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json;
+// the crew's board.file, else option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
+// question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to the answers file beside it (<stem>-answers.jsonl).
 // In the orchestrator's own session the module is also the deliverer of those lines (deliver.ts), pane open or not.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
@@ -509,7 +509,22 @@ async function toggleWork($: $, name: string) {
   if (!was || was.error || (await $.clock.now()) - was.at >= WORK_MS) $.clock.after(0, () => void loadWork($, [name]))
 }
 
-const fileOf = (options: PluginOptions) => option(options, 'boardFile') ?? DEFAULT_FILE
+// The board this session shows: the crew's board.file for the session's repo (resolved once at
+// session start, crewBoardOf), else the option boardFile, else the default. pluginConfigs reach a plugin
+// only from user or managed settings, so a second crew names its board in its crew file.
+let crewBoard: string | undefined
+const fileOf = (options: PluginOptions) => crewBoard ?? option(options, 'boardFile') ?? DEFAULT_FILE
+
+// board.py path --crew-only prints the crew's board.file as an absolute path and exits 1 without one.
+async function crewBoardOf($: $): Promise<string | undefined> {
+  try {
+    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/board.py`, 'path', '--crew-only'], { timeoutMs: 10_000 })
+    const out = run.stdout.trim()
+    return run.exitCode === 0 && out.startsWith('/') && !out.includes('\n') ? out : undefined
+  } catch {
+    return undefined
+  }
+}
 
 function refreshAll($: $, file: string) {
   $.clock.after(0, () => {
@@ -532,6 +547,7 @@ export async function openBoard($: $, options: PluginOptions): Promise<string> {
 // Run from the module's one session.start hook (hooks/register.ts); everything it reaches with $
 // is a function declaration, the only form the engine follows past an import.
 export async function startBoard($: $, options: PluginOptions) {
+  crewBoard = await crewBoardOf($)
   const file = fileOf(options)
   await $.command.register({ name: 'board', description: 'Workspace board: who works on what and what waits for the owner' })
   // The deliverer runs from here, pane or not; the pane's own timers read only once /board was opened.
@@ -578,7 +594,6 @@ async function autoOpens($: $, options: PluginOptions): Promise<boolean> {
 }
 
 export const registerBoard = (on: On, options: PluginOptions) => {
-  const file = fileOf(options)
   const masterProfile = option(options, 'masterProfile')
 
   on('command.run', { command: 'board' }, async $ => ({ text: await openBoard($, options) }))
@@ -593,7 +608,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     return stored
   }).catch(($, e, next) => next(e))
   on('session.receive', ($, e, next) => {
-    if (delivery.isOn && e.text.includes(NOTICE)) $.clock.after(0, () => void heldNotice($, file, e.text))
+    if (delivery.isOn && e.text.includes(NOTICE)) $.clock.after(0, () => void heldNotice($, fileOf(options), e.text))
     return next(e)
   }).catch(($, e, next) => next(e))
   on('turn.start', async ($, e, next) => {
@@ -631,6 +646,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     // Inside a frame: the border and one column of padding on each side.
     const inner = width - 4
 
+    const file = fileOf(options)
     if (!v) return <Text dimColor>{`reading ${file} …`}</Text>
 
     const board = v.board
