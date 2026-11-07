@@ -786,6 +786,19 @@ def test_the_setup_template_classifies_a_removed_rule_as_brake_core():
     assert any(p.fullmatch(".weside/risk-paths") for _, p in rules["brake-change"])
 
 
+def test_the_setup_template_classifies_a_review_workflow_as_brake_core():
+    """L0's "review workflows" holds for the bundled classifier: both usual review workflow names are
+    core paths, the review helpers beside them (skip gate, runner image) are not."""
+    import risk_paths  # noqa: PLC0415
+
+    rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
+    core = [p for _, p in rules["brake-change"]]
+    for name in ("claude-code-review.yml", "codex-code-review.yml"):
+        assert any(p.fullmatch(f".github/workflows/{name}") for p in core), name
+    for name in ("codex-review-skip.yml", "build-codex-review-runner.yml", "ci.yml"):
+        assert not any(p.fullmatch(f".github/workflows/{name}") for p in core), name
+
+
 def test_the_subagent_fallback_lives_in_the_cards_not_in_l0():
     """L0 keeps the principle (a subagent never builds); the opt-in exception sits in the master
     and worker cards, each pointing at its reference."""

@@ -10,3 +10,6 @@
 [brake-change]
 path .weside/crew.json
 path .weside/risk-paths
+# The review workflows (`claude-code-review.yml`, `codex-code-review.yml`); helpers such as a skip
+# gate are named per repo.
+path .github/workflows/*-code-review.yml
