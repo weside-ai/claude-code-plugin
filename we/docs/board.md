@@ -267,7 +267,7 @@ it, and its `✓ update asked` lapses with the orchestrator's next write of the 
 The pane sends nothing itself. One deliverer carries every answer line: the board module in the
 orchestrator's session, the one whose name equals `updated_by`, or, while that field is empty (a
 `board.py` write never sets it), the crew's coordinator (`roles.coordinator` in the crew file of the
-session's repo, read once at session start); found by matching its session id against
+session's repo, read once at session start, and only when the board is that crew's `board.file`); found by matching its session id against
 `claude agents --json`. It runs from session start, pane open or not, every three seconds, and at
 once after a press in that session. The pane says it in red above the queue when neither names a
 coordinator, and when a press (a line without `via`) has had no verdict from any recipient for five

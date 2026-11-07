@@ -1,8 +1,8 @@
 // Delivery of the board's answers (docs/board.md § Answers), the pure half: which answer lines still
 // owe whom a message, how the ledger folds, which notice means a hold. register.tsx wires the events.
 //
-// One deliverer, in the coordinator's session (its live name is the crew's coordinator, coordinatorName;
-// without a crew the board's `updated_by`), carries
+// One deliverer, in the coordinator's session (its live name is the board's `updated_by`, while that is
+// empty the coordinator of the crew whose board.file it is, coordinatorName), carries
 // each answer line to two recipients and writes one ledger row per recipient:
 //   coordinator  `$.prompt.submit` as the person; delivered once its user row is stored. No row by
 //                the end of a turn that started after the submit (or 30 s idle): submit once more,

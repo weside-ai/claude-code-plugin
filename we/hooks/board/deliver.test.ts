@@ -43,6 +43,8 @@ type Opts = {
   ledgerFails?: () => boolean
   // The session's crew: its board.file (board.py path --crew-only) and crew.py show.
   crew?: { board: string; show: Record<string, unknown> }
+  // A crew file without board.file: crew.py show answers, board.py path --crew-only exits 1.
+  show?: Record<string, unknown>
 }
 
 // A fake home: the board, its answers file and the delivery ledger, with answer.py and deliveries.py
@@ -74,7 +76,10 @@ function home($: T$, on: TOn, o: Opts) {
   on('process.run', (_$, e) => {
     const script = String(e.argv[2] ?? '')
     if (script.endsWith('/scripts/board.py')) return o.crew ? RUN(`${o.crew.board}\n`) : RUN('', 1)
-    if (script.endsWith('/scripts/crew.py')) return o.crew ? RUN(JSON.stringify(o.crew.show)) : RUN('', 1, 'no crew')
+    if (script.endsWith('/scripts/crew.py')) {
+      const show = o.crew?.show ?? o.show
+      return show ? RUN(JSON.stringify(show)) : RUN('', 1, 'no crew')
+    }
     if (script.endsWith('/answer.py')) {
       const [path, id, answer, ts, session] = e.argv.slice(3)
       files.set(path!, `${files.get(path!) ?? ''}${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`)
@@ -556,6 +561,13 @@ test('a crew whose board has no updated_by: its coordinator from crew.json deliv
 
 test('a set updated_by still names the deliverer; the crew coordinator steps in only when it is empty', async ($, on) => {
   const { clock, h } = await crewSession($, on, 'Ada', { crew: acmeCrew(), board: acmeBoard({ updated_by: 'coord' }) })
+  await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Ada' })
+  await clock.advance(6_000)
+  expect([h.submitted, h.sent, h.rows('Q7')]).toEqual([[], [], []])
+})
+
+test('a crew without its own board.file does not deliver from the shared board, even with updated_by empty', async ($, on) => {
+  const { clock, h } = await crewSession($, on, 'Ada', { show: acmeCrew().show, board: acmeBoard() })
   await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Ada' })
   await clock.advance(6_000)
   expect([h.submitted, h.sent, h.rows('Q7')]).toEqual([[], [], []])

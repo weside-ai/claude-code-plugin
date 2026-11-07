@@ -515,9 +515,10 @@ async function toggleWork($: $, name: string) {
 // only from user or managed settings, so a second crew names its board in its crew file.
 let crewBoard: string | undefined
 // The crew's coordinator by name (crew.py show, once at session start). It names the delivering session
-// when the board's `updated_by` is empty: a board.py write never sets that field.
+// when the board's `updated_by` is empty (a board.py write never sets that field), and only on the crew's
+// own board.file: a shared fallback board keeps one deliverer.
 let crewCoordinator: string | undefined
-const coordinatorFor = (board: { updatedBy?: string } | undefined) => board?.updatedBy || crewCoordinator
+const coordinatorFor = (board: { updatedBy?: string } | undefined) => board?.updatedBy || (crewBoard ? crewCoordinator : undefined)
 const fileOf = (options: PluginOptions) => crewBoard ?? option(options, 'boardFile') ?? DEFAULT_FILE
 
 // board.py path --crew-only prints the crew's board.file as an absolute path and exits 1 without one.
@@ -651,7 +652,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const v = await read($, view)
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
-    const ledgerRows = (await read($, deliveries))?.rows ?? {}
+    const deliveriesView = await read($, deliveries)
+    const ledgerRows = deliveriesView?.rows ?? {}
     const restOpen = await read($, isRestOpen)
     const notesOpen = await read($, isNotesOpen)
     const opened = await read($, workOpen)
@@ -665,7 +667,6 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     if (!v) return <Text dimColor>{`reading ${file} …`}</Text>
 
     const board = v.board
-    const deliveriesView = await read($, deliveries)
     const stuck = stuckAnswers(given, ledgerRows, deliveriesView?.epoch, now)
     const fresh = freshness(board?.updated, now)
     const freshColor = fresh?.level === 'stale' ? 'error' : fresh?.level === 'warn' ? 'warning' : undefined
