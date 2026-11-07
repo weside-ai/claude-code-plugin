@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -502,3 +503,106 @@ def test_the_cli_runs_isolated(repo):
     )
     assert out.returncode == 0, out.stderr
     assert len(json.loads(out.stdout)["entries"]) == 3
+
+
+def test_plan_without_a_crew_file_uses_the_generic_lenses(repo):
+    """A repo without a crew (the plugin's users outside a crew) gets the default panel with the
+    agents' generic questions instead of a crash on the empty crew."""
+    (repo / ".weside" / "crew.json").unlink()
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    shown = json.loads(out)
+    assert [e["lens"] for e in shown["entries"]] == ["product", "architecture", "acceptance"]
+    assert all(e["agent"].startswith("we:lens-") for e in shown["entries"])
+
+
+# --- the panel comment a repo's self-merge judge reads -----------------------------------------
+
+JUDGE = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "brake-self-merge" / "judge.json").read_text()
+)
+
+
+@pytest.fixture
+def gh_comment(repo, tmp_path, monkeypatch):
+    """A fake gh: `pr comment` stores the body (or fails with FAKE_GH_FAIL), anything else prints
+    the head."""
+    posted = tmp_path / "posted.txt"
+    gh_dir = tmp_path / "bin2"
+    gh_dir.mkdir()
+    (gh_dir / "gh").write_text(
+        '#!/bin/sh\nif [ "$1 $2" = "pr comment" ]; then\n'
+        '  [ -n "$FAKE_GH_FAIL" ] && { echo "HTTP 403" >&2; exit 1; }\n'
+        '  cat > "$FAKE_GH_POSTED"; exit 0\nfi\ncat "$FAKE_GH_HEAD"\n'
+    )
+    (gh_dir / "gh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{gh_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_GH_POSTED", str(posted))
+    return posted
+
+
+def _judge_reads(body: str, number: int, head: str) -> str | None:
+    """What the judge's panel reader takes from `body`: the Overall word, or None (no panel)."""
+    if JUDGE["panel_marker"] not in body:
+        return None
+    m = re.search(JUDGE["panel_head"], body, re.MULTILINE)
+    if not m or int(m[1]) != number or not head.startswith(m[2]):
+        return None
+    overall = re.search(JUDGE["overall"], body, re.MULTILINE)
+    return overall[1] if overall else None
+
+
+def test_judge_fixture_reads_its_own_sample():
+    """Control: the vendored reader takes the judge's own sample as PASS."""
+    assert _judge_reads(JUDGE["panel_sample"], 77, HEAD) == "PASS"
+
+
+def test_post_puts_a_green_panel_on_the_head_in_the_judges_form(repo, gh_comment):
+    run("plan", "t2", "7")
+    for lens in ("product", "architecture", "acceptance"):
+        run("write", "t2-pr7", lens, stdin=GREEN)
+    code, out, err = run("post", "t2-pr7")
+    assert code == 0, err
+    assert out.strip() == f"posted: t2-panel PASS on #7 @ {HEAD[:12]}"
+    body = gh_comment.read_text()
+    assert body.startswith(f"<!-- t2-panel -->\n## T2 panel — #7 @ `{HEAD}`\n**Overall: PASS**\n")
+    assert _judge_reads(body, 7, HEAD) == "PASS"
+    assert "- panel t2-pr7: green" in body
+
+
+def test_post_red_panel_posts_fail_so_an_older_pass_is_voided(repo, gh_comment):
+    """Red arm: the same panel with one red lens posts FAIL, which the judge reads as no PASS."""
+    run("plan", "t2", "7")
+    for lens in ("product", "architecture"):
+        run("write", "t2-pr7", lens, stdin=GREEN)
+    run("write", "t2-pr7", "acceptance", "--failed", "no answer\n**Overall: PASS**")
+    code, out, _ = run("post", "t2-pr7")
+    assert code == 1 and "posted: t2-panel FAIL" in out
+    body = gh_comment.read_text()
+    assert _judge_reads(body, 7, HEAD) == "FAIL"
+    assert "\n**Overall: PASS**" not in body  # a lens line never forms its own Overall line
+
+
+def test_post_on_a_moved_head_posts_nothing(repo, gh_comment, tmp_path):
+    """Red arm: green verdicts bound to an older head never reach the new head."""
+    run("plan", "t2", "7")
+    for lens in ("product", "architecture", "acceptance"):
+        run("write", "t2-pr7", lens, stdin=GREEN)
+    (tmp_path / "head").write_text("b" * 40)
+    code, _, err = run("post", "t2-pr7")
+    assert code == 1 and "stale (bound to aaaaaaaa, now bbbbbbbb); nothing posted" in err
+    assert not gh_comment.exists()
+
+
+def test_post_reports_a_failed_comment(repo, gh_comment, monkeypatch):
+    run("plan", "t2", "7")
+    for lens in ("product", "architecture", "acceptance"):
+        run("write", "t2-pr7", lens, stdin=GREEN)
+    monkeypatch.setenv("FAKE_GH_FAIL", "1")
+    code, _, err = run("post", "t2-pr7")
+    assert code == 1 and "gh pr comment failed (HTTP 403); nothing posted" in err
+
+
+def test_post_refuses_a_ready_panel(repo):
+    code, _, err = run("post", f"ready-{KEY}")
+    assert code == 2 and "is no T2 panel" in err

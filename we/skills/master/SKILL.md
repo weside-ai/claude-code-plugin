@@ -205,15 +205,19 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   names it; gh refuses `--auto` without a method outside a terminal). A T2 diff arms after the lens
   panel's verdict. The hook `automerge_gate.py` refuses an early arm while that
   check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
-  class**, computed by the crew's `risk.command` on the diff (money path, destructive migration,
-  Terraform or secrets, any loosening of tenant, auth or trust, the brake's core `brake-change`): only the human merges it, from a
+  class**, computed by the crew's `risk.command` on the diff (code that computes money, destructive migration,
+  Terraform or secrets, the brake's core `brake-change`): no session merges or arms it. Run the
+  T2 panel on it and post it (`/we:lens t2 <PR>`); where the repo runs a self-merge window
+  (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Self-merge window) it merges itself 2 h after that comment unless vetoed. The
+  brake's core, and every one-way PR in a repo without the window, only the human merges, from a
   board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
   --one-way <class>`); until the merge hook computes the
   class, run the command yourself before you arm. The closing message then says
-  `user merge: one-way (<class>)`. A `T2` line 1 with a `brake-review:` hit line is no merge brake:
-  send the PR link and the hit lines to the machinery owner (the security owner when the hit is a
-  review workflow that gates trust findings), write their answer into the PR body as
-  `brake-review: <reviewer> <head sha> <verdict>`, and arm after the panel. A draft reason (a follow-up still on the branch, an unmerged
+  `user merge: one-way (<class>)`. A `T2` line 1 with a `trust-loosening:`, `money-path:` or
+  `brake-review:` hit line (a card hit) is no merge brake: once the panel is green, start a security
+  card worker on the head (`we-worker <KEY>-card --bg "/<security holder's skill> …"`, brief per
+  `references/worker-dispatch.md` § Card worker) and arm after its `Overall: PASS` comment; a push
+  needs a new verdict, and `automerge_gate.py` refuses the arm until one stands on the head. A draft reason (a follow-up still on the branch, an unmerged
   dependency) keeps the PR a draft per `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
   second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
   head, and pushing first. A fix round

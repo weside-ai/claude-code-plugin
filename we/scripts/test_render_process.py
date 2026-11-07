@@ -24,10 +24,11 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "Only Hal\n  merges it (user merge, `one-way gate` check), from a board item; a `brake-review` "
-    "hit (T2) waits\n  for Kit or the security owner."
+    "A one-way PR outside the brake's\n  core merges itself, where a self-merge window runs, 2 h after "
+    "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
+    "the core only Hal merges."
 )
-DECIDED_3 = "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge."
+DECIDED_3 = "3. One-way merges via the 2 h window, the core by Hal."
 
 
 @pytest.fixture(autouse=True)
@@ -146,9 +147,9 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
         "",
     )
     old = old.replace(
-        "Only {human}\n  merges it",
-        "{human} gets one\n  push line at panel green; "
-        "one word arms auto-merge. Only {human}\n  merges it",
+        "else and the core only {human} merges.",
+        "else and the core only {human} merges. {human} gets one push line at panel green; one "
+        "word arms auto-merge.",
     )
     (process / "L0.md").write_text(old)
     text = rp.render_l0(generic(), process=process)
@@ -566,13 +567,15 @@ def test_serves_counts_the_reserve(tmp_path, monkeypatch):
 
 SECURITY = HERE / "fixtures" / "crew-v2-security.json"
 # one line: on call (woken, not running); a worker with its card signs a `trust-loosening` item
-SECURITY_LINE = "  - {security} owns its label, runs on call; a worker with its card signs `trust-loosening` items."
+SECURITY_LINE = (
+    "  - {security} owns its label, runs on call; a worker with its card signs card hits."
+)
 BOUND_SECURITY_LINE = (
-    "  - Bo owns its label, runs on call; a worker with its card signs `trust-loosening` items."
+    "  - Bo owns its label, runs on call; a worker with its card signs card hits."
 )
 TRUST_LINE = (
-    "- On a `trust-loosening` diff: the panel, then a fresh worker with {security}'s card signs, "
-    "then {human} merges."
+    "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
+    "worker with {security}'s card signs on the head, then auto-merge."
 )
 
 
@@ -639,8 +642,8 @@ def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
     assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
     with_owner = rp.render_card(bound(), "master")
     assert (
-        "- On a `trust-loosening` diff: the panel, then a fresh worker with Bo's card signs, "
-        "then Hal merges." in with_owner
+        "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
+        "worker with Bo's card signs on the head, then auto-merge." in with_owner
     )
     assert "trust-loosening" not in rp.render_card(generic(), "master")
 
@@ -653,8 +656,8 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
         "The security check runs in the T2 panel and you are its keeper",
         "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
         "keep its question file current and sample every 5th verdict post hoc.",
-        "A `trust-loosening` diff is signed after the panel and before Hal merges it by a fresh "
-        "worker its master starts with this card",
+        "A card hit (`trust-loosening`, `money-path`, `brake-review`) is signed after the panel "
+        "and before auto-merge by a fresh worker its master starts with this card",
         "the card version (`worker-dispatch.md` § Card worker). A case without precedent it "
         "escalates to you undecided",
     ):

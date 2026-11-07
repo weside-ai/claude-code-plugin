@@ -19,7 +19,7 @@
     "scrum",
     "ai-companion"
   ],
-  "version": "8.6.0",
+  "version": "8.10.0",
   "skills": "./skills",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -50,7 +50,7 @@
     "boardFile": {
       "type": "string",
       "title": "Board File",
-      "description": "The workspace board /board reads (schema: docs/board.md). Default ~/.claude/we-state/board.json; ~/ and relative paths count from the home folder.",
+      "description": "The workspace board /board reads when the repo's crew file names no board.file (schema: docs/board.md). Default ~/.claude/we-state/board.json; ~/ and relative paths count from the home folder.",
       "required": false
     },
     "boardAutoOpen": {

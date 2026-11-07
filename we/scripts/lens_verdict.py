@@ -13,6 +13,8 @@ Usage:
                                                  object); exit 1 naming what is refused
   lens_verdict.py write ID LENS --failed REASON  record the lens red without findings
   lens_verdict.py check ID                       one line per lens and the panel; exit 0 only green
+  lens_verdict.py post t2-prN                    post the panel comment on the PR's head (PASS or
+                                                 FAIL); exit 0 only for a posted PASS
   lens_verdict.py samples [--keeper SLUG]        the sampled green verdicts nobody has read
   lens_verdict.py sampled ID LENS                mark a sample read
 
@@ -53,6 +55,20 @@ No skip, no override: no field can skip, confirm, waive or lift anything; ``skip
 ``one_way``, ``go`` and every other unknown key are refused. A red panel turns green only through a
 fresh panel on a new plan blob or head. Any session can write this file, so it gates only a two-way
 T2 merge and the move to Selected; the one-way brake never reads it.
+
+Panel comment (T2): ``post`` puts the panel's state on GitHub, where a repo's self-merge judge reads
+it (a one-way PR outside the brake's core merges itself 2 h after a green panel on its head). The
+format is that judge's contract, pinned by ``fixtures/brake-self-merge/judge.json``::
+
+    <!-- t2-panel -->
+    ## T2 panel — #<N> @ `<head sha, 40 hex>`
+    **Overall: PASS**
+
+``Overall: FAIL`` when ``check`` is red, so a red rerun on the same head voids an earlier PASS (the
+last comment on the head decides). Nothing is posted while the binding is stale or the head unknown:
+the comment always names the head the verdicts were given on. Posted through ``gh pr comment`` as
+the session's GitHub identity; like the file, any session could post one, so it is a process
+signal, not a lock.
 
 Sample: every ``lenses.<k>.sample``-th green verdict of a lens is marked ``sample: true`` and listed
 by ``samples`` until ``sampled`` marks it read; nobody waits on a sample. The verdict file is
@@ -174,7 +190,7 @@ def load_crew(root: Path) -> tuple[Path, dict[str, Any]]:
     except crew_mod.CrewError as exc:
         raise UnusableError(f"crew: {exc}") from exc
     if path is None:
-        return root / ".weside" / "crew.json", crew_mod._merge({})
+        return root / ".weside" / "crew.json", crew_mod._merge({"roles": {}, "members": {}})
     return path, crew
 
 
@@ -552,6 +568,52 @@ def sampled(root: Path, vid: str, lens: str) -> None:
             _write_atomic(path, doc)
 
 
+# --- the panel comment ----------------------------------------------------------------------
+
+PANEL_MARKER = "<!-- t2-panel -->"
+
+
+def panel_comment(number: int, head: str, green: bool, lines: list[str]) -> str:
+    """The comment body: the judge's three lines first, then the check lines (one line each)."""
+    rows = [" ".join(line.split()) for line in lines]
+    return (
+        f"{PANEL_MARKER}\n"
+        f"## T2 panel — #{number} @ `{head}`\n"
+        f"**Overall: {'PASS' if green else 'FAIL'}**\n\n" + "".join(f"- {row}\n" for row in rows)
+    )
+
+
+def post(root: Path, vid: str) -> tuple[bool, list[str]]:
+    """Post the T2 panel comment on the bound head; (posted PASS, the lines to print)."""
+    kind, subject = parse_id(vid)
+    if kind != "t2":
+        raise UnusableError(f"post: {vid} is no T2 panel (t2-pr<N>)")
+    doc = read_file(verdict_dir(root) / f"{vid}.json")
+    bound = doc["bound_to"].get("head", "")
+    now = current_binding(root, kind, subject)["head"]
+    if now != bound:
+        raise RefusedError(
+            f"post: panel {vid} is stale (bound to {bound[:8]}, now {now[:8]}); nothing posted"
+        )
+    green, lines = check(root, vid)
+    gh = shutil.which("gh")
+    if gh is None:
+        raise RefusedError("post: gh not found; nothing posted")
+    out = subprocess.run(
+        [gh, "pr", "comment", subject, "--body-file", "-"],
+        input=panel_comment(int(subject), bound, green, lines),
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(root),
+    )
+    if out.returncode != 0:
+        why = (out.stderr.strip().splitlines() or [f"exit {out.returncode}"])[-1]
+        raise RefusedError(f"post: gh pr comment failed ({why}); nothing posted")
+    word = "PASS" if green else "FAIL"
+    return green, [f"posted: t2-panel {word} on #{subject} @ {bound[:12]}"]
+
+
 # --- CLI -------------------------------------------------------------------------------------
 
 
@@ -606,8 +668,8 @@ def _main(argv: list[str], stdin: Any) -> int:
         result = write(root, args[0], args[1], answer=answer, failed=failed)
         print(f"lens {args[1]}: {result['verdict']}" + (" (sample)" if result["sample"] else ""))
         return 0
-    if verb == "check" and len(args) == 1:
-        green, lines = check(root, args[0])
+    if verb in ("check", "post") and len(args) == 1:
+        green, lines = (check if verb == "check" else post)(root, args[0])
         print("\n".join(lines))
         return 0 if green else 1
     if verb == "samples" and not args:

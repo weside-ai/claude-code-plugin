@@ -17,7 +17,9 @@ Grammar, a subset of the rules file the core classifier reads:
   path <glob>
 
 `<section>` is one of the one-way classes, in this fixed order of precedence: `brake-change`,
-`money`, `destructive-migration`, `terraform-secrets`, `trust-loosening`; or `t2` (two-way).
+`money`, `destructive-migration`, `terraform-secrets`; a card section (two-way, `review: high`,
+and the merge hook also waits for a security card verdict): `trust-loosening`, `money-path`,
+`brake-review`; or `t2` (two-way).
 A glob: `**/` matches zero or more whole directories, a bare `**` anything, `*` and `?` stay
 inside one directory, `{a,b}` expands. A `line` or `from` rule, an unknown keyword or section, a
 section without a rule, or a rule before the first section exits 2 naming it. A file without any
@@ -30,7 +32,7 @@ Diff: `git diff --name-only --no-renames <base>...HEAD`; `<base>` must be an anc
 Output (exit 0):
 
   line 1   `T0`, `T2` or `T2 one-way <class>` (the first class in the fixed order that matched)
-  line 2   `review: high` for a one-way class, else `review: standard`
+  line 2   `review: high` for a one-way class or a card section hit, else `review: standard`
   then     one `<file>\t<class>: path <glob>` line per hit
 
 Exit 2 on any failure (missing `origin/main`, missing or broken rules, a git error): a caller
@@ -50,9 +52,13 @@ ONE_WAY = (
     "money",
     "destructive-migration",
     "terraform-secrets",
-    "trust-loosening",
 )
-SECTIONS = (*ONE_WAY, "t2")
+# The brake's core among them: never merges itself, only the owner merges it (a repo's self-merge
+# window takes the other one-way classes 2 h after a green T2 panel; `hooks/automerge_gate.py`).
+CORE = ("brake-change",)
+# Two-way sections whose hit needs the security card verdict (`hooks/automerge_gate.py`).
+CARD = ("trust-loosening", "money-path", "brake-review")
+SECTIONS = (*ONE_WAY, *CARD, "t2")
 
 
 class RiskError(Exception):
@@ -147,6 +153,8 @@ def classify(changed: list[str], rules: dict[str, list[tuple[str, re.Pattern[str
     one_way = next((c for c in ONE_WAY if c in found), None)
     if one_way:
         lines = [f"T2 one-way {one_way}", "review: high"]
+    elif found & set(CARD):
+        lines = ["T2", "review: high"]
     elif "t2" in found:
         lines = ["T2", "review: standard"]
     else:

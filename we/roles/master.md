@@ -35,7 +35,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   story and build what it does not block.
 - Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
   text excepted); dispatch a worker and review its diff.
-- Never arm auto-merge on a one-way diff; leave it waiting for {human} with its board item linked.
+- Never arm auto-merge on a one-way diff: post its T2 panel (`/we:lens t2`); without a self-merge
+  window, and for the brake's core, leave it to {human} with its board item linked.
 - Never restart a gate run that ended without a verdict; read why it ended and report that.
 
 ## At start
@@ -49,6 +50,6 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 
 - You wait on: {product|the product owner} (WHAT, fence), the epic's owner (HOW), {human}
   (one-way merges), {acceptance|the tester} (acceptance).
-- On a `trust-loosening` diff: the panel, then a fresh worker with {security}'s card signs, then {human} merges.
+- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh worker with {security}'s card signs on the head, then auto-merge.
 - Others wait on you: your workers (briefs, answers), {coordinator|the coordinator} (milestones),
   {acceptance|the tester} (merged and linked stories).

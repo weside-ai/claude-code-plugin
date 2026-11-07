@@ -178,7 +178,6 @@ DEFAULTS: dict[str, Any] = {
             "money",
             "destructive-migration",
             "terraform-secrets",
-            "trust-loosening",
             "brake-change",
         ],
         "rules_from": "origin/main",

@@ -124,9 +124,15 @@ export const parseBoard = (text: string): BoardFile => {
   }
 }
 
-// The answers file and the delivery ledger sit beside the board file (docs/board.md § Answers).
-export const answersPathOf = (boardPath: string) => `${boardPath.replace(/[^/]*$/, '')}board-answers.jsonl`
-export const deliveriesPathOf = (boardPath: string) => `${boardPath.replace(/[^/]*$/, '')}board-deliveries.jsonl`
+// The answers file and the delivery ledger sit beside the board file, named after its stem
+// (docs/board.md § Answers): board.json keeps board-answers.jsonl, acme-board.json gets its own.
+export const logPathOf = (boardPath: string, kind: string) => {
+  const name = boardPath.replace(/^.*\//, '')
+  const stem = name.replace(/\.[^.]*$/, '') || name
+  return `${boardPath.slice(0, boardPath.length - name.length)}${stem}-${kind}.jsonl`
+}
+export const answersPathOf = (boardPath: string) => logPathOf(boardPath, 'answers')
+export const deliveriesPathOf = (boardPath: string) => logPathOf(boardPath, 'deliveries')
 
 export const isClosed = (answer: BoardAnswer | undefined) => !!answer && CLOSING.includes(answer.answer)
 

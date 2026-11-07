@@ -167,7 +167,8 @@ test('lastAnswers keeps the newest line per id and skips torn ones', () => {
 
 test('the answers file sits beside the board file; ownName matches on the session id', () => {
   expect(answersPathOf('/home/me/.claude/we-state/board.json')).toBe('/home/me/.claude/we-state/board-answers.jsonl')
-  expect(answersPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/board-answers.jsonl')
+  expect(answersPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/team-answers.jsonl')
+  expect(answersPathOf('/home/me/.claude/we-state/acme-board.json')).toBe('/home/me/.claude/we-state/acme-board-answers.jsonl')
   const live = [{ name: 'lead', sessionId: 'a' }, { name: null, sessionId: 'b' }, { name: 'Orchestrator', sessionId: 'c' }]
   expect(ownName(live, 'c')).toBe('Orchestrator')
   expect(ownName(live, 'b')).toBeUndefined()
@@ -185,7 +186,8 @@ test('update_asker words the asker\'s Update; answer_prompts overrides it like t
   expect(answerPrompt('update_asker', 'Q4')).toBe('check whether Q4 is still current and well worded; re-ask it with a new id or withdraw it')
   const own = parseBoard('{"answer_prompts":{"update_asker":"{id}: bitte prüfen"}}').answerPrompts
   expect(answerPrompt('update_asker', 'Q4', own)).toBe('Q4: bitte prüfen')
-  expect(deliveriesPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/board-deliveries.jsonl')
+  expect(deliveriesPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/team-deliveries.jsonl')
+  expect(deliveriesPathOf('/home/me/.claude/we-state/board.json')).toBe('/home/me/.claude/we-state/board-deliveries.jsonl')
 })
 
 test('an Accept or Deny closes the id: later lines on it change nothing; legacy lines read without error', () => {

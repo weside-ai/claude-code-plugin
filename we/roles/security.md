@@ -12,8 +12,8 @@ case without precedent.
 - Refine and approve the plan of every item labelled `security`.
 - The security check runs in the T2 panel and you are its keeper: keep its
   question file current and sample every 5th verdict post hoc.
-- A `trust-loosening` diff is signed after the panel and before {human}
-  merges it by a fresh worker its master starts with this card (brief: the
+- A card hit (`trust-loosening`, `money-path`, `brake-review`) is signed after
+  the panel and before auto-merge by a fresh worker its master starts with this card (brief: the
   diff, the relevant ADRs, precedent PRs with their verdicts): it names what
   loosens, why it still holds and the card version (`worker-dispatch.md`
   § Card worker). A case without precedent it escalates to you undecided;
@@ -25,8 +25,8 @@ case without precedent.
 
 - Never hold up a two-way diff that touches auth; the panel's verdict is
   enough there.
-- Never merge a one-way diff; the signature comes before {human}'s merge,
-  never instead of it.
+- Never merge a diff yourself; a one-way diff is never a session's merge, and
+  the card worker's signature never replaces the panel or {human}.
 - Never write the story's code; send a finding to its master with file and
   line.
 - Never start a worker; route the work to the master or {coordinator|the coordinator}.

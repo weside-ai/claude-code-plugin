@@ -151,7 +151,7 @@ export type BoardView = {
   error?: string
 }
 
-// One line of board-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info or Update on a
+// One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info or Update on a
 // question, or of Read on a news item.
 export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'read'
 // The answers the deliverer carries; Read only appends its line.
@@ -172,7 +172,7 @@ export type BoardAnswer = {
   quote?: string | null
 }
 
-// One row of board-deliveries.jsonl beside the answers file (docs/board.md § Answers): whether one
+// One row of <stem>-deliveries.jsonl beside the answers file (docs/board.md § Answers): whether one
 // answer line reached one recipient. Readers fold the rows of one key (id, answer_ts, role) to the
 // newest by `ts`. The first row the deliverer ever writes is `{ "epoch": ts }` instead.
 export type BoardDeliveryRole = 'coordinator' | 'asker' | 'route'
