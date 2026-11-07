@@ -211,7 +211,10 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
   --one-way <class>`); until the merge hook computes the
   class, run the command yourself before you arm. The closing message then says
-  `user merge: one-way (<class>)`. A `T2` line 1 with a `trust-loosening:`, `money-path:` or
+  `user merge: one-way (<class>)`. Where the merge hook's one-way refusal names the human's
+  approve as the go (the repo runs an approve gate), the GitHub approve on the head is that go, from the phone too: the repo arms auto-merge
+  itself and the session does nothing after it, so a question to the human about a one-way PR asks
+  "please approve", not "please merge". A `T2` line 1 with a `trust-loosening:`, `money-path:` or
   `brake-review:` hit line (a card hit) is no merge brake: once the panel is green, start a security
   card worker on the head (`we-worker <KEY>-card --bg "/<security holder's skill> …"`, brief per
   `references/worker-dispatch.md` § Card worker) and arm after its `Overall: PASS` comment; a push
