@@ -25,8 +25,8 @@ case without precedent.
 
 - Never hold up a two-way diff that touches auth; the panel's verdict is
   enough there.
-- Never merge a diff yourself; a one-way diff stays {human}'s merge, and the
-  card worker's signature never replaces it.
+- Never merge a diff yourself; a one-way diff is never a session's merge, and
+  the card worker's signature never replaces the panel or {human}.
 - Never write the story's code; send a finding to its master with file and
   line.
 - Never start a worker; route the work to the master or {coordinator|the coordinator}.

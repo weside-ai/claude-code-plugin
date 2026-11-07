@@ -1,0 +1,17 @@
+{
+  "_source": "The formats a repo's self-merge judge reads (a scheduled workflow that merges a one-way PR outside the brake's core after the window), copied from its source and tests. The plugin writes the panel comment and the freeze issue, and reads the notice; a change here follows the judge, never the other way.",
+  "panel_marker": "<!-- t2-panel -->",
+  "panel_head": "^## T2 panel — #(\\d+) @ `([0-9a-f]{7,40})`\\s*$",
+  "overall": "^\\*\\*Overall: (\\w+)\\*\\*\\s*$",
+  "panel_trusted_associations": ["OWNER", "MEMBER", "COLLABORATOR"],
+  "panel_sample": "<!-- t2-panel -->\n## T2 panel — #77 @ `aaaaaaaaaaaa`\n**Overall: PASS**\n",
+  "notice_marker": "<!-- brake-self-merge-notice -->",
+  "notice_author": "github-actions[bot]",
+  "notice_head": "^head: `([0-9a-f]{40})`\\s*$",
+  "notice_run": "^run: (\\d+)\\s*$",
+  "notice_sample": "<!-- brake-self-merge-notice -->\n@owner self-merge window: #77 (https://github.com/o/r/pull/77) · one-way money\nmerges itself at 2026-11-07T10:00Z or later unless someone adds the label `veto` with a comment `veto: <name> · <reason>`.\nhead: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\nrun: 4242\n",
+  "one_way_label": "one-way",
+  "veto_label": "veto",
+  "freeze_label": "merge-freeze",
+  "freeze_open_means_frozen": "any open issue (not a pull request) with the freeze label"
+}

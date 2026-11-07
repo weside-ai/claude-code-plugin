@@ -454,7 +454,13 @@ def test_one_way_is_refused_in_every_call_form(classed: dict, monkeypatch, comma
     reason = refuse(classed["repo"], command, fake, monkeypatch)
     assert reason is not None
     assert "`T2 one-way money`: one-way (money)" in reason
-    assert "Ada merges one-way PRs by hand" in reason
+    assert "No session merges or arms it" in reason
+    assert (
+        "merges itself 2 h after a green T2 panel on its head, once Ada got the push line"
+        in reason
+    )
+    assert "`veto` label stops it" in reason and "/we:lens t2 7" in reason
+    assert "by hand" not in reason
     assert "hand over the link and the class" in reason
     assert "herself" not in reason and " her " not in reason
     assert "PR #7 (https://github.com/o/r/pull/7)" in reason
@@ -643,7 +649,8 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
     reason = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None
     assert "`T2 one-way brake-change`" in reason
-    assert "The owner merges one-way PRs by hand" in reason
+    assert "the brake's core, only The owner merges it, by hand" in reason
+    assert "merges itself" not in reason
 
 
 MERGE = "gh pr merge 7 --squash"
@@ -858,6 +865,18 @@ def test_a_brake_review_hit_is_two_way(classed: dict, monkeypatch, lens: Path) -
     card = [_card(classed["head"][:10])]
     fake = FakeGh([run()], head=classed["head"], cards=card)
     assert refuse(classed["repo"], ARM, fake, monkeypatch) is None
+
+
+def test_the_core_never_points_at_the_self_merge_window(
+    classed: dict, monkeypatch, lens: Path
+) -> None:
+    """Red arm of refusal 3's split: the core class with a green panel still refuses, and its text
+    names the owner's hand, never the self-merge window."""
+    monkeypatch.setenv("FAKE_CLASS", "T2 one-way brake-change")
+    (classed["repo"] / ".lens-green").write_text("")
+    reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
+    assert reason is not None and "one-way (brake-change)" in reason
+    assert "only Ada merges it, by hand" in reason and "merges itself" not in reason
 
 
 def test_a_green_panel_never_lifts_one_way(classed: dict, monkeypatch, lens: Path) -> None:

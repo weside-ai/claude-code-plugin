@@ -202,7 +202,10 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   panel's verdict. The hook `automerge_gate.py` refuses an early arm while that
   check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
   class**, computed by the crew's `risk.command` on the diff (code that computes money, destructive migration,
-  Terraform or secrets, the brake's core `brake-change`): only the human merges it, from a
+  Terraform or secrets, the brake's core `brake-change`): no session merges or arms it. Run the
+  T2 panel on it and post it (`/we:lens t2 <PR>`); where the repo runs a self-merge window
+  (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Self-merge window) it merges itself 2 h after that comment unless vetoed. The
+  brake's core, and every one-way PR in a repo without the window, only the human merges, from a
   board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
   --one-way <class>`); until the merge hook computes the
   class, run the command yourself before you arm. The closing message then says
