@@ -130,6 +130,7 @@ Tests: <test_discipline from .weside/config.json, spelled out; absent → tests 
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 [Code graph: graphify affected "<symbol>" … | graph query "<question>" | not needed (<reason>)]   (only when tools.graphify is true)
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
+[Must-dos carried from the Ready panel: <each `carried` item of the story's last `selected` row in board-transitions.jsonl, as `<lens>: <claim> (<where>)`>]
 Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)

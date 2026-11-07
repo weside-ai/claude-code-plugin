@@ -567,8 +567,8 @@ computed: <reason>`. Without `risk.command` the gate warns `tier check off` and 
 (`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, carried?, pr?, reopen?, epic?, ticket}`
 (`via` and `rc` on `done` rows only; `carried` on a `selected` row only: the WARNINGs a green
 Ready panel carries under `ready_panel.warning_ok_after_rounds`, each `{lens, claim, where}`, also
-printed as `carried: <lens>: <claim> (<where>)` lines; no worker brief reads them yet, so the master
-carries them over by hand); `from` is
+printed as `carried: <lens>: <claim> (<where>)` lines; the master's worker brief copies them as
+must-dos, `skills/master/SKILL.md` § Worker brief); `from` is
 the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
 `carried`).
 
