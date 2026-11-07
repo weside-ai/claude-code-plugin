@@ -438,7 +438,8 @@ class Gate:
                 f"warning: {self.plan}: ## Verification: the PR hook will refuse this plan's "
                 f"block: {problem} The AC classes receipt, ci and walk belong in the AC markers; "
                 f"the `**Oracle:**` line names how the build was observed "
-                f"({verification_gate._MENU})."
+                f"({verification_gate._MENU}); see references/story-plan.md § Two vocabularies "
+                f"named oracle."
             )
 
     def tier(self, text: str) -> None:

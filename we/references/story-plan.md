@@ -199,6 +199,21 @@ nested bullets and wrapped lines included):
   `not-boundary: <why>` (exempt from the boundary terms).
 - Several classes in one marker: ``[`ci` for the file; `walk`: owner · settings]``.
 
+### Two vocabularies named oracle
+
+The AC marker and the Verification block's `**Oracle:**` line answer different questions; neither
+word list maps onto the other.
+
+| | AC marker (Ready gate) | `**Oracle:**` line (Verification block, PR hook) |
+|---|---|---|
+| Words | `receipt` · `ci` · `walk` | `cli` · `ui` · `substitute` · `not-applicable` · `not-observed` |
+| Answers | who/what accepts the AC after merge | how the builder observed the change before the PR |
+| Checked by | `ready_gate.py` (Ready) | `hooks/verification_gate.py` (PR body) |
+
+An AC class on the `**Oracle:**` line (`**Oracle:** ci`) is refused by the PR hook; a `ci` AC is
+still observed via `cli` or `not-observed`. The Ready gate warns on it early (§ What the Ready
+gate reads, check 9).
+
 ## What the Ready gate reads
 
 `ready_gate.py story <plan>` prints one line per failure, `<plan>: <place>: <what is missing>`, and

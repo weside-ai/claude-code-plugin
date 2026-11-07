@@ -152,6 +152,9 @@ def test_an_oracle_line_the_pr_hook_refuses_warns_now_and_refuses_nothing(tmp_pa
     assert len(warned) == 1, out.stderr
     assert warned[0].startswith(f"warning: {path}: ## Verification: the PR hook will refuse")
     assert said in warned[0] and "cli | ui | substitute" in warned[0]
+    assert "references/story-plan.md § Two vocabularies named oracle" in warned[0]
+    story_plan = Path(__file__).resolve().parents[1] / "references" / "story-plan.md"
+    assert "### Two vocabularies named oracle" in story_plan.read_text()
 
 
 def test_a_readable_oracle_line_warns_nothing(tmp_path):
