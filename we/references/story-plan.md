@@ -199,6 +199,21 @@ nested bullets and wrapped lines included):
   `not-boundary: <why>` (exempt from the boundary terms).
 - Several classes in one marker: ``[`ci` for the file; `walk`: owner · settings]``.
 
+### Two vocabularies named oracle
+
+The AC marker and the Verification block's `**Oracle:**` line answer different questions; neither
+word list maps onto the other.
+
+| | AC marker (Ready gate) | `**Oracle:**` line (Verification block, PR hook) |
+|---|---|---|
+| Words | `receipt` · `ci` · `walk` | `cli` · `ui` · `substitute` · `not-applicable` · `not-observed` |
+| Answers | who/what accepts the AC after merge | how the builder observed the change before the PR |
+| Checked by | `ready_gate.py` (Ready) | `hooks/verification_gate.py` (PR body) |
+
+An AC class on the `**Oracle:**` line (`**Oracle:** ci`) is refused by the PR hook; a `ci` AC is
+still observed via `cli` or `not-observed`. The Ready gate warns on it early (§ What the Ready
+gate reads, check 9).
+
 ## What the Ready gate reads
 
 `ready_gate.py story <plan>` prints one line per failure, `<plan>: <place>: <what is missing>`, and
@@ -220,6 +235,9 @@ Story checks, each failure one line, the run never stops at the first:
    `acceptance.boundary_terms` (case-insensitive, whole words), unless the marker says
    `not-boundary: <why>`; boundary ACs need `acceptance.mock_persona`.
 8. Fence, goal file and `serves:` (below), through the story's epic plan.
+9. The `## Verification` block's `**Oracle:**` line, read by the PR hook's parser: a line the hook
+   would refuse at `gh pr create` (an AC class such as `ci` there, a decline without reason) is one
+   warning, never a failure.
 
 **Files.** Under each `### Phase <n>:`, the bullets after `**Files:**` up to the next
 `- **<Label>:**` bullet. A backtick span is a path when it holds no whitespace and contains `/`,

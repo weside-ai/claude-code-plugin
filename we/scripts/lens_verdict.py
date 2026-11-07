@@ -3,9 +3,10 @@
 (Ready) or a PR diff (T2), recorded per subject and checked against today's plan blob or PR head.
 
 Usage:
-  lens_verdict.py plan ready KEY                 start a Ready panel on the story plan
-                                                 docs/plans/KEY-story.md; prints one dispatch
-                                                 entry per Ready lens as JSON
+  lens_verdict.py plan ready KEY [--plan PATH]   start a Ready panel on the story plan
+                                                 docs/plans/KEY-story.md (or PATH, inside the
+                                                 repo; the panel stays bound to it); prints one
+                                                 dispatch entry per Ready lens as JSON
   lens_verdict.py plan t2 PR                     start a T2 panel on the PR's head (``gh``)
   lens_verdict.py arm [COMMAND]                  exit 0 when COMMAND (else stdin) is a red arm in
                                                  test form (the skill may run it), else 1 with why
@@ -27,9 +28,11 @@ repo, never in the tree, so a PR cannot carry its own verdict), plus ``samples.j
 Schema, version 1, closed: an unknown key anywhere refuses the file or the answer, naming the key.
 File: ``version``, ``kind`` (ready|t2), ``subject``, ``bound_to`` (``plan_blob`` for ready, the
 output of ``git hash-object`` on the plan; ``head`` for t2, the PR's head SHA), ``expected`` (the
-lenses copied from the crew when the panel started, so a crew edit cannot shrink a running panel)
-and ``verdicts.<lens>``: ``verdict`` (green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``,
-``findings``, and ``failure`` (why a lens was recorded red without findings). A finding:
+lenses copied from the crew when the panel started, so a crew edit cannot shrink a running panel),
+optional ``plan`` (ready only: the plan's path relative to the repo root when ``--plan`` named
+one, so ``write`` and ``check`` re-hash that file) and ``verdicts.<lens>``: ``verdict``
+(green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``, ``findings``, and ``failure`` (why a
+lens was recorded red without findings). A finding:
 ``severity`` (BLOCKING|WARNING|NOTE), ``claim``, ``where``, ``question`` (the question-file line it
 answers; required on Ready), ``red_arm`` (``command``, ``exit``, ``run``) and ``status``
 (standing|refuted). An answer is ``{"findings": [...]}`` whose findings carry only ``severity``,
@@ -104,7 +107,7 @@ NO_PROOF_EXITS = (124, 126, 127)
 ARM_FORMS = ("pytest ", "python3 -m pytest ", "bash scripts/", "python3 scripts/")
 ARM_FORBIDDEN = (";", "|", "&", "$(", "`", ">", "<", "\n", "\r")
 ID_RE = re.compile(r"\A(?:ready-(?P<key>[A-Za-z][A-Za-z0-9_]*-\d+)|t2-pr(?P<pr>\d+))\Z")
-FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts")
+FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts", "plan")
 VERDICT_KEYS = ("verdict", "agent", "ran_at", "sample", "sampled", "findings", "failure")
 FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm", "status")
 ANSWER_FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm")
@@ -152,13 +155,25 @@ def parse_id(vid: str) -> tuple[str, str]:
     return ("ready", found.group("key")) if found.group("key") else ("t2", found.group("pr"))
 
 
-def plan_path(root: Path, key: str) -> Path:
-    return root / "docs" / "plans" / f"{key}-story.md"
+def plan_path(root: Path, key: str, rel: str | None = None) -> Path:
+    return root / rel if rel else root / "docs" / "plans" / f"{key}-story.md"
 
 
-def current_binding(root: Path, kind: str, subject: str) -> dict[str, str]:
+def plan_rel(root: Path, given: str) -> str:
+    """``--plan`` as a path relative to the repo root; UnusableError outside the repo."""
+    path = Path(given)
+    path = (path if path.is_absolute() else Path.cwd() / path).resolve()
+    try:
+        return path.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        raise UnusableError(f"--plan {given}: not inside the repo {root}") from None
+
+
+def current_binding(
+    root: Path, kind: str, subject: str, plan: str | None = None
+) -> dict[str, str]:
     if kind == "ready":
-        path = plan_path(root, subject)
+        path = plan_path(root, subject, plan)
         if not path.is_file():
             raise RefusedError(f"plan {path.relative_to(root)}: missing")
         return {"plan_blob": _git(root, "hash-object", str(path))}
@@ -310,6 +325,14 @@ def read_file(path: Path) -> dict[str, Any]:
     kind, subject = parse_id(path.stem)
     if doc.get("version") != VERSION or doc.get("kind") != kind or doc.get("subject") != subject:
         raise RefusedError(f"panel {path.stem}: version, kind or subject does not match")
+    rel = doc.get("plan")
+    if rel is not None and (
+        kind != "ready"
+        or not isinstance(rel, str)
+        or Path(rel).is_absolute()
+        or ".." in Path(rel).parts
+    ):
+        raise RefusedError(f"panel {path.stem}: plan needs a path inside the repo (ready only)")
     bound = _closed(
         doc.get("bound_to"), ("plan_blob",) if kind == "ready" else ("head",), "bound_to"
     )
@@ -352,17 +375,20 @@ def _write_atomic(path: Path, doc: dict[str, Any]) -> None:
 # --- verbs -----------------------------------------------------------------------------------
 
 
-def plan(root: Path, kind: str, subject: str) -> dict[str, Any]:
+def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> dict[str, Any]:
     """Start a panel: write the empty verdict file bound to today's subject, return the entries."""
     vid = f"ready-{subject}" if kind == "ready" else f"t2-pr{subject}"
     parse_id(vid)
+    if plan_arg is not None and kind != "ready":
+        raise UnusableError("--plan: only for plan ready")
+    rel = plan_rel(root, plan_arg) if plan_arg is not None else None
     crew_path, crew = load_crew(root)
     try:
         chosen = crew_mod.lenses(crew_path, crew, kind)
     except crew_mod.CrewError as exc:
         raise UnusableError(f"crew: {exc}") from exc
-    bound = current_binding(root, kind, subject)
-    doc = {
+    bound = current_binding(root, kind, subject, rel)
+    doc: dict[str, Any] = {
         "version": VERSION,
         "kind": kind,
         "subject": subject,
@@ -370,6 +396,8 @@ def plan(root: Path, kind: str, subject: str) -> dict[str, Any]:
         "expected": [lens["lens"] for lens in chosen],
         "verdicts": {},
     }
+    if rel is not None:
+        doc["plan"] = rel
     _write_atomic(verdict_dir(root) / f"{vid}.json", doc)
     entries = []
     for lens in chosen:
@@ -381,7 +409,7 @@ def plan(root: Path, kind: str, subject: str) -> dict[str, Any]:
             "registry": lens["registry"],
         }
         if kind == "ready":
-            entry["plan"] = str(plan_path(root, subject))
+            entry["plan"] = str(plan_path(root, subject, rel))
             entry["plan_blob"] = bound["plan_blob"]
         else:
             entry["pr"] = int(subject)
@@ -423,7 +451,7 @@ def write(
     doc = read_file(path)
     if lens not in doc["expected"]:
         raise RefusedError(f"lens {lens}: not expected in panel {vid}")
-    if current_binding(root, kind, subject) != doc["bound_to"]:
+    if current_binding(root, kind, subject, doc.get("plan")) != doc["bound_to"]:
         raise RefusedError(f"panel {vid}: stale (start a fresh panel with plan)")
     if failed is not None:
         findings: list[dict[str, Any]] = []
@@ -503,7 +531,7 @@ def check(root: Path, vid: str) -> tuple[bool, list[str]]:
         return False, [str(exc), f"panel {vid}: red"]
     lines, green = [], True
     try:
-        now = current_binding(root, kind, subject)
+        now = current_binding(root, kind, subject, doc.get("plan"))
     except RefusedError as exc:
         now, green = None, False
         lines.append(str(exc))
@@ -658,9 +686,14 @@ def _main(argv: list[str], stdin: Any) -> int:
         print(f"arm: {'run' if reason is None else 'not run: ' + reason}")
         return 0 if reason is None else 1
     root = repo_root(Path.cwd())
-    args = _positional(rest, ("--failed", "--keeper"))
+    args = _positional(rest, ("--failed", "--keeper", "--plan"))
+    unknown = [a for a in args if a.startswith("--")]
+    if "--plan" in rest and not (verb == "plan" and args[:1] == ["ready"]):
+        unknown = ["--plan (only for plan ready)"]
+    if unknown:
+        raise UnusableError(f"{verb or '(no verb)'}: unknown option {unknown[0]}\n{_usage()}")
     if verb == "plan" and len(args) == 2 and args[0] in ("ready", "t2"):
-        print(json.dumps(plan(root, args[0], args[1]), indent=2))
+        print(json.dumps(plan(root, args[0], args[1], _opt(rest, "--plan")), indent=2))
         return 0
     if verb == "write" and len(args) == 2:
         failed = _opt(rest, "--failed")
@@ -680,7 +713,13 @@ def _main(argv: list[str], stdin: Any) -> int:
         sampled(root, args[0], args[1])
         print(f"sample {args[0]} {args[1]}: read")
         return 0
-    raise UnusableError(__doc__.strip().splitlines()[2].strip())
+    raise UnusableError(f"{verb or '(no verb)'}: wrong arguments\n{_usage()}")
+
+
+def _usage() -> str:
+    """The Usage block of the module docstring: the message of every usage error."""
+    doc = __doc__ or ""
+    return doc[doc.index("Usage:") : doc.index("\n\nID is")].rstrip()
 
 
 if __name__ == "__main__":

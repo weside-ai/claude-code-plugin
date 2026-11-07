@@ -23,7 +23,8 @@ Scratch files go to the session's scratchpad directory (`$S`).
 
 ## 1. Start the panel
 
-Run `LV plan ready <KEY>` or `LV plan t2 <PR>`. It writes a fresh verdict file bound to today's plan blob or
+Run `LV plan ready <KEY>` (`--plan <path>` for a plan outside `docs/plans/<KEY>-story.md`; the panel stays
+bound to that file) or `LV plan t2 <PR>`. It writes a fresh verdict file bound to today's plan blob or
 PR head and prints the dispatch entries as JSON (`id`, `lens`, `agent`, `questions`, `registry`, and `plan`
 plus `plan_blob`, or `pr` plus `head`). Exit 1 (no plan file, head unknown) or 2 (crew file, verdict
 directory): relay the line and stop.
