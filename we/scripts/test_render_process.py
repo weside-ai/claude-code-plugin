@@ -760,11 +760,13 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
     )
 
 
-# The brake's core: a diff to the classifier, the gates, the crew's `risk` block or one that removes
-# a rule is `brake-change` (`risk_paths.CORE`), never self-merged. Rules live only in the rules
-# file, so the bundled classifier sees a removed rule as a change to that file, which the setup
-# template puts under `[brake-change]`; a crew's own `risk.command` may narrow it to removed lines.
-BRAKE_CORE = "the\n  brake core (classifier, gates, removed rules, crew `risk`)."
+# The brake's core: a diff to the classifier, the gates, the review workflows, the crew's `risk`
+# block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged. The
+# review workflows are named apart from the gates: a crew's `[brake-change]` lists them as paths of
+# their own. Rules live only in the rules file, so the bundled classifier sees a removed rule as a
+# change to that file, which the setup template puts under `[brake-change]`; a crew's own
+# `risk.command` may narrow it to removed lines.
+BRAKE_CORE = "brake core (classifier, gates, review workflows, removed rules, crew `risk`)."
 
 
 @pytest.mark.parametrize(
