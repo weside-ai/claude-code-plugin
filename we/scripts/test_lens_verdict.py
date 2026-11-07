@@ -846,8 +846,13 @@ def test_derived_round_carries_warnings_and_seeds_the_next_round(repo):
     new_plan_version(repo)
     run("plan", "ready", KEY)
     doc = json.loads(verdict_file(repo, vid).read_text())
-    assert doc["round"] == 3 and doc["round_derived"].startswith("derived: 2 plan blobs")
+    assert doc["round"] == 3
+    assert doc["round_derived"].startswith("base: round 2 derived: 2 plan blobs")
     assert lv.round_of(repo, vid) == (3, doc["round_derived"])
+    new_plan_version(repo)
+    run("plan", "ready", KEY)
+    doc = json.loads(verdict_file(repo, vid).read_text())
+    assert doc["round"] == 4 and doc["round_derived"].startswith("base: round 2 derived: ")
 
 
 def test_round_derived_is_refused_on_a_t2_panel(repo):

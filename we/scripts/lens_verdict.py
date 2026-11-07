@@ -34,7 +34,8 @@ one, so ``write`` and ``check`` re-hash that file), ``round`` (ready only: the p
 the first plan version; ``plan ready`` on a new plan blob writes the stored round plus one, on the
 same blob it keeps it, so a restart is no round; a file without ``round`` takes its round from
 evidence, see Derived round), ``round_derived`` (ready only: where the round's base came from when
-it was derived, e.g. ``derived: 2 plan blobs with logged lens verdicts: e82588a3, e0d2159d``) and ``verdicts.<lens>``: ``verdict``
+it was derived, e.g. ``base: round 2 derived: 2 plan blobs with logged lens verdicts: e82588a3,
+e0d2159d``) and ``verdicts.<lens>``: ``verdict``
 (green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``, ``findings``, and ``failure`` (why a
 lens was recorded red without findings). A finding:
 ``severity`` (BLOCKING|WARNING|NOTE), ``claim``, ``where``, ``question`` (the question-file line it
@@ -63,7 +64,7 @@ number of distinct plan blobs that provably had a Ready panel: the blobs of this
 plus the blob the file is bound to. A plan version without a logged run (a draft commit, a panel
 whose lenses were all red) never counts, a restart on the same blob counts once; without a line the
 round stays 1. ``check`` prints ``panel <ID>: round N (derived: …)``, ``plan ready`` on a new blob
-writes N + 1 with ``round_derived``, and the verdicts are never in git, so git history is no
+writes N + 1 with ``round_derived`` (``base: round N derived: …``, kept by every later round), and the verdicts are never in git, so git history is no
 source. The log is as writable as the verdict file: deriving loosens nothing a session could not
 already write.
 
@@ -470,6 +471,8 @@ def next_round(path: Path, bound: dict[str, str]) -> tuple[int, str | None]:
     except (RefusedError, UnusableError):
         return 1, None
     stored, origin = panel_round(path.parent, old)
+    if origin is not None and "round" not in old:
+        origin = f"base: round {stored} {origin}"
     return (stored if old["bound_to"] == bound else stored + 1), origin
 
 
