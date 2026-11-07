@@ -956,6 +956,8 @@ def _expect(case: Path) -> dict:
     """The few keys of expect.yaml the replay needs (no yaml dependency on the 3.9 job)."""
     text = (case / "expect.yaml").read_text()
     out = {k: re.search(rf"^{k}: (\S+)", text, re.M)[1] for k in ("id", "lens", "mode", "diff")}
+    flags = re.findall(r'^\s+- where: "([^"]+)"\n\s+severity: \[([^\]]+)\]', text, re.M)
+    out["flags"] = [(where, {s.strip() for s in sev.split(",")}) for where, sev in flags]
     out["where"] = re.findall(r'^\s+- where: "([^"]+)"', text, re.M)
     return out
 
@@ -996,6 +998,12 @@ def test_a_corpus_case_names_an_added_line_and_its_panel_flags_it(repo, case):
         code, _, err = run("write", "t2-pr7", lens, stdin=text)
         assert code == 0, err
     code, out, _ = run("check", "t2-pr7")
-    assert code == 1
-    for where in expect["where"]:
-        assert f"lens {expect['lens']}: red (" in out and where in out
+    assert code == 1 and f"lens {expect['lens']}: red (" in out
+    assert len(expect["flags"]) == len(expect["where"]), "every must_flag needs a severity list"
+    stored = json.loads(verdict_file(repo, "t2-pr7").read_text())["verdicts"][expect["lens"]]
+    for where, severities in expect["flags"]:
+        hits = [f for f in stored["findings"] if f["where"] == where]
+        assert hits, f"lens {expect['lens']} stored no finding at {where}"
+        assert any(f["severity"] in severities and f["status"] == "standing" for f in hits), (
+            f"{where}: stored {[f['severity'] for f in hits]}, expected one of {sorted(severities)}"
+        )

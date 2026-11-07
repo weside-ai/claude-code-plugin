@@ -12,7 +12,7 @@ new file mode 100644
 +++ b/scripts/ci/brake_self_merge.py
 @@ -0,0 +31,6 @@
 +The push line (`<!-- brake-self-merge-notice -->`) @-mentions Owner's GitHub login, so GitHub
-+pushes it to her phone. It counts as delivered only when its author is `github-actions[bot]`, it
++pushes it to the Owner's phone. It counts as delivered only when its author is `github-actions[bot]`, it
 +names the current head, and its `run:` id is a run of `.github/workflows/brake-self-merge.yml` on
 +`main` with event `schedule` or `workflow_dispatch`: a branch's own `pull_request` workflow also
 +posts as `github-actions[bot]` but cannot produce such a run. The window counts from the push
