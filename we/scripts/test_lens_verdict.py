@@ -516,7 +516,7 @@ def test_a_rewrite_of_the_same_lens_counts_once_and_red_counts_never(repo):
     run("write", f"ready-{KEY}", "architecture", stdin=GREEN)
     run("write", f"ready-{KEY}", "architecture", stdin=answer(blocking()))
     lines = (repo / ".git" / "we-lens" / "samples.jsonl").read_text().splitlines()
-    assert len(lines) == 1
+    assert len([x for x in lines if '"kind"' not in x]) == 1
 
 
 # --- the CLI, isolated, as the skill and board.py run it ------------------------------------------
@@ -863,3 +863,84 @@ def test_round_derived_is_refused_on_a_t2_panel(repo):
     path.write_text(json.dumps(doc))
     code, out, _ = run("check", "t2-pr7")
     assert code == 1 and "round_derived needs a string (ready only)" in out
+
+
+# --- severity log: one line per Ready lens verdict, read by ``rounds`` ------------------------
+
+
+def log_lines(root: Path) -> list[dict]:
+    text = (root / ".git" / "we-lens" / "samples.jsonl").read_text()
+    return [json.loads(x) for x in text.splitlines()]
+
+
+def test_every_ready_write_logs_its_severity_counts(repo):
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    note = blocking(severity="NOTE")
+    run(
+        "write", vid, "product", stdin=answer(blocking(), blocking(severity="WARNING"), note, note)
+    )
+    run("write", vid, "architecture", stdin=GREEN)
+    run("write", vid, "acceptance", "--failed", "no answer")
+    sev = [x for x in log_lines(repo) if x.get("kind") == "severity"]
+    blob = json.loads(verdict_file(repo, vid).read_text())["bound_to"]["plan_blob"]
+    assert [(x["lens"], x["verdict"], x["blocking"], x["warning"], x["note"]) for x in sev] == [
+        ("product", "red", 1, 1, 2),
+        ("architecture", "green", 0, 0, 0),
+        ("acceptance", "red", 0, 0, 0),
+    ]
+    assert all(x["id"] == vid and x["bound"] == blob and x["round"] == 1 for x in sev)
+    assert [x["failure"] for x in sev] == [False, False, True]
+
+
+def test_a_t2_write_logs_no_severity_line(repo):
+    run("plan", "t2", "7")
+    run("write", "t2-pr7", "product", stdin=GREEN)
+    path = repo / ".git" / "we-lens" / "samples.jsonl"
+    assert not path.exists() or all("kind" not in x for x in log_lines(repo))
+
+
+def test_rounds_lists_each_round_with_its_last_write_per_lens(repo):
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    run("write", vid, "product", stdin=answer(blocking()))
+    run("write", vid, "product", stdin=answer(blocking(severity="WARNING")))  # asked once more
+    new_plan_version(repo)
+    run("plan", "ready", KEY)
+    run("write", vid, "product", stdin=GREEN)
+    rows = lv.rounds(repo, KEY)
+    assert [r["round"] for r in rows] == [1, 2]
+    assert rows[0]["lenses"]["product"]["warning"] == 1
+    assert rows[0]["lenses"]["product"]["blocking"] == 0
+    code, out, _ = run("rounds", KEY)
+    shown = out.splitlines()
+    assert code == 0 and len(shown) == 2
+    assert shown[0].startswith("round 1 @ ") and shown[0].endswith("product red B0 W1 N0")
+    assert shown[1].endswith("product green B0 W0 N0")
+    assert run("rounds", "PROJ-9")[1].strip() == "ready-PROJ-9: no logged rounds"
+
+
+def test_a_red_severity_line_on_a_new_blob_leaves_the_derived_round_alone(repo):
+    """Red arm: the derived round counts only 8.10.0's green lines; a severity line, red or
+    green, on a blob nobody else logged must not add a round (nor count a sample)."""
+    vid = legacy_run(repo)
+    assert lv.round_of(repo, vid) == (1, None)
+    lv._append(
+        repo / ".git" / "we-lens" / "samples.jsonl",
+        {
+            "kind": "severity",
+            "id": vid,
+            "lens": "product",
+            "bound": "f" * 40,
+            "round": 2,
+            "verdict": "red",
+            "failure": False,
+            "ran_at": "x",
+            "blocking": 1,
+            "warning": 0,
+            "note": 0,
+        },
+    )
+    assert lv.round_of(repo, vid) == (1, None)
+    assert "round" not in run("check", vid)[1]
+    assert run("samples")[1] == ""

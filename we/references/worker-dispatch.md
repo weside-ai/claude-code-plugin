@@ -117,6 +117,9 @@ refuses its merge as for a subagent.
   default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by the conflict check of `/we:ci-review` § 3 (merge `origin/<default-branch>` only on a conflict).
+- The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
+  `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
+  worker in a tree that is not its own; git runs as `git -C <worktree> …`.
 - The worker implements the plan's phases in order, inline, and never fans implementation out to
   sub-agents: one worktree has one git index, and a second committer races `.git/index.lock`.
 - The worker commits per phase and stages by path, never `git add -A`. Every commit carries
