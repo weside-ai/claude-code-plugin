@@ -92,13 +92,13 @@ A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start (L0 §Lifecyc
 master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
-fork you cannot settle → write `## Open Fork` and stop". It ends with the scratch limits, verbatim
+fork you cannot settle → write `## Open Fork` and stop". It ends with the tree limits, verbatim
 (refiners that `cd`'d into the main checkout or a job directory read and wrote the wrong tree):
 
 ```
-Scratch: <absolute path of the tree you were started in> is your only tree; every path you use is absolute and inside it.
+Tree: <absolute path of the tree you were started in> is your only tree; every path you use is absolute and inside it.
 Create no worktree. Never `cd`: not into the main checkout, not into ~/.claude/jobs, nowhere.
-Read, search and write only with the Read, Grep, Glob, Edit and Write tools under Scratch; Bash only for the commands
+Read, search and write only with the Read, Grep, Glob, Edit and Write tools under Tree; Bash only for the commands
 /we:plan-story names, with absolute paths and no `cd`.
 ```
 
