@@ -24,13 +24,11 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "Only Hal merges it (user merge,\n  `one-way gate` check), from a board item; a card hit "
-    "(`trust-loosening`, `money-path`,\n  `brake-review`) also waits for a security card worker."
+    "A one-way PR outside the brake's\n  core merges itself, where a self-merge window runs, 2 h after "
+    "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
+    "the core only Hal merges."
 )
-DECIDED_3 = (
-    "3. Only Hal merges the computed one-way class (user merge); all other T2 auto-merge, "
-    "trust loosening too."
-)
+DECIDED_3 = "3. One-way merges via the 2 h window, the core by Hal."
 
 
 @pytest.fixture(autouse=True)
@@ -149,8 +147,9 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
         "",
     )
     old = old.replace(
-        "Only {human} merges it",
-        "{human} gets one push line at panel green; one word arms auto-merge. Only {human} merges it",
+        "else and the core only {human} merges.",
+        "else and the core only {human} merges. {human} gets one push line at panel green; one "
+        "word arms auto-merge.",
     )
     (process / "L0.md").write_text(old)
     text = rp.render_l0(generic(), process=process)

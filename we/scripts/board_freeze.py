@@ -3,9 +3,22 @@
 and every auto-merge arm in the repos the flag names (`repos`; `*` names every repo), naming the
 reason.
 
-The flag is `freeze.json` in the board's state directory (beside `board.json`, `board.file` in the
-crew): `{"since", "by", "reason", "repos", "disarmed", "not_disarmed"}`. `board.py freeze` and
-`board.py unfreeze` are its only writers; the hook only reads it (`read_flag`).
+The flag sits beside the board file (`board.file` in the crew) and carries the board's stem
+(`flag_path`: `board.json` → `freeze.json`, `acme-board.json` → `acme-board-freeze.json`), so it is
+one per crew, not one per folder: `{"since", "by", "reason", "repos", "disarmed", "not_disarmed",
+"issues"}`. `board.py freeze` and `board.py unfreeze` are its only writers; the hook only reads it
+(`read_flag`).
+
+The freeze also reaches GitHub, where a repo's self-merge window (a scheduled workflow that merges
+a one-way PR outside the brake's core) reads it: an open issue labelled `merge-freeze`
+(`FREEZE_LABEL`, the judge's contract in `fixtures/brake-self-merge/judge.json`) means frozen.
+
+  * `freeze` opens one such issue in every repo of `issue_repos` (the named repos; for `*` every
+    repo of the crew, `board.py` resolves them) unless one is open there already, and records the
+    issues it opened in `issues`. An issue that fails to open lands in `not_disarmed` and the
+    local flag stands anyway.
+  * `unfreeze` closes only the issues the flag recorded; an issue someone else opened (the owner's
+    stop button on the phone) stays open, and a failed close is returned as `issues_open`.
 
   * `freeze` writes the flag first, then disarms every open PR with auto-merge armed in the named
     repos (`gh pr merge <N> -R <repo> --disable-auto`) and records them in `disarmed`. The flag is
@@ -46,6 +59,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import crew
 
 FLAG_NAME = "freeze.json"
+FREEZE_LABEL = "merge-freeze"
 DEFAULT_BOARD = "~/.claude/we-state/board.json"
 GhRunner = Callable[[list], Optional[str]]
 
@@ -55,7 +69,13 @@ class FreezeError(Exception):
 
 
 def flag_path(board_file: str | Path) -> Path:
-    return Path(board_file).expanduser().with_name(FLAG_NAME)
+    """The flag beside `board_file`, named after its stem like the board's logs: `board.json` keeps
+    `freeze.json`, a second crew's `acme-board.json` gets `acme-board-freeze.json`, so a freeze in
+    one crew does not brake another crew whose board shares the folder."""
+    board = Path(board_file).expanduser()
+    if board.stem == "board":
+        return board.with_name(FLAG_NAME)
+    return board.with_name(f"{board.stem}-{FLAG_NAME}")
 
 
 def watched_board_files(start: str | Path | None, default: str = DEFAULT_BOARD) -> list[Path]:
@@ -174,9 +194,11 @@ def freeze(
     gh: GhRunner = _gh,
     now: str | None = None,
     disarm: list[str] | None = None,
+    issue_repos: list[str] | None = None,
 ) -> dict:
-    """Write the flag, disarm the armed PRs of `disarm` (default: `repos` without `*`), record
-    them; returns the flag."""
+    """Write the flag, open the freeze issue in `issue_repos` (default: `repos` without `*`),
+    disarm the armed PRs of `disarm` (default: `repos` without `*`), record both; returns the
+    flag."""
     if not reason.strip():
         raise FreezeError("a freeze needs a reason")
     stamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -193,8 +215,16 @@ def freeze(
         # A second freeze keeps what the first disarmed: `unfreeze` must list every PR.
         "disarmed": list(standing.get("disarmed") or []),
         "not_disarmed": list(standing.get("not_disarmed") or []),
+        "issues": list(standing.get("issues") or []),
     }
     _write_atomic(path, flag)
+    wanted = issue_repos if issue_repos is not None else [r for r in repos if r != "*"]
+    if "*" in repos and not wanted:
+        flag["not_disarmed"].append(
+            {"repo": "*", "why": f"no repo here for a `{FREEZE_LABEL}` issue"}
+        )
+    for repo in wanted:
+        _open_issue(repo, reason, by, flag, gh)
     targets = disarm if disarm is not None else [r for r in repos if r != "*"]
     if "*" in repos and not targets:
         flag["not_disarmed"].append(
@@ -218,8 +248,74 @@ def freeze(
     return flag
 
 
-def unfreeze(path: Path) -> dict | None:
-    """Remove the flag; returns what stood (None when nothing did). A torn flag is removed too."""
+def issue_failures(flag: dict) -> list[dict]:
+    """The `not_disarmed` entries for a freeze issue that did not open (GitHub not frozen there)."""
+    return [e for e in flag.get("not_disarmed") or [] if FREEZE_LABEL in str(e.get("why"))]
+
+
+def _open_freeze_issues(repo: str, gh: GhRunner) -> list[int] | None:
+    raw = gh(
+        [
+            "issue",
+            "list",
+            "-R",
+            repo,
+            "--label",
+            FREEZE_LABEL,
+            "--state",
+            "open",
+            "--json",
+            "number",
+        ]
+    )
+    try:
+        return sorted(int(i["number"]) for i in json.loads(raw or ""))
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+def _open_issue(repo: str, reason: str, by: str, flag: dict, gh: GhRunner) -> None:
+    """Open the freeze issue in `repo` unless one is open; record it in `issues` or the failure in
+    `not_disarmed`."""
+    if any(i.get("repo") == repo for i in flag["issues"]):
+        return
+    standing = _open_freeze_issues(repo, gh)
+    if standing is None:
+        flag["not_disarmed"].append(
+            {"repo": repo, "why": f"listing the `{FREEZE_LABEL}` issues failed"}
+        )
+        return
+    if standing:
+        return  # someone else's freeze issue stands; it is theirs to close
+    # gh refuses a label the repo lacks: create it first (`--force` keeps an existing one).
+    gh(["label", "create", FREEZE_LABEL, "-R", repo, "--color", "b60205", "--force"])
+    out = gh(
+        [
+            "issue",
+            "create",
+            "-R",
+            repo,
+            "--label",
+            FREEZE_LABEL,
+            "--title",
+            f"Merge freeze: {reason}"[:200],
+            "--body",
+            f"Frozen by {by}: {reason}\n\nWhile this issue is open no one-way PR merges itself. "
+            "`board.py unfreeze` closes it; closing it by hand lifts the GitHub side only.",
+        ]
+    )
+    number = (out or "").strip().rstrip("/").rsplit("/", 1)[-1]
+    if out is None or not number.isdigit():
+        flag["not_disarmed"].append(
+            {"repo": repo, "why": f"opening the `{FREEZE_LABEL}` issue failed"}
+        )
+        return
+    flag["issues"].append({"repo": repo, "number": int(number)})
+
+
+def unfreeze(path: Path, gh: GhRunner = _gh) -> dict | None:
+    """Remove the flag and close the freeze issues it opened; returns what stood (None when nothing
+    did), with `issues_open` listing each issue whose close failed. A torn flag is removed too."""
     try:
         flag = read_flag(path)
     except FreezeError:
@@ -228,4 +324,23 @@ def unfreeze(path: Path) -> dict | None:
         path.unlink()
     except FileNotFoundError:
         return None
+    flag["issues_open"] = []
+    for issue in flag.get("issues") or []:
+        try:
+            repo, number = str(issue["repo"]), int(issue["number"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        closed = gh(
+            [
+                "issue",
+                "close",
+                str(number),
+                "-R",
+                repo,
+                "--comment",
+                f"Unfrozen: {flag.get('reason')}",
+            ]
+        )
+        if closed is None:
+            flag["issues_open"].append({"repo": repo, "number": number})
     return flag

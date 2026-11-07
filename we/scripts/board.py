@@ -31,6 +31,7 @@ Usage:
   board.py [--board FILE] book staging --until <YYYY-MM-DDTHH:MMZ>
   board.py [--board FILE] unbook [<rc tag>]
   board.py [--board FILE] staging
+  board.py [--board FILE] self-merge
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -119,18 +120,25 @@ book     books staging for the caller's session until a UTC minute (docs/board.m
          `board.py book: refused: <rc> in acceptance since <UTC>` while an acceptance is open and
          naming the holder while another booking runs. Then it syncs like `staging`.
 unbook   closes the caller's own booking early; `unbook <rc>` closes the acceptance of that RC.
+self-merge mirrors each self-merge notice on an open one-way PR of the crew's repos as one `info`
+         news item `SM<PR>-<comment id>`, once (board_self_merge.py; docs/board.md § Self-merge
+         window); prints one line per notice on a current head, `self-merge: none` without.
 staging  reads the booking and acceptance issues into board.json's `staging` block and prints one
          line each (`staging: free` without either); an acceptance past the crew's
          `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
 
-freeze   writes the freeze flag `freeze.json` beside the board file (only one the merge hook reads:
-         the crew's `board.file`, else the default), then disarms every open PR with
-         auto-merge armed in the named repos (without --repo the flag names `*`, every repo, and
-         the current directory's repo is disarmed) and prints the flag; while it stands the merge
-         hook refuses every merge and arm in those repos (scripts/board_freeze.py).
+freeze   writes the freeze flag beside the board file (`board_freeze.flag_path`: `freeze.json`, or
+         `<stem>-freeze.json` for another board name; only one the merge hook reads: the crew's
+         `board.file`, else the default), opens a `merge-freeze` issue in each named repo (`*`:
+         the crew's repos), then disarms every open PR with auto-merge armed in the named repos
+         (without --repo the flag names `*`, every repo, and the current directory's repo is
+         disarmed) and prints the flag; exit 1 when an issue did not open (the flag stands). While
+         it stands the merge hook refuses every merge and arm in those repos
+         (scripts/board_freeze.py; docs/board.md § The freeze flag).
 path     prints the board file a verb writes (absolute); `--crew-only` prints the crew's
          `board.file` and exits 1 when the crew names none (the /board pane's lookup).
-unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
+unfreeze removes the flag, closes the `merge-freeze` issues the freeze opened (exit 1 naming one that
+         did not close) and prints the disarmed PRs to re-arm through the hook; it re-arms none.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
@@ -161,6 +169,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import board_self_merge  # noqa: E402
 import board_staging  # noqa: E402
 import cold_reader  # noqa: E402
 import crew as crew_mod  # noqa: E402
@@ -867,6 +876,30 @@ def default_board(start=None):
     return _freeze_module().watched_board_files(start or Path.cwd(), DEFAULT_BOARD)[0]
 
 
+def _crew_repos(bf, start=None):
+    """Every repo of the crew for a `*` freeze: the crew file's repo, each member's extra repo
+    that exists here, and the cwd's repo (GitHub `owner/name`, deduplicated, in that order)."""
+    places = [Path(start or Path.cwd())]
+    try:
+        crew_file, crew_data = crew_mod.find_and_load(start or Path.cwd())
+    except crew_mod.CrewError:
+        crew_file, crew_data = None, None
+    if crew_file is not None:
+        places.insert(0, crew_file.parent)
+        for who in (crew_data or {}).get("members") or {}:
+            try:
+                places += crew_mod.extra_repos(crew_file, crew_data, who)[0]
+            except crew_mod.CrewError:
+                continue
+    out = []
+    for place in places:
+        repo = board_staging.repo_of(place)
+        slug = bf.norm_slug(repo) if repo else None
+        if slug and slug not in out:
+            out.append(slug)
+    return out
+
+
 def _unwatched(bf, state, verb):
     """Why `verb` must not touch `state`'s flag (the hook reads none beside it), or None."""
     target = bf.flag_path(state.board_path)
@@ -896,13 +929,30 @@ def cmd_freeze(state, args, _crew, _now):
         return 1
     repos = [r if r == "*" else bf.norm_slug(r) for r in args.repo or []] or ["*"]
     disarm = None if args.repo else [r for r in [_current_repo()] if r]
+    issue_repos = _crew_repos(bf) if "*" in repos else None
     by = args.by or os.environ.get("WESIDE_COMPANION") or os.environ.get("USER") or "unknown"
     try:
-        flag = bf.freeze(bf.flag_path(state.board_path), args.reason, repos, by, disarm=disarm)
+        flag = bf.freeze(
+            bf.flag_path(state.board_path),
+            args.reason,
+            repos,
+            by,
+            disarm=disarm,
+            issue_repos=issue_repos,
+        )
     except bf.FreezeError as exc:
         print(f"board.py freeze: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(flag, ensure_ascii=False))
+    missed = bf.issue_failures(flag)
+    if missed:
+        print(
+            "board.py freeze: the local flag stands, but GitHub is not frozen in "
+            f"{', '.join(e['repo'] for e in missed)} (no `merge-freeze` issue): a self-merge window "
+            "there still merges; open the issue by hand",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -919,6 +969,14 @@ def cmd_unfreeze(state, _args, _crew, _now):
     prs = " ".join(f"{d['repo']}#{d['number']}" for d in flag.get("disarmed") or [])
     print(f"unfrozen: {flag.get('reason')}")
     print(f"re-arm through the hook: {prs or '(none was disarmed)'}")
+    still = " ".join(f"{d['repo']}#{d['number']}" for d in flag.get("issues_open") or [])
+    if still:
+        print(
+            f"board.py unfreeze: the `merge-freeze` issue did not close, GitHub stays frozen: "
+            f"{still}; close it by hand",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -2234,6 +2292,29 @@ def cmd_unbook(state, args, crew, now):
     return _sync_staging(state, staging, now)
 
 
+def cmd_self_merge(state, _args, _crew, now):
+    """Mirror the self-merge notices of the crew's repos into the board's news."""
+    repos = _crew_repos(_freeze_module())
+    if not repos:
+        raise BoardError("board.py self-merge: no GitHub origin for the crew's repos or the cwd")
+    notices = []
+    for repo in repos:
+        try:
+            notices += board_self_merge.read_notices(repo)
+        except board_self_merge.SelfMergeError as exc:
+            raise BoardError(f"board.py self-merge: {repo}: {exc}") from None
+    added = state.write_board(lambda board: board_self_merge.merge(board, notices, repos, now))
+    for n in notices:
+        print(
+            f"self-merge: {n['repo']}#{n['number']} one-way {n['class']} merges at {n['merge_at']}"
+        )
+    if not notices:
+        print("self-merge: none")
+    for item in added:
+        print(f"news: {item['id']} {item['title']}")
+    return 0
+
+
 def cmd_staging(state, args, crew, now):
     return _sync_staging(state, _staging(crew), now)
 
@@ -2276,6 +2357,9 @@ def _add_staging_verbs(verbs):
     verbs.add_parser(
         "staging", help="mirror booking and acceptance into the board file"
     ).set_defaults(run=cmd_staging)
+    verbs.add_parser(
+        "self-merge", help="mirror the self-merge notices of one-way PRs as board news"
+    ).set_defaults(run=cmd_self_merge)
 
 
 def _add_move_verbs(verbs):

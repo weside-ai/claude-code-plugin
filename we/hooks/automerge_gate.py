@@ -26,11 +26,15 @@ Refusals, in this order (the first one wins):
   1. In any worker every merge and arm is refused: merging is the Lead's call in the main session
      (`references/worker-dispatch.md` § Dev-only worker contract). A worker is a subagent
      (`agent_id` in the payload) or a process worker (the marker of `scripts/worker_launch.py`).
-  2. Freeze: while `freeze.json` stands beside the board file (`scripts/board_freeze.py`), every
+  2. Freeze: while the freeze flag stands beside the board file (`board_freeze.flag_path`), every
      merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
      reason; an unreadable flag counts as standing.
-  3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; the owner (`human.name` in the
-     crew) merges it by hand, whatever a command or a chat quote says.
+  3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; no session merges or arms it,
+     whatever a command or a chat quote says, a green panel included. The brake's core
+     (`risk_paths.CORE`) only the owner (`human.name` in the crew) merges, by hand; every other
+     one-way class merges itself through the repo's self-merge window (2 h after a green T2 panel
+     comment on its head, `lens_verdict.py post`, once the owner got the push line; a `veto` label
+     stops it), so the refusal points there.
   4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
      `check(root, "t2-pr<N>")` must be green (missing or red refuses; the verdict file carries no
      skip field). Without the module the check is off with one stderr line. The panel verdict is a
@@ -863,6 +867,26 @@ def _uses_rules(start: str | None) -> bool:
     return _git(root, "cat-file", "-e", f"{RULES_FROM}:.weside/risk-paths") is not None
 
 
+def _one_way_refusal(root: str, cls: ClassResult) -> str:
+    """Refusal 3: the core waits for the owner's hand, every other class for the self-merge window."""
+    pr = f"PR #{cls.number} ({cls.url})"
+    head = (
+        f"{pr} is `{cls.line}`: one-way ({cls.one_way}). No session merges or arms it, whatever "
+        "a command or a quoted go says"
+    )
+    if cls.one_way in risk_paths.CORE:
+        return (
+            f"{head}: it is the brake's core, only {_human(root)} merges it, by hand. "
+            "Hand over the link and the class."
+        )
+    return (
+        f"{head}: it merges itself 2 h after a green T2 panel on its head, once {_human(root)} got "
+        "the push line, where the repo runs a self-merge window; a `veto` label stops it. "
+        f"Post the panel with `/we:lens t2 {cls.number}` if none stands on this head, then hand "
+        "over the link and the class."
+    )
+
+
 def _class_refusal(
     root: str | None,
     call: MergeCall,
@@ -893,13 +917,7 @@ def _class_refusal(
     if cls.line is None:
         return f"Merge refused, class not computed: {cls.reason}.", False
     if cls.one_way:
-        pr = f"PR #{cls.number} ({cls.url})"
-        return (
-            f"{pr} is `{cls.line}`: one-way ({cls.one_way}). {_human(root)} merges one-way PRs "
-            "by hand; no session merges or arms it, whatever a command or a quoted go says: "
-            "hand over the link and the class.",
-            False,
-        )
+        return _one_way_refusal(root, cls), False
     if cls.line == "T2" and cls.number is not None:
         red = _panel_refusal(root, cls.number) or _card_refusal(root, cls, cwd)
         if red:
