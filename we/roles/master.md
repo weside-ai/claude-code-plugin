@@ -20,6 +20,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - Size each step's effort: do it inline when it is a handful of tool calls; use a read-only
   subagent for a wide read or a review; give a story to one worker (the default); start two to
   four workers only for independent chunks. Multi-agent work costs ~15× the tokens.
+- Build workers start through the crew's launcher. One exception: with crew `launch.subagent_fallback: true`
+  and the launcher not on `PATH`, start `Agent(we:dev-*)` (`worker-dispatch.md` § Worker launch backend).
 - After a merge: remove worktrees, branches and finished workers and move the ticket.
 - After every merged story: `/we:epic` update (Updates Log, ticket mirror) before you pull the next one.
 - Keep your open strands (workers, PRs, questions, promised replies) as a task list, so a

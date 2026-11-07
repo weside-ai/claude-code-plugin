@@ -24,7 +24,7 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "A one-way PR outside the brake's\n  core merges itself, where a self-merge window runs, 2 h after "
+    "A one-way PR outside the\n  core merges itself, where a self-merge window runs, 2 h after "
     "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
     "the core only Hal merges."
 )
@@ -758,3 +758,29 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
     assert l0_overrun(crew, process) == (
         f"full L0 with every role bound: {rp.BUDGET + 1} > BUDGET {rp.BUDGET} chars"
     )
+
+
+# The brake's core as the classifier enforces it: a diff to the classifier, the gates, the crew's
+# `risk` block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged.
+BRAKE_CORE = "the\n  brake core (classifier, gates, removed rules, crew `risk`)."
+
+
+@pytest.mark.parametrize(
+    "data", [None, json.loads(ALL_BOUND.read_text())], ids=["generic", "bound"]
+)
+def test_l0_names_every_part_of_the_brake_core(data):
+    crew = generic() if data is None else crewlib._merge(data)
+    assert BRAKE_CORE in rp.render_l0(crew)
+
+
+def test_the_subagent_fallback_lives_in_the_cards_not_in_l0():
+    """L0 keeps the principle (a subagent never builds); the opt-in exception sits in the master
+    and worker cards, each pointing at its reference."""
+    crew = all_bound()
+    l0 = rp.render_l0(crew)
+    assert "A subagent reads and reviews, never builds." in l0
+    assert "subagent_fallback" not in l0
+    for role in ("master", "worker"):
+        card = rp.render_card(crew, role)
+        assert "launch.subagent_fallback" in card, role
+        assert "`worker-dispatch.md` § Worker launch backend" in card, role
