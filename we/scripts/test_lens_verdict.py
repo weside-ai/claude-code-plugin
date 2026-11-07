@@ -177,6 +177,8 @@ def test_plan_outside_the_repo_or_an_unknown_option_names_itself(repo, tmp_path)
     assert code == 2 and "unknown option --plna" in err and "Usage:" in err
     code, _, err = run("plan", "ready")
     assert code == 2 and "plan: wrong arguments" in err and "lens_verdict.py plan ready" in err
+    code, _, err = run("check", f"ready-{KEY}", "--plan", "x.md")
+    assert code == 2 and "--plan (only for plan ready)" in err
 
 
 # --- AC2: missing, stale, green ----------------------------------------------------------------

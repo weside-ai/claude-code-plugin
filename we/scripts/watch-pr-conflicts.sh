@@ -51,7 +51,10 @@ tick() {
 
 . "$(dirname "${BASH_SOURCE[0]}")/gh_anchor.sh"
 gh_anchor
-until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do tick; done
+until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do
+  [ -n "$ORIGIN_REPO" ] && { REPO=$ORIGIN_REPO; break; }
+  tick
+done
 
 DONE=()
 while :; do

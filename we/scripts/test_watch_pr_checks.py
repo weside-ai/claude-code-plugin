@@ -67,7 +67,7 @@ def run(
     gh.write_text(
         "#!/usr/bin/env bash\n"
         f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
-        'if [ "$1 $2" = "repo view" ]; then echo o/r; exit 0; fi\n'
+        'if [ "$1 $2" = "repo view" ]; then [ -n "$GH_REPO_VIEW_FAIL" ] && exit 1; echo o/r; exit 0; fi\n'
         'if [ "$1 $2" = "pr merge" ]; then [ -n "$GH_MERGE_FAIL" ] && { echo "$GH_MERGE_FAIL" >&2; exit 1; }; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
@@ -303,6 +303,18 @@ def make_worktree(tmp_path, remote):
     return main.resolve(), wt
 
 
+def test_from_a_worktree_gh_runs_in_the_main_checkout(tmp_path):
+    """Regression: from `/` a gh that picks its account by directory answered
+    "Could not resolve to a Repository"; the calls stay in the caller's repo instead, and
+    `gh repo view` (set-default, a fork's upstream) still names the repo."""
+    main, wt = make_worktree(tmp_path, "git@github.com:acme/app.git")
+    code, out = run(tmp_path, [_green()], cwd=wt)
+    assert code == 0, out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls[0] == f"{main} | repo view ", calls
+    assert all(c.startswith(f"{main} | ") and " -R o/r " in c for c in calls[1:]), calls
+
+
 @pytest.mark.parametrize(
     "remote",
     [
@@ -311,15 +323,20 @@ def make_worktree(tmp_path, remote):
         "ssh://git@github.com/acme/app.git",
     ],
 )
-def test_from_a_worktree_gh_runs_in_the_main_checkout_with_the_remotes_repo(tmp_path, remote):
-    """Regression: from `/` a gh that picks its account by directory answered
-    "Could not resolve to a Repository"; the calls stay in the caller's repo instead."""
-    main, wt = make_worktree(tmp_path, remote)
-    code, out = run(tmp_path, [_green()], cwd=wt)
+def test_a_failing_repo_view_falls_back_to_a_github_origin(tmp_path, remote):
+    _, wt = make_worktree(tmp_path, remote)
+    code, out = run(tmp_path, [_green()], cwd=wt, env_extra={"GH_REPO_VIEW_FAIL": "1"})
     assert code == 0, out
     calls = (tmp_path / "calls.log").read_text().splitlines()
-    assert calls and all(c.startswith(f"{main} | ") for c in calls), calls
-    assert all(" -R acme/app " in c for c in calls), calls  # from the remote, no `repo view`
+    assert all(" -R acme/app " in c for c in calls[1:]), calls
+
+
+def test_a_non_github_origin_is_no_fallback(tmp_path):
+    _, wt = make_worktree(tmp_path, "git@gitlab.com:acme/app.git")
+    code, out = run(
+        tmp_path, [_green()], cwd=wt, max_errors="2", env_extra={"GH_REPO_VIEW_FAIL": "1"}
+    )
+    assert code == 2 and out and out[-1].startswith("gh failed 2 times"), out
 
 
 @pytest.mark.parametrize("state, code, word", [("MERGED", 7, "merged"), ("CLOSED", 8, "closed")])

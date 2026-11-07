@@ -32,7 +32,7 @@
 # unchanged for WATCH_QUIET seconds and at least two reads. Checks register seconds after a
 # push, so a first read with a few skipped checks is not green. `gh pr checks --required` is not
 # used: repos without a required-check ruleset answer "no required checks reported".
-# The repo is resolved once at start (`-R`, else the caller's `origin` remote, else `gh repo view`)
+# The repo is resolved once at start (`-R`, else `gh repo view`, else a github.com `origin`)
 # and every gh call carries `-R`; the calls run from the repo's main checkout (gh_anchor.sh), so
 # removing the worktree it was started in does not break it and a per-directory gh account holds.
 # Run it as a background command.
@@ -116,6 +116,7 @@ tick() {  # sleep one interval, or exit 9 once the lifetime cap is reached
 . "$(dirname "${BASH_SOURCE[0]}")/gh_anchor.sh"
 gh_anchor
 until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do
+  [ -n "$ORIGIN_REPO" ] && { REPO=$ORIGIN_REPO; break; }
   git rev-parse --git-dir >/dev/null 2>&1 || { echo "not inside a git repo: pass -R <owner/repo>" >&2; exit 2; }
   tick
 done

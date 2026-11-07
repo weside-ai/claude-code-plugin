@@ -28,10 +28,11 @@ repo, never in the tree, so a PR cannot carry its own verdict), plus ``samples.j
 Schema, version 1, closed: an unknown key anywhere refuses the file or the answer, naming the key.
 File: ``version``, ``kind`` (ready|t2), ``subject``, ``bound_to`` (``plan_blob`` for ready, the
 output of ``git hash-object`` on the plan; ``head`` for t2, the PR's head SHA), ``expected`` (the
-lenses copied from the crew when the panel started, so a crew edit cannot shrink a running panel)
-and ``verdicts.<lens>``: ``verdict`` (green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``,
-``findings``, and ``failure``; optional ``plan`` (ready only: the plan's path relative to the
-repo root when ``--plan`` named one, so ``write`` and ``check`` re-hash that file) (why a lens was recorded red without findings). A finding:
+lenses copied from the crew when the panel started, so a crew edit cannot shrink a running panel),
+optional ``plan`` (ready only: the plan's path relative to the repo root when ``--plan`` named
+one, so ``write`` and ``check`` re-hash that file) and ``verdicts.<lens>``: ``verdict``
+(green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``, ``findings``, and ``failure`` (why a
+lens was recorded red without findings). A finding:
 ``severity`` (BLOCKING|WARNING|NOTE), ``claim``, ``where``, ``question`` (the question-file line it
 answers; required on Ready), ``red_arm`` (``command``, ``exit``, ``run``) and ``status``
 (standing|refuted). An answer is ``{"findings": [...]}`` whose findings carry only ``severity``,
@@ -687,6 +688,8 @@ def _main(argv: list[str], stdin: Any) -> int:
     root = repo_root(Path.cwd())
     args = _positional(rest, ("--failed", "--keeper", "--plan"))
     unknown = [a for a in args if a.startswith("--")]
+    if "--plan" in rest and not (verb == "plan" and args[:1] == ["ready"]):
+        unknown = ["--plan (only for plan ready)"]
     if unknown:
         raise UnusableError(f"{verb or '(no verb)'}: unknown option {unknown[0]}\n{_usage()}")
     if verb == "plan" and len(args) == 2 and args[0] in ("ready", "t2"):

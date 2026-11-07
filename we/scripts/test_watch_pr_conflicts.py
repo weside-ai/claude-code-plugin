@@ -76,9 +76,8 @@ def test_from_a_worktree_gh_runs_in_the_main_checkout_with_the_remotes_repo(tmp_
     code, _ = run(tmp_path, {"5": [dirty]}, "5")
     assert code == 1
     calls = (tmp_path / "calls.log").read_text().splitlines()
-    assert calls and all(
-        c.startswith(f"{main.resolve()} | pr view 5 -R acme/app") for c in calls
-    ), calls
+    assert calls[0].startswith(f"{main.resolve()} | repo view"), calls
+    assert all(c.startswith(f"{main.resolve()} | pr view 5 -R o/r") for c in calls[1:]), calls
 
 
 def test_behind_counts_and_unknown_waits(tmp_path):
