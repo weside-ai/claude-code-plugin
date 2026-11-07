@@ -48,7 +48,7 @@ the defaults are the three lenses ``product``, ``architecture``, ``acceptance``,
 default, keeps every standing WARNING red; a number N of at least 1 lets a Ready panel in round N
 or later whose red lenses stand on WARNINGs alone count green with those warnings carried onto the
 Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdict.py`` owns the
-round), ``t2_panel``, ``risk``,
+round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
 ``files``, ``coldstart``, ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every

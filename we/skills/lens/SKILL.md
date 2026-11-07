@@ -9,7 +9,7 @@ description: >
 
 You run the panel; the lens agents judge. Start it with `lens_verdict.py plan`, spawn every entry in one message, record each answer with `write`, end with `check`.
 You never judge in a lens's place, never edit a verdict file and never pass a lens your own context: a lens is a fresh agent.
-The verdict and the green rule are computed by `lens_verdict.py` (its module docstring owns them); a red panel turns green only through a fresh panel on a new plan blob or head.
+The verdict and the green rule are computed by `lens_verdict.py` (its module docstring owns them); a red panel turns green only through a fresh panel on a new plan blob or head (the Ready exception: its § Carried warnings).
 Wanted stop: the `check` lines. Every other status note goes with the next tool call.
 
 ```text
@@ -80,8 +80,8 @@ refusal line; a second refusal: `LV write <id> <lens> --failed "finding without 
 
 ## 5. Check and report
 
-Run `LV check <id>` and relay its lines: one per lens (`green`, `red (<why>)`, `missing`), a `stale` line
-when the plan or head moved, and `panel <id>: green|red`. Exit 0 only for green. The board's move to
+Run `LV check <id>` and relay its lines verbatim: one per lens, a `stale` line when the plan or head moved,
+and the panel line (forms: the script's docstring, § Carried warnings included). Exit 0 only for green. The board's move to
 Selected reads the Ready panel itself (`board.py select`); the merge of a two-way T2 PR reads the T2 panel.
 On T2, one-way PRs included, then run `LV post t2-pr<PR>`: it posts the `<!-- t2-panel -->` comment on
 the head (`Overall: PASS` or `FAIL`, its docstring owns the form), which a repo's self-merge window
