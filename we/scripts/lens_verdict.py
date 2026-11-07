@@ -32,7 +32,10 @@ lenses copied from the crew when the panel started, so a crew edit cannot shrink
 optional ``plan`` (ready only: the plan's path relative to the repo root when ``--plan`` named
 one, so ``write`` and ``check`` re-hash that file), ``round`` (ready only: the panel's round, 1 for
 the first plan version; ``plan ready`` on a new plan blob writes the stored round plus one, on the
-same blob it keeps it, so a restart is no round; a file without ``round`` counts as round 1) and ``verdicts.<lens>``: ``verdict``
+same blob it keeps it, so a restart is no round; a file without ``round`` takes its round from
+evidence, see Derived round), ``round_derived`` (ready only: where the round's base came from when
+it was derived, e.g. ``base: round 2 derived: 2 plan blobs with logged lens verdicts: e82588a3,
+e0d2159d``) and ``verdicts.<lens>``: ``verdict``
 (green|red), ``agent``, ``ran_at``, ``sample``, ``sampled``, ``findings``, and ``failure`` (why a
 lens was recorded red without findings). A finding:
 ``severity`` (BLOCKING|WARNING|NOTE), ``claim``, ``where``, ``question`` (the question-file line it
@@ -54,6 +57,16 @@ a lens that is red only through standing WARNINGs (no BLOCKING, no ``failure``) 
 (warnings carried)`` and ``check_panel`` returns the warnings (lens, claim, where) for the board's
 Selected row. A BLOCKING stays red in every round; without the key, and on every T2 panel, a
 WARNING stays red. The verdict file keeps the lens ``red``: carrying is decided by ``check``.
+
+Derived round (Ready, a file without ``round``, i.e. written by 8.10.0 or older): the round is the
+number of distinct plan blobs that provably had a Ready panel: the blobs of this panel's lines in
+``samples.jsonl`` (every green lens verdict of 8.10.0 and older appended one, ``bound`` = plan blob)
+plus the blob the file is bound to. A plan version without a logged run (a draft commit, a panel
+whose lenses were all red) never counts, a restart on the same blob counts once; without a line the
+round stays 1. ``check`` prints ``panel <ID>: round N (derived: …)``, ``plan ready`` on a new blob
+writes N + 1 with ``round_derived`` (``base: round N derived: …``, kept by every later round), and the verdicts are never in git, so git history is no
+source. The log is as writable as the verdict file: deriving loosens nothing a session could not
+already write.
 
 Red arm (T2): a BLOCKING or WARNING finding needs ``red_arm.command`` and ``red_arm.exit``, or the
 answer is refused naming the finding. The skill runs the arm (never this script: lens output is
@@ -116,7 +129,17 @@ NO_PROOF_EXITS = (124, 126, 127)
 ARM_FORMS = ("pytest ", "python3 -m pytest ", "bash scripts/", "python3 scripts/")
 ARM_FORBIDDEN = (";", "|", "&", "$(", "`", ">", "<", "\n", "\r")
 ID_RE = re.compile(r"\A(?:ready-(?P<key>[A-Za-z][A-Za-z0-9_]*-\d+)|t2-pr(?P<pr>\d+))\Z")
-FILE_KEYS = ("version", "kind", "subject", "bound_to", "expected", "verdicts", "plan", "round")
+FILE_KEYS = (
+    "version",
+    "kind",
+    "subject",
+    "bound_to",
+    "expected",
+    "verdicts",
+    "plan",
+    "round",
+    "round_derived",
+)
 VERDICT_KEYS = ("verdict", "agent", "ran_at", "sample", "sampled", "findings", "failure")
 FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm", "status")
 ANSWER_FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm")
@@ -350,6 +373,8 @@ def read_file(path: Path) -> dict[str, Any]:
         isinstance(round_, int) and not isinstance(round_, bool) and round_ >= 1
     ):
         raise RefusedError(f"panel {path.stem}: round needs a number of at least 1 (ready only)")
+    if "round_derived" in doc and (kind != "ready" or not isinstance(doc["round_derived"], str)):
+        raise RefusedError(f"panel {path.stem}: round_derived needs a string (ready only)")
     expected = doc.get("expected")
     if not isinstance(expected, list) or not all(isinstance(x, str) for x in expected):
         raise RefusedError(f"panel {path.stem}: expected needs a list of lenses")
@@ -414,7 +439,9 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     if rel is not None:
         doc["plan"] = rel
     if kind == "ready":
-        doc["round"] = next_round(path, bound)
+        doc["round"], origin = next_round(path, bound)
+        if origin is not None:
+            doc["round_derived"] = origin
     _write_atomic(path, doc)
     entries = []
     for lens in chosen:
@@ -435,15 +462,38 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     return {"id": vid, "kind": kind, "bound_to": bound, "entries": entries}
 
 
-def next_round(path: Path, bound: dict[str, str]) -> int:
-    """The round of a Ready panel started on ``bound``: 1 without a readable earlier panel, the
-    stored round on the same plan blob (a restart), the stored round plus one on a new blob."""
+def next_round(path: Path, bound: dict[str, str]) -> tuple[int, str | None]:
+    """The round of a Ready panel started on ``bound`` and, when its base was derived, where it
+    came from: 1 without a readable earlier panel, the stored round on the same plan blob (a
+    restart), the stored round plus one on a new blob."""
     try:
         old = read_file(path)
     except (RefusedError, UnusableError):
-        return 1
-    stored = old.get("round", 1)
-    return stored if old["bound_to"] == bound else stored + 1
+        return 1, None
+    stored, origin = panel_round(path.parent, old)
+    if origin is not None and "round" not in old:
+        origin = f"base: round {stored} {origin}"
+    return (stored if old["bound_to"] == bound else stored + 1), origin
+
+
+def panel_round(vdir: Path, doc: dict[str, Any]) -> tuple[int, str | None]:
+    """The stored round with its stored ``round_derived``, or for a file without a round the
+    derived round and its origin (see Derived round); the origin is None when nothing was
+    derived."""
+    if "round" in doc or doc["kind"] != "ready":
+        return doc.get("round", 1), doc.get("round_derived")
+    vid = f"ready-{doc['subject']}"
+    blobs = [
+        x["bound"]
+        for x in _sample_lines(vdir)
+        if x.get("id") == vid and isinstance(x.get("bound"), str) and not x.get("read")
+    ]
+    blobs.append(doc["bound_to"]["plan_blob"])
+    distinct = list(dict.fromkeys(blobs))
+    if len(distinct) < 2:
+        return 1, None
+    names = ", ".join(b[:8] for b in distinct)
+    return len(distinct), f"derived: {len(distinct)} plan blobs with logged lens verdicts: {names}"
 
 
 def parse_answer(text: str) -> dict[str, Any]:
@@ -550,6 +600,11 @@ def _append(path: Path, obj: dict[str, Any]) -> None:
         raise UnusableError(f"{path}: {exc.strerror}") from exc
 
 
+def round_of(root: Path, vid: str) -> tuple[int, str | None]:
+    """The panel's round and, when it was derived, its origin (see Derived round)."""
+    return panel_round(verdict_dir(root), read_file(verdict_dir(root) / f"{vid}.json"))
+
+
 def check(root: Path, vid: str) -> tuple[bool, list[str]]:
     """(green, lines): one line per lens, a stale line when the binding moved, the panel line."""
     green, lines, _carried = check_panel(root, vid)
@@ -572,6 +627,9 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
         return False, [str(exc), f"panel {vid}: red"], []
     lines, green, carried = [], True, []
     carry_after: int | None = None
+    round_, origin = panel_round(verdict_dir(root), doc)
+    if origin is not None:
+        lines.append(f"panel {vid}: round {round_} ({origin})")
     try:
         now = current_binding(root, kind, subject, doc.get("plan"))
     except RefusedError as exc:
@@ -598,7 +656,7 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
         )
         if only_warnings and carry_after is None:
             carry_after = _carry_after(root) or 0
-        if only_warnings and carry_after and doc.get("round", 1) >= carry_after:
+        if only_warnings and carry_after and round_ >= carry_after:
             carried += [{"lens": lens, "claim": f["claim"], "where": f["where"]} for f in standing]
             why = ", ".join(f"WARNING {f['where'] or ''}".strip() for f in standing)
             lines.append(f"lens {lens}: green (warnings carried: {why})")

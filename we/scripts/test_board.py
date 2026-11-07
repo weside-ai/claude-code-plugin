@@ -1925,6 +1925,37 @@ class TestSelectLenses:
         assert transitions(moving)[-1]["carried"] == carried
         assert "carried: acceptance: name the error (plan:AC3)" in out.splitlines()
 
+    def test_select_prints_a_derived_round_with_its_origin(self, moving, capsys):
+        """A verdict file of 8.10.0 (no ``round``) with logged runs on two plan blobs."""
+        root = moving / "work"
+        crew_path = root / ".weside" / "crew.json"
+        data = json.loads(crew_path.read_text(encoding="utf-8"))
+        data["ready_panel"] = {"warning_ok_after_rounds": 2}
+        crew_path.write_text(json.dumps(data), encoding="utf-8")
+        vid = f"ready-{KEY}"
+        plan = root / "docs" / "plans" / f"{KEY}-story.md"
+        path = lens_verdict.verdict_dir(root) / f"{vid}.json"
+        for version in (1, 2):
+            if version == 2:
+                plan.write_text(plan.read_text() + "\n<!-- round 2 -->\n")
+            panel = lens_verdict.plan(root, "ready", KEY)
+            warning = {"severity": "WARNING", "claim": "name the error", "where": "plan:AC3"}
+            warning["question"] = "q"
+            for entry in panel["entries"]:
+                body = {"findings": [warning] if entry["lens"] == "acceptance" else []}
+                lens_verdict.write(root, vid, entry["lens"], answer=json.dumps(body))
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            del doc["round"]
+            path.write_text(json.dumps(doc), encoding="utf-8")
+        code = act(moving, "select", KEY, adapter=fake())
+        out, err = capsys.readouterr()
+        assert code == 0, err
+        assert any(
+            line.startswith("round: 2 (derived: 2 plan blobs with logged lens verdicts: ")
+            for line in out.splitlines()
+        )
+        assert transitions(moving)[-1]["round"].startswith("2 (derived: ")
+
 
 class TestMove:
     @pytest.mark.parametrize(

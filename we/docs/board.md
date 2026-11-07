@@ -565,11 +565,14 @@ computed: <reason>`. Without `risk.command` the gate warns `tier check off` and 
 `tier: none`. `ready_gate.py story` runs the same tier and prints `tier: <line 1>` on stderr.
 
 **Transitions log.** A passing move appends one row to `board-transitions.jsonl` beside the board
-(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, carried?, pr?, reopen?, epic?, ticket}`
+(`O_APPEND`, only grows): `{key, from, to, via?, rc?, ts, by, tier?, carried?, round?, pr?, reopen?, epic?, ticket}`
 (`via` and `rc` on `done` rows only; `carried` on a `selected` row only: the WARNINGs a green
 Ready panel carries under `ready_panel.warning_ok_after_rounds`, each `{lens, claim, where}`, also
 printed as `carried: <lens>: <claim> (<where>)` lines; the master's worker brief copies them as
-must-dos, `skills/master/SKILL.md` § Worker brief); `from` is
+must-dos, `skills/master/SKILL.md` § Worker brief; `round` on a `selected` row only, when the
+verdict file's round was derived from logged runs (`lens_verdict.py` § Derived round), as
+`<N> (derived: …)`, and in a later round `<N> (base: round <M> derived: …)`, also printed as
+`round: …`); `from` is
 the key's previous row's `to`, `by` the calling session's name, `ticket` the transport (`none`,
 `carried`).
 
