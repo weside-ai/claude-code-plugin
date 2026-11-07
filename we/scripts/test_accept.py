@@ -397,3 +397,17 @@ class TestGhSeam:
             lambda _self, argv, _what: subprocess.CompletedProcess(argv, 0, out, ""),
         )
         assert accept.Gh().tag_commit(TAG) == SHA
+
+
+def test_without_board_queue_reads_the_crews_board(crewed, capsys, monkeypatch):  # noqa: F811
+    """A second crew's /we:accept reads its own <stem>-accept.jsonl, never the default board's."""
+    monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewed / "board.json"))
+    crew_file = crewed / "work" / ".weside" / "crew.json"
+    data = json.loads(crew_file.read_text())
+    data["board"] = {**(data.get("board") or {}), "file": "../../acme-board.json"}
+    crew_file.write_text(json.dumps(data))
+    walk = {"rc": "v1", "outcome": "walk", "acs": ["AC1"], "persona": "p", "screen": "s"}
+    (crewed / "board-accept.jsonl").write_text(json.dumps({**walk, "key": "PROJ-1"}) + "\n")
+    (crewed / "acme-board-accept.jsonl").write_text(json.dumps({**walk, "key": "PROJ-7"}) + "\n")
+    assert accept.main(["queue"]) == 0
+    assert capsys.readouterr().out.strip() == "PROJ-7 AC1 p · s (rc v1)"

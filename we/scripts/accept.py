@@ -360,7 +360,9 @@ def cmd_queue(state, args, now, adapter, gh):
 
 def parser():
     p = argparse.ArgumentParser(prog="accept.py", description="Carry a receipts job's verdict.")
-    p.add_argument("--board", default=board.DEFAULT_BOARD)
+    p.add_argument(
+        "--board", help="the board file (default: the crew's board.file, else board.py's default)"
+    )
     verbs = p.add_subparsers(dest="verb", required=True)
     r = verbs.add_parser("run", help="carry the verdict of one RC run")
     r.add_argument("--run-id", dest="run_id", required=True)
@@ -374,7 +376,8 @@ def main(argv=None, now=None, adapter=None, gh=None):
     """`adapter` and `gh` are the tests' fakes; None means the crew's transport and `Gh()`."""
     args = parser().parse_args(argv)
     try:
-        return args.run(board.StateDir(args.board), args, now or board._now(), adapter, gh)
+        state = board.StateDir(args.board or board.default_board())
+        return args.run(state, args, now or board._now(), adapter, gh)
     except (AcceptError, board.BoardError) as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
