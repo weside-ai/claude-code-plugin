@@ -18,6 +18,8 @@ Usage:
                                                  FAIL); exit 0 only for a posted PASS
   lens_verdict.py samples [--keeper SLUG]        the sampled green verdicts nobody has read
   lens_verdict.py sampled ID LENS                mark a sample read
+  lens_verdict.py rounds KEY                     the story's Ready rounds: per round and lens
+                                                 the verdict and its BLOCKING/WARNING/NOTE count
 
 ID is ``ready-<KEY>`` or ``t2-pr<N>``. Exit 2: a usage error, the verdict directory unusable, or
 the crew file unusable.
@@ -95,6 +97,17 @@ the comment always names the head the verdicts were given on. Posted through ``g
 the session's GitHub identity; like the file, any session could post one, so it is a process
 signal, not a lock.
 
+Severity log (Ready only): every ``write`` on a Ready panel appends one line with ``kind:
+"severity"`` to ``samples.jsonl``: ``id``, ``lens``, ``bound`` (the plan blob), ``round``,
+``verdict``, ``failure`` (true when recorded with ``--failed``), ``ran_at`` and the counts
+``blocking``, ``warning``, ``note`` (every finding, refuted ones too; a Ready finding is never
+refuted). ``rounds KEY`` reads them: one line per round and lens, the last write on that blob
+winning. Every other reader of the file (sample counter, ``samples``, the derived round) reads
+only lines without ``kind``: a severity line, red or green, counts no sample and no round. The
+derived round stays the count of 8.10.0's green lines on purpose: it rebuilds rounds of files
+written before ``round`` existed, and a severity line is only ever written next to a file that
+already stores its round.
+
 Sample: every ``lenses.<k>.sample``-th green verdict of a lens is marked ``sample: true`` and listed
 by ``samples`` until ``sampled`` marks it read; nobody waits on a sample. The verdict file is
 written first (temp file plus ``os.replace``), the sample line after it: a crash between the two
@@ -125,6 +138,7 @@ VERSION = 1
 TEXT_CHARS = 500
 SEVERITIES = ("BLOCKING", "WARNING", "NOTE")
 COUNTING = ("BLOCKING", "WARNING")
+SEVERITY_KIND = "severity"
 NO_PROOF_EXITS = (124, 126, 127)
 ARM_FORMS = ("pytest ", "python3 -m pytest ", "bash scripts/", "python3 scripts/")
 ARM_FORBIDDEN = (";", "|", "&", "$(", "`", ">", "<", "\n", "\r")
@@ -561,10 +575,69 @@ def write(
         _append(
             vdir / "samples.jsonl", {"lens": lens, "id": vid, "bound": binding, "sample": sample}
         )
+    if kind == "ready":
+        _append(vdir / "samples.jsonl", severity_line(vdir, doc, vid, lens, binding))
     return doc["verdicts"][lens]
 
 
+def severity_line(
+    vdir: Path, doc: dict[str, Any], vid: str, lens: str, binding: str
+) -> dict[str, Any]:
+    """The severity log line of one Ready lens verdict (see Severity log)."""
+    v = doc["verdicts"][lens]
+    count = {s: sum(1 for f in v["findings"] if f["severity"] == s) for s in SEVERITIES}
+    return {
+        "kind": SEVERITY_KIND,
+        "id": vid,
+        "lens": lens,
+        "bound": binding,
+        "round": panel_round(vdir, doc)[0],
+        "verdict": v["verdict"],
+        "failure": v["failure"] is not None,
+        "ran_at": v["ran_at"],
+        "blocking": count["BLOCKING"],
+        "warning": count["WARNING"],
+        "note": count["NOTE"],
+    }
+
+
+def rounds(root: Path, key: str) -> list[dict[str, Any]]:
+    """The story's Ready rounds from the severity log, oldest first: ``round``, ``bound`` and
+    ``lenses`` (lens -> its last severity line on that blob)."""
+    vid = f"ready-{key}"
+    parse_id(vid)
+    out: dict[tuple[int, str], dict[str, Any]] = {}
+    for x in _log_lines(verdict_dir(root)):
+        if x.get("kind") != SEVERITY_KIND or x.get("id") != vid:
+            continue
+        r, bound, lens = x.get("round"), x.get("bound"), x.get("lens")
+        if not (isinstance(r, int) and isinstance(bound, str) and isinstance(lens, str)):
+            continue
+        row = out.setdefault((r, bound), {"round": r, "bound": bound, "lenses": {}})
+        row["lenses"][lens] = x
+    return [out[k] for k in sorted(out, key=lambda k: k[0])]
+
+
+def rounds_lines(rows: list[dict[str, Any]]) -> list[str]:
+    lines = []
+    for row in rows:
+        parts = []
+        for lens, x in row["lenses"].items():
+            n = f"B{x.get('blocking', 0)} W{x.get('warning', 0)} N{x.get('note', 0)}"
+            parts.append(
+                f"{lens} {x.get('verdict')} {n}" + (" failed" if x.get("failure") else "")
+            )
+        lines.append(f"round {row['round']} @ {row['bound'][:8]}: " + "; ".join(parts))
+    return lines
+
+
 def _sample_lines(vdir: Path) -> list[dict[str, Any]]:
+    """The sample counter's lines: every line without ``kind`` (a severity line counts no
+    sample and no derived round)."""
+    return [x for x in _log_lines(vdir) if "kind" not in x]
+
+
+def _log_lines(vdir: Path) -> list[dict[str, Any]]:
     try:
         text = (vdir / "samples.jsonl").read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -820,15 +893,23 @@ def _main(argv: list[str], stdin: Any) -> int:
         green, lines = (check if verb == "check" else post)(root, args[0])
         print("\n".join(lines))
         return 0 if green else 1
-    if verb == "samples" and not args:
-        for x in samples(root, _opt(rest, "--keeper")):
-            print(f"{x['id']}\t{x['lens']}")
+    if (verb == "samples" and not args) or (verb == "rounds" and len(args) == 1):
+        for line in _listing(root, verb, args, rest):
+            print(line)
         return 0
     if verb == "sampled" and len(args) == 2:
         sampled(root, args[0], args[1])
         print(f"sample {args[0]} {args[1]}: read")
         return 0
     raise UnusableError(f"{verb or '(no verb)'}: wrong arguments\n{_usage()}")
+
+
+def _listing(root: Path, verb: str, args: list[str], rest: list[str]) -> list[str]:
+    """The read-only verbs' lines: ``samples`` and ``rounds``."""
+    if verb == "samples":
+        return [f"{x['id']}\t{x['lens']}" for x in samples(root, _opt(rest, "--keeper"))]
+    rows = rounds(root, args[0])
+    return rounds_lines(rows) if rows else [f"ready-{args[0]}: no logged rounds"]
 
 
 def _usage() -> str:

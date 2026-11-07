@@ -95,3 +95,6 @@ it by hand.
 `lenses.<lens>.sample`-th green one) and not yet read. The keeper reads the verdict file and the subject,
 judges whether the lens was right, and runs `LV sampled <id> <lens>`. A lens that was wrong gets a sharper
 line in its question file, from the keeper; nobody waits on a sample.
+
+`LV rounds <KEY>` prints the story's Ready rounds, one line per round: each lens's last verdict on that plan
+blob with its `B<n> W<n> N<n>` counts (the severity log, `lens_verdict.py` § Severity log). Read-only.

@@ -92,7 +92,15 @@ A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start (L0 §Lifecyc
 master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
-fork you cannot settle → write `## Open Fork` and stop".
+fork you cannot settle → write `## Open Fork` and stop". It ends with the tree limits, verbatim
+(refiners that `cd`'d into the main checkout or a job directory read and wrote the wrong tree):
+
+```
+Tree: <absolute path of the tree you were started in> is your only tree; every path you use is absolute and inside it.
+Create no worktree. Never `cd`: not into the main checkout, not into ~/.claude/jobs, nowhere.
+Read, search and write only with the Read, Grep, Glob, Edit and Write tools under Tree; Bash only for the commands
+/we:plan-story names, with absolute paths and no `cd`.
+```
 
 On return, run the DoR scan on the plan in the returned worktree, then one `we:explore-medium`
 checks every code claim in the plan (file:line, "only caller", "no reader", each named lever)
@@ -135,6 +143,7 @@ Finish: [you are the last writer: run the finish sequence | not yours]. Verifica
 Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
+Tools: read and search with the Read, Grep and Glob tools on absolute paths; never `cd <dir> && grep …` or `cat`/`rg` through Bash.
 Report: worker-dispatch.md § Report fields, as your final message or to your `Lead:`; a skill's output is never it.
   Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
 ```
