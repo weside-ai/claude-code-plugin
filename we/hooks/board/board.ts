@@ -146,7 +146,7 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
       const a = JSON.parse(line) as Partial<BoardAnswer>
       if (typeof a.id === 'string' && isClosed(out[a.id])) continue
       if (typeof a.id === 'string' && KINDS.includes(a.answer as BoardAnswerKind) && typeof a.ts === 'string') {
-        out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null }
+        out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null, ...(a.via ? { via: a.via } : {}) }
       }
     } catch {
       // A torn or foreign line: the answers around it still count.

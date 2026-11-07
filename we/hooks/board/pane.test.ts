@@ -387,7 +387,8 @@ async function startWith($: Parameters<Parameters<typeof test>[1]>[0], on: Param
   on('fs.read', () => ({ value: BOARD }))
   const checks: string[][] = []
   on('process.run', (_$, e) => {
-    if (String(e.argv[2]).endsWith('/scripts/crew.py')) {
+    // crew.py show (the deliverer's coordinator) runs in every session; the option's check is is-role.
+    if (String(e.argv[2]).endsWith('/scripts/crew.py') && e.argv[3] === 'is-role') {
       checks.push(e.argv.slice(3))
       return { value: { exitCode: isOrchestrator ? 0 : 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }

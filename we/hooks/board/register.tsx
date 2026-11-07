@@ -17,7 +17,7 @@ import {
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
-  NOTICE, RESUBMITTED, answerLines, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
+  NOTICE, RESUBMITTED, STUCK_MS, answerLines, coordinatorName, stuckAnswers, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
   storedHits, versionAtLeast,
 } from './deliver'
 import type { Awaiting, Delivery, Ledger } from './deliver'
@@ -158,7 +158,7 @@ async function markStale($: $, file: string) {
   try {
     const v = await read($, view)
     const l = await read($, live)
-    const coordinator = v?.board?.updatedBy
+    const coordinator = coordinatorFor(v?.board)
     if (!coordinator || !v?.path || !l || l.error) return
     if ((liveByName(l.sessions).get(coordinator)?.liveness ?? 'gone') !== 'gone') return
     const ledgerPath = deliveriesPathOf(v.path)
@@ -226,8 +226,8 @@ async function probeOnce($: $) {
 
 // ── The deliverer (deliver.ts) ───────────────────────────────────────────────────────────────────
 // Runs in every session from session.start on the floor build and acts only in the one whose live
-// name is the board's `updated_by`. Its state lives with the module: a restart forgets what waits,
-// and the ledger names again what is still owed.
+// name is the board's `updated_by`, when that is empty the crew's coordinator (coordinatorFor). Its state
+// lives with the module: a restart forgets what waits, and the ledger names again what is still owed.
 const FLOOR = '2.1.312'
 // A session whose name the live column does not know is probed again at most this often.
 const NAME_PROBE_MS = 300_000
@@ -284,7 +284,8 @@ async function coordinatorOf($: $, file: string) {
   await loadBoard($, file)
   const v = await read($, view)
   const board = v?.board
-  if (!board?.updatedBy || !v?.path) return undefined
+  const coordinator = coordinatorFor(board)
+  if (!board || !coordinator || !v?.path) return undefined
   const id = await $.session.id()
   let me = ownName((await read($, live))?.sessions ?? [], id)
   const now = await $.clock.now()
@@ -293,7 +294,7 @@ async function coordinatorOf($: $, file: string) {
     await probe($)
     me = ownName((await read($, live))?.sessions ?? [], id)
   }
-  if (!me || me !== board.updatedBy) return undefined
+  if (!me || me !== coordinator) return undefined
   return { board, name: me, ledgerPath: deliveriesPathOf(v.path), answersPath: answersPathOf(v.path) }
 }
 
@@ -513,6 +514,11 @@ async function toggleWork($: $, name: string) {
 // session start, crewBoardOf), else the option boardFile, else the default. pluginConfigs reach a plugin
 // only from user or managed settings, so a second crew names its board in its crew file.
 let crewBoard: string | undefined
+// The crew's coordinator by name (crew.py show, once at session start). It names the delivering session
+// when the board's `updated_by` is empty (a board.py write never sets that field), and only on the crew's
+// own board.file: a shared fallback board keeps one deliverer.
+let crewCoordinator: string | undefined
+const coordinatorFor = (board: { updatedBy?: string } | undefined) => board?.updatedBy || (crewBoard ? crewCoordinator : undefined)
 const fileOf = (options: PluginOptions) => crewBoard ?? option(options, 'boardFile') ?? DEFAULT_FILE
 
 // board.py path --crew-only prints the crew's board.file as an absolute path and exits 1 without one.
@@ -521,6 +527,15 @@ async function crewBoardOf($: $): Promise<string | undefined> {
     const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/board.py`, 'path', '--crew-only'], { timeoutMs: 10_000 })
     const out = run.stdout.trim()
     return run.exitCode === 0 && out.startsWith('/') && !out.includes('\n') ? out : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function crewCoordinatorOf($: $): Promise<string | undefined> {
+  try {
+    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'show'], { timeoutMs: 10_000 })
+    return run.exitCode === 0 ? coordinatorName(run.stdout) : undefined
   } catch {
     return undefined
   }
@@ -548,6 +563,7 @@ export async function openBoard($: $, options: PluginOptions): Promise<string> {
 // is a function declaration, the only form the engine follows past an import.
 export async function startBoard($: $, options: PluginOptions) {
   crewBoard = await crewBoardOf($)
+  crewCoordinator = await crewCoordinatorOf($)
   const file = fileOf(options)
   await $.command.register({ name: 'board', description: 'Workspace board: who works on what and what waits for the owner' })
   // The deliverer runs from here, pane or not; the pane's own timers read only once /board was opened.
@@ -636,7 +652,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const v = await read($, view)
     const l = await read($, live)
     const given = (await read($, answers))?.byId ?? {}
-    const ledgerRows = (await read($, deliveries))?.rows ?? {}
+    const deliveriesView = await read($, deliveries)
+    const ledgerRows = deliveriesView?.rows ?? {}
     const restOpen = await read($, isRestOpen)
     const notesOpen = await read($, isNotesOpen)
     const opened = await read($, workOpen)
@@ -650,6 +667,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     if (!v) return <Text dimColor>{`reading ${file} …`}</Text>
 
     const board = v.board
+    const stuck = stuckAnswers(given, ledgerRows, deliveriesView?.epoch, now)
     const fresh = freshness(board?.updated, now)
     const freshColor = fresh?.level === 'stale' ? 'error' : fresh?.level === 'warn' ? 'warning' : undefined
     const sessions = board?.sessions ?? []
@@ -687,7 +705,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined
       const struck = isClosed(last)
-      const delivered = deliveryLine(last, ledgerRows, board?.updatedBy)
+      const delivered = deliveryLine(last, ledgerRows, coordinatorFor(board))
       const press = (answer: BoardAnswerKind) => () => {
         if (q.id) void answerQuestion($, file, q.id, answer)
       }
@@ -922,6 +940,14 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           <Text dimColor>{`No board yet: your orchestrator session writes ${v.path ?? file}; the schema is in ${$.plugin.root}/docs/board.md.`}</Text>
         )}
         {v.error && <Text color="error">{`File: ${v.error}`}</Text>}
+        {board && !coordinatorFor(board) && (
+          <Text color="error">{clip('⚠ No coordinator: the board has no updated_by and the crew file names no roles.coordinator; answers stay undelivered.', width)}</Text>
+        )}
+        {stuck.length > 0 && (
+          <Text color="error">
+            {clip(`⚠ ${stuck.length} answer${stuck.length === 1 ? '' : 's'} undelivered for ${STUCK_MS / 60_000}+ min (${stuck.join(', ')}): is ${coordinatorFor(board) ?? 'the coordinator'} running?`, width)}
+          </Text>
+        )}
 
         {board && board.queue.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
