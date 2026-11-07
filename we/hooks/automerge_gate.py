@@ -26,7 +26,7 @@ Refusals, in this order (the first one wins):
   1. In any worker every merge and arm is refused: merging is the Lead's call in the main session
      (`references/worker-dispatch.md` § Dev-only worker contract). A worker is a subagent
      (`agent_id` in the payload) or a process worker (the marker of `scripts/worker_launch.py`).
-  2. Freeze: while `freeze.json` stands beside the board file (`scripts/board_freeze.py`), every
+  2. Freeze: while the freeze flag stands beside the board file (`board_freeze.flag_path`), every
      merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
      reason; an unreadable flag counts as standing.
   3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; no session merges or arms it,

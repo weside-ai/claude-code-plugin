@@ -248,6 +248,11 @@ def freeze(
     return flag
 
 
+def issue_failures(flag: dict) -> list[dict]:
+    """The `not_disarmed` entries for a freeze issue that did not open (GitHub not frozen there)."""
+    return [e for e in flag.get("not_disarmed") or [] if FREEZE_LABEL in str(e.get("why"))]
+
+
 def _open_freeze_issues(repo: str, gh: GhRunner) -> list[int] | None:
     raw = gh(
         [
@@ -282,6 +287,8 @@ def _open_issue(repo: str, reason: str, by: str, flag: dict, gh: GhRunner) -> No
         return
     if standing:
         return  # someone else's freeze issue stands; it is theirs to close
+    # gh refuses a label the repo lacks: create it first (`--force` keeps an existing one).
+    gh(["label", "create", FREEZE_LABEL, "-R", repo, "--color", "b60205", "--force"])
     out = gh(
         [
             "issue",

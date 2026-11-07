@@ -261,9 +261,12 @@ class TestFreezeVerbs:
         flag = json.loads((state_dir / "freeze.json").read_text())
         assert flag["not_disarmed"] == [{"repo": "o/broken", "why": "listing the open PRs failed"}]
 
-    def test_without_repo_the_freeze_covers_every_repo_and_disarms_the_current(self, state_dir):
+    def test_without_repo_the_freeze_covers_every_repo_and_disarms_the_current(
+        self, state_dir, monkeypatch
+    ):
         """owner 06.11.2026: a freeze without --repo, run from the workspace checkout,
         must still stop a merge in core; it disarms the current repo's armed PRs."""
+        monkeypatch.setattr(board, "_crew_repos", lambda *_a, **_k: ["o/here"])
         assert run(state_dir, "freeze", "--reason", "r") == 0
         flag = json.loads((state_dir / "freeze.json").read_text())
         assert flag["repos"] == ["*"]
@@ -316,6 +319,10 @@ class TestFreeze:
         ]
         assert json.loads(capsys.readouterr().out)["disarmed"] == flag["disarmed"]
         assert flag["issues"] == [{"repo": "o/r", "number": 41}]
+        labels = [c for c in fake_gh() if c[:2] == ["label", "create"]]
+        assert labels == [
+            ["label", "create", "merge-freeze", "-R", "o/r", "--color", "b60205", "--force"]
+        ]
         create = [c for c in fake_gh() if c[:2] == ["issue", "create"]]
         assert len(create) == 1 and create[0][create[0].index("--label") + 1] == "merge-freeze"
         assert create[0][create[0].index("--title") + 1] == "Merge freeze: incident"
@@ -380,13 +387,15 @@ class TestFreezeIssue:
         assert run(watched, "unfreeze") == 0
         assert not [c for c in fake_gh() if c[:2] == ["issue", "close"]]
 
-    def test_a_failed_issue_write_is_recorded_and_the_flag_stands(self, watched):
-        assert run(watched, "freeze", "--reason", "r", "--repo", "o/nocreate") == 0
+    def test_a_failed_issue_write_is_recorded_and_the_flag_stands(self, watched, capsys):
+        """Red arm: an issue that did not open exits 1 naming the repo; the flag stands."""
+        assert run(watched, "freeze", "--reason", "r", "--repo", "o/nocreate") == 1
+        assert "GitHub is not frozen in o/nocreate" in capsys.readouterr().err
         flag = json.loads((watched / "freeze.json").read_text())
         assert {"repo": "o/nocreate", "why": "opening the `merge-freeze` issue failed"} in flag[
             "not_disarmed"
         ]
-        assert run(watched, "freeze", "--reason", "r", "--repo", "o/noissue") == 0
+        assert run(watched, "freeze", "--reason", "r", "--repo", "o/noissue") == 1
         flag = json.loads((watched / "freeze.json").read_text())
         assert {"repo": "o/noissue", "why": "listing the `merge-freeze` issues failed"} in flag[
             "not_disarmed"
@@ -417,6 +426,7 @@ class TestFreezePerCrew:
             == tmp_path / "acme-board-freeze.json"
         )
 
+    @pytest.mark.usefixtures("fake_gh")
     def test_a_freeze_in_crew_a_does_not_brake_crew_b(self, tmp_path, monkeypatch):
         """Red arm: crew A (`acme-board.json`) and crew B (`board.json`) keep their boards in one
         folder; A's freeze stands for A's merge hook and never for B's."""

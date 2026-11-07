@@ -127,14 +127,18 @@ staging  reads the booking and acceptance issues into board.json's `staging` blo
          line each (`staging: free` without either); an acceptance past the crew's
          `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
 
-freeze   writes the freeze flag `freeze.json` beside the board file (only one the merge hook reads:
-         the crew's `board.file`, else the default), then disarms every open PR with
-         auto-merge armed in the named repos (without --repo the flag names `*`, every repo, and
-         the current directory's repo is disarmed) and prints the flag; while it stands the merge
-         hook refuses every merge and arm in those repos (scripts/board_freeze.py).
+freeze   writes the freeze flag beside the board file (`board_freeze.flag_path`: `freeze.json`, or
+         `<stem>-freeze.json` for another board name; only one the merge hook reads: the crew's
+         `board.file`, else the default), opens a `merge-freeze` issue in each named repo (`*`:
+         the crew's repos), then disarms every open PR with auto-merge armed in the named repos
+         (without --repo the flag names `*`, every repo, and the current directory's repo is
+         disarmed) and prints the flag; exit 1 when an issue did not open (the flag stands). While
+         it stands the merge hook refuses every merge and arm in those repos
+         (scripts/board_freeze.py; docs/board.md § The freeze flag).
 path     prints the board file a verb writes (absolute); `--crew-only` prints the crew's
          `board.file` and exits 1 when the crew names none (the /board pane's lookup).
-unfreeze removes the flag and prints the disarmed PRs to re-arm through the hook; it re-arms none.
+unfreeze removes the flag, closes the `merge-freeze` issues the freeze opened (exit 1 naming one that
+         did not close) and prints the disarmed PRs to re-arm through the hook; it re-arms none.
 
 Every write of board.json goes through `StateDir.write_board` (an exclusive lock on
 board.json.lock, a re-read, then a temp file and `os.replace`). The JSONL files beside the board
@@ -940,6 +944,15 @@ def cmd_freeze(state, args, _crew, _now):
         print(f"board.py freeze: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(flag, ensure_ascii=False))
+    missed = bf.issue_failures(flag)
+    if missed:
+        print(
+            "board.py freeze: the local flag stands, but GitHub is not frozen in "
+            f"{', '.join(e['repo'] for e in missed)} (no `merge-freeze` issue): a self-merge window "
+            "there still merges; open the issue by hand",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

@@ -24,8 +24,9 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "A one-way PR outside the brake's\n  core merges itself 2 h after a green T2 panel on its head, "
-    "once Hal got the push line; a\n  `veto` label stops it; the core only Hal merges."
+    "A one-way PR outside the brake's\n  core merges itself, where a self-merge window runs, 2 h after "
+    "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
+    "the core only Hal merges."
 )
 DECIDED_3 = "3. One-way merges via the 2 h window, the core by Hal."
 
@@ -146,9 +147,9 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
         "",
     )
     old = old.replace(
-        "the core only {human} merges.",
-        "the core only {human} merges. {human} gets one push line at panel green; one word arms "
-        "auto-merge.",
+        "else and the core only {human} merges.",
+        "else and the core only {human} merges. {human} gets one push line at panel green; one "
+        "word arms auto-merge.",
     )
     (process / "L0.md").write_text(old)
     text = rp.render_l0(generic(), process=process)
