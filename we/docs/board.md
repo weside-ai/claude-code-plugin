@@ -265,9 +265,13 @@ it, and its `✓ update asked` lapses with the orchestrator's next write of the 
 ### Delivery
 
 The pane sends nothing itself. One deliverer carries every answer line: the board module in the
-orchestrator's session, the one whose name equals `updated_by` (found by matching its session id
-against `claude agents --json`). It runs from session start, pane open or not, every three seconds,
-and at once after a press in that session. Per line it writes one row per recipient to
+orchestrator's session, the one whose name equals `updated_by`, or, while that field is empty (a
+`board.py` write never sets it), the crew's coordinator (`roles.coordinator` in the crew file of the
+session's repo, read once at session start); found by matching its session id against
+`claude agents --json`. It runs from session start, pane open or not, every three seconds, and at
+once after a press in that session. The pane says it in red above the queue when neither names a
+coordinator, and when a press (a line without `via`) has had no verdict from any recipient for five
+minutes. Per line it writes one row per recipient to
 `board-deliveries.jsonl` beside the answers file (through `hooks/board/deliveries.py`, append-only):
 
 ```json

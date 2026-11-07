@@ -1,7 +1,8 @@
 // Delivery of the board's answers (docs/board.md § Answers), the pure half: which answer lines still
 // owe whom a message, how the ledger folds, which notice means a hold. register.tsx wires the events.
 //
-// One deliverer, in the coordinator's session (its live name is the board's `updated_by`), carries
+// One deliverer, in the coordinator's session (its live name is the crew's coordinator, coordinatorName;
+// without a crew the board's `updated_by`), carries
 // each answer line to two recipients and writes one ledger row per recipient:
 //   coordinator  `$.prompt.submit` as the person; delivered once its user row is stored. No row by
 //                the end of a turn that started after the submit (or 30 s idle): submit once more,
@@ -11,7 +12,7 @@
 //                (role `route`, confirmed like the coordinator's).
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
-import type { BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
+import type { BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
 import { answerPrompt } from './board'
 
 const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
@@ -197,6 +198,37 @@ export const markerRows = (lines: readonly AnswerLine[], ledger: Ledger, coordin
       rowOf({ line, role: 'coordinator', to: coordinator }, new Date(Date.parse(line.ts) + MARK_AFTER_MS).toISOString(), false, NOT_RUNNING),
     )
 }
+
+// The coordinator's name from `crew.py show`: the member that `roles.coordinator` names; undefined
+// without a crew or without that role, and the board's `updated_by` decides.
+export const coordinatorName = (show: string): string | undefined => {
+  try {
+    const crew = JSON.parse(show) as { roles?: Record<string, unknown>; members?: Record<string, { name?: unknown }> }
+    const slug = str(crew?.roles?.coordinator)
+    const name = slug ? crew.members?.[slug]?.name : undefined
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// How long a pressed answer may wait without any delivered row before the pane says so.
+export const STUCK_MS = 300_000
+
+// The ids whose newest pane press (no `via`: a chat line was answered in its chat) has no verdict
+// after STUCK_MS: no recipient delivered or refused (a refusal shows on its card already). Before the ledger's epoch nothing is ever sent, so
+// such a line counts only while the deliverer has not started yet (no epoch).
+export const stuckAnswers = (
+  given: Record<string, BoardAnswer>,
+  rows: Record<string, BoardDelivery>,
+  epoch: string | undefined,
+  now: number,
+): string[] =>
+  Object.values(given)
+    .filter(a => DELIVERED.includes(a.answer as BoardDeliveredKind) && !a.via)
+    .filter(a => now - Date.parse(a.ts) >= STUCK_MS && (!epoch || after(a.ts, epoch)))
+    .filter(a => !ROLES.some(role => isFinal(rows[keyOf(a.id, a.ts, role)])))
+    .map(a => a.id)
 
 // `2.1.312` ≥ `2.1.302`: numeric per part; a version that is no release counts as below.
 export const versionAtLeast = (version: string | undefined, floor: string) => {

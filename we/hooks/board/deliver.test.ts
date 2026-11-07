@@ -8,8 +8,6 @@ type TOn = Parameters<TestBody>[1]
 
 const DIR = '/home/me/.claude/we-state'
 const BOARD_PATH = `${DIR}/board.json`
-const ANSWERS = `${DIR}/board-answers.jsonl`
-const LEDGER = `${DIR}/board-deliveries.jsonl`
 const T0 = Date.parse('2026-11-03T16:00:00Z')
 // The deliverer ran before: its start row is an hour old.
 const EPOCH = `${JSON.stringify({ epoch: '2026-11-03T15:00:00.000Z' })}\n`
@@ -43,12 +41,17 @@ type Opts = {
   stores?: (text: string, n: number) => boolean
   // Whether deliveries.py fails its next append.
   ledgerFails?: () => boolean
+  // The session's crew: its board.file (board.py path --crew-only) and crew.py show.
+  crew?: { board: string; show: Record<string, unknown> }
 }
 
 // A fake home: the board, its answers file and the delivery ledger, with answer.py and deliveries.py
 // appending as the scripts do, and a session that stores a submitted prompt as a user row.
 function home($: T$, on: TOn, o: Opts) {
-  const files = new Map<string, string>([[BOARD_PATH, o.board ?? boardOf()]])
+  const boardPath = o.crew?.board ?? BOARD_PATH
+  const ANSWERS = boardPath.replace(/\.json$/, '-answers.jsonl')
+  const LEDGER = boardPath.replace(/\.json$/, '-deliveries.jsonl')
+  const files = new Map<string, string>([[boardPath, o.board ?? boardOf()]])
   if (o.answers !== undefined) files.set(ANSWERS, o.answers)
   if (o.ledger !== undefined) files.set(LEDGER, o.ledger)
   const mtimes = new Map<string, number>()
@@ -70,6 +73,8 @@ function home($: T$, on: TOn, o: Opts) {
   on('session.version', () => ({ value: { version: o.version ?? '2.1.317', base: o.version ?? '2.1.317' } }))
   on('process.run', (_$, e) => {
     const script = String(e.argv[2] ?? '')
+    if (script.endsWith('/scripts/board.py')) return o.crew ? RUN(`${o.crew.board}\n`) : RUN('', 1)
+    if (script.endsWith('/scripts/crew.py')) return o.crew ? RUN(JSON.stringify(o.crew.show)) : RUN('', 1, 'no crew')
     if (script.endsWith('/answer.py')) {
       const [path, id, answer, ts, session] = e.argv.slice(3)
       files.set(path!, `${files.get(path!) ?? ''}${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`)
@@ -423,7 +428,7 @@ test('a pane in any other session appends the line and delivers nothing', async 
   const ui = await pane($)
   await ui.press({ key: 'accept-Q1' })
   await clock.advance(9_000)
-  expect(h.files.get(ANSWERS)).toContain('"session":"foxy"')
+  expect(h.files.get(h.answersPath)).toContain('"session":"foxy"')
   expect([h.submitted, h.sent, h.ledger()]).toEqual([[], [], [{ epoch: '2026-11-03T15:00:00.000Z' }]])
   await ui.unmount()
 })
@@ -503,4 +508,94 @@ test('deliveryLine: delivered to the asker, else to the coordinator; a refusal o
   expect(line(r('coordinator', 'coord', false, 'coordinator not running', T0 + 60_000))?.text).toBe('not delivered, with coord (not running)')
   expect(line(r('asker', 'asker', true), r('coordinator', 'coord', false, 'resubmitted'))?.text).toBe('→ delivered to asker 16:00 UTC')
   expect(line(r('coordinator', 'coord', false, 'not stored after a resubmit'))?.text).toBe('not delivered, with coord (not stored after a resubmit)')
+})
+
+// Two crews in one HOME: the first keeps board.json with `updated_by` coord; the second
+// crew writes its board only through board.py, which never sets `updated_by`. Its coordinator comes
+// from its crew file.
+const ACME = `${DIR}/acme-board.json`
+const acmeCrew = (coordinator = 'ada') => ({
+  board: ACME,
+  show: {
+    path: '/work/acme/.weside/crew.json',
+    roles: { coordinator, product: 'bea' },
+    members: { ada: { name: 'Ada' }, bea: { name: 'Bea' }, samu: { name: 'coord' } },
+    board: { file: '~/.claude/we-state/acme-board.json' },
+  },
+})
+const acmeBoard = (extra: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    owner_queue: [{ id: 'Q7', session: 'Tess', key: 'PROJ-7', ask: 'Ship it?', since: '2026-11-03', recommendation: 'yes' }],
+    sessions: [{ name: 'Ada', role: 'master' }],
+    ...extra,
+  })
+
+async function crewSession($: T$, on: TOn, name: string, o: Partial<Opts>) {
+  const clock = mock.clock(on, { now: T0 })
+  mock.store(on)
+  const h = home($, on, { self: { sessionId: `s-${name}`, name }, ledger: EPOCH, ...o })
+  await $.session.start({ cwd: '/work/acme', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  return { clock, h }
+}
+
+test('a crew whose board has no updated_by: its coordinator from crew.json delivers from its own files', async ($, on) => {
+  const { clock, h } = await crewSession($, on, 'Ada', { crew: acmeCrew(), board: acmeBoard() })
+  await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Ada' })
+  await clock.advance(3_000)
+  expect(h.submitted).toEqual(['Q7: proposal accepted'])
+  expect(h.sent).toEqual([{ to: 'Tess', text: 'Q7: proposal accepted' }])
+  expect(h.rows('Q7').map(r => [r.role, r.to, r.delivered])).toEqual([
+    ['asker', 'Tess', true],
+    ['coordinator', 'Ada', true],
+  ])
+  // The first crew's files stay untouched: the ledger is the crew's own.
+  expect([...h.files.keys()].filter(k => k.startsWith(`${DIR}/board`))).toEqual([])
+  expect(h.files.has(`${DIR}/acme-board-deliveries.jsonl`)).toBe(true)
+})
+
+test('a set updated_by still names the deliverer; the crew coordinator steps in only when it is empty', async ($, on) => {
+  const { clock, h } = await crewSession($, on, 'Ada', { crew: acmeCrew(), board: acmeBoard({ updated_by: 'coord' }) })
+  await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Ada' })
+  await clock.advance(6_000)
+  expect([h.submitted, h.sent, h.rows('Q7')]).toEqual([[], [], []])
+})
+
+test('a crew\'s first deliverer start sends no line older than its epoch', async ($, on) => {
+  const answers = `${JSON.stringify({ id: 'Q7', answer: 'accept', ts: iso(T0 - 60_000), session: 'Ada' })}\n`
+  const { clock, h } = await crewSession($, on, 'Ada', { crew: acmeCrew(), board: acmeBoard(), answers, ledger: undefined })
+  await clock.advance(9_000)
+  expect(h.ledger()).toEqual([{ epoch: iso(T0) }])
+  expect([h.submitted, h.sent]).toEqual([[], []])
+})
+
+// The pane says it out loud (not only in the log) when nobody can deliver, and when presses sit undelivered.
+async function paneIn($: T$, on: TOn, o: Partial<Opts>) {
+  const clock = mock.clock(on, { now: T0 })
+  mock.store(on)
+  const live = [{ name: 'foxy', sessionId: 's-foxy', pid: 3, status: 'idle' }]
+  const h = home($, on, { self: { sessionId: 's-foxy', name: 'foxy' }, ledger: EPOCH, live, ...o })
+  await $.session.start({ cwd: '/work/acme', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  return { clock, h, ui: await pane($) }
+}
+
+test('a board without updated_by in a crew without a coordinator role shows a red no-coordinator line', async ($, on) => {
+  const crew = acmeCrew()
+  const { ui } = await paneIn($, on, { crew: { ...crew, show: { ...crew.show, roles: { product: 'bea' } } }, board: acmeBoard() })
+  expect(await ui.find({ type: 'Text', text: /No coordinator/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a pane press nobody delivered for five minutes shows a red line; a chat line does not count', async ($, on) => {
+  const { clock, h, ui } = await paneIn($, on, {})
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await h.click({ id: 'Q2', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy', via: 'chat' })
+  await clock.advance(120_000)
+  expect(await ui.find({ type: 'Text', text: /undelivered/ })).toBeUndefined()
+  await clock.advance(240_000)
+  const line = await ui.find({ type: 'Text', text: /1 answer undelivered for 5\+ min \(Q1\): is coord running\?/ })
+  expect(line).toBeDefined()
+  await ui.unmount()
 })
