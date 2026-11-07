@@ -16,7 +16,8 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 ## Choosing the worker
 
 - Dispatch shape: § Worker launch backend. A repo with a crew starts every `we:dev-*` worker through
-  `agents.worker_launch` as a session of its own; only a repo without a crew uses `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
+  `agents.worker_launch` as a session of its own; only a repo without a crew (or a crew's
+  fallback, § Worker launch backend) uses `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
   A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
   `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
   Never `general-purpose`: a subagent inherits the session effort, and only the agent file's
@@ -65,7 +66,12 @@ master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backen
 - A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
   workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
   backend itself, the master checks the setting before the first dispatch and asks the coordinator
-  for a template when it is unset.
+  for a template when it is unset. One opt-in exception, checked at boot: when the first word of the
+  crew's `launch.worker` (or `agents.worker_launch`) is not on the host's `PATH` (`command -v`; a
+  colleague's machine without the launcher), a crew with `launch.subagent_fallback: true` lets the
+  master start build workers with the full `Agent` call of § Choosing the worker, `isolation="worktree"`
+  included, and say so once in its first status; default `false`: the master stops and names the
+  missing launcher.
 - `"subagent"` (the default when unset), only in a repo without a crew: the `Agent` call of
   § Choosing the worker. A subagent bills the account of the session that calls it.
 - A command template: each worker is a session of its own, billed to the login the command starts

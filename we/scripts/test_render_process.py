@@ -24,7 +24,7 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = (
-    "A one-way PR outside the brake's\n  core merges itself, where a self-merge window runs, 2 h after "
+    "A one-way PR outside the\n  core merges itself, where a self-merge window runs, 2 h after "
     "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
     "the core only Hal merges."
 )
@@ -758,3 +758,55 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
     assert l0_overrun(crew, process) == (
         f"full L0 with every role bound: {rp.BUDGET + 1} > BUDGET {rp.BUDGET} chars"
     )
+
+
+# The brake's core: a diff to the classifier, the gates, the review workflows, the crew's `risk`
+# block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged. The
+# review workflows are named apart from the gates: a crew's `[brake-change]` lists them as paths of
+# their own. Rules live only in the rules file, so the bundled classifier sees a removed rule as a
+# change to that file, which the setup template puts under `[brake-change]`; a crew's own
+# `risk.command` may narrow it to removed lines.
+BRAKE_CORE = "brake core (classifier, gates, review workflows, removed rules, crew `risk`)."
+
+
+@pytest.mark.parametrize(
+    "data", [None, json.loads(ALL_BOUND.read_text())], ids=["generic", "bound"]
+)
+def test_l0_names_every_part_of_the_brake_core(data):
+    crew = generic() if data is None else crewlib._merge(data)
+    assert BRAKE_CORE in rp.render_l0(crew)
+
+
+def test_the_setup_template_classifies_a_removed_rule_as_brake_core():
+    """L0's "removed rules" holds for the bundled classifier: the rules file is a core path."""
+    import risk_paths  # noqa: PLC0415
+
+    rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
+    assert risk_paths.CORE == ("brake-change",)
+    assert any(p.fullmatch(".weside/risk-paths") for _, p in rules["brake-change"])
+
+
+def test_the_setup_template_classifies_a_review_workflow_as_brake_core():
+    """L0's "review workflows" holds for the bundled classifier: both usual review workflow names are
+    core paths, the review helpers beside them (skip gate, runner image) are not."""
+    import risk_paths  # noqa: PLC0415
+
+    rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
+    core = [p for _, p in rules["brake-change"]]
+    for name in ("claude-code-review.yml", "codex-code-review.yml"):
+        assert any(p.fullmatch(f".github/workflows/{name}") for p in core), name
+    for name in ("codex-review-skip.yml", "build-codex-review-runner.yml", "ci.yml"):
+        assert not any(p.fullmatch(f".github/workflows/{name}") for p in core), name
+
+
+def test_the_subagent_fallback_lives_in_the_cards_not_in_l0():
+    """L0 keeps the principle (a subagent never builds); the opt-in exception sits in the master
+    and worker cards, each pointing at its reference."""
+    crew = all_bound()
+    l0 = rp.render_l0(crew)
+    assert "A subagent reads and reviews, never builds." in l0
+    assert "subagent_fallback" not in l0
+    for role in ("master", "worker"):
+        card = rp.render_card(crew, role)
+        assert "launch.subagent_fallback" in card, role
+        assert "`worker-dispatch.md` § Worker launch backend" in card, role

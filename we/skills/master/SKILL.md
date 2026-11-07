@@ -39,6 +39,7 @@ class or a human signal, that is one question line to its owner, never a silent 
 
 1. Read `.weside/orchestrate.md` (bootstrap, generated artifacts, baselines, risk-class files, ticket
    states, where plans land, host resources, post-merge command). Absent → derive them from `AGENTS.md`, say so once.
+   A crew whose launcher is not on this host: `worker-dispatch.md` § Worker launch backend (fallback or stop).
 2. When the session title is not the run's key, print `/rename <KEY>` once (tmux follows by hook).
    A master named by the crew (L0 §Sessions) keeps its name; a bound companion session skips it (`references/companion-session.md` § Name and binding).
 3. Read every story plan completely, every ticket with its comments, the epic plan's success
