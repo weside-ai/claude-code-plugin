@@ -773,3 +773,88 @@ def test_a_t2_panel_never_carries_a_warning(repo):
     green, lines, carried = lv.check_panel(repo, vid)
     assert not green and carried == []
     assert "lens product: red (WARNING a.py:1)" in lines
+
+
+# --- derived round: a verdict file of 8.10.0 or older (no ``round``) -------------------------
+
+
+def legacy_run(root: Path, lens: str = "product") -> str:
+    """A Ready run as 8.10.0 wrote it: the panel file without ``round``, and one green lens
+    verdict, which appends its ``samples.jsonl`` line bound to the plan blob."""
+    vid = f"ready-{KEY}"
+    assert run("plan", "ready", KEY)[0] == 0
+    assert run("write", vid, lens, stdin=GREEN)[0] == 0
+    path = verdict_file(root, vid)
+    doc = json.loads(path.read_text())
+    doc.pop("round", None)
+    path.write_text(json.dumps(doc))
+    return vid
+
+
+def commit_plan(root: Path) -> None:
+    _git(root, "add", "-A")
+    _git(root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "draft")
+
+
+def test_derived_round_without_evidence_stays_one(repo):
+    """Red arm: a file without ``round`` and no logged run on another blob is round 1."""
+    vid = f"ready-{KEY}"
+    run("plan", "ready", KEY)
+    run("write", vid, "product", "--failed", "no answer")
+    doc = json.loads(verdict_file(repo, vid).read_text())
+    del doc["round"]
+    verdict_file(repo, vid).write_text(json.dumps(doc))
+    assert lv.round_of(repo, vid) == (1, None)
+    assert "round" not in run("check", vid)[1]
+
+
+def test_derived_round_counts_two_logged_runs_on_two_blobs(repo):
+    legacy_run(repo)
+    new_plan_version(repo)
+    vid = legacy_run(repo)
+    round_, origin = lv.round_of(repo, vid)
+    assert round_ == 2 and origin.startswith("derived: 2 plan blobs with logged lens verdicts: ")
+    assert f"panel {vid}: round 2 ({origin})" in run("check", vid)[1]
+
+
+def test_derived_round_counts_two_runs_on_one_blob_once(repo):
+    """Red arm: a restart on the same plan blob is no round."""
+    legacy_run(repo, "product")
+    vid = legacy_run(repo, "architecture")
+    assert lv.round_of(repo, vid) == (1, None)
+
+
+def test_a_draft_commit_without_a_run_never_counts(repo):
+    legacy_run(repo)
+    new_plan_version(repo)
+    commit_plan(repo)  # a draft between two panels: committed, never paneled
+    new_plan_version(repo)
+    vid = legacy_run(repo)
+    assert lv.round_of(repo, vid)[0] == 2
+
+
+def test_derived_round_carries_warnings_and_seeds_the_next_round(repo):
+    set_rounds(repo, 2)
+    legacy_run(repo)
+    new_plan_version(repo)
+    vid = legacy_run(repo)
+    run("write", vid, "product", stdin=answer(blocking(severity="WARNING")))
+    run("write", vid, "architecture", stdin=GREEN)
+    run("write", vid, "acceptance", stdin=GREEN)
+    code, out, _ = run("check", vid)
+    assert code == 0 and "panel ready-" in out and "green (warnings carried)" in out
+    new_plan_version(repo)
+    run("plan", "ready", KEY)
+    doc = json.loads(verdict_file(repo, vid).read_text())
+    assert doc["round"] == 3 and doc["round_derived"].startswith("derived: 2 plan blobs")
+    assert lv.round_of(repo, vid) == (3, doc["round_derived"])
+
+
+def test_round_derived_is_refused_on_a_t2_panel(repo):
+    run("plan", "t2", "7")
+    path = verdict_file(repo, "t2-pr7")
+    doc = json.loads(path.read_text())
+    doc["round_derived"] = "derived: forged"
+    path.write_text(json.dumps(doc))
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1 and "round_derived needs a string (ready only)" in out

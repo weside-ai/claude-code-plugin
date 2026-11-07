@@ -1788,7 +1788,8 @@ def rule_tier(m):
 
 def rule_lenses(m):
     """The `ready-<KEY>` lens verdict, green and bound to the current plan blob; the warnings a
-    green panel carries (`ready_panel.warning_ok_after_rounds`) go into the row as `carried`."""
+    green panel carries (`ready_panel.warning_ok_after_rounds`) go into the row as `carried`, a
+    derived round (a verdict file of 8.10.0 or older) as `round` with its origin."""
     try:
         green, lines, carried = lens_verdict.check_panel(m.root, f"ready-{m.key}")
     except (lens_verdict.UnusableError, OSError) as exc:
@@ -1797,6 +1798,12 @@ def rule_lenses(m):
         return lines
     if carried:
         m.extra["carried"] = carried
+    try:
+        round_, origin = lens_verdict.round_of(m.root, f"ready-{m.key}")
+    except (lens_verdict.RefusedError, lens_verdict.UnusableError, OSError) as exc:
+        return [f"lens verdict unreadable: {exc}"]
+    if origin is not None:
+        m.extra["round"] = f"{round_} ({origin})"
     return []
 
 
@@ -2087,6 +2094,8 @@ def _transition(state, args, crew, now, target, head):
     ops = adapter.move(key, status)
     if "tier" in m.extra:
         print(f"tier: {m.extra['tier']}")
+    if "round" in m.extra:
+        print(f"round: {m.extra['round']}")
     for item in m.extra.get("carried", []):
         print(f"carried: {item['lens']}: {item['claim']} ({item['where'] or '-'})")
     print(json.dumps(row, ensure_ascii=False))
