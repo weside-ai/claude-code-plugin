@@ -760,8 +760,10 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
     )
 
 
-# The brake's core as the classifier enforces it: a diff to the classifier, the gates, the crew's
-# `risk` block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged.
+# The brake's core: a diff to the classifier, the gates, the crew's `risk` block or one that removes
+# a rule is `brake-change` (`risk_paths.CORE`), never self-merged. Rules live only in the rules
+# file, so the bundled classifier sees a removed rule as a change to that file, which the setup
+# template puts under `[brake-change]`; a crew's own `risk.command` may narrow it to removed lines.
 BRAKE_CORE = "the\n  brake core (classifier, gates, removed rules, crew `risk`)."
 
 
@@ -771,6 +773,15 @@ BRAKE_CORE = "the\n  brake core (classifier, gates, removed rules, crew `risk`).
 def test_l0_names_every_part_of_the_brake_core(data):
     crew = generic() if data is None else crewlib._merge(data)
     assert BRAKE_CORE in rp.render_l0(crew)
+
+
+def test_the_setup_template_classifies_a_removed_rule_as_brake_core():
+    """L0's "removed rules" holds for the bundled classifier: the rules file is a core path."""
+    import risk_paths  # noqa: PLC0415
+
+    rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
+    assert risk_paths.CORE == ("brake-change",)
+    assert any(p.fullmatch(".weside/risk-paths") for _, p in rules["brake-change"])
 
 
 def test_the_subagent_fallback_lives_in_the_cards_not_in_l0():
