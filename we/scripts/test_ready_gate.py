@@ -133,6 +133,36 @@ def test_a_standalone_story_warns_and_still_checks_repos(tmp_path):
     ]
 
 
+@pytest.mark.parametrize(
+    ("oracle", "said"),
+    [
+        ("ci — the tests prove it", "names no oracle the gate can read"),
+        ("receipt", "names no oracle the gate can read"),
+        ("not-observed", "carries its reason"),
+    ],
+)
+def test_an_oracle_line_the_pr_hook_refuses_warns_now_and_refuses_nothing(tmp_path, oracle, said):
+    """Regression: a plan with `**Oracle:** ci` passed the gate and failed only at the PR body."""
+    root = repo(tmp_path)
+    path = root / plan(root, "green")
+    path.write_text(path.read_text().replace("cli — the endpoint answers.", oracle))
+    out = gate(root, "story", str(path))
+    assert out.returncode == 0 and out.stdout == "", out.stdout
+    warned = [w for w in out.stderr.splitlines() if "## Verification" in w]
+    assert len(warned) == 1, out.stderr
+    assert warned[0].startswith(f"warning: {path}: ## Verification: the PR hook will refuse")
+    assert said in warned[0] and "cli | ui | substitute" in warned[0]
+    assert "references/story-plan.md § Two vocabularies named oracle" in warned[0]
+    story_plan = Path(__file__).resolve().parents[1] / "references" / "story-plan.md"
+    assert "### Two vocabularies named oracle" in story_plan.read_text()
+
+
+def test_a_readable_oracle_line_warns_nothing(tmp_path):
+    root = repo(tmp_path)
+    out = gate(root, "story", plan(root, "green"))
+    assert "## Verification" not in out.stderr, out.stderr
+
+
 def test_an_unknown_class_fails(tmp_path):
     root = repo(tmp_path)
     path = root / plan(root, "green")

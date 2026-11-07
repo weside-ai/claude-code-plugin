@@ -23,6 +23,10 @@ Ready gate reads); this docstring only lists the story checks in their order:
 8. the epic plan's ``fence:``, its ``serves:`` against the goal file, the goal file itself; each
    source missing turns its check off with one warning, and the check arms when it lands;
 9. seams named: at least one path in some phase's ``**Files:**`` list;
+9b. the ``## Verification`` block's ``**Oracle:**`` line, read by the PR hook's own parser
+   (``hooks/verification_gate.py``): a line that hook would refuse is one warning now, not a
+   refusal at ``gh pr create`` later (the AC classes ``receipt``/``ci``/``walk`` are no oracle
+   there);
 10. the plan's tier (``plan_tier.py``): the repo's ``risk.command`` on the plan alone, in a
     scratch tree at ``risk.rules_from``. A success prints ``tier: <line 1>`` on stderr, a
     failure is one stdout line ``<plan>: tier: tier not computed: <reason>``; without a
@@ -49,6 +53,11 @@ if _HERE not in sys.path:
 
 import crew  # noqa: E402
 import plan_tier  # noqa: E402
+
+_HOOKS = str(Path(__file__).resolve().parent.parent / "hooks")
+if _HOOKS not in sys.path:
+    sys.path.append(_HOOKS)
+import verification_gate  # noqa: E402
 
 USAGE = "usage: ready_gate.py story <plan> | ready_gate.py epic <epic plan>"
 REQUIRED_SECTIONS = (
@@ -418,6 +427,20 @@ class Gate:
             self._phase_repos(found_phases)
         if "Implementation Phases" in present and not any(ph.paths for ph in found_phases):
             self.fail("Implementation Phases", "no seams named (no path in any Files list)")
+        if "Verification" in present:
+            self._oracle_line(text)
+
+    def _oracle_line(self, text: str) -> None:
+        """Check 9b: warn now what the PR hook refuses at `gh pr create`."""
+        problem = verification_gate._receipt_problem(text)
+        if problem is not None:
+            self.warnings.append(
+                f"warning: {self.plan}: ## Verification: the PR hook will refuse this plan's "
+                f"block: {problem} The AC classes receipt, ci and walk belong in the AC markers; "
+                f"the `**Oracle:**` line names how the build was observed "
+                f"({verification_gate._MENU}); see references/story-plan.md § Two vocabularies "
+                f"named oracle."
+            )
 
     def tier(self, text: str) -> None:
         """Check 10: the plan-only tier; needs the ``story:`` key and a git checkout."""

@@ -58,6 +58,7 @@ def run(
     max_errors="10",
     quiet="0",
     env_extra=None,
+    cwd=None,
 ):
     """`answers` replays `gh pr view`, `runs` `gh run list --commit <sha>`, `comments` the
     `gh pr view --json comments` read. Every call's argv and cwd land in `calls.log`."""
@@ -66,7 +67,7 @@ def run(
     gh.write_text(
         "#!/usr/bin/env bash\n"
         f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
-        'if [ "$1 $2" = "repo view" ]; then echo o/r; exit 0; fi\n'
+        'if [ "$1 $2" = "repo view" ]; then [ -n "$GH_REPO_VIEW_FAIL" ] && exit 1; echo o/r; exit 0; fi\n'
         'if [ "$1 $2" = "pr merge" ]; then [ -n "$GH_MERGE_FAIL" ] && { echo "$GH_MERGE_FAIL" >&2; exit 1; }; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
@@ -95,7 +96,7 @@ def run(
         capture_output=True,
         text=True,
         env=env,
-        cwd=tmp_path,
+        cwd=cwd or tmp_path,
         timeout=30,
         check=False,
     )
@@ -281,14 +282,61 @@ def _with_codex(d, conclusion="SUCCESS", status="COMPLETED"):
     return d
 
 
-def test_every_gh_call_names_the_repo_and_runs_from_root(tmp_path):
+def test_outside_a_repo_every_gh_call_names_the_repo_and_runs_from_the_callers_dir(tmp_path):
     code, out = run(tmp_path, [_green()])
     assert code == 0, out
     calls = (tmp_path / "calls.log").read_text().splitlines()
-    # The repo is resolved once, from the caller's directory; everything after runs from `/`.
+    # No git repo: the repo comes from `gh repo view`; every call stays in the caller's directory.
     assert calls[0] == f"{tmp_path} | repo view ", calls[0]
     rest = calls[1:]
-    assert rest and all(c.startswith("/ | ") and " -R o/r " in c for c in rest), rest
+    assert rest and all(c.startswith(f"{tmp_path} | ") and " -R o/r " in c for c in rest), rest
+
+
+def make_worktree(tmp_path, remote):
+    """A main checkout with `origin` = `remote` and a linked worktree; returns both paths."""
+    main, wt = tmp_path / "main", tmp_path / "wt"
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "init", "-q", str(main)], check=True)
+    subprocess.run([*git, "-C", str(main), "commit", "-qm", "x", "--allow-empty"], check=True)
+    subprocess.run([*git, "-C", str(main), "remote", "add", "origin", remote], check=True)
+    subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", str(wt)], check=True)
+    return main.resolve(), wt
+
+
+def test_from_a_worktree_gh_runs_in_the_main_checkout(tmp_path):
+    """Regression: from `/` a gh that picks its account by directory answered
+    "Could not resolve to a Repository"; the calls stay in the caller's repo instead, and
+    `gh repo view` (set-default, a fork's upstream) still names the repo."""
+    main, wt = make_worktree(tmp_path, "git@github.com:acme/app.git")
+    code, out = run(tmp_path, [_green()], cwd=wt)
+    assert code == 0, out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls[0] == f"{main} | repo view ", calls
+    assert all(c.startswith(f"{main} | ") and " -R o/r " in c for c in calls[1:]), calls
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        "git@github.com:acme/app.git",
+        "https://github.com/acme/app",
+        "ssh://git@github.com/acme/app.git",
+    ],
+)
+def test_a_failing_repo_view_falls_back_to_a_github_origin(tmp_path, remote):
+    _, wt = make_worktree(tmp_path, remote)
+    code, out = run(tmp_path, [_green()], cwd=wt, env_extra={"GH_REPO_VIEW_FAIL": "1"})
+    assert code == 0, out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert all(" -R acme/app " in c for c in calls[1:]), calls
+
+
+def test_a_non_github_origin_is_no_fallback(tmp_path):
+    _, wt = make_worktree(tmp_path, "git@gitlab.com:acme/app.git")
+    code, out = run(
+        tmp_path, [_green()], cwd=wt, max_errors="2", env_extra={"GH_REPO_VIEW_FAIL": "1"}
+    )
+    assert code == 2 and out and out[-1].startswith("gh failed 2 times"), out
 
 
 @pytest.mark.parametrize("state, code, word", [("MERGED", 7, "merged"), ("CLOSED", 8, "closed")])
