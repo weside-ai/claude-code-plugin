@@ -1,0 +1,58 @@
+diff --git a/.github/workflows/one-way-gate.yml b/.github/workflows/one-way-gate.yml
+--- a/.github/workflows/one-way-gate.yml
++++ b/.github/workflows/one-way-gate.yml
+@@ -131,7 +153,20 @@
+           if [ "$code" -ne 0 ]; then
+             post_status error "class not computed (pr_risk_class.sh exit ${code}): re-run or Owner merges"
+             echo "::error::pr_risk_class.sh exited ${code}; status error on ${head_sha}."
+             exit 1
+           fi
+
++          # The self-merge judge: only its exit 0 opens the window.
++          window=closed
++          case "$tier_line" in
++            "T2 one-way "*)
++              set +e
++              judged=$(cd control && python3 scripts/ci/brake_self_merge.py gate "$PR_NUMBER" "${tier_line#T2 one-way }" "$head_sha")
++              judge_code=$?
++              set -e
++              echo "self-merge judge: ${judged} (exit ${judge_code})"
++              if [ "$judge_code" -eq 0 ]; then window=passed; fi
++              ;;
++          esac
++
+-          if [[ "$tier_line" =~ ^T2\ one-way\ ([^[:space:]]+)$ ]]; then
++          if [ "$window" != passed ] && [[ "$tier_line" =~ ^T2\ one-way\ ([^[:space:]]+)$ ]]; then
+diff --git a/scripts/ci/brake_self_merge.py b/scripts/ci/brake_self_merge.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/ci/brake_self_merge.py
+@@ -0,0 +56,4 @@
++WINDOW = timedelta(hours=2)
++HUMAN = "Owner"
++HUMAN_LOGIN = "owner-login"
++CORE_CLASSES = frozenset({"brake-change"})
+@@ -0,0 +74,1 @@
++_ONE_WAY = re.compile(r"^T2 one-way (\S+)$")
+@@ -0,0 +195,9 @@
++def decide(facts: Facts, now: datetime) -> Decision:
++    m = _ONE_WAY.match(facts.tier_line.strip())
++    if not m:
++        return Decision("not-one-way", f"class is {facts.tier_line.strip() or 'empty'}")
++    cls = m[1]
++    if cls in CORE_CLASSES:
++        return Decision(
++            "core", f"one-way {cls} is the brake's core: {HUMAN} merges", cls
++        )
+@@ -0,0 +362,11 @@
++def _risk_line(number: int, ref: str) -> str:
++    key = re.search(r"([A-Z][A-Z0-9]*-[0-9]+)", ref)
++    script = Path(__file__).resolve().parent / "pr_risk_class.sh"
++    argv = ["bash", str(script), str(number), *([key[1]] if key else [])]
++    out = subprocess.run(argv, capture_output=True, text=True, timeout=600, check=False)
++    if out.returncode != 0:
++        raise RuntimeError(f"pr_risk_class.sh #{number} exit {out.returncode}")
++    lines = out.stdout.strip().splitlines()
++    if not lines:
++        raise RuntimeError(f"pr_risk_class.sh #{number} printed nothing")
++    return lines[0]

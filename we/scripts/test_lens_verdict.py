@@ -944,3 +944,66 @@ def test_a_red_severity_line_on_a_new_blob_leaves_the_derived_round_alone(repo):
     assert lv.round_of(repo, vid) == (1, None)
     assert "round" not in run("check", vid)[1]
     assert run("samples")[1] == ""
+
+
+# --- The corpus: every case is loaded, well-formed and replayed through the verdict ----------------
+
+CORPUS = SEED.parents[1]
+CASES = sorted(p for p in CORPUS.glob("*/*") if (p / "expect.yaml").is_file())
+
+
+def _expect(case: Path) -> dict:
+    """The few keys of expect.yaml the replay needs (no yaml dependency on the 3.9 job)."""
+    text = (case / "expect.yaml").read_text()
+    out = {k: re.search(rf"^{k}: (\S+)", text, re.M)[1] for k in ("id", "lens", "mode", "diff")}
+    flags = re.findall(r'^\s+- where: "([^"]+)"\n\s+severity: \[([^\]]+)\]', text, re.M)
+    out["flags"] = [(where, {s.strip() for s in sev.split(",")}) for where, sev in flags]
+    out["where"] = re.findall(r'^\s+- where: "([^"]+)"', text, re.M)
+    return out
+
+
+def _added_lines(patch: str) -> dict[str, set[int]]:
+    """path -> the new-side line numbers the patch adds."""
+    added: dict[str, set[int]] = {}
+    path, line = "", 0
+    for row in patch.splitlines():
+        if row.startswith("+++ b/"):
+            path = row[6:]
+            added.setdefault(path, set())
+        elif row.startswith("@@"):
+            line = int(re.search(r"\+(\d+)", row)[1])
+        elif row.startswith("+"):
+            added[path].add(line)
+            line += 1
+        elif not row.startswith("-"):
+            line += 1
+    return added
+
+
+def test_the_corpus_holds_the_seed_and_the_cases_after_it():
+    assert SEED in CASES and len(CASES) >= 5
+
+
+@pytest.mark.parametrize("case", CASES, ids=[f"{c.parent.name}/{c.name}" for c in CASES])
+def test_a_corpus_case_names_an_added_line_and_its_panel_flags_it(repo, case):
+    expect = _expect(case)
+    assert expect["id"] == case.name and expect["lens"] == case.parent.name
+    assert expect["mode"] == "t2" and expect["where"]
+    added = _added_lines((case / expect["diff"]).read_text())
+    for where in expect["where"]:
+        path, line = where.rsplit(":", 1)
+        assert int(line) in added.get(path, set()), f"{where} is no added line of the diff"
+    run("plan", "t2", "7")
+    for lens, text in json.loads((case / "panel.json").read_text())["answers"].items():
+        code, _, err = run("write", "t2-pr7", lens, stdin=text)
+        assert code == 0, err
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1 and f"lens {expect['lens']}: red (" in out
+    assert len(expect["flags"]) == len(expect["where"]), "every must_flag needs a severity list"
+    stored = json.loads(verdict_file(repo, "t2-pr7").read_text())["verdicts"][expect["lens"]]
+    for where, severities in expect["flags"]:
+        hits = [f for f in stored["findings"] if f["where"] == where]
+        assert hits, f"lens {expect['lens']} stored no finding at {where}"
+        assert any(f["severity"] in severities and f["status"] == "standing" for f in hits), (
+            f"{where}: stored {[f['severity'] for f in hits]}, expected one of {sorted(severities)}"
+        )

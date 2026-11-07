@@ -1,0 +1,47 @@
+diff --git a/scripts/ci/brake_self_merge.py b/scripts/ci/brake_self_merge.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/ci/brake_self_merge.py
+@@ -0,0 +31,6 @@
++The push line (`<!-- brake-self-merge-notice -->`) @-mentions Owner's GitHub login, so GitHub
++pushes it to the Owner's phone. It counts as delivered only when its author is `github-actions[bot]`, it
++names the current head, and its `run:` id is a run of `.github/workflows/brake-self-merge.yml` on
++`main` with event `schedule` or `workflow_dispatch`: a branch's own `pull_request` workflow also
++posts as `github-actions[bot]` but cannot produce such a run. The window counts from the push
++line's `created_at`, so a push (new head), a new panel and a lifted veto each restart it.
+@@ -0,0 +168,14 @@
++def notice_valid(c: Comment, facts: Facts) -> bool:
++    """A push line of THIS workflow's run on the current head (the delivery receipt)."""
++    if NOTICE_MARKER not in c.body or c.author != NOTICE_AUTHOR:
++        return False
++    head = _NOTICE_HEAD.search(c.body)
++    run = _NOTICE_RUN.search(c.body)
++    if not head or head[1] != facts.head or not run:
++        return False
++    info = facts.notice_runs.get(int(run[1])) or {}
++    return (
++        info.get("path") == WORKFLOW
++        and info.get("head_branch") == "main"
++        and info.get("event") in NOTICE_EVENTS
++    )
+@@ -0,0 +214,8 @@
++    floor = max(t for t in (panel, last_veto) if t is not None)
++    notices = [
++        c.created_at
++        for c in facts.comments
++        if c.created_at >= floor and notice_valid(c, facts)
++    ]
++    if not notices:
++        return Decision("notice-due", f"no push line to {HUMAN} on this head yet", cls)
+@@ -0,0 +230,11 @@
++def notice_body(
++    number: int, url: str, cls: str, head: str, run_id: int, now: datetime
++) -> str:
++    return (
++        f"{NOTICE_MARKER}\n"
++        f"@{HUMAN_LOGIN} self-merge window: #{number} ({url}) · one-way {cls}\n"
++        f"merges itself at {_iso(now + WINDOW)} or later unless someone adds the label "
++        f"`{VETO_LABEL}` with a comment `veto: <name> · <reason>`.\n"
++        f"head: `{head}`\n"
++        f"run: {run_id}\n"
++    )

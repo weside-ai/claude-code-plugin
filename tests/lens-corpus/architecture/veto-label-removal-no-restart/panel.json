@@ -1,0 +1,8 @@
+{
+  "id": "t2-pr7",
+  "answers": {
+    "product": "No finding.\n\n```json\n{\"findings\": []}\n```\n",
+    "architecture": "Removing the veto label opens the window at once.\n\n```json\n{\"findings\": [{\"severity\": \"BLOCKING\", \"claim\": \"Only comment lines feed the veto clock; removing the veto label (or deleting a veto comment) leaves the old push line as the floor, so the window counts as passed with no new push line.\", \"where\": \"scripts/ci/brake_self_merge.py:157\", \"question\": \"Does a new default answer allowed where the old code refused: does lifting a veto by label restart the window it claims to restart?\", \"red_arm\": {\"command\": \"pytest scripts/ci/tests/test_brake_self_merge.py -k label_removed_restarts\", \"exit\": 1}}]}\n```\n",
+    "acceptance": "No finding.\n\n```json\n{\"findings\": []}\n```\n"
+  }
+}

@@ -1,0 +1,23 @@
+diff --git a/scripts/ci/brake_self_merge.py b/scripts/ci/brake_self_merge.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/ci/brake_self_merge.py
+@@ -0,0 +135,18 @@
++def veto(facts: Facts) -> tuple[str | None, datetime | None]:
++    """(why the PR is vetoed or None, `created_at` of the newest veto or lift comment).
++
++    Every name's veto stands on its own: `veto lifted: <name>` lifts only that name's, and
++    `veto lifted: Owner` lifts all of them."""
++    open_by: dict[str, None] = {}
++    last_event: datetime | None = None
++    for c in facts.comments:
++        for line in c.body.splitlines():
++            lift = _LIFT.match(line)
++            if lift:
++                last_event = c.created_at
++                name = lift[1].strip()
++                if name == HUMAN:
++                    open_by.clear()
++                else:
++                    open_by.pop(name, None)
++                continue

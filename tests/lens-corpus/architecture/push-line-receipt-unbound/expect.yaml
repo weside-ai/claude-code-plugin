@@ -1,0 +1,14 @@
+# Cut from a real PR whose T2 panel missed it; the security card found it afterwards.
+# diff.patch is an excerpt: the judge is a new file, its hunks carry the real line numbers.
+id: push-line-receipt-unbound
+lens: architecture  # the Security block of the T2 questions
+mode: t2
+diff: diff.patch
+# The receipt checks author, head and that the cited run id is a scheduled run on main. It never
+# binds the comment to that run (created_at inside the run, no edit) and never requires the
+# @-mention line notice_body writes. Any same-repo pull_request workflow posts as
+# github-actions[bot]: it cites any past scheduled run id and the window runs unannounced.
+must_flag:
+  - where: "scripts/ci/brake_self_merge.py:170"
+    severity: [BLOCKING, WARNING]
+    question: "Is a guard loosened on a premise that cannot happen (a branch workflow cannot produce such a run), and is that premise pinned by a test?"

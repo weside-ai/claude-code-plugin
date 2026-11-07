@@ -1,0 +1,14 @@
+# Cut from a real PR whose T2 panel missed it; the security card found it afterwards.
+# diff.patch is an excerpt: the judge is a new file, its hunks carry the real line numbers.
+id: one-way-card-hit-ignored
+lens: architecture  # the Security block of the T2 questions, run by the architecture lens
+mode: t2
+diff: diff.patch
+# The classifier prints the class on line 1 and one line per [trust-loosening], [money-path] or
+# [brake-review] hit after it; the card hits are meant for the security card worker. The new
+# self-merge judge reads line 1 only and never asks for a card verdict, so a diff that is one-way
+# (a destructive migration) and loosens trust (an RLS file) merges 2 h after the push line.
+must_flag:
+  - where: "scripts/ci/brake_self_merge.py:372"
+    severity: [BLOCKING]
+    question: "Does a merge decision drop the classifier's hit lines, so a one-way diff that also loosens trust merges without the security card?"

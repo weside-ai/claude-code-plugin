@@ -1,0 +1,8 @@
+{
+  "id": "t2-pr7",
+  "answers": {
+    "product": "No finding.\n\n```json\n{\"findings\": []}\n```\n",
+    "architecture": "Anyone lifts the owner's veto.\n\n```json\n{\"findings\": [{\"severity\": \"WARNING\", \"claim\": \"`veto lifted: Owner` is matched on every comment regardless of author, so any collaborator or bot lifts every veto in the human's name.\", \"where\": \"scripts/ci/brake_self_merge.py:144\", \"question\": \"Does code decide who may act by reading a name in text instead of the author the platform reports?\", \"red_arm\": {\"command\": \"pytest scripts/ci/tests/test_brake_self_merge.py -k lift_by_bot_in_owner_name\", \"exit\": 1}}]}\n```\n",
+    "acceptance": "No finding.\n\n```json\n{\"findings\": []}\n```\n"
+  }
+}

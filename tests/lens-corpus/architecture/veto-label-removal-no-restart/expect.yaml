@@ -1,0 +1,14 @@
+# Cut from a real PR whose T2 panel missed it; the security card found it afterwards.
+# diff.patch is an excerpt: the judge is a new file, its hunks carry the real line numbers.
+id: veto-label-removal-no-restart
+lens: architecture
+mode: t2
+diff: diff.patch
+# The docstring promises that a lifted veto restarts the 2 h window. Only comment lines move the
+# floor; the label is read as present/absent with no event time. Label on -> vetoed; label off
+# three hours later -> window-passed against the old push line, no new push line to the human.
+# A deleted `veto:` comment behaves the same.
+must_flag:
+  - where: "scripts/ci/brake_self_merge.py:157"
+    severity: [BLOCKING, WARNING]
+    question: "Does a new default answer allowed where the old code refused: does lifting a veto by label restart the window it claims to restart?"

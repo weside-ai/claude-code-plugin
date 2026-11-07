@@ -1,0 +1,8 @@
+{
+  "id": "t2-pr7",
+  "answers": {
+    "product": "No finding.\n\n```json\n{\"findings\": []}\n```\n",
+    "architecture": "The receipt is not bound to the run it cites.\n\n```json\n{\"findings\": [{\"severity\": \"BLOCKING\", \"claim\": \"The delivery receipt counts any github-actions[bot] comment that cites a past scheduled run id; it need not carry the @-mention nor be posted by that run, so the window runs without the human being pushed.\", \"where\": \"scripts/ci/brake_self_merge.py:170\", \"question\": \"Is a guard loosened on a premise that cannot happen (a branch workflow cannot produce such a run), and is that premise pinned by a test?\", \"red_arm\": {\"command\": \"pytest scripts/ci/tests/test_brake_self_merge.py -k replayed_run_without_mention\", \"exit\": 1}}]}\n```\n",
+    "acceptance": "No finding.\n\n```json\n{\"findings\": []}\n```\n"
+  }
+}
