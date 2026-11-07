@@ -699,9 +699,9 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         q.session ? [{ text: q.session, dim: struck }] : [],
         q.key ? [{ text: q.key, dim: true }] : [],
       ]
-      // A one-way merge waits for the owner's hand merge: no Accept, the PR link instead (board.py close-merged
-      // drops the question once the PR merged).
-      const handMerge = q.one_way && q.pr_url ? `merge by hand (${q.one_way}): ${q.pr_url}` : undefined
+      // A one-way merge waits for the owner's approve (repo with an approve gate) or hand merge: no Accept, the PR
+      // link instead (board.py close-merged drops the question once the PR merged).
+      const handMerge = q.one_way && q.pr_url ? `approve or merge (${q.one_way}): ${q.pr_url}` : undefined
       const buttons = q.id && !struck
         ? [
             ...(q.recommendation && !handMerge ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),

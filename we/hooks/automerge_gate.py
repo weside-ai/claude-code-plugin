@@ -34,7 +34,10 @@ Refusals, in this order (the first one wins):
      (`risk_paths.CORE`) only the owner (`human.name` in the crew) merges, by hand; every other
      one-way class merges itself through the repo's self-merge window (2 h after a green T2 panel
      comment on its head, `lens_verdict.py post`, once the owner got the push line; a `veto` label
-     stops it), so the refusal points there.
+     stops it), so the refusal points there. Where `origin/main` carries an approve gate
+     (`.github/workflows/one-way-gate.yml` and a `brake_self_merge.py` that knows the state
+     `approved`), the owner's GitHub approve on the head is the go for both, and the refusal says
+     so: the session asks for an approve, not a merge, and does nothing after it.
   4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
      `check(root, "t2-pr<N>")` must be green (missing or red refuses; the verdict file carries no
      skip field). Without the module the check is off with one stderr line. The panel verdict is a
@@ -867,13 +870,37 @@ def _uses_rules(start: str | None) -> bool:
     return _git(root, "cat-file", "-e", f"{RULES_FROM}:.weside/risk-paths") is not None
 
 
+def _approve_gate(root: str) -> bool:
+    """The repo's own one-way gate turns the owner's approve on the head into the merge: the
+    workflow `.github/workflows/one-way-gate.yml` and a `brake_self_merge.py` that knows the state
+    `approved`, both read from `origin/main`."""
+    if _git(root, "cat-file", "-e", f"{RULES_FROM}:.github/workflows/one-way-gate.yml") is None:
+        return False
+    hits = _git(root, "grep", "-l", "-F", '"approved"', RULES_FROM, "--", "*brake_self_merge.py")
+    return bool(hits and hits.strip())
+
+
 def _one_way_refusal(root: str, cls: ClassResult) -> str:
-    """Refusal 3: the core waits for the owner's hand, every other class for the self-merge window."""
+    """Refusal 3: the core waits for the owner's hand, every other class for the self-merge window;
+    where the repo runs an approve gate, the owner's approve on the head is the go for both."""
     pr = f"PR #{cls.number} ({cls.url})"
     head = (
         f"{pr} is `{cls.line}`: one-way ({cls.one_way}). No session merges or arms it, whatever "
         "a command or a quoted go says"
     )
+    if _approve_gate(root):
+        approve = (
+            f"{_human(root)}'s GitHub approve on its head is the go (from the phone too): the "
+            "`one-way gate` status turns green and the repo arms auto-merge itself, so the session "
+            "does nothing after it. Ask for an approve, not a merge: hand over the link and the class."
+        )
+        if cls.one_way in risk_paths.CORE:
+            return f"{head}: it is the brake's core. {approve}"
+        return (
+            f"{head}. {approve} Without the approve it merges itself 2 h after a green T2 panel on "
+            f"its head (`/we:lens t2 {cls.number}`) where the repo runs a self-merge window; a "
+            "`veto` label stops it."
+        )
     if cls.one_way in risk_paths.CORE:
         return (
             f"{head}: it is the brake's core, only {_human(root)} merges it, by hand. "

@@ -55,7 +55,7 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
          `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then shows no Accept,
-         only the PR link to merge by hand.
+         only the PR link to approve or merge.
 close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
          `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
          `bundle` runs it first.

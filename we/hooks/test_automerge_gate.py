@@ -879,6 +879,55 @@ def test_the_core_never_points_at_the_self_merge_window(
     assert "only Ada merges it, by hand" in reason and "merges itself" not in reason
 
 
+GATE_FILES = {
+    ".github/workflows/one-way-gate.yml": "name: one-way gate\n",
+    "scripts/ci/brake_self_merge.py": 'PASS = frozenset({"window-passed", "approved"})\n',
+}
+
+
+def _with_gate(classed: dict, files: dict[str, str]) -> str:
+    """origin/main gains `files`; the PR head moves onto it."""
+    main = _commit(classed["repo"], files, "approve gate")
+    _publish_main(classed["repo"], main)
+    return _commit(classed["repo"], {"README.md": "z\n"}, "pr on gate")
+
+
+@pytest.mark.parametrize("cls", ["brake-change", "money"])
+def test_an_approve_gate_makes_the_owners_approve_the_go(
+    classed: dict, monkeypatch, cls: str
+) -> None:
+    """Refusal 3 in a repo with the approve gate: still refused, and the text asks for the owner's
+    approve on the head, after which the session does nothing."""
+    monkeypatch.setenv("FAKE_CLASS", f"T2 one-way {cls}")
+    head = _with_gate(classed, GATE_FILES)
+    reason = refuse(classed["repo"], ARM, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and f"one-way ({cls})" in reason
+    assert "Ada's GitHub approve on its head is the go (from the phone too)" in reason
+    assert "the session does nothing after it" in reason
+    assert "Ask for an approve, not a merge" in reason
+    assert "by hand" not in reason
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {},
+        {".github/workflows/one-way-gate.yml": "name: one-way gate\n"},
+        {**GATE_FILES, "scripts/ci/brake_self_merge.py": "PASS = {'window-passed'}\n"},
+    ],
+    ids=["no-gate", "workflow-only", "judge-without-approved"],
+)
+def test_without_an_approve_gate_the_core_text_stays(
+    classed: dict, monkeypatch, files: dict[str, str]
+) -> None:
+    """Red arm: without the workflow, or without a judge that knows `approved`, the old text."""
+    monkeypatch.setenv("FAKE_CLASS", "T2 one-way brake-change")
+    head = _with_gate(classed, files) if files else classed["head"]
+    reason = refuse(classed["repo"], ARM, FakeGh([run()], head=head), monkeypatch)
+    assert reason is not None and "only Ada merges it, by hand" in reason
+    assert "approve" not in reason
+
+
 def test_a_green_panel_never_lifts_one_way(classed: dict, monkeypatch, lens: Path) -> None:
     (classed["repo"] / ".lens-green").write_text("")
     reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
