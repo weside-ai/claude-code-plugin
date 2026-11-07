@@ -58,6 +58,7 @@ def run(
     max_errors="10",
     quiet="0",
     env_extra=None,
+    cwd=None,
 ):
     """`answers` replays `gh pr view`, `runs` `gh run list --commit <sha>`, `comments` the
     `gh pr view --json comments` read. Every call's argv and cwd land in `calls.log`."""
@@ -95,7 +96,7 @@ def run(
         capture_output=True,
         text=True,
         env=env,
-        cwd=tmp_path,
+        cwd=cwd or tmp_path,
         timeout=30,
         check=False,
     )
@@ -281,14 +282,44 @@ def _with_codex(d, conclusion="SUCCESS", status="COMPLETED"):
     return d
 
 
-def test_every_gh_call_names_the_repo_and_runs_from_root(tmp_path):
+def test_outside_a_repo_every_gh_call_names_the_repo_and_runs_from_the_callers_dir(tmp_path):
     code, out = run(tmp_path, [_green()])
     assert code == 0, out
     calls = (tmp_path / "calls.log").read_text().splitlines()
-    # The repo is resolved once, from the caller's directory; everything after runs from `/`.
+    # No git repo: the repo comes from `gh repo view`; every call stays in the caller's directory.
     assert calls[0] == f"{tmp_path} | repo view ", calls[0]
     rest = calls[1:]
-    assert rest and all(c.startswith("/ | ") and " -R o/r " in c for c in rest), rest
+    assert rest and all(c.startswith(f"{tmp_path} | ") and " -R o/r " in c for c in rest), rest
+
+
+def make_worktree(tmp_path, remote):
+    """A main checkout with `origin` = `remote` and a linked worktree; returns both paths."""
+    main, wt = tmp_path / "main", tmp_path / "wt"
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "init", "-q", str(main)], check=True)
+    subprocess.run([*git, "-C", str(main), "commit", "-qm", "x", "--allow-empty"], check=True)
+    subprocess.run([*git, "-C", str(main), "remote", "add", "origin", remote], check=True)
+    subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", str(wt)], check=True)
+    return main.resolve(), wt
+
+
+@pytest.mark.parametrize(
+    "remote",
+    [
+        "git@github.com:acme/app.git",
+        "https://github.com/acme/app",
+        "ssh://git@github.com/acme/app.git",
+    ],
+)
+def test_from_a_worktree_gh_runs_in_the_main_checkout_with_the_remotes_repo(tmp_path, remote):
+    """Regression: from `/` a gh that picks its account by directory answered
+    "Could not resolve to a Repository"; the calls stay in the caller's repo instead."""
+    main, wt = make_worktree(tmp_path, remote)
+    code, out = run(tmp_path, [_green()], cwd=wt)
+    assert code == 0, out
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls and all(c.startswith(f"{main} | ") for c in calls), calls
+    assert all(" -R acme/app " in c for c in calls), calls  # from the remote, no `repo view`
 
 
 @pytest.mark.parametrize("state, code, word", [("MERGED", 7, "merged"), ("CLOSED", 8, "closed")])

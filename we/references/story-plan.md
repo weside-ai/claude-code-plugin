@@ -220,6 +220,9 @@ Story checks, each failure one line, the run never stops at the first:
    `acceptance.boundary_terms` (case-insensitive, whole words), unless the marker says
    `not-boundary: <why>`; boundary ACs need `acceptance.mock_persona`.
 8. Fence, goal file and `serves:` (below), through the story's epic plan.
+9. The `## Verification` block's `**Oracle:**` line, read by the PR hook's parser: a line the hook
+   would refuse at `gh pr create` (an AC class such as `ci` there, a decline without reason) is one
+   warning, never a failure.
 
 **Files.** Under each `### Phase <n>:`, the bullets after `**Files:**` up to the next
 `- **<Label>:**` bullet. A backtick span is a path when it holds no whitespace and contains `/`,

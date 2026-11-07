@@ -38,7 +38,7 @@ def run(tmp_path, answers, *prs, lifetime="60"):
         capture_output=True,
         text=True,
         env=env,
-        cwd=tmp_path,
+        cwd=tmp_path / "wt" if (tmp_path / "wt").is_dir() else tmp_path,
         timeout=30,
         check=False,
     )
@@ -56,7 +56,29 @@ def test_first_pr_going_dirty_wakes_the_owner(tmp_path):
         ["6 DIRTY/CONFLICTING — merge origin/main, run the after-merge check, push"],
     )
     calls = (tmp_path / "calls.log").read_text().splitlines()
-    assert all(c.startswith("/ | pr view ") for c in calls[1:])
+    assert all(c.startswith(f"{tmp_path} | pr view ") for c in calls[1:])
+
+
+def test_from_a_worktree_gh_runs_in_the_main_checkout_with_the_remotes_repo(tmp_path):
+    """Regression: never from `/`, where a gh that picks its account by directory fails."""
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    main = tmp_path / "main"
+    subprocess.run([*git, "init", "-q", str(main)], check=True)
+    subprocess.run([*git, "-C", str(main), "commit", "-qm", "x", "--allow-empty"], check=True)
+    subprocess.run(
+        [*git, "-C", str(main), "remote", "add", "origin", "git@github.com:acme/app.git"],
+        check=True,
+    )
+    subprocess.run(
+        [*git, "-C", str(main), "worktree", "add", "-q", str(tmp_path / "wt")], check=True
+    )
+    dirty = {"state": "OPEN", "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING"}
+    code, _ = run(tmp_path, {"5": [dirty]}, "5")
+    assert code == 1
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls and all(
+        c.startswith(f"{main.resolve()} | pr view 5 -R acme/app") for c in calls
+    ), calls
 
 
 def test_behind_counts_and_unknown_waits(tmp_path):

@@ -11,7 +11,8 @@
 #   all merged or closed: <PR>…                                           exit 7
 #   gave up after <n>s                                                    exit 9  (WATCH_MAX_LIFETIME)
 # A merged or closed PR leaves the set silently. Re-arm after the owner pushed the merge.
-# The repo is resolved once and the loop runs from `/` (a removed worktree does not break it).
+# The repo is resolved once and the loop runs from the repo's main checkout (gh_anchor.sh: a removed
+# worktree does not break it, a per-directory gh account holds).
 # Env: WATCH_INTERVAL (s, default 180), WATCH_MAX_ERRORS (default 10), WATCH_MAX_LIFETIME (s,
 # default 21600 = 6 h).
 set -uo pipefail
@@ -48,8 +49,9 @@ tick() {
   sleep "$INTERVAL"
 }
 
+. "$(dirname "${BASH_SOURCE[0]}")/gh_anchor.sh"
+gh_anchor
 until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do tick; done
-cd / || exit 2
 
 DONE=()
 while :; do

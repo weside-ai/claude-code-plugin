@@ -152,6 +152,33 @@ def test_a_verdict_id_that_is_no_subject_is_a_usage_error(repo):
     assert code == 2 and "expected ready-<KEY> or t2-pr<N>" in err
 
 
+def test_plan_ready_with_plan_binds_that_file_through_write_and_check(repo):
+    """Regression: `plan ready KEY --plan PATH` ended with exit 2 and an empty message."""
+    other = repo / "plans" / "story.md"
+    other.parent.mkdir()
+    other.write_text("# Plan elsewhere\n")
+    code, out, err = run("plan", "ready", KEY, "--plan", "plans/story.md")
+    assert code == 0, err
+    entry = json.loads(out)["entries"][0]
+    assert entry["plan"] == str(repo / "plans" / "story.md")
+    assert json.loads(verdict_file(repo, f"ready-{KEY}").read_text())["plan"] == "plans/story.md"
+    for lens in ("product", "architecture", "acceptance"):
+        assert run("write", f"ready-{KEY}", lens, stdin=GREEN)[0] == 0
+    assert run("check", f"ready-{KEY}")[0] == 0
+    other.write_text("# Plan elsewhere, edited\n")
+    code, out, _ = run("check", f"ready-{KEY}")
+    assert code == 1 and f"panel ready-{KEY}: stale (bound to" in out
+
+
+def test_plan_outside_the_repo_or_an_unknown_option_names_itself(repo, tmp_path):
+    code, _, err = run("plan", "ready", KEY, "--plan", str(tmp_path / "x.md"))
+    assert code == 2 and "--plan" in err and "not inside the repo" in err
+    code, _, err = run("plan", "ready", KEY, "--plna", "x")
+    assert code == 2 and "unknown option --plna" in err and "Usage:" in err
+    code, _, err = run("plan", "ready")
+    assert code == 2 and "plan: wrong arguments" in err and "lens_verdict.py plan ready" in err
+
+
 # --- AC2: missing, stale, green ----------------------------------------------------------------
 
 

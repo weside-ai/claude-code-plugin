@@ -32,8 +32,10 @@
 # unchanged for WATCH_QUIET seconds and at least two reads. Checks register seconds after a
 # push, so a first read with a few skipped checks is not green. `gh pr checks --required` is not
 # used: repos without a required-check ruleset answer "no required checks reported".
-# The repo is resolved once at start and every gh call carries `-R`; the script then runs from `/`,
-# so removing the worktree it was started in does not break it. Run it as a background command.
+# The repo is resolved once at start (`-R`, else the caller's `origin` remote, else `gh repo view`)
+# and every gh call carries `-R`; the calls run from the repo's main checkout (gh_anchor.sh), so
+# removing the worktree it was started in does not break it and a per-directory gh account holds.
+# Run it as a background command.
 # Needs only `gh` (its built-in --jq).
 # Env: WATCH_INTERVAL (s, default 30), WATCH_QUIET (s, default 60), WATCH_REGISTER_TIMEOUT (s,
 # default 900), WATCH_HEAD_TIMEOUT (s, default 300), WATCH_MAX_ERRORS (default 10),
@@ -111,11 +113,12 @@ tick() {  # sleep one interval, or exit 9 once the lifetime cap is reached
   sleep "$INTERVAL"
 }
 
+. "$(dirname "${BASH_SOURCE[0]}")/gh_anchor.sh"
+gh_anchor
 until [ -n "$REPO" ] || gh_try REPO repo view --json nameWithOwner --jq .nameWithOwner; do
   git rev-parse --git-dir >/dev/null 2>&1 || { echo "not inside a git repo: pass -R <owner/repo>" >&2; exit 2; }
   tick
 done
-cd / || exit 2
 
 view() {
   gh_try OUT pr view "$PR" -R "$REPO" \
