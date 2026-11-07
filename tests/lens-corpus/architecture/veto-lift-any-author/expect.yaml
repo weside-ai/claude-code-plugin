@@ -1,0 +1,13 @@
+# Cut from a real PR whose T2 panel missed it; the security card found it afterwards.
+# diff.patch is an excerpt: the judge is a new file, its hunks carry the real line numbers.
+id: veto-lift-any-author
+lens: architecture  # the Security block of the T2 questions
+mode: t2
+diff: diff.patch
+# `veto lifted: Owner` clears every veto, and the line is matched on every comment whatever its
+# author; every session's bot and any pull_request workflow can write it. Contained (a lift moves
+# the floor, so a new push line follows), hence WARNING, but "only the owner lifts all" is a name.
+must_flag:
+  - where: "scripts/ci/brake_self_merge.py:144"
+    severity: [BLOCKING, WARNING]
+    question: "Does code decide who may act by reading a name in text instead of the author the platform reports?"

@@ -1,0 +1,8 @@
+{
+  "id": "t2-pr7",
+  "answers": {
+    "product": "No finding.\n\n```json\n{\"findings\": []}\n```\n",
+    "architecture": "The judge never sees the card hits.\n\n```json\n{\"findings\": [{\"severity\": \"BLOCKING\", \"claim\": \"The judge keeps only line 1 of the classifier, so a one-way diff that also hits [trust-loosening], [money-path] or [brake-review] arms after panel and window with no security card verdict.\", \"where\": \"scripts/ci/brake_self_merge.py:372\", \"question\": \"Does a merge decision drop the classifier's hit lines, so a one-way diff that also loosens trust merges without the security card?\", \"red_arm\": {\"command\": \"pytest scripts/ci/tests/test_brake_self_merge.py -k card_hit_without_card\", \"exit\": 1}}]}\n```\n",
+    "acceptance": "No finding.\n\n```json\n{\"findings\": []}\n```\n"
+  }
+}

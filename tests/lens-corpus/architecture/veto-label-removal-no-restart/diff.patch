@@ -1,0 +1,66 @@
+diff --git a/.github/workflows/one-way-gate.yml b/.github/workflows/one-way-gate.yml
+--- a/.github/workflows/one-way-gate.yml
++++ b/.github/workflows/one-way-gate.yml
+@@ -49,3 +58,3 @@ on:
+   pull_request_target:
+-    types: [opened, synchronize, reopened, ready_for_review, edited]
++    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+   workflow_dispatch:
+diff --git a/scripts/ci/brake_self_merge.py b/scripts/ci/brake_self_merge.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/ci/brake_self_merge.py
+@@ -0,0 +31,6 @@
++The push line (`<!-- brake-self-merge-notice -->`) @-mentions Owner's GitHub login, so GitHub
++pushes it to her phone. It counts as delivered only when its author is `github-actions[bot]`, it
++names the current head, and its `run:` id is a run of `.github/workflows/brake-self-merge.yml` on
++`main` with event `schedule` or `workflow_dispatch`: a branch's own `pull_request` workflow also
++posts as `github-actions[bot]` but cannot produce such a run. The window counts from the push
++line's `created_at`, so a push (new head), a new panel and a lifted veto each restart it.
+@@ -0,0 +135,31 @@
++def veto(facts: Facts) -> tuple[str | None, datetime | None]:
++    """(why the PR is vetoed or None, `created_at` of the newest veto or lift comment).
++
++    Every name's veto stands on its own: `veto lifted: <name>` lifts only that name's, and
++    `veto lifted: Owner` lifts all of them."""
++    open_by: dict[str, None] = {}
++    last_event: datetime | None = None
++    for c in facts.comments:
++        for line in c.body.splitlines():
++            lift = _LIFT.match(line)
++            if lift:
++                last_event = c.created_at
++                name = lift[1].strip()
++                if name == HUMAN:
++                    open_by.clear()
++                else:
++                    open_by.pop(name, None)
++                continue
++            m = _VETO.match(line)
++            if m:
++                last_event = c.created_at
++                open_by[m[1].strip()] = None
++    if VETO_LABEL in facts.labels:
++        return f"label `{VETO_LABEL}` is on the PR", last_event
++    if open_by:
++        names = ", ".join(open_by)
++        return (
++            f"veto by {names} not lifted (`veto lifted: <same name> · …` or by {HUMAN})",
++            last_event,
++        )
++    return None, last_event
+@@ -0,0 +208,14 @@
++    vetoed, last_veto = veto(facts)
++    if vetoed:
++        return Decision("vetoed", vetoed, cls)
++    panel = panel_at(facts)
++    if panel is None:
++        return Decision("no-panel", f"no T2 panel PASS on head {facts.head[:12]}", cls)
++    floor = max(t for t in (panel, last_veto) if t is not None)
++    notices = [
++        c.created_at
++        for c in facts.comments
++        if c.created_at >= floor and notice_valid(c, facts)
++    ]
++    if not notices:
++        return Decision("notice-due", f"no push line to {HUMAN} on this head yet", cls)
