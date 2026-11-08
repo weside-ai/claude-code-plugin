@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -28,8 +27,8 @@ def repo(tmp_path, crew=CREW):
     return root
 
 
-def no_agents(*_a, **_k):
-    return SimpleNamespace(returncode=0, stdout="[]")
+def no_agents():
+    return []
 
 
 def transcript(projects, root, sid, lines, mtime):
@@ -66,9 +65,18 @@ def test_plan_unpinned_member_and_no_transcript(tmp_path):
 
 def test_plan_refuses_a_running_coordinator(tmp_path):
     root = repo(tmp_path)
-    live = SimpleNamespace(returncode=0, stdout=json.dumps([{"name": "Lea (2)", "pid": 7}]))
     with pytest.raises(start.StartError, match="runs already"):
-        start.plan(root, False, {}, lambda *_a, **_k: live)
+        start.plan(root, False, {}, lambda: [{"name": "Lea (2)", "pid": 7}])
+    # a registry row without pid is a dead session: no refusal
+    assert start.plan(root, True, {}, lambda: [{"name": "Lea"}]).startswith("Lea\t")
+
+
+def test_plan_refuses_when_the_session_list_is_unreadable(tmp_path):
+    def broken():
+        raise start.worker_launch.LaunchError("claude agents --json timed out after 30 s")
+
+    with pytest.raises(start.StartError, match="cannot tell whether Lea runs"):
+        start.plan(repo(tmp_path), True, {}, broken)
 
 
 def test_plan_without_coordinator_fails(tmp_path):

@@ -22,7 +22,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,6 +31,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew as crewlib  # noqa: E402
+import worker_launch  # noqa: E402
 
 HEAD_BYTES = 64 * 1024
 TAIL_BYTES = 256 * 1024
@@ -95,27 +95,25 @@ def last_session(name: str, workplace: Path, projects: Path) -> str:
     return ""
 
 
-def running(name: str, run: Any = subprocess.run) -> bool:
-    """A live session of that name in `claude agents` (the global registry, CLAUDE_CONFIG_DIR unset)."""
-    env = dict(os.environ)
-    env.pop("CLAUDE_CONFIG_DIR", None)
+def running(name: str, sessions: Any = None) -> bool:
+    """A live session of that name (a ``(N)`` suffix is the same companion twice). The list comes from
+    ``worker_launch.sessions()``, the one reader of ``claude agents --json``; a list that cannot be
+    read refuses the start (``StartError``) rather than risk a second main companion."""
     try:
-        out = run(
-            ["claude", "agents", "--json"], capture_output=True, text=True, env=env, timeout=30
-        )
-        rows = json.loads(out.stdout or "[]") if out.returncode == 0 else []
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return False
-    rows = rows if isinstance(rows, list) else rows.get("agents", [])
+        rows = (sessions or worker_launch.sessions)()
+    except worker_launch.LaunchError as exc:
+        raise StartError(
+            f"cannot tell whether {name} runs ({exc}); start it by hand or retry"
+        ) from exc
     return any(
         r.get("pid") and re.sub(r" \(\d+\)$", "", r.get("name") or "") == name for r in rows
     )
 
 
-def plan(start: str | Path | None, fresh: bool, env: Any = None, run: Any = subprocess.run) -> str:
+def plan(start: str | Path | None, fresh: bool, env: Any = None, sessions: Any = None) -> str:
     path, crew, slug, member = coordinator(start)
     name = member["name"]
-    if running(name, run):
+    if running(name, sessions):
         raise StartError(
             f"{name} runs already (claude agents); attach to it instead of starting a second one"
         )

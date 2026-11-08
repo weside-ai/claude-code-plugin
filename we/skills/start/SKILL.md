@@ -5,10 +5,8 @@ description: "Start check of the crew's main companion: companion, role and pin 
 
 # /we:start — the main companion's start
 
-Two halves: `wclaude --start [--fresh]` in the shell starts the coordinator (`roles.coordinator`) in
-its workplace, pinned when its member sets `"pin": true`, with `--resume` of its last session unless
-`--fresh`, and opens the session with `/we:start`. This skill is the half inside the session. The
-crew holds every value (`scripts/crew.py` docstring: `members.<slug>.pin`, `launch.restore`).
+The session half of the main companion's start; the shell half is `wclaude --start`, and the whole
+flow is owned by `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Launch and pin.
 
 1. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/start.py check` and relay its three lines.
    - A `FAIL companion` or `FAIL WE_ROLE` means a wrong start: tell the user to `/exit` and run

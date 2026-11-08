@@ -30,6 +30,9 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
     stub.write_text(
         "#!/usr/bin/env python3\n"
         "import json, os, sys\n"
+        "if sys.argv[1:3] == ['agents', '--json']:\n"
+        "    print('[]')\n"
+        "    sys.exit(0)\n"
         "json.dump({'companion': os.environ.get('WESIDE_COMPANION'), 'argv': sys.argv[1:]},"
         f" open({str(record)!r}, 'w'))\n"
         f"open({str(tmp_path / 'role')!r}, 'w').write(os.environ.get('WE_ROLE', ''))\n"
@@ -324,7 +327,7 @@ def test_start_with_a_pinned_crew_and_no_pin_command_is_refused(tmp_path):
     proc, result = run(tmp_path, args=["--start"], crew=START_CREW)
     assert proc.returncode == 2
     assert "WCLAUDE_PIN" in proc.stderr
-    assert result is None or result["argv"] == ["agents", "--json"]
+    assert result is None
 
 
 def test_start_unpinned_resumes_the_last_session(tmp_path):
