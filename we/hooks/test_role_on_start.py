@@ -282,11 +282,12 @@ def _plugin_root(tmp_path: Path, version: str) -> Path:
     return root
 
 
-def _config(tmp_path: Path, project: Path | None) -> Path:
+def _config(tmp_path: Path, project: Path | None, scope: str = "project") -> Path:
     data = json.loads(INSTALLED.read_text())
     for row in data["plugins"]["we@acme-market"]:
         if row["scope"] == "project":
             row["projectPath"] = str(project or tmp_path / "elsewhere")
+            row["scope"] = scope
     config = tmp_path / "config"
     (config / "plugins").mkdir(parents=True)
     (config / "plugins" / "installed_plugins.json").write_text(json.dumps(data))
@@ -330,3 +331,13 @@ def test_an_unreadable_installed_plugins_file_prints_nothing(tmp_path):
         "CLAUDE_CONFIG_DIR": str(config),
     }
     assert "plugin we " not in (context(run(tmp_path, repo, env)) or "")
+
+
+def test_a_local_scope_install_counts_like_a_project_one(tmp_path):
+    repo, _ = workspace(tmp_path)
+    env = {
+        "WE_ROLE": "master",
+        "CLAUDE_PLUGIN_ROOT": str(_plugin_root(tmp_path, "8.6.1")),
+        "CLAUDE_CONFIG_DIR": str(_config(tmp_path, repo.parent, scope="local")),
+    }
+    assert "plugin we 8.6.1 runs here" in (context(run(tmp_path, repo, env)) or "")

@@ -9,7 +9,8 @@ only the keys WE_ROLE and CLAUDE_CONFIG_DIR are looked at and neither is
 printed as read.
 
 `--crew <crew file>` (two crews, AC4) keeps only the sessions of that crew: a session whose `cwd`
-resolves (`crew.find`) to that crew file stays, one in another crew's repo or in a repo without a
+resolves (`crew.find`) to a crew file of the same crew (`crew.crew_id`: one repo's worktrees and
+pointers share it) stays, one in another crew's repo or in a repo without a
 crew drops out, and one whose `cwd` is missing or no longer exists stays with `crew: "unknown"`.
 Without the flag every session on the host is listed.
 
@@ -87,7 +88,7 @@ def crew_of(cwd, cache):
             found = crewlib.find(cwd)
         except OSError:
             found = None
-        same = found is not None and Path(found).resolve() == cache["want"]
+        same = found is not None and crewlib.crew_id(Path(found)) == cache["want"]
         cache["by_cwd"][cwd] = "same" if same else "other"
     return cache["by_cwd"][cwd]
 
@@ -96,7 +97,7 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     want = None
     if len(argv) >= 2 and argv[0] == "--crew":
-        want = Path(argv[1]).expanduser().resolve()
+        want = crewlib.crew_id(Path(argv[1]).expanduser())
     cache = {"want": want, "by_cwd": {}}
     run = subprocess.run(
         ["claude", "agents", "--json"], capture_output=True, text=True, timeout=20, check=False

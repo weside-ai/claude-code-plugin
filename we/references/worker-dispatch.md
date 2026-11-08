@@ -125,7 +125,8 @@ refuses its merge as for a subagent.
 - No wait loops and no `sleep` in the foreground (`for … sleep … gh pr checks`, `for f in …; git
   show …`): the auto mode holds them as a permission prompt, and the worker then waits for a human.
   The worker waits on CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background
-  (`run_in_background`) or through a Monitor.
+  (`run_in_background`) or through a Monitor. Background output is not polled with `tail` or `cat`
+  on its task file (that, too, stops as a prompt): wait for the notification.
 - The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
   `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
   worker in a tree that is not its own; git runs as `git -C <worktree> …`.

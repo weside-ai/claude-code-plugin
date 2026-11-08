@@ -169,7 +169,7 @@ undrawn below that until you widen the terminal or run `/board`.
 ## The file
 
 **One folder per crew.** A crew's state directory (`crew.py state-dir`) is `WE_STATE_DIR` when set,
-else the crew's `state_dir` (a `~` path or one relative to the crew file), else `~/.claude/we-state`.
+else the crew's `state_dir` (a `~` path or one relative to the crew file in the repo's main worktree, so every worktree shares it), else `~/.claude/we-state`.
 In a repo with a crew the board is the crew's `board.file` when it names one (relative to the crew
 file), else `<state dir>/board.json`; the board's logs, its freeze flag, its crew stamp and
 `l0-served.jsonl` sit in that folder. A second crew on the same machine sets `state_dir` to a folder of
@@ -186,7 +186,8 @@ writing `board.py` verb refuses (exit 3, naming both crews and `--board`) when t
 not the board's: a session without a crew (no crew file, an unreadable one, or a pin
 `WESIDE_COMPANION` that is no member of the cwd's crew) on the default board, or any session on a
 board stamped for another crew. `path`, `check`, `escalation list` and `escalation count` only read
-and pass; `freeze` passes, since a brake must stop merges without a crew. An explicit `--board` on an
+and pass; `freeze` passes, since a brake must stop merges without a crew, and `unfreeze` passes the
+crewless rule (never another crew's stamp). An explicit `--board` on an
 unstamped file passes. The role hook names a state directory another crew holds (one line, with the
 fix) and a plugin older than the user install that a project-scope install keeps in place.
 

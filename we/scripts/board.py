@@ -2618,7 +2618,8 @@ def parser():
 # A freeze must work where the crew file is missing or broken: the brake reads no crew.
 CREWLESS_VERBS = ("answer", "freeze", "unfreeze", "path")
 # The crew guard (`crew_guard`): verbs that only read pass it, and `freeze` does, since a brake
-# must stop merges without a crew and a wrong freeze stops, it never opens.
+# must stop merges without a crew and a wrong freeze stops, it never opens. `unfreeze` passes the
+# crewless rule too (who could freeze can lift it), but never a board stamped for another crew.
 READ_VERBS = ("path", "check", "escalation list", "escalation count")
 GUARD_FREE_VERBS = ("freeze",)
 
@@ -2671,7 +2672,7 @@ def crew_guard(args, env=None, cwd=None):
     mine = None
     if cid is not None:
         mine = crew_mod.board_file(crew_path, crew, env, DEFAULT_BOARD)
-    if cid is None and not args.board:
+    if cid is None and not args.board and verb != "unfreeze":
         owner = f"crew {stamp}" if stamp else "the default board, no crew stamped yet"
         return _guard_text(verb, why, target, owner), None
     if stamp is not None and stamp != cid:

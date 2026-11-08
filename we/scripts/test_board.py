@@ -938,6 +938,14 @@ class TestCrewGuard:
         args = board.parser().parse_args(["freeze", "--reason", "stop"])
         assert board.crew_guard(args, env={}, cwd=crewless / "work") == (None, None)
 
+    def test_unfreeze_passes_the_crewless_rule_but_not_another_crews_stamp(self, crewless):
+        args = board.parser().parse_args(["unfreeze"])
+        assert board.crew_guard(args, env={}, cwd=crewless / "work")[0] is None
+        (crewless / "crew.id").write_text("acme/second-crew\n")
+        args = board.parser().parse_args(["--board", str(crewless / "board.json"), "unfreeze"])
+        refusal, _ = board.crew_guard(args, env={}, cwd=crewless / "work")
+        assert refusal and "acme/second-crew" in refusal
+
     def test_a_crewless_session_may_name_an_unstamped_board(self, crewless):
         assert go(crewless, "set", "state=build") == 0
         assert not (crewless / "crew.id").exists()

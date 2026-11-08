@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,7 +53,12 @@ def _agents(monkeypatch, rows):
         returncode = 0
         stdout = json.dumps(rows)
 
-    monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: Run())
+    real = subprocess.run
+
+    def fake(argv, *a, **k):
+        return Run() if list(argv[:2]) == ["claude", "agents"] else real(argv, *a, **k)
+
+    monkeypatch.setattr(subprocess, "run", fake)
     monkeypatch.setattr(probe, "env_keys", lambda _pid: {})
 
 
@@ -94,3 +100,38 @@ def test_without_crew_every_session_is_listed(tmp_path, monkeypatch, capsys):
     _agents(monkeypatch, [{"name": "x", "cwd": str(a)}, {"name": "y", "cwd": str(b)}])
     assert probe.main([]) == 0
     assert [r["name"] for r in json.loads(capsys.readouterr().out)["sessions"]] == ["x", "y"]
+
+
+def _git(*args):
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", *args], check=True, capture_output=True, env=env)
+
+
+def test_a_worker_in_a_worktree_of_the_crew_repo_stays(tmp_path, monkeypatch, capsys):
+    """Each worktree carries its own copy of the tracked crew file: same crew by crew id."""
+    repo = tmp_path / "repo"
+    (repo / ".weside").mkdir(parents=True)
+    _git("init", "-q", str(repo))
+    (repo / ".weside" / "crew.json").write_text('{"version": 2, "roles": {}, "members": {}}')
+    _git("-C", str(repo), "add", ".")
+    _git("-C", str(repo), "commit", "-q", "-m", "crew")
+    tree = tmp_path / "repo-KEY-1"
+    _git("-C", str(repo), "worktree", "add", "-q", str(tree))
+    other, _ = _crew(tmp_path, "other")
+    _agents(
+        monkeypatch,
+        [
+            {"name": "master", "cwd": str(repo)},
+            {"name": "worker", "cwd": str(tree)},
+            {"name": "foreign", "cwd": str(other)},
+        ],
+    )
+    assert probe.main(["--crew", str(repo / ".weside" / "crew.json")]) == 0
+    rows = json.loads(capsys.readouterr().out)["sessions"]
+    assert [r["name"] for r in rows] == ["master", "worker"]

@@ -54,7 +54,8 @@ round, and every new plan blob is one, a whitespace edit included: pick N with t
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
 ``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and
-``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory; null, the default,
+``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory in the repo's main
+worktree, so every worktree names the same folder; null, the default,
 is ``~/.claude/we-state``; ``WE_STATE_DIR`` wins over it, see ``state_dir()``), ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
 reader stays silent), ``stale_min`` (minutes after which the newest line counts as a dead sampler),
 ``starter_wait_min`` (minutes a chat wait is to wait on its starter before it becomes a question
@@ -717,8 +718,37 @@ def state_dir(crew_path: Path | None, crew: dict[str, Any] | None, env: Any = No
         raise CrewError(f"{crew_path}: state_dir must be a string or null")
     if crew_path is not None and isinstance(value, str) and value.strip():
         named = Path(value.strip()).expanduser()
-        return named if named.is_absolute() else crew_path.parent / named
+        return named if named.is_absolute() else _main_worktree_dir(crew_path) / named
     return Path(DEFAULT_STATE_DIR).expanduser()
+
+
+def _main_worktree_dir(crew_path: Path) -> Path:
+    """The crew file's directory as it sits in the repo's main worktree, so a relative
+    ``state_dir`` names one folder for every worktree of the crew; the file's own directory when
+    git cannot tell."""
+    here = crew_path.resolve().parent
+
+    def git(*args: str) -> str:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(here), *args],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return out.stdout.strip() if out.returncode == 0 else ""
+
+    top = git("rev-parse", "--show-toplevel")
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    if not top or not common or Path(common).name != ".git":
+        return here
+    try:
+        return Path(common).parent / here.relative_to(Path(top).resolve())
+    except ValueError:
+        return here
 
 
 def board_file(

@@ -460,7 +460,7 @@ def collision_note(crew_path: Path, crew: dict[str, Any], env: Any = None) -> st
 
 def version_note(cwd: str | Path, env: Any = None, plugin_root: Path | None = None) -> str | None:
     """two crews, AC6: one line when the running plugin is older than the newest user-scope ``we``
-    install in ``installed_plugins.json`` and a project-scope entry holds ``cwd``; else None (equal
+    install in ``installed_plugins.json`` and a project- or local-scope entry holds ``cwd``; else None (equal
     versions, no project entry, an unreadable file)."""
     env = os.environ if env is None else env
     root = plugin_root or Path(
@@ -490,7 +490,7 @@ def version_note(cwd: str | Path, env: Any = None, plugin_root: Path | None = No
     here = Path(cwd).resolve()
     holders = []
     for e in entries:
-        if e.get("scope") != "project" or not e.get("projectPath"):
+        if e.get("scope") not in ("project", "local") or not e.get("projectPath"):
             continue
         place = Path(str(e["projectPath"])).resolve()
         if here == place or place in here.parents:

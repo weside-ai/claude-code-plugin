@@ -977,3 +977,25 @@ def test_stamp_is_named_after_the_board_stem_and_written_once(tmp_path):
     assert crew.write_stamp(tmp_path / "board.json", "a/one") is True
     assert crew.write_stamp(tmp_path / "board.json", "b/two") is False
     assert crew.read_stamp(tmp_path / "board.json") == "a/one"
+
+
+def test_a_relative_state_dir_names_one_folder_for_every_worktree(tmp_path):
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    core, _ = workspace(tmp_path, {**CREW, "state_dir": "../../.we-state"})
+    subprocess.run(["git", "init", "-q", str(core)], check=True)
+    subprocess.run(["git", "-C", str(core), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(core), "commit", "-q", "-m", "c"], check=True, env=env)
+    tree = tmp_path / "core-wt"
+    subprocess.run(["git", "-C", str(core), "worktree", "add", "-q", str(tree)], check=True)
+    main_path, main_crew = crew.find_and_load(core)
+    wt_path, wt_crew = crew.find_and_load(tree)
+    assert wt_path == tree / ".weside" / "crew.json"
+    want = (core / ".weside" / "../../.we-state").resolve()
+    assert crew.state_dir(main_path, main_crew, {}).resolve() == want
+    assert crew.state_dir(wt_path, wt_crew, {}).resolve() == want

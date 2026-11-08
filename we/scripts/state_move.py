@@ -19,7 +19,7 @@ failed rename after good copies leaves both and exits 1 naming them.
 
 Refused (exit 2, the reason named): the crew sets no ``state_dir``; the board is already in it;
 a target exists; a live session of this crew runs (``claude agents --json``, its ``cwd`` resolving
-to this crew file; the calling session, ``CLAUDE_CODE_SESSION_ID``, does not count); the session
+to a crew file of this crew, worktrees included (``crew.crew_id``); the calling session, ``CLAUDE_CODE_SESSION_ID``, does not count); the session
 list cannot be read; the board lock is held. After the move the crew drops ``board.file``, so its
 sessions resolve ``<state_dir>/board.json``; the script says so.
 """
@@ -114,14 +114,14 @@ def live_sessions(crew_path: Path, env=None) -> list[str]:
     if not isinstance(rows, list):
         raise RefusedError("the session list (`claude agents --json`) cannot be read")
     me = str(env.get("CLAUDE_CODE_SESSION_ID") or "")
-    want = crew_path.resolve()
+    want = crewlib.crew_id(crew_path)
     names = []
     for row in rows:
         if not isinstance(row, dict) or (me and row.get("sessionId") == me):
             continue
         cwd = row.get("cwd")
         found = crewlib.find(cwd) if cwd and os.path.isdir(cwd) else None
-        if found is not None and Path(found).resolve() == want:
+        if found is not None and crewlib.crew_id(Path(found)) == want:
             names.append(str(row.get("name") or row.get("sessionId") or "?"))
     return names
 

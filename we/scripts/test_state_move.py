@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -124,6 +125,29 @@ def test_a_live_session_of_the_crew_refuses_the_move(world, capsys):
     assert state_move.main(["--apply"]) == 2
     assert "live sessions of this crew run: Rex" in capsys.readouterr().err
     assert (world["shared"] / "acme-board.json").exists()
+
+
+def test_a_worker_in_a_worktree_of_the_crew_refuses_the_move(world, capsys, tmp_path):
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    repo = world["repo"]
+    (repo / ".git").rmdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "c"], check=True, env=env)
+    tree = tmp_path / "repo-KEY-1"
+    subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(tree)], check=True)
+    world["agents"].write_text(
+        json.dumps([{"name": "worker", "sessionId": "w", "cwd": str(tree)}])
+    )
+    assert state_move.main(["--apply"]) == 2
+    assert "live sessions of this crew run: worker" in capsys.readouterr().err
 
 
 def test_an_unreadable_session_list_refuses(world, monkeypatch, capsys):

@@ -561,7 +561,7 @@ RESOLVER = r"""python3 -c 'if True:
     here = os.path.realpath(os.getcwd())
     def holds(e):
         p = os.path.realpath(e.get("projectPath") or "/nonexistent")
-        return e.get("scope") == "project" and (here == p or here.startswith(p.rstrip("/") + "/"))
+        return e.get("scope") in ("project", "local") and (here == p or here.startswith(p.rstrip("/") + "/"))
     near = sorted((e for e in rows if holds(e)), key=lambda e: len(os.path.realpath(e["projectPath"])))
     pick = (near or [e for e in rows if e.get("scope") == "user"] or [None])[-1]
     if pick is None:
