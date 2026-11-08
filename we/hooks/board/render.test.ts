@@ -130,7 +130,8 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ └ ● img  PROJ-65  #563  busy  ●  renders the second artwork batch for the journal and the track… │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-[ + 2 idle/other ]
+[ + 1 idle/other ]
+⚠ Live, not on the board: stray
 
 [ Refresh ]  [ Flow ]  file 21:11 UTC · live 21:11 UTC · watch 3 s, all 1 min
 ● runs  ◉ waits for you  ○ rests  ? unknown  second ● = start mode`
@@ -204,7 +205,8 @@ its own.
 │ └ ● img  PROJ-65  #563  busy  ●  renders the second art… │
 ╰──────────────────────────────────────────────────────────╯
 
-[ + 2 idle/other ]
+[ + 1 idle/other ]
+⚠ Live, not on the board: stray
 
 [ Refresh ]  [ Flow ]
 file 21:11 UTC · live 21:11 UTC · watch 3 s, all 1 min
@@ -256,10 +258,10 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   expect(narrow.folded.filter(line => line.startsWith('│')).every(line => line.length === 60 && line.endsWith('│'))).toBe(true)
   expect(narrow.folded).toContain('████████████░░░░  3/4 masters active · 4 waiting for you')
   expect(narrow.folded).toContain('│ └ ● img  PROJ-65  #563  busy  ●  renders the second art… │')
-  // Opened, the rest shows the resting master in its frame and the sessions on no board.
-  expect(narrow.open).toContain('[ − 2 idle/other ]')
+  // Opened, the rest shows the resting master in its frame; the sessions on no board stand outside the fold.
+  expect(narrow.open).toContain('[ − 1 idle/other ]')
   expect(narrow.open.some(line => line.startsWith('│ ○ kernel  PROJ-17  gone'))).toBe(true)
-  expect(narrow.open).toContain('Live, not on the board: stray')
+  expect(narrow.folded).toContain('⚠ Live, not on the board: stray')
   // The restore fields stay off the pane at every width.
   for (const line of [...wide.folded, ...wide.open, ...narrow.folded, ...narrow.open]) {
     expect(/\/home\/me\/work|0b5c1e2a|9e8d7c6b/.test(line)).toBe(false)
@@ -331,4 +333,39 @@ test('/board shows a booking past its end as expired and the block\'s own SLA ho
   expect(drawn).toContain('◇ Staging  booking of lead-12 expired 11-05 09:00 UTC')
   expect(drawn.some(line => line.includes('booked by'))).toBe(false)
   expect(drawn).toContain('◇ Staging  v8.1.0-rc.3 in acceptance since 11-05 09:30 UTC  due 11-05 09:30 UTC  ⚠ past 0 h')
+})
+
+// Session lines carry their age: dim while fresh, grey from 6 h, red and `stale` from 24 h; a stale line in the fold is counted on its button.
+const AGED = JSON.stringify({
+  updated: '2026-11-05T10:00:00+00:00',
+  updated_by: 'Orchestrator',
+  sessions: [
+    { name: 'fresh', role: 'master', state: 'build', updated_at: '2026-11-05T09:30Z' },
+    { name: 'w-old', role: 'worker', parent: 'fresh', state: 'build', updated_at: '2026-11-04T09:00Z' },
+    { name: 'greyed', role: 'master', state: 'build', since: '2026-11-05T02:00Z' },
+    { name: 'parked', role: 'master', state: 'idle', updated_at: '2026-11-01T10:00Z' },
+  ],
+})
+
+test('/board shows each session line\'s age, grey from 6 h, red and stale from 24 h, and counts stale lines in the fold', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-11-05T10:00:00Z') })
+  mock.store(on)
+  on('env.get', () => ({ value: '/home/me' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
+  on('fs.read', (_$, e) => ({ value: String((e as { path?: unknown }).path).endsWith('.jsonl') ? '' : AGED }))
+  on('process.run', () => RUN(JSON.stringify({ sessions: [] })))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 100 } as never })
+  const drawn = paint((await ui.drawn()) as never, 100)
+  expect(await ui.find({ type: 'Text', text: 'stale 25 h' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '8 h' })).toBeDefined()
+  await ui.unmount()
+  expect(drawn.some(line => line.includes('● fresh') && line.includes('30 min'))).toBe(true)
+  expect(drawn.some(line => line.includes('└ ● w-old') && line.includes('stale 25 h'))).toBe(true)
+  expect(drawn.some(line => line.includes('● greyed') && line.includes('8 h'))).toBe(true)
+  expect(drawn).toContain('[ + 1 idle/other (1 stale) ]')
 })

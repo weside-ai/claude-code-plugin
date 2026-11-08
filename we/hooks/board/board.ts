@@ -1,7 +1,7 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
 import type {
   BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession,
-  BoardStaging, LiveSession,
+  BoardStaging, LiveSession, SessionAgeHours,
 } from '../../types'
 import type { Part } from './work'
 
@@ -121,7 +121,32 @@ export const parseBoard = (text: string): BoardFile => {
     notes: str(file.notes),
     answerPrompts: promptsOf(file.answer_prompts),
     staging: stagingOf(file.staging),
+    sessionAgeHours: ageHoursOf(file.session_age_hours),
   }
+}
+
+// A session line ages grey from 6 h and red, marked stale, from 24 h (docs/board.md § The file);
+// the board file's `session_age_hours` moves both, a pair that is not 0 < grey < stale is ignored.
+export const SESSION_AGE_HOURS: SessionAgeHours = { grey: 6, stale: 24 }
+
+const ageHoursOf = (raw: unknown): SessionAgeHours | undefined => {
+  const h = obj(raw)
+  const grey = num(h?.grey)
+  const stale = num(h?.stale)
+  return grey !== undefined && stale !== undefined && grey > 0 && grey < stale ? { grey, stale } : undefined
+}
+
+export type SessionAge = { label: string; level: 'ok' | 'grey' | 'stale' }
+
+// How old a session line is: `updated_at`, else `since`; undefined when it carries neither.
+export const sessionAge = (s: BoardSession, now: number, hours: SessionAgeHours = SESSION_AGE_HOURS): SessionAge | undefined => {
+  const stamp = str(s.updated_at) ?? str(s.since)
+  const at = stamp ? Date.parse(stamp) : NaN
+  if (Number.isNaN(at)) return undefined
+  const minutes = Math.max(0, Math.floor((now - at) / MIN))
+  const h = minutes / 60
+  const label = minutes < 60 ? `${minutes} min` : h < 48 ? `${Math.floor(h)} h` : `${Math.floor(h / 24)} d`
+  return { label, level: h >= hours.stale ? 'stale' : h >= hours.grey ? 'grey' : 'ok' }
 }
 
 // The answers file and the delivery ledger sit beside the board file, named after its stem

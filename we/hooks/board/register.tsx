@@ -13,7 +13,7 @@ import type {
 } from '../../types'
 import {
   ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
-  liveByName, majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, stagingLines, startModeOf, unreadNews,
+  liveByName, majorityMode, ownName, pack, parseBoard, sessionAge, shownAnswer, sortQueue, stagingLines, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
@@ -787,6 +787,16 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       return { lamp: LAMP[lampOf(s.state)], liveness, start: startModeOf(s, isMasterOf(s, sessions), one, majority, masterProfile) }
     }
 
+    // A line's age (`updated_at`, else `since`): dim while fresh, grey past the first threshold, red and
+    // marked stale past the second (board.ts SESSION_AGE_HOURS, the board's `session_age_hours`).
+    const ageOf = (s: BoardSession) => sessionAge(s, now, board?.sessionAgeHours)
+    const ageParts = (s: BoardSession): Part[] => {
+      const age = ageOf(s)
+      if (!age) return []
+      if (age.level === 'stale') return [{ text: `stale ${age.label}`, color: 'error', bold: true }]
+      return [{ text: age.label, color: age.level === 'grey' ? 'inactive' : undefined, dim: age.level === 'ok' }]
+    }
+
     const startReason = (start: StartMode, key: string, indent = 0) =>
       start.level === 'bad' || start.level === 'warn' ? (
         <Box key={key} paddingLeft={indent}><Text color={START[start.level]}>{start.reason}</Text></Box>
@@ -804,6 +814,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         ...(typeof w.pr === 'number' ? [{ text: `  #${w.pr}`, color: 'suggestion' }] : []),
         ...(liveness ? [{ text: `  ${LIVE[liveness].label}`, color: LIVE[liveness].color }] : []),
         ...(start.level !== 'none' ? [{ text: '  ●', color: START[start.level] }] : []),
+        ...ageParts(w).map(p => ({ ...p, text: `  ${p.text}` })),
       ]
       const room = inner - widthOf(parts) - 2
       if (w.now && room >= 8) parts.push({ text: `  ${clip(w.now, room)}`, dim: true })
@@ -833,6 +844,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         typeof s.pr === 'number' ? [{ text: `#${s.pr}`, color: 'suggestion' }] : [],
         liveness ? [{ text: LIVE[liveness].label, color: LIVE[liveness].color }] : [],
         start.level !== 'none' ? [{ text: `● ${start.mode ?? '?'}`, color: START[start.level] }] : [],
+        ageParts(s),
         // A bare priority rides in the title; with a direction it leads that line.
         typeof s.priority === 'number' && !s.direction ? [{ text: `P${s.priority}`, dim: true }] : [],
       ]
@@ -884,7 +896,9 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const groups = groupSessions(sessions)
     const working = groups.filter(g => !isResting(g))
     const resting = groups.filter(isResting)
-    const restCount = resting.reduce((n, g) => n + (g.head ? 1 : 0) + g.workers.length, 0) + offBoard.length
+    const restCount = resting.reduce((n, g) => n + (g.head ? 1 : 0) + g.workers.length, 0)
+    // A stale line folded into the rest is counted on the fold's button, never hidden without a trace.
+    const restStale = resting.flatMap(g => [...(g.head ? [g.head] : []), ...g.workers]).filter(s => ageOf(s)?.level === 'stale').length
 
     const news = board ? unreadNews(board.news, given) : []
     const counts = countBoard(sessions)
@@ -965,13 +979,15 @@ export const registerBoard = (on: On, options: PluginOptions) => {
             <Box flexDirection="row">
               <Button
                 key="rest"
-                label={`${restOpen ? '−' : '+'} ${restCount} idle/other`}
+                label={`${restOpen ? '−' : '+'} ${restCount} idle/other${restStale ? ` (${restStale} stale)` : ''}`}
                 onPress={() => void update($, isRestOpen, open => !open)}
               />
             </Box>
             {restOpen && resting.map(groupFrame)}
-            {restOpen && offBoard.length > 0 && <Text dimColor>{`Live, not on the board: ${offBoard.join(', ')}`}</Text>}
           </Box>
+        )}
+        {offBoard.length > 0 && (
+          <Text color="warning">{clip(`⚠ Live, not on the board: ${offBoard.join(', ')}`, width)}</Text>
         )}
         {l?.error && <Text color="warning">{`Live column: ${l.error}`}</Text>}
 
