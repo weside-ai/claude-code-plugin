@@ -2976,44 +2976,77 @@ def delivered_row(state_dir, qid, answer_ts, ts, role="coordinator", ok=True):
         f.write(json.dumps(row) + "\n")
 
 
-class TestPrune:
-    """A closed question leaves `owner_queue` and handled news leave `news` on the next write."""
+EPOCH = {"epoch": "2026-11-01T00:00:00.000Z"}
 
-    def test_a_delivered_accept_leaves_the_queue_after_the_grace(self, crewless, capsys):
-        answered(crewless, "Q7", "accept", "2026-11-03T08:00:00.000Z")
-        delivered_row(crewless, "Q7", "2026-11-03T08:00:00.000Z", "2026-11-03T08:00:03.000Z")
+
+def epoch_row(state_dir):
+    with open(state_dir / "board-deliveries.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(EPOCH) + "\n")
+
+
+class TestPrune:
+    """A closed question leaves `owner_queue` once its asker is carried; handled news leave `news`."""
+
+    def test_an_accept_carried_to_the_asker_leaves_the_queue(self, crewless, capsys):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        delivered_row(crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:03.000Z")
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]  # coordinator only
+        capsys.readouterr()
+        delivered_row(
+            crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:04.000Z", role="asker"
+        )
         assert go(crewless, "prune") == 0
         assert board_of(crewless)["owner_queue"] == []
         assert capsys.readouterr().out.strip() == "pruned: Q7"
         line = jsonl(crewless / "board-questions.jsonl")[-1]
-        assert {
-            k: line[k] for k in ("id", "outcome", "field", "reason", "answer", "delivered")
-        } == {
+        assert {k: line[k] for k in ("id", "outcome", "field", "reason", "answer")} == {
             "id": "Q7",
             "outcome": "pruned",
             "field": "owner_queue",
             "reason": "answered",
             "answer": "accept",
-            "delivered": True,
         }
 
-    def test_any_write_prunes_so_old_leftovers_go_on_the_first_load(self, crewless):
-        answered(crewless, "Q7", "deny", "2026-11-03T08:00:00.000Z")
-        delivered_row(crewless, "Q7", "2026-11-03T08:00:00.000Z", "2026-11-03T08:00:03.000Z")
-        assert go(crewless, "set", "now=phase 3") == 0
+    def test_a_refused_asker_counts_once_the_route_line_is_delivered(self, crewless):
+        epoch_row(crewless)
+        ts = "2026-11-03T09:59:00.000Z"
+        answered(crewless, "Q7", "deny", ts)
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker", ok=False)
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:09.000Z", role="route")
+        go(crewless, "prune")
         assert board_of(crewless)["owner_queue"] == []
 
-    def test_a_fresh_delivery_keeps_the_question_until_the_asker_had_its_turn(self, crewless):
-        answered(crewless, "Q7", "accept", "2026-11-03T09:50:00.000Z")
-        delivered_row(crewless, "Q7", "2026-11-03T09:50:00.000Z", "2026-11-03T09:50:03.000Z")
+    def test_an_undelivered_close_stays_however_old(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-01T09:00:00.000Z")
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
 
-    def test_an_undelivered_close_goes_after_a_day_and_says_so(self, crewless):
-        answered(crewless, "Q7", "accept", "2026-11-02T09:00:00.000Z")
+    def test_an_earlier_discuss_still_owed_to_the_asker_keeps_it(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "discuss", "2026-11-03T09:00:00.000Z")
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        delivered_row(
+            crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:04.000Z", role="asker"
+        )
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    def test_leftovers_older_than_the_epoch_go_on_any_write(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-10-30T08:00:00.000Z")
+        assert go(crewless, "set", "now=phase 3") == 0
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_an_answer_from_the_askers_own_session_owes_it_nothing(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z", session="asker")
         go(crewless, "prune")
         assert board_of(crewless)["owner_queue"] == []
-        assert jsonl(crewless / "board-questions.jsonl")[-1]["delivered"] is False
 
     def test_discuss_and_update_keep_the_question(self, crewless):
         answered(crewless, "Q7", "discuss", "2026-11-01T09:00:00.000Z")

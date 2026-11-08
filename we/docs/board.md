@@ -420,7 +420,7 @@ Every `ask` past the field check appends one line to `board-questions.jsonl`:
 `{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
 `outcome` `posted` (only then `id`), `returned`, `reader-error`, `closed` (`close-merged`) or `pruned` (§ Pruning), and `reader` the reader's raw
 `decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
-chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
+chat). The line keeps the question's text after it leaves `owner_queue` (§ Pruning, `close-merged`), so
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
 `--urgent` adds `urgent: true` to the item and to its log line; the urgency changes only the order
 in `bundle`, never whether the question goes out.
@@ -444,15 +444,14 @@ the board lock (`prune` in `board.py`), and `board.py prune` runs it alone and p
 
 | Entry | Leaves when |
 |---|---|
-| a question (or item) an Accept or Deny closed | a recipient's `delivered: true` row in `board-deliveries.jsonl` is 1 h old (`PRUNE_GRACE_H`, so the asker is carried before its question goes), or the closing answer is 24 h old (`PRUNE_AFTER_H`), delivered or not |
+| a question (or item) an Accept or Deny closed | nothing is owed to its asker any more, since the deliverer finds the asker only on the board: each answer line on the id is older than the ledger's `epoch`, written in the asker's own session, or has an asker row `delivered: true` in `board-deliveries.jsonl` (refused: a delivered `route` row). A close no one carried stays, however old, and the pane's stuck-answer line names it |
 | a news item | its newest answer line is `read` |
-| a `returned` item, a bundle `B-<date>` | 24 h after its `ts` |
+| a `returned` item, a bundle `B-<date>` | 24 h after its `ts` (`PRUNE_AFTER_H`) |
 | an escalation item `E<n>`, `E<n>a` | never: `escalation settle` drops it |
 
 Discuss, More info and Update keep a question. Each drop appends one line
-`{id, ts, outcome: "pruned", field, reason, answer?, delivered?}` to `board-questions.jsonl`
-(`reason` `answered`, `read` or `expired`; `delivered: false` names a close that no recipient
-confirmed), so a dropped id is never handed out again. Leftovers from before the pass go on the
+`{id, ts, outcome: "pruned", field, reason, answer?}` to `board-questions.jsonl`
+(`reason` `answered`, `read` or `expired`), so a dropped id is never handed out again. Leftovers from before the pass go on the
 first write after the update.
 
 ### Blocked workers

@@ -62,9 +62,11 @@ close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED
          `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
          `bundle` runs it first.
 prune    drops what is handled from board.json (docs/board.md § Pruning) and prints the ids:
-         a question or item an Accept or Deny closed, once a recipient's `delivered: true` row is
-         PRUNE_GRACE_H old or the closing answer PRUNE_AFTER_H old; a news item the owner marked
-         read; a `returned` item or a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
+         a question or item an Accept or Deny closed once nothing is owed to its asker any more
+         (the deliverer finds the asker only on the board): every answer line on it is older than
+         the ledger's epoch, written in the asker's own session, or the asker's row in
+         board-deliveries.jsonl is `delivered: true` (refused: the route row is); a news item the
+         owner marked read; a `returned` item or a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
          items (`E<n>`, `E<n>a`) stay for `escalation settle`. Each drop appends one `pruned` line
          to board-questions.jsonl. Every write of board.json runs the same pass, so leftovers go
          on the first write after an update.
@@ -213,10 +215,10 @@ BLOCKED_KINDS = ("permission", "chat")
 EXCERPT_CHARS = 200  # a blocked command or question excerpt on the board line
 TOKEN = re.compile(r"[a-z][a-z0-9_-]*")  # a correction's kind: one lower-case token
 UNCHANGED = object()  # a `write_board` mutation returning this leaves board.json untouched
-# Pruning (docs/board.md § Pruning): a delivered close waits PRUNE_GRACE_H so every recipient of
-# the answer is carried before its question leaves the board; anything else handled goes after
-# PRUNE_AFTER_H.
-PRUNE_GRACE_H = 1
+# Pruning (docs/board.md § Pruning): a closed question waits until its asker is carried, since the
+# deliverer finds the asker only on the board; returned items and bundles go PRUNE_AFTER_H after
+# their ts.
+DELIVERED_KINDS = KINDS  # the answer kinds the deliverer carries; `read` is not one
 PRUNE_AFTER_H = 24
 EXPIRING_NEWS_KINDS = ("returned",)
 BUNDLE_ID = re.compile(r"B-\d{4}-\d{2}-\d{2}(?:-\d+)?")
@@ -449,25 +451,43 @@ def _parse_ts(text):
     return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
 
 
+def _ledger(state):
+    """The deliverer's first start (`epoch`, None without one) and every (id, answer_ts, role)
+    with a `delivered: true` row in board-deliveries.jsonl."""
+    epoch, delivered = None, set()
+    for row in state.deliveries():
+        if set(row) == {"epoch"}:
+            ts = _parse_ts(row["epoch"])
+            epoch = ts if epoch is None or (ts and ts < epoch) else epoch
+        elif row.get("delivered") is True:  # a later refusal never follows a delivery
+            delivered.add((row.get("id"), row.get("answer_ts"), row.get("role")))
+    return epoch, delivered
+
+
 def prune(board, state, now):
     """Drop what is handled from `owner_queue` and `news` of `board` (in place); returns one
     `pruned` log line per drop. The rules are in the module docstring under `prune`."""
-    grace, after = timedelta(hours=PRUNE_GRACE_H), timedelta(hours=PRUNE_AFTER_H)
-    closing, last = {}, {}
+    after = timedelta(hours=PRUNE_AFTER_H)
+    closing, last, carried = {}, {}, {}
     for a in state.answers():
         qid = a.get("id")
         if not isinstance(qid, str) or qid in closing:
-            continue
+            continue  # a line after the close is never delivered (docs/board.md § Answers)
+        if a.get("answer") in DELIVERED_KINDS:
+            carried.setdefault(qid, []).append(a)
         if a.get("answer") in CLOSING:
             closing[qid] = a
         last[qid] = a.get("answer")
-    delivered = {}
-    for row in state.deliveries():
-        if row.get("delivered") is True:
-            key = (row.get("id"), row.get("answer_ts"))
-            ts = _parse_ts(row.get("ts"))
-            if ts and (key not in delivered or ts < delivered[key]):
-                delivered[key] = ts
+    epoch, delivered = _ledger(state)
+
+    def asker_carried(item, line):
+        """Nothing owed to the asker for this answer line any more (deliver.ts `pendingLines`)."""
+        asker = item.get("session")
+        at = _parse_ts(line.get("ts"))
+        if not asker or line.get("session") == asker or epoch is None or (at and at <= epoch):
+            return True
+        key = (line.get("id"), line.get("ts"))
+        return (*key, "asker") in delivered or (*key, "route") in delivered
 
     def verdict(field, item):
         qid = item.get("id")
@@ -475,10 +495,8 @@ def prune(board, state, now):
             return None
         close = closing.get(qid)
         if close:
-            first = delivered.get((qid, close.get("ts")))
-            answered_at = _parse_ts(close.get("ts"))
-            if (first and now - first >= grace) or (answered_at and now - answered_at >= after):
-                return {"reason": "answered", "answer": close["answer"], "delivered": bool(first)}
+            if all(asker_carried(item, line) for line in carried.get(qid, [])):
+                return {"reason": "answered", "answer": close["answer"]}
             return None
         if field == "news" and last.get(qid) == "read":
             return {"reason": "read"}
