@@ -67,6 +67,10 @@ export type BoardSession = {
   // Restore fields the orchestrator keeps for itself (`--resume <session_id>` in `cwd`); the pane never shows them.
   cwd?: string | null
   session_id?: string | null
+  // When the line was last written (`board.py set` stamps it, UTC minute); the pane shows its age.
+  updated_at?: string | null
+  // In this state since (`YYYY-MM-DDTHH:MMZ`); the age's fallback where `updated_at` is missing.
+  since?: string | null
   // A ready tree of the work in progress, for a repo without plan files; it replaces the one the pane derives.
   work?: WorkNode[] | null
 }
@@ -125,7 +129,11 @@ export type BoardFile = {
   // `answer_prompts`: the orchestrator's own wording of the prompts a press sends.
   answerPrompts?: Partial<Record<BoardPromptKind, string>>
   staging?: BoardStaging
+  // `session_age_hours`: when a session line's age turns grey and when red and stale.
+  sessionAgeHours?: SessionAgeHours
 }
+
+export type SessionAgeHours = { grey: number; stale: number }
 
 // What hooks/board/probe.py prints per running session: verdict-sized facts, no environment values.
 export type LiveSession = {

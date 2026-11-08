@@ -12,6 +12,7 @@ Usage:
            --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
            [--pr REF [--one-way CLASS]]
   board.py [--board FILE] close-merged
+  board.py [--board FILE] prune
   board.py [--board FILE] log correction <session> <kind>
   board.py [--board FILE] blocked <name> --kind <permission|chat> [--waiting-on ROLE]
            [--starter NAME] [--key KEY] [--command TEXT]
@@ -45,7 +46,8 @@ set      writes the caller's own session line (found by `name` through `claude a
          writes another line and is the coordinator's. `waiting_on=<role>` stamps `since` and
          `sla_due` (the crew's `sla`, counted in daytime hours); the same role keeps them, another
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
-         `since`. It never writes `updated` or `updated_by`.
+         `since`. It stamps the line's `updated_at` (UTC minute); it never writes `updated` or
+         `updated_by`.
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
          without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
          lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
@@ -59,6 +61,15 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
 close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
          `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
          `bundle` runs it first.
+prune    drops what is handled from board.json (docs/board.md § Pruning) and prints the ids:
+         a question or item an Accept or Deny closed once nothing is owed to its asker any more
+         (the deliverer finds the asker only on the board): every answer line on it is older than
+         the ledger's epoch, written in the asker's own session, or the asker's row in
+         board-deliveries.jsonl is `delivered: true` (refused: the route row is); a news item the
+         owner marked read; a `returned` item or a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
+         items (`E<n>`, `E<n>a`) stay for `escalation settle`. Each drop appends one `pruned` line
+         to board-questions.jsonl. Every write of board.json runs the same pass, so leftovers go
+         on the first write after an update.
          A wait that ends or changes on a line (`set`, `blocked`) appends one row
          `{key, session, waiting_on, since, ended, duration_s}` to board-waits.jsonl.
 log      `log correction <session> <kind>` (the coordinator): one `correction` line in the flow log
@@ -204,6 +215,14 @@ BLOCKED_KINDS = ("permission", "chat")
 EXCERPT_CHARS = 200  # a blocked command or question excerpt on the board line
 TOKEN = re.compile(r"[a-z][a-z0-9_-]*")  # a correction's kind: one lower-case token
 UNCHANGED = object()  # a `write_board` mutation returning this leaves board.json untouched
+# Pruning (docs/board.md § Pruning): a closed question waits until its asker is carried, since the
+# deliverer finds the asker only on the board; returned items and bundles go PRUNE_AFTER_H after
+# their ts.
+DELIVERED_KINDS = KINDS  # the answer kinds the deliverer carries; `read` is not one
+PRUNE_AFTER_H = 24
+EXPIRING_NEWS_KINDS = ("returned",)
+BUNDLE_ID = re.compile(r"B-\d{4}-\d{2}-\d{2}(?:-\d+)?")
+ESCALATION_ID = re.compile(r"E\d+a?")  # owned by `escalation route|settle`, never pruned
 
 
 class BoardError(Exception):
@@ -263,14 +282,17 @@ def _append_jsonl(path, record):
 class StateDir:
     """The board file and the JSONL files beside it: every path and every read or write of them."""
 
-    def __init__(self, board_file):
+    def __init__(self, board_file, now=None):
         self.board_path = Path(board_file).expanduser()
+        self.now = now  # the pruning clock; None reads the wall clock
+        self.last_pruned = []  # the `pruned` lines of the last write_board
         self.answers_path = self.log_path("answers")
         self.questions_path = self.log_path("questions")
         self.decisions_path = self.log_path("decisions")
         self.escalations_path = self.log_path("escalations")
         self.transitions_path = self.log_path("transitions")
         self.waits_path = self.log_path("waits")
+        self.deliveries_path = self.log_path("deliveries")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
 
     def log_path(self, kind):
@@ -291,10 +313,10 @@ class StateDir:
 
     def write_board(self, mutate, after=None):
         """Run `mutate(board)` on a fresh read under the board lock, then replace the file with the
-        mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED`. `after(result)`
-        runs once the file is replaced, still under the lock: the place for a JSONL line that must
-        not exist without its board change. Returns what `mutate` returned. The plugin's only
-        writer of board.json."""
+        mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED` and the pruning
+        pass (`prune`) dropped nothing. `after(result)` runs once the file is replaced, still under
+        the lock: the place for a JSONL line that must not exist without its board change. Returns
+        what `mutate` returned. The plugin's only writer of board.json."""
         self.board_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT, 0o644)
         try:
@@ -311,7 +333,8 @@ class StateDir:
                     time.sleep(0.05)
             board = self.board()
             result = mutate(board)
-            if result is UNCHANGED:
+            pruned = self.last_pruned = prune(board, self, self.now or _now())
+            if result is UNCHANGED and not pruned:
                 return result
             tmp_fd, tmp_name = tempfile.mkstemp(
                 dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
@@ -325,7 +348,9 @@ class StateDir:
                 if os.path.exists(tmp_name):
                     os.unlink(tmp_name)
                 raise
-            if after is not None:
+            for line in pruned:
+                self.append_question(line)
+            if after is not None and result is not UNCHANGED:
                 after(result)
             return result
         finally:
@@ -382,6 +407,9 @@ class StateDir:
     def append_wait(self, row):
         return _append_jsonl(self.waits_path, row)
 
+    def deliveries(self):
+        return _read_jsonl(self.deliveries_path)
+
     def last_rows(self):
         """`{key: last transitions row}` in log order."""
         out = {}
@@ -407,6 +435,94 @@ class StateDir:
             if m
         ]
         return f"{prefix}{max(numbers, default=0) + 1}"
+
+
+def _parse_ts(text):
+    """An ISO date or timestamp as an aware UTC datetime (naive counts as UTC); None if unreadable."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    raw = text.strip().replace("Z", "+00:00")
+    # Python 3.9's fromisoformat takes 3 or 6 fraction digits only: drop the fraction.
+    raw = re.sub(r"(T\d\d:\d\d:\d\d)\.\d+", r"\1", raw)
+    try:
+        ts = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def _ledger(state):
+    """The deliverer's first start (`epoch`, None without one) and every (id, answer_ts, role)
+    with a `delivered: true` row in board-deliveries.jsonl."""
+    epoch, delivered = None, set()
+    for row in state.deliveries():
+        if set(row) == {"epoch"}:
+            ts = _parse_ts(row["epoch"])
+            epoch = ts if epoch is None or (ts and ts < epoch) else epoch
+        elif row.get("delivered") is True:  # a later refusal never follows a delivery
+            delivered.add((row.get("id"), row.get("answer_ts"), row.get("role")))
+    return epoch, delivered
+
+
+def prune(board, state, now):
+    """Drop what is handled from `owner_queue` and `news` of `board` (in place); returns one
+    `pruned` log line per drop. The rules are in the module docstring under `prune`."""
+    after = timedelta(hours=PRUNE_AFTER_H)
+    closing, last, carried = {}, {}, {}
+    for a in state.answers():
+        qid = a.get("id")
+        if not isinstance(qid, str) or qid in closing:
+            continue  # a line after the close is never delivered (docs/board.md § Answers)
+        if a.get("answer") in DELIVERED_KINDS:
+            carried.setdefault(qid, []).append(a)
+        if a.get("answer") in CLOSING:
+            closing[qid] = a
+        last[qid] = a.get("answer")
+    epoch, delivered = _ledger(state)
+
+    def asker_carried(item, line):
+        """Nothing owed to the asker for this answer line any more (deliver.ts `pendingLines`)."""
+        asker = item.get("session")
+        at = _parse_ts(line.get("ts"))
+        if not asker or line.get("session") == asker or epoch is None or (at and at <= epoch):
+            return True
+        key = (line.get("id"), line.get("ts"))
+        return (*key, "asker") in delivered or (*key, "route") in delivered
+
+    def verdict(field, item):
+        qid = item.get("id")
+        if not isinstance(qid, str) or ESCALATION_ID.fullmatch(qid):
+            return None
+        close = closing.get(qid)
+        if close:
+            if all(asker_carried(item, line) for line in carried.get(qid, [])):
+                return {"reason": "answered", "answer": close["answer"]}
+            return None
+        if field == "news" and last.get(qid) == "read":
+            return {"reason": "read"}
+        expiring = item.get("kind") in EXPIRING_NEWS_KINDS or BUNDLE_ID.fullmatch(qid)
+        posted = _parse_ts(item.get("ts"))
+        if field == "news" and expiring and posted and now - posted >= after:
+            return {"reason": "expired"}
+        return None
+
+    lines = []
+    for field in ("owner_queue", "news"):
+        items = board.get(field)
+        if not isinstance(items, list):
+            continue
+        kept = []
+        for item in items:
+            why = verdict(field, item) if isinstance(item, dict) else None
+            if why is None:
+                kept.append(item)
+            else:
+                lines.append(
+                    {"id": item["id"], "ts": _iso(now), "outcome": "pruned", "field": field, **why}
+                )
+        if len(kept) != len(items):
+            board[field] = kept
+    return lines
 
 
 def load_crew(start=None):
@@ -585,6 +701,7 @@ def cmd_set(state, args, crew, now):
         for key in ("state", "now"):
             if key in fields:
                 line[key] = fields[key]
+        line["updated_at"] = now.strftime(MINUTE_FMT)
         return dict(line)
 
     print(
@@ -725,6 +842,7 @@ def cmd_blocked(state, args, crew, now):
             return UNCHANGED
         ended.append(_apply_wait(line, waiting_on, crew, now))  # the ended wait keeps its key
         line["blocked"] = blocked
+        line["updated_at"] = now.strftime(MINUTE_FMT)  # a rewritten line is not stale
         return dict(line)
 
     result = state.write_board(mutate, after=lambda _r: _log_waits(state, ended))
@@ -771,6 +889,7 @@ def _clear_blocked(state, args, crew, now):
         key = _line_key(line, crew)
         ended.append(_apply_wait(line, "", crew, now))  # before the del: the row keeps its key
         del line["blocked"]
+        line["updated_at"] = now.strftime(MINUTE_FMT)  # a rewritten line is not stale
         obsolete = []
         if blocked.get("kind") == "permission":
             reason = _resolved_label(crew, now)
@@ -1230,6 +1349,13 @@ def close_merged(state, now):
 def cmd_close_merged(state, _args, _crew, now):
     gone = close_merged(state, now)
     print("closed: " + (", ".join(gone) if gone else "none"))
+    return 0
+
+
+def cmd_prune(state, _args, _crew, _now):
+    state.write_board(lambda _board: UNCHANGED)  # the pass inside write_board does the work
+    gone = [line["id"] for line in state.last_pruned]
+    print("pruned: " + (", ".join(gone) if gone else "none"))
     return 0
 
 
@@ -2466,6 +2592,9 @@ def parser():
     verbs.add_parser(
         "close-merged", help="drop merge-go questions whose PR merged or closed"
     ).set_defaults(run=cmd_close_merged)
+    verbs.add_parser(
+        "prune", help="drop answered questions and handled news from the board"
+    ).set_defaults(run=cmd_prune)
     _add_flow_verbs(verbs)
 
     d = verbs.add_parser("decision", help="record a cut or fence decision of the caller's area")
@@ -2496,7 +2625,8 @@ def main(argv=None, now=None, adapter=None):
     try:
         crew = None if args.verb in CREWLESS_VERBS else load_crew()
         args.adapter_given = adapter
-        return args.run(StateDir(args.board or default_board()), args, crew, now or _now())
+        now = now or _now()
+        return args.run(StateDir(args.board or default_board(), now=now), args, crew, now)
     except BoardError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code

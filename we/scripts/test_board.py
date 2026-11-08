@@ -587,7 +587,12 @@ class TestSet:
         before = board_of(crewless)
         assert go(crewless, "set", "now=phase 3", "state=ci") == 0
         after = board_of(crewless)
-        assert line_of(crewless, "lead-12") == {"name": "lead-12", "state": "ci", "now": "phase 3"}
+        assert line_of(crewless, "lead-12") == {
+            "name": "lead-12",
+            "state": "ci",
+            "now": "phase 3",
+            "updated_at": "2026-11-03T10:00Z",
+        }
         assert after["sessions"][1] == before["sessions"][1]
         assert {k: after[k] for k in after if k != "sessions"} == {
             k: before[k] for k in before if k != "sessions"
@@ -602,6 +607,7 @@ class TestSet:
             "name": "fresh-1",
             "session_id": "sid-12",
             "state": "active",
+            "updated_at": "2026-11-03T10:00Z",
         }
 
     def test_the_wait_triple_its_keep_reset_and_clear(self, crewless):
@@ -2596,6 +2602,7 @@ class TestBlocked:
             "waiting_on": "human",
             "since": "2026-11-03T10:00Z",
             "sla_due": "2026-11-03T14:00Z",
+            "updated_at": "2026-11-03T10:00Z",
             "blocked": {
                 "kind": "permission",
                 "starter": "lead-12",
@@ -2616,10 +2623,12 @@ class TestBlocked:
         old = line_of(crewed, "other")
         assert go(crewed, "blocked", "other", "--kind", "permission") == 0
         new = line_of(crewed, "other")
-        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due"}
+        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due", "updated_at"}
         assert {
-            k: v for k, v in new.items() if k not in ("blocked", "waiting_on", "since", "sla_due")
-        } == {k: v for k, v in old.items() if k != "since"}
+            k: v
+            for k, v in new.items()
+            if k not in ("blocked", "waiting_on", "since", "sla_due", "updated_at")
+        } == {k: v for k, v in old.items() if k not in ("since", "updated_at")}
 
     @pytest.mark.parametrize(
         "row, kind, message",
@@ -2956,3 +2965,145 @@ def test_a_star_freeze_without_a_repo_here_records_what_it_could_not_disarm(tmp_
         {"repo": "*", "why": "no repo here for a `merge-freeze` issue"},
         {"repo": "*", "why": "no repo here to disarm; armed PRs elsewhere still auto-merge"},
     ]
+
+
+def answered(state_dir, qid, kind, ts, session="coord"):
+    with open(state_dir / "board-answers.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"id": qid, "answer": kind, "ts": ts, "session": session}) + "\n")
+
+
+def delivered_row(state_dir, qid, answer_ts, ts, role="coordinator", ok=True):
+    row = {"id": qid, "answer_ts": answer_ts, "to": "coord", "role": role}
+    row.update({"click_ts": answer_ts, "ts": ts, "delivered": ok})
+    with open(state_dir / "board-deliveries.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(row) + "\n")
+
+
+EPOCH = {"epoch": "2026-11-01T00:00:00.000Z"}
+
+
+def epoch_row(state_dir):
+    with open(state_dir / "board-deliveries.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(EPOCH) + "\n")
+
+
+class TestPrune:
+    """A closed question leaves `owner_queue` once its asker is carried; handled news leave `news`."""
+
+    def test_an_accept_carried_to_the_asker_leaves_the_queue(self, crewless, capsys):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        delivered_row(crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:03.000Z")
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]  # coordinator only
+        capsys.readouterr()
+        delivered_row(
+            crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:04.000Z", role="asker"
+        )
+        assert go(crewless, "prune") == 0
+        assert board_of(crewless)["owner_queue"] == []
+        assert capsys.readouterr().out.strip() == "pruned: Q7"
+        line = jsonl(crewless / "board-questions.jsonl")[-1]
+        assert {k: line[k] for k in ("id", "outcome", "field", "reason", "answer")} == {
+            "id": "Q7",
+            "outcome": "pruned",
+            "field": "owner_queue",
+            "reason": "answered",
+            "answer": "accept",
+        }
+
+    def test_a_refused_asker_counts_once_the_route_line_is_delivered(self, crewless):
+        epoch_row(crewless)
+        ts = "2026-11-03T09:59:00.000Z"
+        answered(crewless, "Q7", "deny", ts)
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker", ok=False)
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:09.000Z", role="route")
+        go(crewless, "prune")
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_an_undelivered_close_stays_however_old(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-01T09:00:00.000Z")
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    def test_an_earlier_discuss_still_owed_to_the_asker_keeps_it(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "discuss", "2026-11-03T09:00:00.000Z")
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        delivered_row(
+            crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:04.000Z", role="asker"
+        )
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    def test_leftovers_older_than_the_epoch_go_on_any_write(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-10-30T08:00:00.000Z")
+        assert go(crewless, "set", "now=phase 3") == 0
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_an_answer_from_the_askers_own_session_owes_it_nothing(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z", session="asker")
+        go(crewless, "prune")
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_discuss_and_update_keep_the_question(self, crewless):
+        answered(crewless, "Q7", "discuss", "2026-11-01T09:00:00.000Z")
+        answered(crewless, "Q7", "update", "2026-11-01T10:00:00.000Z")
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    def test_read_news_and_expired_returns_and_bundles_go(self, crewless):
+        def seed(b):
+            b["news"] = [
+                {"id": "D3", "kind": "decision", "title": "read it"},
+                {"id": "R1", "kind": "returned", "title": "old", "ts": "2026-11-02T09:00:00Z"},
+                {"id": "R2", "kind": "returned", "title": "fresh", "ts": "2026-11-03T09:00:00Z"},
+                {
+                    "id": "B-2026-11-01",
+                    "kind": "todo",
+                    "title": "old",
+                    "ts": "2026-11-01T19:00:00Z",
+                },
+                {"id": "N5", "kind": "gate", "title": "unread", "ts": "2026-10-01"},
+                {"id": "E2", "kind": "escalation", "title": "open", "ts": "2026-10-01T09:00:00Z"},
+            ]
+
+        board.StateDir(crewless / "board.json", now=NOW).write_board(seed)
+        answered(crewless, "D3", "read", "2026-11-03T09:59:00.000Z")
+        answered(crewless, "E2", "read", "2026-11-01T09:00:00.000Z")
+        go(crewless, "prune")
+        assert [n["id"] for n in board_of(crewless)["news"]] == ["R2", "N5", "E2"]
+
+    def test_a_pruned_id_is_not_handed_out_again(self, crewless):
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["news"].append(
+                {"id": "R4", "kind": "returned", "title": "x", "ts": "2026-11-01T09:00:00Z"}
+            )
+        )
+        go(crewless, "prune")
+        state = board.StateDir(crewless / "board.json")
+        assert state.next_id("R", board_of(crewless)) == "R5"
+
+    def test_nothing_to_prune_leaves_the_file_byte_equal(self, crewless, capsys):
+        before = (crewless / "board.json").read_bytes()
+        assert go(crewless, "prune") == 0
+        assert (crewless / "board.json").read_bytes() == before
+        assert capsys.readouterr().out.strip() == "pruned: none"
+
+
+class TestSessionStamp:
+    def test_set_stamps_updated_at_on_the_line(self, crewless):
+        go(crewless, "set", "now=phase 3")
+        assert line_of(crewless, "lead-12")["updated_at"] == "2026-11-03T10:00Z"
+        assert line_of(crewless, "other").get("updated_at") is None
+
+    def test_blocked_and_clear_stamp_updated_at(self, crewed):
+        # Review #192: a line the sampler rewrites must not read as stale from an old `set`.
+        agents(crewed, {**BLOCKED_ROW, "name": "other", "sessionId": "sid-o"})
+        assert go(crewed, "blocked", "other", "--kind", "permission") == 0
+        assert line_of(crewed, "other")["updated_at"] == "2026-11-03T10:00Z"

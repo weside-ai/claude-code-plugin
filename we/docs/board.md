@@ -69,9 +69,9 @@ From the top: the header with the board's age and a counter (a bar of the master
 are active, how many questions wait for you, how many sessions are in CI), the `priorities` line, the
 unread `news` in one frame (§ News) and, when set, the older `notes` folded to one line. Then one frame with every question, oldest first, and one frame per
 master with its workers inside, each worker on one line cut to the pane. A master whose group neither
-runs nor waits (`idle` or `done`, workers too), a headless worker group at rest and every session
-running but not on the board fold into the last line, **+ N idle/other**, which opens and closes
-them. The frame's border takes the master's lamp colour, red when its start mode is red. The pane
+runs nor waits (`idle` or `done`, workers too) and a headless worker group at rest fold into the
+last line, **+ N idle/other** (with `(k stale)` when k of them are stale), which opens and closes
+them; every session running but not on the board is named in a warning line under it. The frame's border takes the master's lamp colour, red when its start mode is red. The pane
 breaks a header line between its parts, never inside a frame, so it stays readable at 60 columns.
 
 ## News
@@ -98,8 +98,8 @@ breaks a header line between its parts, never inside a frame, so it stays readab
 
 The list keeps the file's order, so the orchestrator puts the newest or most urgent first. Each item
 carries **Read** in front; a press appends a `read` line to the answers file (§ Answers) and the item
-leaves the pane at once. The orchestrator reads those lines and prunes the items from `news`; until
-it does, an item whose newest line is `read` stays hidden. With every item read the frame is gone.
+leaves the pane at once; `board.py` drops it from `news` on its next write (§ Pruning). Until then
+an item whose newest line is `read` stays hidden. With every item read the frame is gone.
 
 `notes`, the older single string, still works: it folds to **▸ Notes** and its first line, dimmed,
 and opens to the whole text on a press. A new board writes `news`.
@@ -225,6 +225,8 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `sessions[].since` | `YYYY-MM-DDTHH:MMZ`: in this state since; a wait (`waiting_on`) is such a state, so `board.py set waiting_on=…` moves it |
 | `sessions[].waiting_on`, `.sla_due` | the role key (or `human`) the session waits on, and when that wait passes the SLA (`YYYY-MM-DDTHH:MMZ`, the crew's `sla.hours` counted only inside `sla.daytime` in `sla.tz`); written by `board.py set` and, for a blocked worker, `board.py blocked` only (§ Questions and decisions) |
 | `sessions[].blocked` | a worker waiting on a permission prompt or on a reply: `kind`, `starter`, `starter_session_id`, `key`, `since`, `waiting_for`, `command` (§ Blocked workers) |
+| `sessions[].updated_at` | `YYYY-MM-DDTHH:MMZ`: when the line was last written; `board.py set` stamps it, a hand write should too. The pane shows the line's age (this, else `since`) beside its lamps: dim while fresh, grey from 6 h, red and marked `stale` from 24 h; a stale line folded into **+ N idle/other** is counted on that button (`(1 stale)`), never hidden without a trace |
+| `session_age_hours` | optional `{"grey": 6, "stale": 24}`: moves both age thresholds (board.ts `SESSION_AGE_HOURS`); a pair that is not `0 < grey < stale` is ignored |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
 | `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
 | `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
@@ -250,8 +252,8 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 | `session` | the name of the session the line was written in, as `claude agents` lists it; `null` when the live column does not know it |
 | `via`, `quote` | only on a line `board.py answer` wrote: `chat`, and the owner's own words when given |
 
-The file only grows (`answer.py` and `board.py` append with `O_APPEND`, nothing rewrites it); the
-orchestrator removes the question from `owner_queue`, or the item from `news`, once handled. The pane
+The file only grows (`answer.py` and `board.py` append with `O_APPEND`, nothing rewrites it);
+`board.py` removes the question from `owner_queue`, or the item from `news`, once handled (§ Pruning). The pane
 shows the newest answer beside the question (`✓ accepted 18:12 UTC (Orchestrator)`), so nobody answers
 twice, re-read with the board's three-second watch.
 
@@ -416,9 +418,9 @@ answer) posts nothing and exits 1 with `reader-error: <cause>`.
 
 Every `ask` past the field check appends one line to `board-questions.jsonl`:
 `{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
-`outcome` `posted` (only then `id`), `returned`, `reader-error` or `closed` (`close-merged`), and `reader` the reader's raw
+`outcome` `posted` (only then `id`), `returned`, `reader-error`, `closed` (`close-merged`) or `pruned` (§ Pruning), and `reader` the reader's raw
 `decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
-chat). The line keeps the question's text after the coordinator removes it from `owner_queue`, so
+chat). The line keeps the question's text after it leaves `owner_queue` (§ Pruning, `close-merged`), so
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
 `--urgent` adds `urgent: true` to the item and to its log line; the urgency changes only the order
 in `bundle`, never whether the question goes out.
@@ -434,6 +436,23 @@ is the coordinator's: one line `{type: "correction", ts, session, kind, by}` in 
 (`scripts/flow_log.py` owns its path `<flow.log_dir>/sampler-<day>.jsonl` and its line schema).
 `kind` is one lower-case token; another role, another kind or an unset `flow.log_dir` is refused and
 nothing is written.
+
+### Pruning
+
+Handled entries leave `board.json` without a hand edit. Every `board.py` write runs one pass under
+the board lock (`prune` in `board.py`), and `board.py prune` runs it alone and prints the ids:
+
+| Entry | Leaves when |
+|---|---|
+| a question (or item) an Accept or Deny closed | nothing is owed to its asker any more, since the deliverer finds the asker only on the board: each answer line on the id is older than the ledger's `epoch`, written in the asker's own session, or has an asker row `delivered: true` in `board-deliveries.jsonl` (refused: a delivered `route` row). A close no one carried stays, however old, and the pane's stuck-answer line names it |
+| a news item | its newest answer line is `read` |
+| a `returned` item, a bundle `B-<date>` | 24 h after its `ts` (`PRUNE_AFTER_H`) |
+| an escalation item `E<n>`, `E<n>a` | never: `escalation settle` drops it |
+
+Discuss, More info and Update keep a question. Each drop appends one line
+`{id, ts, outcome: "pruned", field, reason, answer?}` to `board-questions.jsonl`
+(`reason` `answered`, `read` or `expired`), so a dropped id is never handed out again. Leftovers from before the pass go on the
+first write after the update.
 
 ### Blocked workers
 
@@ -679,7 +698,8 @@ only the facts a verdict needs: busy, waiting, blocked, idle or gone; the `WE_RO
 variable as `master`, `worker` or `other`; the claude-swap profile's folder name from
 `CLAUDE_CONFIG_DIR`; and the newest permission mode in the session's transcript. Of a process's
 environment it looks at those two keys alone and prints neither value as read. A session that runs
-but is not on the board is named in one line below the board.
+but is not on the board is named in one warning line below the board, `⚠ Live, not on the board:
+<names>`, outside the **+ N idle/other** fold, so a session that never wrote its line shows.
 
 The second `●` in a master's title is the start mode, with the permission mode as its label; a
 worker's line shows the lamp alone. A red or yellow lamp names its reason on the next line:

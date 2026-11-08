@@ -69,11 +69,8 @@ test('/board draws the queue oldest first, masters with workers, live and start-
     expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /WE_ROLE missing — restart it as a master/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /P2 · test live/ })).toBeDefined()
-    // Sessions that run on no board fold into the last line until it is opened.
-    expect(await ui.find({ type: 'Text', text: /Live, not on the board: stray/ })).toBeUndefined()
-    await ui.press({ key: 'rest' })
-    expect(await ui.find({ type: 'Text', text: /Live, not on the board: stray/ })).toBeDefined()
-    await ui.press({ key: 'rest' })
+    // A session that runs on no board is named in the open, not folded away with the resting ones.
+    expect(await ui.find({ type: 'Text', text: /⚠ Live, not on the board: stray/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /#5560/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /⚠ WE_ROLE missing/ })).toBeDefined()
     await ui.press({ key: 'flow' })

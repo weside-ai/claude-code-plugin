@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import {
   ageDays, answerPrompt, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterProfile, isResting, lastAnswers,
   liveByName,
-  majorityMode, ownName, pack, parseBoard, shownAnswer, sortQueue, startModeOf, unreadNews,
+  majorityMode, ownName, pack, parseBoard, sessionAge, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
@@ -212,4 +212,22 @@ test('an update mark lapses once the board was rewritten after the press; other 
   expect(shownAnswer(update, '2026-11-03T10:05:00Z')).toBeUndefined()
   expect(shownAnswer(accept, '2026-11-03T10:05:00Z')).toBe(accept)
   expect(shownAnswer(undefined, '2026-11-03T10:05:00Z')).toBeUndefined()
+})
+
+test('a session line shows its age: grey from 6 h, red and stale from 24 h, since as the fallback', () => {
+  const at = (iso: string): BoardSession => ({ name: 'x', updated_at: iso })
+  expect(sessionAge(at('2026-10-30T17:40Z'), NOW)).toEqual({ label: '30 min', level: 'ok' })
+  expect(sessionAge(at('2026-10-30T11:10Z'), NOW)).toEqual({ label: '7 h', level: 'grey' })
+  expect(sessionAge(at('2026-10-29T12:00Z'), NOW)).toEqual({ label: '30 h', level: 'stale' })
+  expect(sessionAge(at('2026-10-26T18:10Z'), NOW)).toEqual({ label: '4 d', level: 'stale' })
+  expect(sessionAge({ name: 'x', since: '2026-10-30T10:00Z' }, NOW)?.level).toBe('grey')
+  expect(sessionAge({ name: 'x' }, NOW)).toBeUndefined()
+  // the board file may move both thresholds
+  expect(sessionAge(at('2026-10-30T15:10Z'), NOW, { grey: 2, stale: 3 })?.level).toBe('stale')
+})
+
+test('the board file carries its own session age thresholds; a bad pair is left out', () => {
+  expect(parseBoard('{"session_age_hours":{"grey":2,"stale":12}}').sessionAgeHours).toEqual({ grey: 2, stale: 12 })
+  expect(parseBoard('{"session_age_hours":{"grey":12,"stale":2}}').sessionAgeHours).toBeUndefined()
+  expect(parseBoard('{}').sessionAgeHours).toBeUndefined()
 })
