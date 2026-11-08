@@ -63,6 +63,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 - `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.
 - `/we:resume` — after a usage-limit stop ("weiter"): resumes open items, workers and CI watches.
 - `/we:pin` — which account bills this master session; `on`/`off` restarts it on a fixed account or on the global login. [docs/companion.md](docs/companion.md)
+- `/we:start` — the crew's main companion after `wclaude --start`: checks companion, role and pin against `crew.json`, offers the crew restore after a crash, opens the board. [docs/companion.md](docs/companion.md)
 - `/we:sideload` — works in a neighbour repo from here.
 - `/we:find-dead-code` — finds and removes dead code in Python backends.
 - `/we:codex-task` — sends one task to Codex; ends with the Codex subscription.

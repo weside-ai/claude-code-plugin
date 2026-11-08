@@ -30,6 +30,13 @@ claude-swap profile; unset, `--pin` is refused). A pinned session runs in its ow
 cannot switch, because the profile's credential belongs to the switcher (a link to the global login
 lets the switcher write through it, so the profile stays a plain file).
 
+`wclaude --start [--fresh]` starts the crew's main companion (`roles.coordinator`) from a shell: in its
+`workplace`, pinned when its member sets `"pin": true`, with `--resume` of its newest transcript
+titled with its name unless `--fresh`, refused while it runs (`scripts/start.py plan`). It sets
+`WE_START=1`, so the coordinator's session opens `/board` whatever `boardAutoOpen` says, and opens
+with `/we:start`: the check of companion, `WE_ROLE` and pin against the crew, then the crew's
+`launch.restore` after a crash (`skills/start/SKILL.md`).
+
 A companion session is a normal Claude Code session; what binds it to its companion is the pin
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the
 account's selected companion).

@@ -302,3 +302,52 @@ def test_an_unreadable_installed_plugins_file_ends_with_one_line_naming_it(tmp_p
     err = _menu(script, project, env)
     assert err.count("installed_plugins.json not readable") == 1
     assert "from 9.1.0" not in err and "from 8.6.1" not in err
+
+
+START_CREW = {
+    "version": 2,
+    "roles": {"coordinator": "lead"},
+    "members": {"lead": {"name": "Lea", "pin": True, "workplace": "."}},
+}
+
+
+def test_start_runs_the_coordinator_pinned_with_we_start(tmp_path):
+    proc, result = run(
+        tmp_path, args=["--start"], crew=START_CREW, launch=str(tmp_path / "bin" / "claude")
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Lea starts fresh" in proc.stderr
+    assert result == {"companion": "Lea", "argv": ["--name", "Lea", "/we:start"]}
+
+
+def test_start_with_a_pinned_crew_and_no_pin_command_is_refused(tmp_path):
+    proc, result = run(tmp_path, args=["--start"], crew=START_CREW)
+    assert proc.returncode == 2
+    assert "WCLAUDE_PIN" in proc.stderr
+    assert result is None or result["argv"] == ["agents", "--json"]
+
+
+def test_start_unpinned_resumes_the_last_session(tmp_path):
+    crew = {**START_CREW, "members": {"lead": {"name": "Lea"}}}
+    folder = (
+        tmp_path
+        / ".claude"
+        / "projects"
+        / ("-" + str(tmp_path / "project").strip("/").replace("/", "-").replace("_", "-"))
+    )
+    folder.mkdir(parents=True)
+    (folder / "abc.jsonl").write_text(
+        json.dumps({"type": "custom-title", "customTitle": "Lea"}) + "\n"
+    )
+    proc, result = run(tmp_path, args=["--start"], crew=crew)
+    assert proc.returncode == 0, proc.stderr
+    assert result == {
+        "companion": "Lea",
+        "argv": ["--name", "Lea", "--resume", "abc", "/we:start"],
+    }
+
+
+@pytest.mark.parametrize("args", [["--start", "--as", "Ada"], ["--fresh"]])
+def test_start_misuse_is_refused(tmp_path, args):
+    proc, _ = run(tmp_path, args=args, crew=START_CREW)
+    assert proc.returncode == 2

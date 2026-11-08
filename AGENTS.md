@@ -47,7 +47,7 @@ we/                               plugin root
                                   from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
                                   identity cache, wake_poller.py (companion wake), statusline,
                                   flow_log.py (the flow log's one owner), sampler_age.py (its pulse),
-                                  wclaude + install_launcher.py (companion launcher),
+                                  wclaude + install_launcher.py (companion launcher), start.py (wclaude --start, /we:start),
                                   watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
                                   watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), worker_launch.py
                                   (worker launch backend), retro_claim.sh,
