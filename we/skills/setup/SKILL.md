@@ -145,8 +145,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
 - **Rule bridge**, when the repo has `.claude/rules/`: Claude Code loads the rules itself, every other
   agent (Codex, Gemini) does not. `.agents/skills/claude-rules/SKILL.md` exists → skip. Otherwise copy
   `${CLAUDE_PLUGIN_ROOT}/templates/agents-skill/SKILL.md` there unchanged and name the instruction-file
-  line that points at it. The template resolves `scripts/load-rules.py` from the plugin cache
-  (`~/.claude/plugins/cache/weside-ai/we/*/`) at run time, so the repo carries no copy of the loader.
+  line that points at it. The template resolves `scripts/load-rules.py` at run time from the install Claude Code
+  uses in the repo (`installed_plugins.json`, project scope first), so the repo carries no copy of the loader.
 - **Statusline** (model · branch · PR · context · cost; follows `/we:master`'s
   `~/.claude/we-focus/<session>.json`): run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_statusline.py --status`.
   `offer to install` → ask once, on yes `--apply`. `already active` with a `NOTE` that the copy differs → `--apply`

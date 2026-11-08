@@ -29,6 +29,9 @@ silently return:
    docs/plans/ (and RETIRED_ALLOWLIST) names a term of RETIRED_TERMS: the verbs,
    references and council shells the cut to the crew process L0 removed. A
    successor is named instead (master, plan-story, epic-plan, council-member).
+11. Install resolver — no file under we/ resolves the plugin by the newest folder of the
+   cache (`plugins/cache/weside-ai/we/*`), and every file of RESOLVER_FILES carries the one
+   resolver RESOLVER verbatim (a copy in a Markdown list or YAML block indented by 3 or 8 spaces), two crews, AC7.
 
 Stdlib only. Exit 1 on any finding.
 
@@ -543,6 +546,68 @@ ROOT_CHECKS = {
 }
 
 
+# --- Check 11: the install resolver (two crews, AC7) --------------------------------------------
+# Where no ${CLAUDE_PLUGIN_ROOT} exists, the plugin is found through installed_plugins.json: the
+# project-scope `we` entry for the directory or its nearest ancestor, else the user-scope one.
+RESOLVER = r"""python3 -c 'if True:
+    import json, os, sys
+    f = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "plugins", "installed_plugins.json")
+    want, run = sys.argv[1], "--exec" in sys.argv[2:3]
+    try:
+        rows = [e for k, v in json.load(open(f))["plugins"].items() if k.split("@")[0] == "we" for e in v]
+    except Exception:
+        sys.stderr.write("we plugin: " + f + " not readable; the plugin is not resolved\n")
+        sys.exit(0 if run else 1)
+    here = os.path.realpath(os.getcwd())
+    def holds(e):
+        p = os.path.realpath(e.get("projectPath") or "/nonexistent")
+        return e.get("scope") in ("project", "local") and (here == p or here.startswith(p.rstrip("/") + "/"))
+    near = sorted((e for e in rows if holds(e)), key=lambda e: len(os.path.realpath(e["projectPath"])))
+    pick = (near or [e for e in rows if e.get("scope") == "user"] or [None])[-1]
+    if pick is None:
+        sys.stderr.write("we plugin: no we install in " + f + "\n")
+        sys.exit(0 if run else 1)
+    path = os.path.join(pick["installPath"], want)
+    if run:
+        os.execvp(sys.executable, [sys.executable, path] + sys.argv[3:])
+    print(path)
+'"""
+RESOLVER_FILES = (
+    "we/scripts/wclaude",
+    "we/templates/agents-skill/SKILL.md",
+    "we/references/optimization-store.md",
+)
+CACHE_GLOB = "plugins/cache/weside-ai/we/*"
+
+
+def _dedent(text: str, n: int) -> str:
+    pad = " " * n
+    return "\n".join(line[n:] if line.startswith(pad) else line for line in text.splitlines())
+
+
+def check_install_resolver(root: Path = REPO) -> None:
+    for path in sorted((root / "we").rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if CACHE_GLOB in text:
+            fail(
+                f"{path.relative_to(root)}: resolves the plugin by the newest cache folder "
+                f"({CACHE_GLOB}); use the install resolver (scripts/validate-consistency.py RESOLVER)"
+            )
+    for rel in RESOLVER_FILES:
+        path = root / rel
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if not any(RESOLVER in _dedent(text, n) for n in (0, 3, 8)):
+            fail(f"{rel}: the install resolver differs from RESOLVER or is missing")
+
+
+ROOT_CHECKS["install-resolver"] = check_install_resolver
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, help="run the --check checks on this tree")
@@ -564,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
         check_retired()
         check_orchestrate_template()
         check_neutral_skills()
+        check_install_resolver()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

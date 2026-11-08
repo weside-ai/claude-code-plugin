@@ -41,9 +41,9 @@ type Opts = {
   stores?: (text: string, n: number) => boolean
   // Whether deliveries.py fails its next append.
   ledgerFails?: () => boolean
-  // The session's crew: its board.file (board.py path --crew-only) and crew.py show.
+  // The session's crew: its resolved board (board.py path), crew.py path and crew.py show.
   crew?: { board: string; show: Record<string, unknown> }
-  // A crew file without board.file: crew.py show answers, board.py path --crew-only exits 1.
+  // A crew whose board.py path fails: crew.py path and show answer, board.py path exits 1.
   show?: Record<string, unknown>
 }
 
@@ -78,7 +78,9 @@ function home($: T$, on: TOn, o: Opts) {
     if (script.endsWith('/scripts/board.py')) return o.crew ? RUN(`${o.crew.board}\n`) : RUN('', 1)
     if (script.endsWith('/scripts/crew.py')) {
       const show = o.crew?.show ?? o.show
-      return show ? RUN(JSON.stringify(show)) : RUN('', 1, 'no crew')
+      if (!show) return RUN('', 1, 'no crew')
+      // crew.py path: the crew file in force (the pane resolves its board and live column from it)
+      return e.argv[3] === 'path' ? RUN(`${String(show.path ?? '/work/acme/.weside/crew.json')}\n`) : RUN(JSON.stringify(show))
     }
     if (script.endsWith('/answer.py')) {
       const [path, id, answer, ts, session] = e.argv.slice(3)

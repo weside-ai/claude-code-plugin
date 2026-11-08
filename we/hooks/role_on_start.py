@@ -12,7 +12,9 @@ is all it needs; after a refused crew it gets that line alone. Otherwise it prin
 1. the role card ``roles/<role>.md`` (a held role key, ``specialist``, ``master`` or ``worker``);
 2. the repo addendum: a pinned member's ``<workplace>/.weside/roles/<slug>.md``, an unpinned
    master's or worker's ``<crew repo>/.weside/roles/<role>.md``, when present;
-3. the notes: per extra repo of the member that does not exist here, ``extra repo <value> not
+3. the notes: the start notes (``render_process.start_notes``, two crews: a state directory held by
+   another crew, a plugin older than the user install pinned by a project-scope install; a
+   session without a role gets them too), per extra repo of the member that does not exist here, ``extra repo <value> not
    found, skipped`` (``crew.extra_repos``; the card never depends on an extra repo);
 4. per extra repo that exists: its ``AGENTS.md`` up to the first level-2 heading;
 5. per extra repo: the output of each ``type: command`` SessionStart hook of its
@@ -54,16 +56,19 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
     if crew_path is None or crew is None:
         return None, None
     notice = render_process.crew_notice(crew) if crew.get("crew_error") else None
+    start = [] if crew.get("crew_error") else render_process.start_notes(crew_path, crew, cwd, env)
     role = crewlib.role_of_session(crew, env, hook_input)
     if role is None:
-        return notice, None
+        lines = [n for n in (notice, *start) if n]
+        return ("\n".join(lines) if lines else None), None
     kind, pin = crewlib.session_kind(env, hook_input.get("agent_type"), hook_input)
     found = crewlib.member(crew, pin) if pin and kind != "worker" else None
     slug = found[0] if found else ""
     try:
         parts = render_process.card_parts(crew_path, crew, role, slug, hook_input)
-        if notice:
-            parts = parts._replace(notes=(notice, *parts.notes))
+        lead = tuple(n for n in (notice, *start) if n)
+        if lead:
+            parts = parts._replace(notes=(*lead, *parts.notes))
         text, _ = render_process.compose(parts)
     except (OSError, crewlib.CrewError, render_process.RenderError) as exc:
         return None, f"role_on_start: {exc}; not loaded, read it with the Read tool"

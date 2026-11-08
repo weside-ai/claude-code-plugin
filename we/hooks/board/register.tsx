@@ -1,5 +1,5 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json;
-// the crew's board.file, else option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
+// the crew's resolved board, else option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
 // question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to the answers file beside it (<stem>-answers.jsonl).
 // In the orchestrator's own session the module is also the deliverer of those lines (deliver.ts), pane open or not.
 import { atom, read, update } from 'claude-code'
@@ -210,7 +210,8 @@ function probe($: $): Promise<void> {
 
 async function probeOnce($: $) {
   try {
-    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/board/probe.py`], { timeoutMs: 25_000 })
+    const argv = ['python3', '-I', `${$.plugin.root}/hooks/board/probe.py`, ...(crewFile ? ['--crew', crewFile] : [])]
+    const run = await $.process.run(argv, { timeoutMs: 25_000 })
     const out = JSON.parse(run.stdout || '{}') as { sessions?: LiveView['sessions']; error?: string }
     const next: LiveView = {
       sessions: out.sessions ?? [],
@@ -510,26 +511,41 @@ async function toggleWork($: $, name: string) {
   if (!was || was.error || (await $.clock.now()) - was.at >= WORK_MS) $.clock.after(0, () => void loadWork($, [name]))
 }
 
-// The board this session shows: the crew's board.file for the session's repo (resolved once at
-// session start, crewBoardOf), else the option boardFile, else the default. pluginConfigs reach a plugin
-// only from user or managed settings, so a second crew names its board in its crew file.
+// The board this session shows: in a repo with a crew, the board `board.py path` resolves for it (the
+// crew's board.file, else board.json in its state_dir; resolved once at session start, crewBoardOf);
+// without a crew the option boardFile, else the default. pluginConfigs reach a plugin only from user or
+// managed settings, so a crew names its board in its crew file, and the option never beats it (two crews, AC5).
 let crewBoard: string | undefined
+// The crew file of the session's repo (crew.py path, once at session start): the live column lists only
+// this crew's sessions (probe.py --crew), so the deliverer's name match never reaches another crew.
+let crewFile: string | undefined
 // The crew's coordinator by name (crew.py show, once at session start). It names the delivering session
 // when the board's `updated_by` is empty (a board.py write never sets that field), and only on the crew's
-// own board.file: a shared fallback board keeps one deliverer.
+// own board: a crewless fallback board keeps one deliverer.
 let crewCoordinator: string | undefined
 const coordinatorFor = (board: { updatedBy?: string } | undefined) => board?.updatedBy || (crewBoard ? crewCoordinator : undefined)
 const fileOf = (options: PluginOptions) => crewBoard ?? option(options, 'boardFile') ?? DEFAULT_FILE
 
-// board.py path --crew-only prints the crew's board.file as an absolute path and exits 1 without one.
-async function crewBoardOf($: $): Promise<string | undefined> {
+// One absolute path printed by a plugin script, else undefined.
+async function pathFrom($: $, argv: string[]): Promise<string | undefined> {
   try {
-    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/board.py`, 'path', '--crew-only'], { timeoutMs: 10_000 })
+    const run = await $.process.run(argv, { timeoutMs: 10_000 })
     const out = run.stdout.trim()
     return run.exitCode === 0 && out.startsWith('/') && !out.includes('\n') ? out : undefined
   } catch {
     return undefined
   }
+}
+
+// crew.py path prints the crew file in force for the session's directory and exits 1 without one.
+async function crewFileOf($: $): Promise<string | undefined> {
+  return pathFrom($, ['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'path'])
+}
+
+// board.py path prints the board a verb without --board writes, the crew's resolved board.
+async function crewBoardOf($: $): Promise<string | undefined> {
+  if (!crewFile) return undefined
+  return pathFrom($, ['python3', '-I', `${$.plugin.root}/scripts/board.py`, 'path'])
 }
 
 async function crewCoordinatorOf($: $): Promise<string | undefined> {
@@ -562,6 +578,7 @@ export async function openBoard($: $, options: PluginOptions): Promise<string> {
 // Run from the module's one session.start hook (hooks/register.ts); everything it reaches with $
 // is a function declaration, the only form the engine follows past an import.
 export async function startBoard($: $, options: PluginOptions) {
+  crewFile = await crewFileOf($)
   crewBoard = await crewBoardOf($)
   crewCoordinator = await crewCoordinatorOf($)
   const file = fileOf(options)

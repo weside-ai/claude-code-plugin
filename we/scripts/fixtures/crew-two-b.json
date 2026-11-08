@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "skill_prefix": "crewb",
+  "state_dir": "~/.claude/we-state/second",
+  "roles": {"coordinator": "rex", "product": "pam"},
+  "members": {
+    "rex": {"name": "Rex", "workplace": "."},
+    "pam": {"name": "Pam", "components": ["App"], "workplace": "."}
+  }
+}

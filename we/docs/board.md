@@ -168,12 +168,28 @@ undrawn below that until you widen the terminal or run `/board`.
 
 ## The file
 
-The board is the crew's `board.file` for the session's repo (`.weside/crew.json`, relative to the
-crew file), else the plugin option `boardFile` (`~/` and a relative path count from the home folder),
-else `~/.claude/we-state/board.json`. The crew file wins because a plugin option counts only from user
-or managed settings: a second crew on the same machine names its own board there. `board.py` without
-`--board` writes the same file (crew, else default); `board.py path --crew-only` prints the crew's.
-Without the file the pane says so and points here.
+**One folder per crew.** A crew's state directory (`crew.py state-dir`) is `WE_STATE_DIR` when set,
+else the crew's `state_dir` (a `~` path or one relative to the crew file in the repo's main worktree, so every worktree shares it), else `~/.claude/we-state`.
+In a repo with a crew the board is the crew's `board.file` when it names one (relative to the crew
+file), else `<state dir>/board.json`; the board's logs, its freeze flag, its crew stamp and
+`l0-served.jsonl` sit in that folder. A second crew on the same machine sets `state_dir` to a folder of
+its own and moves an older shared board there once with `scripts/state_move.py` (dry run, then
+`--apply` while none of its sessions runs; the sources stay as `<name>.migrated-<date>`). A session
+without a crew reads the plugin option `boardFile` (`~/` and a relative path count from the home
+folder), else `~/.claude/we-state/board.json`; the option never beats a crew. `board.py` without
+`--board` writes the crew's board; `board.py path` prints it, `--crew-only` only when it is not the
+default board. Without the file the pane says so and points here.
+
+**Crew guard.** Each board carries the crew that owns it in a stamp beside it (`crew.id` for
+`board.json`, `<stem>-crew.id` otherwise), left by the first write of that crew to its own board. A
+writing `board.py` verb refuses (exit 3, naming both crews and `--board`) when the session's crew is
+not the board's: a session without a crew (no crew file, an unreadable one, or a pin
+`WESIDE_COMPANION` that is no member of the cwd's crew) on the default board, or any session on a
+board stamped for another crew. `path`, `check`, `escalation list` and `escalation count` only read
+and pass; `freeze` passes, since a brake must stop merges without a crew, and `unfreeze` passes the
+crewless rule (never another crew's stamp). An explicit `--board` on an
+unstamped file passes. The role hook names a state directory another crew holds (one line, with the
+fix) and a plugin older than the user install that a project-scope install keeps in place.
 
 **Logs per board.** Every JSONL file beside the board carries the board file's stem: `board.json`
 keeps `board-answers.jsonl`, `board-questions.jsonl` and the rest; `acme-board.json` writes
@@ -335,8 +351,7 @@ auto-merge armed in the named repos and records each one. The issue is what a re
 window reads (§ Self-merge window); one that fails to open lands in `not_disarmed` and the flag
 stands anyway. Without `--repo` the flag names `*` (every repo) and disarms the current directory's repo:
 a freeze from the wrong checkout must not miss the repo it is for. The hook reads the flag only
-beside the crew's `board.file` when the crew names one (a relative one resolves against the crew
-file's directory), else beside the default board, so `freeze` and `unfreeze` refuse any other
+beside the crew's board (§ The file: its `board.file`, else `board.json` in its state directory), so `freeze` and `unfreeze` refuse any other
 `--board`, naming the path. `*` means every repo of the crews reading that board, not every crew:
 a crew with a `board.file` of its own does not see a freeze on the default board. While the file
 stands, the merge hook (`hooks/automerge_gate.py`) refuses every merge and arm in the repos it
@@ -699,7 +714,10 @@ variable as `master`, `worker` or `other`; the claude-swap profile's folder name
 `CLAUDE_CONFIG_DIR`; and the newest permission mode in the session's transcript. Of a process's
 environment it looks at those two keys alone and prints neither value as read. A session that runs
 but is not on the board is named in one warning line below the board, `⚠ Live, not on the board:
-<names>`, outside the **+ N idle/other** fold, so a session that never wrote its line shows.
+<names>`, outside the **+ N idle/other** fold, so a session that never wrote its line shows. In a
+repo with a crew the column lists only that crew's sessions (`probe.py --crew`: a session whose `cwd`
+resolves to the same crew file); one whose `cwd` cannot be read stays, marked unknown. The answer
+deliverer matches the board's `updated_by` against this list, so it acts only in its own crew.
 
 The second `●` in a master's title is the start mode, with the permission mode as its label; a
 worker's line shows the lamp alone. A red or yellow lamp names its reason on the next line:

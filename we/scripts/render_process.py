@@ -421,6 +421,97 @@ def _run_extra_hook(
     return str(context).strip("\n") if context else out
 
 
+INSTALLED_PLUGINS = Path("plugins") / "installed_plugins.json"
+UPDATE_COMMAND = "claude plugin update we@weside-ai --scope project"
+
+
+def _version_key(text: object) -> tuple[int, ...] | None:
+    parts = re.findall(r"\d+", str(text or "").split("-", 1)[0])
+    return tuple(int(p) for p in parts[:3]) if parts else None
+
+
+def collision_note(crew_path: Path, crew: dict[str, Any], env: Any = None) -> str | None:
+    """two crews, AC3: the one line for a crew whose state directory another crew holds, else None.
+
+    The holder is ``<state dir>/crew.id`` (``crew.stamp_path`` of the folder's ``board.json``).
+    A crew whose board is that ``board.json`` stamps an unstamped folder; a crew with a board of
+    its own (``board.file``) never claims the folder. The same crew (another worktree, a
+    ``.weside/config.json`` pointer) shares the id (``crew.crew_id``) and gets nothing. Fail-open:
+    any read or write error prints nothing."""
+    try:
+        folder = crewlib.state_dir(crew_path, crew, env)
+        cid = crewlib.crew_id(crew_path)
+        default_board = folder / crewlib.BOARD_NAME
+        holder = crewlib.read_stamp(default_board)
+        if holder is None:
+            if crewlib.board_file(crew_path, crew, env) == default_board:
+                crewlib.write_stamp(default_board, cid)
+            return None
+    except (OSError, crewlib.CrewError):
+        return None
+    if holder == cid:
+        return None
+    return (
+        f"state dir {folder} is held by crew {holder} ({crewlib.CREW_ID_NAME}); this crew {cid} "
+        f"shares it: set `state_dir` in {crew_path} to a folder of its own, then run "
+        "`state_move.py --apply`"
+    )
+
+
+def version_note(cwd: str | Path, env: Any = None, plugin_root: Path | None = None) -> str | None:
+    """two crews, AC6: one line when the running plugin is older than the newest user-scope ``we``
+    install in ``installed_plugins.json`` and a project- or local-scope entry holds ``cwd``; else None (equal
+    versions, no project entry, an unreadable file)."""
+    env = os.environ if env is None else env
+    root = plugin_root or Path(
+        env.get("CLAUDE_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
+    )
+    config = Path(env.get("CLAUDE_CONFIG_DIR") or Path(env.get("HOME") or Path.home()) / ".claude")
+    try:
+        running = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text())[
+            "version"
+        ]
+        data = json.loads((config / INSTALLED_PLUGINS).read_text(encoding="utf-8"))
+        entries = [
+            e
+            for key, rows in (data.get("plugins") or {}).items()
+            if key.split("@", 1)[0] == "we" and isinstance(rows, list)
+            for e in rows
+            if isinstance(e, dict)
+        ]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    users = [e for e in entries if e.get("scope") == "user" and _version_key(e.get("version"))]
+    if not users or _version_key(running) is None:
+        return None
+    newest = max(users, key=lambda e: _version_key(e.get("version")))
+    if _version_key(running) >= _version_key(newest.get("version")):
+        return None
+    here = Path(cwd).resolve()
+    holders = []
+    for e in entries:
+        if e.get("scope") not in ("project", "local") or not e.get("projectPath"):
+            continue
+        place = Path(str(e["projectPath"])).resolve()
+        if here == place or place in here.parents:
+            holders.append(place)
+    if not holders:
+        return None
+    nearest = max(holders, key=lambda p: len(p.parts))
+    return (
+        f"plugin we {running} runs here, the user install is {newest.get('version')}: the "
+        f"project-scope install for {nearest} holds the old one; run `{UPDATE_COMMAND}` there, "
+        "then restart the session"
+    )
+
+
+def start_notes(
+    crew_path: Path, crew: dict[str, Any], cwd: str | Path, env: Any = None
+) -> list[str]:
+    """The role hook's start notes beside the card (two crews, AC3, AC6), each one line."""
+    return [n for n in (collision_note(crew_path, crew, env), version_note(cwd, env)) if n]
+
+
 def card_parts(
     crew_path: Path,
     crew: dict[str, Any],

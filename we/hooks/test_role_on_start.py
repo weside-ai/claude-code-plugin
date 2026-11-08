@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 HOOK = Path(__file__).resolve().parent / "role_on_start.py"
 SCRIPTS = HOOK.parent.parent / "scripts"
 GENERIC = SCRIPTS / "fixtures" / "crew-v2-generic.json"
@@ -50,7 +52,15 @@ def run(tmp_path: Path, cwd: Path, env_extra: dict, **hook_input) -> subprocess.
     env = {
         k: v
         for k, v in os.environ.items()
-        if k not in ("WE_ROLE", "WESIDE_COMPANION", "CLAUDE_CODE_SESSION_ID")
+        if k
+        not in (
+            "WE_ROLE",
+            "WESIDE_COMPANION",
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CONFIG_DIR",
+            "CLAUDE_PLUGIN_ROOT",
+            "WE_STATE_DIR",
+        )
     }
     env.update({"HOME": str(tmp_path / "home"), **env_extra})
     data = {"session_id": "sid-1", "source": "startup", "cwd": str(cwd), **hook_input}
@@ -189,3 +199,145 @@ def test_no_session_is_pointed_at_a_deleted_working_mode_reference(tmp_path):
         assert "working-mode" not in text and "before routing" not in text, env
         assert len(text) <= render_process.BUDGET, env
     assert context(run(tmp_path, repo, {})) is None
+
+
+# --- two crews, AC3: a state directory two crews resolve -----------------------------------------
+
+
+def _second_crew(tmp_path: Path, name: str, **top) -> Path:
+    repo = tmp_path / name
+    (repo / ".weside").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", f"git@github.com:acme/{name}.git"],
+        check=True,
+    )
+    data = json.loads(GENERIC.read_text())
+    data.update(top)
+    (repo / ".weside" / "crew.json").write_text(json.dumps(data))
+    return repo
+
+
+def test_the_second_crew_on_a_held_state_dir_gets_one_collision_note(tmp_path):
+    first = _second_crew(tmp_path, "crew-one")
+    second = _second_crew(
+        tmp_path, "crew-two", board={"file": "~/.claude/we-state/two-board.json"}
+    )
+    master = {"WE_ROLE": "master"}
+    assert "state dir" not in (context(run(tmp_path, first, master)) or "")
+    stamp = tmp_path / "home" / ".claude" / "we-state" / "crew.id"
+    assert stamp.read_text().strip() == "acme/crew-one"
+    text = context(run(tmp_path, second, master)) or ""
+    assert text.count("is held by crew acme/crew-one") == 1
+    assert "this crew acme/crew-two" in text and "`state_dir`" in text
+    # the first crew again, and the second crew once it has its own folder: silent
+    assert "state dir" not in (context(run(tmp_path, first, master)) or "")
+    data = json.loads((second / ".weside" / "crew.json").read_text())
+    data["state_dir"] = "~/.claude/we-state/two"
+    data["board"] = {}
+    (second / ".weside" / "crew.json").write_text(json.dumps(data))
+    assert "state dir" not in (context(run(tmp_path, second, master)) or "")
+
+
+def test_another_worktree_or_a_pointer_of_the_same_crew_prints_nothing(tmp_path):
+    first = _second_crew(tmp_path, "crew-one")
+    master = {"WE_ROLE": "master"}
+    context(run(tmp_path, first, master))
+    tree = tmp_path / "crew-one-wt"
+    subprocess.run(
+        ["git", "-C", str(first), "commit", "-q", "--allow-empty", "-m", "x"],
+        check=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
+    )
+    subprocess.run(["git", "-C", str(first), "worktree", "add", "-q", str(tree)], check=True)
+    (tree / ".weside").mkdir(exist_ok=True)
+    shutil.copy(first / ".weside" / "crew.json", tree / ".weside" / "crew.json")
+    pointer = tmp_path / "side"
+    (pointer / ".weside").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(pointer)], check=True)
+    (pointer / ".weside" / "config.json").write_text(
+        json.dumps({"crew": "../crew-one/.weside/crew.json"})
+    )
+    for where in (tree, pointer):
+        assert "state dir" not in (context(run(tmp_path, where, master)) or "")
+
+
+# --- two crews, AC6: a plugin older than the user install, pinned by a project-scope install -----
+
+INSTALLED = (
+    Path(__file__).resolve().parent.parent / "scripts" / "fixtures" / "installed-plugins.json"
+)
+
+
+def _plugin_root(tmp_path: Path, version: str) -> Path:
+    root = tmp_path / f"plugin-{version}"
+    (root / ".claude-plugin").mkdir(parents=True)
+    (root / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": version}))
+    return root
+
+
+def _config(tmp_path: Path, project: Path | None, scope: str = "project") -> Path:
+    data = json.loads(INSTALLED.read_text())
+    for row in data["plugins"]["we@acme-market"]:
+        if row["scope"] == "project":
+            row["projectPath"] = str(project or tmp_path / "elsewhere")
+            row["scope"] = scope
+    config = tmp_path / "config"
+    (config / "plugins").mkdir(parents=True)
+    (config / "plugins" / "installed_plugins.json").write_text(json.dumps(data))
+    return config
+
+
+@pytest.mark.parametrize(
+    "running, project, said",
+    [
+        ("8.6.1", True, True),  # older, a project entry holds the cwd: one note
+        ("9.1.0", True, False),  # equal to the newest user install
+        ("8.6.1", False, False),  # no project entry for this directory
+    ],
+)
+def test_an_old_plugin_pinned_by_a_project_install_names_both_versions(
+    tmp_path, running, project, said
+):
+    repo, _ = workspace(tmp_path)
+    env = {
+        "WE_ROLE": "master",
+        "CLAUDE_PLUGIN_ROOT": str(_plugin_root(tmp_path, running)),
+        "CLAUDE_CONFIG_DIR": str(_config(tmp_path, repo.parent if project else None)),
+    }
+    text = context(run(tmp_path, repo, env)) or ""
+    if said:
+        assert text.count(f"plugin we {running} runs here, the user install is 9.1.0") == 1
+        assert f"project-scope install for {repo.parent}" in text
+        assert "claude plugin update we@weside-ai --scope project" in text
+    else:
+        assert "plugin we " not in text
+
+
+def test_an_unreadable_installed_plugins_file_prints_nothing(tmp_path):
+    repo, _ = workspace(tmp_path)
+    config = tmp_path / "config"
+    (config / "plugins").mkdir(parents=True)
+    (config / "plugins" / "installed_plugins.json").write_text("{not json")
+    env = {
+        "WE_ROLE": "master",
+        "CLAUDE_PLUGIN_ROOT": str(_plugin_root(tmp_path, "8.6.1")),
+        "CLAUDE_CONFIG_DIR": str(config),
+    }
+    assert "plugin we " not in (context(run(tmp_path, repo, env)) or "")
+
+
+def test_a_local_scope_install_counts_like_a_project_one(tmp_path):
+    repo, _ = workspace(tmp_path)
+    env = {
+        "WE_ROLE": "master",
+        "CLAUDE_PLUGIN_ROOT": str(_plugin_root(tmp_path, "8.6.1")),
+        "CLAUDE_CONFIG_DIR": str(_config(tmp_path, repo.parent, scope="local")),
+    }
+    assert "plugin we 8.6.1 runs here" in (context(run(tmp_path, repo, env)) or "")
