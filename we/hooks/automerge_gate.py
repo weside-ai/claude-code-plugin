@@ -85,7 +85,8 @@ with the reason. Where the command starts in a checkout that uses rules (a crew 
 checkout's (`-R`, a URL selector, an origin that is no plain github.com URL) and a `cd` the hook
 cannot resolve (`$(…)`, an unset variable; `~` and `$VAR` are expanded) refuse too; without rules
 those merges go on unclassed, as before the class brake. The freeze flag counts beside the board
-file of `board_freeze.watched_board_files` (the crew's `board.file`, else the default) and only
+file of `board_freeze.watched_board_files` (the crew's `board.file`, else `board.json` in the
+crew's state directory, `crew.state_dir`) and only
 for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
 count as covered). Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
@@ -709,7 +710,7 @@ def _board_files(root: str | None) -> list[Path]:
     return (
         board_freeze.watched_board_files(root, DEFAULT_BOARD)
         if root
-        else [Path(DEFAULT_BOARD).expanduser()]
+        else [board_freeze.crew.board_file(None, None, default=DEFAULT_BOARD)]
     )
 
 

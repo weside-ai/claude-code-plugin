@@ -188,3 +188,38 @@ def test_a_person_or_a_foreign_command_in_a_skill_fails(tmp_path):
 def test_this_repos_skills_are_neutral():
     done = run(REPO, "neutral-skills")
     assert done.returncode == 0, done.stdout
+
+
+# Check 11 (two crews, AC7): no newest-cache glob under we/, one resolver text everywhere.
+
+
+def _resolver():
+    spec = util.spec_from_file_location("validate_consistency", SCRIPT)
+    module = util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.RESOLVER, module.RESOLVER_FILES
+
+
+def test_the_newest_cache_glob_fails_and_a_drifted_resolver_copy_fails(tmp_path):
+    resolver, files = _resolver()
+    good = dict.fromkeys(files, f"x\n{resolver} scripts/a.py\n")
+    root = tree(
+        tmp_path,
+        {**good, "we/skills/x/SKILL.md": "ls ~/.claude/plugins/cache/weside-ai/we/*/scripts"},
+    )
+    out = run(root, "install-resolver")
+    assert out.returncode == 1
+    assert "we/skills/x/SKILL.md: resolves the plugin by the newest cache folder" in out.stdout
+    drifted = {**good, files[0]: good[files[0]].replace("projectPath", "project_path")}
+    out = run(tree(tmp_path / "b", drifted), "install-resolver")
+    assert f"{files[0]}: the install resolver differs" in out.stdout
+
+
+def test_this_repos_resolver_copies_pass():
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "--root", str(REPO), "--check", "install-resolver"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert out.returncode == 0, out.stdout

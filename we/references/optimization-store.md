@@ -174,7 +174,8 @@ the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill
 ## Gate hook
 
 The instruction-budget gate as a repo's local pre-commit hook (`/we:setup` § 6 adds it). It resolves
-the gate from the plugin cache and passes with a notice where the plugin is absent: a local hook and
+the gate from the install Claude Code uses in the repo (`installed_plugins.json`: the project-scope
+entry, else the user one) and passes with a notice naming that file where the plugin is absent: a local hook and
 a `/we:optimize` step, not a CI job, so the repo vendors no copy of the plugin's scripts.
 
 ```yaml
@@ -182,10 +183,34 @@ a `/we:optimize` step, not a CI job, so the repo vendors no copy of the plugin's
   hooks:
     - id: instruction-budget
       name: Instruction budget (we plugin)
-      entry: bash -c 'g=$(ls -d ~/.claude/plugins/cache/weside-ai/we/*/scripts/check-instruction-budget.py 2>/dev/null | sort -V | tail -1); if [ -z "$g" ]; then echo "we plugin absent - instruction budget not checked"; exit 0; fi; python3 "$g"'
       language: system
       pass_filenames: false
       files: '(^|/)(\.claude/rules/.*|SKILL\.md|agents/[^/]*\.md|AGENTS\.md|CLAUDE\.md|references/.*\.md|process/[^/]*\.md|roles/[^/]*\.md|\.weside/(config|crew)\.json)$'
+      # we-install-resolver: --exec runs the gate from the install this repo uses
+      entry: |-
+        python3 -c 'if True:
+            import json, os, sys
+            f = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "plugins", "installed_plugins.json")
+            want, run = sys.argv[1], "--exec" in sys.argv[2:3]
+            try:
+                rows = [e for k, v in json.load(open(f))["plugins"].items() if k.split("@")[0] == "we" for e in v]
+            except Exception:
+                sys.stderr.write("we plugin: " + f + " not readable; the plugin is not resolved\n")
+                sys.exit(0 if run else 1)
+            here = os.path.realpath(os.getcwd())
+            def holds(e):
+                p = os.path.realpath(e.get("projectPath") or "/nonexistent")
+                return e.get("scope") == "project" and (here == p or here.startswith(p.rstrip("/") + "/"))
+            near = sorted((e for e in rows if holds(e)), key=lambda e: len(os.path.realpath(e["projectPath"])))
+            pick = (near or [e for e in rows if e.get("scope") == "user"] or [None])[-1]
+            if pick is None:
+                sys.stderr.write("we plugin: no we install in " + f + "\n")
+                sys.exit(0 if run else 1)
+            path = os.path.join(pick["installPath"], want)
+            if run:
+                os.execvp(sys.executable, [sys.executable, path] + sys.argv[3:])
+            print(path)
+        ' scripts/check-instruction-budget.py --exec
 ```
 
 ## Plugin checkout and workspace

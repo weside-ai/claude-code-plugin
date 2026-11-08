@@ -191,7 +191,7 @@ import ready_gate  # noqa: E402
 import ticket_adapter  # noqa: E402
 import worker_launch as wl  # noqa: E402  (the one reader of `claude agents --json`)
 
-DEFAULT_BOARD = "~/.claude/we-state/board.json"
+DEFAULT_BOARD = str(Path(crew_mod.DEFAULT_STATE_DIR) / crew_mod.BOARD_NAME)
 KINDS = ("accept", "deny", "discuss", "info", "update")
 CLOSING = ("accept", "deny")
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
@@ -976,12 +976,12 @@ def _current_repo():
 
 
 def cmd_path(state, args, _crew, _now):
-    """Print the board file a verb writes; --crew-only: the crew's `board.file`, exit 1 without."""
+    """Print the board file a verb writes; --crew-only: the crew's own board (its `board.file` or a
+    `state_dir` of its own), exit 1 when it resolves to the default board."""
     if args.crew_only:
         default = Path(DEFAULT_BOARD).expanduser()
         named = _freeze_module().watched_board_files(Path.cwd(), str(default))[0]
-        # The crew's merged defaults carry the default file too: that names no board of its own.
-        if named in (default, Path(crew_mod.DEFAULTS["board"]["file"]).expanduser()):
+        if named == default:
             return 1
         print(named.resolve())
         return 0
@@ -2617,6 +2617,83 @@ def parser():
 
 # A freeze must work where the crew file is missing or broken: the brake reads no crew.
 CREWLESS_VERBS = ("answer", "freeze", "unfreeze", "path")
+# The crew guard (`crew_guard`): verbs that only read pass it, and `freeze` does, since a brake
+# must stop merges without a crew and a wrong freeze stops, it never opens.
+READ_VERBS = ("path", "check", "escalation list", "escalation count")
+GUARD_FREE_VERBS = ("freeze",)
+
+
+def _verb_name(args):
+    step = getattr(args, "step", None)
+    return f"{args.verb} {step}" if args.verb == "escalation" and step else args.verb
+
+
+def _is_member(crew, pin):
+    """Whether the companion `pin` (WESIDE_COMPANION) is a member of `crew`, by slug or name."""
+    want = pin.strip().lower()
+    for slug, entry in crew_mod.members(crew or {}).items():
+        if want in (str(slug).lower(), str(entry.get("name") or "").strip().lower()):
+            return True
+    return False
+
+
+def _session_crew(cwd, env):
+    """(crew id or None, crew file or None, crew or None, why none): the calling session's crew.
+    A pin (WESIDE_COMPANION) that is no member of the cwd's crew counts as no crew."""
+    try:
+        crew_path, crew = crew_mod.find_and_load(cwd)
+    except crew_mod.CrewError as exc:
+        return None, None, None, f"no crew (the crew file is unreadable: {exc})"
+    if crew_path is None:
+        return None, None, None, f"no crew (no crew file found from {cwd})"
+    cid = crew_mod.crew_id(crew_path)
+    pin = str(env.get("WESIDE_COMPANION") or "").strip()
+    if pin and not _is_member(crew, pin):
+        return None, crew_path, crew, f"no crew (the pinned companion {pin} is no member of {cid})"
+    return cid, crew_path, crew, None
+
+
+def crew_guard(args, env=None, cwd=None):
+    """(refusal or None, the board to stamp after the write or None) for a `board.py` call.
+
+    Refused (two crews, AC11): a writing verb of a session without a crew on the default board
+    (no `--board`), and a writing verb on a board whose stamp (`crew.stamp_path`) names another
+    crew than the session's. The session's own board, resolved from its crew, is stamped by its
+    first write. An explicit `--board` on an unstamped file passes (scratch and test boards)."""
+    verb = _verb_name(args)
+    if verb in READ_VERBS or verb in GUARD_FREE_VERBS:
+        return None, None
+    env = os.environ if env is None else env
+    cwd = Path(cwd or Path.cwd())
+    target = Path(args.board).expanduser() if args.board else default_board(cwd)
+    cid, crew_path, crew, why = _session_crew(cwd, env)
+    stamp = crew_mod.read_stamp(target)
+    mine = None
+    if cid is not None:
+        mine = crew_mod.board_file(crew_path, crew, env, DEFAULT_BOARD)
+    if cid is None and not args.board:
+        owner = f"crew {stamp}" if stamp else "the default board, no crew stamped yet"
+        return _guard_text(verb, why, target, owner), None
+    if stamp is not None and stamp != cid:
+        return _guard_text(verb, why or f"crew {cid}", target, f"crew {stamp}", mine), None
+    own = mine is not None and _same_file(mine, target)
+    return None, (target if own and stamp is None else None)
+
+
+def _same_file(a, b):
+    return Path(a).expanduser().resolve() == Path(b).expanduser().resolve()
+
+
+def _guard_text(verb, caller, target, owner, mine=None):
+    fix = (
+        f"name your own crew's board with --board {mine}"
+        if mine is not None
+        else "run it from a session of the board's crew, or name the board meant with --board FILE"
+    )
+    return (
+        f"board.py {verb}: refused: this session's crew is {caller}; the board {target} belongs "
+        f"to {owner}. Nothing was written. {fix} (`board.py path` in your crew's repo prints it)."
+    )
 
 
 def main(argv=None, now=None, adapter=None):
@@ -2626,7 +2703,15 @@ def main(argv=None, now=None, adapter=None):
         crew = None if args.verb in CREWLESS_VERBS else load_crew()
         args.adapter_given = adapter
         now = now or _now()
-        return args.run(StateDir(args.board or default_board(), now=now), args, crew, now)
+        refusal, stamp_board = crew_guard(args)
+        if refusal:
+            raise BoardError(refusal, code=3)
+        code = args.run(StateDir(args.board or default_board(), now=now), args, crew, now)
+        if stamp_board is not None and code == 0 and Path(stamp_board).expanduser().exists():
+            cid, *_ = _session_crew(Path.cwd(), os.environ)
+            if cid is not None:
+                crew_mod.write_stamp(stamp_board, cid)
+        return code
     except BoardError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code

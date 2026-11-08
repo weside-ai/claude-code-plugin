@@ -838,12 +838,17 @@ class TestSecondCrew:
         assert jsonl(crewed / "acme-board-questions.jsonl")[0]["id"] == LIVE_NEXT_Q
         assert (crewed / "board.json").read_bytes() == before
 
-    def test_without_board_or_crew_file_the_default_board_is_written(self, crewless, monkeypatch):
+    def test_without_board_or_crew_file_the_default_board_is_refused(
+        self, crewless, monkeypatch, capsys
+    ):
+        # two crews, AC11: a session without a crew no longer writes the default board.
         monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewless / "board.json"))
+        before = (crewless / "board.json").read_bytes()
         answer_with(crewless, CLEAR)
-        assert board.main(ask_argv(), now=NOW) == 0
-        assert board_of(crewless)["owner_queue"][-1]["id"] == LIVE_NEXT_Q
-        assert jsonl(crewless / "board-questions.jsonl")[0]["id"] == LIVE_NEXT_Q
+        assert board.main(ask_argv(), now=NOW) == 3
+        assert "no crew" in capsys.readouterr().err
+        assert (crewless / "board.json").read_bytes() == before
+        assert not (crewless / "board-questions.jsonl").exists()
 
     def test_path_names_the_crews_board_and_crew_only_fails_without_one(
         self, crewed, capsys, monkeypatch
@@ -857,6 +862,91 @@ class TestSecondCrew:
         crew_file.write_text(json.dumps(data))
         assert board.main(["path", "--crew-only"]) == 0
         assert capsys.readouterr().out.strip() == str((crewed / "acme-board.json").resolve())
+
+
+def _crew_with(crewed, **top):
+    crew_file = crewed / "work" / ".weside" / "crew.json"
+    data = json.loads(crew_file.read_text())
+    data.update(top)
+    crew_file.write_text(json.dumps(data))
+    return crew_file
+
+
+class TestCrewGuard:
+    """two crews, AC11: a writing verb refuses a board of another crew, and a crewless default write.
+
+    Finding of 08.11.: a second crew's coordinator ran `board.py prune` without `--board` and
+    removed the first crew's returned news. Red arm on origin/main: every refusal below wrote."""
+
+    @pytest.fixture
+    def own(self, crewed, monkeypatch):
+        """The crewed session's own board is `crewed/board.json` (DEFAULT_BOARD points there)."""
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewed / "board.json"))
+        (crewed / "board.json").write_text(json.dumps(LIVE), encoding="utf-8")
+        return crewed
+
+    def test_the_own_crews_first_write_stamps_its_board(self, own):
+        assert board.main(["set", "state=build"], now=NOW) == 0
+        stamp = (own / "crew.id").read_text().strip()
+        assert stamp == board.crew_mod.crew_id(own / "work" / ".weside" / "crew.json")
+        assert board.main(["set", "state=ci"], now=NOW) == 0
+
+    def test_a_board_stamped_for_another_crew_refuses_a_write(self, own, capsys):
+        (own / "crew.id").write_text("acme/second-crew\n")
+        before = (own / "board.json").read_bytes()
+        assert board.main(["prune"], now=NOW) == 3
+        err = capsys.readouterr().err
+        assert "refused" in err and "crew acme/second-crew" in err and "--board" in err
+        assert (own / "board.json").read_bytes() == before
+
+    def test_an_explicit_board_of_another_crew_is_refused(self, own, capsys):
+        other = own / "acme-board.json"
+        other.write_text(json.dumps(LIVE), encoding="utf-8")
+        (own / "acme-board-crew.id").write_text("acme/second-crew\n")
+        before = other.read_bytes()
+        assert board.main(["--board", str(other), "set", "state=build"], now=NOW) == 3
+        err = capsys.readouterr().err
+        assert "acme/second-crew" in err and str(own / "board.json") in err
+        assert other.read_bytes() == before
+
+    def test_a_pin_outside_the_crew_counts_as_no_crew(self, own, monkeypatch, capsys):
+        pin(monkeypatch, "smu")
+        before = (own / "board.json").read_bytes()
+        assert board.main(["prune"], now=NOW) == 3
+        err = capsys.readouterr().err
+        assert "pinned companion smu is no member" in err and "--board" in err
+        assert (own / "board.json").read_bytes() == before
+
+    @pytest.mark.usefixtures("own")
+    def test_a_member_pin_writes(self, monkeypatch):
+        pin(monkeypatch, "otto")
+        assert board.main(["set", "state=build"], now=NOW) == 0
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["path"], ["escalation", "list", "--waiting-on", "coordinator"], ["escalation", "count"]],
+    )
+    def test_reading_verbs_pass_for_a_foreign_session(self, own, monkeypatch, argv):
+        (own / "crew.id").write_text("acme/second-crew\n")
+        pin(monkeypatch, "smu")
+        assert board.main(argv, now=NOW) == 0
+
+    def test_freeze_passes_without_a_crew(self, crewless, monkeypatch):
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewless / "board.json"))
+        monkeypatch.setattr(board, "_current_repo", lambda: None)
+        monkeypatch.setattr(board, "_crew_repos", lambda *_a, **_k: [])
+        args = board.parser().parse_args(["freeze", "--reason", "stop"])
+        assert board.crew_guard(args, env={}, cwd=crewless / "work") == (None, None)
+
+    def test_a_crewless_session_may_name_an_unstamped_board(self, crewless):
+        assert go(crewless, "set", "state=build") == 0
+        assert not (crewless / "crew.id").exists()
+
+    def test_a_relative_state_dir_moves_the_board(self, crewed, monkeypatch, capsys):
+        monkeypatch.delenv("WE_STATE_DIR", raising=False)
+        _crew_with(crewed, state_dir="../../second")
+        assert board.main(["path"]) == 0
+        assert capsys.readouterr().out.strip() == str((crewed / "second" / "board.json").resolve())
 
 
 class TestAskReader:

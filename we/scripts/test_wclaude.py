@@ -218,3 +218,87 @@ def test_every_start_is_a_master(tmp_path, args):
     _write_wrapper(tmp_path)
     run(tmp_path, args=args, launch="pinned")
     assert (tmp_path / "role").read_text() == "master"
+
+
+# --- two crews, AC7: the installed copy resolves the install Claude Code uses here ------------
+
+
+def _install(cache, version, marker):
+    scripts = cache / version / "scripts"
+    scripts.mkdir(parents=True)
+    crew_py = scripts / "crew.py"
+    crew_py.write_text(
+        "import sys\n"
+        "if sys.argv[1:2] == ['path']:\n"
+        f"    print({marker!r})\n"
+        "elif sys.argv[1:2] == ['members']:\n"
+        f"    print({marker!r} + '\\tfrom ' + {version!r})\n"
+    )
+    return cache / version
+
+
+def _installed_copy(tmp_path, installed):
+    """wclaude copied alone (as install_launcher.py does), HOME with the cache and the file."""
+    home = tmp_path / "home"
+    cache = home / ".claude" / "plugins" / "cache" / "weside-ai" / "we"
+    old = _install(cache, "8.6.1", "Old")
+    new = _install(cache, "9.1.0", "New")
+    project = tmp_path / "project"
+    (project / "sub").mkdir(parents=True)
+    data = {
+        "version": 2,
+        "plugins": {
+            "we@weside-ai": [
+                {"scope": "user", "installPath": str(new), "version": "9.1.0"},
+                {
+                    "scope": "project",
+                    "projectPath": str(project),
+                    "installPath": str(old),
+                    "version": "8.6.1",
+                },
+            ]
+        },
+    }
+    if installed is not None:
+        (home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            installed if isinstance(installed, str) else json.dumps(data)
+        )
+    bin_dir = tmp_path / "local-bin"
+    bin_dir.mkdir()
+    shutil.copy(SCRIPT, bin_dir / "wclaude")
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    (stub / "claude").write_text("#!/bin/sh\nexit 0\n")
+    (stub / "claude").chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CONFIG_DIR", "WCLAUDE_PIN")}
+    env.update(HOME=str(home), PATH=f"{stub}{os.pathsep}{env['PATH']}")
+    return bin_dir / "wclaude", project, env
+
+
+def _menu(script, cwd, env):
+    return subprocess.run(
+        ["bash", str(script)],
+        input="0\n",
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
+        timeout=20,
+        check=False,
+    ).stderr
+
+
+def test_the_installed_copy_takes_the_project_scope_install_of_its_directory(tmp_path):
+    script, project, env = _installed_copy(tmp_path, installed=True)
+    # the project's own install (8.6.1), also from a subdirectory; elsewhere the user install
+    assert "from 8.6.1" in _menu(script, project / "sub", env)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    assert "from 9.1.0" in _menu(script, elsewhere, env)
+
+
+def test_an_unreadable_installed_plugins_file_ends_with_one_line_naming_it(tmp_path):
+    script, project, env = _installed_copy(tmp_path, installed="{broken")
+    err = _menu(script, project, env)
+    assert err.count("installed_plugins.json not readable") == 1
+    assert "from 9.1.0" not in err and "from 8.6.1" not in err

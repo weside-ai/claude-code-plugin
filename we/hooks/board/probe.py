@@ -7,6 +7,13 @@ and the permission mode. Never a value from the environment beyond the
 profile name: /proc/<pid>/environ holds secrets, so
 only the keys WE_ROLE and CLAUDE_CONFIG_DIR are looked at and neither is
 printed as read.
+
+`--crew <crew file>` (two crews, AC4) keeps only the sessions of that crew: a session whose `cwd`
+resolves (`crew.find`) to that crew file stays, one in another crew's repo or in a repo without a
+crew drops out, and one whose `cwd` is missing or no longer exists stays with `crew: "unknown"`.
+Without the flag every session on the host is listed.
+
+Usage: probe.py [--crew FILE]
 """
 
 import json
@@ -14,6 +21,10 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+import crew as crewlib
 
 SWAP_SESSIONS = os.path.expanduser("~/.local/share/claude-swap/sessions/")
 CLAUDE_HOME = os.path.expanduser("~/.claude")
@@ -67,7 +78,26 @@ def mode_of(config_dir, cwd, session_id):
     return hits[-1].decode() if hits else None
 
 
-def main():
+def crew_of(cwd, cache):
+    """`same`, `other` or `unknown` for a session in `cwd`, against the wanted crew in `cache`."""
+    if not cwd or not os.path.isdir(cwd):
+        return "unknown"
+    if cwd not in cache["by_cwd"]:
+        try:
+            found = crewlib.find(cwd)
+        except OSError:
+            found = None
+        same = found is not None and Path(found).resolve() == cache["want"]
+        cache["by_cwd"][cwd] = "same" if same else "other"
+    return cache["by_cwd"][cwd]
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    want = None
+    if len(argv) >= 2 and argv[0] == "--crew":
+        want = Path(argv[1]).expanduser().resolve()
+    cache = {"want": want, "by_cwd": {}}
     run = subprocess.run(
         ["claude", "agents", "--json"], capture_output=True, text=True, timeout=20, check=False
     )
@@ -76,6 +106,9 @@ def main():
         return 0
     out = []
     for agent in json.loads(run.stdout):
+        crew = crew_of(agent.get("cwd"), cache) if want is not None else None
+        if crew == "other":
+            continue
         pid = agent.get("pid")
         env = env_keys(pid) if pid else None
         out.append(
@@ -92,6 +125,7 @@ def main():
                 "mode": mode_of(
                     (env or {}).get("CLAUDE_CONFIG_DIR"), agent.get("cwd"), agent.get("sessionId")
                 ),
+                **({"crew": "unknown"} if crew == "unknown" else {}),
             }
         )
     print(json.dumps({"sessions": out}))

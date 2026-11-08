@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "plugins": {
+    "we@acme-market": [
+      {
+        "scope": "user",
+        "installPath": "/cache/acme-market/we/9.1.0",
+        "version": "9.1.0",
+        "installedAt": "2026-11-01T10:00:00.000Z",
+        "lastUpdated": "2026-11-08T10:00:00.000Z"
+      },
+      {
+        "scope": "project",
+        "projectPath": "/replaced/by/the/test",
+        "installPath": "/cache/acme-market/we/8.6.1",
+        "version": "8.6.1",
+        "installedAt": "2026-10-20T10:00:00.000Z",
+        "lastUpdated": "2026-10-20T10:00:00.000Z"
+      }
+    ],
+    "other@acme-market": [
+      {"scope": "user", "installPath": "/cache/acme-market/other/1.0.0", "version": "1.0.0"}
+    ]
+  }
+}

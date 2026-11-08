@@ -898,3 +898,82 @@ def test_launch_subagent_fallback_is_a_known_bool_default_off(tmp_path):
     core2, _ = workspace(tmp_path / "b", {**CREW, "launch": {"subagent_fallback": "yes"}})
     out = run(core2, "validate")
     assert out.returncode == 1 and "launch.subagent_fallback" in out.stderr
+
+
+# --- two crews, AC1: the crew's state directory -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "env, state_dir, expected",
+    [
+        ({"WE_STATE_DIR": "/forced"}, "own", "/forced"),  # the env wins over the key
+        ({}, "own", "{core}/.weside/own"),  # relative to the crew file's directory
+        ({}, "~/crew-b", "{home}/crew-b"),  # a ~ path
+        ({}, None, "{home}/.claude/we-state"),  # no key: today's folder
+    ],
+)
+def test_state_dir_precedence(tmp_path, monkeypatch, env, state_dir, expected):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    data = {**CREW, **({"state_dir": state_dir} if state_dir is not None else {})}
+    core, _ = workspace(tmp_path, data)
+    path, loaded = crew.find_and_load(core)
+    want = expected.format(core=core, home=tmp_path / "home")
+    assert crew.state_dir(path, loaded, env) == Path(want)
+    assert crew.board_file(path, loaded, env) == Path(want) / "board.json"
+
+
+def test_board_file_wins_over_state_dir(tmp_path):
+    core, _ = workspace(tmp_path, {**CREW, "state_dir": "own", "board": {"file": "b/x.json"}})
+    path, loaded = crew.find_and_load(core)
+    assert crew.board_file(path, loaded, {}) == core / ".weside" / "b" / "x.json"
+
+
+def test_without_a_crew_file_the_paths_are_todays(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    today = tmp_path / "home" / ".claude" / "we-state"
+    assert crew.state_dir(None, None, {}) == today
+    assert crew.resolve_board(tmp_path, env={}) == today / "board.json"
+    # a caller's DEFAULT_BOARD (tests point it at a temp file) stands in while nothing moves it
+    assert crew.resolve_board(tmp_path, env={}, default="/t/b.json") == Path("/t/b.json")
+    assert crew.resolve_board(tmp_path, env={"WE_STATE_DIR": "/s"}, default="/t/b.json") == Path(
+        "/s/board.json"
+    )
+
+
+def test_a_state_dir_that_is_no_string_is_refused(tmp_path):
+    core, _ = workspace(tmp_path, {**CREW, "state_dir": 3})
+    with pytest.raises(crew.CrewError, match="state_dir must be a string or null"):
+        crew.find_and_load(core)
+
+
+def test_cli_state_dir_prints_the_resolved_folder(tmp_path):
+    core, _ = workspace(tmp_path, {**CREW, "state_dir": "own"})
+    env = {k: v for k, v in os.environ.items() if k != "WE_STATE_DIR"}
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "state-dir", "--from", str(core)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert out.returncode == 0
+    assert out.stdout.strip() == str((core / ".weside" / "own").resolve())
+
+
+def test_crew_id_is_the_origin_slug_shared_by_a_pointer(tmp_path):
+    core, biz = workspace(tmp_path)
+    subprocess.run(["git", "init", "-q", str(core)], check=True)
+    subprocess.run(
+        ["git", "-C", str(core), "remote", "add", "origin", "git@github.com:Acme/Core.git"],
+        check=True,
+    )
+    assert crew.crew_id(core / ".weside" / "crew.json") == "acme/core"
+    assert crew.crew_id(crew.find(biz)) == "acme/core"
+
+
+def test_stamp_is_named_after_the_board_stem_and_written_once(tmp_path):
+    assert crew.stamp_path(tmp_path / "board.json") == tmp_path / "crew.id"
+    assert crew.stamp_path(tmp_path / "acme-board.json") == tmp_path / "acme-board-crew.id"
+    assert crew.write_stamp(tmp_path / "board.json", "a/one") is True
+    assert crew.write_stamp(tmp_path / "board.json", "b/two") is False
+    assert crew.read_stamp(tmp_path / "board.json") == "a/one"

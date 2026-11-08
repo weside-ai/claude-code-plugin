@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "skill_prefix": "crewa",
+  "roles": {"coordinator": "otto", "product": "ada"},
+  "members": {
+    "otto": {"name": "Otto", "workplace": "."},
+    "ada": {"name": "Ada", "components": ["App"], "workplace": "."}
+  }
+}

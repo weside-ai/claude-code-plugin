@@ -35,7 +35,8 @@ a one-way PR outside the brake's core) reads it: an open issue labelled `merge-f
     the current repo's armed PRs. A flag without a `repos` list counts for every repo.
   * The hook reads a flag only beside the board file `watched_board_files` names: the crew's
     `board.file` when the crew names one (a relative one resolved against the crew file's
-    directory), else the default board. A crew with a board of its own is a separate team: a
+    directory), else `board.json` in the crew's state directory (`crew.state_dir`: `WE_STATE_DIR`,
+    the crew's `state_dir`, else the default folder). A crew with a board of its own is a separate team: a
     freeze on the default board does not reach it, `*` included. `freeze` and `unfreeze` refuse any other `--board`, so no flag stands where no
     hook sees it.
 
@@ -60,7 +61,7 @@ import crew
 
 FLAG_NAME = "freeze.json"
 FREEZE_LABEL = "merge-freeze"
-DEFAULT_BOARD = "~/.claude/we-state/board.json"
+DEFAULT_BOARD = str(Path(crew.DEFAULT_STATE_DIR) / crew.BOARD_NAME)
 GhRunner = Callable[[list], Optional[str]]
 
 
@@ -80,18 +81,11 @@ def flag_path(board_file: str | Path) -> Path:
 
 def watched_board_files(start: str | Path | None, default: str = DEFAULT_BOARD) -> list[Path]:
     """The board file the merge hook reads a freeze beside, for a command run in `start`, as a
-    one-item list: the crew's `board.file` (relative to the crew file's directory) when the crew
-    names one, else the default board. A missing or broken crew file names the default board."""
-    default_file = Path(default).expanduser()
-    try:
-        crew_file, crew_data = crew.find_and_load(start)
-    except crew.CrewError:
-        return [default_file]
-    board = (crew_data or {}).get("board")
-    name = board.get("file") if isinstance(board, dict) else None
-    if crew_file is not None and isinstance(name, str) and name.strip():
-        return [crew_file.parent / Path(name.strip()).expanduser()]
-    return [default_file]
+    one-item list: `crew.resolve_board` (the crew's `board.file`, relative to the crew file's
+    directory, else `<state dir>/board.json` with the state directory from `WE_STATE_DIR` or the
+    crew's `state_dir`), `default` where neither moves the folder. A missing or broken crew file
+    resolves as no crew. `board.py` writes and the merge hook reads through this one function."""
+    return [crew.resolve_board(start, default=default)]
 
 
 def norm_slug(value: object) -> str | None:

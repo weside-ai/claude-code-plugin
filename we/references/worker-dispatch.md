@@ -99,6 +99,11 @@ With a template, the Lead:
    `TaskStop`, once its report is integrated or dropped, also after exit 4: it removes the marker
    and the brief, then the worktree can go or the Lead can work in it.
 
+Where the host's launcher brings its own verbs for a running worker (`status|stop|logs <name>`,
+e.g. a `we-worker` wrapper named in `launch.worker`), the Lead steers and inspects through them
+instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
+from `claude agents --json`, never from a log or a quiet tail.
+
 The hooks treat a session as the worker only when the marker names its session id, so the Lead
 working in the worker's tree is never one.
 
@@ -117,6 +122,10 @@ refuses its merge as for a subagent.
   default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by the conflict check of `/we:ci-review` § 3 (merge `origin/<default-branch>` only on a conflict).
+- No wait loops and no `sleep` in the foreground (`for … sleep … gh pr checks`, `for f in …; git
+  show …`): the auto mode holds them as a permission prompt, and the worker then waits for a human.
+  The worker waits on CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background
+  (`run_in_background`) or through a Monitor.
 - The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
   `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
   worker in a tree that is not its own; git runs as `git -C <worktree> …`.

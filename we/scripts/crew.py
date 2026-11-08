@@ -20,6 +20,8 @@ Usage:
                                             a held role key, specialist, or none (with a hint)
   crew.py validate [--strict] [--from DIR]  "ok <path>" for a usable crew; --strict also refuses an
                                             unknown key (exit 1 naming every one)
+  crew.py state-dir [--from DIR]            the crew's state directory (``state_dir``), absolute;
+                                            without a crew file the default
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -51,7 +53,9 @@ Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdic
 round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
 ``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
-``files``, ``coldstart``, ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
+``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and
+``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory; null, the default,
+is ``~/.claude/we-state``; ``WE_STATE_DIR`` wins over it, see ``state_dir()``), ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
 reader stays silent), ``stale_min`` (minutes after which the newest line counts as a dead sampler),
 ``starter_wait_min`` (minutes a chat wait is to wait on its starter before it becomes a question
 for the human), ``urgent_commands`` (regexes; a blocked command matching one is to mark its
@@ -93,6 +97,7 @@ import copy
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -201,8 +206,9 @@ DEFAULTS: dict[str, Any] = {
         "receipt_check": None,
         "walk_paths": [],
     },
+    "state_dir": None,
     "board": {
-        "file": "~/.claude/we-state/board.json",
+        "file": None,
         "ticketing": "none",
         "states": {
             "on_hold": "On Hold",
@@ -258,6 +264,9 @@ RETIRED_KEYS = ("capacity",)
 STUB_MARKER = "<!-- we:stub"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "companion-skill" / "SKILL.md"
 _SAFE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+DEFAULT_STATE_DIR = "~/.claude/we-state"
+BOARD_NAME = "board.json"
+CREW_ID_NAME = "crew.id"
 
 
 class CrewError(Exception):
@@ -694,6 +703,122 @@ def _merge(data: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def state_dir(crew_path: Path | None, crew: dict[str, Any] | None, env: Any = None) -> Path:
+    """The crew's state directory: ``WE_STATE_DIR`` when set, else the crew's ``state_dir`` (``~``
+    expanded, a relative one against the crew file's directory), else ``DEFAULT_STATE_DIR``. A
+    session without a crew file gets ``WE_STATE_DIR`` or the default. Raises ``CrewError`` on a
+    ``state_dir`` that is not a string (``load`` refuses it first)."""
+    env = os.environ if env is None else env
+    forced = str(env.get("WE_STATE_DIR") or "").strip()
+    if forced:
+        return Path(forced).expanduser()
+    value = (crew or {}).get("state_dir")
+    if value is not None and not isinstance(value, str):
+        raise CrewError(f"{crew_path}: state_dir must be a string or null")
+    if crew_path is not None and isinstance(value, str) and value.strip():
+        named = Path(value.strip()).expanduser()
+        return named if named.is_absolute() else crew_path.parent / named
+    return Path(DEFAULT_STATE_DIR).expanduser()
+
+
+def board_file(
+    crew_path: Path | None,
+    crew: dict[str, Any] | None,
+    env: Any = None,
+    default: str | Path | None = None,
+) -> Path:
+    """The crew's board: its ``board.file`` (``~`` expanded, a relative one against the crew file's
+    directory) when it names one, else ``<state dir>/board.json``. ``default`` (the callers'
+    ``DEFAULT_BOARD``, which tests point at a temp file) stands in for that path when neither
+    ``WE_STATE_DIR`` nor the crew's ``state_dir`` moves the folder."""
+    env = os.environ if env is None else env
+    board = (crew or {}).get("board")
+    name = board.get("file") if isinstance(board, dict) else None
+    if crew_path is not None and isinstance(name, str) and name.strip():
+        named = Path(name.strip()).expanduser()
+        return named if named.is_absolute() else crew_path.parent / named
+    own = (crew or {}).get("state_dir") if crew_path is not None else None
+    moved = str(env.get("WE_STATE_DIR") or "").strip() or (isinstance(own, str) and own.strip())
+    if default is not None and not moved:
+        return Path(default).expanduser()
+    return state_dir(crew_path, crew, env) / BOARD_NAME
+
+
+def resolve_board(
+    start: str | Path | None = None, env: Any = None, default: str | Path | None = None
+) -> Path:
+    """The board for a session in ``start``: ``board_file`` of its crew; a missing or broken crew
+    file resolves as no crew (``WE_STATE_DIR`` or the default folder)."""
+    try:
+        crew_path, crew = find_and_load(start)
+    except CrewError:
+        crew_path, crew = None, None
+    if crew_path is None:
+        crew = None
+    return board_file(crew_path, crew, env, default)
+
+
+def crew_id(crew_path: Path) -> str:
+    """Who a crew is, for telling two crews apart: ``owner/repo`` of the ``origin`` of the repo
+    holding the crew file (lower case), else that repo's git common dir, else the file's path. Two
+    worktrees of one repo, and a repo whose ``.weside/config.json`` points at the file, share it."""
+    where = str(crew_path.resolve().parent)
+
+    def git(*args: str) -> str:
+        try:
+            out = subprocess.run(
+                ["git", "-C", where, *args],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return out.stdout.strip() if out.returncode == 0 else ""
+
+    url = git("config", "--get", "remote.origin.url").lower()
+    text = url.split("://", 1)[-1].removesuffix(".git").rstrip("/")
+    parts = [p for p in text.replace(":", "/").split("/") if p]
+    if len(parts) >= 2:
+        return f"{parts[-2]}/{parts[-1]}"
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    return common or str(crew_path.resolve())
+
+
+def stamp_path(board: Path) -> Path:
+    """The crew stamp beside a board, named after its stem like the freeze flag: ``board.json`` →
+    ``crew.id`` (the state directory's owner, read by the role hook), ``acme-board.json`` →
+    ``acme-board-crew.id``."""
+    board = Path(board).expanduser()
+    if board.stem == "board":
+        return board.with_name(CREW_ID_NAME)
+    return board.with_name(f"{board.stem}-{CREW_ID_NAME}")
+
+
+def read_stamp(board: Path) -> str | None:
+    """The crew id stamped beside ``board``, or None (no stamp, unreadable, empty)."""
+    try:
+        text = stamp_path(board).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text.splitlines()[0].strip() if text else None
+
+
+def write_stamp(board: Path, cid: str) -> bool:
+    """Stamp ``board`` with crew ``cid`` unless a stamp exists; True when this call wrote it."""
+    path = stamp_path(board)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "x", encoding="utf-8") as fh:
+            fh.write(cid + "\n")
+    except FileExistsError:
+        return False
+    except OSError:
+        return False
+    return True
+
+
 def at(root: str | Path) -> Path | None:
     """The crew file ``root`` itself declares (its own file or its config pointer), never one
     above it; None without one."""
@@ -978,6 +1103,7 @@ VERBS = (
     "lenses",
     "session-kind",
     "validate",
+    "state-dir",
 )
 
 
@@ -986,8 +1112,10 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
     cmd = argv[0]
-    if cmd in ("skill-path", "path"):
-        return _skill_path_cli(argv) if cmd == "skill-path" else _path_cli(argv)
+    if cmd in ("skill-path", "path", "state-dir"):
+        return {"skill-path": _skill_path_cli, "path": _path_cli, "state-dir": _state_dir_cli}[
+            cmd
+        ](argv)
     notes: list[str] = []
     loaded = _load_cli(argv, notes, strict=cmd == "validate" and "--strict" in argv)
     if loaded is None:
@@ -1003,6 +1131,16 @@ def main(argv: list[str]) -> int:
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
         return 1
+
+
+def _state_dir_cli(argv: list[str]) -> int:
+    try:
+        crew_path, crew = find_and_load(_opt(argv, "--from"))
+        print(state_dir(crew_path, crew).resolve())
+    except CrewError as exc:
+        print(f"crew: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def _show_cli(_argv: list[str], crew_path: Path, crew: dict[str, Any]) -> int:

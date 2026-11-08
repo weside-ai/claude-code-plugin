@@ -115,7 +115,11 @@ test('the crew file of the session\'s repo names the board, ahead of boardFile',
     return { value: BOARD }
   })
   on('process.run', (_$, e) =>
-    e.argv.some(a => a.endsWith('/scripts/board.py')) ? RUN('/home/me/.claude/we-state/acme-board.json\n') : RUN(PROBE),
+    e.argv.some(a => a.endsWith('/scripts/board.py'))
+      ? RUN('/home/me/.claude/we-state/acme-board.json\n')
+      : e.argv.some(a => a.endsWith('/scripts/crew.py')) && e.argv.includes('path')
+        ? RUN('/work/acme/.weside/crew.json\n')
+        : RUN(PROBE),
   )
   on('session.id', () => ({ value: 's1' }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -129,6 +133,59 @@ test('the crew file of the session\'s repo names the board, ahead of boardFile',
   const dir = '/home/me/.claude/we-state'
   expect([...new Set(reads)].sort()).toEqual([`${dir}/acme-board-answers.jsonl`, `${dir}/acme-board-deliveries.jsonl`, `${dir}/acme-board.json`])
 })
+
+// two crews, AC4/AC5: in a repo with a crew the board is what `board.py path` resolves (never the option
+// or the constant), and the live column asks probe.py for that crew's sessions only.
+for (const crew of [true, false]) {
+  test(`board file and live column ${crew ? 'with' : 'without'} a crew`, { options: { boardFile: '~/boards/team.json' } }, async ($, on) => {
+    const clock = mock.clock(on)
+    mock.store(on)
+    on('env.get', () => ({ value: '/home/me' }))
+    on('fs.exists', () => ({ value: true }))
+    on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
+    const reads: string[] = []
+    on('fs.read', (_$, e) => {
+      reads.push(String((e as { path?: unknown }).path))
+      return { value: BOARD }
+    })
+    const probes: string[][] = []
+    const boardPaths: string[][] = []
+    on('process.run', (_$, e) => {
+      const argv = e.argv.map(String)
+      if (argv.some(a => a.endsWith('/hooks/board/probe.py'))) {
+        probes.push(argv)
+        return RUN(PROBE)
+      }
+      if (argv.some(a => a.endsWith('/scripts/crew.py')) && argv.includes('path')) {
+        return crew ? RUN('/work/second/.weside/crew.json\n') : { value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      }
+      if (argv.some(a => a.endsWith('/scripts/board.py'))) {
+        boardPaths.push(argv)
+        return RUN('/home/me/.claude/we-state/second/board.json\n')
+      }
+      return RUN('')
+    })
+    on('session.id', () => ({ value: 's1' }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('command.register', () => ({ value: { command: 'board' } }))
+    on('session.start', (_, e) => ({ cwd: e.cwd }))
+    on('session.version', () => ({ value: { version: '2.1.317', base: '2.1.317' } }))
+
+    await $.session.start({ cwd: '/work/second', surface: 'terminal', isInteractive: true })
+    await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+    await clock.settle()
+    if (crew) {
+      expect(boardPaths.map(a => a.slice(3))).toEqual([['path']])
+      expect(reads).toContain('/home/me/.claude/we-state/second/board.json')
+      expect(reads.some(r => r.includes('/boards/team'))).toBe(false)
+      expect(probes.length > 0 && probes.every(a => a.slice(-2).join(' ') === '--crew /work/second/.weside/crew.json')).toBe(true)
+    } else {
+      expect(boardPaths).toEqual([])
+      expect(reads).toContain('/home/me/boards/team.json')
+      expect(probes.length > 0 && probes.every(a => !a.includes('--crew'))).toBe(true)
+    }
+  })
+}
 
 test('a missing board file says who writes it and where the schema is', async ($, on) => {
   const clock = mock.clock(on)

@@ -14,8 +14,9 @@ a preview, so the text is gated at ``render_process.BUDGET``: over it, nothing i
 stderr line names the template to read, exit 1.
 
 After printing, it appends ``{ts, session_id, pid, source, by: "plugin"}`` to ``l0-served.jsonl``
-next to the crew's ``board.file`` (the last ``LOG_KEEP`` lines kept); a write failure is ignored,
-the log is evidence of doubles, not a gate.
+in the crew's state directory (``crew.state_dir``: ``WE_STATE_DIR``, the crew's ``state_dir``, else
+``~/.claude/we-state``; the last ``LOG_KEEP`` lines kept), so two crews with their own folders
+keep two logs; a write failure is ignored, the log is evidence of doubles, not a gate.
 """
 
 from __future__ import annotations
@@ -53,9 +54,13 @@ def claude_pid(start: int | None = None) -> int:
     return os.getppid()
 
 
-def log_served(crew: dict, hook_input: dict, by: str = "plugin") -> None:
-    board = Path(os.path.expanduser(str((crew.get("board") or {}).get("file") or "")))
-    path = board.parent / LOG_NAME
+def log_served(
+    crew: dict, hook_input: dict, by: str = "plugin", crew_path: Path | None = None
+) -> None:
+    try:
+        path = crewlib.state_dir(crew_path, crew) / LOG_NAME
+    except crewlib.CrewError:
+        return
     line = {
         "ts": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "session_id": str(hook_input.get("session_id") or ""),
@@ -76,8 +81,9 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
     """(additionalContext or None, stderr line or None)."""
     env = os.environ if environ is None else environ
     cwd = hook_input.get("cwd") or os.getcwd()
+    crew_path = None
     try:
-        _, crew = crewlib.find_and_load(cwd)
+        crew_path, crew = crewlib.find_and_load(cwd)
     except crewlib.CrewError as exc:
         crew = crewlib.fallback(crewlib.find(cwd), str(exc))
     if not crew:
@@ -95,7 +101,7 @@ def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, s
             f"not loaded, read {shown} (render_process.py --role master)"
         )
     if not crew.get("crew_error"):
-        log_served(crew, hook_input)
+        log_served(crew, hook_input, crew_path=crew_path)
     return text, None
 
 

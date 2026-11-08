@@ -45,8 +45,10 @@ if [[ $pin -eq 1 ]]; then
 fi
 export WE_ROLE=master
 
-# crew.py next to this script (the plugin's copy), else the newest in the plugin cache (the
-# installed copy in ~/.local/bin); references/companion-session.md § Crew.
+# crew.py next to this script (the plugin's copy), else the install Claude Code uses in this
+# directory (the installed copy in ~/.local/bin): the project-scope `we` entry of
+# installed_plugins.json for the directory or its nearest ancestor, else the user-scope entry,
+# never the newest folder of the cache (two crews, AC7); references/companion-session.md § Crew.
 crew_script() {
   local here
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -54,7 +56,30 @@ crew_script() {
     echo "$here/crew.py"
     return 0
   fi
-  ls -d "$HOME"/.claude/plugins/cache/weside-ai/we/*/scripts/crew.py 2>/dev/null | sort -V | tail -1
+  # we-install-resolver (scripts/validate-consistency.py keeps every copy equal)
+  python3 -c 'if True:
+    import json, os, sys
+    f = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "plugins", "installed_plugins.json")
+    want, run = sys.argv[1], "--exec" in sys.argv[2:3]
+    try:
+        rows = [e for k, v in json.load(open(f))["plugins"].items() if k.split("@")[0] == "we" for e in v]
+    except Exception:
+        sys.stderr.write("we plugin: " + f + " not readable; the plugin is not resolved\n")
+        sys.exit(0 if run else 1)
+    here = os.path.realpath(os.getcwd())
+    def holds(e):
+        p = os.path.realpath(e.get("projectPath") or "/nonexistent")
+        return e.get("scope") == "project" and (here == p or here.startswith(p.rstrip("/") + "/"))
+    near = sorted((e for e in rows if holds(e)), key=lambda e: len(os.path.realpath(e["projectPath"])))
+    pick = (near or [e for e in rows if e.get("scope") == "user"] or [None])[-1]
+    if pick is None:
+        sys.stderr.write("we plugin: no we install in " + f + "\n")
+        sys.exit(0 if run else 1)
+    path = os.path.join(pick["installPath"], want)
+    if run:
+        os.execvp(sys.executable, [sys.executable, path] + sys.argv[3:])
+    print(path)
+' scripts/crew.py || true
 }
 
 if [[ $picked -eq 0 ]]; then
