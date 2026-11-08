@@ -842,6 +842,7 @@ def cmd_blocked(state, args, crew, now):
             return UNCHANGED
         ended.append(_apply_wait(line, waiting_on, crew, now))  # the ended wait keeps its key
         line["blocked"] = blocked
+        line["updated_at"] = now.strftime(MINUTE_FMT)  # a rewritten line is not stale
         return dict(line)
 
     result = state.write_board(mutate, after=lambda _r: _log_waits(state, ended))
@@ -888,6 +889,7 @@ def _clear_blocked(state, args, crew, now):
         key = _line_key(line, crew)
         ended.append(_apply_wait(line, "", crew, now))  # before the del: the row keeps its key
         del line["blocked"]
+        line["updated_at"] = now.strftime(MINUTE_FMT)  # a rewritten line is not stale
         obsolete = []
         if blocked.get("kind") == "permission":
             reason = _resolved_label(crew, now)

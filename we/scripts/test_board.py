@@ -2602,6 +2602,7 @@ class TestBlocked:
             "waiting_on": "human",
             "since": "2026-11-03T10:00Z",
             "sla_due": "2026-11-03T14:00Z",
+            "updated_at": "2026-11-03T10:00Z",
             "blocked": {
                 "kind": "permission",
                 "starter": "lead-12",
@@ -2622,10 +2623,12 @@ class TestBlocked:
         old = line_of(crewed, "other")
         assert go(crewed, "blocked", "other", "--kind", "permission") == 0
         new = line_of(crewed, "other")
-        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due"}
+        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due", "updated_at"}
         assert {
-            k: v for k, v in new.items() if k not in ("blocked", "waiting_on", "since", "sla_due")
-        } == {k: v for k, v in old.items() if k != "since"}
+            k: v
+            for k, v in new.items()
+            if k not in ("blocked", "waiting_on", "since", "sla_due", "updated_at")
+        } == {k: v for k, v in old.items() if k not in ("since", "updated_at")}
 
     @pytest.mark.parametrize(
         "row, kind, message",
@@ -3098,3 +3101,9 @@ class TestSessionStamp:
         go(crewless, "set", "now=phase 3")
         assert line_of(crewless, "lead-12")["updated_at"] == "2026-11-03T10:00Z"
         assert line_of(crewless, "other").get("updated_at") is None
+
+    def test_blocked_and_clear_stamp_updated_at(self, crewed):
+        # Review #192: a line the sampler rewrites must not read as stale from an old `set`.
+        agents(crewed, {**BLOCKED_ROW, "name": "other", "sessionId": "sid-o"})
+        assert go(crewed, "blocked", "other", "--kind", "permission") == 0
+        assert line_of(crewed, "other")["updated_at"] == "2026-11-03T10:00Z"
