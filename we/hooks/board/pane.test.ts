@@ -432,10 +432,10 @@ test('Read appends a read line, sends no prompt and drops the item; the old note
 })
 
 // boardAutoOpen: the pane opens at session start for `on`, for `orchestrator` only when crew.py says so.
-async function startWith($: Parameters<Parameters<typeof test>[1]>[0], on: Parameters<Parameters<typeof test>[1]>[1], isOrchestrator: boolean) {
+async function startWith($: Parameters<Parameters<typeof test>[1]>[0], on: Parameters<Parameters<typeof test>[1]>[1], isOrchestrator: boolean, weStart = false) {
   const clock = mock.clock(on)
   mock.store(on)
-  on('env.get', () => ({ value: '/home/me' }))
+  on('env.get', (_$, e) => ({ value: (e as { name?: unknown }).name === 'WE_START' ? (weStart ? '1' : undefined) : '/home/me' }))
   on('fs.exists', () => ({ value: true }))
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
   on('fs.read', () => ({ value: BOARD }))
@@ -478,5 +478,16 @@ test('boardAutoOpen orchestrator opens it only in the Orchestrator\'s session', 
 
 test('boardAutoOpen orchestrator leaves another session alone', { options: { boardAutoOpen: 'orchestrator' } }, async ($, on) => {
   const { opened } = await startWith($, on, false)
+  expect(opened).toEqual([])
+})
+
+// `wclaude --start` (WE_START=1) opens the board in the coordinator's session even with the option off.
+test('WE_START opens the board in the coordinator session with boardAutoOpen off', async ($, on) => {
+  const { opened, checks } = await startWith($, on, true, true)
+  expect([opened, checks]).toEqual([['we-board'], [['is-role', 'coordinator', '--session', 's-orch']]])
+})
+
+test('WE_START leaves a session that is not the coordinator alone', async ($, on) => {
+  const { opened } = await startWith($, on, false, true)
   expect(opened).toEqual([])
 })

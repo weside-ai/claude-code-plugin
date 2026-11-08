@@ -7,6 +7,7 @@
 #   wclaude -c              menu, then claude -c (claude's own --continue)
 #   wclaude --as <Name> ... no menu; the rest goes to claude
 #   wclaude --pin ...       start through $WCLAUDE_PIN instead of claude (combines with --as)
+#   wclaude --start [--fresh]  the crew's main companion (references/companion-session.md § Launch and pin)
 # Choice 0 starts claude with the companion pin cleared (WESIDE_COMPANION empty = no companion).
 # Every session it starts is a master: WE_ROLE=master. Without --pin it runs on the same login as a
 # plain `claude` and follows your account switcher. WCLAUDE_PIN names one executable that takes
@@ -23,6 +24,8 @@ usage() {
 pick=""
 picked=0
 pin=0
+start=0
+fresh=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --as)
@@ -33,6 +36,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --pin)
       pin=1
+      shift
+      ;;
+    --start)
+      start=1
+      shift
+      ;;
+    --fresh)
+      fresh=--fresh
       shift
       ;;
     *) break ;;
@@ -81,6 +92,34 @@ crew_script() {
     print(path)
 ' scripts/crew.py || true
 }
+
+# --start: scripts/start.py plan decides who, where, pinned or not, which session.
+if [[ $start -eq 1 ]]; then
+  [[ $picked -eq 0 ]] || { echo "wclaude: --start takes the companion from the crew; drop --as" >&2; exit 2; }
+  command -v python3 >/dev/null 2>&1 || { echo "wclaude: --start needs python3" >&2; exit 1; }
+  resolver=$(crew_script)
+  [[ -n "$resolver" ]] || { echo "wclaude: --start needs the we plugin (crew.py not found)" >&2; exit 1; }
+  row=$(python3 "$(dirname "$resolver")/start.py" plan ${fresh:+"$fresh"}) || exit 1
+  IFS=$'\t' read -r pick s_pin s_dir s_sid <<<"$row"
+  picked=1
+  if [[ "$s_pin" == 1 && $pin -eq 0 ]]; then
+    pin=1
+    [[ -n "${WCLAUDE_PIN:-}" ]] || { echo "wclaude: the crew pins $pick, but WCLAUDE_PIN is not set" >&2; exit 2; }
+    launch=$WCLAUDE_PIN
+  fi
+  cd "$s_dir"
+  export WE_START=1
+  if [[ -n "$s_sid" ]]; then
+    echo "wclaude: $pick resumes its last session $s_sid in $s_dir" >&2
+    set -- --resume "$s_sid" "$@"
+  else
+    echo "wclaude: $pick starts fresh in $s_dir" >&2
+  fi
+  set -- "$@" "/we:start"
+elif [[ -n "$fresh" ]]; then
+  echo "wclaude: --fresh goes with --start" >&2
+  exit 2
+fi
 
 if [[ $picked -eq 0 ]]; then
   crew=""

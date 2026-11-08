@@ -35,7 +35,8 @@ and a line holding their bare token then drops from the L0) and ``members.<slug>
 ``title``, ``components`` (backlogs the member orders), ``workplace`` (the repo the member starts
 in, relative to the repo holding the crew file), ``extra_repos`` (more repos the member works in,
 same base), ``on_call``, ``specialist`` (the field of a member woken on demand; a member
-holding a role key is that role, never a specialist)). Every other key
+holding a role key is that role, never a specialist), ``pin`` (the member's session starts pinned,
+``wclaude --pin``; read by ``start.py`` for the coordinator, default false)). Every other key
 has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``question_label``
 (opens a question line to the human), ``labels`` (the words of a question line and of the
 parking signal in the crew's language: ``recommendation``, ``ready``, and of the notice line a
@@ -52,7 +53,9 @@ or later whose red lenses stand on WARNINGs alone count green with those warning
 Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdict.py`` owns the
 round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
-``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch``, ``release``, ``cadences``,
+``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch`` (``worker``, ``subagent_fallback``,
+``restore``: the crew's restore command after a host crash, which prints its plan without arguments
+and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
 ``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and
 ``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory in the repo's main
 worktree, so every worktree names the same folder; null, the default,
@@ -143,6 +146,7 @@ MEMBER_KEYS = {
     "extra_repos": list,
     "on_call": bool,
     "specialist": str,
+    "pin": bool,
 }
 
 
@@ -230,7 +234,7 @@ DEFAULTS: dict[str, Any] = {
         "story_days": 1,
     },
     "naming": {"key": "[A-Z]+-\\d+", "master": "<word>-<number>", "worker": "<key>-<chunk>"},
-    "launch": {"worker": None, "subagent_fallback": False},
+    "launch": {"worker": None, "subagent_fallback": False, "restore": None},
     "release": {
         "rc_job": None,
         "runbook": None,
