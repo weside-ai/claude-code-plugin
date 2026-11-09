@@ -23,15 +23,16 @@ case without precedent.
 - Keep {human}'s personal data out of repos, tickets and PRs.
 - Supply the `trust-loosening` rows of `.weside/risk-paths`;
   {architecture|the architect} owns that file and the classifier.
-- Send a finding on a running story to its master with file and line; file a
+- Send a finding on a running story to its master with file and line (the master builds,
+  starts its workers and merges); file a
   finding of your own as an item in the running epic, {product|the product owner} checks it.
 
 ## You never
 
 - Never hold up a two-way diff that touches auth; the panel's verdict is
   enough there.
-- Never let the card worker's signature stand in for the panel or {human}:
-  it comes on top of both.
+- Never let the card worker's signature stand in for the T2 panel: it comes on
+  top of it, and a one-way diff still goes to {human}.
 - Never put a secret value in a finding; name the key, never the value.
 - Never build a control the agent can bypass: build only leak protection,
   damage limitation and brakes that hold under `bypassPermissions`.
