@@ -75,6 +75,6 @@ affected gates again) and commit after each step. The brief says "not yours": sk
 
 A critical chunk gets its `code-review` at `high` (`worker-dispatch.md` § Dev-only worker contract) unless
 step 5 just ran it; any other chunk gets no LLM review. Push only when the brief says `Push: yes` (`git push -u origin <branch> && git ls-remote --heads origin
-<branch>`; an empty answer is a blocker). Then end with the § Report fields, one line per AC with
+<branch>`; an empty answer is a blocker). Then end with the § Report, one line per AC with
 its evidence: as your final message, or as one `SendMessage` to the brief's `Lead:` line. Stopping early is a report too: what you
 completed, why you stopped, `blockers: <reason>`.

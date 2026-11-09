@@ -19,7 +19,7 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
    ```
 
    Disabling hooks for the `worktree add` keeps a post-checkout bootstrap from building a venv or a
-   database for a tree that carries one file (measured 25.09.2026: four orphan databases). Commit
+   database for a tree that carries one file. Commit
    hooks still run on the commit.
 3. **Get the file into the scratch tree.** A writer dispatched by the verb writes straight to the
    absolute path inside `<scratch>`. A file written elsewhere (a refiner's `isolation: "worktree"`
@@ -48,7 +48,9 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
      no story key (`/we:retro`, `/we:optimize`, `/we:instruction-audit`; the PR body names the
      verb). `<b>` exists without an open PR (`gh pr list --head <b> --state open`): suffix it with
      the UTC date, still taken, with `-<n>`.
-     - **Open PR on `<b>`:** add your commits to it, no new PR:
+     - A document that waits on a decision goes up as a draft PR (`gh pr create --draft`), armed once decided.
+     - **Open PR on `<b>`:** add your commits to it, no new PR. A second change to a file already on
+       the open PR starts from `origin/<b>`, not from the default branch:
        `git -C <scratch> fetch origin <b> && git -C <scratch> rebase --onto origin/<b> HEAD~<n>`
        (`<n>` = your commits), then `git -C <scratch> push origin HEAD:refs/heads/<b>`.
      - **New branch:** `git -C <scratch> fetch origin && git -C <scratch> rebase origin/<default>`,
@@ -62,9 +64,9 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
    reading the plan, Selected for Development) polls `gh pr view <url> --json state,mergedAt`
    (or `gh pr checks <url> --watch`) until `state` is `MERGED`. If `gh pr merge --auto` is
    refused (auto-merge off in the repo), a required review blocks, or the PR is not merged within
-   60 min: report the PR URL to the owner (in a crew: the Lead/Orchestrator line) and leave the
+   60 min: report the PR URL to the owner (in a crew: the coordinator) and leave the
    story unselected; never merge by hand, never force. The PR URL goes into your report before
    step 6, it outlives the scratch tree.
 6. **Clean up** in a command of its own, only after the push exited 0 (and, on the PR path, the PR is open and its URL is in your report): `git worktree remove <scratch>`
-   (never `--force`, never chained to the commit or push: a rejected push then deleted the only
-   copy twice, 29.09. and 01.10.2026). Remove a refiner's worktree with the repo's own worktree verb when it has one.
+   (never `--force`, never chained to the commit or push: a rejected push then deletes the only
+   copy). Remove a refiner's worktree with the repo's own worktree verb when it has one.

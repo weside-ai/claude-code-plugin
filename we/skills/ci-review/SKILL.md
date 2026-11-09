@@ -11,7 +11,7 @@ Longer than 150 lines because the thread query and the gate checks are load-bear
 
 1. The gate is every required check (`gh pr checks $PR --required`, read live) concluded non-red, plus zero unresolved bot threads.
 2. A required reviewer's BLOCKING or WARNING is fixed. A skip needs cited evidence posted on the PR.
-3. Codex is advisory (owner 30.09.2026); its check is the one `review.codex_check` in `.weside/config.json` names (default `Codex Review`), and a repo whose workflows run no such job has none. A Codex BLOCKING or WARNING turns that check red until each finding is fixed or skipped with a cited reply (owner 28.10.2026). Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; the owner decides the subscription on these numbers.
+3. Whether Codex reviews is the repo's setting: its check is the one `review.codex_check` in `.weside/config.json` names (default `Codex Review`), and a repo whose workflows run no such job has none. Where it runs, the arm waits for its verdict on the head (`automerge_gate.py`). A Codex BLOCKING or WARNING turns that check red until each finding is fixed or skipped with a cited reply (owner 28.10.2026). Read every Codex review and check each finding against the code: fix a real defect, skip the rest with a cited line, and never spend a round on it alone. The report carries `Codex: <n> findings · <x> real · <y> fixed · <z> skipped (<reason>)`; the owner decides the subscription on these numbers.
 4. One round means collect, fix, validate locally, commit once, resolve the threads, merge the base only on a conflict (§ 3), and push once. Wait with a background `scripts/watch-pr-checks.sh` (§ 4) or `gh run watch`, never a sleep loop and never a `Monitor` for a CI job (30-min cap, shorter than a backend test job).
 5. The run stops only in a terminal state (green · cap · blocked) or before a protected action (a merge without `--auto`, a force-push, a rebase). Every other status note goes in the same message as the next tool call.
 
@@ -25,9 +25,9 @@ It needs a real PR. This skill does not call it.
 | Severity | Source | Policy |
 |---|---|---|
 | BLOCKING | a red required check · a required reviewer's BLOCKING · a direct instruction contradiction (§ 1) | fix |
-| WARNING | a required reviewer's WARNING (it turns Claude Review red since 2026-09-27) | fix |
+| WARNING | a required reviewer's WARNING (it turns Claude Review red) | fix |
 | SUGGESTION · NITPICK | any reviewer | fix or skip, with a one-line reason in the report |
-| advisory | any finding from a non-required reviewer (Codex, `chatgpt-codex-connector[bot]`) | fix a real defect; skip a rewrite of prose, a rename, a defensive branch for an input the code cannot receive, or a test the PR's red arm already covers |
+| advisory | any finding from a non-required reviewer (Codex where its check is not required, `chatgpt-codex-connector[bot]`) | fix a real defect; skip a rewrite of prose, a rename, a defensive branch for an input the code cannot receive, or a test the PR's red arm already covers |
 
 A skip is legitimate only when one of these holds:
 
