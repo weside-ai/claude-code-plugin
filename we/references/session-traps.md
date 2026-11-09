@@ -30,13 +30,11 @@ cards point here instead of repeating them.
   committer in the same tree sees its edit vanish. Each worker gets its own worktree; the Lead merges.
 - **Parked code goes to a pushed `wip/<KEY>-<slug>` branch**, never only to a scratch directory: a
   host restart wipes `/tmp`. A brief that resumes parked work names the branch.
-- Remove a worktree in a command of its own, after the push exited 0, never chained to it.
 
 ## Workers and their trees
 
 - **A worker stopped by a usage limit comes back** when its account refreshes. Stop it first, then
   start a replacement; two live workers on one branch race each other's commits.
-- Stop processes by PID, never `pkill -f <pattern>`: the pattern matches the shell running it.
 
 ## CI and checks
 

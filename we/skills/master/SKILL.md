@@ -213,7 +213,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 
 ## Close the run
 
-- **Who merges what** (the one table; L0 §Risk tiers and every other file point here). Line 1 of the
+- **Who merges what** (the one table; `/we:pr`, the master card and the epic template point here, L0 states the one-way class in brief). Line 1 of the
   crew's `risk.command` on the diff gives the class; `automerge_gate.py` refuses every merge or arm
   that breaks a row, every merge from a worker, all of them during a freeze (`board.py freeze`), and
   an arm while the PR body says `receipt red` (`verification.pre_merge_receipt`).

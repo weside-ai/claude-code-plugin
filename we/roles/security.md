@@ -18,6 +18,7 @@ case without precedent.
   loosens, why it still holds and the card version (`worker-dispatch.md`
   § Card worker). A case without precedent it escalates to you undecided;
   you decide it and record the precedent.
+- Write to or exec in prod only on {human}'s word.
 - Supply the `trust-loosening` rows of `.weside/risk-paths`;
   {architecture|the architect} owns that file and the classifier.
 - Send a finding on a running story to its master with file and line; file a

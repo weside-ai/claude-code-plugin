@@ -24,7 +24,7 @@ we/                               plugin root
   agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens)
   references/                     shared contracts (epic-plan, plan-commit, worker-dispatch, ticketing, privacy-guard,
                                   optimization-store, instruction-sources, instruction-authoring, companion-session,
-                                  context-engineering, story-plan)
+                                  context-engineering, story-plan, session-traps)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
   hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,

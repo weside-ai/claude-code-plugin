@@ -126,7 +126,9 @@ refuses its merge as for a subagent.
   default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by the conflict check of `/we:ci-review` § 3 (merge `origin/<default-branch>` only on a conflict).
-- Waiting on CI and background output: `roles/worker.md` § You never (loaded into every worker).
+- No wait loops and no `sleep` in the foreground: the auto mode holds them as a permission prompt. Wait on
+  CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background, or for the notification;
+  never poll a task file with `tail`/`cat` (a process worker's card says the same: `roles/worker.md`).
 - The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
   `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
   worker in a tree that is not its own; git runs as `git -C <worktree> …`.
