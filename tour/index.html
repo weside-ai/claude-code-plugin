@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>we plugin tour</title>
-<meta name="description" content="The we plugin for Claude Code in one page: epics and stories, one master per epic that builds one PR per story, a pane that shows every story's step, and the effort rule behind it.">
+<meta name="description" content="The we plugin for Claude Code in one page: a crew of sessions that plans epics, builds one PR per story, merges by risk class and accepts by oracle; and the same pipeline alone.">
 <style>
   :root {
     --bg: #07070c; --card: #14141e; --line: #2a2a3a;
@@ -57,29 +57,71 @@
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
   .scroll { overflow-x: auto; }
+  .lc { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+  .lc div { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; flex: 1 1 140px; }
+  .lc b { display: block; } .lc span { color: var(--muted); font-size: 0.9rem; }
+  .note { color: var(--muted); font-size: 0.95rem; }
 </style>
 </head>
 <body>
 <main>
   <h1>we — Agentic Product Ownership for Claude Code</h1>
-  <p class="lede">Plan an epic and its stories, build with one master per epic, watch every story's step in one pane, deliver one PR per story that auto-merges once CI and review are through.</p>
+  <p class="lede">A Claude Code plugin that turns an outcome into merged, accepted pull requests. A crew of sessions plans the work as epics and stories, workers build one PR per story, and a merge gate lets each PR merge by its computed risk class. You decide what only a person can decide, from one inbox.</p>
 
-  <div class="flowline">
-    <span>Plan</span><i>→</i><span>Approval</span><i>→</i><span>Build</span><i>→</i><span>PR</span><i>→</i><span>CI</span><i>→</i><span>Review</span><i>→</i><span>Merge</span>
-  </div>
-
-  <h2>1 · Plan</h2>
+  <h2>1 · Who runs</h2>
   <div class="steps">
-    <div class="step"><b><code>/we:epic</code></b><span>one outcome that serves a metric of your goal file, with named stories</span></div>
-    <div class="step"><b><code>/we:plan-story</code></b><span>one story, one PR: the build-ready plan a refiner worker writes</span></div>
+    <div class="step"><b>You, the human</b><span>vision, money and prod, and whatever else you choose; one inbox: the board</span></div>
+    <div class="step"><b>Companions (owners)</b><span>product, architecture, acceptance, machinery, coordinator, escalation, HR; each guards one cornerstone and advises. They judge, they do not build</span></div>
+    <div class="step"><b>A master per epic</b><span><code>/we:master</code>: pulls the epic's stories, starts workers, opens and merges the PRs, cleans up; no product decision</span></div>
+    <div class="step"><b>Workers</b><span>one chunk each in its own worktree (<code>we-worker</code>), report once and end. A subagent reads and reviews, never builds</span></div>
   </div>
-  <p style="margin-top:12px">You approve the epic; a story plan that lands on the default branch and passes the Ready gate (<code>status: approved</code>) is ready to build. <code>/we:council</code> convenes role lenses when you want them, <code>/we:grill</code> stress-tests a plan one question at a time.</p>
+  <p class="note" style="margin-top:12px">Who holds which role lives in <code>.weside/crew.json</code>; <code>/we:setup</code> writes it. Every session then starts with the crew process and its role card.</p>
 
-  <h2>2 · Build</h2>
-  <p><code>/we:master</code> is the epic's master. It starts a refiner worker for a story without a plan (<code>/we:plan-story</code>), one dev worker per planned story (<code>/we:develop</code>, in its own worktree), checks the report against the acceptance criteria and the DoD, pushes once, opens the story's PR and runs <code>/we:ci-review</code> when CI concludes, up to three rounds.</p>
+  <h2>2 · What is built</h2>
+  <div class="flowline"><span>Goal file</span><i>→</i><span>Epic + scope fence</span><i>→</i><span>Story = one PR</span><i>→</i><span>Plan first</span></div>
+  <ul>
+    <li><b>Goal file:</b> goals with metrics, no epics. An epic says which metric it <code>serves</code>.</li>
+    <li><b>Epic</b> (<code>/we:epic</code>): one outcome, a user, a metric, exit criteria and a <b>scope fence</b>. You approve the epic; a story inside its fence needs no further approval.</li>
+    <li><b>Story:</b> one PR per repo, acceptance criteria as Given/When/Then, each with an oracle class. Its plan <code>docs/plans/PROJ-12-story.md</code> lands on the default branch before code; a refiner worker writes it (<code>/we:plan-story</code>).</li>
+  </ul>
 
-  <h2>3 · Watch: <code>/flow</code></h2>
-  <p>A pane beside the transcript with one traffic light per step, for a story, every story of an epic, or whatever this session works on. It reads git and GitHub on its own every two minutes; no agent feeds it. Buttons run the verb the state calls for.</p>
+  <h2>3 · A story's life</h2>
+  <div class="lc">
+    <div><b>ON_HOLD</b><span>filed, reopen trigger named</span></div>
+    <div><b>Backlog</b><span>its epic is approved</span></div>
+    <div><b>Selected</b><span>Ready gate green, tier computed, the three lenses green (<code>/we:lens ready</code>)</span></div>
+    <div><b>In Progress</b><span>a master pulled it</span></div>
+    <div><b>In Review</b><span>PR merged and linked (<code>/we:merged</code>)</span></div>
+    <div><b>Done</b><span>receipt report green, or an acceptance comment with <code>Not proven:</code></span></div>
+  </div>
+  <p class="note" style="margin-top:12px"><code>board.py</code> makes every move and refuses one whose entry rule fails.</p>
+
+  <h2>4 · Who waits on whom: the risk class</h2>
+  <p>A classifier over <code>.weside/risk-paths</code> computes each PR's class. The merge gate (a hook on every merge and auto-merge arm) refuses what breaks the table, refuses any merge from a worker, and holds everything during a freeze.</p>
+  <div class="scroll">
+    <table>
+      <tr><th>Class</th><th>Who arms or merges</th><th>Waits for</th></tr>
+      <tr><td><code>T0</code></td><td>the master arms auto-merge</td><td>green CI, and the Codex verdict where the repo runs Codex</td></tr>
+      <tr><td><code>T2</code></td><td>the master</td><td>as T0, plus a green T2 lens panel on the PR head (<code>/we:lens t2</code>)</td></tr>
+      <tr><td><code>T2</code> with a card hit (trust loosening, money path, brake review)</td><td>the master</td><td>as T2, plus a security card worker's <code>PASS</code> on the head; never you</td></tr>
+      <tr><td><code>T2 one-way</code> (money, destructive migration, Terraform or secrets)</td><td>nobody arms</td><td>the repo's self-merge window (2 h after the green panel, a <code>veto</code> label stops it), else you</td></tr>
+      <tr><td>one-way in the brake's own code</td><td>only you</td><td>your merge</td></tr>
+    </table>
+  </div>
+
+  <h2>5 · Your one inbox: the board</h2>
+  <p>A session that needs you writes one question with its recommendation (<code>board.py ask</code>); a cold reader first checks that it stands on its own. The <code>/board</code> pane shows what waits for you, which sessions run and on what. You answer with a button; the coordinator's session carries the answer back to the session that asked, and bundles what is not urgent on the crew's cadence.</p>
+  <pre><code>QUESTION · PROJ-12 Export as CSV · Should the export include archived rows? · Recommendation: no, add a filter later</code></pre>
+
+  <h2>6 · Acceptance</h2>
+  <ul>
+    <li><b><code>receipt</code></b>: a scripted check runs on the first release candidate that carries the story; <code>/we:accept</code> moves green stories to Done.</li>
+    <li><b><code>ci</code></b>: a test in CI, with the reason staging cannot see it.</li>
+    <li><b><code>walk</code></b>: a person or an acceptance worker walks a screen, only where no script sees it.</li>
+  </ul>
+
+  <h2>7 · Watch it: <code>/flow</code> and <code>/board</code></h2>
+  <p><code>/flow</code> is a pane with one traffic light per step, for a story, every story of an epic, or this session's work. It reads git and GitHub on its own; buttons run the next verb.</p>
   <div class="pane" role="img" aria-label="The flow pane: an epic with one story red in CI and its traffic lights">
     <div class="head">◆ PROJ-10</div>
     <div><span class="bar"><span class="f">██████████████████████</span><span class="e">░░░░</span></span> <b>13/15 merged · 1 open · 1 red</b></div>
@@ -106,22 +148,25 @@
       <tr><th>Lamp</th><th>Green when</th><th>Its button</th></tr>
       <tr><td>Plan · Approval</td><td>the story plan is on the default branch and says <code>status: approved</code></td><td>Refine → <code>/we:master</code></td></tr>
       <tr><td>Build · PR</td><td>a worker's commits are on a branch and a PR is open</td><td>Build → <code>/we:master</code></td></tr>
-      <tr><td>CI · Review</td><td>the required checks and the Claude Review passed (Codex is advisory)</td><td>Fix CI → <code>/we:ci-review</code></td></tr>
+      <tr><td>CI · Review</td><td>the required checks and the Claude Review passed; Codex is shown beside it and never turns the lamp red</td><td>Fix CI → <code>/we:ci-review</code></td></tr>
       <tr><td>Merge</td><td>merged; yellow while auto-merge is armed, red on a conflict</td><td>Standup → <code>/we:standup</code></td></tr>
     </table>
   </div>
-  <p style="margin-top:12px"><code>/flow</code> without a key takes the session's focus, its branch, or the keys you named. Details: <a href="https://github.com/weside-ai/claude-code-plugin/blob/main/docs/flow.md">docs/flow.md</a>.</p>
+  <p style="margin-top:12px">Details: <a href="https://github.com/weside-ai/claude-code-plugin/blob/main/docs/flow.md">docs/flow.md</a> · <a href="https://github.com/weside-ai/claude-code-plugin/blob/main/we/docs/board.md">we/docs/board.md</a>.</p>
 
-  <h2>4 · Deliver</h2>
-  <p>Claude arms auto-merge when CI and the Codex review are through; you merge the computed one-way class (money path, destructive migration, Terraform or secrets, a loosened tenant, auth or trust rule). <code>/we:merged</code> removes the worktrees and branches and moves each linked story to In Review; Done follows acceptance.</p>
+  <h2>8 · Limits and restarts</h2>
+  <ul>
+    <li>A session that hits its usage limit resumes with <code>/we:resume</code> (or "weiter"): open items, workers, CI watches.</li>
+    <li><code>we-worker status</code> shows each worker, its last activity and a usage limit with its resume command; <code>we-worker stop</code> stops one before a replacement starts.</li>
+    <li>Parked work goes to a pushed <code>wip/</code> branch; after a compaction a session rebuilds its state from the plan, git, the PR and the ticket.</li>
+  </ul>
 
-  <h2>Around the pipeline</h2>
+  <h2>9 · Alone, without a crew</h2>
+  <p>Without <code>.weside/crew.json</code> the same pipeline runs in one session: <code>/we:epic</code>, then <code>/we:master &lt;epic&gt;</code> plans each story, builds it in a worktree subagent, opens one PR per story, works CI and reviews with <code>/we:ci-review</code> and arms auto-merge; <code>/we:merged</code> cleans up. No board and no role cards; questions come to you at the end of the message, with a recommendation.</p>
   <div class="steps">
-    <div class="step"><b><code>/we:standup</code></b><span>picks you back up: what we work on, where it stands, what you must do next</span></div>
-    <div class="step"><b><code>/we:ac-review</code></b><span>a branch against its acceptance criteria and the DoD</span></div>
+    <div class="step"><b><code>/we:standup</code></b><span>where you are and what you must do next</span></div>
+    <div class="step"><b><code>/we:council</code> · <code>/we:grill</code></b><span>role lenses on a question; one question at a time until a plan holds</span></div>
     <div class="step"><b><code>/we:retro</code> · <code>/we:optimize</code></b><span>frictions become inbox candidates; you decide, the ledger keeps them</span></div>
-    <div class="step"><b><code>/we:resume</code></b><span>after a usage-limit stop: open items, workers, CI watches</span></div>
-    <div class="step"><b><code>/we:setup</code></b><span>per repo: stack, ticketing, council roster, crew, statusline</span></div>
   </div>
 
   <h2>The effort rule</h2>
@@ -130,7 +175,6 @@
     <li><code>we:dev-high</code> for promises across several code paths, money, transactions or idempotency, fragile paths, a second attempt, and plan-writing.</li>
     <li>Implementation never runs on Sonnet. One implementer per story; parallel only for disjoint files.</li>
   </ul>
-  <p>The measurements: <a href="https://github.com/weside-ai/claude-code-plugin/blob/main/we/AUTHORING.md">we/AUTHORING.md</a>.</p>
 
   <h2>Install</h2>
 <pre><code>/plugin marketplace add weside-ai/claude-code-plugin
