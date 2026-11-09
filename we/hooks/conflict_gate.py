@@ -17,7 +17,7 @@ prints the merge state once, and a worker or peer session idles while its PR con
   * Fail-open on every error: a `gh` or parse failure lets the stop through.
 
 State: `$WE_STATE_DIR/conflict-gate/<session>.json` (default `~/.claude/we-state`); a session's
-file ages out after 30 days (`scripts/state_prune.py`).
+file ages out after 45 days (`scripts/state_prune.py`).
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def decide(payload: dict, now: float | None = None) -> str | None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state))
-        state_prune.prune(path.parent, "*.json")  # a session's state ages out after 30 days
+        state_prune.prune(path.parent, "*.json")  # a session's state ages out (45 days)
     except OSError:
         pass
     return reason

@@ -292,12 +292,12 @@ _READ_ONLY_DOC = re.compile(
 )
 
 
-_NOT_LITERAL = frozenset("$`\\%")
+_LITERAL_WORD = re.compile(r"[A-Za-z0-9 _:{}()\"'.=@]*")
 
 
 def _piped_read_only(argv: list[str], at: int) -> bool:
     """Whether the stdin of the `gh` at `argv[at]` is an `echo`/`printf` right before it, piped in
-    with `|`, whose words are fully literal (no `$`, backtick, backslash, `%` or flag) and spell a
+    with `|`, whose words the shell cannot change (`_LITERAL_WORD`, no `..`, no flag) and spell a
     read-only query, and the call itself redirects nothing (`<`).
 
     Only that one segment counts: a query elsewhere in the command says nothing about this stdin.
@@ -313,10 +313,11 @@ def _piped_read_only(argv: list[str], at: int) -> bool:
     if any(t.startswith("<") for t in vg._args_from(argv, at)):
         return False
     words = segment[1:]
-    # Only fully literal words count: the shell expands `$(…)`, `$VAR` and backticks, printf
-    # formats and escapes (`%s`, `\165`) and `echo -e` after this check, so any of them can
-    # spell a mutation the regex never saw.
-    if any(set(w) & _NOT_LITERAL or w.startswith("-") for w in words):
+    # Only words the shell cannot change count: it expands `$(…)`, `$VAR`, backticks, braces
+    # (`{mu,}tation`, `{a..b}`), globs and `~`, and printf/`echo -e` decode formats and escapes,
+    # all after this check, so any of them could spell a mutation the regex never saw. An
+    # allow-list (no `,`, no `..`, no `$ \ % * ? [ ~`) instead of a list of known tricks.
+    if any(not _LITERAL_WORD.fullmatch(w) or ".." in w or w.startswith("-") for w in words):
         return False
     return bool(_READ_ONLY_DOC.search(" ".join(words)))
 

@@ -22,18 +22,19 @@ def _file(folder: Path, name: str, age_days: float, now: float) -> Path:
 
 def test_stale_files_go_and_fresh_ones_stay(tmp_path):
     now = 2_000_000_000.0
-    old = _file(tmp_path, "a.jsonl", 31, now)
+    old = _file(tmp_path, "a.jsonl", 46, now)
+    kept = _file(tmp_path, "d.jsonl", 40, now)  # inside the audit span plus margin
     fresh = _file(tmp_path, "b.jsonl", 2, now)
     other = _file(tmp_path, "c.txt", 99, now)
     assert state_prune.prune(tmp_path, "*.jsonl", now=now) == 1
-    assert not old.exists() and fresh.exists() and other.exists()
+    assert not old.exists() and fresh.exists() and other.exists() and kept.exists()
 
 
 def test_one_sweep_a_day(tmp_path):
     now = 2_000_000_000.0
     state_prune.prune(tmp_path, "*.jsonl", now=now)
     os.utime(tmp_path / state_prune.STAMP, (now, now))
-    late = _file(tmp_path, "a.jsonl", 40, now)
+    late = _file(tmp_path, "a.jsonl", 50, now)
     assert state_prune.prune(tmp_path, "*.jsonl", now=now + 3600) == 0
     assert late.exists()
     assert state_prune.prune(tmp_path, "*.jsonl", now=now + DAY + 1) == 1

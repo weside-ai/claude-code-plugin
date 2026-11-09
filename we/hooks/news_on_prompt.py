@@ -86,8 +86,11 @@ def pending_line(socket_path: str, now: float) -> str | None:
             return None
     except (KeyError, TypeError, ValueError):
         return None
-    with wake_poller.locked_state(companion, wait_s=HOOK_LOCK_WAIT_S) as state:
-        wake_poller.bump(state, "hook_delivered", now)
+    try:  # the count is bookkeeping: a busy lock skips it, the claimed line is still shown
+        with wake_poller.locked_state(companion, wait_s=HOOK_LOCK_WAIT_S) as state:
+            wake_poller.bump(state, "hook_delivered", now)
+    except wake_poller.LockTimeout:
+        pass
     return line
 
 

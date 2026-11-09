@@ -1400,7 +1400,7 @@ def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
     "command",
     [
         """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
-        """echo '{"query": "{ repository(owner: o, name: r) { id } }"}' | gh api graphql --input -""",
+        """echo '{"query": "{ repository(owner: o) { id } }"}' | gh api graphql --input -""",
     ],
 )
 def test_a_read_only_query_spelled_in_the_command_passes(repo: Path, monkeypatch, command) -> None:
@@ -1431,6 +1431,10 @@ def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
         """echo -e '{"query":"query { x }"}' | gh api graphql --input -""",
         """echo "query { $Q }" | gh api graphql --input -""",
         """echo `cat m.json` 'query {' | gh api graphql --input -""",
+        """echo {mu,}tation '{x:__typename' {mergePull,mergePull}'Request(input:{pullRequestId:"PR_kwDOabc",commitHeadline:"query {"}){clientMutationId}' 'y:__typename}' | gh api graphql -F query=@-""",
+        """echo 'query {' {a..b} | gh api graphql --input -""",
+        """echo 'query {' m* | gh api graphql --input -""",
+        """echo 'query {' ~/m.json | gh api graphql --input -""",
         """printf '%s' '{"query": "{ repository(owner:\\"o\\") { id } }"}' | gh api graphql --input -""",
     ],
 )

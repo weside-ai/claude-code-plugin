@@ -308,6 +308,32 @@ class PollerTest(unittest.TestCase):
         finally:
             os.close(fd)
 
+    def test_the_poller_waits_for_a_busy_lock_instead_of_dying(self):
+        """T2 acceptance lens on #197: the poller takes the lock without a timeout (a cursor it
+        records after a delivery is never dropped); only the prompt hook's wait is bounded."""
+        real, waits = wp.locked_state, []
+
+        def spy(companion, wait_s=wp.LOCK_WAIT_S):
+            waits.append(wait_s)
+            return real(companion, wait_s=wait_s)
+
+        p = self.poller()
+        self.answers = [self.handoffs((17, "room:384"), cursor=17)]
+        with mock.patch.object(wp, "locked_state", spy):
+            self.assertEqual(p.poll_once(), "ok")
+        self.assertTrue(waits)
+        self.assertEqual(set(waits), {None})
+
+    def test_an_unbounded_wait_takes_the_lock_once_it_is_free(self):
+        target = wp.state_path("Nox")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(target.with_name(target.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o600)
+        wp.fcntl.flock(fd, wp.fcntl.LOCK_EX)
+        threading.Timer(0.3, os.close, (fd,)).start()
+        with wp.locked_state("Nox", wait_s=None) as state:
+            state["server_shape"] = "rooms"
+        self.assertEqual(wp.read_state("Nox")["server_shape"], "rooms")
+
     def test_the_poller_sends_without_holding_the_cursor_lock(self):
         free = []
 

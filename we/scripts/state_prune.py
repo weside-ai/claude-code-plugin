@@ -3,7 +3,7 @@
 
 Per-session state (``~/.claude/we-timing/<session>.jsonl``, ``<state dir>/conflict-gate/<session>.json``)
 grows by one file per session and nothing else removes it. ``prune(folder, pattern)`` deletes the
-files matching ``pattern`` whose mtime is older than ``MAX_AGE_DAYS`` (30), at most once per
+files matching ``pattern`` whose mtime is older than ``MAX_AGE_DAYS`` (45: `/we:instruction-audit` reads a 30-day span of `we-timing`, plus a margin), at most once per
 ``EVERY_S`` (one day) per folder: the folder's ``.pruned`` file stamps the last sweep. Never raises:
 a sweep that fails leaves the files for the next one.
 """
@@ -14,7 +14,7 @@ import contextlib
 import time
 from pathlib import Path
 
-MAX_AGE_DAYS = 30
+MAX_AGE_DAYS = 45
 EVERY_S = 86_400
 STAMP = ".pruned"
 

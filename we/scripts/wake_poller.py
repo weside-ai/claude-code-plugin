@@ -52,8 +52,9 @@ Per cycle
     (``hooks/news_on_prompt.py``), cursor kept.
 
 Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
-``<file>.lock``, atomic replace), shared by every session of that companion. The lock is taken
-with a timeout (``LOCK_WAIT_S``; ``LockTimeout`` past it) and never held across a delivery: a
+``<file>.lock``, atomic replace), shared by every session of that companion. The poller takes
+the lock as long as it takes, the prompt hook with a timeout (``LockTimeout`` past it), and nobody
+holds it across a delivery: a
 cycle decides under the lock, sends without it, then records the outcome under it again.
     ``handoff_cursor`` int or null — every handoff id up to it is delivered
     ``server_shape`` ``handoffs`` (default) or ``rooms`` — the rule the last cycle applied
@@ -302,17 +303,21 @@ class LockTimeout(OSError):  # noqa: N818  (reads as the event, like TimeoutErro
 
 
 @contextlib.contextmanager
-def locked_state(companion: str, wait_s: float = LOCK_WAIT_S):
+def locked_state(companion: str, wait_s: float | None = LOCK_WAIT_S):
     """Yield the cursor file's state under its lock; the state is written back on exit.
 
-    Raises ``LockTimeout`` when the lock is not free within ``wait_s`` seconds.
+    Raises ``LockTimeout`` when the lock is not free within ``wait_s`` seconds; ``None`` waits as
+    long as it takes (the poller: its own process, and a cursor it records after a delivery must
+    not be dropped, or the next cycle delivers again).
     """
     target = state_path(companion)
     target.parent.mkdir(parents=True, exist_ok=True)
     lock = target.with_name(target.name + ".lock")
     fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        if fcntl is not None:
+        if fcntl is not None and wait_s is None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        elif fcntl is not None:
             deadline = time.monotonic() + wait_s
             while True:
                 try:
@@ -656,13 +661,13 @@ class Poller:
         self.resumed = False
 
     def start(self) -> None:
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             self.resumed = state["cursor"] is not None
             state["started"] = iso(self.clock())
 
     def _fail(self, cls: str, detail: str | None = None) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_error"] = {"class": cls, "at": iso(now)}
             if detail:
                 state["last_error"]["detail"] = detail
@@ -680,7 +685,7 @@ class Poller:
     def poll_once(self) -> str:
         """One cycle; returns ``ok``, ``error:<class>``, ``auth-exit`` or ``gone``."""
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             last_shape = state["server_shape"]
             bases = {"handoffs": state["handoff_cursor"], "rooms": state["cursor"]}
             bump(state, "polls", now)
@@ -702,7 +707,7 @@ class Poller:
                 if shape_of(answer) != "rooms":
                     raise PollError("format")
             if shape != last_shape:
-                with locked_state(self.companion) as state:
+                with locked_state(self.companion, wait_s=None) as state:
                     state["server_shape"] = shape
                 self.log(f"server shape {shape}")
         except PollError as exc:
@@ -716,7 +721,7 @@ class Poller:
 
     def _apply_handoffs(self, base: int | None, answer: dict) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_ok"] = iso(now)
             if state["handoff_cursor"] != base:
                 self.log("ok skipped (cursor moved by another poller)")
@@ -734,7 +739,7 @@ class Poller:
         failed = self._send(text)
         if failed == "gone":
             return "gone"
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
             if failed:
                 write_pending(self.socket_path, self.companion, {"handoffs": handoffs}, now)
@@ -751,7 +756,7 @@ class Poller:
 
     def _apply(self, base: int | None, answer: dict, since: bool) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_ok"] = iso(now)
             if state["cursor"] != base:
                 self.log("ok skipped (cursor moved by another poller)")
@@ -775,7 +780,7 @@ class Poller:
         failed = self._send(text)
         if failed == "gone":
             return "gone"
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
             delivered, delivered_row = state["delivered"], state["delivered_row"]
             if failed:
