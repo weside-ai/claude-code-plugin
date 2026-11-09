@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,8 @@ if args[:2] == ["agents", "--json"]:
     print(json.dumps(rows)); sys.exit(0)
 if args[:1] == ["stop"]:
     json.dump([r for r in rows if r["id"] != args[1]], open(state, "w")); sys.exit(0)
+if args[:1] == ["--help"]:
+    print("Options:\n  --bg  --agent <a>  --permission-mode <m>  -n, --name <n>  --resume  --settings  --allow-dangerously-skip-permissions"); sys.exit(0)
 if args[:1] == ["logs"]:
     print("\x1b[1mhello\x1b[0m world\r"); sys.exit(0)
 sys.exit(0)
@@ -249,13 +252,51 @@ def test_logs_raw_strips_ansi(tmp_path):
     assert run(project, env, "logs", "w", "--raw").stdout == "hello world\n"
 
 
-def test_stop_waits_until_the_row_is_gone(tmp_path):
-    rows = [
-        {"id": "ab12", "name": "w", "kind": "background", "pid": os.getpid(), "sessionId": "s"}
-    ]
-    project, env = setup(tmp_path, rows)
-    proc = run(project, env, "stop", "w")
-    assert proc.returncode == 0 and "w (ab12) stopped" in proc.stdout
+def _fake_worker():
+    """A process with one child, standing in for a worker session and the watcher it left."""
+    proc = subprocess.Popen(["bash", "-c", "sleep 60 & wait"])
+    for _ in range(50):
+        kids = subprocess.run(
+            ["pgrep", "-P", str(proc.pid)], capture_output=True, text=True, check=False
+        )
+        if kids.stdout.strip():
+            return proc, int(kids.stdout.split()[0])
+        time.sleep(0.05)
+    raise AssertionError("no child")
+
+
+def test_stop_waits_until_the_row_is_gone_and_ends_what_it_left(tmp_path):
+    worker, child = _fake_worker()
+    try:
+        rows = [
+            {"id": "ab12", "name": "w", "kind": "background", "pid": worker.pid, "sessionId": "s"}
+        ]
+        project, env = setup(tmp_path, rows)
+        proc = run(project, env, "stop", "w")
+        assert proc.returncode == 0, proc.stderr
+        assert f"w (ab12) stopped; also ended: {child} sleep" in proc.stdout
+    finally:
+        worker.kill()
+
+
+def test_stop_of_a_window_worker_sends_sigterm_to_its_pid(tmp_path):
+    # Detached (its parent exits at once), so init reaps it as a real session's parent would.
+    out = subprocess.run(
+        ["bash", "-c", "sleep 60 >/dev/null 2>&1 & echo $!"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pid = int(out.stdout)
+    try:
+        rows = [{"id": "cd34", "name": "w", "kind": "interactive", "pid": pid, "sessionId": "s"}]
+        project, env = setup(tmp_path, rows)
+        env["WE_WORKER_STOP_WAIT"] = "5"
+        proc = run(project, env, "stop", "w")
+        assert proc.returncode == 0 and "w (cd34) stopped" in proc.stdout, proc.stderr
+        assert not any(c["argv"][:1] == ["stop"] for c in calls(tmp_path))
+    finally:
+        subprocess.run(["kill", str(pid)], capture_output=True, check=False)
 
 
 @pytest.mark.parametrize(("name", "warns"), [("AC-12-impl", False), ("helper", True)])
@@ -264,3 +305,89 @@ def test_without_a_crew_the_default_key_pattern_decides(tmp_path, name, warns):
     proc = run(project, env, name, "--bg", "go")
     assert proc.returncode == 0
     assert ("carries no story key ([A-Z]+-\\d+)" in proc.stderr) is warns
+
+
+def test_an_unknown_flag_before_the_claude_args_refuses(tmp_path):
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", "/x", "go")
+    assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
+    assert "cd <tree> && we-worker AC-12-impl" in proc.stderr
+    assert not started(tmp_path)
+
+
+def test_a_claude_flag_passes(tmp_path):
+    project, env = setup(tmp_path)
+    assert (
+        run(project, env, "AC-12-impl", "--bg", "--agent", "we:dev-medium", "go").returncode == 0
+    )
+    assert started(tmp_path)[0]["argv"][-3:] == ["--agent", "we:dev-medium", "go"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "args", "bypass"),
+    [("bypass", ["--bg"], True), ("bypass", [], False), ("auto", ["--bg"], False)],
+)
+def test_worker_mode_bypass_starts_only_a_bg_worker_in_bypass(tmp_path, mode, args, bypass):
+    project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": mode}})
+    env["TMUX"] = ""
+    run(project, env, "AC-12-impl", *args, "go")
+    argv = [c["argv"] for c in calls(tmp_path) if c["argv"] and c["argv"][0] in ("--bg", "-n")]
+    if args:
+        assert ("--permission-mode" in argv[0]) is bypass
+    else:
+        assert not any("--permission-mode" in a for a in argv)
+
+
+def test_a_permission_mode_of_the_caller_wins(tmp_path):
+    project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": "bypass"}})
+    run(project, env, "AC-12-impl", "--bg", "--permission-mode", "plan", "go")
+    (call,) = started(tmp_path)
+    assert call["argv"].count("--permission-mode") == 1 and "plan" in call["argv"]
+
+
+def test_checkpoint_commits_tracked_changes_and_pushes_a_wip_branch(tmp_path):
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    tree = tmp_path / "tree"
+    subprocess.run(["git", "init", "-q", "-b", "feat/AC-12-slug", str(tree)], check=True)
+    git = ["git", "-C", str(tree), "-c", "user.email=t@t", "-c", "user.name=t"]
+    (tree / "a.txt").write_text("one\n")
+    subprocess.run([*git, "add", "a.txt"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "one"], check=True)
+    subprocess.run([*git, "remote", "add", "origin", str(origin)], check=True)
+    (tree / "a.txt").write_text("two\n")
+    (tree / "untracked.txt").write_text("x\n")
+    rows = [
+        {
+            "id": "ab12",
+            "name": "w",
+            "kind": "background",
+            "pid": 1,
+            "cwd": str(tree),
+            "sessionId": "s",
+        }
+    ]
+    project, env = setup(tmp_path, rows)
+    env.update(
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@t",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@t",
+    )
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 0, proc.stderr
+    assert "pushed to wip/AC-12-slug" in proc.stdout
+    shown = subprocess.run(
+        ["git", "--git-dir", str(origin), "show", "wip/AC-12-slug:a.txt"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert shown.stdout == "two\n"
+    status = subprocess.run(
+        ["git", "-C", str(tree), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert status.stdout.strip() == "?? untracked.txt"

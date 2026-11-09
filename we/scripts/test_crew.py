@@ -1020,3 +1020,12 @@ def test_the_launch_verb_without_a_crew_prints_the_default(tmp_path):
     (tmp_path / ".git").mkdir()
     out = run(tmp_path, "launch", "allow_bypass")
     assert out.returncode == 0 and out.stdout == "false\n"
+
+
+def test_launch_worker_mode_is_auto_or_bypass(tmp_path):
+    assert crew.DEFAULTS["launch"]["worker_mode"] == "auto"
+    core, _ = workspace(tmp_path, {**CREW, "launch": {"worker_mode": "bypass"}})
+    assert run(core, "launch", "worker_mode").stdout == "bypass\n"
+    bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"worker_mode": "yolo"}})
+    out = run(bad, "validate")
+    assert out.returncode == 1 and "launch.worker_mode must be one of auto, bypass" in out.stderr

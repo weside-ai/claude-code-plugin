@@ -82,7 +82,10 @@ template in force; the master's boot check and `/we:accept` read it there.
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
   {agent}`, so its effort and model apply). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
-  the Lead's messages for approval.
+  the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
+  a `--bg` worker in bypass, a window worker stays `auto` (owner 09.11., Q478): in the background
+  nobody answers a prompt, and the `permissions.deny`/`ask` rules and the plugin's guards still
+  hold under bypass.
 
 With a template, the Lead:
 

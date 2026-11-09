@@ -28,10 +28,14 @@ Usage:
   worker_launch.py backend [--repo <dir>]          prints `subagent` or the template; 2 = invalid
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
-                                                   with --worktree it removes marker and brief; a
+                                                   with --worktree it removes marker and brief;
+                                                   several sessions of that name all stop (ids
+                                                   printed), a refusal names the pid; a
                                                    template whose launcher has a `stop` verb
                                                    (`we-worker`) stops through it
   worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
+  worker_launch.py checkpoint --name <n>           commit the worker's tracked changes, push them to
+                                                   wip/<branch without its type prefix>
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
 """
 
@@ -260,6 +264,12 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
     tokens = validate(template)
     if "{agent}" in tokens and not agent:
         raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
+    if agent and "{agent}" not in tokens:
+        print(
+            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
+            "the worker starts without its effort and model; add `--agent {agent}` to the template",
+            file=sys.stderr,
+        )
     gd = git_dir(worktree)
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
@@ -346,35 +356,67 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     return first
 
 
-def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> None:
-    cwd = str(worktree) if worktree else None
-    rows = _running(sessions(), name, cwd)
-    if not rows:
-        clear_marker(worktree)
-        raise LaunchError(f"no running session named {name}")
-    if len(rows) > 1:
-        raise LaunchError(f"{len(rows)} sessions named {name}: pass --worktree")
-    launcher = launcher_with_verbs(worktree)
-    argv = (
-        [launcher, "stop", str(rows[0]["id"])]
-        if launcher
-        else ["claude", "stop", str(rows[0]["id"])]
-    )
+def _stop_one(row: dict, launcher: str | None) -> str:
+    """Stop one session row; returns its id. A refusal names the id and the pid."""
+    rid = str(row.get("id"))
+    argv = [launcher or "claude", "stop", rid]
     try:
         out = subprocess.run(
             argv, capture_output=True, text=True, check=False, timeout=STOP_VERB_TIMEOUT_S
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise LaunchError(f"{argv[0]} stop: {exc}") from exc
+        raise LaunchError(f"{argv[0]} stop {rid}: {exc}") from exc
     if out.returncode != 0:
-        raise LaunchError(f"{argv[0]} stop exited {out.returncode}: {out.stderr.strip()}")
+        raise LaunchError(
+            f"{argv[0]} stop {rid} exited {out.returncode}: {out.stderr.strip()} "
+            f"(pid {row.get('pid', '?')}: `kill {row.get('pid', '<pid>')}` ends it)"
+        )
+    return rid
+
+
+def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> list[str]:
+    """Stop every session named `name` (in `worktree` when given); returns their ids."""
+    cwd = str(worktree) if worktree else None
+    rows = _running(sessions(), name, cwd)
+    if not rows:
+        clear_marker(worktree)
+        raise LaunchError(f"no running session named {name}")
+    launcher = launcher_with_verbs(worktree)
+    ids = [_stop_one(row, launcher) for row in rows]
     deadline = time.monotonic() + wait_s
-    while _running(sessions(), name, cwd):
+    while left := _running(sessions(), name, cwd):
         if time.monotonic() >= deadline:
-            raise LaunchError(f"{name} still running {wait_s:.0f} s after {argv[0]} stop", 3)
+            pids = ", ".join(f"{r.get('id')} pid {r.get('pid', '?')}" for r in left)
+            raise LaunchError(f"{name} still running {wait_s:.0f} s after stop ({pids})", 3)
         time.sleep(1)
     clear_marker(worktree)
-    _timing("WorkerStop", name=name, cwd=cwd)
+    _timing("WorkerStop", name=name, cwd=cwd, ids=ids)
+    return ids
+
+
+def checkpoint(name: str) -> str:
+    """Commit the tracked changes in the worker's worktree and push them to wip/<branch sans type>.
+
+    For a Lead before a quota pause; returns the line to print. The worker's cwd comes from
+    `claude agents --json`.
+    """
+    rows = [r for r in sessions() if r.get("name") == name and r.get("cwd")]
+    if not rows:
+        raise LaunchError(f"no session named {name} with a working directory")
+    tree = Path(str(rows[-1]["cwd"]))
+    branch = _git(tree, "rev-parse", "--abbrev-ref", "HEAD")
+    if not branch or branch == "HEAD":
+        raise LaunchError(f"{tree}: no branch to name the wip branch after")
+    wip = "wip/" + branch.split("/", 1)[-1]
+    dirty = _git(tree, "status", "--porcelain", "--untracked-files=no")
+    if dirty and (
+        _git(tree, "add", "-u") is None
+        or _git(tree, "commit", "-q", "-m", f"wip: checkpoint {name}") is None
+    ):
+        raise LaunchError(f"{tree}: the checkpoint commit failed (a pre-commit hook?)")
+    if _git(tree, "push", "-q", "origin", f"HEAD:refs/heads/{wip}") is None:
+        raise LaunchError(f"push of {wip} failed; the commit stays local in {tree}")
+    return f"checkpoint {_git(tree, 'rev-parse', '--short', 'HEAD')} of {name} pushed to {wip}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -392,6 +434,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--worktree", type=Path)
     p = sub.add_parser("alive")
     p.add_argument("--name", required=True)
+    p = sub.add_parser("checkpoint")
+    p.add_argument("--name", required=True)
     args = parser.parse_args(argv)
     try:
         if args.cmd == "backend":
@@ -400,8 +444,10 @@ def main(argv: list[str] | None = None) -> int:
             marker = launch(args.worktree.resolve(), args.name, args.brief_file, args.agent)
             print(f"launched: {args.name} · marker {marker}")
         elif args.cmd == "stop":
-            stop(args.name, args.worktree.resolve() if args.worktree else None)
-            print(f"stopped: {args.name}")
+            ids = stop(args.name, args.worktree.resolve() if args.worktree else None)
+            print(f"stopped: {args.name} ({', '.join(ids)})")
+        elif args.cmd == "checkpoint":
+            print(checkpoint(args.name))
         else:
             return 0 if alive(args.name) else 1
     except LaunchError as exc:
