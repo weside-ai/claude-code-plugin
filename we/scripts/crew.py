@@ -22,6 +22,9 @@ Usage:
                                             unknown key (exit 1 naming every one)
   crew.py state-dir [--from DIR]            the crew's state directory (``state_dir``), absolute;
                                             without a crew file the default
+  crew.py launch FIELD [--from DIR]         the value of ``launch.FIELD`` for a shell: a bool as
+                                            ``true``/``false``, null as an empty line; without a
+                                            crew file the default (exit 0), a broken crew exit 1
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -53,8 +56,12 @@ or later whose red lenses stand on WARNINGs alone count green with those warning
 Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdict.py`` owns the
 round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
-``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch`` (``worker``, ``subagent_fallback``,
-``restore``: the crew's restore command after a host crash, which prints its plan without arguments
+``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
+starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
+``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
+``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
+``permissions.defaultMode``; ``worker_timer``: a script ``we-worker`` registers each worker's time
+limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
 and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
 ``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and
 ``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory in the repo's main
@@ -234,7 +241,13 @@ DEFAULTS: dict[str, Any] = {
         "story_days": 1,
     },
     "naming": {"key": "[A-Z]+-\\d+", "master": "<word>-<number>", "worker": "<key>-<chunk>"},
-    "launch": {"worker": None, "subagent_fallback": False, "restore": None},
+    "launch": {
+        "worker": None,
+        "subagent_fallback": False,
+        "allow_bypass": False,
+        "worker_timer": None,
+        "restore": None,
+    },
     "release": {
         "rc_job": None,
         "runbook": None,
@@ -1138,6 +1151,7 @@ VERBS = (
     "session-kind",
     "validate",
     "state-dir",
+    "launch",
 )
 
 
@@ -1146,10 +1160,13 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
     cmd = argv[0]
-    if cmd in ("skill-path", "path", "state-dir"):
-        return {"skill-path": _skill_path_cli, "path": _path_cli, "state-dir": _state_dir_cli}[
-            cmd
-        ](argv)
+    if cmd in ("skill-path", "path", "state-dir", "launch"):
+        return {
+            "skill-path": _skill_path_cli,
+            "path": _path_cli,
+            "state-dir": _state_dir_cli,
+            "launch": _launch_cli,
+        }[cmd](argv)
     notes: list[str] = []
     loaded = _load_cli(argv, notes, strict=cmd == "validate" and "--strict" in argv)
     if loaded is None:
@@ -1174,6 +1191,21 @@ def _state_dir_cli(argv: list[str]) -> int:
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _launch_cli(argv: list[str]) -> int:
+    field = _positional(argv[1:], ("--from",))
+    if field not in DEFAULTS["launch"]:
+        print(f"crew: launch takes one of {', '.join(DEFAULTS['launch'])}", file=sys.stderr)
+        return 2
+    try:
+        _path, crew = find_and_load(_opt(argv, "--from"))
+    except CrewError as exc:
+        print(f"crew: {exc}", file=sys.stderr)
+        return 1
+    value = (crew or DEFAULTS)["launch"][field]
+    print(("true" if value else "false") if isinstance(value, bool) else (value or ""))
     return 0
 
 

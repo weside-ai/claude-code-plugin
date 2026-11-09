@@ -9,9 +9,32 @@
 # a new tmux window that waits until this session has exited; outside tmux it prints the command.
 #   status   prints pinned|unpinned and the account the session bills
 #   on|off   schedules the successor; then /exit this session
+# A crew with launch.allow_bypass true (scripts/crew.py) gives the successor
+# --allow-dangerously-skip-permissions, on and off alike; its start mode stays permissions.defaultMode.
 set -euo pipefail
 
+# is_claude <args of a process>: the command is Claude Code, run as `claude` or as
+# `node|bun …/claude[.js]|…/claude-code/cli.js` (an npm install runs under node).
+is_claude() {
+  local first=${1%% *} rest=""
+  [[ "$1" == *" "* ]] && rest=${1#* }
+  [[ "$(basename "${first:-x}")" == claude ]] && return 0
+  case $(basename "${first:-x}") in
+    node | nodejs | bun) ;;
+    *) return 1 ;;
+  esac
+  local second=${rest%% *}
+  case $second in
+    */claude | */claude.js | */claude-code/cli.js | */claude-code/*.js) return 0 ;;
+  esac
+  return 1
+}
+
 mode=${1:-status}
+if [[ $mode == --is-claude ]]; then # test hook for is_claude
+  is_claude "${2:-}"
+  exit
+fi
 sid=${CLAUDE_CODE_SESSION_ID:-}
 
 account_of() { # <.claude.json> → the e-mail of the logged-in account, from Claude Code's own config
@@ -69,6 +92,10 @@ else
 fi
 name_args=""
 [[ -n "${WESIDE_COMPANION:-}" ]] && name_args=$(printf ' --name %q' "$WESIDE_COMPANION")
+here_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ "$(python3 "$here_dir/crew.py" launch allow_bypass 2>/dev/null || true)" == true ]]; then
+  name_args="$name_args --allow-dangerously-skip-permissions"
+fi
 cmd="cd $(printf '%q' "$PWD") && env $prefix WESIDE_COMPANION=$(printf '%q' "${WESIDE_COMPANION:-}") WE_ROLE=master $launch$name_args --resume $(printf '%q' "$sid")"
 
 if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
@@ -76,8 +103,7 @@ if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
   pid=$$
   while [[ "$pid" -gt 1 ]]; do
     pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
-    argv0=$(ps -o args= -p "$pid" | awk '{print $1}')
-    [[ "$(basename "${argv0:-x}")" == claude ]] && break
+    is_claude "$(ps -o args= -p "$pid")" && break
   done
   [[ "$pid" -gt 1 ]] || { echo "pin.sh: no claude process above this shell" >&2; exit 1; }
   tmux new-window -d -n "${WESIDE_COMPANION:-pin-$mode}" \

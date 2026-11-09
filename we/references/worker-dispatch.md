@@ -58,16 +58,19 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 
 ## Worker launch backend
 
-`.weside/config.json` → `agents.worker_launch` decides how every `we:dev-*` worker starts:
-implementer, finisher, refiner, a ci-review worker. `we:explore-medium` readers and council lenses
+One template decides how every `we:dev-*` worker starts (implementer, finisher, refiner, a
+ci-review worker): the crew's `launch.worker` in a repo with a crew, `.weside/config.json` →
+`agents.worker_launch` in a repo without one (or while the crew sets none). Both set and different:
+`worker_launch.py` warns once and the crew wins. `we:explore-medium` readers and council lenses
 stay subagents. Who may start workers, how many and how they are named: L0 §Sessions and the
-master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the setting.
+master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backend` prints the
+template in force; the master's boot check and `/we:accept` read it there.
 
 - A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
   workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
   backend itself, the master checks the setting before the first dispatch and asks the coordinator
   for a template when it is unset. One opt-in exception, checked at boot: when the first word of the
-  crew's `launch.worker` (or `agents.worker_launch`) is not on the host's `PATH` (`command -v`; a
+  template `worker_launch.py backend` prints is not on the host's `PATH` (`command -v`; a
   colleague's machine without the launcher), a crew with `launch.subagent_fallback: true` lets the
   master start build workers with the full `Agent` call of § Choosing the worker, `isolation="worktree"`
   included, and say so once in its first status; default `false`: the master stops and names the
@@ -99,9 +102,10 @@ With a template, the Lead:
    `TaskStop`, once its report is integrated or dropped, also after exit 4: it removes the marker
    and the brief, then the worktree can go or the Lead can work in it.
 
-Where the host's launcher brings its own verbs for a running worker (`status|stop|logs <name>`,
-e.g. a `we-worker` wrapper named in `launch.worker`), the Lead steers and inspects through them
-instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
+The plugin ships such a launcher: `scripts/we-worker` (installed next to `wclaude` by
+`scripts/install_launcher.py`; `we-worker --help`), with the verbs `status|stop|logs|waiting`;
+`worker_launch.py stop` uses its `stop` when the template starts with it. Where a launcher brings
+such verbs, the Lead steers and inspects through them instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
 from `claude agents --json`, never from a log or a quiet tail.
 
 The hooks treat a session as the worker only when the marker names its session id, so the Lead

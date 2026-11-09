@@ -281,3 +281,65 @@ def test_a_hanging_claude_agents_times_out(monkeypatch):
     with pytest.raises(wl.LaunchError, match=r"claude agents --json timed out after 30 s"):
         wl.sessions()
     assert seen["timeout"] == wl.AGENTS_TIMEOUT_S
+
+
+# --- one owner of the worker template: the crew's launch.worker -------------------------------
+
+
+def _crew(env, launch):
+    (env["wt"] / ".weside").mkdir(exist_ok=True)
+    crew = {
+        "version": 2,
+        "roles": {"product": "po"},
+        "members": {"po": {"name": "Ada"}},
+        "launch": launch,
+    }
+    (env["wt"] / ".weside" / "crew.json").write_text(json.dumps(crew))
+
+
+def test_the_crew_template_wins_and_a_differing_config_warns_once(env, capsys):
+    env["configure"]("claude --bg -n {name} {brief}")
+    _crew(env, {"worker": TEMPLATE})
+    assert wl.backend(env["wt"]) == TEMPLATE
+    err = capsys.readouterr().err
+    assert err.count("launch.worker and agents.worker_launch differ; the crew wins") == 1
+
+
+def test_equal_templates_do_not_warn(env, capsys):
+    env["configure"](TEMPLATE)
+    _crew(env, {"worker": TEMPLATE})
+    assert wl.backend(env["wt"]) == TEMPLATE
+    assert "differ" not in capsys.readouterr().err
+
+
+def test_a_crew_without_launch_worker_falls_back_to_the_config(env):
+    env["configure"](TEMPLATE)
+    _crew(env, {"subagent_fallback": False})
+    assert wl.backend(env["wt"]) == TEMPLATE
+
+
+def test_an_invalid_crew_template_names_the_crew_key(env):
+    _crew(env, {"worker": "claude --bg {name}"})
+    with pytest.raises(wl.LaunchError, match=r"launch\.worker: placeholder \{brief\} is required"):
+        wl.backend(env["wt"])
+
+
+def test_stop_goes_through_the_we_worker_stop_verb(env, tmp_path):
+    bindir = tmp_path / "bin"
+    ww = bindir / "we-worker"
+    ww.write_text(
+        "#!/usr/bin/env python3\nimport json, os, sys\n"
+        "with open(os.environ['STUB_LOG'], 'a') as fh:\n"
+        "    fh.write(json.dumps({'argv': ['we-worker'] + sys.argv[1:], 'cwd': os.getcwd()}) + '\\n')\n"
+        "state = os.environ['STUB_STATE']\n"
+        "rows = [r for r in json.load(open(state)) if r['id'] != sys.argv[2]]\n"
+        "json.dump(rows, open(state, 'w'))\n"
+    )
+    ww.chmod(0o755)
+    env["configure"](TEMPLATE)
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    _crew(env, {"worker": "we-worker {name} --bg --agent {agent} {brief}"})
+    wl.stop("w1", env["wt"])
+    argvs = [c["argv"] for c in _calls(env)]
+    assert ["we-worker", "stop", "bg1"] in argvs
+    assert ["stop", "bg1"] not in argvs

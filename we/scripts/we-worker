@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+# we-worker — start and steer a process worker on the global login (references/worker-dispatch.md).
+#   we-worker <name> [--bg] [--limit <duration>] [claude args...]   start a worker session named <name>
+#   we-worker status [<name|id>]   one line per background worker: id, name, pid, state, last=HH:MM (UTC
+#                                  of its last assistant entry), then `usage-limit` or `auth` when that
+#                                  entry is an API error of that kind, then `time-limit=HH:MM` (the
+#                                  deadline of --limit, `reached` once past); an exited worker that hit
+#                                  the usage limit gets a second line with its resume command
+#   we-worker stop <name|id>       stops it and waits until `claude agents --json` drops it (30 s)
+#   we-worker logs <name|id> [-n N] [--raw]
+#                                  the last N (default 5) assistant texts from its transcript, plain;
+#                                  --raw (or no transcript) prints `claude logs` with ANSI codes removed
+#   we-worker waiting              sessions waiting on a permission prompt, with the tool call they wait on
+# These verbs are no worker names. Whether a worker lives comes only from `claude agents --json` (pid and
+# state), never from the wording of `claude logs` or `claude stop`.
+#
+# Start: every CLAUDE* variable of the calling session is dropped, CLAUDE_CONFIG_DIR above all: started
+# from a pinned master, the worker would otherwise bill the pinned account. WESIDE_COMPANION is dropped
+# too (a worker is never the companion of its starter) and WE_ROLE=worker is set.
+#   default  interactive in a tmux window <name> (the caller's tmux session, else the attached one)
+#   --bg     a background session (`claude --bg`): listed in `claude agents`, steered with SendMessage
+#   --limit  the time limit handed to the timer (default 3h; 90m, 2h30m; a bare number is minutes)
+#   --resume/-r <id|name>  a short id or name resolves to the full session id; ambiguous, unknown or still
+#                          running (its pid lives: claude would start a copy) refuses without starting
+# A start under a name a running background session holds refuses as well: steer it, or stop it first.
+# A name without the story key (crew `naming.key`) or a plan slug of docs/plans/ gets a warning, no refusal.
+# The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
+#   launch.allow_bypass true   --allow-dangerously-skip-permissions: the start mode stays
+#                              permissions.defaultMode, bypass is one Shift+Tab away
+#   launch.worker_timer <cmd>  the timer script (or $WE_WORKER_TIMER, which wins): `register` writes the
+#                              worker's state, `arm` becomes a SessionStart hook of this worker alone;
+#                              without one the worker starts with no timer
+set -euo pipefail
+
+usage() {
+  echo "usage: we-worker <name> [--bg] [--limit <duration>] [claude args...] | status [<name|id>] | stop <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
+  exit 2
+}
+
+crew_script() {
+  local here
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if [[ -f "$here/crew.py" ]]; then
+    echo "$here/crew.py"
+    return 0
+  fi
+  # we-install-resolver (scripts/validate-consistency.py keeps every copy equal)
+  python3 -c 'if True:
+    import json, os, sys
+    f = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "plugins", "installed_plugins.json")
+    want, run = sys.argv[1], "--exec" in sys.argv[2:3]
+    try:
+        rows = [e for k, v in json.load(open(f))["plugins"].items() if k.split("@")[0] == "we" for e in v]
+    except Exception:
+        sys.stderr.write("we plugin: " + f + " not readable; the plugin is not resolved\n")
+        sys.exit(0 if run else 1)
+    here = os.path.realpath(os.getcwd())
+    def holds(e):
+        p = os.path.realpath(e.get("projectPath") or "/nonexistent")
+        return e.get("scope") in ("project", "local") and (here == p or here.startswith(p.rstrip("/") + "/"))
+    near = sorted((e for e in rows if holds(e)), key=lambda e: len(os.path.realpath(e["projectPath"])))
+    pick = (near or [e for e in rows if e.get("scope") == "user"] or [None])[-1]
+    if pick is None:
+        sys.stderr.write("we plugin: no we install in " + f + "\n")
+        sys.exit(0 if run else 1)
+    path = os.path.join(pick["installPath"], want)
+    if run:
+        os.execvp(sys.executable, [sys.executable, path] + sys.argv[3:])
+    print(path)
+' scripts/crew.py || true
+}
+
+
+# The crew's launch.<field> (crew.py launch), empty without a crew or crew.py.
+crew_launch() {
+  local resolver
+  resolver=$(crew_script 2>/dev/null)
+  [[ -n "$resolver" ]] || return 0
+  python3 "$resolver" launch "$1" 2>/dev/null || true
+}
+
+# Control always goes through the global profile, however the calling session is pinned.
+_agents() { env -u CLAUDE_CONFIG_DIR claude agents --json 2>/dev/null; }
+_projects() { echo "$HOME/.claude/projects"; }
+_resolve() { # <name|id> -> "id pid state sessionId" of the newest background agent, else empty
+  _agents | python3 -I -c 'import json,sys
+k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if a.get("kind")=="background" and k in (a.get("name"),a.get("id"))]
+d.sort(key=lambda a:a.get("startedAt",0))
+print(*(str(d[-1].get(f) or "-") for f in ("id","pid","state","sessionId")) if d else "")' "$1"
+}
+
+name="${1:-}"
+[[ -n "$name" ]] || usage
+case "$name" in
+  status)
+    _agents | python3 -I -c 'import datetime,glob,json,os,re,sys
+proj, statedir = sys.argv[1], sys.argv[2]
+def mark(e, t):  # "usage-limit", "auth" or None for an assistant entry
+    err = e.get("error") if e.get("isApiErrorMessage") else None
+    if err == "rate_limit": return "usage-limit"
+    if err in ("authentication_failed", "oauth_org_not_allowed"): return "auth"
+    return "usage-limit" if re.search(r"(hit|reached) your .*limit", t) else None
+def alive(pid):
+    try: pid = int(pid)
+    except (TypeError, ValueError): return False
+    if pid <= 0: return False
+    try: os.kill(pid, 0)
+    except PermissionError: return True
+    except OSError: return False
+    return True
+def last_assistant(sid):  # (HH:MM UTC, mark) of the last assistant entry; reads the tail only
+    fs = glob.glob(os.path.join(proj, "*", "%s.jsonl" % sid)) if sid else []
+    if not fs: return "-", None
+    with open(fs[0], "rb") as f:
+        size = f.seek(0, 2); n = 1 << 16
+        while True:
+            f.seek(max(0, size - n)); lines = f.read().splitlines()
+            if size > n: lines = lines[1:]
+            for l in reversed(lines):
+                if b"\"assistant\"" not in l: continue
+                try: e = json.loads(l)
+                except ValueError: continue
+                if e.get("type") != "assistant": continue
+                c = (e.get("message") or {}).get("content")
+                t = " ".join(x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else str(c or "")
+                return (e.get("timestamp") or "")[11:16] or "-", mark(e, t)
+            if size <= n: return "-", None
+            n *= 4
+def time_limit(name):  # "time-limit=HH:MM" or "time-limit=reached" from the timer state file
+    try: st = json.load(open(os.path.join(statedir, "%s.json" % name)))
+    except (OSError, ValueError, TypeError): return None
+    dl = st.get("deadline") if isinstance(st, dict) else None
+    if not dl: return None
+    try: when = datetime.datetime.fromisoformat(str(dl).replace("Z", "+00:00"))
+    except ValueError: return None
+    if when.tzinfo is None: when = when.replace(tzinfo=datetime.timezone.utc)
+    past = when <= datetime.datetime.now(datetime.timezone.utc)
+    return "time-limit=" + ("reached" if past else when.astimezone(datetime.timezone.utc).strftime("%H:%M"))
+k = sys.argv[3] if len(sys.argv) > 3 else None
+for a in json.load(sys.stdin):
+    if a.get("kind") != "background" or (k and k not in (a.get("name"), a.get("id"))): continue
+    hm, m = last_assistant(a.get("sessionId"))
+    st = a.get("state") or a.get("status")
+    gone = not alive(a.get("pid"))
+    if gone: st = "exited(%s)" % st
+    tl = time_limit(a.get("name") or "")
+    print(a.get("id"), a.get("name"), "pid=" + str(a.get("pid", "-")), st, "last=" + hm, *[x for x in (m, tl) if x])
+    if gone and m == "usage-limit" and a.get("sessionId"):
+        print("  resume after the reset: we-worker %s --bg --resume %s" % (a.get("name"), a.get("sessionId")))' \
+      "$(_projects)" "${WE_WORKER_STATE_DIR:-$HOME/.claude/we-state/workers}" ${2:+"$2"}
+    exit 0
+    ;;
+  waiting)
+    _agents | python3 -I -c 'import glob,json,os,sys
+for x in json.load(sys.stdin):
+    if x.get("waitingFor") != "permission prompt": continue
+    fs = glob.glob(os.path.join(sys.argv[1], "*", "%s.jsonl" % x.get("sessionId")))
+    last = None
+    for line in (open(fs[0]) if fs else []):
+        try: e = json.loads(line)
+        except ValueError: continue
+        m = e.get("message") or {}
+        if e.get("type") == "assistant" and isinstance(m.get("content"), list):
+            last = next((c for c in reversed(m["content"]) if isinstance(c, dict) and c.get("type") == "tool_use"), last)
+    i = (last or {}).get("input") or {}
+    print(x.get("name"), x.get("id"), (last or {}).get("name"), str(i.get("command") or i.get("to") or i.get("file_path") or "")[:120])' "$(_projects)"
+    exit 0
+    ;;
+  stop | logs)
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    key=$2
+    read -r id _pid _state sid <<<"$(_resolve "$key")" || true
+    [[ -n "${id:-}" ]] || { echo "we-worker: no background worker '$key' in claude agents" >&2; exit 1; }
+    if [[ "$name" == logs ]]; then
+      shift 2
+      n=5
+      raw=0
+      while [[ $# -gt 0 ]]; do
+        case $1 in
+          -n) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || usage; n=$2; shift 2 ;;
+          --raw) raw=1; shift ;;
+          *) usage ;;
+        esac
+      done
+      if [[ $raw -eq 0 && "${sid:-}" != - ]] && python3 -I -c 'import glob,json,os,sys
+fs = glob.glob(os.path.join(sys.argv[1], "*", "%s.jsonl" % sys.argv[2]))
+if not fs: sys.exit(1)
+out = []
+for line in open(fs[0], encoding="utf-8", errors="replace"):
+    try: e = json.loads(line)
+    except ValueError: continue
+    if e.get("type") != "assistant": continue
+    c = (e.get("message") or {}).get("content")
+    t = "\n".join(x.get("text", "") for x in c if isinstance(x, dict) and x.get("type") == "text") if isinstance(c, list) else str(c or "")
+    if t.strip(): out.append(((e.get("timestamp") or "")[11:16] or "--:--", t.strip()))
+for hm, t in out[-int(sys.argv[3]):]:
+    print("[%s] %s\n" % (hm, t))' "$(_projects)" "$sid" "$n"; then
+        exit 0
+      fi
+      env -u CLAUDE_CONFIG_DIR claude logs "$id" 2>&1 | sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g; s/\x1b\\][^\x07]*\x07//g; s/\r//g'
+      exit "${PIPESTATUS[0]}"
+    fi
+    env -u CLAUDE_CONFIG_DIR claude stop "$id" >/dev/null 2>&1 || true
+    for _ in $(seq 1 30); do
+      read -r id2 pid2 _s _sid <<<"$(_resolve "$id")" || true
+      if [[ -z "${id2:-}" || "${pid2:-}" == - ]] || ! kill -0 "$pid2" 2>/dev/null; then
+        echo "we-worker: $key ($id) stopped"
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "we-worker: $key ($id) still running after 30 s (pid $pid2)" >&2
+    exit 1
+    ;;
+  -h | --help)
+    sed -n '2,/^set /{/^#/s/^# \{0,1\}//p}' "$0"
+    exit 0
+    ;;
+  -*)
+    echo "we-worker: '$name' is no worker name" >&2
+    usage
+    ;;
+esac
+shift
+
+bg=0
+limit=3h
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --bg) bg=1; shift ;;
+    --limit) [[ $# -ge 2 ]] || { echo "we-worker: --limit needs a duration (3h, 90m)" >&2; exit 2; }; limit=$2; shift 2 ;;
+    --limit=*) limit=${1#--limit=}; shift ;;
+    *) break ;;
+  esac
+done
+
+# A living session under this name: a second start would make two workers answer to one name.
+read -r held_id held_pid _s _sid <<<"$(_resolve "$name")" || true
+if [[ -n "${held_id:-}" && "${held_pid:-}" != - ]] && kill -0 "$held_pid" 2>/dev/null; then
+  echo "we-worker: a running session already holds the name $name ($held_id, pid $held_pid); steer it with SendMessage, read it with 'we-worker logs $name', or 'we-worker stop $name' first" >&2
+  exit 2
+fi
+
+# Story key or plan slug in the name: a warning for the reader of `claude agents`, no refusal.
+key_re=$(python3 "$(crew_script 2>/dev/null || echo /nonexistent)" show 2>/dev/null |
+  python3 -I -c 'import json,sys
+try: print(((json.load(sys.stdin).get("naming") or {}).get("key")) or "")
+except ValueError: print("")' 2>/dev/null || true)
+python3 -I - "$name" "${key_re:-[A-Z]+-\\d+}" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" <<'PY' || true
+import os, re, sys
+name, key, top = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    if re.search(key, name, re.I):
+        sys.exit(0)
+except re.error:
+    pass
+plans = os.path.join(top, "docs", "plans") if top else ""
+slugs = []
+if plans and os.path.isdir(plans):
+    for f in os.listdir(plans):
+        if f.endswith(".md"):
+            slugs.append(re.sub(r"(-story|-epic)?\.md$", "", f).lower())
+if any(s and s in name.lower() for s in slugs):
+    sys.exit(0)
+sys.stderr.write("we-worker: warning: the name %s carries no story key (%s) and no plan slug; "
+                 "its master and the board find it by key\n" % (name, key))
+PY
+
+# --resume/-r with a short id or a name: resolve to the full session id first, or claude opens the
+# session picker ("No sessions match") and the worker hangs without a word.
+_resume_id() {
+  local out sid live=""
+  if [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then sid=$1; else
+    out=$(_agents | python3 -I -c 'import json,sys
+k=sys.argv[1]; d={a.get("sessionId") for a in json.load(sys.stdin) if k in (a.get("id"),a.get("name")) and a.get("sessionId")}
+print(*sorted(d))' "$1") || out=""
+    case "$(wc -w <<<"$out" | tr -d ' ')" in
+      1) sid=$out ;;
+      0) echo "we-worker: --resume '$1': no session with that id or name in claude agents; give the full UUID" >&2; return 1 ;;
+      *) echo "we-worker: --resume '$1' is ambiguous ($out); give the full UUID" >&2; return 1 ;;
+    esac
+  fi
+  while read -r pid aid aname; do
+    if [[ -n "${pid:-}" && "$pid" != - ]] && kill -0 "$pid" 2>/dev/null; then
+      live="$aid $aname"
+      break
+    fi
+  done < <(_agents | python3 -I -c 'import json,sys
+for a in json.load(sys.stdin):
+    if a.get("sessionId")==sys.argv[1]: print(a.get("pid") or "-", a.get("id") or "-", a.get("name") or "-")' "$sid")
+  if [[ -n "$live" ]]; then
+    read -r aid aname <<<"$live"
+    echo "we-worker: --resume '$1': session $aname still runs (its pid lives); --resume would only start a copy. Look at it: claude attach $aid, or we-worker logs $aname" >&2
+    return 1
+  fi
+  echo "$sid"
+}
+cargs=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --resume | -r)
+      [[ $# -ge 2 && "$2" != -* ]] || { echo "we-worker: $1 needs a session id" >&2; exit 2; }
+      rid=$(_resume_id "$2") || exit 2
+      cargs+=("$1" "$rid")
+      shift 2
+      ;;
+    --resume=*) rid=$(_resume_id "${1#--resume=}") || exit 2; cargs+=("--resume=$rid"); shift ;;
+    *) cargs+=("$1"); shift ;;
+  esac
+done
+set -- ${cargs[@]+"${cargs[@]}"}
+
+extra=()
+[[ "$(crew_launch allow_bypass)" == true ]] && extra+=(--allow-dangerously-skip-permissions)
+timer=${WE_WORKER_TIMER:-$(crew_launch worker_timer)}
+timer=${timer/#\~/$HOME}
+mode="tmux"
+[[ $bg -eq 1 ]] && mode="bg"
+if [[ -n "$timer" ]]; then
+  if [[ -f "$timer" ]]; then
+    # Before the CLAUDE* variables go: the caller's session id names the starter.
+    state=$(python3 -I "$timer" register --name "$name" --limit "$limit" --mode "$mode" \
+      --starter-session "${CLAUDE_CODE_SESSION_ID:-}" ${WE_WORKER_STARTER+--starter "$WE_WORKER_STARTER"}) ||
+      { echo "we-worker: the timer $timer refused to register $name; no worker started" >&2; exit 2; }
+    hook=$(printf 'python3 -I %q arm %q' "$timer" "$state")
+    settings=$(python3 -I -c 'import json,sys; print(json.dumps({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": sys.argv[1]}]}]}}))' "$hook")
+    extra+=(--settings "$settings")
+  else
+    echo "we-worker: warning: timer $timer not found; $name starts without a time limit" >&2
+  fi
+fi
+
+for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
+unset WESIDE_COMPANION
+export WE_ROLE=worker
+
+if [[ $bg -eq 1 ]]; then
+  exec claude --bg -n "$name" ${extra[@]+"${extra[@]}"} "$@"
+fi
+# The window's tmux session: the caller's own, else the attached one (a background session has no
+# $TMUX). Neither: start in this terminal, else refuse rather than run once inside a Bash tool.
+target=""
+if [[ -z "${TMUX:-}" ]]; then
+  target=$(tmux list-sessions -F '#{session_attached} #{session_name}' 2>/dev/null | awk '$1 > 0 {print $2; exit}' || true)
+  if [[ -z "$target" ]]; then
+    [[ -t 0 ]] && exec claude -n "$name" ${extra[@]+"${extra[@]}"} "$@"
+    echo "we-worker: no tmux and no terminal; use --bg or start inside tmux" >&2
+    exit 1
+  fi
+  target="$target:"
+fi
+args=$(printf ' %q' -n "$name" ${extra[@]+"${extra[@]}"} "$@")
+# tmux starts the window with the server's environment, not this shell's: clear it there.
+tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION WE_ROLE=worker claude$args"
+echo "we-worker: $name starts in tmux window $name${target:+ of ${target%:}} (global login${timer:+; time limit $limit})"
