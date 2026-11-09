@@ -99,7 +99,7 @@ block (stack, ticketing, goals, test discipline, verification, review gates, mis
 "Set up this repo's council now? `/we:council` convenes it; without a weside account
 every lens is generic and still works." On yes:
 
-1. Extend `config.json` (never re-emit its keys) with `vault`, `framework_version: 1`, and the
+1. Extend `config.json` (never re-emit its keys) with `vault` and the
    roster `/we:council` reads: `"council": {"default": ["product_owner","architect","scrum_master"]}`.
 2. TurboVault: check whether this repo's vault is in `list_vaults` by name (another repo's vault
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
