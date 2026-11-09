@@ -18,7 +18,7 @@ improves one epic and never decomposes it; it hands off by printing the next ver
 - Slugs are kebab-case.
 - Epic frontmatter: `type: epic-plan`, `epic` (the file stem), `serves` (the goal file's metric or
   `null`), `ticket` (key or `null`), `created`, `updated`,
-  `status: draft | selected | in-progress | backlog | done`.
+  `status: draft | approved | selected | in-progress | backlog | done` (`board.py move <KEY> backlog --epic` needs a status starting `approved`).
 - A Story's `epic:` is the Epic's ticket key, or the Epic file stem without ticketing. Readers match
   a Story to an Epic on either value (file stem, `epic:` or `ticket:` of the Epic plan).
 - Frontmatter lines are bare `key: value`: the parsers (`ready_gate.py`, `epic_state.py`) keep a trailing `# comment` in the value.

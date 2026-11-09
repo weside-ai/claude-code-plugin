@@ -100,7 +100,7 @@ Answering the fork deletes the section.>
 <Patterns, primitives, the seam; the architecture refs used; how the `**Files:**` lists were
 derived — code graph, or "grep-derived, no code graph".>
 
-Three lists here each cost review rounds when missing (Codex rounds, 10/2026):
+Three lists here each cost review rounds when missing:
 
 - **Writes into two systems** (a table and an API, a table and a cache, two transactions): every outcome
   combination — both succeed, the first fails, the second fails, a timeout after the first — and what the
@@ -164,7 +164,7 @@ The block is copied into the PR body, where a hook reads the `**Oracle:**` line 
 undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and `not-observed`
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
-`**Staging checks:**` names the file of checks the Tester runs on staging after the deploy
+`**Staging checks:**` names the file of checks the acceptance owner runs on staging after the deploy
 (L0 §Sessions, the acceptance role). Its path, format, planned state and validate command are
 the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it proves (`AC<n>`,
 more than one per AC `AC<n>-b`), so the run's report maps back to the ACs. The refiner writes the
@@ -288,6 +288,5 @@ measures its token use appends one line through `${CLAUDE_PLUGIN_ROOT}/scripts/s
 `<date> <step> tokens:` then either the four counts (input, output, cache read, cache write),
 followed by optional `key=value` pairs (`models`, `session` as the first eight characters,
 `skipped` = unreadable transcript lines), or `absent (<reason>)` with no `)` in the reason. A value
-nobody measured is `absent`, never `0`. Only a session of its own is measured (`agents.worker_launch`
-is a command template, `references/worker-dispatch.md` § Worker launch backend): a subagent shares
+nobody measured is `absent`, never `0`. Only a session of its own is measured (the worker template, `references/worker-dispatch.md` § Worker launch backend): a subagent shares
 its caller's session id. The message the step sends after the line is not counted.

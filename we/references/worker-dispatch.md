@@ -16,7 +16,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 ## Choosing the worker
 
 - Dispatch shape: § Worker launch backend. A repo with a crew starts every `we:dev-*` worker through
-  `agents.worker_launch` as a session of its own; only a repo without a crew (or a crew's
+  the template `worker_launch.py backend` prints (the crew's `launch.worker`) as a session of its own; only a repo without a crew (or a crew's
   fallback, § Worker launch backend) uses `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
   A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
   `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
@@ -67,8 +67,8 @@ master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backen
 template in force; the master's boot check and `/we:accept` read it there.
 
 - A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
-  workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
-  backend itself, the master checks the setting before the first dispatch and asks the coordinator
+  workers; a subagent reads and reviews, never builds). The launcher does not refuse the `subagent`
+  backend itself: the master checks the setting before the first dispatch and asks the coordinator
   for a template when it is unset. One opt-in exception, checked at boot: when the first word of the
   template `worker_launch.py backend` prints is not on the host's `PATH` (`command -v`; a
   colleague's machine without the launcher), a crew with `launch.subagent_fallback: true` lets the
@@ -102,7 +102,7 @@ With a template, the Lead:
    `TaskStop`, once its report is integrated or dropped, also after exit 4: it removes the marker
    and the brief, then the worktree can go or the Lead can work in it.
 
-The plugin ships such a launcher: `scripts/we-worker` (installed next to `wclaude` by
+The plugin ships a launcher: `scripts/we-worker` (installed next to `wclaude` by
 `scripts/install_launcher.py`; `we-worker --help`), with the verbs `status|stop|logs|waiting`;
 `worker_launch.py stop` uses its `stop` when the template starts with it. Where a launcher brings
 such verbs, the Lead steers and inspects through them instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
