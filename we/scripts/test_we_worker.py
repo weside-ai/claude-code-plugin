@@ -291,15 +291,25 @@ def test_stop_waits_until_the_row_is_gone_and_ends_what_it_left(tmp_path):
         worker.kill()
 
 
-def test_stop_of_a_window_worker_sends_sigterm_to_its_pid(tmp_path):
-    # Detached (its parent exits at once), so init reaps it as a real session's parent would.
+def _detached_sleep(role: str | None) -> int:
+    """A detached `sleep` (init reaps it, as a real session's parent would), started as a worker
+    (`WE_ROLE=worker`) or as no worker at all."""
+    env = {k: v for k, v in os.environ.items() if k != "WE_ROLE"}
+    if role:
+        env["WE_ROLE"] = role
     out = subprocess.run(
         ["bash", "-c", "sleep 60 >/dev/null 2>&1 & echo $!"],
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
-    pid = int(out.stdout)
+    return int(out.stdout)
+
+
+@pytest.mark.skipif(not Path("/proc/self/environ").exists(), reason="WE_ROLE read from /proc")
+def test_stop_of_a_window_worker_sends_sigterm_to_its_pid(tmp_path):
+    pid = _detached_sleep("worker")
     try:
         rows = [{"id": "cd34", "name": "w", "kind": "interactive", "pid": pid, "sessionId": "s"}]
         project, env = setup(tmp_path, rows)
@@ -307,6 +317,24 @@ def test_stop_of_a_window_worker_sends_sigterm_to_its_pid(tmp_path):
         proc = run(project, env, "stop", "w")
         assert proc.returncode == 0 and "w (cd34) stopped" in proc.stdout, proc.stderr
         assert not any(c["argv"][:1] == ["stop"] for c in calls(tmp_path))
+    finally:
+        subprocess.run(["kill", str(pid)], capture_output=True, check=False)
+
+
+@pytest.mark.parametrize("role", [None, "master"])
+def test_stop_never_ends_a_session_that_is_no_worker(tmp_path, role):
+    """Lead on #202: a name that hits a master or companion (no marker, no WE_ROLE=worker) is a
+    typo; stop refuses and names `claude stop <id>`."""
+    pid = _detached_sleep(role)
+    try:
+        rows = [
+            {"id": "ma01", "name": "Samu", "kind": "interactive", "pid": pid, "sessionId": "s"}
+        ]
+        project, env = setup(tmp_path, rows)
+        proc = run(project, env, "stop", "Samu")
+        assert proc.returncode == 1
+        assert "is no worker" in proc.stderr and "claude stop ma01" in proc.stderr
+        assert subprocess.run(["kill", "-0", str(pid)], check=False).returncode == 0
     finally:
         subprocess.run(["kill", str(pid)], capture_output=True, check=False)
 

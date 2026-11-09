@@ -375,6 +375,16 @@ def test_stop_ends_every_session_of_the_name_and_names_their_ids(env):
     assert ["stop", "w1a"] in argvs and ["stop", "w1b"] in argvs
 
 
+def test_stop_refuses_a_session_of_the_name_that_is_no_worker(env):
+    rows = [*_rows(env), {"id": "ma1", "name": "Pia", "cwd": "/nowhere", "kind": "interactive"}]
+    env["state"].write_text(json.dumps(rows))
+    with pytest.raises(
+        wl.LaunchError, match=r"Pia \(ma1, interactive\) is no worker.*claude stop ma1"
+    ):
+        wl.stop("Pia")
+    assert not any(c["argv"][:1] == ["stop"] for c in _calls(env))
+
+
 def test_a_refused_stop_names_the_pid(env, monkeypatch):
     monkeypatch.setenv("STUB_STOP_FAILS", "1")
     rows = [

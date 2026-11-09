@@ -6,11 +6,12 @@
 #                                  entry is an API error of that kind, then `time-limit=HH:MM` (the
 #                                  deadline of --limit, `reached` once past); an exited worker that hit
 #                                  the usage limit gets a second line with its resume command
-#   we-worker stop <name|id>       stops it (a background session with `claude stop`, a window session
-#                                  with SIGTERM to its pid) and waits until it is gone (30 s); then ends
-#                                  what it left running (watchers, dev servers: its process tree) and
-#                                  names each one
-#   we-worker checkpoint <name|id> commits the worker's tracked changes in its worktree and pushes them
+#   we-worker stop <name|id>       stops a worker (a background session with `claude stop`, a window
+#                                  worker with SIGTERM to its pid) and waits until it is gone (30 s);
+#                                  then ends what it left running (watchers, dev servers: its process
+#                                  tree) and names each one. A session that is no worker (no background,
+#                                  no launcher marker, no WE_ROLE=worker: a master, a companion) refuses
+#   we-worker checkpoint <name|id> commits the worker's changes (new files too) in its worktree and pushes them
 #                                  to wip/<branch without its type prefix> (before a quota pause)
 #   we-worker logs <name|id> [-n N] [--raw]
 #                                  the last N (default 5) assistant texts from its transcript, plain;
@@ -104,6 +105,15 @@ _resolve_any() { # <name|id> -> "id pid kind sessionId cwd" of the newest agent 
 k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if k in (a.get("name"),a.get("id"))]
 d.sort(key=lambda a:a.get("startedAt",0))
 print(*(str(d[-1].get(f) or "-") for f in ("id","pid","kind","sessionId","cwd")) if d else "")' "$1"
+}
+_is_worker() { # <kind> <pid> <cwd>: a background session, a worktree with the launcher's marker,
+  # or a process started as a worker (WE_ROLE=worker, readable on Linux); never a master/companion
+  [[ "$1" == background ]] && return 0
+  local gd
+  if [[ "$3" != - ]] && gd=$(git -C "$3" rev-parse --absolute-git-dir 2>/dev/null) && [[ -f "$gd/we-worker.json" ]]; then
+    return 0
+  fi
+  [[ "$2" != - && -r "/proc/$2/environ" ]] && tr '\0' '\n' <"/proc/$2/environ" | grep -qx 'WE_ROLE=worker'
 }
 _tree() { # <pid> -> "pid comm" of every descendant, one per line
   ps -e -o pid=,ppid=,comm= 2>/dev/null | python3 -I -c 'import sys
@@ -222,6 +232,10 @@ for x in json.load(sys.stdin):
     key=$2
     read -r id _pid kind sid _cwd <<<"$(_resolve_any "$key")" || true
     [[ -n "${id:-}" ]] || { echo "we-worker: no worker '$key' in claude agents" >&2; exit 1; }
+    if ! _is_worker "${kind:--}" "${_pid:--}" "${_cwd:--}"; then
+      echo "we-worker: '$key' ($id, $kind) is no worker (not background, no we-worker marker, no WE_ROLE=worker); a typo protects a master or companion here. To stop it anyway: claude stop $id${_pid:+ or kill $_pid}" >&2
+      exit 1
+    fi
     left=""
     [[ "${_pid:-}" != - ]] && left=$(_tree "$_pid")
     if [[ "${kind:-background}" == background ]]; then

@@ -374,17 +374,37 @@ def _stop_one(row: dict, launcher: str | None) -> str:
     return rid
 
 
+def is_worker(row: dict) -> bool:
+    """A background session, a worktree carrying this launcher's marker, or a process started as a
+    worker (`WE_ROLE=worker`, readable on Linux): never a master or companion session."""
+    if row.get("kind") == "background" or read_marker(row.get("cwd")) is not None:
+        return True
+    try:
+        env = Path(f"/proc/{int(row.get('pid'))}/environ").read_bytes()
+    except (TypeError, ValueError, OSError):
+        return False
+    return b"WE_ROLE=worker" in env.split(b"\0")
+
+
 def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> list[str]:
-    """Stop every session named `name` (in `worktree` when given); returns their ids."""
+    """Stop every worker session named `name` (in `worktree` when given); returns their ids. A
+    session of that name that is no worker (`is_worker`) is never stopped: a typo guard."""
     cwd = str(worktree) if worktree else None
-    rows = _running(sessions(), name, cwd)
+    named = _running(sessions(), name, cwd)
+    rows = [r for r in named if is_worker(r)]
+    if not rows and named:
+        r = named[-1]
+        raise LaunchError(
+            f"{name} ({r.get('id')}, {r.get('kind')}) is no worker; a master or companion is never "
+            f"stopped by name. To stop it anyway: claude stop {r.get('id')}"
+        )
     if not rows:
         clear_marker(worktree)
         raise LaunchError(f"no running session named {name}")
     launcher = launcher_with_verbs(worktree)
     ids = [_stop_one(row, launcher) for row in rows]
     deadline = time.monotonic() + wait_s
-    while left := _running(sessions(), name, cwd):
+    while left := [r for r in _running(sessions(), name, cwd) if is_worker(r)]:
         if time.monotonic() >= deadline:
             pids = ", ".join(f"{r.get('id')} pid {r.get('pid', '?')}" for r in left)
             raise LaunchError(f"{name} still running {wait_s:.0f} s after stop ({pids})", 3)

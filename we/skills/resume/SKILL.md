@@ -15,8 +15,8 @@ the user is the whole instruction: ask nothing the open-items list already decid
    this session. After a compaction, read the transcript tail for it. No list → name the last task
    in one line and continue it.
 2. **Workers.** `ListAgents`, then per worker (before a quota pause a Lead secures each worker's
-   tree with `worker_launch.py checkpoint --name <name>` or `we-worker checkpoint <name>`: tracked
-   changes committed and pushed to `wip/<branch>`):
+   tree with `worker_launch.py checkpoint --name <name>` or `we-worker checkpoint <name>`: its
+   changes, new files too, committed and pushed to `wip/<branch>`):
    - stopped mid-task → `SendMessage(to=<name>, "continue where you stopped")`;
    - already reported → shut it down and verify it is gone (`TaskStop`, or no process under
      `/proc`); never restart it.
