@@ -69,6 +69,10 @@ def run(
         f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
         'if [ "$1 $2" = "repo view" ]; then [ -n "$GH_REPO_VIEW_FAIL" ] && exit 1; echo o/r; exit 0; fi\n'
         'if [ "$1 $2" = "pr merge" ]; then [ -n "$GH_MERGE_FAIL" ] && { echo "$GH_MERGE_FAIL" >&2; exit 1; }; exit 0; fi\n'
+        'if [ "$1 $2" = "run view" ]; then printf "%s\\n" "${GH_LOG_FAILED:-}"; exit 0; fi\n'
+        'if [ "$1 $2" = "run rerun" ]; then exit 0; fi\n'
+        'if [ "$1" = api ]; then f=$(mktemp); case "$2" in *compare*) printf "%s" "${GH_COMPARE:-{\\"ahead_by\\":0,\\"commits\\":[]\\}}" > "$f" ;; *) echo \'{"default_branch":"main"}\' > "$f" ;; esac; '
+        'while [ $# -gt 0 ]; do [ "$1" = --jq ] && q=$2; shift; done; jq -r "$q" "$f"; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
         + '; elif [[ " $* " == *" comments "* ]]; then '
@@ -240,12 +244,7 @@ def test_a_rerun_not_yet_started_hides_its_old_failure(tmp_path):
     [
         ("CLEAN", "MERGEABLE", "merge: CLEAN/MERGEABLE"),
         ("BLOCKED", "MERGEABLE", "merge: BLOCKED/MERGEABLE"),
-        ("DIRTY", "CONFLICTING", "merge: DIRTY/CONFLICTING — conflicts with the base: merge it"),
-        (
-            "UNKNOWN",
-            "CONFLICTING",
-            "merge: UNKNOWN/CONFLICTING — conflicts with the base: merge it",
-        ),
+        ("DIRTY", "UNKNOWN", "merge: DIRTY/UNKNOWN — conflicts with the base: merge it"),
     ],
 )
 def test_final_line_names_the_merge_state(tmp_path, mss, mergeable, note):
@@ -464,3 +463,132 @@ def test_until_merged_reports_a_green_pr_blocked_past_the_grace(tmp_path, monkey
     armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
     code, out = run(tmp_path, [armed] * 6, "--until-merged")
     assert code == 0 and out[-1].startswith(f"final {SHA}: green") and "BLOCKED" in out[-1], out
+
+
+# Review 09.11. (sister crew): infra reruns, stale heads, missing runs, review quota, conflicts early.
+
+SONNET_FAIL = "Claude Review (Analyze)"
+
+
+def _only_failing(name, d=None):
+    """The rollup with every check green but `name`, which failed in run 41."""
+    d = copy.deepcopy(d or _green())
+    for c in d["statusCheckRollup"]:
+        if c["name"] == name:
+            c.update(conclusion="FAILURE", detailsUrl=RUN_URL.format(41, 1))
+    return d
+
+
+def test_a_job_that_failed_on_a_5xx_is_rerun_once_and_counts_as_pending(tmp_path):
+    lint = "Python Lint & Format"
+    code, out = run(
+        tmp_path,
+        [_only_failing(lint), _only_failing(lint), _green()],
+        env_extra={"GH_LOG_FAILED": "Error: HTTP 503 Service Unavailable from ghcr.io"},
+    )
+    assert code == 0, out
+    assert out[0] == f'infra: {lint} failed on "HTTP 503" — rerun once (run 41)'
+    assert out[-1] == f"final {SHA}: green · {MERGE}"
+    calls = (tmp_path / "calls.log").read_text()
+    assert calls.count("run rerun 41") == 1
+
+
+def test_an_infra_failure_is_rerun_only_once(tmp_path):
+    lint = "Python Lint & Format"
+    code, out = run(
+        tmp_path,
+        [_only_failing(lint)],
+        env_extra={"GH_LOG_FAILED": "connect: ETIMEDOUT registry.npmjs.org"},
+    )
+    assert code == 1
+    assert sum(line.startswith("infra:") for line in out) == 1
+    assert out[-1].startswith(f"final {SHA}: red · failed: {lint}")
+
+
+def test_a_code_failure_is_not_rerun(tmp_path):
+    lint = "Python Lint & Format"
+    code, out = run(
+        tmp_path, [_only_failing(lint)], env_extra={"GH_LOG_FAILED": "E501 line too long"}
+    )
+    assert code == 1 and not any(line.startswith("infra:") for line in out)
+    assert "run rerun" not in (tmp_path / "calls.log").read_text()
+
+
+def test_a_red_head_behind_the_default_branch_says_the_run_predates_it(tmp_path):
+    lint = "Python Lint & Format"
+    newest = "abcdef1234567890"
+    code, out = run(
+        tmp_path,
+        [_only_failing(lint)],
+        env_extra={
+            "GH_COMPARE": json.dumps(
+                {"ahead_by": 2, "commits": [{"sha": "0" * 16}, {"sha": newest}]}
+            )
+        },
+    )
+    assert code == 1
+    assert out[-1].endswith(" · run predates abcdef123456 (main is 2 ahead: merge it, then rerun)")
+
+
+def test_no_run_and_no_check_ends_with_its_own_exit(tmp_path):
+    empty = {"headRefOid": SHA, "statusCheckRollup": []}
+    code, out = run(tmp_path, [empty], env_extra={"WATCH_NO_RUN_TIMEOUT": "0"})
+    assert (code, out) == (10, [f"no workflow ran on {SHA} after 0s"])
+
+
+def test_a_review_that_failed_on_its_quota_keeps_auto_merge_and_exits_11(tmp_path):
+    d = {**_only_failing(SONNET_FAIL), "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(
+        tmp_path,
+        [d],
+        env_extra={
+            "GH_LOG_FAILED": "##[error]Claude review failed: usage limit reached, resets 5am"
+        },
+    )
+    assert code == 11
+    assert out[-1] == (
+        f"final {SHA}: review quota ({SONNET_FAIL}: usage limit) · auto-merge stays on"
+        " — quota: rerun after the next verdict"
+    )
+    assert "pr merge" not in (tmp_path / "calls.log").read_text()
+
+
+def test_a_codex_error_on_quota_exits_11(tmp_path):
+    body = _codex("ERROR")
+    body["comments"][1]["body"] += "\nCodex failed: You've hit your usage limit."
+    code, out = run(tmp_path, [_with_codex(_green())], comments=[body])
+    assert code == 11 and "review quota (codex: hit your usage limit)" in out[-1]
+
+
+def test_a_codex_error_prints_its_reason_and_the_watch_goes_on(tmp_path):
+    body = _codex("ERROR")
+    body["comments"][1]["body"] += "\nCodex failed: model returned no review."
+    code, out = run(tmp_path, [_with_codex(_green())], comments=[body])
+    assert code == 0
+    assert out[0] == "codex ERROR: Codex failed: model returned no review. — rerun the Codex check"
+
+
+def test_a_conflict_ends_the_watch_before_the_checks(tmp_path):
+    d = {**_pending(_green()), "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING"}
+    code, out = run(tmp_path, [d])
+    assert (code, out) == (12, [f"final {SHA}: conflicts with the base — merge it"])
+
+
+def test_a_review_verdict_whose_echoed_script_names_quota_is_red_not_quota(tmp_path):
+    """Claude Review on #198: the step's echoed `run:` script mentions `quota`; only the error
+    annotation decides."""
+    d = {**_only_failing(SONNET_FAIL), "autoMergeRequest": {"enabledAt": "x"}}
+    log = (
+        'Gate\t##[group]Run case "$CAUSE" in\n'
+        "Gate\t\x1b[36;1m# Name the cause (auth · quota · refused · other)\x1b[0m\n"
+        "Gate\t##[error]Claude review verdict BLOCKING — fix the findings, then push again."
+    )
+    code, out = run(tmp_path, [d], env_extra={"GH_LOG_FAILED": log})
+    assert code == 1 and "auto-merge disarmed" in out[-1]
+
+
+def test_a_failing_assertion_on_a_500_is_no_infra(tmp_path):
+    lint = "Python Lint & Format"
+    log = "E   assert resp.status_code == 500\nerror: status 500 in test_api"
+    code, out = run(tmp_path, [_only_failing(lint)], env_extra={"GH_LOG_FAILED": log})
+    assert code == 1 and not any(line.startswith("infra:") for line in out)
