@@ -85,6 +85,26 @@ jobs:
         # No PyYAML: macOS /usr/bin/python3 lacks it, so this lane runs the lenient parser.
         run: uv run --no-project --python 3.9 --with pytest python -m pytest -q we scripts
 
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # ubuntu-latest ships shellcheck; warnings and errors fail, info notes do not.
+      - run: cd we/scripts && shellcheck -x -S warning ./*.sh we-worker wclaude
+
+  hooks-module:
+    # The /flow and /board hooks module (TypeScript) against Claude Code's own engine: its types
+    # come from Claude Code, so `plugin validate` is the typecheck. Needs no login. Pin the CLI
+    # and bump it deliberately (Renovate), like ruff above.
+    name: Hooks Module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm install -g @anthropic-ai/claude-code@2.1.321
+      - run: claude plugin validate we
+      - run: claude plugin test we
+
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-latest
