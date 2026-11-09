@@ -28,7 +28,7 @@ git fetch -q origin && git show origin/<default>:.weside/optimization/CHARTER.md
 Read the charter (goal, decisions, findings, next steps), then `LEDGER.md`, then every file in
 `inbox/`, plus entries staged under `~/.claude/we-inbox/<repo>/` by an auto retro: move those into
 `inbox/` now. With `feedback-sources.md`, add each listed repo's plugin findings as named
-sources, read-only, key, target and fact only (`optimization-store.md` § Feedback sources). No
+sources, read-only, key, target and fact only (`optimization-store.md` § Plugin checkout and workspace, Feedback sources). No
 store → offer `/we:setup` § Instruction loop and stop. Tell the user briefly where
 things stand, what you do now, and whether you need anything.
 

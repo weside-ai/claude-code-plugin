@@ -101,7 +101,7 @@ carries **Read** in front; a press appends a `read` line to the answers file (§
 leaves the pane at once; `board.py` drops it from `news` on its next write (§ Pruning). Until then
 an item whose newest line is `read` stays hidden. With every item read the frame is gone.
 
-`notes`, the older single string, still works: it folds to **▸ Notes** and its first line, dimmed,
+`notes` as one string works too: it folds to **▸ Notes** and its first line, dimmed,
 and opens to the whole text on a press. A new board writes `news`.
 
 ## Work
@@ -356,7 +356,7 @@ beside the crew's board (§ The file: its `board.file`, else `board.json` in its
 a crew with a `board.file` of its own does not see a freeze on the default board. While the file
 stands, the merge hook (`hooks/automerge_gate.py`) refuses every merge and arm in the repos it
 names, naming the reason; a file that does not parse, a flag without `repos` or without
-`scoped: true` (written before per-repo scope) and a merge whose repo the hook cannot name count
+`scoped: true` and a merge whose repo the hook cannot name count
 as frozen for every repo. `board.py unfreeze` removes it, closes the `merge-freeze` issues it
 opened (one someone else opened, such as the owner's from the phone, stays open; a failed close
 exits 1 naming it) and prints the disarmed PRs to re-arm by hand through the hook; it re-arms none
@@ -607,7 +607,7 @@ computed: <reason>`. Without `risk.command` the gate warns `tier check off` and 
 (`via` and `rc` on `done` rows only; `carried` on a `selected` row only: the WARNINGs a green
 Ready panel carries under `ready_panel.warning_ok_after_rounds`, each `{lens, claim, where}`, also
 printed as `carried: <lens>: <claim> (<where>)` lines; the master's worker brief copies them as
-must-dos, `skills/master/SKILL.md` § Worker brief; `round` on a `selected` row only, when the
+must-dos, `skills/master/SKILL.md` § Build (worker brief); `round` on a `selected` row only, when the
 verdict file's round was derived from logged runs (`lens_verdict.py` § Derived round), as
 `<N> (derived: …)`, and in a later round `<N> (base: round <M> derived: …)`, also printed as
 `round: …`); `from` is
