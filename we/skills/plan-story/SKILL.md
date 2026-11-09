@@ -45,7 +45,7 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
 2. **Read before writing.**
    - The brief's refs, then the instruction file chain (`AGENTS.md`, else `CLAUDE.md`) and the repo rules for
      the paths the story touches.
-   - ADRs and earlier plans on the same seam; the epic plan's `## Success Criteria` (older epics: `## Success Metrics`).
+   - ADRs and earlier plans on the same seam; the epic plan's `## Success Criteria` (or `## Success Metrics`).
    - `.weside/dor.md`: each row becomes a labelled line in `## Constraints and Pins`.
    - `.weside/config.json`: `test_discipline` (`tdd`, `tests-after` as the default, `off`) sets the level of
      `## Testing Requirements`; `tools.graphify` and `tools.turbovault` say which search tools exist.
@@ -54,7 +54,7 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
    - The code: the seam the story names. With the code graph, `graphify affected "<identifier>" --relation calls
      --depth 2`; otherwise `rg`, and write "grep-derived, no code graph" into `## Technical Approach`. Resolve
      prose scope ("the queue producer and consumer") to real paths before listing them.
-   - Four claim classes drew most of the Lead's corrections (about a dozen per plan, 10/2026): a claim over a
+   - Four claim classes drew most of the Lead's corrections: a claim over a
      set ("every table", "all five call sites") lists each member with file:line; a new lookup into an existing
      map names the keys its callers pass and what a miss does; every caller of the changed seam is traced and
      each path that skips the new guard is named; every behaviour change on an existing path is an AC or a

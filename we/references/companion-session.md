@@ -86,7 +86,7 @@ Who starts and steers workers: L0 §Sessions and the master role card. A worker 
 never the companion: it is not titled, not
 asked to materialize, not bound, and stores no turn. A `claude --bg` worker gets the daemon's
 environment (§ Launch and pin), so the pin is absent only when the daemon was started without one;
-a foreground worker starts with the pin cleared (`env -u WESIDE_COMPANION claude`). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
+a foreground worker starts with the pin cleared (`we-worker <name>` without `--bg`, a tmux window). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
 connection and fire no SessionStart. A teammate in its own process inherits the environment: it gets
 the title and the note, and the note tells a spawned session to ignore it.
 

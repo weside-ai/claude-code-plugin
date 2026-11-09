@@ -69,7 +69,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "stack": ["python", "node"],
   "tools": { "graphify": false, "turbovault": false },
   "test_discipline": "tests-after",
-  "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true,
+  "verification": { "required": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
   "agents": { "visible_teammates": false, "worker_launch": "subagent" },
@@ -164,7 +164,7 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
   worker launcher `we-worker`: a `NOTE` naming it (missing, differing or someone else's) → ask once, on yes
   `--apply` (`--apply --force` for someone else's); declined while the crew's `launch.worker` starts with
   `we-worker` → rewrite it to `claude --bg -n {name} --agent {agent} {brief}` (step 4a.3).
-- The statusline, the launcher and the council agents are the only user-scope files setup touches.
+- The statusline and the two launchers (`wclaude`, `we-worker`) are the only user-scope files setup touches.
 
 ## 6. Instruction loop (optional, ask once)
 

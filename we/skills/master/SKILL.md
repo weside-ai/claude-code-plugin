@@ -94,7 +94,7 @@ master starts it; the owner judges, never starts), whose brief begins: "Use the 
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
 fork you cannot settle → write `## Open Fork` and stop". It ends with the tree limits, verbatim
-(refiners that `cd`'d into the main checkout or a job directory read and wrote the wrong tree):
+(a refiner that `cd`s out of its tree reads and writes the wrong one):
 
 ```
 Tree: <absolute path of the tree you were started in> is your only tree; every path you use is absolute and inside it.
@@ -148,7 +148,7 @@ Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot p
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
 Tools: read and search with the Read, Grep and Glob tools on absolute paths; never `cd <dir> && grep …` or `cat`/`rg` through Bash.
-Report: worker-dispatch.md § Report fields, as your final message or to your `Lead:`; a skill's output is never it.
+Report: worker-dispatch.md § Report, as your final message or to your `Lead:`; a skill's output is never it.
   Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
 ```
 
@@ -164,8 +164,7 @@ replacement while the original may be alive: stop it, verify, then re-dispatch o
 
 **Parallel chunks** (per the plan's `parallel_groups` or § Choosing the worker): create the integration worktree
 `git worktree add <repo>-<KEY>-integration -b <type>/<KEY>-<slug> origin/<default>`, dispatch
-the wave in one message, and merge each branch as it returns, not after the wave (chunks sat 20–35
-min unmerged, 17.10.2026): `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`.
+the wave in one message, and merge each branch as it returns, not after the wave: `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`.
 A serial successor is dispatched on its predecessor's head the moment that one reports. A result without
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run
 `worker-dispatch.md` § After each lane merge; a contract change breaks a sibling no chunk gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
@@ -228,7 +227,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
     `--squash`/`--rebase` when `.weside/orchestrate.md` names it; gh refuses `--auto` without a
     method outside a terminal.
   - **Card hit:** once the panel is green, start a security card worker on the head
-    (`we-worker <KEY>-card --bg "/<security holder's skill> …"`, brief per
+    (`<KEY>-card`, through the crew's launcher like any worker, brief per
     `references/worker-dispatch.md` § Card worker); a push needs a new verdict.
   - **One-way:** post the T2 panel. For the human's merge write one board item with the PR link, the
     class and the panel verdict (`board.py ask --cause merge-go --pr <url> --one-way <class>`); the
