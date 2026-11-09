@@ -21,12 +21,26 @@
 #   final <sha>: merged                                     exit 7
 #   final <sha>: closed                                     exit 8
 #   gave up after <n>s on <sha>                             exit 9  (--max-hours reached)
+#   no workflow ran on <sha> after <n>s                     exit 10 (no run and no check: a path
+#       filter skipped every workflow, or Actions is down; WATCH_NO_RUN_TIMEOUT, default 600)
+#   final <sha>: review quota · auto-merge stays on — quota: rerun after the next verdict   exit 11
+#       (a failed review check whose own error annotation (`##[error]`, `::error::`) names a quota or
+#       usage limit, or the Codex comment's VERDICT:ERROR naming one: the review did not judge, so
+#       nothing is disarmed; the step's echoed script and the log's other lines never count)
+#   final <sha>: conflicts with the base — merge it          exit 12 (mergeable CONFLICTING: no check
+#       result can make it mergeable, so the watcher does not wait for them)
+# A failed job whose failed-step log names a GitHub/registry 5xx or a network timeout
+# (INFRA_RX) is rerun once (`gh run rerun <id> --failed`, only on its first attempt) with the line
+# `infra: <name> failed on "<match>" — rerun once (run <id>)`, and counts as pending again.
+# A red final line ends with ` · run predates <sha>` when the head lacks the newest commit of the
+# default branch (`gh api …/compare`): the failure may be fixed there; merge the base and rerun.
+# A Codex VERDICT:ERROR that is no quota prints `codex ERROR: <reason line>` once and the watch goes on.
 # On exit 6, and on exit 1 with a failed review check, an armed PR is disarmed here
 # (`gh pr merge --disable-auto`), so it cannot merge before its fix round; a failed disarm says
 # `auto-merge on (disarm failed: <error>) — run gh pr merge <PR> --disable-auto`.
-# <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); a conflict with the base
-# reads `DIRTY/CONFLICTING — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind
-# the base: merge it`.
+# <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); `DIRTY/…` reads
+# `DIRTY/… — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind the base: merge
+# it` (`mergeable` CONFLICTING ends the watch with exit 12 first).
 # Final means: the head's checks are non-empty, none pending, no workflow run for the head SHA
 # queued or in progress (a rerun counts as pending until it completes), and the whole set
 # unchanged for WATCH_QUIET seconds and at least two reads. Checks register seconds after a
@@ -73,6 +87,11 @@ BLOCKED_GRACE=${WATCH_BLOCKED_GRACE:-900}
 CODEX_CHECK=${WATCH_CODEX_CHECK:-Codex Review}
 CODEX_READS=${WATCH_CODEX_READS:-10}
 REVIEW_RX=${WATCH_REVIEW_RX:-review}
+NO_RUN_TIMEOUT=${WATCH_NO_RUN_TIMEOUT:-600}
+# A failed job is infra, not code, when its failed-step log says so (case-insensitive).
+# Anchored on runner and registry phrasing, so a failing assertion on a 500 is no infra.
+INFRA_RX=${WATCH_INFRA_RX:-'HTTP/[0-9.]+ 50[0-9]|(returned|received|got|responded with)( status)?( code)? 50[0-9]|HTTP (error )?50[0-9]|50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)|ETIMEDOUT|ECONNRESET|i/o timeout|TLS handshake timeout|context deadline exceeded|Connection timed out'}
+QUOTA_RX=${WATCH_QUOTA_RX:-'quota|usage limit|rate[ -]limit(ed)?|credit balance|limit (reached|exceeded)|hit your .*limit'}
 LIFETIME=${WATCH_MAX_LIFETIME:-$((MAX_HOURS * 3600))}
 BORN=$(date +%s)
 
@@ -137,7 +156,7 @@ merge_note() {
   local mss mergeable note
   mss=$(field 1); mergeable=$(field 2)
   note="merge: $mss/$mergeable"
-  if [ "$mss" = DIRTY ] || [ "$mergeable" = CONFLICTING ]; then
+  if [ "$mss" = DIRTY ]; then
     note="$note — conflicts with the base: merge it"
   elif [ "$mss" = BEHIND ]; then
     note="$note — behind the base: merge it"
@@ -149,7 +168,6 @@ merge_stuck() {  # green, but GitHub will not merge it by itself
   # BLOCKED while green and armed is normal for seconds before the merge; only after BLOCKED_GRACE
   # of a stable green does it mean a review or rule waits.
   [ "$(field 4)" = off ] || [ "$(field 1)" = DIRTY ] || [ "$(field 1)" = BEHIND ] \
-    || [ "$(field 2)" = CONFLICTING ] \
     || { [ "$(field 1)" = BLOCKED ] && [ $(($(date +%s) - STABLE_SINCE)) -ge "$BLOCKED_GRACE" ]; }
 }
 disarm() {  # prints the auto-merge note after disarming an armed PR; never exits
@@ -161,12 +179,55 @@ disarm() {  # prints the auto-merge note after disarming an armed PR; never exit
     echo "auto-merge on (disarm failed: $(tail -n 1 <<<"$out")) — run \`gh pr merge $PR --disable-auto\`"
   fi
 }
+failed_log() {  # failed_log <run id>: the last lines the failed steps printed, empty on any error
+  # GitHub's log echoes each step's `run:` script first (`##[group]Run …`, then the script lines in
+  # ANSI cyan): that echo is the workflow's text, not what happened, so it is dropped.
+  local out
+  [ -n "$1" ] || return 0
+  out=$(gh run view "$1" -R "$REPO" --log-failed 2>/dev/null) || return 0
+  grep -v -e '##\[group\]' -e $'\x1b\\[36;1m' <<<"$out" | tail -n 200
+}
+error_lines() {  # error_lines <run id>: only the failure's own annotations (`##[error]`, `::error::`)
+  failed_log "$1" | grep -E '##\[error\]|::error::'
+}
+predates() {  # " · run predates <sha>" when the head lacks the default branch's newest commit
+  local default line behind newest
+  default=$(gh api "repos/$REPO" --jq .default_branch 2>/dev/null) || return 0
+  [ -n "$default" ] || return 0
+  line=$(gh api "repos/$REPO/compare/$SHA...$default" --jq '"\(.ahead_by) \(.commits[-1].sha // "")"' 2>/dev/null) || return 0
+  read -r behind newest <<<"$line"
+  [ -n "$newest" ] && [ "${behind:-0}" -gt 0 ] 2>/dev/null && echo " · run predates ${newest:0:12} ($default is $behind ahead: merge it, then rerun)"
+  return 0
+}
+quota_exit() {  # quota_exit <why>: the review did not judge; auto-merge stays as it is
+  echo "final $SHA: review quota ($1) · auto-merge stays $(field 4) — quota: rerun after the next verdict"
+  exit 11
+}
 red_exit() {  # red_exit <failed names>: the red final line; a failed review check disarms first
-  local note=""
-  if grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$1")" && [ "$(field 4)" = on ]; then
-    note=" · $(disarm)"
+  local note="" name run reason
+  if grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$1")"; then
+    # A review that failed on its quota judged nothing: no disarm, its own exit.
+    while IFS=$'\t' read -r name run; do
+      grep -qiE "$REVIEW_RX" <<<"$name" || continue
+      reason=$(error_lines "$run" | grep -oiE "$QUOTA_RX" | head -n 1)
+      [ -n "$reason" ] && quota_exit "$name: $reason"
+    done <<<"$FAILED_RUNS"
+    [ "$(field 4)" = on ] && note=" · $(disarm)"
   fi
-  echo "final $SHA: red · failed: $1 · $(merge_note)$note"; exit 1
+  echo "final $SHA: red · failed: $1 · $(merge_note)$note$(predates)"; exit 1
+}
+infra_rerun() {  # infra_rerun <name> <run id>: rerun a first-attempt run that failed on infra; 0 if rerun
+  local name=$1 run=$2 attempt match
+  [ -n "$run" ] || return 1
+  case $'\n'"$RERUN"$'\n' in *$'\n'"$run"$'\n'*) return 1 ;; esac
+  attempt=$(awk -F'\t' -v r="$run" '$1 == r { print $2 }' <<<"$RUNROWS" | head -n 1)
+  [ "${attempt:-1}" = 1 ] || return 1
+  match=$(failed_log "$run" | grep -oiE "$INFRA_RX" | head -n 1)
+  [ -n "$match" ] || return 1
+  gh run rerun "$run" -R "$REPO" --failed >/dev/null 2>&1 || return 1
+  RERUN="$RERUN"$'\n'"$run"
+  echo "infra: $name failed on \"$match\" — rerun once (run $run)"
+  return 0
 }
 codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or BLOCKING
   local reviewed verdict
@@ -179,6 +240,12 @@ codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or
     WARNING|BLOCKING)
       echo "final $SHA: codex $verdict · $(disarm) — then /we:ci-review"
       exit 6 ;;
+    ERROR)
+      local why
+      why=$(grep -iE "$QUOTA_RX" <<<"$BODY" | head -n 1)
+      [ -n "$why" ] && quota_exit "codex: $(grep -oiE "$QUOTA_RX" <<<"$why" | head -n 1)"
+      why=$(grep -vE '^\s*<!--.*-->\s*$' <<<"$BODY" | grep -iE 'error|fail|reason' | head -n 1)
+      echo "codex ERROR: ${why:-no reason in the comment} — rerun the Codex check" ;;
   esac
 }
 
@@ -204,11 +271,15 @@ STABLE_SINCE=$START
 READS=0
 CODEX_SEEN=""
 CODEX_TRIES=0
+RERUN=""
 while :; do
   if view && gh_try RUNROWS run list -R "$REPO" --commit "$SHA" --limit 100 --json databaseId,attempt,status --jq "$RUNS"; then
     closed_exit "$SHA"
     NOW_SHA=$(head -n 1 <<<"$OUT")
     if [ "$NOW_SHA" != "$SHA" ]; then echo "head moved $SHA -> $NOW_SHA"; exit 3; fi
+    if [ "$(field 2)" = CONFLICTING ]; then
+      echo "final $SHA: conflicts with the base — merge it"; exit 12
+    fi
     ROWS=$(tail -n +3 <<<"$OUT")
     # Runs still queued or in progress (a fresh push, a `gh run rerun` not yet started). A run
     # parked in `waiting`/`action_required` waits for a human and does not hold the watcher.
@@ -216,6 +287,7 @@ while :; do
     PENDING=""
     [ -n "$OPEN_RUNS" ] && PENDING=1
     FAILED=""
+    FAILED_RUNS=""
     STATE=""
     CODEX_DONE=""
     while IFS=$'\t' read -r verdict name run url; do
@@ -227,7 +299,9 @@ while :; do
       case "$verdict" in
         pending) PENDING=1 ;;
         fail|cancelled)
+          if [ "$verdict" = fail ] && infra_rerun "$name" "$run"; then PENDING=1; continue; fi
           FAILED="${FAILED:+$FAILED, }$name"
+          FAILED_RUNS="${FAILED_RUNS:+$FAILED_RUNS$'\n'}$name"$'\t'"$run"
           case $'\n'"$SEEN"$'\n' in
             *$'\n'"$name $url"$'\n'*) ;;
             *) echo "$verdict: $name"; SEEN="$SEEN"$'\n'"$name $url"
@@ -244,6 +318,9 @@ while :; do
     fi
     NOW=$(date +%s)
     if [ -z "$ROWS" ]; then
+      if [ -z "$RUNROWS" ] && [ $((NOW - START)) -ge "$NO_RUN_TIMEOUT" ]; then
+        echo "no workflow ran on $SHA after ${NO_RUN_TIMEOUT}s"; exit 10
+      fi
       if [ $((NOW - START)) -ge "$REGISTER_TIMEOUT" ]; then
         echo "no checks on $SHA after ${REGISTER_TIMEOUT}s"; exit 4
       fi
