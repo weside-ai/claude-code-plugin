@@ -18,16 +18,15 @@ improves one epic and never decomposes it; it hands off by printing the next ver
 - Slugs are kebab-case.
 - Epic frontmatter: `type: epic-plan`, `epic` (the file stem), `serves` (the goal file's metric or
   `null`), `ticket` (key or `null`), `created`, `updated`,
-  `status: draft | selected | in-progress | backlog | done`.
+  `status: draft | approved | selected | in-progress | backlog | done` (`board.py move <KEY> backlog --epic` needs a status starting `approved`).
 - A Story's `epic:` is the Epic's ticket key, or the Epic file stem without ticketing. Readers match
   a Story to an Epic on either value (file stem, `epic:` or `ticket:` of the Epic plan).
-- Frontmatter lines are bare `key: value`: the v6 parser keeps a trailing `# comment` in the value.
+- Frontmatter lines are bare `key: value`: the parsers (`ready_gate.py`, `epic_state.py`) keep a trailing `# comment` in the value.
 - A Story named only in an Epic's `## Sequencing` has no key: `/we:master <epic>` rosters it only
   after it has a ticket or a plan.
 - Readers below the Epic (`/we:plan-story`, `/we:master`) read the Epic's success section and
-  `## Scope`. The success section is `## Success Criteria`, or `## Success Metrics` in Epics written
-  before v7 (measured in 12 Epics, 27.09.2026): readers accept both, writers write
-  `## Success Criteria`.
+  `## Scope`. The success section is `## Success Criteria` or `## Success Metrics`: readers accept
+  both, writers write `## Success Criteria`.
 - A ticket description carries the one-line purpose and the plan path, never the plan's content.
 
 ## Mirror block

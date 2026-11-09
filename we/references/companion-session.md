@@ -55,7 +55,7 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 ```
 
 `-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
-`WE_ROLE=worker` with the pin makes it a consultation, not a master (L0 §Sessions; kind from `scripts/crew.py session_kind`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
+`WE_ROLE=worker` with the pin makes it a consultation, not a master (L0 §Sessions; kind from `session_kind()` in `scripts/crew.py`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
 (`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
 
 ## Name and binding
@@ -86,7 +86,7 @@ Who starts and steers workers: L0 §Sessions and the master role card. A worker 
 never the companion: it is not titled, not
 asked to materialize, not bound, and stores no turn. A `claude --bg` worker gets the daemon's
 environment (§ Launch and pin), so the pin is absent only when the daemon was started without one;
-a foreground worker starts with the pin cleared (`env -u WESIDE_COMPANION claude`). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
+a foreground worker starts with the pin cleared (`we-worker <name>` without `--bg`, a tmux window). A background session without the pin is refused as the companion by `hooks/materialize_on_start.py` and `identity_cache.py bind`. `Agent` subagents share the session's MCP
 connection and fire no SessionStart. A teammate in its own process inherits the environment: it gets
 the title and the note, and the note tells a spawned session to ignore it.
 
@@ -166,8 +166,7 @@ docstring owns the mechanics: files, cursor and hold-off rules, back-off, exits.
 - **The counter:** `hooks/news_on_prompt.py` (UserPromptSubmit) puts a wake the socket did not take
   into the next prompt once and counts it; in a session whose socket had a poller it names a poller
   gone stale with its error class. It sees neither a line the socket held nor an unread wake, so it
-  is the counter "hook delivered n times", not a fallback, until a forced delivery failure against
-  a real session proved it one. Thresholds: that hook's docstring.
+  is the counter "hook delivered n times", not a fallback. Thresholds: that hook's docstring.
 
 ## Role owners
 

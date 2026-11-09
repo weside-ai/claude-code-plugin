@@ -20,11 +20,11 @@ rules the task touches.
 
 **Editing** (a change lands in the other repo): never edit it from this session, because its
 path-bound rules, hooks and worktree conventions do not apply here. Start a native session there:
-`cd <repo> && claude --bg "<task, with the context a human would give>"`. A `--bg` session gets the
-daemon's environment, not this shell's, so a prefix does not clear the pin: a daemon started from a
-pinned shell hands the worker the companion's pin. From a companion session, start the worker in the
-foreground instead (`env -u WESIDE_COMPANION claude …` in a tmux window;
-`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Workers). A `--bg` start prints an id;
+`cd <repo> && we-worker <name> --bg "<task, with the context a human would give>"` (the plugin's
+launcher, `${CLAUDE_PLUGIN_ROOT}/scripts/we-worker`; it drops the caller's `CLAUDE_*` variables and
+`WESIDE_COMPANION`). A `--bg` session still takes the `claude daemon`'s environment
+(`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Launch and pin): from a companion session drop
+`--bg`, and the worker starts in a tmux window with the pin cleared. A `--bg` start prints an id;
 `claude agents` lists it. Steer it with `SendMessage` to its name from `ListAgents`, and pass
 `notify_when_idle: true` to hear when it finishes instead of polling. A session in a different
 permission mode holds cross-session messages for its user's approval, so a send is not proof it
