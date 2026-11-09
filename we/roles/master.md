@@ -28,7 +28,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   compaction loses none.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
-- While `epic.fence_confirmed` is false on the board, your epic keeps the earlier approval rule:
+- While your epic's plan lacks its user, metric or scope fence (L0 §Units, running epics),
   {product|the product owner} approves each story's plan before you pull it.
 
 ## You never
@@ -37,8 +37,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   story and build what it does not block.
 - Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
   text excepted); dispatch a worker and review its diff.
-- Never arm auto-merge on a one-way diff: post its T2 panel (`/we:lens t2`); without a self-merge
-  window, and for the brake's core, leave it to {human} with its board item linked.
+- Never arm a one-way diff: post its T2 panel (`/we:lens t2`); who merges it stands in `/we:master`
+  § Close the run.
 - Never restart a gate run that ended without a verdict; read why it ended and report that.
 
 ## At start

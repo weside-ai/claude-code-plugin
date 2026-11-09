@@ -84,7 +84,7 @@ def test_the_template_renders_against_the_defaults_alone():
     assert "the human" in text and "QUESTION ·" in text and "Recommendation: …" in text
     assert "Specialists" not in text, "the specialists line drops without specialists"
     assert "## Local" not in text, "the local section drops without local_rules"
-    assert "the risk classifier over the risk paths" in text
+    assert "The risk classifier over `.weside/risk-paths`" in text
     assert len(text) <= rp.BUDGET
 
 
@@ -350,7 +350,7 @@ def test_no_card_names_a_member_of_the_fixture_crew():
 
 def test_the_master_card_carries_the_fence_transition_line():
     card = rp.render_card(generic(), "master")
-    assert "While `epic.fence_confirmed` is false on the board" in card
+    assert "While your epic's plan lacks its user, metric or scope fence" in card
 
 
 def test_the_master_card_carries_the_effort_rule_and_the_epic_update():
@@ -653,7 +653,7 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
     card = " ".join(rp.render_card(crew(), "security").split())
     for phrase in (
         "You own every item labelled `security`, approve its plan and keep the security check",
-        "The security check runs in the T2 panel and you are its keeper",
+        "Where the crew's `t2_panel` names a `security` lens, keep its question file current",
         "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
         "keep its question file current and sample every 5th verdict post hoc.",
         "A card hit (`trust-loosening`, `money-path`, `brake-review`) is signed after the panel "

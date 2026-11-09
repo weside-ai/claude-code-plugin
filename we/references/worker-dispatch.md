@@ -122,11 +122,7 @@ refuses its merge as for a subagent.
   default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by the conflict check of `/we:ci-review` § 3 (merge `origin/<default-branch>` only on a conflict).
-- No wait loops and no `sleep` in the foreground (`for … sleep … gh pr checks`, `for f in …; git
-  show …`): the auto mode holds them as a permission prompt, and the worker then waits for a human.
-  The worker waits on CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background
-  (`run_in_background`) or through a Monitor. Background output is not polled with `tail` or `cat`
-  on its task file (that, too, stops as a prompt): wait for the notification.
+- Waiting on CI and background output: `roles/worker.md` § You never (loaded into every worker).
 - The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
   `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
   worker in a tree that is not its own; git runs as `git -C <worktree> …`.
@@ -141,11 +137,8 @@ refuses its merge as for a subagent.
   a network service is skipped and listed, unless the brief names an integration suite for a
   critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
   last 20 lines in the report.
-- A gate run that ended without a verdict (killed, aborted, timed out, out of memory, a worker pool
-  that broke) is never restarted automatically, neither by the worker nor by a loop or a monitor: the
-  worker reads why it ended and reports it, and only a run it has answered with a fix runs again. On a
-  shared host the cause is usually another heavy run; a second start doubles the load (30.10.2026:
-  restarted gate runs took a shared host past its memory limit twice).
+- A gate run that ended without a verdict, and the other measured traps of shared trees:
+  `references/session-traps.md`; only a run the worker answered with a fix runs again.
 - A mutation run the plan or repo asks for happens inside the chunk, right after its seam tests are
   green and before the report, never as a step after the PR: run after a green PR it cost a second
   CI round and let a parallel migration land first (64 of 201 min, 17.10.2026).

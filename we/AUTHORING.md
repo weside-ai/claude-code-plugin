@@ -60,8 +60,8 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   call.
 - The most frequent correction is a wrong assumption about the environment or an earlier decision.
   Skills read the repo's instruction files and decision records before assuming.
-- Claude Review (Opus 5.5 `medium`) is the required review gate; Codex is advisory and ends with the
-  subscription.
+- Claude Review (Opus 5.5 `medium`) is the required review gate. Whether Codex reviews is the repo's
+  setting (`review.codex_check`); where it runs, the arm waits for its verdict on the head.
 - SessionStart hook output (Claude Code 2.1.317, `claude -p`, probed 2026-11-03 by
   `scripts/probe-hook-cap.py`, fixture `scripts/fixtures/hook-cap.json`): `additionalContext`
   arrived whole up to 50,000 chars, judged per hook (two 9,895-char hooks in one event both whole);
