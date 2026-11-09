@@ -81,9 +81,10 @@ caller recorded.
 Carried panel (T2 only): a panel bound to an older head ``old`` stays green on the PR's current
 head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
 the change ``old..new`` touches no file the PR's class hit: the PR is classified on
-``merge-base(origin/main, new)..new`` by ``risk_runner.classify`` (the merge hook's own runner and
-rules); class ``T0`` carries, otherwise the delta's files (``git diff --name-only old new``) must
-miss every hit line's file, and a class without hit lines carries nothing. A clean merge of the
+``merge-base(<rules ref>, new)..new`` by ``risk_runner`` (the merge hook's own runner, rules and
+rules ref); class ``T0`` carries, a one-way class never does (its panel opens the self-merge
+window: every head gets a fresh one), otherwise the delta's files (``git diff --name-only old
+new``) must miss every hit line's file, and a class without hit lines carries nothing. A clean merge of the
 default branch therefore carries; a delta on a risk path, a head outside the PR's history, a red
 panel, no panel and any git or classifier failure do not. ``check`` prints ``panel <ID>: carried
 from <old> to <new> (<why>)`` in place of the stale line, or the stale line plus ``panel <ID>: not
@@ -711,14 +712,19 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
     return green, lines, carried
 
 
-def check_t2(root: Path, vid: str) -> tuple[bool, list[str], str | None]:
+def check_t2(
+    root: Path, vid: str, git: risk_runner.Git | None = None, timeout: float | None = None
+) -> tuple[bool, list[str], str | None]:
     """``check`` plus the head a green T2 panel was carried from (see Carried panel), else None.
-    The merge hook reads it to take the security card from that head too."""
-    green, lines, _carried, carried_from = _check(root, vid)
+    The merge hook reads it to take the security card from that head too, and passes its own
+    ``git`` and ``timeout`` so the carry stays inside its time budget."""
+    green, lines, _carried, carried_from = _check(root, vid, git, timeout)
     return green, lines, carried_from
 
 
-def _check(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]], str | None]:
+def _check(
+    root: Path, vid: str, git: risk_runner.Git | None = None, timeout: float | None = None
+) -> tuple[bool, list[str], list[dict[str, Any]], str | None]:
     kind, subject = parse_id(vid)
     try:
         doc = read_file(verdict_dir(root) / f"{vid}.json")
@@ -767,7 +773,9 @@ def _check(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]],
             lines.append(f"lens {lens}: green" + (f" ({notes} note)" if notes else ""))
     carried_from = None
     if stale:
-        rows, carried_from = _stale_rows(root, vid, doc["bound_to"], now, kind == "t2" and green)
+        rows, carried_from = _stale_rows(
+            root, vid, doc["bound_to"], now, kind == "t2" and green, git, timeout
+        )
         green = green and carried_from is not None
         lines[stale_at:stale_at] = rows
     if not green:
@@ -781,38 +789,66 @@ def _check(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]],
 
 
 def _stale_rows(
-    root: Path, vid: str, bound: dict[str, str], now: dict[str, str], may_carry: bool
+    root: Path,
+    vid: str,
+    bound: dict[str, str],
+    now: dict[str, str],
+    may_carry: bool,
+    git: risk_runner.Git | None = None,
+    timeout: float | None = None,
 ) -> tuple[list[str], str | None]:
     """The lines of a moved binding and the head a green T2 panel was carried from, else None."""
     was, is_ = next(iter(bound.values())), next(iter(now.values()))
     stale = f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})"
     if not may_carry:
         return [stale], None
-    carries, why = carry(root, was, is_)
+    carries, why = carry(
+        root,
+        was,
+        is_,
+        git or risk_runner.plain_git,
+        risk_runner.CLASSIFY_TIMEOUT if timeout is None else timeout,
+    )
     if carries:
         return [f"panel {vid}: carried from {was[:8]} to {is_[:8]} ({why})"], was
     return [stale, f"panel {vid}: not carried ({why})"], None
 
 
-def carry(root: Path, old: str, new: str) -> tuple[bool, str]:  # noqa: PLR0911
+def carry(  # noqa: PLR0911
+    root: Path,
+    old: str,
+    new: str,
+    git: risk_runner.Git = risk_runner.plain_git,
+    timeout: float = risk_runner.CLASSIFY_TIMEOUT,
+) -> tuple[bool, str]:
     """(carries, why): whether a green T2 panel on head ``old`` holds for head ``new`` (see
-    Carried panel). Any failure carries nothing."""
-    r, git = str(root), risk_runner.plain_git
-    if not risk_runner.fetch_rules(r, risk_runner.RULES_FROM, git):
-        return False, f"{risk_runner.RULES_FROM} could not be fetched"
+    Carried panel). Any failure carries nothing. ``git`` and ``timeout`` are the caller's: the
+    merge hook passes its own, cut to its time budget."""
+    r = str(root)
+    found = risk_runner.rules(r, git)
+    if isinstance(found, str):
+        return False, f"the rules are not readable: {found}"
     if git(r, "cat-file", "-e", f"{new}^{{commit}}") is None:
         git(r, "fetch", "-q", "--no-tags", "origin", new, timeout=60)
     if git(r, "merge-base", "--is-ancestor", old, new) is None:
         return False, f"{old[:8]} is no ancestor of {new[:8]}"
-    base = (git(r, "merge-base", risk_runner.RULES_FROM, new) or "").strip()
+    if found is None:
+        return True, f"delta {old[:8]}..{new[:8]}: no risk rules here, T0"
+    rules_from = found[2]
+    if rules_from != risk_runner.RULES_FROM and not risk_runner.fetch_rules(r, rules_from, git):
+        return False, f"{rules_from} could not be fetched"
+    base = (git(r, "merge-base", rules_from, new) or "").strip()
     delta = git(r, "diff", "--name-only", "--no-renames", old, new)
     if not base or delta is None:
         return False, f"no merge base or diff for {old[:8]}..{new[:8]}"
-    lines, why = risk_runner.classify(r, new, base)
+    lines, why = risk_runner.run(r, git, found, new, base, timeout)
     if lines is None:
         return False, f"the PR's class is not computed: {why}"
     if lines[0] == "T0":
         return True, f"delta {old[:8]}..{new[:8]}: the PR is T0"
+    if risk_runner.CLASS_LINE.match(lines[0]).group(2):
+        # a one-way PR's panel opens its self-merge window: every head gets a fresh panel
+        return False, f"the PR is {lines[0]}; a one-way PR never carries its panel"
     hits = {row.split("\t", 1)[0] for row in lines[2:] if "\t" in row}
     if not hits:
         return False, f"the PR is {lines[0]} and names no file it hit"

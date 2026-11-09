@@ -699,7 +699,10 @@ def _panel_refusal(root: str, number: int, cls: ClassResult | None = None) -> st
         spec.loader.exec_module(module)
         carried = None
         if hasattr(module, "check_t2"):
-            green, lines, carried = module.check_t2(Path(root), vid)
+            # the hook's own git and timeout: the carry's calls stay inside BUDGET_SECONDS
+            green, lines, carried = module.check_t2(
+                Path(root), vid, git=_git, timeout=_left(CLASSIFY_TIMEOUT)
+            )
         else:
             green, lines = module.check(Path(root), vid)
     except Exception as exc:  # a brake: a broken reader counts red, never green
@@ -717,7 +720,7 @@ def _panel_refusal(root: str, number: int, cls: ClassResult | None = None) -> st
 
 PLAN_DIR = "docs/plans"
 # Board states before Selected: a story there has no approved plan to build on.
-_BEFORE_SELECTED = frozenset({"on_hold", "backlog"})
+_BEFORE_SELECTED = frozenset(crew.STATES[: crew.STATES.index("selected")])
 
 
 def _story_key(root: str, names: list[str]) -> str | None:

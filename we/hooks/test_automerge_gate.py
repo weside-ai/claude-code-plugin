@@ -1376,7 +1376,8 @@ FAKE_LENS_T2 = """
 from pathlib import Path
 def check(root, vid):
     raise AssertionError("check_t2 is preferred")
-def check_t2(root, vid):
+def check_t2(root, vid, git=None, timeout=None):
+    assert git is not None and timeout is not None, "the hook passes its own git and budget"
     old = Path(root, ".lens-carried").read_text()
     return True, ["panel " + vid + ": carried from " + old[:8], "panel " + vid + ": green"], old
 """
