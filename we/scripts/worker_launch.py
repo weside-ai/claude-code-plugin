@@ -371,7 +371,7 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
     deadline = time.monotonic() + wait_s
     while _running(sessions(), name, cwd):
         if time.monotonic() >= deadline:
-            raise LaunchError(f"{name} still running {wait_s:.0f} s after claude stop", 3)
+            raise LaunchError(f"{name} still running {wait_s:.0f} s after {argv[0]} stop", 3)
         time.sleep(1)
     clear_marker(worktree)
     _timing("WorkerStop", name=name, cwd=cwd)

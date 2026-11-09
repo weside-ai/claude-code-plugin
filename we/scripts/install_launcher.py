@@ -47,6 +47,9 @@ WORKER_MARKER = b"we-worker \xe2\x80\x94 start and steer a process worker"
 VERDICT_OFFER = "offer the launcher"
 VERDICT_ACTIVE = "launcher installed"
 VERDICT_KEEP = "foreign wclaude"
+# The worker launcher's own NOTE lines, whatever the verdict says about wclaude; /we:setup § 5 names them.
+WORKER_NOTE_APPLY = "we-worker is not installed or differs — --apply installs it"
+WORKER_NOTE_FOREIGN = "we-worker is someone else's — --apply --force replaces it (backed up)"
 
 
 def on_path() -> bool:
@@ -109,7 +112,8 @@ def cmd_status() -> int:
     current = state()
     print(f"launcher:  {current} ({TARGET})")
     worker = tools()[1]
-    print(f"worker:    {state(worker)} ({worker[0]})")
+    worker_state = state(worker)
+    print(f"worker:    {worker_state} ({worker[0]})")
     shadow_note(worker[0])
     print(f"PATH:      {BIN_DIR} {'on PATH' if on_path() else 'NOT on PATH'}")
     if current == "missing":
@@ -121,6 +125,10 @@ def cmd_status() -> int:
         print(f"VERDICT: {VERDICT_ACTIVE}")
         if current == "stale":
             print("NOTE: the installed copy differs from the shipped one — --apply refreshes it")
+    if worker_state == "foreign":
+        print(f"NOTE: {WORKER_NOTE_FOREIGN}")
+    elif worker_state != "current":
+        print(f"NOTE: {WORKER_NOTE_APPLY} ({worker_state})")
     return 0
 
 

@@ -125,8 +125,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    question 1 → bind `files.goals` to its path, or the Ready gate's goal check stays off. Check it with
    `crew.py validate --strict` (it names every key it refuses, an unknown one too). Propose
    `launch.worker` with `{agent}`, so the worker's effort applies: `we-worker {name} --bg --agent {agent}
-   {brief}` when `command -v we-worker` finds the launcher (§ 5 installs it), else `claude --bg -n
-   {name} --agent {agent} {brief}`; the user corrects it (§ Worker launch backend of
+   {brief}` (§ 5 installs `we-worker` next to `wclaude`; a user who declines it there gets this line
+   rewritten to `claude --bg -n {name} --agent {agent} {brief}`); the user corrects it (§ Worker launch backend of
    `references/worker-dispatch.md` lists the placeholders). Ask once: "Should every start offer
    bypass mode (Shift+Tab), while the start mode stays your `permissions.defaultMode`?" yes →
    `launch.allow_bypass: true`. A re-run shows the diff and asks before replacing.
@@ -160,7 +160,10 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_launcher.py --status`. `offer the launcher` → ask once,
   on yes `--apply` into `~/.local/bin/wclaude`. `launcher installed` with a `NOTE` that the copy differs →
   `--apply` refreshes it. `foreign wclaude` → keep the user's file and mention `--apply --force` (backed up,
-  `--revert` restores it). Relay a `NOTE` that `~/.local/bin` is not on PATH.
+  `--revert` restores it). Relay a `NOTE` that `~/.local/bin` is not on PATH. The same script installs the
+  worker launcher `we-worker`: a `NOTE` naming it (missing, differing or someone else's) → ask once, on yes
+  `--apply` (`--apply --force` for someone else's); declined while the crew's `launch.worker` starts with
+  `we-worker` → rewrite it to `claude --bg -n {name} --agent {agent} {brief}` (step 4a.3).
 - The statusline, the launcher and the council agents are the only user-scope files setup touches.
 
 ## 6. Instruction loop (optional, ask once)

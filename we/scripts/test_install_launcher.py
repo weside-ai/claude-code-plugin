@@ -1,5 +1,7 @@
 """install_launcher.py: install, refresh, foreign-file refusal, backup and revert."""
 
+import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -89,6 +91,14 @@ class LauncherInstallerTest(unittest.TestCase):
         self.assertEqual(ins.cmd_apply(force=False), 1)
         self.assertEqual(ins.state(), "current")
         self.assertEqual((ins.BIN_DIR / "we-worker").read_text(), "#!/bin/sh\necho host\n")
+
+    def test_status_names_a_missing_we_worker_even_when_wclaude_is_current(self):
+        ins.copy_script()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ins.cmd_status()
+        self.assertIn("VERDICT: " + ins.VERDICT_ACTIVE, out.getvalue())
+        self.assertIn("NOTE: " + ins.WORKER_NOTE_APPLY + " (missing)", out.getvalue())
 
 
 if __name__ == "__main__":
