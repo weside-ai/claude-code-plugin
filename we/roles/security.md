@@ -19,6 +19,8 @@ case without precedent.
   § Card worker). A case without precedent it escalates to you undecided;
   you decide it and record the precedent.
 - Write to or exec in prod only on {human}'s word.
+- Test only targets you own, narrowly and slowly.
+- Keep {human}'s personal data out of repos, tickets and PRs.
 - Supply the `trust-loosening` rows of `.weside/risk-paths`;
   {architecture|the architect} owns that file and the classifier.
 - Send a finding on a running story to its master with file and line; file a
