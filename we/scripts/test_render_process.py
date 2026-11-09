@@ -84,7 +84,7 @@ def test_the_template_renders_against_the_defaults_alone():
     assert "the human" in text and "QUESTION ·" in text and "Recommendation: …" in text
     assert "Specialists" not in text, "the specialists line drops without specialists"
     assert "## Local" not in text, "the local section drops without local_rules"
-    assert "The risk classifier over `.weside/risk-paths`" in text
+    assert "`risk_paths.py` over `.weside/risk-paths`" in text
     assert len(text) <= rp.BUDGET
 
 
