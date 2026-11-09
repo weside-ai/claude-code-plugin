@@ -190,3 +190,64 @@ def test_post_names_the_new_head_and_the_carry(pr):
     body = pr["posted"].read_text()
     assert body.startswith(f"<!-- t2-panel -->\n## T2 panel — #7 @ `{new}`\n**Overall: PASS**\n")
     assert f"carried from {pr['old'][:8]} to {new[:8]}" in body
+
+
+def _rules_on_main(pr, files: dict[str, str]) -> None:
+    """Land new rules on origin/main and merge them into the PR branch (a clean merge)."""
+    root = pr["root"]
+    git(root, "checkout", "-q", "main")
+    commit(root, files, "rules")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "checkout", "-q", "feat")
+
+
+def test_a_one_way_pr_never_carries_its_panel(pr):
+    """T2 panel on #203: a one-way PR's panel opens its self-merge window, so each head needs a
+    fresh one, even when the delta touches no hit file."""
+    _rules_on_main(pr, {".weside/risk-paths": "[money]\npath risky/**\n"})
+    root = pr["root"]
+    git(root, "merge", "-q", "--no-edit", "main")
+    pr["point"](git(root, "rev-parse", "HEAD"))
+    green_panel()
+    new = commit(root, {"docs/notes.md": "receipt\n"}, "receipt only")
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1
+    assert "a one-way PR never carries its panel" in out
+
+
+def test_a_class_without_hit_lines_carries_nothing(pr, tmp_path):
+    script = "#!/bin/sh\necho T2\necho 'review: standard'\n"
+    _rules_on_main(
+        pr,
+        {
+            "bin/classify.sh": script,
+            ".weside/crew.json": json.dumps({**CREW, "risk": {"command": "bin/classify.sh"}}),
+        },
+    )
+    root = pr["root"]
+    git(root, "merge", "-q", "--no-edit", "main")
+    pr["point"](git(root, "rev-parse", "HEAD"))
+    green_panel()
+    new = commit(root, {"docs/notes.md": "receipt\n"}, "receipt only")
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1 and "names no file it hit" in out
+
+
+def test_a_classifier_failure_carries_nothing(pr):
+    _rules_on_main(
+        pr,
+        {
+            "bin/classify.sh": "#!/bin/sh\necho broken >&2\nexit 2\n",
+            ".weside/crew.json": json.dumps({**CREW, "risk": {"command": "bin/classify.sh"}}),
+        },
+    )
+    root = pr["root"]
+    git(root, "merge", "-q", "--no-edit", "main")
+    pr["point"](git(root, "rev-parse", "HEAD"))
+    green_panel()
+    new = commit(root, {"docs/notes.md": "receipt\n"}, "receipt only")
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1 and "the PR's class is not computed" in out
