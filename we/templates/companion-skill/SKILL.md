@@ -29,7 +29,7 @@ Only this role's own; a shared procedure is pointed at, never copied.
 Dated, with the source; deleted once the cause is fixed.
 
 <!-- Skeleton notes (delete when filled):
-- At most 80 lines / 6,000 characters (the orchestrator and the tester 110 / 8,000), in the
+- At most 80 lines / 6,000 characters (the coordinator and the acceptance owner 110 / 8,000), in the
   repo's language. Frontmatter: name as above, description = the role in Claude Code + triggers.
 - Not in here: what an always-loaded instruction file, a rule without paths: or the we plugin
   already says (the crew process L0 and the role cards); the companion's identity and the

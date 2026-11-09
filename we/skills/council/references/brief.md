@@ -3,7 +3,7 @@
 The lead fills this per member and passes it as the spawn `prompt`. The deliberation protocol lives
 here, not in the agent files: `${CLAUDE_PLUGIN_ROOT}` is not shown to expand in an agent body, and a
 member acts only on what its prompt carries. Drop a `{…}` line whose condition does not hold. `{lead name}` is the name members reach the lead
-by: `team-lead` in an Agent Teams session (v6 master); the ADJOURN message repeats it. A member
+by: `team-lead` in an Agent Teams session; the ADJOURN message repeats it. A member
 that ends its turn also returns its text as the Agent result, so a wrong name loses nothing.
 The Companion name is the helper's `companion`, else the role's handbook owner (`weside-members.md`
 § Identity, only without a crew).

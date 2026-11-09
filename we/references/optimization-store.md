@@ -108,7 +108,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 - An applied `sunset--`/`ablation--` row sets the row it names to `removed` with `review_by` `—`,
   in the same commit. A rejected one moves that row's `review_by` forward by `review_days`.
 - `change`: the commit SHA or PR that carries it.
-- A ledger written before `metric` and `review_by` existed keeps its rows; `/we:optimize` fills
+- A ledger without the `metric` and `review_by` columns keeps its rows; `/we:optimize` fills
   `review_by` for applied rows and writes `—` where a column does not apply.
 
 ## Source lock
