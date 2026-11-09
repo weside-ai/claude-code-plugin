@@ -47,7 +47,7 @@ set      writes the caller's own session line (found by `name` through `claude a
          `sla_due` (the crew's `sla`, counted in daytime hours); the same role keeps them, another
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
          `since`. It stamps the line's `updated_at` (UTC minute); the board's `updated` moves with
-         every write (`write_board`), `updated_by` never.
+         every write of the coordinator (`write_board`), `updated_by` never.
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
          without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
          lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
@@ -283,9 +283,11 @@ def _append_jsonl(path, record):
 class StateDir:
     """The board file and the JSONL files beside it: every path and every read or write of them."""
 
-    def __init__(self, board_file, now=None):
+    def __init__(self, board_file, now=None, stamps_updated=False):
         self.board_path = Path(board_file).expanduser()
         self.now = now  # the pruning clock; None reads the wall clock
+        # True for the coordinator's writes (board.py main): only they move the board's `updated`.
+        self.stamps_updated = stamps_updated
         self.last_pruned = []  # the `pruned` lines of the last write_board
         self.answers_path = self.log_path("answers")
         self.questions_path = self.log_path("questions")
@@ -317,8 +319,10 @@ class StateDir:
         mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED` and the pruning
         pass (`prune`) dropped nothing. `after(result)` runs once the file is replaced, still under
         the lock: the place for a JSONL line that must not exist without its board change. Returns
-        what `mutate` returned. Every write stamps the board's `updated` (the header's age, and the
-        lapse of an Update mark: `board.ts` `shownAnswer`); `updated_by` stays as it was.
+        what `mutate` returned. A write of the coordinator (`stamps_updated`) stamps the board's
+        `updated` (the header's age, and the lapse of an Update mark once the orchestrator rewrote
+        the board: `board.ts` `shownAnswer`); another session's write leaves it; `updated_by`
+        stays as it was.
         The plugin's only writer of board.json."""
         with self.locked():
             return self._write_board_locked(mutate, after)
@@ -351,7 +355,8 @@ class StateDir:
         pruned = self.last_pruned = prune(board, self, self.now or _now())
         if result is UNCHANGED and not pruned:
             return result
-        board["updated"] = (self.now or _now()).astimezone().isoformat(timespec="seconds")
+        if self.stamps_updated:
+            board["updated"] = (self.now or _now()).astimezone().isoformat(timespec="seconds")
         tmp_fd, tmp_name = tempfile.mkstemp(
             dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
         )
@@ -2730,7 +2735,9 @@ def main(argv=None, now=None, adapter=None):
         refusal, stamp_board = crew_guard(args)
         if refusal:
             raise BoardError(refusal, code=3)
-        code = args.run(StateDir(args.board or default_board(), now=now), args, crew, now)
+        coordinator = bool(crew) and crew_mod.holds_role(crew, "coordinator", os.environ)
+        state = StateDir(args.board or default_board(), now=now, stamps_updated=coordinator)
+        code = args.run(state, args, crew, now)
         if stamp_board is not None and code == 0 and Path(stamp_board).expanduser().exists():
             cid, *_ = _session_crew(Path.cwd(), os.environ)
             if cid is not None:

@@ -40,3 +40,18 @@ def test_an_unreadable_settings_file_is_no_option(tmp_path):
     (tmp_path / "p").mkdir()
     (tmp_path / "p" / "settings.json").write_text("{broken")
     assert claude_home.plugin_options({"CLAUDE_CONFIG_DIR": str(tmp_path / "p")}) == {}
+
+
+def test_tmux_attention_keeps_the_same_option_rule(tmp_path, monkeypatch):
+    """tmux_attention carries its own copy (it runs on every tool call); both read the same file."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+    import tmux_attention  # noqa: PLC0415
+
+    for configs in (
+        {"we@other": {"options": {"tmuxAttention": False}}},
+        {"we@weside-ai": {"options": {"x": 1}}, "zz@m": {"options": {"x": 2}}},
+        {"other@m": {"options": {"x": 3}}},
+    ):
+        _settings(tmp_path / "p", configs)
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "p"))
+        assert tmux_attention.plugin_options() == claude_home.plugin_options()

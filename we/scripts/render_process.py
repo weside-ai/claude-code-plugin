@@ -434,12 +434,12 @@ def _version_key(text: object) -> tuple[int, ...] | None:
 def collision_note(crew_path: Path, crew: dict[str, Any], env: Any = None) -> str | None:
     """two crews, AC3: the one line for a crew whose state directory another crew holds, else None.
 
-        The holder is ``<state dir>/crew.id`` (``crew.stamp_path`` of the folder's ``board.json``).
-        A crew whose board is that ``board.json`` stamps an unstamped folder; a crew with a board of
-        its own (``board.file``) never claims the folder and gets no line either: its board family is
-    named after its own file (``board.py`` § files), so sharing the folder collides with nothing. The same crew (another worktree, a
-        ``.weside/config.json`` pointer) shares the id (``crew.crew_id``) and gets nothing. Fail-open:
-        any read or write error prints nothing."""
+    The holder is ``<state dir>/crew.id`` (``crew.stamp_path`` of the folder's ``board.json``).
+    A crew whose board is that ``board.json`` stamps an unstamped folder; a crew with a board of
+    its own (``board.file``) never claims the folder and gets no line either: its board family is
+    named after its own file (``board.py`` § files), so sharing the folder collides with nothing.
+    The same crew (another worktree, a ``.weside/config.json`` pointer) shares the id
+    (``crew.crew_id``) and gets nothing. Fail-open: any read or write error prints nothing."""
     try:
         folder = crewlib.state_dir(crew_path, crew, env)
         cid = crewlib.crew_id(crew_path)

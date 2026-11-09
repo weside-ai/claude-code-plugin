@@ -594,9 +594,9 @@ class TestSet:
             "updated_at": "2026-11-03T10:00Z",
         }
         assert after["sessions"][1] == before["sessions"][1]
-        assert {k: after[k] for k in after if k not in ("sessions", "updated")} == {
-            k: before[k] for k in before if k not in ("sessions", "updated")
-        }  # updated_by untouched; updated moves with every write
+        assert {k: after[k] for k in after if k != "sessions"} == {
+            k: before[k] for k in before if k != "sessions"
+        }  # updated and updated_by untouched: not the coordinator
 
     def test_appends_a_missing_line_with_name_and_session_id(self, crewless):
         (crewless / "agents.json").write_text(
@@ -3207,14 +3207,26 @@ class TestSessionStamp:
         assert line_of(crewed, "other")["updated_at"] == "2026-11-03T10:00Z"
 
 
-def test_every_write_stamps_the_boards_updated(tmp_path):
-    """board.ts lapses an Update mark and ages the header on `updated`; board.py must move it."""
+def test_a_coordinator_write_stamps_the_boards_updated_and_another_does_not(tmp_path):
+    """board.ts lapses an Update mark and ages the header on `updated` once the orchestrator
+    rewrote the board: its writes move it, a worker's status ping does not (Claude Review #197)."""
     path = tmp_path / "board.json"
     path.write_text(json.dumps({"updated": "2000-01-01T00:00:00+00:00", "updated_by": "Lea"}))
     board.StateDir(path).write_board(lambda b: b.setdefault("questions", []))
+    assert json.loads(path.read_text())["updated"] == "2000-01-01T00:00:00+00:00"
+    board.StateDir(path, stamps_updated=True).write_board(lambda b: b.setdefault("news", []))
     data = json.loads(path.read_text())
-    assert data["updated"] > "2000-01-01" and data["updated"][:4] >= "2026"
-    assert data["updated_by"] == "Lea"
+    assert data["updated"][:4] >= "2026" and data["updated_by"] == "Lea"
+
+
+def test_main_stamps_updated_only_for_the_coordinator(crewed, monkeypatch):
+    before = board_of(crewed)["updated"]
+    assert go(crewed, "set", "now=x") == 0
+    assert board_of(crewed)["updated"] == before
+    pin(monkeypatch, "otto")
+    (crewed / "agents.json").write_text(json.dumps([{"sessionId": "sid-12", "name": "Otto"}]))
+    assert go(crewed, "set", "now=y") == 0
+    assert board_of(crewed)["updated"] != before
 
 
 def test_a_transition_row_is_built_and_appended_under_the_board_lock(tmp_path):

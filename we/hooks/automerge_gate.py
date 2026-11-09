@@ -90,8 +90,9 @@ crew's state directory, `crew.state_dir`) and only
 for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
 count as covered). Any exception while checking a
 command that looks like a merge refuses it, and so does a failed import of the hook's own modules
-(`_import_failure`). A query piped in from stdin counts as seen when the command itself spells a
-read-only query (`"query":"query {…"` or `query {…`, no `mutation` in the command). The whole hook
+(`_import_failure`). A query piped in from stdin counts as seen only when an `echo`/`printf` right
+before that `gh` (`… | gh api graphql --input -`) spells a read-only query and the call redirects
+nothing (`_piped_read_only`); a query elsewhere in the command, a `cat` or a `<` stay unseen. The whole hook
 shares one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s `timeout` in `hooks.json`:
 each `git`, `gh` and classifier call has its own timeout, cut to what is left of it (`_left`); a call cut short
 fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -285,14 +286,34 @@ def _api_method(args: list[str]) -> str:
     return "POST" if any(a in fields or a.startswith(fields) for a in args) else "GET"
 
 
-# A query written into the command itself (`echo '{"query":"query { … }"}' | gh api graphql
-# --input -`) with no `mutation` anywhere in the command: readable, read-only, never a merge.
-_READ_ONLY_INLINE = re.compile(
+# A read-only GraphQL document: names a query (`"query":"query {…"`, `"query":"{…"`, `query {`), no mutation.
+_READ_ONLY_DOC = re.compile(
     r"^(?!.*\bmutation\b)(?=.*(\"query\"\s*:\s*\"\s*(query\b|\{)|\bquery\s*[({]))", re.DOTALL
 )
 
 
-def _graphql_text(args: list[str], command: str, cwd: str | None) -> tuple[str, str | None]:
+def _piped_read_only(argv: list[str], at: int) -> bool:
+    """Whether the stdin of the `gh` at `argv[at]` is an `echo`/`printf` right before it, piped in
+    with `|`, whose words spell a read-only query, and the call itself redirects nothing (`<`).
+
+    Only that one segment counts: a query elsewhere in the command says nothing about this stdin.
+    """
+    if at < 2 or argv[at - 1] != "|":
+        return False
+    start = at - 2
+    while start > 0 and argv[start - 1] not in vg._SEPARATORS:
+        start -= 1
+    segment = argv[start : at - 1]
+    if not segment or segment[0] not in ("echo", "printf"):
+        return False
+    if any(t.startswith("<") for t in vg._args_from(argv, at)):
+        return False
+    return bool(_READ_ONLY_DOC.search(" ".join(segment[1:])))
+
+
+def _graphql_text(
+    args: list[str], command: str, cwd: str | None, piped_read_only: bool = False
+) -> tuple[str, str | None]:
     """(the command's own text plus every query file it names, why a query is unseen or None).
 
     A query from stdin (`--input -`, `query=@-`) is in the command only as a heredoc; piped from
@@ -307,7 +328,7 @@ def _graphql_text(args: list[str], command: str, cwd: str | None) -> tuple[str, 
             files.append(value)
     for name in files:
         if name == "-":
-            if "<<" not in command and not _READ_ONLY_INLINE.search(command):
+            if "<<" not in command and not piped_read_only:
                 unseen = "the GraphQL query comes from stdin, which the hook cannot read"
             continue
         try:
@@ -366,7 +387,9 @@ def _merge_calls(argv: list[str], command: str, cwd: str | None) -> list[MergeCa
             continue
         if "graphql" not in args:
             continue
-        text, unseen = _graphql_text(args, command, _cwd_at(argv, cwd, i)[0])
+        text, unseen = _graphql_text(
+            args, command, _cwd_at(argv, cwd, i)[0], _piped_read_only(argv, i)
+        )
         arm = "enablePullRequestAutoMerge" in text
         if not arm and "mergePullRequest" not in text and unseen is None:
             continue

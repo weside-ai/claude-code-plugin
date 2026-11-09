@@ -1407,6 +1407,22 @@ def test_a_read_only_query_spelled_in_the_command_passes(repo: Path, monkeypatch
     assert refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch) is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh api graphql -f query='query { viewer { login } }' && gh api graphql --input - < arm.json",
+        "cat payload.json | gh api graphql --input -  # query {",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - < arm.json""",
+    ],
+)
+def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
+    repo: Path, monkeypatch, command
+) -> None:
+    """Claude Review on #197: only the echo piped straight into this gh call counts."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
 def test_a_mutation_spelled_in_the_command_still_refuses_unseen(repo: Path, monkeypatch) -> None:
     command = """echo '{"query":"mutation { x }"}' | gh api graphql --input -"""
     reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
