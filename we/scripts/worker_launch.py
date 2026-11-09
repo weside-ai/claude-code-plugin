@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """The worker launch backend: a dev worker as an `Agent` subagent or as a session of its own.
 
-`.weside/config.json` → `agents.worker_launch` is `"subagent"` (the default, also when the file or
-key is missing) or a command template. A subagent bills the account of the session that calls it;
-a template starts the worker as its own process, on whatever login the command starts it with.
+One owner of the template: in a repo with a crew, the crew's `launch.worker` (`scripts/crew.py`);
+`.weside/config.json` → `agents.worker_launch` counts only where the crew sets none (a repo without
+a crew, or a crew written before the move). Both set and different: one stderr line, the crew wins.
+The value is `"subagent"` (the default, also when nothing is set) or a command template. A subagent
+bills the account of the session that calls it; a template starts the worker as its own process,
+on whatever login the command starts it with. `backend()` is the one reader; the master's boot
+check and `/we:accept` read it through `worker_launch.py backend`.
 Contract and Lead steps: `references/worker-dispatch.md` § Worker launch backend.
 
 Template grammar: split like a shell line (`shlex`), then a token that is exactly `{name}`,
@@ -24,7 +28,9 @@ Usage:
   worker_launch.py backend [--repo <dir>]          prints `subagent` or the template; 2 = invalid
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
-                                                   with --worktree it removes marker and brief
+                                                   with --worktree it removes marker and brief; a
+                                                   template whose launcher has a `stop` verb
+                                                   (`we-worker`) stops through it
   worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
 """
@@ -37,6 +43,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -59,12 +66,19 @@ class LaunchError(Exception):
         self.code = code
 
 
+GIT_TIMEOUT_S = 30
+
+
 def _git(cwd: Path, *args: str) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=False
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=GIT_TIMEOUT_S,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return None
     return out.stdout.strip() if out.returncode == 0 else None
 
@@ -104,26 +118,30 @@ def clear_marker(worktree: Path | None) -> None:
             path.unlink()
 
 
-def validate(template: str) -> list[str]:
+CONFIG_KEY = "agents.worker_launch"
+CREW_KEY = "launch.worker"
+
+
+def validate(template: str, source: str = CONFIG_KEY) -> list[str]:
     try:
         tokens = shlex.split(template)
     except ValueError as exc:
-        raise LaunchError(f"agents.worker_launch: cannot split the template ({exc})", 2) from exc
+        raise LaunchError(f"{source}: cannot split the template ({exc})", 2) from exc
     if not tokens:
-        raise LaunchError("agents.worker_launch: empty template", 2)
+        raise LaunchError(f"{source}: empty template", 2)
     for token in tokens:
         for found in re.findall(r"\{([^{}]*)\}", token):
             if found not in PLACEHOLDERS:
-                raise LaunchError(f"agents.worker_launch: unknown placeholder {{{found}}}", 2)
+                raise LaunchError(f"{source}: unknown placeholder {{{found}}}", 2)
             if token != f"{{{found}}}":
                 raise LaunchError(
-                    f"agents.worker_launch: placeholder {{{found}}} must be a token of its own, "
+                    f"{source}: placeholder {{{found}}} must be a token of its own, "
                     f"not part of {token!r}",
                     2,
                 )
     for name in REQUIRED:
         if f"{{{name}}}" not in tokens:
-            raise LaunchError(f"agents.worker_launch: placeholder {{{name}}} is required", 2)
+            raise LaunchError(f"{source}: placeholder {{{name}}} is required", 2)
     return tokens
 
 
@@ -138,24 +156,53 @@ def render(tokens: list[str], values: dict[str, str]) -> list[str]:
     return argv
 
 
-def backend(repo: Path) -> str:
-    """`subagent` or the validated template of the repo holding `repo`."""
-    top = _git(repo, "rev-parse", "--show-toplevel")
-    path = Path(top or repo) / ".weside" / "config.json"
+def _config_template(top: Path) -> str | None:
+    """`agents.worker_launch` of the repo's config.json, None when the file or key is missing."""
+    path = top / ".weside" / "config.json"
     try:
         config = json.loads(path.read_text())
     except FileNotFoundError:
-        return SUBAGENT
+        return None
     except (OSError, json.JSONDecodeError) as exc:
         raise LaunchError(f"{path}: unreadable ({exc})") from exc
     agents = config.get("agents") if isinstance(config, dict) else None
-    value = agents.get("worker_launch", SUBAGENT) if isinstance(agents, dict) else SUBAGENT
-    if value == SUBAGENT:
-        return SUBAGENT
-    if not isinstance(value, str):
-        raise LaunchError('agents.worker_launch: must be "subagent" or a command string', 2)
-    validate(value)
+    value = agents.get("worker_launch") if isinstance(agents, dict) else None
+    if value is not None and not isinstance(value, str):
+        raise LaunchError(f'{CONFIG_KEY}: must be "subagent" or a command string', 2)
     return value
+
+
+def _crew_template(top: Path) -> str | None:
+    """The crew's `launch.worker`, None without a crew or without the key."""
+    import crew as crew_mod  # noqa: PLC0415  (lazy: crew.py imports this module)
+
+    try:
+        _path, crew = crew_mod.find_and_load(top)
+    except crew_mod.CrewError as exc:
+        print(f"worker_launch: crew unreadable ({exc}); {CONFIG_KEY} decides", file=sys.stderr)
+        return None
+    value = ((crew or {}).get("launch") or {}).get("worker")
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def backend(repo: Path) -> str:
+    """`subagent` or the validated template of the repo holding `repo` (crew first, see above)."""
+    top = Path(_git(repo, "rev-parse", "--show-toplevel") or repo)
+    from_crew = _crew_template(top)
+    from_config = _config_template(top)
+    if from_crew is not None:
+        if from_config not in (None, SUBAGENT, from_crew):
+            print(
+                f"worker_launch: {CREW_KEY} and {CONFIG_KEY} differ; the crew wins "
+                f"({from_crew!r}); drop {CONFIG_KEY} from .weside/config.json",
+                file=sys.stderr,
+            )
+        validate(from_crew, CREW_KEY)
+        return from_crew
+    if from_config in (None, SUBAGENT):
+        return SUBAGENT
+    validate(from_config)
+    return from_config
 
 
 AGENTS_TIMEOUT_S = 30
@@ -277,6 +324,28 @@ def alive(name: str) -> bool:
     return bool(_running(sessions(), name))
 
 
+STOP_VERB_TIMEOUT_S = 60
+
+
+def launcher_with_verbs(repo: Path | None) -> str | None:
+    """The template's first word when it is a launcher with its own `stop` verb, else None.
+
+    Only `we-worker` (this plugin's launcher, `scripts/we-worker`) is known to carry
+    `status|stop|logs|waiting`; any other launcher, or a `we-worker` not on `PATH`, is stopped
+    with `claude stop`.
+    """
+    try:
+        template = backend(repo or Path.cwd())
+    except LaunchError:
+        return None
+    if template == SUBAGENT:
+        return None
+    first = shlex.split(template)[0]
+    if Path(first).name != "we-worker" or shutil.which(first) is None:
+        return None  # not ours, or not on this host: `claude stop` does it
+    return first
+
+
 def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> None:
     cwd = str(worktree) if worktree else None
     rows = _running(sessions(), name, cwd)
@@ -285,15 +354,24 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
         raise LaunchError(f"no running session named {name}")
     if len(rows) > 1:
         raise LaunchError(f"{len(rows)} sessions named {name}: pass --worktree")
-    out = subprocess.run(
-        ["claude", "stop", str(rows[0]["id"])], capture_output=True, text=True, check=False
+    launcher = launcher_with_verbs(worktree)
+    argv = (
+        [launcher, "stop", str(rows[0]["id"])]
+        if launcher
+        else ["claude", "stop", str(rows[0]["id"])]
     )
+    try:
+        out = subprocess.run(
+            argv, capture_output=True, text=True, check=False, timeout=STOP_VERB_TIMEOUT_S
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise LaunchError(f"{argv[0]} stop: {exc}") from exc
     if out.returncode != 0:
-        raise LaunchError(f"claude stop exited {out.returncode}: {out.stderr.strip()}")
+        raise LaunchError(f"{argv[0]} stop exited {out.returncode}: {out.stderr.strip()}")
     deadline = time.monotonic() + wait_s
     while _running(sessions(), name, cwd):
         if time.monotonic() >= deadline:
-            raise LaunchError(f"{name} still running {wait_s:.0f} s after claude stop", 3)
+            raise LaunchError(f"{name} still running {wait_s:.0f} s after {argv[0]} stop", 3)
         time.sleep(1)
     clear_marker(worktree)
     _timing("WorkerStop", name=name, cwd=cwd)

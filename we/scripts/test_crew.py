@@ -999,3 +999,24 @@ def test_a_relative_state_dir_names_one_folder_for_every_worktree(tmp_path):
     want = (core / ".weside" / "../../.we-state").resolve()
     assert crew.state_dir(main_path, main_crew, {}).resolve() == want
     assert crew.state_dir(wt_path, wt_crew, {}).resolve() == want
+
+
+def test_launch_allow_bypass_is_a_bool_default_off_and_the_launch_verb_prints_it(tmp_path):
+    assert crew.DEFAULTS["launch"]["allow_bypass"] is False
+    core, _ = workspace(
+        tmp_path, {**CREW, "launch": {"allow_bypass": True, "worker_timer": "~/t.py"}}
+    )
+    assert run(core, "validate", "--strict").returncode == 0
+    assert run(core, "launch", "allow_bypass").stdout == "true\n"
+    assert run(core, "launch", "worker_timer").stdout == "~/t.py\n"
+    assert run(core, "launch", "worker").stdout == "\n"
+    assert run(core, "launch", "nope").returncode == 2
+    bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"allow_bypass": "yes"}})
+    out = run(bad, "validate")
+    assert out.returncode == 1 and "launch.allow_bypass" in out.stderr
+
+
+def test_the_launch_verb_without_a_crew_prints_the_default(tmp_path):
+    (tmp_path / ".git").mkdir()
+    out = run(tmp_path, "launch", "allow_bypass")
+    assert out.returncode == 0 and out.stdout == "false\n"

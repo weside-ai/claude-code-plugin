@@ -573,6 +573,7 @@ RESOLVER = r"""python3 -c 'if True:
     print(path)
 '"""
 RESOLVER_FILES = (
+    "we/scripts/we-worker",
     "we/scripts/wclaude",
     "we/templates/agents-skill/SKILL.md",
     "we/references/optimization-store.md",
