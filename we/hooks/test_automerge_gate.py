@@ -1435,6 +1435,12 @@ def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
         """echo 'query {' {a..b} | gh api graphql --input -""",
         """echo 'query {' m* | gh api graphql --input -""",
         """echo 'query {' ~/m.json | gh api graphql --input -""",
+        'echo() { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """echo() { cat m.json; } ; echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        'function echo { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """PATH=/tmp/x echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        """printf '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - && echo done""",
         """printf '%s' '{"query": "{ repository(owner:\\"o\\") { id } }"}' | gh api graphql --input -""",
     ],
 )

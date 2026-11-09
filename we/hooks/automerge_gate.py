@@ -90,9 +90,10 @@ crew's state directory, `crew.state_dir`) and only
 for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
 count as covered). Any exception while checking a
 command that looks like a merge refuses it, and so does a failed import of the hook's own modules
-(`_import_failure`). A query piped in from stdin counts as seen only when an `echo`/`printf` right
-before that `gh` (`… | gh api graphql --input -`) spells a read-only query and the call redirects
-nothing (`_piped_read_only`); a query elsewhere in the command, a `cat` or a `<` stay unseen. The whole hook
+(`_import_failure`). A query piped in from stdin counts as seen only when the whole command is
+`echo <literal words> | gh api graphql …` and the words spell a read-only query
+(`_piped_read_only`); any other part of the command, `printf`, a `cat` or a redirection leaves it
+unseen. The whole hook
 shares one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s `timeout` in `hooks.json`:
 each `git`, `gh` and classifier call has its own timeout, cut to what is left of it (`_left`); a call cut short
 fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -296,25 +297,22 @@ _LITERAL_WORD = re.compile(r"[A-Za-z0-9 _:{}()\"'.=@]*")
 
 
 def _piped_read_only(argv: list[str], at: int) -> bool:
-    """Whether the stdin of the `gh` at `argv[at]` is an `echo`/`printf` right before it, piped in
-    with `|`, whose words the shell cannot change (`_LITERAL_WORD`, no `..`, no flag) and spell a
-    read-only query, and the call itself redirects nothing (`<`).
+    """Whether the command is exactly `echo <words> | gh …` with the `gh` at `argv[at]`, whose words
+    the shell cannot change (`_LITERAL_WORD`, no `..`, no flag) and spell a read-only query.
 
-    Only that one segment counts: a query elsewhere in the command says nothing about this stdin.
+    Anything else around it (another command, a redirection, `printf`) leaves the stdin unseen.
     """
     if at < 2 or argv[at - 1] != "|":
         return False
-    start = at - 2
-    while start > 0 and argv[start - 1] not in vg._SEPARATORS:
-        start -= 1
-    segment = argv[start : at - 1]
-    if not segment or segment[0] not in ("echo", "printf"):
+    # The whole command is this one pipeline: no earlier part can redefine `echo` (a function,
+    # `enable -n`, `PATH=`), and nothing after it feeds or redirects the call.
+    if argv[0] != "echo" or any(
+        t in vg._SEPARATORS or t.startswith(("<", ">")) for i, t in enumerate(argv) if i != at - 1
+    ):
         return False
-    if any(t.startswith("<") for t in vg._args_from(argv, at)):
-        return False
-    words = segment[1:]
+    words = argv[1 : at - 1]
     # Only words the shell cannot change count: it expands `$(…)`, `$VAR`, backticks, braces
-    # (`{mu,}tation`, `{a..b}`), globs and `~`, and printf/`echo -e` decode formats and escapes,
+    # (`{mu,}tation`, `{a..b}`), globs and `~`, and `echo -e` decodes escapes,
     # all after this check, so any of them could spell a mutation the regex never saw. An
     # allow-list (no `,`, no `..`, no `$ \ % * ? [ ~`) instead of a list of known tricks.
     if any(not _LITERAL_WORD.fullmatch(w) or ".." in w or w.startswith("-") for w in words):
