@@ -88,7 +88,8 @@ no confirm: the invocation is the go.
 
 ## Refine lane
 
-A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start (L0 §Lifecycle: the epic's
+A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start in a detached worktree of its own
+(`git worktree add --detach <path> origin/<default>`; the brief's `Tree:` names it) (L0 §Lifecycle: the epic's
 master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
@@ -118,8 +119,10 @@ merged artifact its plan names, not the whole story) and every story without a p
 limit (L0 §Sessions) is reached. Two stories whose plans touch the same files never run in parallel: the second
 waits for the first one's merge.
 
-**Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
-pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
+**Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it).
+When only CI holds the plan's docs PR, the build may start once the Ready panel is green on the plan
+blob; the code PR then carries the line `plan: waits for <docs PR> and Selected` and is armed only
+after the plan is on the default branch and `board.py select` passed (L0 §Units). Then pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
 (L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
 § Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
@@ -182,7 +185,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
 3. A "push now" relay to a worker says "push; merge `origin/<default>` first only on a conflict". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
-   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
+   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` in the PR branch's worktree (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
    `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,

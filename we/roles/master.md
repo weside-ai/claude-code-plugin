@@ -39,7 +39,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   text excepted); dispatch a worker and review its diff.
 - Never arm a one-way diff: post its T2 panel (`/we:lens t2`); who merges it stands in `/we:master`
   § Close the run.
-- Never restart a gate run that ended without a verdict; read why it ended and report that.
+- Never restart a heavy gate run (gate lock, test slot) that ended without a verdict; read why it ended
+  and report that. A review check that errored on quota or infrastructure you re-run once, after the cause is gone.
 
 ## At start
 

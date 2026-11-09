@@ -68,5 +68,7 @@ cards point here instead of repeating them.
 
 - Write a PR body file in one Bash call and run `gh pr create|edit --body-file` in the next: the
   verification gate reads the file before the command runs and would judge stale content.
+- Briefs, PR bodies and every file another session reads live outside `/tmp`: a host restart or a
+  cleanup there loses them before the reader comes.
 - A brief passed through the shell goes in a quoted heredoc (`<<'EOF'`), so `$`, backticks and
   quotes reach the worker unchanged.
