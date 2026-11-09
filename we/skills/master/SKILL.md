@@ -81,8 +81,8 @@ risk-class call. The WHAT goes to the Product Owner, the HOW to the epic owner (
 else the component owner), what only the human decides as one question line to the coordinator. A
 question never stops independent work: first dispatch everything that does not depend on an answer,
 then ask early, and park only the chunk an answer blocks. An important question is
-still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase
-and push it to `wip/<KEY>-<slug>`. Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
+still asked, never skipped silently. Before a known quota end, secure each worker's tree with
+`we-worker checkpoint <name>` (tracked changes to `wip/<branch>`). Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. A Selected plan needs
 no confirm: the invocation is the go.
 

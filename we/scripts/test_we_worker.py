@@ -433,17 +433,44 @@ def test_checkpoint_commits_tracked_changes_and_pushes_a_wip_branch(tmp_path):
         check=True,
     )
     assert shown.stdout == "two\n"
-    status = subprocess.run(
-        ["git", "-C", str(tree), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert status.stdout.strip() == ""  # new files are part of the checkpoint
-    shown = subprocess.run(
+    # a new file may be a scratch dump or a local secret: named, never pushed
+    assert "not in it (new, untracked): untracked.txt" in proc.stdout
+    missing = subprocess.run(
         ["git", "--git-dir", str(origin), "show", "wip/AC-12-slug:untracked.txt"],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
-    assert shown.stdout == "x\n"
+    assert missing.returncode != 0
+
+
+def _checkpoint_tree(tmp_path, branch):
+    tree = tmp_path / "tree"
+    subprocess.run(["git", "init", "-q", "-b", branch, str(tree)], check=True)
+    git = ["git", "-C", str(tree), "-c", "user.email=t@t", "-c", "user.name=t"]
+    (tree / "a.txt").write_text("one\n")
+    subprocess.run([*git, "add", "a.txt"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "one"], check=True)
+    (tree / "a.txt").write_text("two\n")
+    return tree
+
+
+def test_checkpoint_refuses_a_session_that_is_no_worker(tmp_path):
+    tree = _checkpoint_tree(tmp_path, "feat/x")
+    rows = [{"id": "ma1", "name": "Samu", "kind": "interactive", "pid": "-", "cwd": str(tree)}]
+    project, env = setup(tmp_path, rows)
+    proc = run(project, env, "checkpoint", "Samu")
+    assert proc.returncode == 1 and "is no worker" in proc.stderr
+    assert "two" in (tree / "a.txt").read_text()
+    log = subprocess.run(
+        ["git", "-C", str(tree), "log", "--oneline"], capture_output=True, text=True, check=True
+    )
+    assert "checkpoint" not in log.stdout
+
+
+def test_checkpoint_never_commits_on_main(tmp_path):
+    tree = _checkpoint_tree(tmp_path, "main")
+    rows = [{"id": "ab1", "name": "w", "kind": "background", "pid": 1, "cwd": str(tree)}]
+    project, env = setup(tmp_path, rows)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and "is on main" in proc.stderr
