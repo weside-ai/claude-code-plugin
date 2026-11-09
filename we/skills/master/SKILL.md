@@ -121,8 +121,10 @@ waits for the first one's merge.
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it).
 When only CI holds the plan's docs PR, the build may start once the Ready panel is green on the plan
-blob; the code PR then carries the line `plan: waits for <docs PR> and Selected` and is armed only
-after the plan is on the default branch and `board.py select` passed (L0 §Units). Then pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
+blob, before the pull: `board.py select` needs the plan on the default branch (with a crew
+`risk.command` its tier fails until then), and In Progress needs Selected. The code PR carries the
+line `plan: waits for <docs PR> and Selected`; once the docs PR merged, run `board.py select`, pull
+the story, then arm (L0 §Units; no gate checks this yet). Otherwise pull the story first: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
 (L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
 § Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
