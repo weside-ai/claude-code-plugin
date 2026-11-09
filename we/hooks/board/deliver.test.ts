@@ -180,7 +180,7 @@ test('a coordinator prompt that is never stored is submitted once more after the
   await clock.advance(3_000)
   await turn($, 't1')
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q1: proposal accepted', 'Q1: proposal accepted'])
+  expect(h.submitted).toEqual(['Q1: proposal accepted (answered from the board pane in coord)', 'Q1: proposal accepted (answered from the board pane in coord)'])
   await ui.unmount()
 })
 
@@ -204,8 +204,8 @@ test('a press in another pane reaches the coordinator and the asker within one w
   const { clock, h } = await coordinator($, on)
   await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q1: proposal accepted'])
-  expect(h.sent).toEqual([{ to: 'asker', text: 'Q1: proposal accepted' }])
+  expect(h.submitted).toEqual(['Q1: proposal accepted (answered from the board pane in foxy)'])
+  expect(h.sent).toEqual([{ to: 'asker', text: 'Q1: proposal accepted (answered from the board pane in foxy)' }])
   const rows = h.rows('Q1')
   expect(rows.map(r => [r.role, r.to, r.delivered])).toEqual([
     ['asker', 'asker', true],
@@ -227,9 +227,9 @@ test('a busy coordinator: its row counts when the queued prompt is stored, well 
   // The turn that ran before the submit ends: no resubmit, the prompt is still queued.
   await $.turn.complete({ reason: 'answer', answer: '', durationMs: 43_000, isAborted: false, turnId: 'busy' } as never)
   await clock.advance(1_000)
-  expect(h.submitted).toEqual(["Q1: let's talk about it"])
+  expect(h.submitted).toEqual(["Q1: let's talk about it (answered from the board pane in foxy)"])
   await $.turn.start({ text: '', turnId: 'queued' } as never)
-  await h.store("Q1: let's talk about it")
+  await h.store("Q1: let's talk about it (answered from the board pane in foxy)")
   await clock.settle()
   const row = h.rows('Q1', 'coordinator')[0]!
   expect(row.delivered).toBe(true)
@@ -246,7 +246,7 @@ for (const shape of ['one text', 'two blocks'] as const) {
     await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
     await h.click({ id: 'Q2', answer: 'discuss', ts: iso(T0 + 1_500), session: 'foxy' })
     await clock.advance(3_000)
-    const prompts = ['Q1: proposal accepted', "Q2: let's talk about it"]
+    const prompts = ['Q1: proposal accepted (answered from the board pane in foxy)', "Q2: let's talk about it (answered from the board pane in foxy)"]
     expect(h.submitted).toEqual(prompts)
     await $.turn.complete({ reason: 'answer', answer: '', durationMs: 4_000, isAborted: false, turnId: 'busy' } as never)
     await $.turn.start({ text: '', turnId: 'queued' } as never)
@@ -270,7 +270,7 @@ for (const [name, reason] of [
     await clock.advance(3_000)
     expect(h.rows('Q1', 'asker')).toEqual([expect.objectContaining({ to: 'asker', delivered: false, reason })])
     const flat = reason.replace(/\s+/g, ' ').trim()
-    expect(h.submitted).toEqual(['Q1: proposal accepted', `Q1: the owner's answer (accept) did not reach asker (${flat}); wake that session or route the answer`])
+    expect(h.submitted).toEqual(['Q1: proposal accepted (answered from the board pane in foxy)', `Q1: the owner's answer (accept) did not reach asker (${flat}); wake that session or route the answer`])
     expect(h.rows('Q1', 'route')).toEqual([expect.objectContaining({ to: 'coord', delivered: true })])
     await clock.advance(9_000)
     expect([h.sent.length, h.submitted.length]).toEqual([1, 2])
@@ -313,7 +313,7 @@ test('Q189 to the end: no row after the resubmit either is a refusal row and a t
   expect(h.rows('Q1', 'coordinator').map(r => r.reason)).toEqual(['resubmitted'])
   await turn($, 't2')
   await clock.settle()
-  expect(h.submitted).toEqual(['Q1: I need more information', 'Q1: I need more information'])
+  expect(h.submitted).toEqual(['Q1: I need more information (answered from the board pane in foxy)', 'Q1: I need more information (answered from the board pane in foxy)'])
   expect(h.rows('Q1', 'coordinator').map(r => [r.delivered, r.reason])).toEqual([
     [false, 'resubmitted'],
     [false, 'not stored after a resubmit'],
@@ -353,8 +353,8 @@ test('a ledger present at start: a delivered line is not sent again, a marker li
   ].map(r => `${JSON.stringify(r)}\n`).join('')
   const { clock, h } = await coordinator($, on, { answers, ledger })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q2: proposal denied'])
-  expect(h.sent).toEqual([{ to: 'other', text: 'Q2: proposal denied' }])
+  expect(h.submitted).toEqual(['Q2: proposal denied (answered from the board pane in foxy)'])
+  expect(h.sent).toEqual([{ to: 'other', text: 'Q2: proposal denied (answered from the board pane in foxy)' }])
   // The deliverer's newer row supersedes the marker.
   const q2 = h.rows('Q2', 'coordinator')
   expect(q2.map(r => r.delivered)).toEqual([false, true])
@@ -374,14 +374,14 @@ test('a first start writes the epoch and sends nothing older, legacy lines inclu
   await h.click({ id: 'Q2', answer: 'skipped', ts: iso(T0 + 10_000), session: 'foxy' })
   await h.click({ id: 'Q2', answer: 'info', ts: iso(T0 + 11_000), session: 'foxy', via: 'chat in somewhere' })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q2: I need more information'])
+  expect(h.submitted).toEqual(['Q2: I need more information (answered from the board pane in foxy)'])
 })
 
 test('a line the asker wrote itself goes to the coordinator only', async ($, on) => {
   const { clock, h } = await coordinator($, on)
   await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'asker' })
   await clock.advance(3_000)
-  expect([h.submitted, h.sent]).toEqual([["Q1: let's talk about it"], []])
+  expect([h.submitted, h.sent]).toEqual([["Q1: let's talk about it (answered from the board pane in asker)"], []])
   expect(h.rows('Q1').map(r => r.role)).toEqual(['coordinator'])
 })
 
@@ -389,8 +389,8 @@ test('Update asks the asker to check its question and the coordinator as before'
   const { clock, h } = await coordinator($, on)
   await h.click({ id: 'Q1', answer: 'update', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
-  expect(h.sent).toEqual([{ to: 'asker', text: 'check whether Q1 is still current and well worded; re-ask it with a new id or withdraw it' }])
-  expect(h.submitted).toEqual(['Q1: please check whether this question is still current and correctly worded (goal still active? needs an update?)'])
+  expect(h.sent).toEqual([{ to: 'asker', text: 'check whether Q1 is still current and well worded; re-ask it with a new id or withdraw it (answered from the board pane in foxy)' }])
+  expect(h.submitted).toEqual(['Q1: please check whether this question is still current and correctly worded (goal still active? needs an update?) (answered from the board pane in foxy)'])
 })
 
 test('a chat answer written back: from the asker\'s chat to the coordinator, from the coordinator\'s chat to the asker', async ($, on) => {
@@ -398,8 +398,8 @@ test('a chat answer written back: from the asker\'s chat to the coordinator, fro
   await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'asker', via: 'chat', quote: 'go ahead' })
   await h.click({ id: 'Q2', answer: 'deny', ts: iso(T0 + 1_500), session: 'coord', via: 'chat' })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q1: proposal accepted\nThe owner\'s words: "go ahead"'])
-  expect(h.sent).toEqual([{ to: 'other', text: 'Q2: proposal denied' }])
+  expect(h.submitted).toEqual(['Q1: proposal accepted (answered in the chat of asker)\nThe owner\'s words: "go ahead"'])
+  expect(h.sent).toEqual([{ to: 'other', text: 'Q2: proposal denied (answered in the chat of coord)' }])
   expect(h.rows('Q1').map(r => r.role)).toEqual(['coordinator'])
   expect(h.rows('Q2').map(r => r.role)).toEqual(['asker'])
 })
@@ -550,8 +550,8 @@ test('a crew whose board has no updated_by: its coordinator from crew.json deliv
   const { clock, h } = await crewSession($, on, 'Ada', { crew: acmeCrew(), board: acmeBoard() })
   await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Ada' })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q7: proposal accepted'])
-  expect(h.sent).toEqual([{ to: 'Tess', text: 'Q7: proposal accepted' }])
+  expect(h.submitted).toEqual(['Q7: proposal accepted (answered from the board pane in Ada)'])
+  expect(h.sent).toEqual([{ to: 'Tess', text: 'Q7: proposal accepted (answered from the board pane in Ada)' }])
   expect(h.rows('Q7').map(r => [r.role, r.to, r.delivered])).toEqual([
     ['asker', 'Tess', true],
     ['coordinator', 'Ada', true],
@@ -612,4 +612,38 @@ test('a pane press nobody delivered for five minutes shows a red line; a chat li
   const line = await ui.find({ type: 'Text', text: /1 answer undelivered for 5\+ min \(Q1\): is coord running\?/ })
   expect(line).toBeDefined()
   await ui.unmount()
+})
+
+// Review 09.11. (findings G § Academy b): the subject's owner gets the answer too, through the same deliverer.
+test('the owner of a question gets a copy of the answer; a failed copy is a row, not a routing line', async ($, on) => {
+  const board = boardOf({
+    owner_queue: [{ id: 'Q1', session: 'asker', key: 'PROJ-40', ask: 'Ship it?', since: '2026-11-03', recommendation: 'yes', owner: 'Vic' }],
+  })
+  const { clock, h } = await coordinator($, on, {
+    board,
+    send: to => (to === 'Vic' ? { isDelivered: false, reason: 'No agent named Vic is reachable' } : { isDelivered: true }),
+  })
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.sent.map(s => s.to).sort()).toEqual(['Vic', 'asker'])
+  expect(h.sent.find(s => s.to === 'Vic')?.text).toBe(
+    'Q1: proposal accepted (answered from the board pane in foxy)\n(copy for the owner of this subject)',
+  )
+  const rows = h.rows('Q1')
+  expect(rows.map(r => [r.role, r.delivered]).sort()).toEqual([
+    ['asker', true],
+    ['coordinator', true],
+    ['owner', false],
+  ])
+  expect(h.submitted).toEqual(['Q1: proposal accepted (answered from the board pane in foxy)'])
+})
+
+test('an owner who is the asker or the writer gets no second copy', async ($, on) => {
+  const board = boardOf({
+    owner_queue: [{ id: 'Q1', session: 'asker', key: 'PROJ-40', ask: 'Ship it?', since: '2026-11-03', recommendation: 'yes', owner: 'asker' }],
+  })
+  const { clock, h } = await coordinator($, on, { board })
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.sent.map(s => s.to)).toEqual(['asker'])
 })
