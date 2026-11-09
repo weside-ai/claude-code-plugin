@@ -736,8 +736,13 @@ class Poller:
                 self.log(f"ok handoffs={len(handoffs)} held")
                 return "ok"
             text = render_handoffs(self.companion, handoffs)
+            # claim the send before the lock goes: a second poller of this companion sees the
+            # holdoff and holds instead of delivering the same handoff
+            state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
         failed = self._send(text)
         if failed == "gone":
+            with locked_state(self.companion, wait_s=None) as state:
+                state["holdoff"].pop(HANDOFF_KEY, None)  # the claim goes: the next session wakes
             return "gone"
         with locked_state(self.companion, wait_s=None) as state:
             state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
@@ -748,7 +753,12 @@ class Poller:
                 bump(state, "errors", now)
                 self.log(f"pending note handoffs={len(handoffs)}")
                 return "error:socket"
-            state["handoff_cursor"] = answer["cursor"]
+            # as given (a reset server may go back), unless another poller moved it meanwhile:
+            # then never back
+            moved = state["handoff_cursor"] != base
+            state["handoff_cursor"] = (
+                max(answer["cursor"], state["handoff_cursor"] or 0) if moved else answer["cursor"]
+            )
             state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
             bump(state, "wakes", now)
             self.log(f"wake delivered handoffs={len(handoffs)}")
@@ -777,8 +787,13 @@ class Poller:
                 for f in wakeable
             ]
             text = render(self.companion, rooms, since)
+            for f in wakeable:  # the claim, as for handoffs
+                state["holdoff"][f["room"]] = now + HOLDOFF_S
         failed = self._send(text)
         if failed == "gone":
+            with locked_state(self.companion, wait_s=None) as state:
+                for f in wakeable:  # the claims go: the next session wakes
+                    state["holdoff"].pop(f["room"], None)
             return "gone"
         with locked_state(self.companion, wait_s=None) as state:
             state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}

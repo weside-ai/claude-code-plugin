@@ -90,10 +90,9 @@ crew's state directory, `crew.state_dir`) and only
 for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
 count as covered). Any exception while checking a
 command that looks like a merge refuses it, and so does a failed import of the hook's own modules
-(`_import_failure`). A query piped in from stdin counts as seen only when the whole command is
-`echo <literal words> | gh api graphql …` and the words spell a read-only query
-(`_piped_read_only`); any other part of the command, `printf`, a `cat` or a redirection leaves it
-unseen. The whole hook
+(`_import_failure`). A query piped in from stdin stays unseen and refused, whatever
+piped it (four T2 panel rounds found a way past every reading of `echo … | gh`); only a heredoc in
+the command is read. The whole hook
 shares one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s `timeout` in `hooks.json`:
 each `git`, `gh` and classifier call has its own timeout, cut to what is left of it (`_left`); a call cut short
 fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
@@ -288,41 +287,7 @@ def _api_method(args: list[str]) -> str:
 
 
 # A read-only GraphQL document: names a query (`"query":"query {…"`, `"query":"{…"`, `query {`), no mutation.
-_READ_ONLY_DOC = re.compile(
-    r"^(?!.*\bmutation\b)(?=.*(\"query\"\s*:\s*\"\s*(query\b|\{)|\bquery\s*[({]))", re.DOTALL
-)
-
-
-_LITERAL_WORD = re.compile(r"[A-Za-z0-9 _:{}()\"'.=@]*")
-
-
-def _piped_read_only(argv: list[str], at: int) -> bool:
-    """Whether the command is exactly `echo <words> | gh …` with the `gh` at `argv[at]`, whose words
-    the shell cannot change (`_LITERAL_WORD`, no `..`, no flag) and spell a read-only query.
-
-    Anything else around it (another command, a redirection, `printf`) leaves the stdin unseen.
-    """
-    if at < 2 or argv[at - 1] != "|":
-        return False
-    # The whole command is this one pipeline: no earlier part can redefine `echo` (a function,
-    # `enable -n`, `PATH=`), and nothing after it feeds or redirects the call.
-    if argv[0] != "echo" or any(
-        t in vg._SEPARATORS or t.startswith(("<", ">")) for i, t in enumerate(argv) if i != at - 1
-    ):
-        return False
-    words = argv[1 : at - 1]
-    # Only words the shell cannot change count: it expands `$(…)`, `$VAR`, backticks, braces
-    # (`{mu,}tation`, `{a..b}`), globs and `~`, and `echo -e` decodes escapes,
-    # all after this check, so any of them could spell a mutation the regex never saw. An
-    # allow-list (no `,`, no `..`, no `$ \ % * ? [ ~`) instead of a list of known tricks.
-    if any(not _LITERAL_WORD.fullmatch(w) or ".." in w or w.startswith("-") for w in words):
-        return False
-    return bool(_READ_ONLY_DOC.search(" ".join(words)))
-
-
-def _graphql_text(
-    args: list[str], command: str, cwd: str | None, piped_read_only: bool = False
-) -> tuple[str, str | None]:
+def _graphql_text(args: list[str], command: str, cwd: str | None) -> tuple[str, str | None]:
     """(the command's own text plus every query file it names, why a query is unseen or None).
 
     A query from stdin (`--input -`, `query=@-`) is in the command only as a heredoc; piped from
@@ -337,7 +302,7 @@ def _graphql_text(
             files.append(value)
     for name in files:
         if name == "-":
-            if "<<" not in command and not piped_read_only:
+            if "<<" not in command:
                 unseen = "the GraphQL query comes from stdin, which the hook cannot read"
             continue
         try:
@@ -396,9 +361,7 @@ def _merge_calls(argv: list[str], command: str, cwd: str | None) -> list[MergeCa
             continue
         if "graphql" not in args:
             continue
-        text, unseen = _graphql_text(
-            args, command, _cwd_at(argv, cwd, i)[0], _piped_read_only(argv, i)
-        )
+        text, unseen = _graphql_text(args, command, _cwd_at(argv, cwd, i)[0])
         arm = "enablePullRequestAutoMerge" in text
         if not arm and "mergePullRequest" not in text and unseen is None:
             continue

@@ -334,6 +334,25 @@ class PollerTest(unittest.TestCase):
             state["server_shape"] = "rooms"
         self.assertEqual(wp.read_state("Nox")["server_shape"], "rooms")
 
+    def test_a_second_poller_holds_while_the_first_one_sends(self):
+        """T2 acceptance lens on #197: with the lock free during the send, the first poller's
+        claim (its holdoff) keeps a second poller of the companion from the same handoff."""
+        second = []
+
+        def send_and_poll_again(_path, _token, text):
+            self.sent.append(text)
+            if not second:
+                self.answers = [self.handoffs((17, "room:384"), cursor=17)]
+                second.append(self.poller().poll_once())
+
+        self.send = send_and_poll_again
+        p = self.poller()
+        self.answers = [self.handoffs((17, "room:384"), cursor=17)]
+        self.assertEqual(p.poll_once(), "ok")
+        self.assertEqual(second, ["ok"])
+        self.assertEqual(len(self.sent), 1, "the handoff wakes one session once")
+        self.assertEqual(self.state()["handoff_cursor"], 17)
+
     def test_the_poller_sends_without_holding_the_cursor_lock(self):
         free = []
 

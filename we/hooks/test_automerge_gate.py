@@ -1401,10 +1401,14 @@ def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
     [
         """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
         """echo '{"query": "{ repository(owner: o) { id } }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input - 0<arm.json""",
     ],
 )
-def test_a_read_only_query_spelled_in_the_command_passes(repo: Path, monkeypatch, command) -> None:
-    assert refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch) is None
+def test_any_piped_stdin_query_stays_unseen(repo: Path, monkeypatch, command) -> None:
+    """T2 panel on #197, four rounds: every reading of `echo … | gh` had a way past it (printf,
+    braces, a redefined echo, `0<file`), so a piped query is refused as on main."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
 
 
 @pytest.mark.parametrize(
