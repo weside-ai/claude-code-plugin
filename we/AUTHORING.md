@@ -1,7 +1,7 @@
-# Authoring contract for we 7.0
+# Authoring contract
 
 Every file in `we/` is here on purpose. This contract says what earns a line. Read it before you
-write or port a skill, agent, hook or reference.
+write or change a skill, agent, hook or reference.
 
 ## The rule for every line
 
@@ -19,7 +19,9 @@ emphatic wording (capitals, "never ever", ⛔), duplicated text across skills, r
 
 ## Shape of a skill
 
-- Frontmatter `description` states what the verb does and its triggers, at most ~250 characters.
+- Frontmatter `description` states what the verb does and its triggers; with `when_to_use` at most
+  1,536 characters (`scripts/check-instruction-budget.py`, `skill_listing_chars`). It sits in every
+  session's skill list: the shorter, the better.
 - The first five lines tell a reader who reads nothing else how to act correctly.
 - Every line reads on its own: no "see above", no pronoun that crosses a paragraph.
 - One home per fact. A fact two skills need lives in `references/` and both point at it.
@@ -75,12 +77,6 @@ Where Claude Code does the job, point at it instead of re-implementing it:
   `worker` ≤ 1,500), a repo addendum ≤ 3,500, card plus addendum ≤ 9,500 rendered; role tokens,
   never names; no line repeats the L0, every "never" names the move instead (gate:
   `scripts/check-instruction-budget.py`, checks `card-*`).
-
-## Porting from v6
-
-For each v6 file: list its units, decide per unit (keep · shorten · replace by built-in · drop) with
-a reason, write the v7 file from those decisions. Record the decisions in the port note the Lead
-asks for. Do not copy a v6 file and trim it; start from the decisions.
 
 ## Testing a revised skill
 
