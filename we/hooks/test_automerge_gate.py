@@ -1400,7 +1400,7 @@ def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
     "command",
     [
         """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
-        """printf '%s' '{"query": "{ repository(owner:\\"o\\", name:\\"r\\") { id } }"}' | gh api graphql --input -""",
+        """echo '{"query": "{ repository(owner: o, name: r) { id } }"}' | gh api graphql --input -""",
     ],
 )
 def test_a_read_only_query_spelled_in_the_command_passes(repo: Path, monkeypatch, command) -> None:
@@ -1419,6 +1419,24 @@ def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
     repo: Path, monkeypatch, command
 ) -> None:
     """Claude Review on #197: only the echo piped straight into this gh call counts."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """printf '%.0s%s' 'query {' "$(cat m.json)" | gh api graphql --input -""",
+        r"""printf '{"query":"query{a} m\165tation{e\156ablePullRequestAutoMerge(x)}"}' | gh api graphql --input -""",
+        """echo -e '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo "query { $Q }" | gh api graphql --input -""",
+        """echo `cat m.json` 'query {' | gh api graphql --input -""",
+        """printf '%s' '{"query": "{ repository(owner:\\"o\\") { id } }"}' | gh api graphql --input -""",
+    ],
+)
+def test_an_expanded_echo_or_printf_is_unseen_stdin(repo: Path, monkeypatch, command) -> None:
+    """T2 architecture lens on #197: the shell expands these after the hook reads them, so a
+    mutation can hide behind a read-only-looking word."""
     reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
     assert reason is not None and "comes from stdin" in reason
 

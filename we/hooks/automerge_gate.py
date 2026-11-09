@@ -292,9 +292,13 @@ _READ_ONLY_DOC = re.compile(
 )
 
 
+_NOT_LITERAL = frozenset("$`\\%")
+
+
 def _piped_read_only(argv: list[str], at: int) -> bool:
     """Whether the stdin of the `gh` at `argv[at]` is an `echo`/`printf` right before it, piped in
-    with `|`, whose words spell a read-only query, and the call itself redirects nothing (`<`).
+    with `|`, whose words are fully literal (no `$`, backtick, backslash, `%` or flag) and spell a
+    read-only query, and the call itself redirects nothing (`<`).
 
     Only that one segment counts: a query elsewhere in the command says nothing about this stdin.
     """
@@ -308,7 +312,13 @@ def _piped_read_only(argv: list[str], at: int) -> bool:
         return False
     if any(t.startswith("<") for t in vg._args_from(argv, at)):
         return False
-    return bool(_READ_ONLY_DOC.search(" ".join(segment[1:])))
+    words = segment[1:]
+    # Only fully literal words count: the shell expands `$(…)`, `$VAR` and backticks, printf
+    # formats and escapes (`%s`, `\165`) and `echo -e` after this check, so any of them can
+    # spell a mutation the regex never saw.
+    if any(set(w) & _NOT_LITERAL or w.startswith("-") for w in words):
+        return False
+    return bool(_READ_ONLY_DOC.search(" ".join(words)))
 
 
 def _graphql_text(
