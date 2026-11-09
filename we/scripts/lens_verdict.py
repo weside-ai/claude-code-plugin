@@ -78,10 +78,23 @@ proved nothing and the answer is refused as a finding without red arm (Kiska 04.
 in test form is never run: the finding stays ``standing`` with ``run: false``, whatever exit the
 caller recorded.
 
+Carried panel (T2 only): a panel bound to an older head ``old`` stays green on the PR's current
+head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
+the change ``old..new`` touches no file the PR's class hit: the PR is classified on
+``merge-base(origin/main, new)..new`` by ``risk_runner.classify`` (the merge hook's own runner and
+rules); class ``T0`` carries, otherwise the delta's files (``git diff --name-only old new``) must
+miss every hit line's file, and a class without hit lines carries nothing. A clean merge of the
+default branch therefore carries; a delta on a risk path, a head outside the PR's history, a red
+panel, no panel and any git or classifier failure do not. ``check`` prints ``panel <ID>: carried
+from <old> to <new> (<why>)`` in place of the stale line, or the stale line plus ``panel <ID>: not
+carried (<why>)``; ``check_t2`` returns the carried head, which the merge hook reads to take the
+security card from that head too. ``post`` posts a carried panel on the new head. The carry is
+computed on every ``check``; nothing is written.
+
 No skip, no override: no field can skip, confirm, waive or lift anything; ``skip``, ``override``,
 ``one_way``, ``go`` and every other unknown key are refused. A red panel turns green only through a
-fresh panel on a new plan blob or head. Any session can write this file, so it gates only a two-way
-T2 merge and the move to Selected; the one-way brake never reads it.
+fresh panel on a new plan blob or head; a green T2 panel is carried only as above. Any session
+can write this file, so it gates only a two-way T2 merge and the move to Selected; the one-way brake never reads it.
 
 Panel comment (T2): ``post`` puts the panel's state on GitHub, where a repo's self-merge judge reads
 it (a one-way PR outside the brake's core merges itself 2 h after a green panel on its head). The

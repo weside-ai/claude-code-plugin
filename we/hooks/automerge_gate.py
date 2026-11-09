@@ -41,7 +41,9 @@ Refusals, in this order (the first one wins):
   4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
      `check(root, "t2-pr<N>")` must be green (missing or red refuses; the verdict file carries no
      skip field). Without the module the check is off with one stderr line. The panel verdict is a
-     process signal, not a boundary: any session can write that file, so it never lifts 3.
+     process signal, not a boundary: any session can write that file, so it never lifts 3. A
+     module with `check_t2` is read through it: a panel carried from an older head (its §
+     Carried panel) is green and names that head.
   5. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
      (line 3 on, `<file>\t<section>: <why>`) in `trust-loosening`, `money-path` or `brake-review`
      needs, besides the green panel, a PR comment of the security card worker
@@ -56,11 +58,21 @@ Refusals, in this order (the first one wins):
      among them only those whose `@ <sha>` is a prefix of the PR's current head; the last of those
      decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head (missing, or
      only on an older head) refuses, and so does a comment read that fails. 4 runs first, so this
-     check holds only once the panel is green or the panel check is off.
-  6. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
+     check holds only once the panel is green or the panel check is off. When the panel was
+     carried and no card comment is on the current head, a card PASS on the carried head counts:
+     the carried delta touches no file the class hit.
+  6. Plan first: the PR's head branch, else its title, names a story key (the crew's
+     `naming.key` on `origin/main`, else the default) whose plan `docs/plans/<KEY>-story.md` is
+     on the head or on `origin/main`, and the PR changes a file outside `docs/`: the plan must be
+     on `origin/main`, and the story's last row in the board's transitions log
+     (`<board stem>-transitions.jsonl` beside `board_freeze.watched_board_files`) must not be
+     `on_hold` or `backlog`. A story the log does not know passes; a PR without a key or a plan
+     file, and the plan PR itself (only `docs/`), are untouched. Only where the class was
+     computed (a repo with rules).
+  7. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
      `.weside/config.json`, default `Codex Review`), unless the base branch requires that check
      itself (rulesets or classic protection); a repo whose workflows name no such job has none.
-  7. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
+  8. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
      `.weside/config.json` names `verification.pre_merge_receipt`.
 
 The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/crew.json` is read as
@@ -92,7 +104,7 @@ count as covered). Any exception while checking a
 command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
 from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
 short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
-receipt read (6, 7) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
+receipt read (7, 8) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
 Pinned by `test_automerge_gate.py`.
 """
 
