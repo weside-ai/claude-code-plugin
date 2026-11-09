@@ -102,10 +102,8 @@ import importlib.util
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -116,6 +114,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import board_freeze
 import crew
 import risk_paths
+import risk_runner
 import verification_gate as vg
 from worker_launch import worker_marker
 
@@ -147,7 +146,7 @@ _NODE_ID = re.compile(r"\bPR_[A-Za-z0-9_-]+")
 _ONE_WAY_SECTION = re.compile(
     r"^\s*\[\s*(" + "|".join(re.escape(c) for c in risk_paths.ONE_WAY) + r")\s*\]", re.MULTILINE
 )
-_CLASS_LINE = re.compile(r"^T[02]( one-way (\S+))?$")
+_CLASS_LINE = risk_runner.CLASS_LINE
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
 # The two-way sections whose hit needs a security card verdict besides the panel (brake stage 2).
@@ -161,7 +160,7 @@ _LOOKS_LIKE_MERGE = re.compile(
     r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
     re.DOTALL,
 )
-RULES_FROM = "origin/main"
+RULES_FROM = risk_runner.RULES_FROM
 # The whole hook stays inside this many seconds, below hooks.json's 600: a hook Claude Code kills
 # on its timeout is a non-blocking error, and the command would run unbraked.
 BUDGET_SECONDS = 540
@@ -180,7 +179,6 @@ CLASSIFY_TIMEOUT = 60
 DEFAULT_BOARD = board_freeze.DEFAULT_BOARD
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 LENS_VERDICT = SCRIPTS / "lens_verdict.py"
-RISK_PATHS = SCRIPTS / "risk_paths.py"
 
 
 def _gh(args: list[str], cwd: str | None) -> str | None:
@@ -504,6 +502,9 @@ class ClassResult:
     notice: str | None = None
     head: str | None = None
     hits: list[str] = field(default_factory=list)  # line 3 on: `<file>\t<section>: <why>`
+    carried_from: str | None = None  # the head a green T2 panel was carried from (Q480)
+    names: list[str] = field(default_factory=list)  # the PR's head branch and title
+    base: str | None = None  # the merge base the class was computed on
 
     @property
     def one_way(self) -> str | None:
@@ -553,58 +554,21 @@ def _crew_present_on_main(root: str, ref: str = RULES_FROM) -> bool:
     """`ref` carries a crew file of its own, parsing or not: a broken crew still uses the crew
     process. A repo that only points at another repo's crew (`.weside/config.json` `crew`) is not
     one: it keeps T0 without rules, as before."""
-    return _git(root, "cat-file", "-e", f"{ref}:.weside/crew.json") is not None
+    return risk_runner.crew_present(root, _git, ref)
 
 
 def _crew_on_main(root: str) -> dict:
     """`origin/main`'s `.weside/crew.json` as a dict; {} when it has none or it does not parse."""
-    raw = _git(root, "show", f"{RULES_FROM}:.weside/crew.json")
-    try:
-        crew = json.loads(raw or "")
-    except ValueError:
-        return {}
-    return crew if isinstance(crew, dict) else {}
+    return risk_runner.crew_on(root, _git)
 
 
 def _fetch_rules(root: str, ref: str) -> bool:
-    """Fetch `origin/<branch>` so the rules are current; False when it cannot be fetched (a ref
-    outside `origin/` is not fetched and must exist)."""
-    remote, _, branch = ref.partition("/")
-    if remote == "origin" and branch:
-        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
-        if _git(root, "fetch", "-q", "--no-tags", "origin", refspec, timeout=60) is None:
-            return False
-    return _git(root, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}") is not None
+    return risk_runner.fetch_rules(root, ref, _git)
 
 
 def _classifier(root: str) -> tuple[list[str], str | None, str] | None | str:
-    """(argv prefix with a {file} slot, blob spec to write there or None, rules ref);
-    None when the repo uses no rules (class T0); a str is the reason it cannot be computed."""
-    if not _fetch_rules(root, RULES_FROM):
-        return (
-            f"`git fetch origin {RULES_FROM.split('/', 1)[1]}` failed; the rules must be current"
-        )
-    crew_doc = _crew_on_main(root)
-    risk = crew_doc.get("risk") or {}
-    rules_from = risk.get("rules_from") if isinstance(risk.get("rules_from"), str) else RULES_FROM
-    command = risk.get("command")
-    if isinstance(command, str) and command.strip():
-        parts = command.split()
-        return ["{file}", *parts[1:]], f"{rules_from}:{parts[0]}", rules_from
-    if _git(root, "cat-file", "-e", f"{rules_from}:.weside/risk-paths") is None:
-        if crew_doc or _crew_present_on_main(root, rules_from):
-            return (
-                f"this repo has a crew (`.weside/crew.json` on {rules_from}) but no risk rules: "
-                f"neither `risk.command` in the crew nor `.weside/risk-paths` on {rules_from}, "
-                "so the hook cannot tell a one-way PR from a two-way one. Land a "
-                "`.weside/risk-paths` (`/we:setup` writes a starter; without one-way sections it "
-                "brakes nothing, on purpose) or a `risk.command` first; the PR that lands it is "
-                "refused here too, so the owner merges that one by hand"
-            )
-        return None
-    own = f"{rules_from}:we/scripts/risk_paths.py"
-    blob = own if _git(root, "cat-file", "-e", own) is not None else None
-    return [sys.executable, "{file}"], blob, rules_from
+    """`risk_runner.rules` with this hook's git (its time budget)."""
+    return risk_runner.rules(root, _git)
 
 
 def _read_json(path: Path) -> dict:
@@ -631,11 +595,13 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
         *(["-R", call.repo] if call.repo else []),
     ]
     try:
-        pr = json.loads(_gh([*view, "--json", "number,headRefOid,url"], cwd) or "")
+        fields = "number,headRefOid,url,headRefName,title"
+        pr = json.loads(_gh([*view, "--json", fields], cwd) or "")
         number, head, url = int(pr["number"]), pr["headRefOid"], pr["url"]
     except (ValueError, TypeError, KeyError):
         return ClassResult(reason="`gh pr view` did not name the PR's head")
-    result = ClassResult(number=number, url=url, head=head)
+    names = [str(pr.get(k) or "") for k in ("headRefName", "title")]
+    result = ClassResult(number=number, url=url, head=head, names=names)
     if rules_from != RULES_FROM and not _fetch_rules(root, rules_from):
         result.reason = f"`git fetch` of {rules_from} failed; the rules must be current"
         return result
@@ -645,6 +611,7 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
     if not base:
         result.reason = f"no merge base of {head[:9]} and {rules_from} (fetch origin)"
         return result
+    result.base = base
     lines, result.reason = _run_classifier(root, prefix, blob, head, base)
     if lines:
         result.line, result.hits = lines[0], lines[2:]
@@ -661,48 +628,10 @@ def pr_class(root: str, call: MergeCall, cwd: str | None) -> ClassResult:
 def _run_classifier(
     root: str, prefix: list[str], blob: str | None, head: str, base: str
 ) -> tuple[list[str] | None, str | None]:
-    """(output lines with the class as line 1, None) or (None, why): the classifier run as a file
-    in a no-checkout worktree of `head`, on `base`; the worktree is removed whatever happens."""
-    tmp = tempfile.mkdtemp(prefix="we-merge-class.")
-    tree = os.path.join(tmp, "head")
-    try:
-        script = os.path.join(tmp, "classifier")
-        if blob is None:
-            shutil.copyfile(RISK_PATHS, script)
-        else:
-            body = _git(root, "show", blob)
-            if body is None:
-                return None, f"`{blob}` is missing"
-            Path(script).write_text(body, encoding="utf-8")
-        os.chmod(script, 0o700)
-        if (
-            _git(root, "worktree", "add", "--no-checkout", "--detach", tree, head, timeout=60)
-            is None
-        ):
-            return None, f"`git worktree add` of {head[:9]} failed"
-        argv = [script if a == "{file}" else a for a in prefix] + [base]
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-        try:
-            out = subprocess.run(
-                argv,
-                cwd=tree,
-                capture_output=True,
-                text=True,
-                timeout=_left(CLASSIFY_TIMEOUT),
-                check=False,
-                env=env,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return None, f"the classifier did not finish ({type(exc).__name__})"
-        lines = out.stdout.splitlines() or [""]
-        line = lines[0].strip()
-        if out.returncode != 0 or not _CLASS_LINE.match(line):
-            last = (out.stderr.strip().splitlines() or [line or "no output"])[-1]
-            return None, f"the classifier exited {out.returncode}: {last}"
-        return [line, *lines[1:]], None
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-        _git(root, "worktree", "prune")
+    """`risk_runner.run`, the one runner the T2 panel's carry uses too."""
+    return risk_runner.run(
+        root, _git, (prefix, blob, RULES_FROM), head, base, timeout=_left(CLASSIFY_TIMEOUT)
+    )
 
 
 def _board_files(root: str | None) -> list[Path]:
@@ -742,8 +671,9 @@ def _freeze_refusal(root: str | None, slug: str | None = None) -> str | None:
     )
 
 
-def _panel_refusal(root: str, number: int) -> str | None:
-    """Why a two-way T2 PR may not merge yet; None when the panel is green or the check is off."""
+def _panel_refusal(root: str, number: int, cls: ClassResult | None = None) -> str | None:
+    """Why a two-way T2 PR may not merge yet; None when the panel is green or the check is off.
+    A panel carried from an older head (`lens_verdict.check_t2`) records that head on `cls`."""
     path = LENS_VERDICT
     if not path.exists():
         print(
@@ -755,15 +685,94 @@ def _panel_refusal(root: str, number: int) -> str | None:
         spec = importlib.util.spec_from_file_location("we_lens_verdict", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        green, lines = module.check(Path(root), vid)
+        carried = None
+        if hasattr(module, "check_t2"):
+            green, lines, carried = module.check_t2(Path(root), vid)
+        else:
+            green, lines = module.check(Path(root), vid)
     except Exception as exc:  # a brake: a broken reader counts red, never green
         green, lines = False, [f"the verdict reader failed ({type(exc).__name__}: {exc})"]
     if green:
+        if cls is not None and isinstance(carried, str):
+            cls.carried_from = carried
+            NOTICES.append(f"T2 panel carried: {'; '.join(lines)}")
         return None
     return (
         f"PR #{number} is T2 and its lens panel is not green: {'; '.join(lines)}. "
         f"Run `/we:lens t2 {number}` on this head; a skip never turns a finding green."
     )
+
+
+PLAN_DIR = "docs/plans"
+# Board states before Selected: a story there has no approved plan to build on.
+_BEFORE_SELECTED = frozenset({"on_hold", "backlog"})
+
+
+def _story_key(root: str, names: list[str]) -> str | None:
+    """The first match of the crew's `naming.key` (on `origin/main`, else the default) in the
+    PR's head branch, else in its title."""
+    naming = _crew_on_main(root).get("naming")
+    rx = naming.get("key") if isinstance(naming, dict) else None
+    try:
+        pattern = re.compile(rx if isinstance(rx, str) and rx else crew.DEFAULTS["naming"]["key"])
+    except re.error:
+        return None
+    for name in names:
+        found = pattern.search(name)
+        if found:
+            return found.group(0)
+    return None
+
+
+def _last_move(root: str, key: str) -> str | None:
+    """The `to` state of the story's last row in the board's transitions log, or None."""
+    last = None
+    for board_file in _board_files(root):
+        log = board_file.with_name(f"{board_file.stem}-transitions.jsonl")
+        try:
+            rows = log.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw in rows:
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and row.get("key") == key and isinstance(row.get("to"), str):
+                last = row["to"]
+    return last
+
+
+def _plan_refusal(root: str, cls: ClassResult) -> str | None:
+    """Plan first: a PR of a story with a plan file merges once that plan is on `origin/main`
+    and the story's last board move is Selected or later. A PR with no story key, a story with
+    no plan file, and a PR that changes nothing outside `docs/` (the plan PR itself) pass."""
+    if not cls.head or not cls.base or cls.number is None:
+        return None
+    key = _story_key(root, cls.names)
+    if key is None:
+        return None
+    plan = f"{PLAN_DIR}/{key}-story.md"
+    on_main = _git(root, "cat-file", "-e", f"{RULES_FROM}:{plan}") is not None
+    if not on_main and _git(root, "cat-file", "-e", f"{cls.head}:{plan}") is None:
+        return None
+    changed = _git(root, "diff", "--name-only", "--no-renames", f"{cls.base}...{cls.head}")
+    files = [f for f in (changed or "").splitlines() if f.strip()]
+    if changed is not None and all(f.startswith("docs/") for f in files):
+        return None
+    if not on_main:
+        return (
+            f"PR #{cls.number} builds story {key}, whose plan `{plan}` is not on "
+            f"{RULES_FROM} yet: plan first. Land the plan PR, then merge this one; the build may "
+            "already run once the Ready panel on the plan blob is green."
+        )
+    moved = _last_move(root, key)
+    if moved in _BEFORE_SELECTED:
+        return (
+            f"PR #{cls.number} builds story {key}, which is `{moved}` on the board: the code PR "
+            f"merges once the story is Selected (`board.py select {key}`)."
+        )
+    return None
 
 
 def _card_hits(hits: list[str]) -> list[str]:
@@ -837,6 +846,14 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
         return f"{start}: the PR comments could not be read, which counts as no verdict. {how}"
     verdict, last_head = _card_verdict(bodies, head)
     if verdict == "PASS":
+        return None
+    # a carried panel's delta touches no hit file, so the card on the carried head holds
+    if (
+        verdict is None
+        and cls.carried_from
+        and _card_verdict(bodies, cls.carried_from)[0] == "PASS"
+    ):
+        NOTICES.append(f"security card carried from {cls.carried_from[:10]} with the panel")
         return None
     if verdict is not None:
         why = f"the card verdict on this head is {verdict}"
@@ -947,9 +964,12 @@ def _class_refusal(
     if cls.one_way:
         return _one_way_refusal(root, cls), False
     if cls.line == "T2" and cls.number is not None:
-        red = _panel_refusal(root, cls.number) or _card_refusal(root, cls, cwd)
+        red = _panel_refusal(root, cls.number, cls) or _card_refusal(root, cls, cwd)
         if red:
             return red, False
+    red = _plan_refusal(root, cls)
+    if red:
+        return red, False
     return None, True
 
 

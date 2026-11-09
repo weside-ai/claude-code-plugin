@@ -133,6 +133,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew as crew_mod  # noqa: E402
+import risk_runner  # noqa: E402
 
 VERSION = 1
 TEXT_CHARS = 500
@@ -693,11 +694,23 @@ def _carry_after(root: Path) -> int | None:
 def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]]]:
     """``check`` plus the warnings a green Ready panel carries (``lens``, ``claim``, ``where``);
     the list is empty whenever the panel is red."""
+    green, lines, carried, _from = _check(root, vid)
+    return green, lines, carried
+
+
+def check_t2(root: Path, vid: str) -> tuple[bool, list[str], str | None]:
+    """``check`` plus the head a green T2 panel was carried from (see Carried panel), else None.
+    The merge hook reads it to take the security card from that head too."""
+    green, lines, _carried, carried_from = _check(root, vid)
+    return green, lines, carried_from
+
+
+def _check(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]], str | None]:
     kind, subject = parse_id(vid)
     try:
         doc = read_file(verdict_dir(root) / f"{vid}.json")
     except RefusedError as exc:
-        return False, [str(exc), f"panel {vid}: red"], []
+        return False, [str(exc), f"panel {vid}: red"], [], None
     lines, green, carried = [], True, []
     carry_after: int | None = None
     round_, origin = panel_round(verdict_dir(root), doc)
@@ -708,10 +721,7 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
     except RefusedError as exc:
         now, green = None, False
         lines.append(str(exc))
-    if now is not None and now != doc["bound_to"]:
-        green = False
-        was, is_ = next(iter(doc["bound_to"].values())), next(iter(now.values()))
-        lines.append(f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})")
+    stale_at, stale = len(lines), now is not None and now != doc["bound_to"]
     for lens in doc["expected"]:
         v = doc["verdicts"].get(lens)
         if v is None:
@@ -742,11 +752,62 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
         else:
             notes = sum(1 for f in v["findings"] if f["severity"] == "NOTE")
             lines.append(f"lens {lens}: green" + (f" ({notes} note)" if notes else ""))
+    carried_from = None
+    if stale:
+        rows, carried_from = _stale_rows(root, vid, doc["bound_to"], now, kind == "t2" and green)
+        green = green and carried_from is not None
+        lines[stale_at:stale_at] = rows
     if not green:
         carried = []
     state = "red" if not green else "green (warnings carried)" if carried else "green"
     lines.append(f"panel {vid}: {state}")
-    return green, lines, carried
+    return green, lines, carried, carried_from
+
+
+# --- the carried T2 panel --------------------------------------------------------------------
+
+
+def _stale_rows(
+    root: Path, vid: str, bound: dict[str, str], now: dict[str, str], may_carry: bool
+) -> tuple[list[str], str | None]:
+    """The lines of a moved binding and the head a green T2 panel was carried from, else None."""
+    was, is_ = next(iter(bound.values())), next(iter(now.values()))
+    stale = f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})"
+    if not may_carry:
+        return [stale], None
+    carries, why = carry(root, was, is_)
+    if carries:
+        return [f"panel {vid}: carried from {was[:8]} to {is_[:8]} ({why})"], was
+    return [stale, f"panel {vid}: not carried ({why})"], None
+
+
+def carry(root: Path, old: str, new: str) -> tuple[bool, str]:  # noqa: PLR0911
+    """(carries, why): whether a green T2 panel on head ``old`` holds for head ``new`` (see
+    Carried panel). Any failure carries nothing."""
+    r, git = str(root), risk_runner.plain_git
+    if not risk_runner.fetch_rules(r, risk_runner.RULES_FROM, git):
+        return False, f"{risk_runner.RULES_FROM} could not be fetched"
+    if git(r, "cat-file", "-e", f"{new}^{{commit}}") is None:
+        git(r, "fetch", "-q", "--no-tags", "origin", new, timeout=60)
+    if git(r, "merge-base", "--is-ancestor", old, new) is None:
+        return False, f"{old[:8]} is no ancestor of {new[:8]}"
+    base = (git(r, "merge-base", risk_runner.RULES_FROM, new) or "").strip()
+    delta = git(r, "diff", "--name-only", "--no-renames", old, new)
+    if not base or delta is None:
+        return False, f"no merge base or diff for {old[:8]}..{new[:8]}"
+    lines, why = risk_runner.classify(r, new, base)
+    if lines is None:
+        return False, f"the PR's class is not computed: {why}"
+    if lines[0] == "T0":
+        return True, f"delta {old[:8]}..{new[:8]}: the PR is T0"
+    hits = {row.split("\t", 1)[0] for row in lines[2:] if "\t" in row}
+    if not hits:
+        return False, f"the PR is {lines[0]} and names no file it hit"
+    touched = sorted(hits & {f for f in delta.splitlines() if f.strip()})
+    if touched:
+        more = f" and {len(touched) - 3} more" if len(touched) > 3 else ""
+        return False, f"delta {old[:8]}..{new[:8]} touches {', '.join(touched[:3])}{more}"
+    return True, f"delta {old[:8]}..{new[:8]} touches no risk path, T0"
 
 
 def samples(root: Path, keeper: str | None = None) -> list[dict[str, Any]]:
@@ -807,17 +868,17 @@ def post(root: Path, vid: str) -> tuple[bool, list[str]]:
     doc = read_file(verdict_dir(root) / f"{vid}.json")
     bound = doc["bound_to"].get("head", "")
     now = current_binding(root, kind, subject)["head"]
-    if now != bound:
+    green, lines, carried_from = check_t2(root, vid)
+    if now != bound and carried_from is None:
         raise RefusedError(
             f"post: panel {vid} is stale (bound to {bound[:8]}, now {now[:8]}); nothing posted"
         )
-    green, lines = check(root, vid)
     gh = shutil.which("gh")
     if gh is None:
         raise RefusedError("post: gh not found; nothing posted")
     out = subprocess.run(
         [gh, "pr", "comment", subject, "--body-file", "-"],
-        input=panel_comment(int(subject), bound, green, lines),
+        input=panel_comment(int(subject), now, green, lines),
         capture_output=True,
         text=True,
         check=False,
@@ -827,7 +888,7 @@ def post(root: Path, vid: str) -> tuple[bool, list[str]]:
         why = (out.stderr.strip().splitlines() or [f"exit {out.returncode}"])[-1]
         raise RefusedError(f"post: gh pr comment failed ({why}); nothing posted")
     word = "PASS" if green else "FAIL"
-    return green, [f"posted: t2-panel {word} on #{subject} @ {bound[:12]}"]
+    return green, [f"posted: t2-panel {word} on #{subject} @ {now[:12]}"]
 
 
 # --- CLI -------------------------------------------------------------------------------------

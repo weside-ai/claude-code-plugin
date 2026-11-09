@@ -63,12 +63,14 @@ class FakeGh:
         node: dict | None = None,
         view_fail: bool = False,
         cards: list | None = None,
+        names: tuple[str, str] = ("feat/x", "A change"),
     ):
         self.runs, self.comments, self.fail, self.calls = runs, list(comments), fail, []
         self.body, self.head, self.node, self.view_fail = body, head, node, view_fail
         self.rules, self.protection, self.rules_fail = rules or [], protection, rules_fail
         # issue comments for the card read: a body (by a MEMBER) or (body, association, user type)
         self.cards = [c if isinstance(c, tuple) else (c, "MEMBER", "User") for c in cards or []]
+        self.names = names
 
     def __call__(self, args: list[str], _cwd: str | None) -> str | None:  # noqa: PLR0911
         self.calls.append(args)
@@ -85,6 +87,7 @@ class FakeGh:
         if args[:2] == ["pr", "view"]:
             url = "https://github.com/o/r/pull/7"
             pr = {"headRefOid": self.head, "number": 7, "url": url, "baseRefName": "main"}
+            pr["headRefName"], pr["title"] = self.names
             return json.dumps(pr)
         if args[0] == "api" and args[1] == "repos/o/r/issues/7/comments":
             rows = [{"body": b, "assoc": a, "type": t} for b, a, t in self.cards]
@@ -1365,3 +1368,114 @@ def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc
         green["repo"], ARM, FakeGh([run()], head=green["head"], cards=[card]), monkeypatch
     )
     assert (red is None) is counts, red
+
+
+# The carried T2 panel (lens_verdict.check_t2): the card on the carried head holds too.
+
+FAKE_LENS_T2 = """
+from pathlib import Path
+def check(root, vid):
+    raise AssertionError("check_t2 is preferred")
+def check_t2(root, vid):
+    old = Path(root, ".lens-carried").read_text()
+    return True, ["panel " + vid + ": carried from " + old[:8], "panel " + vid + ": green"], old
+"""
+
+
+@pytest.fixture()
+def carried(classed: dict, monkeypatch, tmp_path_factory) -> dict:
+    path = tmp_path_factory.mktemp("lens2") / "lens_verdict.py"
+    path.write_text(FAKE_LENS_T2)
+    monkeypatch.setattr(gate, "LENS_VERDICT", path)
+    (classed["repo"] / ".lens-carried").write_text(classed["main"])
+    return classed
+
+
+def test_a_card_pass_on_the_carried_head_lets_it_merge(carried: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    fake = FakeGh([run()], head=carried["head"], cards=[_card(carried["main"][:10])])
+    assert refuse(carried["repo"], ARM, fake, monkeypatch) is None
+    assert any("security card carried from" in n for n in gate.NOTICES)
+
+
+def test_a_card_verdict_on_the_new_head_beats_the_carried_pass(carried: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    cards = [_card(carried["main"][:10]), _card(carried["head"][:10], "BLOCKING")]
+    fake = FakeGh([run()], head=carried["head"], cards=cards)
+    red = refuse(carried["repo"], ARM, fake, monkeypatch)
+    assert red is not None and "the card verdict on this head is BLOCKING" in red
+
+
+def test_a_card_on_an_older_head_without_a_carry_still_refuses(green: dict, monkeypatch) -> None:
+    """Red arm for the carry: the plain `check` reader names no carried head."""
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    fake = FakeGh([run()], head=green["head"], cards=[_card(green["main"][:10])])
+    assert "the last card verdict is on the older head" in refuse(
+        green["repo"], ARM, fake, monkeypatch
+    )
+
+
+# Plan first: a story's code PR merges once its plan is on origin/main and the story is Selected.
+
+PLAN = "docs/plans/PROJ-5-story.md"
+STORY = ("feat/PROJ-5-thing", "PROJ-5 the thing")
+
+
+def _move(state: Path, to: str) -> None:
+    with (state / "board-transitions.jsonl").open("a") as f:
+        f.write(json.dumps({"key": "PROJ-5", "from": "x", "to": to}) + "\n")
+
+
+@pytest.fixture()
+def story(classed: dict, monkeypatch) -> dict:
+    monkeypatch.setenv("FAKE_CLASS", "T0")
+    return classed
+
+
+def test_a_story_pr_whose_plan_is_not_on_main_is_refused(story: dict, monkeypatch) -> None:
+    head = _commit(story["repo"], {PLAN: "# plan\n", "app.py": "x = 1\n"}, "plan and code")
+    for command in (ARM, "gh pr merge 7 --squash"):
+        red = refuse(story["repo"], command, FakeGh([run()], head=head, names=STORY), monkeypatch)
+        assert red is not None, command
+        assert f"story PROJ-5, whose plan `{PLAN}` is not on origin/main yet: plan first" in red
+
+
+def test_the_plan_pr_itself_passes(story: dict, monkeypatch) -> None:
+    _git(story["repo"], "reset", "-q", "--hard", story["main"])
+    head = _commit(story["repo"], {PLAN: "# plan\n"}, "plan only")
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+
+
+def _plan_on_main(story: dict) -> str:
+    main = _commit(story["repo"], {PLAN: "# plan\n"}, "plan lands")
+    _publish_main(story["repo"], main)
+    return _commit(story["repo"], {"app.py": "x = 1\n"}, "code")
+
+
+@pytest.mark.parametrize("state", ["backlog", "on_hold"])
+def test_a_story_before_selected_is_refused(
+    story: dict, monkeypatch, _isolated_state: Path, state: str
+) -> None:
+    head = _plan_on_main(story)
+    _move(_isolated_state, "selected")
+    _move(_isolated_state, state)
+    red = refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch)
+    assert red is not None and f"story PROJ-5, which is `{state}` on the board" in red
+    assert "`board.py select PROJ-5`" in red
+
+
+@pytest.mark.parametrize("moves", [["selected"], ["selected", "in_progress"], []])
+def test_a_selected_or_unlogged_story_with_its_plan_on_main_passes(
+    story: dict, monkeypatch, _isolated_state: Path, moves: list
+) -> None:
+    head = _plan_on_main(story)
+    for to in moves:
+        _move(_isolated_state, to)
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+
+
+def test_a_pr_without_a_story_plan_is_untouched(story: dict, monkeypatch) -> None:
+    head = _commit(story["repo"], {"app.py": "x = 1\n"}, "code")
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+    fake = FakeGh([run()], head=head, names=("fix/typo", "Fix a typo"))
+    assert refuse(story["repo"], ARM, fake, monkeypatch) is None
