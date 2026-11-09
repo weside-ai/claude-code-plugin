@@ -38,7 +38,7 @@
 #                              permissions.defaultMode, bypass is one Shift+Tab away
 #   launch.worker_mode bypass  a --bg worker starts with --permission-mode bypassPermissions (in the
 #                              background nobody answers a prompt); a window worker stays in the
-#                              default mode (Foxy 09.11., Q478); a --permission-mode of the caller wins
+#                              default mode (nobody answers a prompt in the background); a --permission-mode of the caller wins
 #   launch.worker_timer <cmd>  the timer script (or $WE_WORKER_TIMER, which wins): `register` writes the
 #                              worker's state, `arm` becomes a SessionStart hook of this worker alone;
 #                              without one the worker starts with no timer
@@ -206,6 +206,12 @@ for x in json.load(sys.stdin):
     i = (last or {}).get("input") or {}
     print(x.get("name"), x.get("id"), (last or {}).get("name"), str(i.get("command") or i.get("to") or i.get("file_path") or "")[:120])' "$(_projects)"
     exit 0
+    ;;
+  is-worker) # <id|name>: exit 0 for a worker; the one owner of the rule (worker_launch.is_worker)
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    read -r id _pid kind _sid cwd <<<"$(_resolve_any "$2")" || true
+    [[ -n "${id:-}" ]] && _is_worker "${kind:--}" "${_pid:--}" "${cwd:--}"
+    exit
     ;;
   checkpoint)
     [[ $# -ge 2 && -n "$2" ]] || usage
@@ -385,8 +391,10 @@ for a in json.load(sys.stdin):
 }
 # Flags claude knows, from its own help; empty when the help cannot be read (then nothing is refused).
 known_flags=$(env -u CLAUDE_CONFIG_DIR claude --help 2>/dev/null | grep -oE -- '--[a-z][a-z0-9-]*' | sort -u || true)
-if [[ -n "$known_flags" && $# -gt 1 ]]; then
-  for arg in "${@:1:$#-1}"; do # every word before the prompt (the last one)
+if [[ -n "$known_flags" && $# -gt 0 ]]; then
+  last=$#
+  [[ "${!#}" == --* ]] || last=$(($# - 1)) # the prompt is the last word unless it is a flag
+  for arg in "${@:1:$last}"; do
     [[ "$arg" == --* ]] || continue
     flag=${arg%%=*}
     if ! grep -qxF -- "$flag" <<<"$known_flags"; then

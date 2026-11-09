@@ -63,7 +63,7 @@ starts a process worker, the one owner of it in a repo with a crew (``worker_lau
 ``permissions.defaultMode``; ``worker_mode``: ``auto`` (the default) or ``bypass``, the mode a
 ``we-worker --bg`` worker starts in (``bypass`` adds ``--permission-mode bypassPermissions``: in the
 background nobody answers a prompt; a window worker stays ``auto`` with selectable bypass;
-Foxy 09.11., Q478); ``worker_timer``: a script ``we-worker`` registers each worker's time
+the background answers no prompt); ``worker_timer``: a script ``we-worker`` registers each worker's time
 limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
 and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
 ``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and

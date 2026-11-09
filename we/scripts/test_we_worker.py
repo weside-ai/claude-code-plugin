@@ -474,3 +474,17 @@ def test_checkpoint_never_commits_on_main(tmp_path):
     project, env = setup(tmp_path, rows)
     proc = run(project, env, "checkpoint", "w")
     assert proc.returncode == 1 and "is on main" in proc.stderr
+
+
+def test_a_flag_as_the_last_word_is_checked_too(tmp_path):
+    """Claude Review on #202: with no prompt, the last word is a flag, not the prompt."""
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "a", "--cwd")
+    assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
+
+
+@pytest.mark.parametrize(("kind", "code"), [("background", 0), ("interactive", 1)])
+def test_is_worker_is_the_one_owner_of_the_rule(tmp_path, kind, code):
+    rows = [{"id": "x1", "name": "x", "kind": kind, "pid": "-", "cwd": "-"}]
+    project, env = setup(tmp_path, rows)
+    assert run(project, env, "is-worker", "x1").returncode == code

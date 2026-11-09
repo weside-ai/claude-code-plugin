@@ -341,7 +341,7 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     """The template's first word when it is a launcher with its own `stop` verb, else None.
 
     Only `we-worker` (this plugin's launcher, `scripts/we-worker`) is known to carry
-    `status|stop|logs|waiting`; any other launcher, or a `we-worker` not on `PATH`, is stopped
+    `status|stop|logs|waiting|checkpoint`; any other launcher, or a `we-worker` not on `PATH`, is stopped
     with `claude stop`.
     """
     try:
@@ -375,15 +375,21 @@ def _stop_one(row: dict, launcher: str | None) -> str:
 
 
 def is_worker(row: dict) -> bool:
-    """A background session, a worktree carrying this launcher's marker, or a process started as a
-    worker (`WE_ROLE=worker`, readable on Linux): never a master or companion session."""
-    if row.get("kind") == "background" or read_marker(row.get("cwd")) is not None:
-        return True
+    """`we-worker is-worker <id>` (the one owner of the rule, beside this file): a background
+    session, a worktree with the launcher's marker, or a process started as a worker; never a
+    master or companion session. Any failure counts as no worker."""
+    script = Path(__file__).resolve().with_name("we-worker")
     try:
-        env = Path(f"/proc/{int(row.get('pid'))}/environ").read_bytes()
-    except (TypeError, ValueError, OSError):
+        out = subprocess.run(
+            ["bash", str(script), "is-worker", str(row.get("id"))],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=STOP_VERB_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
         return False
-    return b"WE_ROLE=worker" in env.split(b"\0")
+    return out.returncode == 0
 
 
 def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> list[str]:
