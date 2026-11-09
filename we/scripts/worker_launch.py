@@ -34,7 +34,7 @@ Usage:
                                                    template whose launcher has a `stop` verb
                                                    (`we-worker`) stops through it
   worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
-  worker_launch.py checkpoint --name <n>           commit the worker's tracked changes, push them to
+  worker_launch.py checkpoint --name <n>           commit the worker's changes (via we-worker), push them to
                                                    wip/<branch without its type prefix>
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
 """
@@ -395,28 +395,24 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
 
 
 def checkpoint(name: str) -> str:
-    """Commit the tracked changes in the worker's worktree and push them to wip/<branch sans type>.
-
-    For a Lead before a quota pause; returns the line to print. The worker's cwd comes from
-    `claude agents --json`.
-    """
-    rows = [r for r in sessions() if r.get("name") == name and r.get("cwd")]
-    if not rows:
-        raise LaunchError(f"no session named {name} with a working directory")
-    tree = Path(str(rows[-1]["cwd"]))
-    branch = _git(tree, "rev-parse", "--abbrev-ref", "HEAD")
-    if not branch or branch == "HEAD":
-        raise LaunchError(f"{tree}: no branch to name the wip branch after")
-    wip = "wip/" + branch.split("/", 1)[-1]
-    dirty = _git(tree, "status", "--porcelain", "--untracked-files=no")
-    if dirty and (
-        _git(tree, "add", "-u") is None
-        or _git(tree, "commit", "-q", "-m", f"wip: checkpoint {name}") is None
-    ):
-        raise LaunchError(f"{tree}: the checkpoint commit failed (a pre-commit hook?)")
-    if _git(tree, "push", "-q", "origin", f"HEAD:refs/heads/{wip}") is None:
-        raise LaunchError(f"push of {wip} failed; the commit stays local in {tree}")
-    return f"checkpoint {_git(tree, 'rev-parse', '--short', 'HEAD')} of {name} pushed to {wip}"
+    """`we-worker checkpoint <name>` (the one owner of the procedure, beside this file): commit
+    the worker's changes and push them to wip/<branch sans type>; returns its line."""
+    script = Path(__file__).resolve().with_name("we-worker")
+    try:
+        out = subprocess.run(
+            ["bash", str(script), "checkpoint", name],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=STOP_VERB_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise LaunchError(f"we-worker checkpoint {name}: {exc}") from exc
+    if out.returncode != 0:
+        raise LaunchError(
+            out.stderr.strip() or f"we-worker checkpoint {name} exited {out.returncode}"
+        )
+    return out.stdout.strip().removeprefix("we-worker: ")
 
 
 def main(argv: list[str] | None = None) -> int:

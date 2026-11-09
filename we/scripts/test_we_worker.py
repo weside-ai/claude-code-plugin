@@ -37,11 +37,23 @@ sys.exit(0)
 CREW = {"version": 2, "roles": {"product": "po"}, "members": {"po": {"name": "Ada"}}}
 
 
+TMUX_STUB = r"""#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ["STUB_LOG"], "a") as fh:
+    fh.write(json.dumps({"argv": [], "tmux": sys.argv[1:]}) + "\n")
+if sys.argv[1:2] == ["list-sessions"]:
+    print("1 stub")
+"""
+
+
 def setup(tmp_path, rows=(), crew=CREW):
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     (bindir / "claude").write_text(STUB)
     (bindir / "claude").chmod(0o755)
+    # a stub tmux: a window launch never reaches a real tmux server (and its real claude)
+    (bindir / "tmux").write_text(TMUX_STUB)
+    (bindir / "tmux").chmod(0o755)
     state = tmp_path / "state.json"
     state.write_text(json.dumps(list(rows)))
     project = tmp_path / "project"
@@ -315,6 +327,13 @@ def test_an_unknown_flag_before_the_claude_args_refuses(tmp_path):
     assert not started(tmp_path)
 
 
+def test_an_unknown_flag_later_among_the_claude_args_refuses(tmp_path):
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "x", "--cwd", "/x", "go")
+    assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
+    assert not started(tmp_path)
+
+
 def test_a_claude_flag_passes(tmp_path):
     project, env = setup(tmp_path)
     assert (
@@ -335,7 +354,9 @@ def test_worker_mode_bypass_starts_only_a_bg_worker_in_bypass(tmp_path, mode, ar
     if args:
         assert ("--permission-mode" in argv[0]) is bypass
     else:
-        assert not any("--permission-mode" in a for a in argv)
+        windows = [c["tmux"] for c in calls(tmp_path) if c.get("tmux", [""])[0] == "new-window"]
+        assert len(windows) == 1 and "-n" in windows[0]
+        assert "--permission-mode" not in windows[0][-1]
 
 
 def test_a_permission_mode_of_the_caller_wins(tmp_path):
@@ -390,4 +411,11 @@ def test_checkpoint_commits_tracked_changes_and_pushes_a_wip_branch(tmp_path):
         text=True,
         check=True,
     )
-    assert status.stdout.strip() == "?? untracked.txt"
+    assert status.stdout.strip() == ""  # new files are part of the checkpoint
+    shown = subprocess.run(
+        ["git", "--git-dir", str(origin), "show", "wip/AC-12-slug:untracked.txt"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert shown.stdout == "x\n"

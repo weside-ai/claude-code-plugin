@@ -203,10 +203,11 @@ for x in json.load(sys.stdin):
     branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null) || { echo "we-worker: $cwd is no git worktree" >&2; exit 1; }
     [[ "$branch" != HEAD ]] || { echo "we-worker: $cwd has a detached HEAD; nothing to name the wip branch after" >&2; exit 1; }
     wip="wip/${branch#*/}"
-    if git -C "$cwd" diff --quiet && git -C "$cwd" diff --cached --quiet; then
-      echo "we-worker: $key has no tracked change; nothing to checkpoint"
+    if [[ -z "$(git -C "$cwd" status --porcelain)" ]]; then
+      echo "we-worker: $key has no change; nothing to checkpoint"
     else
-      if ! { git -C "$cwd" add -u && git -C "$cwd" commit -q -m "wip: checkpoint $key"; }; then
+      # every change, new files included (.gitignore still holds): the tree is what a pause loses
+      if ! { git -C "$cwd" add -A && git -C "$cwd" commit -q -m "wip: checkpoint $key"; }; then
         echo "we-worker: the checkpoint commit in $cwd failed (a pre-commit hook?); nothing pushed" >&2
         exit 1
       fi
@@ -367,12 +368,15 @@ for a in json.load(sys.stdin):
 }
 # Flags claude knows, from its own help; empty when the help cannot be read (then nothing is refused).
 known_flags=$(env -u CLAUDE_CONFIG_DIR claude --help 2>/dev/null | grep -oE -- '--[a-z][a-z0-9-]*' | sort -u || true)
-if [[ -n "$known_flags" && $# -gt 0 && "$1" == --* ]]; then
-  flag=${1%%=*}
-  if ! grep -qxF -- "$flag" <<<"$known_flags"; then
-    echo "we-worker: $flag is neither a we-worker flag (--bg, --limit) nor one claude knows; to start in another tree run: cd <tree> && we-worker $name …" >&2
-    exit 2
-  fi
+if [[ -n "$known_flags" && $# -gt 1 ]]; then
+  for arg in "${@:1:$#-1}"; do # every word before the prompt (the last one)
+    [[ "$arg" == --* ]] || continue
+    flag=${arg%%=*}
+    if ! grep -qxF -- "$flag" <<<"$known_flags"; then
+      echo "we-worker: $flag is neither a we-worker flag (--bg, --limit) nor one claude knows; to start in another tree run: cd <tree> && we-worker $name …" >&2
+      exit 2
+    fi
+  done
 fi
 cargs=()
 while [[ $# -gt 0 ]]; do
