@@ -35,6 +35,8 @@ silently return:
 
 12. Layout — the `## Layout` block of AGENTS.md names every hook, plugin script, agent,
    process template and repo check file (tests aside).
+13. Plugin-root paths — every `${CLAUDE_PLUGIN_ROOT}/<path>` in hooks.json and in a shipped
+   file under we/ exists (patterns and tests skipped).
 
 Stdlib only. Exit 1 on any finding.
 
