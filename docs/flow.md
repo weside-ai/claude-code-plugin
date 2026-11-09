@@ -53,7 +53,7 @@ Seven lamps, in the order `/we:master` walks a story through them:
 | Build | a PR exists | commits on a branch, no PR yet | branch left after a closed PR |
 | PR | a PR is open (not a draft) or merged | a draft PR | closed without a merge |
 | CI | every required check except the reviews passed | checks running | a check failed |
-| Review | the Claude Review check passed | it runs | it failed; Codex is shown beside it, advisory |
+| Review | the Claude Review check passed | it runs | it failed; Codex is shown beside it and never turns this lamp red (the merge gate still waits for its verdict) |
 | Merge | merged | auto-merge armed, or green and waiting for a user merge | conflicts with the default branch |
 
 `○` is a step not reached yet, `–` one that was skipped (a story built without a plan file). Under

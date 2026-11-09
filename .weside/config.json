@@ -1,21 +1,7 @@
 {
-  "framework_version": 1,
-  "onboarded": true,
-  "onboarded_at": "2026-05-16T17:38:10+00:00",
-  "repo_flavor": "plugin",
-  "roles_enabled": [
-    "architect",
-    "legal",
-    "marketing",
-    "orchestrator",
-    "product_owner",
-    "scrum_master",
-    "security"
-  ],
   "ticketing": {
     "tool": "github-issues",
-    "project_key": "weside-ai/claude-code-plugin",
-    "note": "Repo flavor: Plugin / toolkit. Stack: markdown, python."
+    "project_key": "weside-ai/claude-code-plugin"
   },
   "stack": [
     "markdown",

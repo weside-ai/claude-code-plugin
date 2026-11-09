@@ -223,3 +223,29 @@ def test_this_repos_resolver_copies_pass():
         check=False,
     )
     assert out.returncode == 0, out.stdout
+
+
+def test_agents_layout_names_every_file(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "AGENTS.md": "# x\n\n## Layout\n\nwe/hooks: automerge_gate council-member\n\n## Conventions\n",
+            "we/hooks/automerge_gate.py": "",
+            "we/hooks/test_automerge_gate.py": "",
+        },
+    )
+    assert run(root, "agents-layout").returncode == 0
+
+
+def test_agents_layout_fails_naming_the_missing_file(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "AGENTS.md": "# x\n\n## Layout\n\nwe/hooks: automerge_gate council-member\n\n## Conventions\nnew_gate\n",
+            "we/hooks/automerge_gate.py": "",
+            "we/hooks/new_gate.py": "",
+        },
+    )
+    result = run(root, "agents-layout")
+    assert result.returncode == 1
+    assert "we/hooks/new_gate.py is not named" in result.stdout

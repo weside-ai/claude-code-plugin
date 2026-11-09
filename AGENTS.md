@@ -19,47 +19,52 @@ we/                               plugin root
   .claude-plugin/plugin.json      name, version, userConfig
   .mcp.json                       weside-mcp (OAuth, optional)
   AUTHORING.md                    authoring contract
-  skills/<verb>/SKILL.md          one directory per /we:<verb>
+  process/                        the crew process: L0.md, L0-worker.md (rendered by scripts/render_process.py)
   roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
-  agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens)
-  references/                     shared contracts (epic-plan, plan-commit, worker-dispatch, ticketing, privacy-guard,
-                                  optimization-store, instruction-sources, instruction-authoring, companion-session,
-                                  context-engineering, story-plan)
+  skills/<verb>/SKILL.md          one directory per /we:<verb>
+  agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens),
+                                  lens-product, lens-architecture, lens-acceptance (the lens panel)
+  references/                     shared contracts, one owner per fact (.claude/rules/plugin-authoring.md § Single owner)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
-  docs/board.md                   the /board pane and its board.json schema (ships with the plugin)
-  hooks/                          hooks.json + register.ts (the one function-hooks module) with flow/ (the /flow pane,
-                                  phase.ts logic), board/ (the /board pane, board.ts logic, work.ts trees, probe.py,
-                                  answer.py) and plans/ (plan files and PRs both panes read), *.test.ts
-                                  + SessionStart materialize, process L0, role card and optimization reminder, UserPromptSubmit
-                                  wake counter (news_on_prompt), sampler and blocked-worker line
-                                  (sampler_on_prompt), Stop store-conversation, conflict gate
-                                  (own DIRTY PRs), reply-language gate and question gate
-                                  (AskUserQuestion while background work runs),
-                                  tmux attention (window title white while the session waits, grey at rest),
-                                  PreToolUse verification gate, merge gate (every merge form:
-                                  freeze, risk class, T2 panel, Codex verdict on the head),
-                                  draft-reason gate and teammate gate
-                                  (no worker panes by default), SubagentStart/Stop timing,
-                                  SubagentStop report gate (dev workers), Stop report gate (process
-                                  workers, worker_report_gate), InstructionsLoaded + skill-run telemetry
-  scripts/                        crew.py (the one reader of .weside/crew.json), risk_paths.py
-                                  (path-rule classifier over .weside/risk-paths), board_freeze.py, rule_loading.py (Claude Code's rule-loading semantics, importable; fixtures/
-                                  from probe-rule-loading.py), load-rules.py, check-instruction-budget.py,
-                                  identity cache, wake_poller.py (companion wake), statusline,
-                                  flow_log.py (the flow log's one owner), sampler_age.py (its pulse),
-                                  wclaude + install_launcher.py (companion launcher), start.py (wclaude --start, /we:start),
-                                  watch-pr-checks.sh (CI watch bound to the PR head, to the merge),
-                                  watch-pr-conflicts.sh, watch-worker.sh (Lead watchdog), worker_launch.py
-                                  (worker launch backend), retro_claim.sh,
-                                  pr-body-receipt.py (splices the plan's Verification block),
-                                  check-plan-identifiers.py (plan names exist on the base),
-                                  test-delta.py (the PR body's test line), session_tokens.py (a step's token line in the plan),
-                                  state_move.py (moves a crew's board family into its own state_dir)
-  templates/agents-skill/         rule bridge /we:setup installs for non-Claude agents
-  templates/companion-skill/      role-skill stub /we:setup writes per crew member
+  docs/board.md                   the /board pane, board.json schema, moves, answers, freeze, self-merge, staging
+  templates/                      agents-skill/ (rule bridge for non-Claude agents), companion-skill/ (role-skill stub
+                                  and pointer), orchestrate.md and risk-paths (copied by /we:setup), cold-reader.md
+  hooks/
+    hooks.json, register.ts       the hook table and the one function-hooks module (both panes)
+    flow/, board/, plans/         the /flow pane (phase.ts), the /board pane (board.ts, work.ts, deliver.ts, probe.py,
+                                  answer.py, deliveries.py), plan files and PRs both panes read
+    SessionStart                  materialize_on_start, process_on_start (L0), role_on_start (role card),
+                                  optimization_reminder, compact_on_start (matcher compact)
+    UserPromptSubmit              news_on_prompt (wake counter), sampler_on_prompt (dead sampler, blocked worker)
+    PreToolUse                    automerge_gate (every merge form: worker refusal, freeze, risk class, T2 panel,
+                                  security card PASS, Codex verdict on the head, receipt red), verification_gate,
+                                  draft_reason_gate, teammate_gate
+    Stop                          store_conversation_hook, conflict_gate (own DIRTY PRs), reply_language_gate,
+                                  question_gate, worker_report_gate (process workers)
+    PreCompact                    epic_age_precompact (stale Updates Log)
+    SubagentStop                  the dev-worker report gate (a hook on `we:dev-*`, no script)
+    timing and telemetry          subagent_timing (SubagentStart/Stop, InstructionsLoaded, UserPromptExpansion, Skill)
+    attention                     tmux_attention (window title white while the session waits, grey at rest)
+  scripts/
+    crew                          crew.py (the one reader of .weside/crew.json), render_process.py, start.py,
+                                  state_move.py, council_lens.py
+    board                         board.py, board_freeze.py, board_self_merge.py, board_staging.py, cold_reader.py,
+                                  accept.py, ticket_adapter.py, epic_state.py
+    gates                         ready_gate.py, plan_tier.py, risk_paths.py, lens_verdict.py,
+                                  check-plan-identifiers.py, check-instruction-budget.py
+    rules                         rule_loading.py, load-rules.py, probe-rule-loading.py, probe-hook-cap.py (fixtures/)
+    launch                        wclaude, we-worker, install_launcher.py, worker_launch.py, pin.sh, identity_cache.py,
+                                  wake_poller.py, gh_anchor.sh
+    watch                         watch-pr-checks.sh (CI to the merge), watch-pr-conflicts.sh, watch-worker.sh
+    flow                          flow_log.py (the flow log's one owner), sampler_age.py
+    PR and plan                   pr-body-receipt.py, test-delta.py, session_tokens.py, retro_claim.sh
+    statusline                    statusline.js, install_statusline.py
+    test support                  node_test_procs.py (the node binary and process reaping for statusline tests)
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
-scripts/                          repo validators (frontmatter, structure, consistency), claude_review_gate.py
+scripts/                          repo checks: validate-frontmatter.py, validate-plugin-structure.sh,
+                                  validate-consistency.py (also checks this layout names every file), full_test_run.py,
+                                  check-version-bump.sh, check_compat_line.py, claude_review_gate.py
 ```
 
 ## Conventions
