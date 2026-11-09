@@ -52,7 +52,9 @@ Per cycle
     (``hooks/news_on_prompt.py``), cursor kept.
 
 Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
-``<file>.lock``, atomic replace), shared by every session of that companion:
+``<file>.lock``, atomic replace), shared by every session of that companion. The lock is taken
+with a timeout (``LOCK_WAIT_S``; ``LockTimeout`` past it) and never held across a delivery: a
+cycle decides under the lock, sends without it, then records the outcome under it again.
     ``handoff_cursor`` int or null — every handoff id up to it is delivered
     ``server_shape`` ``handoffs`` (default) or ``rooms`` — the rule the last cycle applied
                    (for ``status``; every cycle asks ``handoffs=true`` first)
@@ -292,16 +294,34 @@ def write_state(companion: str, state: dict) -> None:
     _write_atomic(state_path(companion), json.dumps(state, sort_keys=True))
 
 
+LOCK_WAIT_S = 10.0
+
+
+class LockTimeout(OSError):  # noqa: N818  (reads as the event, like TimeoutError's peers)
+    """The cursor file's lock stayed taken past the wait."""
+
+
 @contextlib.contextmanager
-def locked_state(companion: str):
-    """Yield the cursor file's state under its lock; the state is written back on exit."""
+def locked_state(companion: str, wait_s: float = LOCK_WAIT_S):
+    """Yield the cursor file's state under its lock; the state is written back on exit.
+
+    Raises ``LockTimeout`` when the lock is not free within ``wait_s`` seconds.
+    """
     target = state_path(companion)
     target.parent.mkdir(parents=True, exist_ok=True)
     lock = target.with_name(target.name + ".lock")
     fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         if fcntl is not None:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            deadline = time.monotonic() + wait_s
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise LockTimeout(f"{lock} held longer than {wait_s:.0f} s") from None
+                    time.sleep(0.05)
         state = read_state(companion)
         yield state
         write_state(companion, state)
@@ -711,12 +731,12 @@ class Poller:
                 self.log(f"ok handoffs={len(handoffs)} held")
                 return "ok"
             text = render_handoffs(self.companion, handoffs)
-            try:
-                self.send(self.socket_path, self._token, text)
-            except SessionGoneError:
-                self.log("exit session gone")
-                return "gone"
-            except PollError:
+        failed = self._send(text)
+        if failed == "gone":
+            return "gone"
+        with locked_state(self.companion) as state:
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            if failed:
                 write_pending(self.socket_path, self.companion, {"handoffs": handoffs}, now)
                 state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
                 state["last_error"] = {"class": "socket", "at": iso(now)}
@@ -752,12 +772,13 @@ class Poller:
                 for f in wakeable
             ]
             text = render(self.companion, rooms, since)
-            try:
-                self.send(self.socket_path, self._token, text)
-            except SessionGoneError:
-                self.log("exit session gone")
-                return "gone"
-            except PollError:
+        failed = self._send(text)
+        if failed == "gone":
+            return "gone"
+        with locked_state(self.companion) as state:
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            delivered, delivered_row = state["delivered"], state["delivered_row"]
+            if failed:
                 news = {"rooms": rooms, "since_last_session": since}
                 write_pending(self.socket_path, self.companion, news, now)
                 for f in wakeable:
@@ -777,6 +798,17 @@ class Poller:
                 self._advance(state, base, answer["cursor"])
             self.log(f"wake delivered rooms={len(rooms)}")
             return "ok"
+
+    def _send(self, text: str) -> str | None:
+        """Deliver outside the cursor lock: None when sent, ``gone`` or ``failed``."""
+        try:
+            self.send(self.socket_path, self._token, text)
+        except SessionGoneError:
+            self.log("exit session gone")
+            return "gone"
+        except PollError:
+            return "failed"
+        return None
 
     def _fresh(self, rooms: list[dict], delivered: dict, delivered_row: dict) -> list[dict]:
         """The rooms with a line not yet delivered; ``waiting`` marks one still in its grace.

@@ -206,3 +206,29 @@ def test_the_served_log_keeps_the_last_lines(tmp_path):
     context(run(tmp_path, root, {}))
     lines = log.read_text().splitlines()
     assert len(lines) == 1_000 and lines[0] == '{"n": 1}' and '"by": "plugin"' in lines[-1]
+
+
+def test_the_served_line_names_its_crew(tmp_path):
+    root = repo(tmp_path)
+    context(run(tmp_path, root, {"WE_ROLE": "master"}))
+    log = tmp_path / "home" / ".claude" / "we-state" / "l0-served.jsonl"
+    entry = json.loads(log.read_text().splitlines()[-1])
+    assert entry["crew"]
+
+
+def test_a_held_log_lock_skips_the_line_instead_of_hanging(tmp_path):
+    import fcntl  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    root = repo(tmp_path)
+    log = tmp_path / "home" / ".claude" / "we-state" / "l0-served.jsonl"
+    log.parent.mkdir(parents=True)
+    fd = os.open(str(log.with_name(log.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    try:
+        start = time.monotonic()
+        assert context(run(tmp_path, root, {"WE_ROLE": "master"}))
+        assert time.monotonic() - start < 15
+    finally:
+        os.close(fd)
+    assert not log.exists()

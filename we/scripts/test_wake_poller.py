@@ -293,6 +293,39 @@ class PollerTest(unittest.TestCase):
     def handoffs(*items, cursor):
         return {"cursor": cursor, "handoffs": [{"id": h, "from": f} for h, f in items]}
 
+    # --- the cursor lock: a timeout, and never held across a delivery (review 09.11.) ----
+
+    def test_locked_state_times_out_instead_of_blocking(self):
+        target = wp.state_path("Nox")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(target.with_name(target.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o600)
+        wp.fcntl.flock(fd, wp.fcntl.LOCK_EX)
+        try:
+            start = time.monotonic()
+            with self.assertRaises(wp.LockTimeout), wp.locked_state("Nox", wait_s=0.3):
+                pass
+            self.assertLess(time.monotonic() - start, 2)
+        finally:
+            os.close(fd)
+
+    def test_the_poller_sends_without_holding_the_cursor_lock(self):
+        free = []
+
+        def probing_send(_path, _token, text):
+            try:
+                with wp.locked_state("Nox", wait_s=0.2):
+                    free.append(True)
+            except wp.LockTimeout:
+                free.append(False)
+            self.sent.append(text)
+
+        self.send = probing_send
+        p = self.poller()
+        self.answers = [self.handoffs((17, "room:384"), cursor=17)]
+        self.assertEqual(p.poll_once(), "ok")
+        self.assertEqual(free, [True])
+        self.assertEqual(self.state()["handoff_cursor"], 17)
+
     # --- handoffs wake, room news does not --------------------------------
 
     def test_a_handoff_wakes_exactly_once_with_the_fixed_line_and_no_note(self):

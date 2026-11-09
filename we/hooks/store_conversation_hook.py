@@ -48,7 +48,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-
+import claude_home
 from identity_cache import read_binding
 
 MIN_USER_MSG_LENGTH = 50
@@ -57,7 +57,7 @@ MAX_CONTENT_LENGTH = 500
 _MAX_SOURCE_DETAIL_LEN = 200  # mirrors the backend's own source_detail cap
 
 MCP_URL = "https://api.weside.ai/mcp/"
-CLAUDE_CODE_CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
+CLAUDE_CODE_CREDENTIALS_PATH = str(claude_home.config_dir() / ".credentials.json")
 MCP_OAUTH_KEY_PREFIX = "plugin:we:weside-mcp|"
 
 
@@ -82,7 +82,7 @@ def _decode_jwt_exp(token: str) -> int | None:
 def _get_valid_token() -> str | None:
     """Read the weside MCP OAuth access token managed by Claude Code itself.
 
-    Claude Code stores per-MCP OAuth tokens in ~/.claude/.credentials.json under
+    Claude Code stores per-MCP OAuth tokens in <config dir>/.credentials.json (``claude_home``) under
     ``mcpOAuth['plugin:we:weside-mcp|<hash>']`` and auto-refreshes them when
     reconnecting to the MCP server at session start. Reading from here means the
     hook piggy-backs on Claude Code's own refresh loop instead of maintaining a
@@ -245,13 +245,11 @@ def _call_store_conversations(
 
 def get_plugin_config() -> dict:
     """Read plugin config from Claude settings."""
-    try:
-        path = os.path.expanduser("~/.claude/settings.json")
-        with open(path) as f:
-            settings = json.load(f)
-        return settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
-    except Exception:
-        return {}
+    opts = dict(claude_home.plugin_options())
+    env_value = claude_home.plugin_option("autoStoreConversations")
+    if env_value is not None:
+        opts["autoStoreConversations"] = env_value
+    return opts
 
 
 _SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?(?:</system-reminder>|\Z)", re.S)

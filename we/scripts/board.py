@@ -46,8 +46,8 @@ set      writes the caller's own session line (found by `name` through `claude a
          writes another line and is the coordinator's. `waiting_on=<role>` stamps `since` and
          `sla_due` (the crew's `sla`, counted in daytime hours); the same role keeps them, another
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
-         `since`. It stamps the line's `updated_at` (UTC minute); it never writes `updated` or
-         `updated_by`.
+         `since`. It stamps the line's `updated_at` (UTC minute); the board's `updated` moves with
+         every write (`write_board`), `updated_by` never.
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
          without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
          lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
@@ -162,6 +162,7 @@ only grow (O_APPEND). FILE defaults to the crew's `board.file` (relative to the 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import fcntl
 import importlib.util
@@ -316,7 +317,16 @@ class StateDir:
         mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED` and the pruning
         pass (`prune`) dropped nothing. `after(result)` runs once the file is replaced, still under
         the lock: the place for a JSONL line that must not exist without its board change. Returns
-        what `mutate` returned. The plugin's only writer of board.json."""
+        what `mutate` returned. Every write stamps the board's `updated` (the header's age, and the
+        lapse of an Update mark: `board.ts` `shownAnswer`); `updated_by` stays as it was.
+        The plugin's only writer of board.json."""
+        with self.locked():
+            return self._write_board_locked(mutate, after)
+
+    @contextlib.contextmanager
+    def locked(self):
+        """The board lock (`<board>.lock`, flock, `LOCK_WAIT_S`): board.json and every JSONL line
+        whose content depends on what the log already holds are written under it."""
         self.board_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT, 0o644)
         try:
@@ -331,30 +341,34 @@ class StateDir:
                             f"lock {self.lock_path} not taken within {LOCK_WAIT_S:g} s"
                         ) from None
                     time.sleep(0.05)
-            board = self.board()
-            result = mutate(board)
-            pruned = self.last_pruned = prune(board, self, self.now or _now())
-            if result is UNCHANGED and not pruned:
-                return result
-            tmp_fd, tmp_name = tempfile.mkstemp(
-                dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
-            )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp:
-                    json.dump(board, tmp, ensure_ascii=False, indent=2)
-                    tmp.write("\n")
-                os.replace(tmp_name, str(self.board_path))
-            except BaseException:
-                if os.path.exists(tmp_name):
-                    os.unlink(tmp_name)
-                raise
-            for line in pruned:
-                self.append_question(line)
-            if after is not None and result is not UNCHANGED:
-                after(result)
-            return result
+            yield
         finally:
             os.close(fd)
+
+    def _write_board_locked(self, mutate, after):
+        board = self.board()
+        result = mutate(board)
+        pruned = self.last_pruned = prune(board, self, self.now or _now())
+        if result is UNCHANGED and not pruned:
+            return result
+        board["updated"] = (self.now or _now()).astimezone().isoformat(timespec="seconds")
+        tmp_fd, tmp_name = tempfile.mkstemp(
+            dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp:
+                json.dump(board, tmp, ensure_ascii=False, indent=2)
+                tmp.write("\n")
+            os.replace(tmp_name, str(self.board_path))
+        except BaseException:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+            raise
+        for line in pruned:
+            self.append_question(line)
+        if after is not None and result is not UNCHANGED:
+            after(result)
+        return result
 
     def ids(self):
         board = self.board()
@@ -403,6 +417,14 @@ class StateDir:
 
     def append_transition(self, row):
         return _append_jsonl(self.transitions_path, row)
+
+    def record_transition(self, key, build):
+        """Under the board lock: `build(last row of key or None)` makes the row, which is appended.
+        Two moves of one key at once cannot both read the same `from`. Returns the row."""
+        with self.locked():
+            row = build(self.last_rows().get(key))
+            self.append_transition(row)
+        return row
 
     def append_wait(self, row):
         return _append_jsonl(self.waits_path, row)
@@ -2206,17 +2228,18 @@ def _transition(state, args, crew, now, target, head):
     status = (crew.get("board") or {}).get("states", {}).get(target) or (
         crew_mod.DEFAULTS["board"]["states"][target]
     )
-    last = state.last_rows().get(key)
-    row = {
-        "key": key,
-        "from": last.get("to") if last else None,
-        "to": target,
-        "ts": _iso(now),
-        "by": _caller(),
-        **m.extra,
-        "ticket": adapter.name,
-    }
-    state.append_transition(row)
+    row = state.record_transition(
+        key,
+        lambda last: {
+            "key": key,
+            "from": last.get("to") if last else None,
+            "to": target,
+            "ts": _iso(now),
+            "by": _caller(),
+            **m.extra,
+            "ticket": adapter.name,
+        },
+    )
     ops = adapter.move(key, status)
     if "tier" in m.extra:
         print(f"tier: {m.extra['tier']}")
@@ -2316,7 +2339,7 @@ def move_done(
         "by": _caller(),
         "ticket": adapter.name,
     }
-    state.append_transition(row)
+    state.record_transition(key, lambda _last: row)
     ops = adapter.move(key, status) + adapter.comment(key, m.comment)
     sample = _sample(state, crew, key, now) if row["via"] == "receipt" else None
     return row, ops, sample

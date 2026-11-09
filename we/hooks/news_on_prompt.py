@@ -38,6 +38,10 @@ from identity_cache import read_binding
 STALE_AFTER_S = 3 * wake_poller.INTERVAL_S
 
 
+# A prompt never waits long on the cursor lock: past it the hook adds nothing (wake_poller.LockTimeout).
+HOOK_LOCK_WAIT_S = 2.0
+
+
 def claim_pending(socket_path: str) -> dict | None:
     """Take this socket's pending note (rename first, so two prompts cannot both print it)."""
     note = wake_poller.pending_path(socket_path)
@@ -82,7 +86,7 @@ def pending_line(socket_path: str, now: float) -> str | None:
             return None
     except (KeyError, TypeError, ValueError):
         return None
-    with wake_poller.locked_state(companion) as state:
+    with wake_poller.locked_state(companion, wait_s=HOOK_LOCK_WAIT_S) as state:
         wake_poller.bump(state, "hook_delivered", now)
     return line
 

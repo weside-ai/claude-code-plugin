@@ -22,7 +22,7 @@ mechanically per event:
     `window-status-current-style` an older version set.
   * Nothing without `$TMUX_PANE`, in a background session (`$CLAUDE_JOB_DIR`), in a subagent
     (`agent_id`), or with the option `tmuxAttention` off. Options come from
-    `CLAUDE_PLUGIN_OPTION_<KEY>`, else from `pluginConfigs` in `~/.claude/settings.json`.
+    `CLAUDE_PLUGIN_OPTION_<KEY>`, else from `pluginConfigs` in Claude Code's settings (`$CLAUDE_CONFIG_DIR` or `~/.claude`).
   * Fail-open and silent: every error exits 0 without output.
 """
 
@@ -54,11 +54,15 @@ def option(environ: dict, settings: dict, key: str) -> object:
 
 
 def plugin_options() -> dict:
+    # Self-contained on purpose (the hook runs on every tool call); same rule as claude_home.py.
     try:
-        with open(os.path.expanduser("~/.claude/settings.json")) as fh:
-            settings = json.load(fh)
-        opts = settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
-        return opts if isinstance(opts, dict) else {}
+        base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+        with open(os.path.join(base, "settings.json")) as fh:
+            configs = json.load(fh).get("pluginConfigs", {})
+        for key in sorted(configs):
+            if key.split("@")[0] == "we" and isinstance(configs[key].get("options"), dict):
+                return configs[key]["options"]
+        return {}
     except Exception:
         return {}
 

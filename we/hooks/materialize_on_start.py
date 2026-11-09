@@ -24,7 +24,7 @@ no ``weside_account: true`` (a team without a weside account) a pinned session g
 the role-skill line only, never the request to materialize.
 
 Unpinned: when the user enabled autoMaterialize
-(``~/.claude/settings.json`` → ``pluginConfigs["we@weside-ai"].options``),
+(``CLAUDE_PLUGIN_OPTION_AUTOMATERIALIZE``, else ``pluginConfigs`` in Claude Code's settings: ``claude_home.plugin_option``),
 ask the session to load the companion first. Off, absent or unreadable → the
 hook prints nothing.
 A background session (``claude --bg``, ``$CLAUDE_JOB_DIR`` set) without a pin is a
@@ -58,6 +58,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import claude_home
 import crew
 import render_process
 import wake_poller
@@ -215,13 +216,7 @@ def refused_line(cwd: str) -> str | None:
 
 
 def enabled() -> bool:
-    try:
-        with open(os.path.expanduser("~/.claude/settings.json")) as fh:
-            settings = json.load(fh)
-        opts = settings.get("pluginConfigs", {}).get("we@weside-ai", {}).get("options", {})
-        return opts.get("autoMaterialize") is True
-    except Exception:
-        return False
+    return claude_home.plugin_option("autoMaterialize") is True
 
 
 def read_input() -> dict:

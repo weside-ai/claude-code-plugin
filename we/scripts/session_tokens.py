@@ -33,6 +33,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import claude_home
 from worker_launch import SUBAGENT, LaunchError, backend
 
 HEADER = "## Updates Log"
@@ -110,7 +111,7 @@ def token_text(plan: Path, env: dict[str, str]) -> str:
     session_id = env.get("CLAUDE_CODE_SESSION_ID", "").strip()
     if not session_id:
         return _absent("no session id")
-    config_dir = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    config_dir = claude_home.config_dir(env)
     files = transcripts(session_id, config_dir)
     if not files:
         return _absent("no session transcript")

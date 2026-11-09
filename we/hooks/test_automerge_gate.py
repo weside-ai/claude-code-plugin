@@ -1365,3 +1365,63 @@ def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc
         green["repo"], ARM, FakeGh([run()], head=green["head"], cards=[card]), monkeypatch
     )
     assert (red is None) is counts, red
+
+
+# Robustness review 09.11.: a broken import refuses merges; a read-only inline query passes.
+
+
+def _run_copy_without_modules(tmp_path: Path, command: str) -> str:
+    lonely = tmp_path / "lonely"
+    lonely.mkdir()
+    (lonely / "automerge_gate.py").write_text(Path(gate.__file__).read_text())
+    payload = {"tool_name": "Bash", "cwd": "/", "tool_input": {"command": command}}
+    proc = subprocess.run(
+        [sys.executable, "-I", str(lonely / "automerge_gate.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout
+
+
+def test_a_failed_import_denies_a_merge(tmp_path: Path) -> None:
+    out = json.loads(_run_copy_without_modules(tmp_path, ARM))["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert "cannot load its modules (ModuleNotFoundError" in out["permissionDecisionReason"]
+
+
+def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
+    assert _run_copy_without_modules(tmp_path, "ls -la") == ""
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
+        """printf '%s' '{"query": "{ repository(owner:\\"o\\", name:\\"r\\") { id } }"}' | gh api graphql --input -""",
+    ],
+)
+def test_a_read_only_query_spelled_in_the_command_passes(repo: Path, monkeypatch, command) -> None:
+    assert refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch) is None
+
+
+def test_a_mutation_spelled_in_the_command_still_refuses_unseen(repo: Path, monkeypatch) -> None:
+    command = """echo '{"query":"mutation { x }"}' | gh api graphql --input -"""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+def test_a_body_edit_chained_before_the_arm_is_named_in_the_refusal(
+    repo: Path, monkeypatch
+) -> None:
+    chained = "gh pr edit 7 --body-file /tmp/b.md && " + ARM
+    reason = refuse(receipt_repo(repo), chained, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "receipt red on #7" in reason
+    assert "change the body in a command of its own, then arm" in reason
+
+
+def test_a_plain_refusal_carries_no_body_chain_note(repo: Path, monkeypatch) -> None:
+    reason = refuse(receipt_repo(repo), ARM, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "command of its own" not in reason

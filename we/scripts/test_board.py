@@ -594,9 +594,9 @@ class TestSet:
             "updated_at": "2026-11-03T10:00Z",
         }
         assert after["sessions"][1] == before["sessions"][1]
-        assert {k: after[k] for k in after if k != "sessions"} == {
-            k: before[k] for k in before if k != "sessions"
-        }  # updated and updated_by untouched
+        assert {k: after[k] for k in after if k not in ("sessions", "updated")} == {
+            k: before[k] for k in before if k not in ("sessions", "updated")
+        }  # updated_by untouched; updated moves with every write
 
     def test_appends_a_missing_line_with_name_and_session_id(self, crewless):
         (crewless / "agents.json").write_text(
@@ -2712,8 +2712,8 @@ class TestBlocked:
             },
         }
         assert after["sessions"][:2] == before["sessions"]  # no other line touched
-        assert {k: after[k] for k in after if k != "sessions"} == {
-            k: before[k] for k in before if k != "sessions"
+        assert {k: after[k] for k in after if k not in ("sessions", "updated")} == {
+            k: before[k] for k in before if k not in ("sessions", "updated")
         }
 
     def test_an_existing_line_gains_only_the_wait_fields(self, crewed):
@@ -3205,3 +3205,37 @@ class TestSessionStamp:
         agents(crewed, {**BLOCKED_ROW, "name": "other", "sessionId": "sid-o"})
         assert go(crewed, "blocked", "other", "--kind", "permission") == 0
         assert line_of(crewed, "other")["updated_at"] == "2026-11-03T10:00Z"
+
+
+def test_every_write_stamps_the_boards_updated(tmp_path):
+    """board.ts lapses an Update mark and ages the header on `updated`; board.py must move it."""
+    path = tmp_path / "board.json"
+    path.write_text(json.dumps({"updated": "2000-01-01T00:00:00+00:00", "updated_by": "Lea"}))
+    board.StateDir(path).write_board(lambda b: b.setdefault("questions", []))
+    data = json.loads(path.read_text())
+    assert data["updated"] > "2000-01-01" and data["updated"][:4] >= "2026"
+    assert data["updated_by"] == "Lea"
+
+
+def test_a_transition_row_is_built_and_appended_under_the_board_lock(tmp_path):
+    """Review 09.11.: `from` is read from the log under the same lock that appends the row."""
+    import fcntl  # noqa: PLC0415
+
+    state = board.StateDir(tmp_path / "board.json")
+    held = []
+
+    def build(last):
+        fd = os.open(str(state.lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            held.append(False)
+        except BlockingIOError:
+            held.append(True)
+        finally:
+            os.close(fd)
+        return {"key": "AC-1", "from": last.get("to") if last else None, "to": "selected"}
+
+    state.record_transition("AC-1", build)
+    row = state.record_transition("AC-1", build)
+    assert held == [True, True]
+    assert row["from"] == "selected"

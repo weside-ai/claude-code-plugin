@@ -30,6 +30,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import claude_home  # noqa: E402
 import crew as crewlib  # noqa: E402
 import worker_launch  # noqa: E402
 
@@ -59,7 +60,7 @@ def coordinator(start: str | Path | None) -> tuple[Path, dict[str, Any], str, di
 
 def projects_dir(env: Any = None) -> Path:
     env = os.environ if env is None else env
-    return Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+    return claude_home.config_dir(env) / "projects"
 
 
 def project_slug(cwd: Path) -> str:

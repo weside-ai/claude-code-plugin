@@ -2,7 +2,8 @@
 
 Events: SubagentStart/SubagentStop (timing), InstructionsLoaded (which rule file loaded and why),
 PreToolUse on Skill and UserPromptExpansion (which skill ran, by Claude or typed by the user).
-Records names only, never skill arguments or prompts. Silent; never blocks (always exit 0)."""
+Records names only, never skill arguments or prompts. Silent; never blocks (always exit 0).
+A session's file ages out after 30 days (`scripts/state_prune.py`, at most one sweep a day)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,9 @@ import re
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import state_prune
 
 AGENT = ("agent_id", "agent_type")
 FIELDS = {
@@ -46,6 +50,7 @@ def record(payload: dict, home: Path) -> Path | None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")
+    state_prune.prune(out.parent, "*.jsonl")  # a session's file ages out after 30 days
     return out
 
 
