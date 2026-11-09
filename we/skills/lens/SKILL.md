@@ -26,7 +26,7 @@ Scratch files go to the session's scratchpad directory (`$S`).
 Run `LV plan ready <KEY>` (`--plan <path>` for a plan outside `docs/plans/<KEY>-story.md`; the panel stays
 bound to that file) or `LV plan t2 <PR>`. It writes a fresh verdict file bound to today's plan blob or
 PR head and prints the dispatch entries as JSON (`id`, `lens`, `agent`, `questions`, `registry`, and `plan`
-plus `plan_blob`, or `pr` plus `head`). Exit 1 (no plan file, head unknown) or 2 (crew file, verdict
+plus `plan_blob`, or `pr` plus `head`). Exit 1 (no plan file here nor on `origin/main`, the Ready gate refuses the plan, head unknown) or 2 (crew file, verdict
 directory): relay the line and stop.
 
 An entry whose `agent` is not one this plugin ships (`we:lens-product`, `we:lens-architecture`,
