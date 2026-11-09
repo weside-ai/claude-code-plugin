@@ -26,6 +26,9 @@ hook's `sessionTitle` does not rename a new session's row in `claude agents` (Cl
 login, which follows the account switcher like a plain `claude`. `--pin` holds the session on one
 account instead: it starts `$WCLAUDE_PIN` (one command that takes claude's arguments, e.g. a
 claude-swap profile; unset, `--pin` is refused). A pinned session runs in its own `CLAUDE_CONFIG_DIR`.
+A crew with `launch.allow_bypass: true` gets `--allow-dangerously-skip-permissions` on every start
+without a pin and on both `/we:pin` sides: the start mode stays `permissions.defaultMode`, bypass is
+one Shift+Tab away.
 `/we:pin` shows which account bills and switches sides by restarting with `--resume`; a live session
 cannot switch, because the profile's credential belongs to the switcher (a link to the global login
 lets the switcher write through it, so the profile stays a plain file).
