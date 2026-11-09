@@ -43,6 +43,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -178,7 +179,8 @@ def _crew_template(top: Path) -> str | None:
     try:
         _path, crew = crew_mod.find_and_load(top)
     except crew_mod.CrewError as exc:
-        raise LaunchError(f"crew: {exc}") from exc
+        print(f"worker_launch: crew unreadable ({exc}); {CONFIG_KEY} decides", file=sys.stderr)
+        return None
     value = ((crew or {}).get("launch") or {}).get("worker")
     return value if isinstance(value, str) and value.strip() else None
 
@@ -329,7 +331,8 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     """The template's first word when it is a launcher with its own `stop` verb, else None.
 
     Only `we-worker` (this plugin's launcher, `scripts/we-worker`) is known to carry
-    `status|stop|logs|waiting|checkpoint`; any other launcher is stopped with `claude stop`.
+    `status|stop|logs|waiting`; any other launcher, or a `we-worker` not on `PATH`, is stopped
+    with `claude stop`.
     """
     try:
         template = backend(repo or Path.cwd())
@@ -338,7 +341,9 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     if template == SUBAGENT:
         return None
     first = shlex.split(template)[0]
-    return first if Path(first).name == "we-worker" else None
+    if Path(first).name != "we-worker" or shutil.which(first) is None:
+        return None  # not ours, or not on this host: `claude stop` does it
+    return first
 
 
 def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> None:

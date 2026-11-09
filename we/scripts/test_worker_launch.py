@@ -343,3 +343,18 @@ def test_stop_goes_through_the_we_worker_stop_verb(env, tmp_path):
     argvs = [c["argv"] for c in _calls(env)]
     assert ["we-worker", "stop", "bg1"] in argvs
     assert ["stop", "bg1"] not in argvs
+
+
+def test_a_broken_crew_leaves_the_config_in_charge(env, capsys):
+    env["configure"](TEMPLATE)
+    (env["wt"] / ".weside" / "crew.json").write_text('{"version": 7}')
+    assert wl.backend(env["wt"]) == TEMPLATE
+    assert "crew unreadable" in capsys.readouterr().err
+
+
+def test_stop_falls_back_to_claude_stop_when_we_worker_is_not_on_path(env):
+    env["configure"](TEMPLATE)
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    _crew(env, {"worker": "we-worker {name} --bg --agent {agent} {brief}"})
+    wl.stop("w1", env["wt"])
+    assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]

@@ -256,3 +256,11 @@ def test_stop_waits_until_the_row_is_gone(tmp_path):
     project, env = setup(tmp_path, rows)
     proc = run(project, env, "stop", "w")
     assert proc.returncode == 0 and "w (ab12) stopped" in proc.stdout
+
+
+@pytest.mark.parametrize(("name", "warns"), [("AC-12-impl", False), ("helper", True)])
+def test_without_a_crew_the_default_key_pattern_decides(tmp_path, name, warns):
+    project, env = setup(tmp_path, crew=None)
+    proc = run(project, env, name, "--bg", "go")
+    assert proc.returncode == 0
+    assert ("carries no story key ([A-Z]+-\\d+)" in proc.stderr) is warns
