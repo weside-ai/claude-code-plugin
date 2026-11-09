@@ -88,7 +88,7 @@ receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sam
 
 `agents.worker_launch` is a command template that starts each dev worker as a session of its own
 (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend), for a repo without a
-crew; `"subagent"` (shown above) is its default. A repo with a crew holds its template in the crew's
+crew; `"subagent"` (shown above) is its default. A repo with a crew gets one in the crew's
 `launch.worker` instead, written in step 4a (L0 §Sessions: build only in workers).
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
