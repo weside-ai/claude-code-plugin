@@ -58,8 +58,8 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
          `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then shows no Accept,
-         only the PR link to approve or merge. `--kind task` stamps `kind: task` (the pane offers
-         Taken / Done). `--source <command or link>` stamps where the ask's fact comes from (the
+         only the PR link to approve or merge. `--kind task` stamps `kind: task` (the pane labels
+         Accept as Taken when the task carries a recommendation). `--source <command or link>` stamps where the ask's fact comes from (the
          pane shows it). `--owner <member>` or `--component <name>` (the member whose `components`
          hold it) stamps `owner`: the deliverer carries the answer to that member's session too.
          An open question on the same key draws a warning naming its id; `--replace <QID>` takes
@@ -1145,14 +1145,19 @@ def _ask_extras(args, crew):
     return extras
 
 
-def _take_off(board, qid):
-    """Remove the open question `qid` from the queue for `ask --replace`; [] without one."""
+def _take_off(board, qid, key=None):
+    """Remove the open question `qid` (on `key`) from the queue for `ask --replace`; [] without
+    one. A question on another key is refused: a mistyped id never drops an unrelated question."""
     if not qid:
         return []
     queue = board.get("owner_queue") or []
     old = [q for q in queue if isinstance(q, dict) and q.get("id") == qid]
     if not old:
         raise BoardError(f"board.py ask: --replace {qid}: no open question with that id")
+    if key and old[0].get("key") != key:
+        raise BoardError(
+            f"board.py ask: --replace {qid}: that question is on {old[0].get('key')!r}, not {key!r}"
+        )
     board["owner_queue"] = [q for q in queue if q not in old]
     return [qid]
 
@@ -1320,7 +1325,7 @@ def cmd_ask(state, args, crew, now):
         for line in asker_lines(board):
             if _is_return_note(line.get("note")):
                 del line["note"]
-        replaced.extend(_take_off(board, args.replace))
+        replaced.extend(_take_off(board, args.replace, args.key))
         qid = state.next_id("Q", board)
         item = {"id": qid, **fields, "since": now.strftime("%Y-%m-%d"), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)
@@ -2674,14 +2679,14 @@ def parser():
         dest="ask_kind",
         choices=("question", "task"),
         default="question",
-        help="task: the pane offers Taken / Done instead of Accept / Deny",
+        help="task: the pane labels Accept as Taken",
     )
     q.add_argument("--source", metavar="CMD_OR_LINK", help="where the fact in the ask comes from")
     q.add_argument("--owner", metavar="MEMBER", help="the member who owns the subject")
     q.add_argument(
         "--component", metavar="NAME", help="owner: the member whose components hold it"
     )
-    q.add_argument("--replace", metavar="QID", help="replace this open question (same key)")
+    q.add_argument("--replace", metavar="QID", help="replace this open question on the same --key")
     q.set_defaults(run=cmd_ask)
     verbs.add_parser(
         "close-merged", help="drop merge-go questions whose PR merged or closed"

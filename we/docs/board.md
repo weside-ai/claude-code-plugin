@@ -400,7 +400,8 @@ write leaves no line.
 **`set` — the session's own line.** `board.py set now="<step>" state=<state> waiting_on=<role>`
 writes the line whose `name` is the caller's, as `claude agents --json` lists it for its
 `CLAUDE_CODE_SESSION_ID` (a missing line is appended with `name` and `session_id`; a session without
-a name is told to `/rename` first). Only `waiting_on`, `state` and `now` are settable; `state` takes
+a name is told to `/rename` first). Only `waiting_on`, `state`, `now`, `topic` (one line) and `keys` (comma-separated, each a match of
+`naming.key`; an empty value clears it) are settable; `state` takes
 the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--for <name>` writes
 another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
 `since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting

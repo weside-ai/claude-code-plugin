@@ -3266,3 +3266,15 @@ def test_replace_of_an_unknown_id_is_refused(crewless, capsys):
     answer_with(crewless, CLEAR)
     assert go(crewless, *ask_argv(), "--replace", "Q999999") == 1
     assert "--replace Q999999: no open question with that id" in capsys.readouterr().err
+
+
+def test_replace_of_a_question_on_another_key_is_refused(crewless, capsys):
+    """Claude Review on #201: a mistyped id never drops an unrelated question."""
+    answer_with(crewless, CLEAR)
+    assert go(crewless, *ask_argv()) == 0
+    first = capsys.readouterr().out.strip().split()[-1]
+    assert go(crewless, *ask_argv(**{"--key": "PROJ-13"}), "--replace", first) == 1
+    assert f"--replace {first}: that question is on 'PROJ-12', not 'PROJ-13'" in (
+        capsys.readouterr().err
+    )
+    assert first in [q["id"] for q in board_of(crewless)["owner_queue"]]

@@ -92,6 +92,13 @@ function home($: T$, on: TOn, o: Opts) {
       if (o.ledgerFails?.()) return RUN('', 1, 'deliveries.py: disk full')
       const [verb, path, ...rows] = e.argv.slice(3)
       expect(verb).toBe('append')
+      // the real deliveries.py refuses a role it does not know: keep the fake as strict
+      for (const r of rows) {
+        const role = (JSON.parse(r) as { role?: string }).role
+        if (role !== undefined && !['coordinator', 'asker', 'owner', 'route'].includes(role)) {
+          return RUN('', 1, `deliveries.py: role must be one of coordinator, asker, owner, route`)
+        }
+      }
       files.set(path!, `${files.get(path!) ?? ''}${rows.map(r => `${r}\n`).join('')}`)
       touch(path!)
       return RUN('')
