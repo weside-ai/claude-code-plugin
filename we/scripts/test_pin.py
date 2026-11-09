@@ -90,3 +90,48 @@ def test_off_refuses_a_profile_with_its_own_transcripts(tmp_path):
     proc = run(tmp_path, "off", profile=True, own_projects=True)
     assert proc.returncode == 1
     assert "--resume will not find" in proc.stderr
+
+
+FLAG = "--allow-dangerously-skip-permissions"
+
+
+def _bypass_crew(tmp_path, on=True):
+    (tmp_path / ".git").mkdir(exist_ok=True)
+    (tmp_path / ".weside").mkdir(exist_ok=True)
+    crew = {
+        "version": 2,
+        "roles": {"product": "po"},
+        "members": {"po": {"name": "Ada"}},
+        "launch": {"allow_bypass": on},
+    }
+    (tmp_path / ".weside" / "crew.json").write_text(json.dumps(crew))
+
+
+@pytest.mark.parametrize("mode,extra", [("off", {}), ("on", {"WCLAUDE_PIN": "/opt/pinned"})])
+def test_allow_bypass_reaches_the_successor_on_and_off(tmp_path, mode, extra):
+    _bypass_crew(tmp_path)
+    proc = run(tmp_path, mode, profile=mode == "off", **extra)
+    assert proc.returncode == 0, proc.stderr
+    assert f"--name Ada {FLAG} --resume sid-1" in proc.stdout
+
+
+def test_without_allow_bypass_the_successor_has_no_flag(tmp_path):
+    _bypass_crew(tmp_path, on=False)
+    proc = run(tmp_path, "off", profile=True)
+    assert FLAG not in proc.stdout
+
+
+@pytest.mark.parametrize(
+    "args,ok",
+    [
+        ("claude --bg", True),
+        ("/opt/local/bin/claude -c", True),
+        ("node /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js --resume x", True),
+        ("bun /opt/claude", True),
+        ("node server.js", False),
+        ("bash -c claude", False),
+    ],
+)
+def test_the_claude_process_is_found_also_under_node(args, ok):
+    proc = subprocess.run(["bash", str(SCRIPT), "--is-claude", args], check=False)
+    assert (proc.returncode == 0) is ok

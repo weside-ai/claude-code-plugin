@@ -12,12 +12,14 @@
 # Every session it starts is a master: WE_ROLE=master. Without --pin it runs on the same login as a
 # plain `claude` and follows your account switcher. WCLAUDE_PIN names one executable that takes
 # claude's arguments and holds the session on one account (e.g. a claude-swap profile); --pin
-# without it is refused.
+# without it is refused. A crew with launch.allow_bypass true gets --allow-dangerously-skip-permissions
+# on every start without a pin (--start included): the start mode stays permissions.defaultMode,
+# bypass is one Shift+Tab away; a pin command adds its own flags.
 # Portable to macOS bash 3.2: no mapfile, no empty-array expansion under `set -u`.
 set -euo pipefail
 
 usage() {
-  echo "usage: wclaude [--as <Name>] [--pin] [claude arguments...]" >&2
+  echo "usage: wclaude [--as <Name>] [--pin] [--start [--fresh]] [claude arguments...]" >&2
   exit 2
 }
 
@@ -195,6 +197,14 @@ if [[ $picked -eq 0 ]]; then
     fi
   else
     pick=$choice # a typed name works too
+  fi
+fi
+
+# launch.allow_bypass of the crew (crew.py launch); a pinned start leaves it to the pin command.
+if [[ $pin -eq 0 ]] && command -v python3 >/dev/null 2>&1; then
+  [[ -n "${resolver+x}" ]] || resolver=$(crew_script 2>/dev/null)
+  if [[ -n "$resolver" && "$(python3 "$resolver" launch allow_bypass 2>/dev/null || true)" == true ]]; then
+    set -- --allow-dangerously-skip-permissions "$@"
   fi
 fi
 

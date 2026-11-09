@@ -87,9 +87,9 @@ receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sam
 `${CLAUDE_PLUGIN_ROOT}/skills/merged/SKILL.md` § 5).
 
 `agents.worker_launch` is a command template that starts each dev worker as a session of its own
-(`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend). A repo with a crew
-gets one, written in step 4a (L0 §Sessions: build only in workers); `"subagent"` (shown above) is for
-a repo without a crew only.
+(`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend), for a repo without a
+crew; `"subagent"` (shown above) is its default. A repo with a crew gets one in the crew's
+`launch.worker` instead, written in step 4a (L0 §Sessions: build only in workers).
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
 block (stack, ticketing, goals, test discipline, verification, review gates, missing tools).
@@ -123,10 +123,13 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    `roles` (role key → member slug), `members`, and only the keys whose value differs from
    `crew.py`'s `DEFAULTS`; `weside_account: true` only when the MCP was connected. A goal file from
    question 1 → bind `files.goals` to its path, or the Ready gate's goal check stays off. Check it with
-   `crew.py validate --strict` (it names every key it refuses, an unknown one too). Set `agents.worker_launch` to a command template
-   that starts each worker as a session of its own (ask for the launcher; § Worker launch backend of
-   `references/worker-dispatch.md` lists the placeholders). A re-run shows the diff and asks before
-   replacing.
+   `crew.py validate --strict` (it names every key it refuses, an unknown one too). Propose
+   `launch.worker` with `{agent}`, so the worker's effort applies: `we-worker {name} --bg --agent {agent}
+   {brief}` (§ 5 installs `we-worker` next to `wclaude`; a user who declines it there gets this line
+   rewritten to `claude --bg -n {name} --agent {agent} {brief}`); the user corrects it (§ Worker launch backend of
+   `references/worker-dispatch.md` lists the placeholders). Ask once: "Should every start offer
+   bypass mode (Shift+Tab), while the start mode stays your `permissions.defaultMode`?" yes →
+   `launch.allow_bypass: true`. A re-run shows the diff and asks before replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
    creates them from `templates/companion-skill/SKILL.md`, never overwriting.
 5. A crew without `weside_account: true` → merge `"deniedMcpServers": [{"serverName":
@@ -157,7 +160,10 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/install_launcher.py --status`. `offer the launcher` → ask once,
   on yes `--apply` into `~/.local/bin/wclaude`. `launcher installed` with a `NOTE` that the copy differs →
   `--apply` refreshes it. `foreign wclaude` → keep the user's file and mention `--apply --force` (backed up,
-  `--revert` restores it). Relay a `NOTE` that `~/.local/bin` is not on PATH.
+  `--revert` restores it). Relay a `NOTE` that `~/.local/bin` is not on PATH. The same script installs the
+  worker launcher `we-worker`: a `NOTE` naming it (missing, differing or someone else's) → ask once, on yes
+  `--apply` (`--apply --force` for someone else's); declined while the crew's `launch.worker` starts with
+  `we-worker` → rewrite it to `claude --bg -n {name} --agent {agent} {brief}` (step 4a.3).
 - The statusline, the launcher and the council agents are the only user-scope files setup touches.
 
 ## 6. Instruction loop (optional, ask once)

@@ -354,3 +354,43 @@ def test_start_unpinned_resumes_the_last_session(tmp_path):
 def test_start_misuse_is_refused(tmp_path, args):
     proc, _ = run(tmp_path, args=args, crew=START_CREW)
     assert proc.returncode == 2
+
+
+# --- launch.allow_bypass: bypass selectable on every start without a pin ------------------------
+
+BYPASS_CREW = {**CREW, "launch": {"allow_bypass": True}}
+FLAG = "--allow-dangerously-skip-permissions"
+
+
+def test_allow_bypass_adds_the_flag_without_a_pin(tmp_path):
+    proc, result = run(tmp_path, args=["--as", "Ada"], crew=BYPASS_CREW)
+    assert proc.returncode == 0, proc.stderr
+    assert result["argv"] == ["--name", "Ada", FLAG]
+
+
+def test_allow_bypass_adds_the_flag_with_no_companion(tmp_path):
+    _, result = run(tmp_path, stdin="0\n", crew=BYPASS_CREW)
+    assert result["argv"] == [FLAG]
+
+
+def test_without_allow_bypass_no_flag(tmp_path):
+    _, result = run(tmp_path, args=["--as", "Ada"])
+    assert FLAG not in result["argv"]
+
+
+def test_a_pinned_start_leaves_the_flag_to_the_pin_command(tmp_path):
+    _write_wrapper(tmp_path)
+    _, result = run(tmp_path, args=["--pin", "--as", "Ada"], crew=BYPASS_CREW, launch="pinned")
+    assert FLAG not in result["argv"]
+
+
+def test_start_unpinned_with_allow_bypass_carries_the_flag(tmp_path):
+    crew = {**START_CREW, "members": {"lead": {"name": "Lea"}}, "launch": {"allow_bypass": True}}
+    proc, result = run(tmp_path, args=["--start", "--fresh"], crew=crew)
+    assert proc.returncode == 0, proc.stderr
+    assert FLAG in result["argv"] and result["argv"][-1] == "/we:start"
+
+
+def test_usage_names_start(tmp_path):
+    proc, _ = run(tmp_path, args=["--as"])
+    assert "--start" in proc.stderr

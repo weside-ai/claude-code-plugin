@@ -44,7 +44,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/accept.py queue
 ```
 
 One line per open walk: `<KEY> AC<n> <persona> · <screen> (rc <rc>)`. Start one acceptance worker
-per line through the crew's `launch.worker` with the agent `we:lens-acceptance`, the persona and the
+per line through the template `worker_launch.py backend` prints with the agent `we:lens-acceptance`, the persona and the
 screen. Its comment names what it observed and carries a `Not proven: <what>` line; then:
 
 ```bash

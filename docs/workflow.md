@@ -102,7 +102,7 @@ merges the base, pushes once, opens the story's PR (`/we:pr` does the same by ha
 `/we:ac-review` checks a branch against its acceptance criteria and the DoD on demand.
 
 The dispatch contract: [we/references/worker-dispatch.md](../we/references/worker-dispatch.md).
-With a crew, `.weside/config.json` sets `agents.worker_launch` to a command that starts each worker
+With a crew, its `launch.worker` is the command that starts each worker
 as a session of its own (§ *Worker launch backend* there); a subagent reads and reviews, never
 builds. Without a crew a worker may run as a subagent, which bills the Lead's account.
 

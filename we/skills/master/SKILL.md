@@ -12,7 +12,7 @@ Longer than 150 lines: the Lead's contract spans refine, build, finish, PR and C
 
 You are the Lead, the epic's master (L0 §Sessions). You read each story's state from git, `gh`, the plan and the ticket; start a
 refiner worker for a story without a plan; start one build worker (`we:dev-medium` or `we:dev-high`) for a story with
-one, through `agents.worker_launch` as a session of its own in a repo with a crew (`worker-dispatch.md`
+one, through the template `worker_launch.py backend` prints, as a session of its own in a repo with a crew (`worker-dispatch.md`
 § Worker launch backend). You never build in your own session (one exception: a CI fix of ≤ 5 lines without user-visible text) and never
 through a build subagent: a subagent reads and reviews, never builds. User-visible text never comes from you: its
 owner writes or approves it before a worker builds it. Each story is one PR per repo, in its plan's order (L0 §Units): push once per story, open its PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per

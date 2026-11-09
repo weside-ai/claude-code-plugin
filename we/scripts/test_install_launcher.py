@@ -1,5 +1,7 @@
 """install_launcher.py: install, refresh, foreign-file refusal, backup and revert."""
 
+import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -72,6 +74,31 @@ class LauncherInstallerTest(unittest.TestCase):
         self.assertTrue(ins.on_path())
         os.environ["PATH"] = "/usr/bin"
         self.assertFalse(ins.on_path())
+
+    def test_apply_installs_we_worker_next_to_wclaude_and_revert_removes_it(self):
+        worker = ins.tools()[1]
+        self.assertIn(ins.WORKER_MARKER, ins.WORKER_SOURCE.read_bytes())
+        self.assertEqual(ins.cmd_apply(force=False), 0)
+        self.assertEqual(worker[0], ins.BIN_DIR / "we-worker")
+        self.assertEqual(worker[0].read_bytes(), ins.WORKER_SOURCE.read_bytes())
+        self.assertTrue(os.access(worker[0], os.X_OK))
+        self.assertEqual(ins.cmd_revert(), 0)
+        self.assertFalse(worker[0].exists())
+
+    def test_a_foreign_we_worker_is_refused_and_wclaude_still_installs(self):
+        ins.BIN_DIR.mkdir(parents=True)
+        (ins.BIN_DIR / "we-worker").write_text("#!/bin/sh\necho host\n")
+        self.assertEqual(ins.cmd_apply(force=False), 1)
+        self.assertEqual(ins.state(), "current")
+        self.assertEqual((ins.BIN_DIR / "we-worker").read_text(), "#!/bin/sh\necho host\n")
+
+    def test_status_names_a_missing_we_worker_even_when_wclaude_is_current(self):
+        ins.copy_script()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ins.cmd_status()
+        self.assertIn("VERDICT: " + ins.VERDICT_ACTIVE, out.getvalue())
+        self.assertIn("NOTE: " + ins.WORKER_NOTE_APPLY + " (missing)", out.getvalue())
 
 
 if __name__ == "__main__":
