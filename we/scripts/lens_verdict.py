@@ -146,6 +146,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew as crew_mod  # noqa: E402
+import ready_gate  # noqa: E402
 import risk_runner  # noqa: E402
 
 VERSION = 1
@@ -196,6 +197,15 @@ def _git(root: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
+def _git_ok(root: Path, *args: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, check=False
+        ).returncode
+        == 0
+    )
+
+
 def repo_root(start: Path) -> Path:
     return Path(_git(start, "rev-parse", "--show-toplevel"))
 
@@ -229,14 +239,48 @@ def plan_rel(root: Path, given: str) -> str:
         raise UnusableError(f"--plan {given}: not inside the repo {root}") from None
 
 
+PLAN_FALLBACK_REF = "origin/main"
+
+
+def _origin_blob(root: Path, rel: str) -> str | None:
+    """The blob of ``rel`` on ``PLAN_FALLBACK_REF``, or None: a checkout behind main (the plan PR
+    just merged) still binds the plan main carries."""
+    out = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", "-q", f"{PLAN_FALLBACK_REF}:{rel}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    blob = out.stdout.strip()
+    return blob if out.returncode == 0 and re.fullmatch(r"[0-9a-f]{40,64}", blob) else None
+
+
+def plan_source(root: Path, subject: str, rel: str | None, blob: str) -> tuple[Path, str]:
+    """(the file a lens reads, the ref it came from): the plan in this checkout, else the bound
+    blob written beside the verdict files (``<we-lens>/plans/<blob>.md``) from ``origin/main``."""
+    path = plan_path(root, subject, rel)
+    if path.is_file():
+        return path, "worktree"
+    copy = verdict_dir(root) / "plans" / f"{blob}.md"
+    if not copy.is_file():
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text(_git(root, "cat-file", "blob", blob) + "\n", encoding="utf-8")
+    return copy, PLAN_FALLBACK_REF
+
+
 def current_binding(
     root: Path, kind: str, subject: str, plan: str | None = None
 ) -> dict[str, str]:
     if kind == "ready":
         path = plan_path(root, subject, plan)
-        if not path.is_file():
-            raise RefusedError(f"plan {path.relative_to(root)}: missing")
-        return {"plan_blob": _git(root, "hash-object", str(path))}
+        if path.is_file():
+            return {"plan_blob": _git(root, "hash-object", str(path))}
+        blob = _origin_blob(root, path.relative_to(root).as_posix())
+        if blob is None:
+            raise RefusedError(
+                f"plan {path.relative_to(root)}: missing (here and on {PLAN_FALLBACK_REF})"
+            )
+        return {"plan_blob": blob}
     gh = shutil.which("gh")
     out = (
         subprocess.run(
@@ -340,11 +384,27 @@ def _finding(raw: Any, where: str, kind: str, stored: bool) -> dict[str, Any]:
         "where": _text(f.get("where"), f"{where}.where"),
         "question": _text(f.get("question"), f"{where}.question", required=kind == "ready"),
         "red_arm": _arm(
-            f.get("red_arm"), f"{where}.red_arm", ARM_KEYS if stored else ANSWER_ARM_KEYS
+            None if _empty_arm(f.get("red_arm")) else f.get("red_arm"),
+            f"{where}.red_arm",
+            ARM_KEYS if stored else ANSWER_ARM_KEYS,
         ),
     }
     out["status"] = _status(out, where, kind, stored)
     return out
+
+
+def _empty_arm(value: Any) -> bool:
+    """`""`, `{}` or an arm with a blank command and no exit: no arm at all. A lens that writes
+    one beside a NOTE or a Ready finding (which need none) is not refused for it; a T2 BLOCKING
+    or WARNING still needs a real one."""
+    if value in ("", {}):
+        return True
+    return (
+        isinstance(value, dict)
+        and set(value) <= {"command", "exit"}
+        and not str(value.get("command") or "").strip()
+        and value.get("exit") is None
+    )
 
 
 def _status(f: dict[str, Any], where: str, kind: str, stored: bool) -> str:
@@ -455,6 +515,8 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     except crew_mod.CrewError as exc:
         raise UnusableError(f"crew: {exc}") from exc
     bound = current_binding(root, kind, subject, rel)
+    if kind == "ready":
+        _ready_gate_first(root, subject, rel, bound["plan_blob"])
     path = verdict_dir(root) / f"{vid}.json"
     doc: dict[str, Any] = {
         "version": VERSION,
@@ -481,13 +543,36 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
             "registry": lens["registry"],
         }
         if kind == "ready":
-            entry["plan"] = str(plan_path(root, subject, rel))
+            source, ref = plan_source(root, subject, rel, bound["plan_blob"])
+            entry["plan"] = str(source)
             entry["plan_blob"] = bound["plan_blob"]
+            entry["ref"] = ref  # read the epic plan and every named file at this ref
         else:
             entry["pr"] = int(subject)
             entry["head"] = bound["head"]
         entries.append(entry)
     return {"id": vid, "kind": kind, "bound_to": bound, "entries": entries}
+
+
+def _ready_gate_first(root: Path, subject: str, rel: str | None, blob: str) -> None:
+    """The Ready gate's checks (``ready_gate.story_failures``) before any lens runs: a plan the
+    gate refuses would only send the lenses after the same gaps. RefusedError names them."""
+    source, _ref = plan_source(root, subject, rel, blob)
+    plan = plan_path(root, subject, rel)
+    if source != plan:  # the gate finds the crew from the plan's own folder
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            failures, _warnings = ready_gate.story_failures(plan)
+        finally:
+            plan.unlink()
+    else:
+        failures, _warnings = ready_gate.story_failures(plan)
+    if failures:
+        lines = "\n".join(f"  {f}" for f in failures)
+        raise RefusedError(
+            f"plan {plan.relative_to(root)}: the Ready gate refuses it, no lens runs:\n{lines}"
+        )
 
 
 def next_round(path: Path, bound: dict[str, str]) -> tuple[int, str | None]:
@@ -557,7 +642,16 @@ def write(
     doc = read_file(path)
     if lens not in doc["expected"]:
         raise RefusedError(f"lens {lens}: not expected in panel {vid}")
-    if current_binding(root, kind, subject, doc.get("plan")) != doc["bound_to"]:
+    try:
+        now_bound = current_binding(root, kind, subject, doc.get("plan"))
+    except RefusedError:
+        # the plan's worktree may be gone by the time a lens answers: the blob the panel is
+        # bound to is still in the object store, and `check` re-hashes the plan anyway
+        blob = doc["bound_to"].get("plan_blob")
+        if kind != "ready" or not blob or _git_ok(root, "cat-file", "-e", blob) is False:
+            raise
+        now_bound = doc["bound_to"]
+    if now_bound != doc["bound_to"]:
         raise RefusedError(f"panel {vid}: stale (start a fresh panel with plan)")
     if failed is not None:
         findings: list[dict[str, Any]] = []
