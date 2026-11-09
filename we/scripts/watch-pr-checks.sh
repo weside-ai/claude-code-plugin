@@ -24,8 +24,9 @@
 #   no workflow ran on <sha> after <n>s                     exit 10 (no run and no check: a path
 #       filter skipped every workflow, or Actions is down; WATCH_NO_RUN_TIMEOUT, default 600)
 #   final <sha>: review quota · auto-merge stays on — quota: rerun after the next verdict   exit 11
-#       (a failed review check, or the Codex comment's VERDICT:ERROR, whose reason names a quota or
-#       usage limit: the review did not judge, so nothing is disarmed)
+#       (a failed review check whose own error annotation (`##[error]`, `::error::`) names a quota or
+#       usage limit, or the Codex comment's VERDICT:ERROR naming one: the review did not judge, so
+#       nothing is disarmed; the step's echoed script and the log's other lines never count)
 #   final <sha>: conflicts with the base — merge it          exit 12 (mergeable CONFLICTING: no check
 #       result can make it mergeable, so the watcher does not wait for them)
 # A failed job whose failed-step log names a GitHub/registry 5xx or a network timeout
@@ -37,9 +38,9 @@
 # On exit 6, and on exit 1 with a failed review check, an armed PR is disarmed here
 # (`gh pr merge --disable-auto`), so it cannot merge before its fix round; a failed disarm says
 # `auto-merge on (disarm failed: <error>) — run gh pr merge <PR> --disable-auto`.
-# <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); a conflict with the base
-# reads `DIRTY/CONFLICTING — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind
-# the base: merge it`.
+# <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); `DIRTY/…` reads
+# `DIRTY/… — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind the base: merge
+# it` (`mergeable` CONFLICTING ends the watch with exit 12 first).
 # Final means: the head's checks are non-empty, none pending, no workflow run for the head SHA
 # queued or in progress (a rerun counts as pending until it completes), and the whole set
 # unchanged for WATCH_QUIET seconds and at least two reads. Checks register seconds after a
@@ -88,7 +89,8 @@ CODEX_READS=${WATCH_CODEX_READS:-10}
 REVIEW_RX=${WATCH_REVIEW_RX:-review}
 NO_RUN_TIMEOUT=${WATCH_NO_RUN_TIMEOUT:-600}
 # A failed job is infra, not code, when its failed-step log says so (case-insensitive).
-INFRA_RX=${WATCH_INFRA_RX:-'(HTTP|status|error)[^0-9]{0,12}50[0-9]|(502|503|504) (Bad Gateway|Service Unavailable|Gateway Time-?out)|Internal Server Error|ETIMEDOUT|ECONNRESET|i/o timeout|TLS handshake timeout|context deadline exceeded|Connection timed out|The operation was canceled'}
+# Anchored on runner and registry phrasing, so a failing assertion on a 500 is no infra.
+INFRA_RX=${WATCH_INFRA_RX:-'HTTP/[0-9.]+ 50[0-9]|(returned|received|got|responded with)( status)?( code)? 50[0-9]|HTTP (error )?50[0-9]|50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)|ETIMEDOUT|ECONNRESET|i/o timeout|TLS handshake timeout|context deadline exceeded|Connection timed out'}
 QUOTA_RX=${WATCH_QUOTA_RX:-'quota|usage limit|rate[ -]limit(ed)?|credit balance|limit (reached|exceeded)|hit your .*limit'}
 LIFETIME=${WATCH_MAX_LIFETIME:-$((MAX_HOURS * 3600))}
 BORN=$(date +%s)
@@ -154,7 +156,7 @@ merge_note() {
   local mss mergeable note
   mss=$(field 1); mergeable=$(field 2)
   note="merge: $mss/$mergeable"
-  if [ "$mss" = DIRTY ] || [ "$mergeable" = CONFLICTING ]; then
+  if [ "$mss" = DIRTY ]; then
     note="$note — conflicts with the base: merge it"
   elif [ "$mss" = BEHIND ]; then
     note="$note — behind the base: merge it"
@@ -166,7 +168,6 @@ merge_stuck() {  # green, but GitHub will not merge it by itself
   # BLOCKED while green and armed is normal for seconds before the merge; only after BLOCKED_GRACE
   # of a stable green does it mean a review or rule waits.
   [ "$(field 4)" = off ] || [ "$(field 1)" = DIRTY ] || [ "$(field 1)" = BEHIND ] \
-    || [ "$(field 2)" = CONFLICTING ] \
     || { [ "$(field 1)" = BLOCKED ] && [ $(($(date +%s) - STABLE_SINCE)) -ge "$BLOCKED_GRACE" ]; }
 }
 disarm() {  # prints the auto-merge note after disarming an armed PR; never exits
@@ -178,11 +179,16 @@ disarm() {  # prints the auto-merge note after disarming an armed PR; never exit
     echo "auto-merge on (disarm failed: $(tail -n 1 <<<"$out")) — run \`gh pr merge $PR --disable-auto\`"
   fi
 }
-failed_log() {  # failed_log <run id>: the last lines of the run's failed steps, empty on any error
+failed_log() {  # failed_log <run id>: the last lines the failed steps printed, empty on any error
+  # GitHub's log echoes each step's `run:` script first (`##[group]Run …`, then the script lines in
+  # ANSI cyan): that echo is the workflow's text, not what happened, so it is dropped.
   local out
   [ -n "$1" ] || return 0
   out=$(gh run view "$1" -R "$REPO" --log-failed 2>/dev/null) || return 0
-  tail -n 200 <<<"$out"
+  grep -v -e '##\[group\]' -e $'\x1b\\[36;1m' <<<"$out" | tail -n 200
+}
+error_lines() {  # error_lines <run id>: only the failure's own annotations (`##[error]`, `::error::`)
+  failed_log "$1" | grep -E '##\[error\]|::error::'
 }
 predates() {  # " · run predates <sha>" when the head lacks the default branch's newest commit
   local default line behind newest
@@ -203,7 +209,7 @@ red_exit() {  # red_exit <failed names>: the red final line; a failed review che
     # A review that failed on its quota judged nothing: no disarm, its own exit.
     while IFS=$'\t' read -r name run; do
       grep -qiE "$REVIEW_RX" <<<"$name" || continue
-      reason=$(failed_log "$run" | grep -oiE "$QUOTA_RX" | head -n 1)
+      reason=$(error_lines "$run" | grep -oiE "$QUOTA_RX" | head -n 1)
       [ -n "$reason" ] && quota_exit "$name: $reason"
     done <<<"$FAILED_RUNS"
     [ "$(field 4)" = on ] && note=" · $(disarm)"

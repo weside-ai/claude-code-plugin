@@ -487,7 +487,7 @@ def test_a_job_that_failed_on_a_5xx_is_rerun_once_and_counts_as_pending(tmp_path
         env_extra={"GH_LOG_FAILED": "Error: HTTP 503 Service Unavailable from ghcr.io"},
     )
     assert code == 0, out
-    assert out[0] == f'infra: {lint} failed on "Error: HTTP 503" — rerun once (run 41)'
+    assert out[0] == f'infra: {lint} failed on "HTTP 503" — rerun once (run 41)'
     assert out[-1] == f"final {SHA}: green · {MERGE}"
     calls = (tmp_path / "calls.log").read_text()
     assert calls.count("run rerun 41") == 1
@@ -539,7 +539,11 @@ def test_no_run_and_no_check_ends_with_its_own_exit(tmp_path):
 def test_a_review_that_failed_on_its_quota_keeps_auto_merge_and_exits_11(tmp_path):
     d = {**_only_failing(SONNET_FAIL), "autoMergeRequest": {"enabledAt": "x"}}
     code, out = run(
-        tmp_path, [d], env_extra={"GH_LOG_FAILED": "Error: Claude usage limit reached, resets 5am"}
+        tmp_path,
+        [d],
+        env_extra={
+            "GH_LOG_FAILED": "##[error]Claude review failed: usage limit reached, resets 5am"
+        },
     )
     assert code == 11
     assert out[-1] == (
@@ -568,3 +572,23 @@ def test_a_conflict_ends_the_watch_before_the_checks(tmp_path):
     d = {**_pending(_green()), "mergeStateStatus": "DIRTY", "mergeable": "CONFLICTING"}
     code, out = run(tmp_path, [d])
     assert (code, out) == (12, [f"final {SHA}: conflicts with the base — merge it"])
+
+
+def test_a_review_verdict_whose_echoed_script_names_quota_is_red_not_quota(tmp_path):
+    """Claude Review on #198: the step's echoed `run:` script mentions `quota`; only the error
+    annotation decides."""
+    d = {**_only_failing(SONNET_FAIL), "autoMergeRequest": {"enabledAt": "x"}}
+    log = (
+        'Gate\t##[group]Run case "$CAUSE" in\n'
+        "Gate\t\x1b[36;1m# Name the cause (auth · quota · refused · other)\x1b[0m\n"
+        "Gate\t##[error]Claude review verdict BLOCKING — fix the findings, then push again."
+    )
+    code, out = run(tmp_path, [d], env_extra={"GH_LOG_FAILED": log})
+    assert code == 1 and "auto-merge disarmed" in out[-1]
+
+
+def test_a_failing_assertion_on_a_500_is_no_infra(tmp_path):
+    lint = "Python Lint & Format"
+    log = "E   assert resp.status_code == 500\nerror: status 500 in test_api"
+    code, out = run(tmp_path, [_only_failing(lint)], env_extra={"GH_LOG_FAILED": log})
+    assert code == 1 and not any(line.startswith("infra:") for line in out)
