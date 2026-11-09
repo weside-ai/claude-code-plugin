@@ -25,12 +25,12 @@ Start Claude Code as one Companion: `WESIDE_COMPANION=<Name> claude`. The sessio
 and catches up on what `<Name>` lived since yesterday. Every weside MCP request of the session acts as
 `<Name>`, so two sessions as two Companions run side by side without steering each other; switching
 companions inside a pinned session is refused. The statusline shows the bound Companion. Workers the
-session starts are not the Companion: `/we:sideload` clears the pin for them. At milestones the session
+session starts are not the Companion: `we-worker` clears the pin for them. At milestones the session
 writes a `worklog` memory the Companion reads on its other surfaces. A role skill named `weside-<name>` (lower case; the
 prefix comes from the crew) is the Companion's working knowledge: in `.claude/skills/` of the repo or of your home a pinned
 session is asked to invoke it right after materializing, in the member's `workplace` repo from the crew it is asked to read it,
 so no link into `~/.claude/skills/` is needed. A skill `/we:setup` wrote as a stub is filled by the Companion at its first
-start, which then tells the Orchestrator (for HR). In a repo whose crew has no weside account (`weside_account` unset) a
+start, which then tells the coordinator (for HR). In a repo whose crew has no weside account (`weside_account` unset) a
 pinned session gets its title and that skill line only, no `/we:materialize`. Such a repo keeps the
 weside MCP off through its tracked `.claude/settings.json` (`"deniedMcpServers": [{"serverName":
 "plugin:we:weside-mcp"}]`, written by `/we:setup`); a session start warns while the entry is missing. While the session runs, a small poller
@@ -56,5 +56,20 @@ follows your account switcher. `wclaude --pin` holds it on one account: it start
 instead of `claude`, a wrapper of your own with the same arguments (for example one that runs claude
 in a fixed claude-swap profile). `/we:pin status` names the account that bills the session;
 `/we:pin on|off` restarts it on the other side with `--resume`.
+
+`wclaude --start` starts the crew's main companion (`roles.coordinator`) in its `workplace`, pinned
+when its member sets `"pin": true`, resuming its newest session unless `--fresh`; it refuses while
+that session runs and opens with `/we:start` (the check of companion, role and pin, then the crew's
+restore after a crash, then `/board`).
+
+**Permission mode.** A session starts in your `permissions.defaultMode`. A crew with
+`launch.allow_bypass: true` adds `--allow-dangerously-skip-permissions` to every start through
+`wclaude` (without a pin), `/we:pin` and `we-worker`, so bypass is one Shift+Tab away; it never
+starts in bypass by itself.
+
+**Workers.** `we-worker <name> [--bg] "<brief>"` starts a worker session on the global login:
+every `CLAUDE*` variable and `WESIDE_COMPANION` of the caller dropped, `WE_ROLE=worker` set; in a
+tmux window by default, as a background session with `--bg` (steered with `SendMessage`). `we-worker
+status`, `stop`, `logs` and `waiting` show and steer them. `/we:setup` installs it next to `wclaude`.
 
 Settings: [getting-started.md](getting-started.md#plugin-settings).
