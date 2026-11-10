@@ -80,7 +80,9 @@ prune    drops what is handled from board.json (docs/board.md § Pruning) and pr
          a question or item an Accept or Deny closed once nothing is owed to its asker any more
          (the deliverer finds the asker only on the board): every answer line on it is older than
          the ledger's epoch, written in the asker's own session, or the asker's row in
-         board-deliveries.jsonl is `delivered: true` (refused: the route row is); a news item the
+         board-deliveries.jsonl is `delivered: true` (refused: the route row is); a closed one
+         also once a `duplicate-answer` line names it (`closed_by`) or PRUNE_AFTER_H after its
+         close, so no answered question stays; a `withdrawn` or `superseded` one; a news item the
          owner marked read; a `returned` item or a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
          items (`E<n>`, `E<n>a`) stay for `escalation settle`. Each drop appends one `pruned` line
          to board-questions.jsonl. Every write of board.json runs the same pass, so leftovers go
@@ -252,6 +254,8 @@ UNCHANGED = object()  # a `write_board` mutation returning this leaves board.jso
 # their ts.
 DELIVERED_KINDS = KINDS  # the answer kinds the deliverer carries; `read` is not one
 PRUNE_AFTER_H = 24
+# board-questions.jsonl outcomes that take a question off the board for good
+GONE = ("withdrawn", "superseded")
 EXPIRING_NEWS_KINDS = ("returned",)
 BUNDLE_ID = re.compile(r"B-\d{4}-\d{2}-\d{2}(?:-\d+)?")
 ESCALATION_ID = re.compile(r"E\d+a?")  # owned by `escalation route|settle`, never pruned
@@ -539,6 +543,9 @@ def prune(board, state, now):
             closing[qid] = a
         last[qid] = a.get("answer")
     epoch, delivered = _ledger(state)
+    duplicated = {
+        q.get("id") for q in state.questions() if q.get("closed_by") or q.get("outcome") in GONE
+    }
 
     def asker_carried(item, line):
         """Nothing owed to the asker for this answer line any more (deliver.ts `pendingLines`)."""
@@ -549,15 +556,27 @@ def prune(board, state, now):
         key = (line.get("id"), line.get("ts"))
         return (*key, "asker") in delivered or (*key, "route") in delivered
 
+    def answered(item, qid, close):
+        """A closed question goes once its asker is owed nothing, a duplicate answer names it,
+        or PRUNE_AFTER_H after its close."""
+        closed_at = _parse_ts(close.get("ts"))
+        if (
+            qid in duplicated
+            or (closed_at and now - closed_at >= after)
+            or all(asker_carried(item, line) for line in carried.get(qid, []))
+        ):
+            return {"reason": "answered", "answer": close["answer"]}
+        return None
+
     def verdict(field, item):
         qid = item.get("id")
         if not isinstance(qid, str) or ESCALATION_ID.fullmatch(qid):
             return None
         close = closing.get(qid)
+        if qid in duplicated and close is None:
+            return {"reason": "withdrawn"}
         if close:
-            if all(asker_carried(item, line) for line in carried.get(qid, [])):
-                return {"reason": "answered", "answer": close["answer"]}
-            return None
+            return answered(item, qid, close)
         if field == "news" and last.get(qid) == "read":
             return {"reason": "read"}
         expiring = item.get("kind") in EXPIRING_NEWS_KINDS or BUNDLE_ID.fullmatch(qid)
@@ -1330,13 +1349,45 @@ def _remote_target(args, crew):
     return to, every[to]
 
 
-def cmd_ask(state, args, crew, now):
+def _on_hold_refusal(state, args, crew):
+    """A merge-go in a crew with humans reads the ticket's status first: a story another machine
+    put On Hold gets no merge question. `CARRY` while the session has to read it."""
+    if args.cause != "merge-go" or not crew_mod.several_humans(crew):
+        return None
+    if _key_failure(crew, (args.key or "").strip(), "ask"):
+        return None  # a plan slug has no ticket yet
+    ticket = _reads(args, crew).ticket(args.key.strip())
+    if ticket is None:
+        return CARRY
+    if state_of_status(crew, ticket.get("status")) == "on_hold":
+        return (
+            f"board.py ask: refused: {args.key} is {ticket.get('status')} on the ticket; a story "
+            "on hold gets no merge-go (ask its owner why first)"
+        )
+    return None
+
+
+def _ask_gate(state, args, crew):
+    """The field check, the on-hold read of a merge-go and the PR check, before any write:
+    the PR url, or `CARRY` while the session has to read the ticket; a refusal raises."""
     failures = _ask_failures(args, crew)
     if failures:
         raise BoardError("\n".join(failures))
+    held = _on_hold_refusal(state, args, crew)
+    if held is CARRY:
+        return CARRY
+    if held:
+        raise BoardError(held)
     pr_url, refusal = _pr_failure(args)
     if refusal:
         raise BoardError(refusal)
+    return pr_url
+
+
+def cmd_ask(state, args, crew, now):
+    pr_url = _ask_gate(state, args, crew)
+    if pr_url is CARRY:
+        return _carry_reads("ask", [], [args.key.strip()])
 
     fields = {f: getattr(args, f).strip() for f in ASK_FIELDS}
     if args.urgent:
@@ -1497,17 +1548,34 @@ def cmd_signals(state, args, crew, now):
             tickets[q["key"]] = found
     if searches or keys:
         return _carry_reads("signals", searches, sorted(set(keys)))
-    seen = {row.get("id") for row in _read_jsonl(state.signals_path)}
+    rows = _read_jsonl(state.signals_path)
+    seen = {row.get("id") for row in rows}
     every = crew_mod.humans(crew)
     lines = []
+
+    def is_new(sig, hit):
+        """Once per key, state and change time; a hit without one counts again only after a
+        whole `jql_window` past the last signal of its key and state (a later selection)."""
+        stem = f"{hit['key']}:{sig['state']}:"
+        if hit.get("changed"):
+            return stem + str(hit["changed"]), stem + str(hit["changed"]) not in seen
+        window = _window(sig["jql_window"])
+        recent = [
+            _parse_ts(r.get("ts"))
+            for r in rows
+            if str(r.get("id") or "").startswith(stem) and r.get("kind") == "signal"
+        ]
+        fresh = any(ts and now - ts < window for ts in recent)
+        return f"{stem}@{_iso(now)}", not fresh and f"{stem}@{_iso(now)}" not in seen
 
     def mutate(board):
         added = []
         for sig, hit in hits:
-            sid = f"{hit['key']}:{sig['state']}:{hit.get('changed') or ''}"
-            if sid in seen:
+            sid, new = is_new(sig, hit)
+            if not new:
                 continue
             seen.add(sid)
+            rows.append({"id": sid, "kind": "signal", "ts": _iso(now)})
             status = (crew.get("board") or {}).get("states", {}).get(sig["state"], sig["state"])
             item = {
                 "id": state.next_id("S", board),
@@ -1536,6 +1604,12 @@ def cmd_signals(state, args, crew, now):
     return 0
 
 
+def _window(text):
+    """A `jql_window` (`35m`, `4h`, `2d`) as a timedelta."""
+    unit = {"m": "minutes", "h": "hours", "d": "days"}[text[-1]]
+    return timedelta(**{unit: int(text[:-1])})
+
+
 def _read_back(state, q, ticket, every, seen, now):
     """The answer lines for one question sent to another human, each once (board-signals.jsonl)."""
     human = q["to"]
@@ -1547,9 +1621,9 @@ def _read_back(state, q, ticket, every, seen, now):
         if rid in seen:
             continue
         seen.add(rid)
-        _answer_from_ticket(state, q, reply["kind"], reply["quote"], human, now)
+        _answer_from_ticket(state, q, reply["kind"], reply["quote"], reply["by"], now)
         _append_jsonl(state.signals_path, {"id": rid, "kind": "answer", "ts": _iso(now)})
-        out.append(f"answer {q['id']}: {reply['kind']} from {human} on {q['key']}")
+        out.append(f"answer {q['id']}: {reply['kind']} from {reply['by']} on {q['key']}")
     rid = f"{q['id']}:label-off"
     label = q.get("label")
     labels = ticket.get("labels")  # None: the read gave no labels, so none counts as removed
@@ -1575,12 +1649,91 @@ def _answer_from_ticket(state, q, kind, quote, human, now):
     )
 
 
+def cmd_withdraw(state, args, crew, now):
+    """`withdraw <Q>` and `supersede <Q> --by <Q2>`: the asker (or the coordinator) takes its own
+    open question off the board; a question asked on a ticket loses its label there too."""
+    verb = "supersede" if getattr(args, "by", None) else "withdraw"
+    qid = args.id
+    queue = [q for q in state.board().get("owner_queue") or [] if isinstance(q, dict)]
+    found = next((q for q in queue if q.get("id") == qid), None)
+    if found is None:
+        raise BoardError(f"board.py {verb}: {qid} is no open question in owner_queue")
+    caller = _caller()
+    if found.get("session") != caller and not crew_mod.holds_role(crew, "coordinator", os.environ):
+        raise BoardError(
+            f"board.py {verb}: {qid} was asked by {found.get('session')}, not by {caller}; "
+            "only its asker or the coordinator takes it back"
+        )
+    if verb == "supersede":
+        newer = next((q for q in queue if q.get("id") == args.by), None)
+        if newer is None or args.by == qid:
+            raise BoardError(f"board.py supersede: --by {args.by} is no other open question")
+    adapter = _adapter(args, crew) if found.get("to") else None
+
+    def mutate(board):
+        items = board.get("owner_queue") or []
+        if not any(isinstance(q, dict) and q.get("id") == qid for q in items):
+            return UNCHANGED
+        board["owner_queue"] = [
+            q for q in items if not (isinstance(q, dict) and q.get("id") == qid)
+        ]
+        return [qid]
+
+    def log(_gone):
+        outcome = "superseded" if verb == "supersede" else "withdrawn"
+        line = {"id": qid, "ts": _iso(now), "outcome": outcome, "session": caller}
+        if verb == "supersede":
+            line["by"] = args.by
+        if args.reason:
+            line["reason"] = args.reason.strip()
+        state.append_question(line)
+
+    state.write_board(mutate, after=log)
+    done = f"superseded by {args.by}" if verb == "supersede" else "withdrawn"
+    print(f"{qid}: {done}")
+    if adapter is not None:
+        text = f"{qid} {done}" + (f": {args.reason.strip()}" if args.reason else "")
+        _print_carry(
+            adapter.comment(found["key"], text) + adapter.unlabel(found["key"], found["label"])
+        )
+    return 0
+
+
+def cmd_inbox(state, args, crew, now):
+    """The tickets carrying this session's human's question label: the open questions to them."""
+    slug, _entry = _me(crew, "inbox")
+    adapter = _reads(args, crew)
+    jql = board_humans.inbox_jql(crew, slug)
+    found = adapter.search("inbox", jql)
+    if found is None:
+        return _carry_reads("inbox", [("inbox", jql)], [])
+    keys = [h["key"] for h in found if isinstance(h, dict) and h.get("key")]
+    label = board_humans.question_label(crew, slug)
+    print(f"inbox {slug} ({label}): " + (", ".join(keys) if keys else "nothing open"))
+    return 0
+
+
+def cmd_reply(state, args, crew, now):
+    """The answer of this session's human on the ticket: a signed comment, then its question
+    label off (`board_humans.reply_comment`)."""
+    failures = _key_failure(crew, args.key, "reply")
+    if failures:
+        raise BoardError("\n".join(failures))
+    who = _who(crew, verb="reply")
+    adapter = _adapter(args, crew)
+    text = board_humans.reply_comment(who, args.kind, args.text or "")
+    label = board_humans.question_label(crew, who.split("@", 1)[1])
+    print(f"{args.key}: {text}")
+    _print_carry(adapter.comment(args.key, text) + adapter.unlabel(args.key, label))
+    return 0
+
+
 def cmd_claim(state, args, crew, now):
     key = args.key
     failures = _key_failure(crew, key, "claim")
     if failures:
         raise BoardError("\n".join(failures))
-    who = _who(crew)
+    who = _who(crew, verb="claim")
     role, human = who.split("@", 1)
     session = _caller()
     adapter = _reads(args, crew)
@@ -1598,7 +1751,7 @@ def cmd_claim(state, args, crew, now):
     if args.release:
         body = f"release {who} {session}"
     else:
-        others = [c for w, c in live.items() if w != (role, human)]
+        others = [c for w, c in live.items() if w != (role, human, session)]
         if others:
             c = others[-1]
             raise BoardError(
@@ -2212,7 +2365,7 @@ def cmd_escalation_count(state, args, crew, now):
 
 # --- moves: select, move, check (docs/board.md § Moves) --------------------------------------
 
-MOVE_STATES = ("on_hold", "backlog", "in_progress", "in_review", "done")
+MOVE_STATES = ("on_hold", "backlog", "in_progress", "in_review", "in_test", "done")
 GH_TIMEOUT = 30
 _PR_URL = re.compile(r"^https?://[^/]+/([^/]+)/([^/]+)/pull/(\d+)(?:[/?#].*)?$")
 _PR_QUALIFIED = re.compile(r"^([\w.-]+)/([\w.-]+)#(\d+)$")
@@ -2228,6 +2381,7 @@ class Move:
         self.extra = {}
         self.warnings = []
         self.selected = {}  # what the select comment names (plan blob)
+        self.source = None  # the state the story leaves (`_source_state`)
 
 
 def _toplevel(verb):
@@ -2260,13 +2414,60 @@ def rule_gate(m):
 
 
 def rule_selector(m):
-    """With several humans only the product role selects: the start signal is its move."""
+    """With several humans only the product role selects, on the machine of a human who runs
+    product: the start signal is its move. The select comment's `<role>@<human>` is fixed here,
+    before any write."""
     if not crew_mod.several_humans(m.crew):
         return []
     role = crew_mod.role_of_session(m.crew, os.environ) or "none"
     if role != "product":
         return [f"only the product role selects (roles.product); this session is {role}"]
+    try:
+        m.selected["who"] = _who(m.crew, verb=f"select {m.key}")
+    except BoardError as exc:
+        return [str(exc).split("refused: ", 1)[-1]]
+    human = m.selected["who"].split("@", 1)[1]
+    if "product" not in crew_mod.runs(m.crew, human):
+        return [f"{human} does not run product (humans.{human}.runs)"]
     return []
+
+
+def _human_of(m):
+    """This session's human slug for an entry rule, or the refusal line."""
+    try:
+        found = crew_mod.current_human(m.crew)
+    except crew_mod.CrewError as exc:
+        return None, str(exc)
+    if found is None:
+        return None, (
+            "several humans and none is this session's: set WE_HUMAN=<slug> or git config "
+            "user.email to one of humans.*.email"
+        )
+    return found[0], None
+
+
+def rule_owner(m):
+    """With several humans only a human who owns the state the story leaves (`owns_states`)
+    moves it on; out of a running state (`crew.RUNNING_STATES`) the refusal names the question
+    to its owner instead."""
+    if not crew_mod.several_humans(m.crew) or m.source is None:
+        return []
+    owners = crew_mod.state_owners(m.crew, m.source)
+    if not owners:
+        return []
+    me, failure = _human_of(m)
+    if failure:
+        return [failure]
+    if me in owners:
+        return []
+    line = f"{m.key} is {m.source}, owned by {', '.join(owners)}; this session works for {me}"
+    if m.source in crew_mod.RUNNING_STATES:
+        line += (
+            f"; a change to running work is a question to its owner: board.py ask --to "
+            f"{owners[0]} --key {m.key} --cause info --session <you> --key-title <title> "
+            f'--ask "<the change>" --recommendation "<yours>"'
+        )
+    return [line]
 
 
 def rule_plan_on_main(m):
@@ -2358,10 +2559,15 @@ SELECT_ONLY = "use board.py select (the Ready gate, the tier and the lenses deci
 
 
 def rule_pulled(m):
-    last = m.state.last_rows().get(m.key)
-    if last is None or last.get("to") != "selected":
-        was = "no row" if last is None else f"its last row is {last.get('to')}"
+    if m.source != "selected":
+        was = "no row" if m.source is None else f"its last row is {m.source}"
         return [f"in_progress needs the key's last row to be selected ({was})"]
+    return []
+
+
+def rule_reviewed(m):
+    if m.source != "in_review":
+        return [f"in_test needs the key to be in_review (it is {m.source or 'none'})"]
     return []
 
 
@@ -2458,11 +2664,40 @@ DONE_VIA_ACCEPT = (
 
 
 def rule_in_review(m):
-    last = m.state.last_rows().get(m.key)
-    was = last.get("to") if last else "none"
-    if was != "in_review":
-        return [f"last move is {was}, not in_review"]
-    return []
+    """Done comes from in_review, or from in_test; with an owner of in_test (several humans) only
+    from in_test, unless `board.done_without_test` names this session's role and the plan's front
+    matter says `user_visible: no`."""
+    was = m.source or "none"
+    tested = crew_mod.several_humans(m.crew) and crew_mod.state_owners(m.crew, "in_test")
+    if was not in ("in_review", "in_test"):
+        return [f"last move is {was}, not {'in_test' if tested else 'in_review'}"]
+    if not tested or was == "in_test":
+        return []
+    exempt = (m.crew.get("board") or {}).get("done_without_test")
+    role = crew_mod.role_of_session(m.crew, os.environ)
+    if exempt and role == exempt and _user_visible(m) == "no":
+        m.extra["without_test"] = exempt
+        return []
+    return [
+        f"{m.key} is in_review: Done comes from in_test (owned by "
+        f"{', '.join(tested)}), or from {exempt or 'board.done_without_test'} when the plan says "
+        "`user_visible: no`"
+    ]
+
+
+def _user_visible(m):
+    """The plan's front matter `user_visible` (lower case), empty when unreadable."""
+    root = m.root
+    if root is None:
+        try:
+            root = _toplevel("move")
+        except BoardError:
+            return ""
+    try:
+        text = (root / "docs" / "plans" / f"{m.key}-story.md").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return str(ready_gate.frontmatter(text).get("user_visible", "")).strip().lower()
 
 
 def _ac_numbers(values):
@@ -2557,18 +2792,24 @@ def done_comment(entry, rc, run_url):
 # One list of (group, rule) per target state, run in order; the first failing group stops the
 # run. `selected` is exactly the Ready gate, the tier and the lenses: no rule asks a human.
 ENTRY_RULES = {
-    "on_hold": [("reopen", rule_reopen)],
-    "backlog": [("epic", rule_epic_approved)],
+    "on_hold": [("owner", rule_owner), ("reopen", rule_reopen)],
+    "backlog": [("owner", rule_owner), ("epic", rule_epic_approved)],
     "selected": [
         ("role", rule_selector),
+        ("owner", rule_owner),
         ("ready gate", rule_gate),
         ("plan on main", rule_plan_on_main),
         ("tier", rule_tier),
         ("lenses", rule_lenses),
     ],
-    "in_progress": [("pulled", rule_pulled)],
-    "in_review": [("pr", rule_pr_merged_and_linked)],
-    "done": [("in review", rule_in_review), ("evidence", rule_done_evidence)],
+    "in_progress": [("owner", rule_owner), ("pulled", rule_pulled)],
+    "in_review": [("owner", rule_owner), ("pr", rule_pr_merged_and_linked)],
+    "in_test": [("owner", rule_owner), ("in review", rule_reviewed)],
+    "done": [
+        ("owner", rule_owner),
+        ("in review", rule_in_review),
+        ("evidence", rule_done_evidence),
+    ],
 }
 
 
@@ -2583,16 +2824,20 @@ def _caller():
 def _transition(state, args, crew, now, target, head):
     """Run the target's entry rules, then write the row, call the adapter once and print the
     row and the `carry:` line; a refusal writes, calls and carries nothing."""
-    adapter = _adapter(args, crew)
+    adapter = _reads(args, crew)
     key = args.key
     failures = _key_failure(crew, key, head.split()[1])
     if failures:
         raise BoardError("\n".join(failures))
+    source = _source_state(state, adapter, crew, key)
+    if source is CARRY:
+        return _carry_reads(head.split()[1], [], [key])
     root = _toplevel(head.split()[1])
     plan = (
         Path(args.plan) if getattr(args, "plan", None) else root / "docs/plans" / f"{key}-story.md"
     )
     m = Move(state, key, target, root, plan, crew, args)
+    m.source = source
     for group, rule in ENTRY_RULES[target]:
         lines = rule(m)
         if lines:
@@ -2608,9 +2853,9 @@ def _transition(state, args, crew, now, target, head):
     )
     row = state.record_transition(
         key,
-        lambda last: {
+        lambda _last: {
             "key": key,
-            "from": last.get("to") if last else None,
+            "from": m.source,
             "to": target,
             "ts": _iso(now),
             "by": _caller(),
@@ -2632,20 +2877,55 @@ def _transition(state, args, crew, now, target, head):
     return 0
 
 
-def _who(crew, env=None):
-    """`<role>@<human>` of the calling session, as a ticket comment names it across machines."""
+def _who(crew, env=None, verb="claim"):
+    """`<role>@<human>` of the calling session, as a ticket comment names it across machines;
+    refused (`BoardError`) when the crew cannot tell the session's human."""
     env = os.environ if env is None else env
     role = crew_mod.role_of_session(crew, env) or "session"
     try:
         found = crew_mod.current_human(crew, env)
-    except crew_mod.CrewError:
-        found = None
-    return f"{role}@{found[0] if found else 'unknown'}"
+    except crew_mod.CrewError as exc:
+        raise BoardError(f"board.py {verb}: refused: {exc}") from None
+    if found is None:
+        raise BoardError(
+            f"board.py {verb}: refused: several humans and none is this session's: set "
+            "WE_HUMAN=<slug> or git config user.email to one of humans.*.email"
+        )
+    return f"{role}@{found[0]}"
 
 
 def _select_comment(m):
     plan = str(m.selected.get("plan") or "")[:12] or "-"
-    return f"selected by {_who(m.crew)}, plan {plan}, panel ready-{m.key}"
+    who = m.selected.get("who") or _who(m.crew, verb=f"select {m.key}")
+    return f"selected by {who}, plan {plan}, panel ready-{m.key}"
+
+
+CARRY = object()  # `_source_state`: the session has to read the ticket first
+
+
+def state_of_status(crew, status):
+    """The board state a ticket status name maps to (`board.states`, case-insensitive), else None."""
+    states = {
+        **crew_mod.DEFAULTS["board"]["states"],
+        **((crew.get("board") or {}).get("states") or {}),
+    }
+    want = str(status or "").strip().lower()
+    return next((st for st, name in states.items() if want and str(name).lower() == want), None)
+
+
+def _source_state(state, adapter, crew, key):
+    """The state a story leaves: with several humans the ticket's status (every machine moves
+    the ticket, each keeps its own rows), `CARRY` while the session has to read it; else, or for
+    a status no board state names, the key's last local row."""
+    if crew_mod.several_humans(crew):
+        ticket = adapter.ticket(key)
+        if ticket is None:
+            return CARRY
+        found = state_of_status(crew, ticket.get("status"))
+        if found is not None:
+            return found
+    last = state.last_rows().get(key)
+    return last.get("to") if last else None
 
 
 def cmd_select(state, args, crew, now):
@@ -2657,8 +2937,12 @@ def cmd_move(state, args, crew, now):
     if args.state == "selected":
         raise BoardError(f"{head}: refused: {SELECT_ONLY}")
     if args.state == "done":
+        adapter = _reads(args, crew)
+        source = _source_state(state, adapter, crew, args.key)
+        if source is CARRY:
+            return _carry_reads("move", [], [args.key])
         row, ops, sample = move_done(
-            state, args.key, crew, now, _adapter(args, crew), comment_file=args.comment_file
+            state, args.key, crew, now, adapter, comment_file=args.comment_file, source=source
         )
         print(json.dumps(row, ensure_ascii=False))
         if sample:
@@ -2702,13 +2986,24 @@ def _sample(state, crew, key, now):
 
 
 def move_done(
-    state, key, crew, now, adapter, *, entry=None, rc=None, run_url=None, comment_file=None
+    state,
+    key,
+    crew,
+    now,
+    adapter,
+    *,
+    entry=None,
+    rc=None,
+    run_url=None,
+    comment_file=None,
+    source=None,
 ):
     """The `done` move: its entry rules, then the row, the adapter (transition, then comment) and
     the sample. Returns (row, ops, sample line or None); a refusal raises `BoardError` with one
     `board.py move <KEY> done: refused: <reason>` line per failure and writes nothing. `entry`
     (a verdict entry) comes only from accept.py, after its provenance check; the CLI passes
-    `comment_file`."""
+    `comment_file`. `source` is the state the story leaves (`_source_state`), default the key's
+    last local row."""
     head = f"board.py move {key} done"
     failures = _key_failure(crew, key, "move")
     if failures:
@@ -2718,6 +3013,10 @@ def move_done(
     )
     m = Move(state, key, "done", None, None, crew, args)
     m.comment = None
+    if source is None:
+        last = state.last_rows().get(key)
+        source = last.get("to") if last else None
+    m.source = source
     for _group, rule in ENTRY_RULES["done"]:
         lines = rule(m)
         if lines:
@@ -2727,9 +3026,10 @@ def move_done(
     )
     row = {
         "key": key,
-        "from": "in_review",
+        "from": m.source,
         "to": "done",
         "via": m.extra["via"],
+        **({"without_test": m.extra["without_test"]} if m.extra.get("without_test") else {}),
         **({"rc": m.extra["rc"]} if m.extra.get("rc") else {}),
         "ts": _iso(now),
         "by": _caller(),
@@ -2927,6 +3227,7 @@ def _add_move_verbs(verbs):
     sel = verbs.add_parser("select", help="move a story to Selected: Ready gate, tier, lenses")
     sel.add_argument("key")
     sel.add_argument("--plan", help="the story plan (default docs/plans/<KEY>-story.md)")
+    sel.add_argument("--input", metavar="FILE", help="several humans: the ticket read carried")
     sel.set_defaults(run=cmd_select)
 
     mv = verbs.add_parser("move", help="move a story to a state whose entry rule holds")
@@ -2941,11 +3242,17 @@ def _add_move_verbs(verbs):
         metavar="FILE",
         help="done: an acceptance comment holding a `Not proven:` line",
     )
+    mv.add_argument("--input", metavar="FILE", help="several humans: the ticket read carried")
     mv.set_defaults(run=cmd_move)
 
     ck = verbs.add_parser("check", help="board-vs-ticketing drift over a snapshot")
     ck.add_argument("--jira", required=True, metavar="FILE", help="JSON object key → status name")
     ck.set_defaults(run=cmd_check)
+
+
+def _add_remote_ask(q):
+    q.add_argument("--to", metavar="HUMAN", help="a human on another machine: asked on the ticket")
+    q.add_argument("--input", metavar="FILE", help="several humans: the ticket read carried")
 
 
 def _add_human_verbs(verbs):
@@ -2957,6 +3264,28 @@ def _add_human_verbs(verbs):
     cl.add_argument("--release", action="store_true", help="end this session's claim")
     cl.add_argument("--input", metavar="FILE", help="the ticket read the session carried")
     cl.set_defaults(run=cmd_claim)
+    ib = verbs.add_parser(
+        "inbox", help="the open questions to this session's human (ticket labels)"
+    )
+    ib.add_argument("--input", metavar="FILE", help="the search the session carried")
+    ib.set_defaults(run=cmd_inbox)
+    rp = verbs.add_parser("reply", help="answer a question to this human on its ticket")
+    rp.add_argument("key")
+    rp.add_argument("kind", choices=board_humans.KINDS)
+    rp.add_argument("--text", default="", help="the answer's words")
+    rp.set_defaults(run=cmd_reply)
+    for name, text in (
+        ("withdraw", "take back your own open question"),
+        ("supersede", "replace your own open question by a newer one"),
+    ):
+        wd = verbs.add_parser(name, help=text)
+        wd.add_argument("id")
+        if name == "supersede":
+            wd.add_argument(
+                "--by", required=True, metavar="QID", help="the open question that replaces it"
+            )
+        wd.add_argument("--reason", default="", help="one line why")
+        wd.set_defaults(run=cmd_withdraw)
 
 
 def _add_flow_verbs(verbs):
@@ -3033,7 +3362,7 @@ def parser():
         "--component", metavar="NAME", help="owner: the member whose components hold it"
     )
     q.add_argument("--replace", metavar="QID", help="replace this open question on the same --key")
-    q.add_argument("--to", metavar="HUMAN", help="a human on another machine: asked on the ticket")
+    _add_remote_ask(q)
     q.set_defaults(run=cmd_ask)
     _add_human_verbs(verbs)
     verbs.add_parser(

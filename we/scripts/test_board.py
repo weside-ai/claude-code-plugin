@@ -466,7 +466,7 @@ class TestFreezePerCrew:
 import fcntl  # noqa: E402
 import os  # noqa: E402
 import shutil  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
 
 import cold_reader  # noqa: E402
 
@@ -1966,9 +1966,10 @@ class TestSelect:
         assert after == before, "select wrote board.json or the answers file"
         sub = board.parser()._subparsers._group_actions[0].choices["select"]
         options = {s for a in sub._actions for s in a.option_strings} - {"-h", "--help"}
-        assert options == {"--plan"}
+        assert options == {"--plan", "--input"}
         assert [g for g, _ in board.ENTRY_RULES["selected"]] == [
             "role",
+            "owner",
             "ready gate",
             "plan on main",
             "tier",
@@ -3135,11 +3136,22 @@ class TestPrune:
         go(crewless, "prune")
         assert board_of(crewless)["owner_queue"] == []
 
-    def test_an_undelivered_close_stays_however_old(self, crewless):
+    def test_an_undelivered_close_stays_a_day_then_goes(self, crewless):
+        """An answered question never stays for good: undelivered, it waits PRUNE_AFTER_H."""
         epoch_row(crewless)
-        answered(crewless, "Q7", "accept", "2026-11-01T09:00:00.000Z")
+        answered(crewless, "Q7", "accept", "2026-11-03T08:00:00.000Z")
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        go(crewless, "prune", now=NOW + timedelta(hours=board.PRUNE_AFTER_H))
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_a_duplicate_answer_takes_the_question_off(self, crewless):
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        assert go(crewless, "answer", "Q7", "deny", "--session", "foxy", "--via", "chat") == 0
+        go(crewless, "prune")
+        assert board_of(crewless)["owner_queue"] == []
 
     def test_an_earlier_discuss_still_owed_to_the_asker_keeps_it(self, crewless):
         epoch_row(crewless)

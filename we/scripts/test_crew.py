@@ -1107,9 +1107,57 @@ def test_humans_load_and_resolve_the_session_s_human(tmp_path):
     assert crew.current_human(loaded, {}, email="eve@example.com") is None
     with pytest.raises(crew.CrewError, match="WE_HUMAN=eve is no human"):
         crew.current_human(loaded, {"WE_HUMAN": "eve"})
-    assert crew.state_owner(loaded, "backlog") == "bob"
-    assert crew.state_owner(loaded, "done") is None
+    assert crew.state_owners(loaded, "backlog") == ["bob"]
+    assert crew.state_owners(loaded, "done") == []
     assert crew.runs(loaded, "bob") == ["product", "lex"]
+
+
+def test_several_humans_share_a_state_and_in_test_is_a_state(tmp_path):
+    shared = {
+        **HUMANS,
+        "alice": {**HUMANS["alice"], "owns_states": ["backlog", "in_review"]},
+        "bob": {**HUMANS["bob"], "owns_states": ["backlog", "in_test"]},
+    }
+    core, _ = workspace(tmp_path, with_(humans=shared))
+    loaded = crew.load(core / ".weside" / "crew.json", strict=True)
+    assert crew.state_owners(loaded, "backlog") == ["alice", "bob"]
+    assert crew.state_owners(loaded, "in_test") == ["bob"]
+    assert loaded["board"]["states"]["in_test"] == "In Test"
+    assert (
+        crew.STATES.index("in_review") < crew.STATES.index("in_test") < crew.STATES.index("done")
+    )
+    assert crew.RUNNING_STATES[0] == "in_progress"
+
+
+def test_the_deciding_human_is_the_first_with_decides(tmp_path):
+    first = {
+        "bob": {**HUMANS["bob"], "decides": []},
+        "alice": HUMANS["alice"],
+    }
+    core, _ = workspace(tmp_path, with_(humans=first))
+    loaded = crew.load(core / ".weside" / "crew.json", strict=True)
+    assert crew.deciding_human(loaded)[0] == "alice"
+
+
+def test_the_deliverer_is_the_coordinator_or_the_first_role_this_human_runs(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    loaded = crew.load(core / ".weside" / "crew.json")
+    assert crew.deliverer(loaded, {"WE_HUMAN": "alice"}) == "Otto"
+    # bob's machine runs no coordinator: his product session delivers, by his name for it
+    assert crew.deliverer(loaded, {"WE_HUMAN": "bob"}) == "Paula"
+    assert crew.deliverer(CREW, {}) == crew.holder_name(CREW, "coordinator")
+    out = run(core, "deliverer", env={"WE_HUMAN": "bob"})
+    assert out.returncode == 0 and out.stdout.strip() == "Paula"
+
+
+@pytest.mark.parametrize("value, ok", [("acceptance", True), (None, True), ("tester", False)])
+def test_done_without_test_is_a_role_key_or_null(tmp_path, value, ok):
+    core, _ = workspace(tmp_path, with_(board__done_without_test=value))
+    if ok:
+        assert crew.load(core / ".weside" / "crew.json")["board"]["done_without_test"] == value
+    else:
+        with pytest.raises(crew.CrewError, match="done_without_test must be a role key"):
+            crew.load(core / ".weside" / "crew.json")
 
 
 def test_display_name_per_human_and_member_lookup_by_it(tmp_path):
@@ -1142,13 +1190,6 @@ def test_we_role_id_picks_among_the_roles_one_member_holds():
         ({"alice": {"name": "A", "runs": "coordinator"}}, "humans.alice.runs must be a list"),
         ({"alice": {"name": "A", "runs": ["pilot"]}}, "'pilot' is no role key, member slug"),
         ({"alice": {"name": "A", "owns_states": ["review"]}}, "'review' is no state"),
-        (
-            {
-                "alice": {"name": "A", "owns_states": ["done"]},
-                "bob": {"name": "B", "owns_states": ["done"]},
-            },
-            "done is owned by humans.alice already",
-        ),
         (
             {"alice": {"name": "A", "email": "x@y"}, "bob": {"name": "B", "email": "X@Y"}},
             "humans.bob.email is also humans.alice.email",

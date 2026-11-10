@@ -6,15 +6,18 @@ Pure functions over the ticket data the adapter returns (`ticket_adapter.py`: `s
 verbs in `board.py` own every write. Grammar (docs/board.md § Several humans):
 
 - a signal query: `[<board.jql_scope> AND ]status changed to "<status>" after -<jql_window>`;
-- a claim comment: `claim <role>@<human> <session>`, its release `release <role>@<human> <session>`;
-  a claim lives `board.claim_hours` from its comment's `created`, until its claimant releases it;
-  a ticket comment holds a claim only from the account of a human of the crew (`from_crew`);
+- a claim comment: `claim <role>@<human> <session>` as the comment's first line, its release
+  `release <role>@<human> <session>`; a ticket comment holds a claim only from the account of a
+  human of the crew (`from_crew`); a claim lives `board.claim_hours` from its comment's `created`,
+  until the same role, human and session releases it (two sessions of one human are two
+  claimants);
 - a question to a human on another machine: the comment `<question_label> <labels.to> <Name> ·
   <ask> · <labels.recommendation>: <recommendation>` and the label `question_label(crew, human)`;
 - an account: a human's `email` or Jira `account_id` (`humans.<slug>`), never a display name,
   which anyone can give themselves;
-- a reply: a comment created after the question by that human (its `author` is one of the human's
-  accounts), or signed `<role>@<human>` as its first word from the account of a human of the crew;
+- a reply: a comment created after the question by that human or by another human who runs one
+  of the same role keys (`peers`; its `author` is one of that human's accounts), or signed
+  `<role>@<human>` as its first word from the account of a human of the crew;
   its first word, read in any case, when it is an answer kind
   (`accept`, `deny`, `discuss`, `info`, `update`), is the answer, else `discuss`. The label taken
   off without a reply is the answer `update` (ask whether the question still stands).
@@ -27,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 KINDS = ("accept", "deny", "discuss", "info", "update")
-CLAIM = re.compile(r"^(claim|release) ([a-z0-9_-]+)@([a-z0-9_-]+)(?: (\S+))?", re.MULTILINE)
+CLAIM = re.compile(r"(claim|release) ([a-z0-9_-]+)@([a-z0-9_-]+)(?: (\S+))?")
 SIGNED = re.compile(r"^([a-z0-9_-]+)@([a-z0-9_-]+)\b")
 QUOTE_CHARS = 500
 
@@ -69,12 +72,14 @@ def question_comment(crew: dict, name: str, ask: str, recommendation: str) -> st
 
 
 def claims(comments: list[dict]) -> list[dict]:
-    """Every claim and release line of the comments, oldest first: `{verb, role, human, session,
-    at}` (`at` the comment's `created`, None when unreadable)."""
+    """The claim or release on the first line of each comment, oldest first: `{verb, role, human,
+    session, at}` (`at` the comment's `created`, None when unreadable); a quoted claim further
+    down a comment never counts (the caller passes only crew comments, `from_crew`)."""
     out = []
     for c in comments or []:
-        body = str((c or {}).get("body") or "")
-        for m in CLAIM.finditer(body):
+        body = str((c or {}).get("body") or "").strip()
+        m = CLAIM.match(body.split("\n", 1)[0].strip())
+        if m:
             out.append(
                 {
                     "verb": m.group(1),
@@ -87,11 +92,14 @@ def claims(comments: list[dict]) -> list[dict]:
     return sorted(out, key=lambda x: x["at"] or datetime.min.replace(tzinfo=timezone.utc))
 
 
-def live_claims(comments: list[dict], now: datetime, hours: float) -> dict[tuple[str, str], dict]:
-    """(role, human) -> its newest claim still alive at `now`: younger than `hours`, not released."""
-    newest: dict[tuple[str, str], dict] = {}
+def live_claims(
+    comments: list[dict], now: datetime, hours: float
+) -> dict[tuple[str, str, str], dict]:
+    """(role, human, session) -> its newest claim still alive at `now`: younger than `hours`, not
+    released by the same claimant."""
+    newest: dict[tuple[str, str, str], dict] = {}
     for c in claims(comments):
-        newest[(c["role"], c["human"])] = c
+        newest[(c["role"], c["human"], c["session"])] = c
     limit = timedelta(hours=hours)
     return {
         who: c
@@ -119,6 +127,15 @@ def from_crew(comments: list[dict], every: dict) -> list[dict]:
     return [c for c in comments or [] if _author(c) in known]
 
 
+def peers(human: str, every: dict) -> list[str]:
+    """`human` and every other human who runs one of the same role keys (`runs` without
+    `masters`): any of them answers a question to `human`."""
+    mine = {r for r in (every.get(human) or {}).get("runs") or [] if r != "masters"}
+    return [human] + [
+        s for s, e in every.items() if s != human and mine & set(e.get("runs") or [])
+    ]
+
+
 def _by_human(comment: dict, human: str, every: dict) -> bool:
     """The comment is `human`'s: its author is one of that human's accounts, or it is signed
     `<role>@<human>` and written from the account of a human of the crew (one shared account); a
@@ -133,16 +150,29 @@ def _by_human(comment: dict, human: str, every: dict) -> bool:
 
 
 def replies(ticket: dict, asked: datetime, human: str, every: dict) -> list[dict]:
-    """The comments `human` wrote on the ticket after `asked`, oldest first: `{kind, quote, at}`;
-    `every` is the crew's humans (``crew.humans``)."""
+    """The comments `human` or one of their `peers` wrote on the ticket after `asked`, oldest
+    first: `{kind, quote, at, by}`; `every` is the crew's humans (``crew.humans``)."""
     out = []
     for c in (ticket or {}).get("comments") or []:
         at = parse_ts((c or {}).get("created"))
-        if at is None or at <= asked or not _by_human(c, human, every):
+        by = next((h for h in peers(human, every) if _by_human(c or {}, h, every)), None)
+        if at is None or at <= asked or by is None:
             continue
         body = " ".join(str(c.get("body") or "").split())
         body = SIGNED.sub("", body, count=1).lstrip(" :·-")
         first = body.split(" ", 1)[0].strip(".:,;·").lower() if body else ""
         kind = first if first in KINDS else "discuss"
-        out.append({"kind": kind, "quote": body[:QUOTE_CHARS], "at": c.get("created")})
+        out.append({"kind": kind, "quote": body[:QUOTE_CHARS], "at": c.get("created"), "by": by})
     return sorted(out, key=lambda r: parse_ts(r["at"]))
+
+
+def inbox_jql(crew: dict, human: str) -> str:
+    """The open questions to `human`: the tickets carrying their question label."""
+    query = f'labels = "{question_label(crew, human)}"'
+    scope = str((crew.get("board") or {}).get("jql_scope") or "").strip()
+    return f"{scope} AND {query}" if scope else query
+
+
+def reply_comment(who: str, kind: str, text: str) -> str:
+    """The reply `board.py reply` writes: `<role>@<human> <kind> · <text>`."""
+    return f"{who} {kind} · {' '.join(text.split())}" if text.strip() else f"{who} {kind}"

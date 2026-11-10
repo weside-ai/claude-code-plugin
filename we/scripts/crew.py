@@ -28,6 +28,8 @@ Usage:
   crew.py human [--from DIR]                this session's human (``current_human``):
                                             "<slug>\t<name>\t<runs, comma-separated>", exit 1 when
                                             the crew cannot tell (the reason on stderr)
+  crew.py deliverer [--from DIR]            the name of the session that delivers the board's answers
+                                            on this machine (``deliverer``), exit 1 when none
   crew.py name ROLE [--from DIR]            the display name of ROLE (a role key or a member slug)
                                             for this session's human (``display_name``)
 
@@ -66,7 +68,8 @@ round, and every new plan blob is one, a whitespace edit included: pick N with t
 ``{state, role, jql_window}``, the transitions ``board.py signals`` reads: ``state`` a key of
 ``STATES``, ``role`` a role key, ``jql_window`` a number with ``m``, ``h`` or ``d``; ``jql_scope``:
 a JQL clause every signal query starts with, null = none; ``claim_hours``: how long a ticket claim
-lives), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
+lives; ``done_without_test``: a role key that may move a story whose plan front matter says
+``user_visible: no`` to Done from In Review, past In Test and its owners, null = none), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
 starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
@@ -106,7 +109,9 @@ their own sessions; ``humans.<slug>`` (the slug ``[a-z0-9][a-z0-9_-]*``) holds `
 ``email`` (matched case-insensitively against ``git config user.email``, unique), ``account_id``
 (the human's ticketing account id, e.g. a Jira accountId, unique; with ``email`` the only accounts
 a ticket comment counts as that human's, ``board_humans.py``), ``decides``
-(list), ``owns_states`` (keys of ``STATES``; a state has at most one owning human), ``runs`` (what
+(list; the first human with ``decides`` is the crew's deciding human, ``{human}`` in the process
+text), ``owns_states`` (keys of ``STATES``; several humans may own one state, each of them moves a
+story on from it), ``runs`` (what
 starts on that human's machine: role keys, member slugs of specialists, and ``masters`` for epic
 masters and their workers) and ``companions`` (role key or member slug -> the display name that
 human gives it; a name never denotes two members). Without ``humans`` the crew has one human,
@@ -170,7 +175,9 @@ LOCAL_RULES_MAX = 10
 LOCAL_RULE_CHARS = 160
 LABEL_CHARS = 40
 CADENCES = ("rc_train", "bundle", "replenishment", "flow_report", "process_inbox", "goal_file")
-STATES = ("on_hold", "backlog", "selected", "in_progress", "in_review", "done")
+STATES = ("on_hold", "backlog", "selected", "in_progress", "in_review", "in_test", "done")
+# from here on a story runs: a move out of one of these by another human becomes a question
+RUNNING_STATES = STATES[STATES.index("in_progress") :]
 FALLBACK_TARGETS = (*ROLE_KEYS, "human_bundle")
 HUMAN_KEYS = {
     "name": str,
@@ -265,11 +272,13 @@ DEFAULTS: dict[str, Any] = {
             "selected": "Selected for Development",
             "in_progress": "In Progress",
             "in_review": "In Review",
+            "in_test": "In Test",
             "done": "Done",
         },
         "signals": [],
         "jql_scope": None,
         "claim_hours": 4,
+        "done_without_test": None,
     },
     "sla": {"hours": 4, "daytime": "08-20", "tz": "UTC", "t2_second_reviewer": None},
     "limits": {
@@ -655,6 +664,15 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
     _validate_roles(path, data["roles"], slugs)
     if "humans" in data:
         _validate_humans(path, data, slugs)
+    exempt = (
+        (data.get("board") or {}).get("done_without_test")
+        if isinstance(data.get("board"), dict)
+        else None
+    )
+    if exempt is not None and exempt not in ROLE_KEYS:
+        raise _fail(
+            path, f"board.done_without_test must be a role key ({', '.join(ROLE_KEYS)}) or null"
+        )
     for key, value in data.items():
         if key in ("lenses", "fallback") or key not in DEFAULTS:
             continue
@@ -757,7 +775,6 @@ def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
     places = set(ROLE_KEYS) | slugs
     emails: dict[str, str] = {}
     ids: dict[str, str] = {}
-    owners: dict[str, str] = {}
     names: dict[str, tuple[str, str]] = {}  # display name lowered -> (target member, where)
     for slug, entry in data["members"].items():
         names[str(entry.get("name") or "").strip().lower()] = (slug, f"members.{slug}.name")
@@ -772,13 +789,6 @@ def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
                 raise _fail(
                     path, f"humans.{slug}.owns_states: {state!r} is no state ({', '.join(STATES)})"
                 )
-            if state in owners:
-                raise _fail(
-                    path,
-                    f"humans.{slug}.owns_states: {state} is owned by humans.{owners[state]} already"
-                    " (one owning human per state)",
-                )
-            owners[state] = slug
         for role in entry.get("runs", []):
             if role not in places and role != MASTERS:
                 raise _fail(
@@ -1213,9 +1223,39 @@ def runs(crew: dict[str, Any], human: str) -> list[str]:
     return list((humans(crew).get(human) or {}).get("runs") or [])
 
 
-def state_owner(crew: dict[str, Any], state: str) -> str | None:
-    """The slug of the human owning ``state`` (``owns_states``), else None."""
-    return next((s for s, e in humans(crew).items() if state in e["owns_states"]), None)
+def state_owners(crew: dict[str, Any], state: str) -> list[str]:
+    """The slugs of the humans owning ``state`` (``owns_states``), in file order; [] for none."""
+    return [s for s, e in humans(crew).items() if state in e["owns_states"]]
+
+
+def deciding_human(crew: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The crew's deciding human: the first human with ``decides``, else the first human."""
+    every = humans(crew)
+    slug = next((s for s, e in every.items() if e["decides"]), next(iter(every)))
+    return slug, every[slug]
+
+
+def deliverer(crew: dict[str, Any], env: Any = None) -> str | None:
+    """The session that delivers the board's answers on this machine (``hooks/board/deliver.ts``):
+    the coordinator when this session's human runs it (or the crew cannot tell the human), else
+    the first role key, then member, this human runs; its name for this human. None unbound."""
+    try:
+        found = current_human(crew, env)
+    except CrewError:
+        found = None
+    mine = found[1]["runs"] if found and several_humans(crew) else ["coordinator"]
+    order = (
+        ["coordinator"]
+        if "coordinator" in mine
+        else [r for r in ROLE_KEYS if r in mine] + [r for r in mine if r not in ROLE_KEYS]
+    )
+    for role in order:
+        if role == MASTERS:
+            continue
+        name = display_name(crew, role, found[0] if found else None)
+        if name:
+            return name
+    return None
 
 
 def holder(crew: dict[str, Any], role: str) -> dict[str, Any] | None:
@@ -1488,6 +1528,7 @@ VERBS = (
     "launch",
     "human",
     "name",
+    "deliverer",
 )
 
 
@@ -1629,7 +1670,17 @@ def _name_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -> int:
     return 0
 
 
+def _deliverer_cli(_argv: list[str], _crew_path: Path, crew: dict[str, Any]) -> int:
+    name = deliverer(crew)
+    if not name:
+        print("crew: no role on this machine delivers the board's answers", file=sys.stderr)
+        return 1
+    print(name)
+    return 0
+
+
 _READERS = {
+    "deliverer": _deliverer_cli,
     "human": _human_cli,
     "name": _name_cli,
     "validate": _validate_cli,

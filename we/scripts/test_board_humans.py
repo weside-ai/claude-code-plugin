@@ -280,7 +280,7 @@ class TestClaim:
         as_(monkeypatch, "alice", "Otto")
         assert act(crewed, "claim", "PROJ-12") == 0
         assert carry_of(capsys.readouterr().out) == [
-            {"op": "read", "key": "PROJ-12", "fields": "labels,comments"}
+            {"op": "read", "key": "PROJ-12", "fields": "status,labels,comments"}
         ]
         assert not (crewed / "board-claims.jsonl").exists()
 
@@ -492,6 +492,282 @@ def test_a_read_without_labels_is_no_removed_label(crewed, monkeypatch, tmp_path
     assert carry_of(capsys.readouterr().out)[-1] == {
         "op": "read",
         "key": "PROJ-12",
-        "fields": "labels,comments",
+        "fields": "status,labels,comments",
     }
     assert jsonl(crewed / "board-answers.jsonl") == []
+
+
+# --- follow-ups: who, claims, signals, owners, Done, inbox, reply, withdraw ------------------
+
+
+def two_sessions(state_dir, monkeypatch, name):
+    """The agents list with a second session `name` of the same human, and this session it."""
+    agents = state_dir / "agents.json"
+    rows = [{"sessionId": "sid-12", "name": "lead-12"}, {"sessionId": "sid-13", "name": name}]
+    agents.write_text(json.dumps(rows), encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sid-13")
+
+
+class TestWhoAndClaims:
+    def test_an_unknown_human_is_refused_not_written_as_unknown(self, crewed, monkeypatch, capsys):
+        with_humans(crewed)
+        monkeypatch.setenv("WESIDE_COMPANION", "Otto")
+        monkeypatch.delenv("WE_HUMAN", raising=False)
+        adapter = ticket_adapter.FakeAdapter()
+        assert act(crewed, "claim", "PROJ-12", adapter=adapter) == 1
+        err = capsys.readouterr().err
+        assert "board.py claim: refused: several humans and none is this session's" in err
+        assert adapter.calls == [] and not (crewed / "board-claims.jsonl").exists()
+
+    def test_two_sessions_of_one_human_cannot_claim_the_same_ticket(
+        self, crewed, monkeypatch, capsys
+    ):
+        with_humans(crewed)
+        as_(monkeypatch, "alice", "Otto")
+        assert act(crewed, "claim", "PROJ-12", adapter=ticket_adapter.FakeAdapter()) == 0
+        two_sessions(crewed, monkeypatch, "lead-13")
+        assert act(crewed, "claim", "PROJ-12", adapter=ticket_adapter.FakeAdapter()) == 1
+        assert "claimed by coordinator@alice (lead-12)" in capsys.readouterr().err
+
+    def test_a_quoted_claim_or_one_from_a_stranger_does_not_count(self, crewed, monkeypatch):
+        with_humans(crewed)
+        as_(monkeypatch, "alice", "Otto")
+        comments = [
+            {
+                "author": "eve@example.com",
+                "body": "claim product@bob Paula",
+                "created": ago(hours=1),
+            },
+            {
+                "author": "bob@example.com",
+                "body": "As agreed:\nclaim product@bob Paula",
+                "created": ago(hours=1),
+            },
+        ]
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": {"comments": comments}})
+        assert act(crewed, "claim", "PROJ-12", adapter=adapter) == 0
+
+
+class TestSignalWithoutChange:
+    def test_a_hit_without_change_time_signals_again_after_its_window(
+        self, crewed, monkeypatch, capsys
+    ):
+        with_humans(crewed)
+        as_(monkeypatch, "alice", "Otto")
+        adapter = ticket_adapter.FakeAdapter(searches={JQL: ["PROJ-12"]})
+        assert act(crewed, "signals", adapter=adapter) == 0
+        assert act(crewed, "signals", adapter=adapter, now=NOW + timedelta(minutes=20)) == 0
+        assert "signals: nothing new" in capsys.readouterr().out.splitlines()[-1]
+        assert act(crewed, "signals", adapter=adapter, now=NOW + timedelta(hours=2)) == 0
+        assert "signal S2: PROJ-12" in capsys.readouterr().out
+
+
+SHARED = {
+    "alice": {
+        "name": "Alice",
+        "email": "alice@example.com",
+        "decides": ["money", "prod"],
+        "owns_states": ["selected", "in_progress", "in_review"],
+        "runs": ["coordinator", "architecture", "acceptance", "masters"],
+    },
+    "bob": {
+        "name": "Bob",
+        "email": "bob@example.com",
+        "owns_states": ["backlog", "in_test"],
+        "runs": ["product"],
+        "companions": {"product": "Paula"},
+    },
+    "cleo": {
+        "name": "Cleo",
+        "email": "cleo@example.com",
+        "owns_states": ["backlog", "in_test"],
+        "runs": ["product"],
+        "companions": {"product": "Pia"},
+    },
+}
+
+
+def shared(state_dir, **board):
+    with_humans(state_dir, **board)
+    path = state_dir / "work" / ".weside" / "crew.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["humans"] = SHARED
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+class TestOwners:
+    def test_a_move_out_of_a_running_state_by_a_non_owner_names_the_question(
+        self, moving, monkeypatch, capsys
+    ):
+        shared(moving)
+        as_(monkeypatch, "bob", "Paula")
+        adapter = ticket_adapter.FakeAdapter({KEY: "In Progress"})
+        assert act(moving, "move", KEY, "on_hold", "--reopen", "later", adapter=adapter) == 1
+        err = capsys.readouterr().err
+        assert f"{KEY} is in_progress, owned by alice; this session works for bob" in err
+        assert f"board.py ask --to alice --key {KEY}" in err
+        assert adapter.calls == [] and transitions(moving) == []
+
+    def test_the_owner_moves_and_the_ticket_status_is_the_source(self, moving, monkeypatch):
+        shared(moving)
+        as_(monkeypatch, "alice", "Otto")
+        # no local `selected` row on this machine: the ticket's status counts
+        adapter = ticket_adapter.FakeAdapter({KEY: "Selected for Development"})
+        assert act(moving, "move", KEY, "in_progress", adapter=adapter) == 0
+        assert transitions(moving)[-1]["from"] == "selected"
+
+    def test_a_shared_state_lets_each_owner_move(self, moving, monkeypatch):
+        shared(moving)
+        for human, name in (("bob", "Paula"), ("cleo", "Pia")):
+            as_(monkeypatch, human, name)
+            adapter = ticket_adapter.FakeAdapter({KEY: "Backlog"})
+            assert act(moving, "move", KEY, "on_hold", "--reopen", "q1", adapter=adapter) == 0
+
+    def test_jira_carries_the_status_read_before_a_move(self, moving, monkeypatch, capsys):
+        shared(moving, ticketing="jira")
+        as_(monkeypatch, "alice", "Otto")
+        assert act(moving, "move", KEY, "in_progress") == 0
+        assert carry_of(capsys.readouterr().out) == [
+            {"op": "read", "key": KEY, "fields": "status,labels,comments"}
+        ]
+        assert transitions(moving) == []
+
+    def test_select_needs_a_human_who_runs_product(self, moving, monkeypatch, capsys):
+        shared(moving)
+        committed(moving)
+        green_lenses(moving)
+        path = moving / "work" / ".weside" / "crew.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["humans"]["alice"]["owns_states"].append("backlog")
+        path.write_text(json.dumps(data), encoding="utf-8")
+        as_(monkeypatch, "alice", "Ada")  # product's member, on a machine that runs no product
+        adapter = ticket_adapter.FakeAdapter({KEY: "Backlog"})
+        assert act(moving, "select", KEY, adapter=adapter) == 1
+        assert "alice does not run product" in capsys.readouterr().err
+        assert adapter.calls == []
+
+
+def plan_says(state_dir, visible):
+    plan = state_dir / "work" / "docs" / "plans" / f"{KEY}-story.md"
+    text = plan.read_text(encoding="utf-8")
+    plan.write_text(text.replace("---\n", f"---\nuser_visible: {visible}\n", 1), encoding="utf-8")
+
+
+class TestDoneByHumans:
+    def done(self, state_dir, status, adapter=None):
+        adapter = adapter or ticket_adapter.FakeAdapter({KEY: status})
+        path = state_dir / "comment.md"
+        path.write_text("Walked on staging.\nNot proven: the native app\n", encoding="utf-8")
+        return act(state_dir, "move", KEY, "done", "--comment-file", str(path), adapter=adapter)
+
+    def test_done_from_in_test_by_its_owner(self, moving, monkeypatch):
+        shared(moving)
+        as_(monkeypatch, "cleo", "Pia")
+        assert self.done(moving, "In Test") == 0
+        assert transitions(moving)[-1]["from"] == "in_test"
+
+    def test_done_from_in_review_is_refused_when_in_test_has_owners(
+        self, moving, monkeypatch, capsys
+    ):
+        shared(moving)
+        as_(monkeypatch, "alice", "Tess", role="acceptance")
+        assert self.done(moving, "In Review") == 1
+        assert "Done comes from in_test (owned by bob, cleo)" in capsys.readouterr().err
+
+    def test_the_exempt_role_sets_done_for_a_story_without_user_visible_behaviour(
+        self, moving, monkeypatch, capsys
+    ):
+        shared(moving, done_without_test="acceptance")
+        as_(monkeypatch, "alice", "Tess", role="acceptance")
+        assert self.done(moving, "In Review") == 1  # the plan does not say user_visible: no
+        capsys.readouterr()
+        plan_says(moving, "no")
+        assert self.done(moving, "In Review") == 0
+        row = transitions(moving)[-1]
+        assert (row["from"], row["without_test"]) == ("in_review", "acceptance")
+
+    def test_in_test_comes_from_in_review_by_its_owner(self, moving, monkeypatch, capsys):
+        shared(moving)
+        as_(monkeypatch, "alice", "Otto")
+        adapter = ticket_adapter.FakeAdapter({KEY: "In Review"})
+        assert act(moving, "move", KEY, "in_test", adapter=adapter) == 0
+        assert adapter.calls == [("move", KEY, "In Test")]
+        adapter = ticket_adapter.FakeAdapter({KEY: "In Progress"})
+        assert act(moving, "move", KEY, "in_test", adapter=adapter) == 1
+        assert "in_test needs the key to be in_review" in capsys.readouterr().err
+
+
+class TestInboxReplyWithdraw:
+    def test_inbox_lists_the_tickets_labelled_for_this_human(self, crewed, monkeypatch, capsys):
+        with_humans(crewed)
+        as_(monkeypatch, "bob", "Paula")
+        jql = 'project = PROJ AND labels = "ask-bob"'
+        adapter = ticket_adapter.FakeAdapter(searches={jql: ["PROJ-12", "PROJ-20"]})
+        assert act(crewed, "inbox", adapter=adapter) == 0
+        assert "inbox bob (ask-bob): PROJ-12, PROJ-20" in capsys.readouterr().out
+
+    def test_reply_comments_signed_and_takes_the_label_off(self, crewed, monkeypatch, capsys):
+        with_humans(crewed, ticketing="jira")
+        as_(monkeypatch, "bob", "Paula")
+        assert act(crewed, "reply", "PROJ-12", "accept", "--text", "go tonight") == 0
+        assert carry_of(capsys.readouterr().out) == [
+            {"op": "comment", "key": "PROJ-12", "text": "product@bob accept · go tonight"},
+            {"op": "unlabel", "key": "PROJ-12", "remove": "ask-bob"},
+        ]
+
+    def test_another_human_of_the_same_role_answers(self, crewed, monkeypatch, capsys):
+        shared(crewed)
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "alice", "Otto")
+        assert act(crewed, *ask_argv(), "--to", "bob", adapter=ticket_adapter.FakeAdapter()) == 0
+        later = NOW + timedelta(hours=1)
+        ticket = {
+            "labels": ["ask-bob"],
+            "comments": [
+                {"author": "cleo@example.com", "body": "accept", "created": later.isoformat()}
+            ],
+        }
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": ticket})
+        assert act(crewed, "signals", adapter=adapter, now=later) == 0
+        assert "accept from cleo on PROJ-12" in capsys.readouterr().out
+
+    def test_the_asker_withdraws_and_supersedes_its_own_question(self, crewed, monkeypatch):
+        with_humans(crewed)
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "alice", "Otto")
+        adapter = ticket_adapter.FakeAdapter()
+        assert act(crewed, *ask_argv(), "--to", "bob", adapter=adapter) == 0
+        assert act(crewed, *ask_argv(), "--to", "bob", adapter=adapter) == 0
+        first, second = [q["id"] for q in board_of(crewed)["owner_queue"]][-2:]
+        adapter = ticket_adapter.FakeAdapter()
+        assert act(crewed, "supersede", first, "--by", second, adapter=adapter) == 0
+        assert ("unlabel", "PROJ-12", "ask-bob") in adapter.calls
+        assert act(crewed, "withdraw", second, "--reason", "settled in chat") == 0
+        assert [q["id"] for q in board_of(crewed)["owner_queue"]][-2:] != [first, second]
+        assert first not in [q["id"] for q in board_of(crewed)["owner_queue"]]
+        outcomes = [(q["id"], q["outcome"]) for q in jsonl(crewed / "board-questions.jsonl")]
+        assert (first, "superseded") in outcomes and (second, "withdrawn") in outcomes
+
+    def test_another_session_cannot_withdraw(self, crewed, monkeypatch, capsys):
+        with_humans(crewed)
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "bob", "Paula")
+        assert act(crewed, *ask_argv()) == 0
+        qid = board_of(crewed)["owner_queue"][-1]["id"]
+        two_sessions(crewed, monkeypatch, "lead-13")
+        assert act(crewed, "withdraw", qid) == 1
+        assert "only its asker or the coordinator takes it back" in capsys.readouterr().err
+
+
+class TestMergeGoReadsTheTicket:
+    def test_a_story_on_hold_gets_no_merge_go(self, crewed, monkeypatch, capsys):
+        with_humans(crewed)
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "alice", "Otto")
+        argv = [*ask_argv(**{"--cause": "merge-go"}), "--pr", "acme/app#5"]
+        adapter = ticket_adapter.FakeAdapter({"PROJ-12": "On Hold"})
+        assert act(crewed, *argv, adapter=adapter) == 1
+        assert "PROJ-12 is On Hold on the ticket" in capsys.readouterr().err
+        adapter = ticket_adapter.FakeAdapter({"PROJ-12": "In Progress"})
+        act(crewed, *argv, adapter=adapter)  # past the hold, the PR check decides
+        assert "On Hold" not in capsys.readouterr().err
