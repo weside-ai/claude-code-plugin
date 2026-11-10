@@ -83,6 +83,8 @@ refusal line; a second refusal: `LV write <id> <lens> --failed "finding without 
 Run `LV check <id>` and relay its lines verbatim: one per lens, a `stale` line when the plan or head moved,
 and the panel line (forms: the script's docstring, § Carried warnings included). Exit 0 only for green. The board's move to
 Selected reads the Ready panel itself (`board.py select`); the merge of a two-way T2 PR reads the T2 panel.
+A Ready panel green with carried warnings: run `LV carry ready-<KEY>` and commit the plan with it; it writes
+each carried warning into the plan's `## Carried warnings` as a must, and the panel stays green over that edit.
 On T2, one-way PRs included, then run `LV post t2-pr<PR>`: it posts the `<!-- t2-panel -->` comment on
 the head (`Overall: PASS` or `FAIL`, its docstring owns the form), which a repo's self-merge window
 reads; a stale panel posts nothing and needs a fresh one.
