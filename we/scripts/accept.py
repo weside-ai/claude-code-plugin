@@ -376,6 +376,10 @@ def main(argv=None, now=None, adapter=None, gh=None):
     """`adapter` and `gh` are the tests' fakes; None means the crew's transport and `Gh()`."""
     args = parser().parse_args(argv)
     try:
+        if args.verb == "run":  # a write: the same crew guard as every board.py write (AC11)
+            refusal, _stamp = board.crew_guard(argparse.Namespace(verb="accept", board=args.board))
+            if refusal:
+                raise board.BoardError(refusal, code=3)
         state = board.StateDir(args.board or board.default_board())
         return args.run(state, args, now or board._now(), adapter, gh)
     except (AcceptError, board.BoardError) as exc:

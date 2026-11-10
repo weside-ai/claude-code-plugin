@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import accept  # noqa: E402
 import board  # noqa: E402
+import crew as crew_mod  # noqa: E402
 import ticket_adapter  # noqa: E402
 from test_board import NOW, crewed, crewless, jsonl, with_jira  # noqa: E402,F401
 
@@ -411,3 +412,13 @@ def test_without_board_queue_reads_the_crews_board(crewed, capsys, monkeypatch):
     (crewed / "acme-board-accept.jsonl").write_text(json.dumps({**walk, "key": "PROJ-7"}) + "\n")
     assert accept.main(["queue"]) == 0
     assert capsys.readouterr().out.strip() == "PROJ-7 AC1 p · s (rc v1)"
+
+
+def test_run_on_a_board_another_crew_stamped_is_refused(crewed, capsys, monkeypatch):  # noqa: F811
+    """Review 09.11.: accept writes the board family like board.py does, so the same crew guard."""
+    target = crewed / "board.json"
+    monkeypatch.setattr(board, "DEFAULT_BOARD", str(target))
+    target.write_text("{}")
+    crew_mod.write_stamp(target, "acme/other-crew")
+    assert accept.main(["--board", str(target), "run", "--run-id", "1"]) == 3
+    assert "acme/other-crew" in capsys.readouterr().err

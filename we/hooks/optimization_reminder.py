@@ -7,6 +7,7 @@ or the last `/we:optimize` is `optimization.reminder_days` (default 14) or more 
 ran. Silent on resume,
 clear and compact, without a store, and when `.weside/config.json` sets
 `optimization.reminder: false`. Store format: references/optimization-store.md.
+Fail open: a reminder, no brake; any error prints one stderr line and nothing else.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ def repo_root(cwd: str) -> Path | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=10,
     )
     return Path(result.stdout.strip()) if result.returncode == 0 else None
 
@@ -40,6 +42,7 @@ def staging_dir(root: Path) -> Path | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=10,
     )
     match = re.search(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?/?$", result.stdout.strip())
     if result.returncode != 0 or not match:
@@ -99,11 +102,15 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except ValueError:
         return 0
-    if payload.get("source", "startup") != "startup":
+    try:
+        if not isinstance(payload, dict) or payload.get("source", "startup") != "startup":
+            return 0
+        root = repo_root(payload.get("cwd") or ".")
+        today = dt.datetime.now().astimezone().date()
+        text = message(root, today, staging_dir(root)) if root else None
+    except Exception as exc:
+        print(f"optimization_reminder: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 0
-    root = repo_root(payload.get("cwd") or ".")
-    today = dt.datetime.now().astimezone().date()
-    text = message(root, today, staging_dir(root)) if root else None
     if text:
         print(json.dumps({"systemMessage": text}))
     return 0

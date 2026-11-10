@@ -81,6 +81,7 @@ for _p in (str(_HERE), str(_HERE.parent / "hooks")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import claude_home  # noqa: E402
 import crew as crewlib  # noqa: E402
 import rule_loading  # noqa: E402
 
@@ -435,17 +436,20 @@ def collision_note(crew_path: Path, crew: dict[str, Any], env: Any = None) -> st
 
     The holder is ``<state dir>/crew.id`` (``crew.stamp_path`` of the folder's ``board.json``).
     A crew whose board is that ``board.json`` stamps an unstamped folder; a crew with a board of
-    its own (``board.file``) never claims the folder. The same crew (another worktree, a
-    ``.weside/config.json`` pointer) shares the id (``crew.crew_id``) and gets nothing. Fail-open:
-    any read or write error prints nothing."""
+    its own (``board.file``) never claims the folder and gets no line either: its board family is
+    named after its own file (``board.py`` § files), so sharing the folder collides with nothing.
+    The same crew (another worktree, a ``.weside/config.json`` pointer) shares the id
+    (``crew.crew_id``) and gets nothing. Fail-open: any read or write error prints nothing."""
     try:
         folder = crewlib.state_dir(crew_path, crew, env)
         cid = crewlib.crew_id(crew_path)
         default_board = folder / crewlib.BOARD_NAME
+        own_board = crewlib.board_file(crew_path, crew, env)
+        if own_board != default_board:
+            return None  # a board of its own: the folder's board.json is not this crew's
         holder = crewlib.read_stamp(default_board)
         if holder is None:
-            if crewlib.board_file(crew_path, crew, env) == default_board:
-                crewlib.write_stamp(default_board, cid)
+            crewlib.write_stamp(default_board, cid)
             return None
     except (OSError, crewlib.CrewError):
         return None
@@ -466,7 +470,7 @@ def version_note(cwd: str | Path, env: Any = None, plugin_root: Path | None = No
     root = plugin_root or Path(
         env.get("CLAUDE_PLUGIN_ROOT") or Path(__file__).resolve().parent.parent
     )
-    config = Path(env.get("CLAUDE_CONFIG_DIR") or Path(env.get("HOME") or Path.home()) / ".claude")
+    config = claude_home.config_dir(env)
     try:
         running = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text())[
             "version"
