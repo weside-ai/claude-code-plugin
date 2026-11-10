@@ -1,5 +1,7 @@
 """we-worker against a stub `claude` on PATH: start flags, guards, status, logs, stop."""
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -323,7 +325,7 @@ def test_stop_of_a_window_worker_sends_sigterm_to_its_pid(tmp_path):
 
 @pytest.mark.parametrize("role", [None, "master"])
 def test_stop_never_ends_a_session_that_is_no_worker(tmp_path, role):
-    """Lead on #202: a name that hits a master or companion (no marker, no WE_ROLE=worker) is a
+    """A name that hits a master or companion (no marker, no WE_ROLE=worker) is a
     typo; stop refuses and names `claude stop <id>`."""
     pid = _detached_sleep(role)
     try:
@@ -477,7 +479,7 @@ def test_checkpoint_never_commits_on_main(tmp_path):
 
 
 def test_a_flag_as_the_last_word_is_checked_too(tmp_path):
-    """Claude Review on #202: with no prompt, the last word is a flag, not the prompt."""
+    """With no prompt, the last word is a flag, not the prompt."""
     project, env = setup(tmp_path)
     proc = run(project, env, "AC-12-impl", "--bg", "--agent", "a", "--cwd")
     assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr

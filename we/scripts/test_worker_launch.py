@@ -360,7 +360,7 @@ def test_stop_falls_back_to_claude_stop_when_we_worker_is_not_on_path(env):
     assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]
 
 
-# Review 09.11. (/we:optimize § A): several sessions of one name, a dropped --agent, checkpoint.
+# Several sessions of one name, a dropped --agent, checkpoint.
 
 
 def test_stop_ends_every_session_of_the_name_and_names_their_ids(env):

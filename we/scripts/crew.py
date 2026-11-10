@@ -61,9 +61,8 @@ starts a process worker, the one owner of it in a repo with a crew (``worker_lau
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
 ``permissions.defaultMode``; ``worker_mode``: ``auto`` (the default) or ``bypass``, the mode a
-``we-worker --bg`` worker starts in (``bypass`` adds ``--permission-mode bypassPermissions``: in the
-background nobody answers a prompt; a window worker stays ``auto`` with selectable bypass;
-the background answers no prompt); ``worker_timer``: a script ``we-worker`` registers each worker's time
+``we-worker --bg`` worker starts in (``bypass`` adds ``--permission-mode bypassPermissions``, because
+in the background nobody answers a prompt; a window worker keeps the default mode); ``worker_timer``: a script ``we-worker`` registers each worker's time
 limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
 and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
 ``files``, ``state_dir`` (the folder of the crew's board family and

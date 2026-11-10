@@ -36,9 +36,9 @@
 # The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
 #   launch.allow_bypass true   --allow-dangerously-skip-permissions: the start mode stays
 #                              permissions.defaultMode, bypass is one Shift+Tab away
-#   launch.worker_mode bypass  a --bg worker starts with --permission-mode bypassPermissions (in the
-#                              background nobody answers a prompt); a window worker stays in the
-#                              default mode (nobody answers a prompt in the background); a --permission-mode of the caller wins
+#   launch.worker_mode bypass  a --bg worker starts with --permission-mode bypassPermissions, because in
+#                              the background nobody answers a prompt; a window worker keeps the
+#                              default mode; a --permission-mode of the caller wins
 #   launch.worker_timer <cmd>  the timer script (or $WE_WORKER_TIMER, which wins): `register` writes the
 #                              worker's state, `arm` becomes a SessionStart hook of this worker alone;
 #                              without one the worker starts with no timer
