@@ -1022,6 +1022,15 @@ def test_the_launch_verb_without_a_crew_prints_the_default(tmp_path):
     assert out.returncode == 0 and out.stdout == "false\n"
 
 
+def test_launch_worker_mode_is_auto_or_bypass(tmp_path):
+    assert crew.DEFAULTS["launch"]["worker_mode"] == "auto"
+    core, _ = workspace(tmp_path, {**CREW, "launch": {"worker_mode": "bypass"}})
+    assert run(core, "launch", "worker_mode").stdout == "bypass\n"
+    bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"worker_mode": "yolo"}})
+    out = run(bad, "validate")
+    assert out.returncode == 1 and "launch.worker_mode must be one of auto, bypass" in out.stderr
+
+
 def test_a_member_with_a_role_addendum_gets_the_pointer_skill(tmp_path):
     core, biz = workspace(tmp_path)
     path = core / ".weside" / "crew.json"

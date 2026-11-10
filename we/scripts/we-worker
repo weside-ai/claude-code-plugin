@@ -6,7 +6,15 @@
 #                                  entry is an API error of that kind, then `time-limit=HH:MM` (the
 #                                  deadline of --limit, `reached` once past); an exited worker that hit
 #                                  the usage limit gets a second line with its resume command
-#   we-worker stop <name|id>       stops it and waits until `claude agents --json` drops it (30 s)
+#   we-worker stop <name|id>       stops a worker (a background session with `claude stop`, a window
+#                                  worker with SIGTERM to its pid) and waits until it is gone (30 s);
+#                                  then ends what it left running (watchers, dev servers: its process
+#                                  tree) and names each one. A session that is no worker (no background,
+#                                  no launcher marker, no WE_ROLE=worker: a master, a companion) refuses
+#   we-worker checkpoint <name|id> commits a worker's tracked changes in its worktree (never on main; new files are named, not
+#                                  committed) and pushes them
+#                                  to wip/<branch without its type prefix> (before a quota pause);
+#                                  refuses a worker that is working or busy (one writer per worktree)
 #   we-worker logs <name|id> [-n N] [--raw]
 #                                  the last N (default 5) assistant texts from its transcript, plain;
 #                                  --raw (or no transcript) prints `claude logs` with ANSI codes removed
@@ -23,17 +31,22 @@
 #   --resume/-r <id|name>  a short id or name resolves to the full session id; ambiguous, unknown or still
 #                          running (its pid lives: claude would start a copy) refuses without starting
 # A start under a name a running background session holds refuses as well: steer it, or stop it first.
+# A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
+# `--cwd` would otherwise reach claude as a prompt): run `cd <tree> && we-worker …` instead.
 # A name without the story key (crew `naming.key`) or a plan slug of docs/plans/ gets a warning, no refusal.
 # The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
 #   launch.allow_bypass true   --allow-dangerously-skip-permissions: the start mode stays
 #                              permissions.defaultMode, bypass is one Shift+Tab away
+#   launch.worker_mode bypass  a --bg worker starts with --permission-mode bypassPermissions, because in
+#                              the background nobody answers a prompt; a window worker keeps the
+#                              default mode; a --permission-mode of the caller wins
 #   launch.worker_timer <cmd>  the timer script (or $WE_WORKER_TIMER, which wins): `register` writes the
 #                              worker's state, `arm` becomes a SessionStart hook of this worker alone;
 #                              without one the worker starts with no timer
 set -euo pipefail
 
 usage() {
-  echo "usage: we-worker <name> [--bg] [--limit <duration>] [claude args...] | status [<name|id>] | stop <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
+  echo "usage: we-worker <name> [--bg] [--limit <duration>] [claude args...] | status [<name|id>] | stop <name|id> | checkpoint <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
   exit 2
 }
 
@@ -87,6 +100,37 @@ _resolve() { # <name|id> -> "id pid state sessionId" of the newest background ag
 k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if a.get("kind")=="background" and k in (a.get("name"),a.get("id"))]
 d.sort(key=lambda a:a.get("startedAt",0))
 print(*(str(d[-1].get(f) or "-") for f in ("id","pid","state","sessionId")) if d else "")' "$1"
+}
+
+_resolve_any() { # <name|id> -> "id pid kind sessionId state cwd" of the newest agent of any kind, else empty
+  _agents | python3 -I -c 'import json,sys
+k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if k in (a.get("name"),a.get("id"))]
+d.sort(key=lambda a:a.get("startedAt",0))
+a=d[-1] if d else {}
+a["state"]=a.get("status") or a.get("state")  # an interactive row says busy/idle in status only
+print(*(str(a.get(f) or "-") for f in ("id","pid","kind","sessionId","state","cwd")) if d else "")' "$1"
+}
+_is_worker() { # <kind> <pid> <cwd>: a background session, a worktree with the launcher's marker,
+  # or a process started as a worker (WE_ROLE=worker, readable on Linux); never a master/companion
+  [[ "$1" == background ]] && return 0
+  local gd  # the marker as worker_launch.read_marker reads it: a JSON object with a name
+  if [[ "$3" != - ]] && gd=$(git -C "$3" rev-parse --absolute-git-dir 2>/dev/null) &&
+    python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and d.get("name") else 1)' "$gd/we-worker.json" 2>/dev/null; then
+    return 0
+  fi
+  [[ "$2" != - && -r "/proc/$2/environ" ]] && tr '\0' '\n' <"/proc/$2/environ" | grep -qx 'WE_ROLE=worker'
+}
+_tree() { # <pid> -> "pid comm" of every descendant, one per line
+  ps -e -o pid=,ppid=,comm= 2>/dev/null | python3 -I -c 'import sys
+root=sys.argv[1]; kids={}; names={}
+for l in sys.stdin:
+    f=l.split(None,2)
+    if len(f)<3: continue
+    kids.setdefault(f[1],[]).append(f[0]); names[f[0]]=f[2].strip()
+out=[]; todo=list(kids.get(root,[]))
+while todo:
+    c=todo.pop(); out.append(c); todo+=kids.get(c,[])
+for c in out: print(c, names.get(c,"?"))' "$1"
 }
 
 name="${1:-}"
@@ -166,12 +210,79 @@ for x in json.load(sys.stdin):
     print(x.get("name"), x.get("id"), (last or {}).get("name"), str(i.get("command") or i.get("to") or i.get("file_path") or "")[:120])' "$(_projects)"
     exit 0
     ;;
-  stop | logs)
+  is-worker) # <id|name>: exit 0 for a worker; the one owner of the rule (worker_launch.is_worker)
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    read -r id _pid kind _sid _state cwd <<<"$(_resolve_any "$2")" || true
+    [[ -n "${id:-}" ]] && _is_worker "${kind:--}" "${_pid:--}" "${cwd:--}"
+    exit
+    ;;
+  checkpoint)
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    key=$2
+    read -r id _pid kind _sid state cwd <<<"$(_resolve_any "$key")" || true
+    [[ -n "${id:-}" && "${cwd:-}" != - ]] || { echo "we-worker: no worker '$key' with a working directory in claude agents" >&2; exit 1; }
+    _is_worker "${kind:--}" "${_pid:--}" "$cwd" || { echo "we-worker: '$key' ($id, $kind) is no worker; checkpoint commits only in a worker's tree" >&2; exit 1; }
+    # one writer per worktree: a working worker commits in this tree itself
+    case "${state:-}" in working | busy) echo "we-worker: '$key' ($id) is $state; checkpoint an idle or stopped worker (one writer per worktree)" >&2; exit 1 ;; esac
+    branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null) || { echo "we-worker: $cwd is no git worktree" >&2; exit 1; }
+    [[ "$branch" != HEAD ]] || { echo "we-worker: $cwd has a detached HEAD; nothing to name the wip branch after" >&2; exit 1; }
+    case "$branch" in main | master) echo "we-worker: $cwd is on $branch; a checkpoint commits only on a worker's own branch" >&2; exit 1 ;; esac
+    wip="wip/${branch#*/}"
+    # tracked changes only: a new file may be a scratch dump or a local secret, never pushed unseen
+    untracked=$(git -C "$cwd" ls-files --others --exclude-standard | head -5 | paste -sd ' ' -)
+    if git -C "$cwd" diff --quiet && git -C "$cwd" diff --cached --quiet; then
+      echo "we-worker: $key has no tracked change; nothing to checkpoint"
+    else
+      if ! { git -C "$cwd" add -u && git -C "$cwd" commit -q -m "wip: checkpoint $key"; }; then
+        echo "we-worker: the checkpoint commit in $cwd failed (a pre-commit hook?); nothing pushed" >&2
+        exit 1
+      fi
+    fi
+    git -C "$cwd" push -q origin "HEAD:refs/heads/$wip" ||
+      { echo "we-worker: push of $wip failed; the commit stays local in $cwd" >&2; exit 1; }
+    echo "we-worker: checkpoint $(git -C "$cwd" rev-parse --short HEAD) of $key pushed to $wip${untracked:+; not in it (new, untracked): $untracked}"
+    exit 0
+    ;;
+  stop)
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    key=$2
+    read -r id _pid kind sid _state _cwd <<<"$(_resolve_any "$key")" || true
+    [[ -n "${id:-}" ]] || { echo "we-worker: no worker '$key' in claude agents" >&2; exit 1; }
+    if ! _is_worker "${kind:--}" "${_pid:--}" "${_cwd:--}"; then
+      echo "we-worker: '$key' ($id, $kind) is no worker (not background, no we-worker marker, no WE_ROLE=worker); a typo protects a master or companion here. To stop it anyway: claude stop $id${_pid:+ or kill $_pid}" >&2
+      exit 1
+    fi
+    left=""
+    [[ "${_pid:-}" != - ]] && left=$(_tree "$_pid")
+    if [[ "${kind:-background}" == background ]]; then
+      env -u CLAUDE_CONFIG_DIR claude stop "$id" >/dev/null 2>&1 || true
+    elif [[ "${_pid:-}" != - ]]; then
+      kill -TERM "$_pid" 2>/dev/null || true
+    fi
+    gone=""
+    for _ in $(seq 1 "${WE_WORKER_STOP_WAIT:-30}"); do
+      read -r id2 pid2 _k _sid _state _cwd <<<"$(_resolve_any "$id")" || true
+      if [[ -z "${id2:-}" || "${pid2:-}" == - ]] || ! kill -0 "$pid2" 2>/dev/null; then gone=1; break; fi
+      sleep 1
+    done
+    ended=""
+    mine=" $$ $(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ') "
+    while read -r cpid comm; do
+      if [[ -z "${cpid:-}" || "$mine" == *" $cpid "* ]] || ! kill -0 "$cpid" 2>/dev/null; then continue; fi
+      kill -TERM "$cpid" 2>/dev/null && ended="${ended:+$ended, }$cpid $comm"
+    done <<<"$left"
+    if [[ -n "$gone" ]]; then
+      echo "we-worker: $key ($id) stopped${ended:+; also ended: $ended}"
+      exit 0
+    fi
+    echo "we-worker: $key ($id) still running after ${WE_WORKER_STOP_WAIT:-30} s (pid $pid2; claude stop names no job for it? end it with: kill $pid2)${ended:+; ended: $ended}" >&2
+    exit 1
+    ;;
+  logs)
     [[ $# -ge 2 && -n "$2" ]] || usage
     key=$2
     read -r id _pid _state sid <<<"$(_resolve "$key")" || true
     [[ -n "${id:-}" ]] || { echo "we-worker: no background worker '$key' in claude agents" >&2; exit 1; }
-    if [[ "$name" == logs ]]; then
       shift 2
       n=5
       raw=0
@@ -199,18 +310,6 @@ for hm, t in out[-int(sys.argv[3]):]:
       fi
       env -u CLAUDE_CONFIG_DIR claude logs "$id" 2>&1 | sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g; s/\x1b\\][^\x07]*\x07//g; s/\r//g'
       exit "${PIPESTATUS[0]}"
-    fi
-    env -u CLAUDE_CONFIG_DIR claude stop "$id" >/dev/null 2>&1 || true
-    for _ in $(seq 1 30); do
-      read -r id2 pid2 _s _sid <<<"$(_resolve "$id")" || true
-      if [[ -z "${id2:-}" || "${pid2:-}" == - ]] || ! kill -0 "$pid2" 2>/dev/null; then
-        echo "we-worker: $key ($id) stopped"
-        exit 0
-      fi
-      sleep 1
-    done
-    echo "we-worker: $key ($id) still running after 30 s (pid $pid2)" >&2
-    exit 1
     ;;
   -h | --help)
     sed -n '2,/^set /{/^#/s/^# \{0,1\}//p}' "$0"
@@ -295,6 +394,20 @@ for a in json.load(sys.stdin):
   fi
   echo "$sid"
 }
+# Flags claude knows, from its own help; empty when the help cannot be read (then nothing is refused).
+known_flags=$(env -u CLAUDE_CONFIG_DIR claude --help 2>/dev/null | grep -oE -- '--[a-z][a-z0-9-]*' | sort -u || true)
+if [[ -n "$known_flags" && $# -gt 0 ]]; then
+  last=$#
+  [[ "${!#}" == --* ]] || last=$(($# - 1)) # the prompt is the last word unless it is a flag
+  for arg in "${@:1:$last}"; do
+    [[ "$arg" == --* ]] || continue
+    flag=${arg%%=*}
+    if ! grep -qxF -- "$flag" <<<"$known_flags"; then
+      echo "we-worker: $flag is neither a we-worker flag (--bg, --limit) nor one claude knows; to start in another tree run: cd <tree> && we-worker $name …" >&2
+      exit 2
+    fi
+  done
+fi
 cargs=()
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -312,6 +425,11 @@ set -- ${cargs[@]+"${cargs[@]}"}
 
 extra=()
 [[ "$(crew_launch allow_bypass)" == true ]] && extra+=(--allow-dangerously-skip-permissions)
+mode_given=0
+for a in "$@"; do [[ "$a" == --permission-mode || "$a" == --permission-mode=* ]] && mode_given=1; done
+if [[ $bg -eq 1 && $mode_given -eq 0 && "$(crew_launch worker_mode)" == bypass ]]; then
+  extra+=(--permission-mode bypassPermissions)
+fi
 timer=${WE_WORKER_TIMER:-$(crew_launch worker_timer)}
 timer=${timer/#\~/$HOME}
 mode="tmux"

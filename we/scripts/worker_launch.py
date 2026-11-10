@@ -28,10 +28,14 @@ Usage:
   worker_launch.py backend [--repo <dir>]          prints `subagent` or the template; 2 = invalid
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
-                                                   with --worktree it removes marker and brief; a
+                                                   with --worktree it removes marker and brief;
+                                                   several sessions of that name all stop (ids
+                                                   printed), a refusal names the pid; a
                                                    template whose launcher has a `stop` verb
                                                    (`we-worker`) stops through it
   worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
+  worker_launch.py checkpoint --name <n>           commit the worker's changes (via we-worker), push them to
+                                                   wip/<branch without its type prefix>
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
 """
 
@@ -260,6 +264,12 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
     tokens = validate(template)
     if "{agent}" in tokens and not agent:
         raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
+    if agent and "{agent}" not in tokens:
+        print(
+            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
+            "the worker starts without its effort and model; add `--agent {agent}` to the template",
+            file=sys.stderr,
+        )
     gd = git_dir(worktree)
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
@@ -331,7 +341,7 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     """The template's first word when it is a launcher with its own `stop` verb, else None.
 
     Only `we-worker` (this plugin's launcher, `scripts/we-worker`) is known to carry
-    `status|stop|logs|waiting`; any other launcher, or a `we-worker` not on `PATH`, is stopped
+    `status|stop|logs|waiting|checkpoint`; any other launcher, or a `we-worker` not on `PATH`, is stopped
     with `claude stop`.
     """
     try:
@@ -346,35 +356,89 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     return first
 
 
-def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> None:
-    cwd = str(worktree) if worktree else None
-    rows = _running(sessions(), name, cwd)
-    if not rows:
-        clear_marker(worktree)
-        raise LaunchError(f"no running session named {name}")
-    if len(rows) > 1:
-        raise LaunchError(f"{len(rows)} sessions named {name}: pass --worktree")
-    launcher = launcher_with_verbs(worktree)
-    argv = (
-        [launcher, "stop", str(rows[0]["id"])]
-        if launcher
-        else ["claude", "stop", str(rows[0]["id"])]
-    )
+def _stop_one(row: dict, launcher: str | None) -> str:
+    """Stop one session row; returns its id. A refusal names the id and the pid."""
+    rid = str(row.get("id"))
+    argv = [launcher or "claude", "stop", rid]
     try:
         out = subprocess.run(
             argv, capture_output=True, text=True, check=False, timeout=STOP_VERB_TIMEOUT_S
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise LaunchError(f"{argv[0]} stop: {exc}") from exc
+        raise LaunchError(f"{argv[0]} stop {rid}: {exc}") from exc
     if out.returncode != 0:
-        raise LaunchError(f"{argv[0]} stop exited {out.returncode}: {out.stderr.strip()}")
+        raise LaunchError(
+            f"{argv[0]} stop {rid} exited {out.returncode}: {out.stderr.strip()} "
+            f"(pid {row.get('pid', '?')}: `kill {row.get('pid', '<pid>')}` ends it)"
+        )
+    return rid
+
+
+def is_worker(row: dict) -> bool:
+    """`we-worker is-worker <id>` (the one owner of the rule, beside this file): a background
+    session, a worktree with the launcher's marker, or a process started as a worker; never a
+    master or companion session. Any failure counts as no worker."""
+    script = Path(__file__).resolve().with_name("we-worker")
+    try:
+        out = subprocess.run(
+            ["bash", str(script), "is-worker", str(row.get("id"))],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=STOP_VERB_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return out.returncode == 0
+
+
+def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -> list[str]:
+    """Stop every worker session named `name` (in `worktree` when given); returns their ids. A
+    session of that name that is no worker (`is_worker`) is never stopped: a typo guard."""
+    cwd = str(worktree) if worktree else None
+    named = _running(sessions(), name, cwd)
+    rows = [r for r in named if is_worker(r)]
+    if not rows and named:
+        r = named[-1]
+        raise LaunchError(
+            f"{name} ({r.get('id')}, {r.get('kind')}) is no worker; a master or companion is never "
+            f"stopped by name. To stop it anyway: claude stop {r.get('id')}"
+        )
+    if not rows:
+        clear_marker(worktree)
+        raise LaunchError(f"no running session named {name}")
+    launcher = launcher_with_verbs(worktree)
+    ids = [_stop_one(row, launcher) for row in rows]
     deadline = time.monotonic() + wait_s
-    while _running(sessions(), name, cwd):
+    while left := [r for r in _running(sessions(), name, cwd) if is_worker(r)]:
         if time.monotonic() >= deadline:
-            raise LaunchError(f"{name} still running {wait_s:.0f} s after {argv[0]} stop", 3)
+            pids = ", ".join(f"{r.get('id')} pid {r.get('pid', '?')}" for r in left)
+            raise LaunchError(f"{name} still running {wait_s:.0f} s after stop ({pids})", 3)
         time.sleep(1)
     clear_marker(worktree)
-    _timing("WorkerStop", name=name, cwd=cwd)
+    _timing("WorkerStop", name=name, cwd=cwd, ids=ids)
+    return ids
+
+
+def checkpoint(name: str) -> str:
+    """`we-worker checkpoint <name>` (the one owner of the procedure, beside this file): commit
+    the worker's changes and push them to wip/<branch sans type>; returns its line."""
+    script = Path(__file__).resolve().with_name("we-worker")
+    try:
+        out = subprocess.run(
+            ["bash", str(script), "checkpoint", name],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=STOP_VERB_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise LaunchError(f"we-worker checkpoint {name}: {exc}") from exc
+    if out.returncode != 0:
+        raise LaunchError(
+            out.stderr.strip() or f"we-worker checkpoint {name} exited {out.returncode}"
+        )
+    return out.stdout.strip().removeprefix("we-worker: ")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -392,6 +456,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--worktree", type=Path)
     p = sub.add_parser("alive")
     p.add_argument("--name", required=True)
+    p = sub.add_parser("checkpoint")
+    p.add_argument("--name", required=True)
     args = parser.parse_args(argv)
     try:
         if args.cmd == "backend":
@@ -400,8 +466,10 @@ def main(argv: list[str] | None = None) -> int:
             marker = launch(args.worktree.resolve(), args.name, args.brief_file, args.agent)
             print(f"launched: {args.name} · marker {marker}")
         elif args.cmd == "stop":
-            stop(args.name, args.worktree.resolve() if args.worktree else None)
-            print(f"stopped: {args.name}")
+            ids = stop(args.name, args.worktree.resolve() if args.worktree else None)
+            print(f"stopped: {args.name} ({', '.join(ids)})")
+        elif args.cmd == "checkpoint":
+            print(checkpoint(args.name))
         else:
             return 0 if alive(args.name) else 1
     except LaunchError as exc:

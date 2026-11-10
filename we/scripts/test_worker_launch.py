@@ -358,3 +358,70 @@ def test_stop_falls_back_to_claude_stop_when_we_worker_is_not_on_path(env):
     _crew(env, {"worker": "we-worker {name} --bg --agent {agent} {brief}"})
     wl.stop("w1", env["wt"])
     assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]
+
+
+# Several sessions of one name, a dropped --agent, checkpoint.
+
+
+def test_stop_ends_every_session_of_the_name_and_names_their_ids(env):
+    rows = [
+        *_rows(env),
+        {"id": "w1a", "name": "w1", "cwd": "/a", "kind": "background", "pid": 1},
+        {"id": "w1b", "name": "w1", "cwd": "/b", "kind": "background", "pid": 2},
+    ]
+    env["state"].write_text(json.dumps(rows))
+    assert wl.stop("w1") == ["w1a", "w1b"]
+    argvs = [c["argv"] for c in _calls(env)]
+    assert ["stop", "w1a"] in argvs and ["stop", "w1b"] in argvs
+
+
+def test_stop_refuses_a_session_of_the_name_that_is_no_worker(env):
+    rows = [*_rows(env), {"id": "ma1", "name": "Pia", "cwd": "/nowhere", "kind": "interactive"}]
+    env["state"].write_text(json.dumps(rows))
+    with pytest.raises(
+        wl.LaunchError, match=r"Pia \(ma1, interactive\) is no worker.*claude stop ma1"
+    ):
+        wl.stop("Pia")
+    assert not any(c["argv"][:1] == ["stop"] for c in _calls(env))
+
+
+def test_a_refused_stop_names_the_pid(env, monkeypatch):
+    monkeypatch.setenv("STUB_STOP_FAILS", "1")
+    rows = [
+        *_rows(env),
+        {"id": "w9", "name": "w9", "cwd": "/a", "kind": "background", "pid": 4242},
+    ]
+    env["state"].write_text(json.dumps(rows))
+    with pytest.raises(wl.LaunchError, match=r"pid 4242: `kill 4242` ends it"):
+        wl.stop("w9")
+
+
+def test_an_agent_the_template_cannot_carry_is_named(env, capsys):
+    env["configure"]("claude --bg -n {name} {brief}")
+    wl.launch(env["wt"], "w1", env["brief"], "we:dev-high")
+    assert "--agent we:dev-high is dropped" in capsys.readouterr().err
+
+
+def test_checkpoint_pushes_the_tracked_changes_to_a_wip_branch(env, tmp_path, monkeypatch):
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git(env["wt"], "remote", "add", "origin", str(origin))
+    (env["wt"] / "a.txt").write_text("one\n")
+    _git(env["wt"], "add", "a.txt")
+    _git(env["wt"], "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a")
+    (env["wt"] / "a.txt").write_text("two\n")
+    rows = [*_rows(env), {"id": "w1", "name": "w1", "cwd": str(env["wt"]), "kind": "background"}]
+    env["state"].write_text(json.dumps(rows))
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@t")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
+    line = wl.checkpoint("w1")
+    assert line.endswith("pushed to wip/x")
+    shown = subprocess.run(
+        ["git", "--git-dir", str(origin), "show", "wip/x:a.txt"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert shown.stdout == "two\n"

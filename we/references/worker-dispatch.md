@@ -82,7 +82,10 @@ template in force; the master's boot check and `/we:accept` read it there.
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
   {agent}`, so its effort and model apply). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
-  the Lead's messages for approval.
+  the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
+  a `--bg` worker in bypass, a window worker keeps its default mode: in the background
+  nobody answers a prompt, and the `permissions.deny`/`ask` rules and the plugin's guards still
+  hold under bypass.
 
 With a template, the Lead:
 
@@ -103,8 +106,11 @@ With a template, the Lead:
    and the brief, then the worktree can go or the Lead can work in it.
 
 The plugin ships a launcher: `scripts/we-worker` (installed next to `wclaude` by
-`scripts/install_launcher.py`; `we-worker --help`), with the verbs `status|stop|logs|waiting`;
-`worker_launch.py stop` uses its `stop` when the template starts with it. Where a launcher brings
+`scripts/install_launcher.py`; `we-worker --help`), with the verbs
+`status|stop|logs|waiting|checkpoint`; `worker_launch.py stop` uses its `stop` when the template
+starts with it. `stop` and `checkpoint` touch workers only: a name that hits a master or companion
+refuses (`stop` names `claude stop <id>`); `checkpoint` runs on an idle or stopped worker only and refuses
+one `claude agents` shows working or busy (one writer per worktree). Where a launcher brings
 such verbs, the Lead steers and inspects through them instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
 from `claude agents --json`, never from a log or a quiet tail.
 

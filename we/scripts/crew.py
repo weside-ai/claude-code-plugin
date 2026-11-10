@@ -60,7 +60,9 @@ round, and every new plan blob is one, a whitespace edit included: pick N with t
 starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
-``permissions.defaultMode``; ``worker_timer``: a script ``we-worker`` registers each worker's time
+``permissions.defaultMode``; ``worker_mode``: ``auto`` (the default) or ``bypass``, the mode a
+``we-worker --bg`` worker starts in (``bypass`` adds ``--permission-mode bypassPermissions``, because
+in the background nobody answers a prompt; a window worker keeps the default mode); ``worker_timer``: a script ``we-worker`` registers each worker's time
 limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
 and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
 ``files``, ``state_dir`` (the folder of the crew's board family and
@@ -244,6 +246,7 @@ DEFAULTS: dict[str, Any] = {
         "worker": None,
         "subagent_fallback": False,
         "allow_bypass": False,
+        "worker_mode": "auto",
         "worker_timer": None,
         "restore": None,
     },
@@ -571,6 +574,9 @@ def _check_list(path: Path, value: Any, default: list, dotted: str) -> None:
         raise _fail(path, f"{dotted} must be a list of strings")
 
 
+WORKER_MODES = ("auto", "bypass")
+
+
 def _validate(path: Path, data: dict[str, Any]) -> None:
     """The hard checks, on ``data`` without its unknown keys."""
     for key in ("roles", "members"):
@@ -592,6 +598,9 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
     reviewer = data.get("sla", {}).get("t2_second_reviewer")
     if reviewer is not None and reviewer not in slugs:
         raise _fail(path, f"sla.t2_second_reviewer {reviewer!r} is no member")
+    mode = data.get("launch", {}).get("worker_mode", "auto")
+    if mode not in WORKER_MODES:
+        raise _fail(path, f"launch.worker_mode must be one of {', '.join(WORKER_MODES)}")
     _validate_local_rules(path, data.get("local_rules", []))
     _validate_urgent_commands(path, data.get("flow", {}).get("urgent_commands", []))
     for key, text in data.get("labels", {}).items():

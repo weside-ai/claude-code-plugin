@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +43,12 @@ GREEN = '```json\n{"findings": []}\n```'
 
 def _git(root: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+
+@pytest.fixture(autouse=True)
+def _gate_passes(monkeypatch):
+    """The Ready gate has its own suite; here every plan passes it unless a test says otherwise."""
+    monkeypatch.setattr(lv.ready_gate, "story_failures", lambda _plan: ([], []))
 
 
 @pytest.fixture
@@ -524,7 +531,7 @@ def test_a_rewrite_of_the_same_lens_counts_once_and_red_counts_never(repo):
 
 def test_the_cli_runs_isolated(repo):
     out = subprocess.run(
-        [sys.executable, "-I", str(SCRIPT), "plan", "ready", KEY],
+        [sys.executable, "-I", str(SCRIPT), "plan", "t2", "7"],  # imports ready_gate too
         capture_output=True,
         text=True,
         cwd=repo,
@@ -1007,6 +1014,92 @@ def test_a_corpus_case_names_an_added_line_and_its_panel_flags_it(repo, case):
         assert any(f["severity"] in severities and f["status"] == "standing" for f in hits), (
             f"{where}: stored {[f['severity'] for f in hits]}, expected one of {sorted(severities)}"
         )
+
+
+# --- 3e: lens ergonomics -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("empty", ["", {}, {"command": ""}, {"command": "  "}])
+def test_an_empty_red_arm_beside_a_note_is_no_arm(repo, empty):
+    run("plan", "t2", "7")
+    note = {"severity": "NOTE", "claim": "c", "where": "a.py:1", "question": "q", "red_arm": empty}
+    code, out, err = run("write", "t2-pr7", "product", stdin=answer(note))
+    assert code == 0, err
+    assert "lens product: green" in out
+
+
+def test_an_empty_red_arm_beside_a_t2_blocking_still_refuses(repo):
+    run("plan", "t2", "7")
+    code, _, err = run("write", "t2-pr7", "product", stdin=answer(blocking({"command": ""})))
+    assert code == 1 and "finding without red arm" in err
+
+
+def test_a_ready_write_after_the_plan_worktree_is_gone(repo):
+    """The plan is committed, so its blob stays in the object store when the file goes."""
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "plan")
+    run("plan", "ready", KEY)
+    (repo / "docs" / "plans" / f"{KEY}-story.md").unlink()
+    code, out, err = run("write", f"ready-{KEY}", "product", stdin=GREEN)
+    assert code == 0, err
+    assert "lens product: green" in out
+
+
+def test_a_ready_write_on_an_unknown_blob_still_refuses(repo):
+    run("plan", "ready", KEY)  # the plan was never committed: its blob is in no object store
+    (repo / "docs" / "plans" / f"{KEY}-story.md").unlink()
+    code, _, err = run("write", f"ready-{KEY}", "product", stdin=GREEN)
+    assert code == 1 and "missing" in err
+
+
+def test_plan_ready_runs_the_ready_gate_first_and_starts_no_panel_on_a_failure(repo, monkeypatch):
+    monkeypatch.setattr(
+        lv.ready_gate,
+        "story_failures",
+        lambda plan: ([f"{plan}: ## Context: section missing"], []),
+    )
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 1 and out == ""
+    assert (
+        "the Ready gate refuses it, no lens runs" in err and "## Context: section missing" in err
+    )
+    assert not verdict_file(repo, f"ready-{KEY}").exists()
+
+
+def test_plan_ready_reads_the_plan_from_origin_main_when_this_checkout_lacks_it(repo, tmp_path):
+    """A checkout behind main right after the plan PR merged: the panel binds main's plan blob and
+    hands the lenses a copy of it (with ref origin/main)."""
+    plan = repo / "docs" / "plans" / f"{KEY}-story.md"
+    plan.write_text("# Plan on main\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "plan")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    blob = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", f"HEAD:docs/plans/{KEY}-story.md"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    plan.unlink()
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    entry = json.loads(out)["entries"][0]
+    assert entry["plan_blob"] == blob and entry["ref"] == "origin/main"
+    assert Path(entry["plan"]).read_text() == "# Plan on main\n"
+    assert run("write", f"ready-{KEY}", "product", stdin=GREEN)[0] == 0
+
+
+def test_the_ready_gate_leaves_no_folder_it_made_for_main_s_plan(repo):
+    """The gate reads main's plan from its own path for a moment; the folders that took go too."""
+    plan = repo / "docs" / "plans" / f"{KEY}-story.md"
+    plan.write_text("# Plan on main\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "plan")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    shutil.rmtree(repo / "docs")
+    code, _out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    assert not (repo / "docs").exists()
 
 
 def test_parallel_writes_keep_every_lens(repo):
