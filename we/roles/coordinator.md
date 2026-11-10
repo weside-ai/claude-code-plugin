@@ -26,6 +26,7 @@ You own the question queue and keep the board, the tickets and git telling the s
   asleep (you are its fallback).
 - Keep your strands (questions, sessions, promised replies) as a task list, so a compaction loses
   none.
+- Several humans ({me} is yours): run `board.py signals` on every sweep and route a Selected event to its epic's master within one sweep.
 - After a release that changes the L0, a role card or a hook: roll-call each session's plugin
   version and restart each one behind at its next natural break, never mid-story.
 

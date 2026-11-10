@@ -24,8 +24,15 @@ Usage:
                                                reserve), else 1
 
 Templates: ``process/L0.md`` (every session but a worker) and ``process/L0-worker.md``. A token is
-``{key}`` or ``{key|fallback}``. ``key`` is a role key of ``crew.ROLE_KEYS`` (the holder's name,
-else the fallback, else the role's title), ``human`` (``human.name``), ``specialists`` (``Name
+``{key}`` or ``{key|fallback}``. ``key`` is a role key of ``crew.ROLE_KEYS`` (the name this
+session's human gives the role, ``crew.display_name`` with ``crew.env_human``: ``WE_HUMAN``, which
+``wclaude --start`` sets; else the holder's name, else the fallback, else the role's title),
+``human`` (this session's human's name in a crew with ``humans``, else ``human.name``),
+``human.decides`` (that human's ``decides``), ``me`` (that name only in a crew with ``humans``: the
+line holding it is dropped otherwise), ``single`` (empty, the line holding it is dropped in a crew
+with ``humans``), ``humans`` (one bullet per human: name, slug, owned states, decides, runs; only
+in ``process/humans.md``, which ``card_parts`` adds after the card of every session but a worker in
+a crew with ``humans``), ``specialists (``Name
 (field)`` of every member with ``specialist`` that holds no role key; the line holding it is
 dropped when there is none), a key of ``crew.OPTIONAL_ROLE_KEYS`` without a holder (the line holding
 its bare token is dropped, so an unbound crew renders as before),
@@ -196,9 +203,55 @@ def crew_notice(crew: dict[str, Any]) -> str | None:
     return line[:NOTICE_HEAD] + "…" + line[-tail:]
 
 
+def _local_human(crew: dict[str, Any]) -> dict[str, Any] | None:
+    """This session's human in a crew with ``humans`` (``crew.env_human``), else None."""
+    if not crewlib.several_humans(crew):
+        return None
+    slug = crewlib.env_human(crew)
+    return crewlib.humans(crew).get(slug) if slug else None
+
+
+def _human(crew: dict[str, Any]) -> str | None:
+    local = _local_human(crew)
+    return local["name"] if local else _show((crew.get("human") or {}).get("name"))
+
+
+def _decides(crew: dict[str, Any]) -> str | None:
+    local = _local_human(crew)
+    if local is None:
+        return _show((crew.get("human") or {}).get("decides"))
+    return _show(local["decides"])
+
+
+def _me(crew: dict[str, Any]) -> str | None:
+    local = _local_human(crew)
+    return local["name"] if local else None
+
+
+def _humans(crew: dict[str, Any]) -> str | None:
+    if not crewlib.several_humans(crew):
+        return None
+    states = (crew.get("board") or {}).get("states") or {}
+    rows = []
+    for slug, e in crewlib.humans(crew).items():
+        head, parts = f"- **{e['name']}** (`{slug}`)", []
+        if e["owns_states"]:
+            parts.append("owns " + ", ".join(states.get(x, x) for x in e["owns_states"]))
+        if e["decides"]:
+            parts.append("decides " + ", ".join(e["decides"]))
+        if e["runs"]:
+            parts.append("runs " + ", ".join(e["runs"]))
+        rows.append(f"{head}: {'; '.join(parts)}." if parts else f"{head}.")
+    return "\n".join(rows)
+
+
 SPECIAL = {
     "crew_notice": crew_notice,
-    "human": lambda crew: _show((crew.get("human") or {}).get("name")),
+    "human": _human,
+    "human.decides": _decides,
+    "me": _me,
+    "single": lambda crew: None if crewlib.several_humans(crew) else "",
+    "humans": _humans,
     "specialists": _specialists,
     "local_rules": _local_rules,
     "t2_second_reviewer": _second_reviewer,
@@ -207,7 +260,7 @@ SPECIAL = {
 
 def _resolve(crew: dict[str, Any], key: str) -> str | None:
     if key in crewlib.ROLE_KEYS:
-        return crewlib.holder_name(crew, key)
+        return crewlib.display_name(crew, key, crewlib.env_human(crew))
     if key in SPECIAL:
         return SPECIAL[key](crew)
     return _show(_dotted(crew, key))
@@ -215,7 +268,11 @@ def _resolve(crew: dict[str, Any], key: str) -> str | None:
 
 def render(template: str, crew: dict[str, Any]) -> str:
     """``template`` with every token filled from ``crew``; see the module docstring."""
-    drop_lines = {"specialists": _resolve(crew, "specialists") is None}
+    drop_lines = {
+        "specialists": _resolve(crew, "specialists") is None,
+        "me": _resolve(crew, "me") is None,
+        "single": _resolve(crew, "single") is None,
+    }
     for key in crewlib.OPTIONAL_ROLE_KEYS:
         drop_lines[key] = _resolve(crew, key) is None
     if _resolve(crew, "crew_notice") is None:
@@ -291,6 +348,14 @@ def card_headings(text: str) -> list[str]:
 def render_card(crew: dict[str, Any], role: str, roles: Path = ROLES) -> str:
     """The role card for ``role`` (``all_roles``) filled from ``crew``."""
     return render((roles / f"{role}.md").read_text(encoding="utf-8"), crew).strip("\n")
+
+
+def humans_part(crew: dict[str, Any], role: str, process: Path = PROCESS) -> str | None:
+    """``process/humans.md`` filled from ``crew`` for every session but a worker in a crew with
+    ``humans``, else None; ``card_parts`` puts it after the card."""
+    if role == "worker" or not crewlib.several_humans(crew):
+        return None
+    return render((process / "humans.md").read_text(encoding="utf-8"), crew).strip("\n")
 
 
 def addendum_path(crew_path: Path, crew: dict[str, Any], role: str, slug: str) -> Path:
@@ -533,6 +598,9 @@ def card_parts(
     command that has one. OSError and CrewError (unknown
     member, missing workplace) propagate."""
     card = render_card(crew, role)
+    several = humans_part(crew, role)
+    if several:
+        card = f"{card}\n\n{several}"
     path = addendum_path(crew_path, crew, role, slug)
     addendum = (path, path.read_text(encoding="utf-8").strip("\n")) if path.is_file() else None
     extras, missing = crewlib.extra_repos(crew_path, crew, slug) if slug else ([], [])

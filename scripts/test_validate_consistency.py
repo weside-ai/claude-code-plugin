@@ -281,3 +281,31 @@ def test_existing_plugin_root_paths_pass(tmp_path):
         },
     )
     assert run(root, "plugin-root-paths").returncode == 0
+
+
+ADAPTER = 'VALUE_FIELD = {"transition": "status", "label": "add"}\n'
+
+
+def test_every_carry_op_is_documented(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "we/scripts/ticket_adapter.py": ADAPTER,
+            "we/references/ticketing.md": '`{"op": "transition", "key", "status"}`\n',
+            "we/docs/board.md": '`{"op": "label", "key", "add"}`\n',
+        },
+    )
+    assert run(root, "carry-ops").returncode == 0
+
+
+def test_an_undocumented_carry_op_fails(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "we/scripts/ticket_adapter.py": ADAPTER,
+            "we/references/ticketing.md": '`{"op": "transition", "key", "status"}`\n',
+        },
+    )
+    result = run(root, "carry-ops")
+    assert result.returncode == 1
+    assert "carry op 'label'" in result.stdout

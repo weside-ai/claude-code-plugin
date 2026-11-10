@@ -7,7 +7,13 @@
 #   wclaude -c              menu, then claude -c (claude's own --continue)
 #   wclaude --as <Name> ... no menu; the rest goes to claude
 #   wclaude --pin ...       start through $WCLAUDE_PIN instead of claude (combines with --as)
-#   wclaude --start [--fresh]  the crew's main companion (references/companion-session.md § Launch and pin)
+#   wclaude --start [--fresh] [--role <key>]  the crew's main companion, or another role this
+#                           human runs (references/companion-session.md § Launch and pin); sets
+#                           WE_HUMAN (the human) and WE_ROLE_ID (the role key). Without --role it
+#                           also opens the product owner in its own tmux window (start.py side);
+#                           outside tmux it names the command instead. A companion that runs
+#                           already is named and not started twice.
+# Outside tmux ($TMUX empty) every start warns on stderr and goes on.
 # Choice 0 starts claude with the companion pin cleared (WESIDE_COMPANION empty = no companion).
 # Every session it starts is a master: WE_ROLE=master. Without --pin it runs on the same login as a
 # plain `claude` and follows your account switcher. WCLAUDE_PIN names one executable that takes
@@ -19,7 +25,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: wclaude [--as <Name>] [--pin] [--start [--fresh]] [claude arguments...]" >&2
+  echo "usage: wclaude [--as <Name>] [--pin] [--start [--fresh] [--role <key>]] [claude arguments...]" >&2
   exit 2
 }
 
@@ -28,6 +34,7 @@ picked=0
 pin=0
 start=0
 fresh=""
+role=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --as)
@@ -48,9 +55,17 @@ while [[ $# -gt 0 ]]; do
       fresh=--fresh
       shift
       ;;
+    --role)
+      [[ $# -ge 2 && -n "$2" ]] || usage
+      role=$2
+      shift 2
+      ;;
     *) break ;;
   esac
 done
+if [[ -z "${TMUX:-}" ]]; then
+  echo "wclaude: warning: not inside tmux; the session ends with this terminal, and --start opens no second window" >&2
+fi
 launch=claude
 if [[ $pin -eq 1 ]]; then
   [[ -n "${WCLAUDE_PIN:-}" ]] || { echo "wclaude: --pin needs WCLAUDE_PIN (the command that pins an account)" >&2; exit 2; }
@@ -101,8 +116,29 @@ if [[ $start -eq 1 ]]; then
   command -v python3 >/dev/null 2>&1 || { echo "wclaude: --start needs python3" >&2; exit 1; }
   resolver=$(crew_script)
   [[ -n "$resolver" ]] || { echo "wclaude: --start needs the we plugin (crew.py not found)" >&2; exit 1; }
-  row=$(python3 "$(dirname "$resolver")/start.py" plan ${fresh:+"$fresh"}) || exit 1
-  IFS=$'\t' read -r pick s_pin s_dir s_sid <<<"$row"
+  starter="$(dirname "$resolver")/start.py"
+  status=0
+  row=$(python3 "$starter" plan ${fresh:+"$fresh"} ${role:+--role "$role"}) || status=$?
+  [[ $status -eq 0 || $status -eq 3 ]] || exit 1
+  if [[ -z "$role" ]]; then
+    # the product owner beside the coordinator: its own tmux window, else the command to run
+    self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+    while IFS=$'\t' read -r o_role o_name o_human; do
+      [[ -n "$o_role" ]] || continue
+      if [[ -n "${TMUX:-}" ]]; then
+        o_env=(WE_HUMAN="$o_human")
+        [[ -z "${WCLAUDE_PIN:-}" ]] || o_env+=(WCLAUDE_PIN="$WCLAUDE_PIN")
+        tmux new-window -d -n "$o_name" -c "$PWD" env "${o_env[@]}" \
+          "$self" --start --role "$o_role" ${fresh:+"$fresh"}
+        echo "wclaude: $o_name ($o_role) starts in the tmux window $o_name" >&2
+      else
+        echo "wclaude: start $o_name ($o_role) in a second terminal: wclaude --start --role $o_role" >&2
+      fi
+    done < <(python3 "$starter" side || true)
+  fi
+  [[ $status -eq 0 ]] || exit 0 # the main companion runs already: nothing more to start
+  IFS=$'\t' read -r pick s_pin s_dir s_human s_role s_sid <<<"$row"
+  export WE_HUMAN=$s_human WE_ROLE_ID=$s_role
   picked=1
   if [[ "$s_pin" == 1 && $pin -eq 0 ]]; then
     pin=1
@@ -118,8 +154,8 @@ if [[ $start -eq 1 ]]; then
     echo "wclaude: $pick starts fresh in $s_dir" >&2
   fi
   set -- "$@" "/we:start"
-elif [[ -n "$fresh" ]]; then
-  echo "wclaude: --fresh goes with --start" >&2
+elif [[ -n "$fresh" || -n "$role" ]]; then
+  echo "wclaude: --fresh and --role go with --start" >&2
   exit 2
 fi
 

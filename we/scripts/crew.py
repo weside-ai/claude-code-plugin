@@ -25,6 +25,11 @@ Usage:
   crew.py launch FIELD [--from DIR]         the value of ``launch.FIELD`` for a shell: a bool as
                                             ``true``/``false``, null as an empty line; without a
                                             crew file the default (exit 0), a broken crew exit 1
+  crew.py human [--from DIR]                this session's human (``current_human``):
+                                            "<slug>\t<name>\t<runs, comma-separated>", exit 1 when
+                                            the crew cannot tell (the reason on stderr)
+  crew.py name ROLE [--from DIR]            the display name of ROLE (a role key or a member slug)
+                                            for this session's human (``display_name``)
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -45,7 +50,8 @@ has a default in ``DEFAULTS``; a repo writes only what differs: ``human``, ``que
 parking signal in the crew's language: ``recommendation``, ``ready``, and of the notice line a
 session reads when its crew is unreadable or carries unknown keys: ``crew_unreadable``,
 ``crew_unknown_keys``, and the reason ``board.py blocked --clear`` gives a question whose permission
-prompt was resolved, followed by the time: ``prompt_resolved``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
+prompt was resolved, followed by the time: ``prompt_resolved``, and the word before a human's name in a
+question posted on a ticket (``board.py ask --to``): ``to``; each one line of at most ``LABEL_CHARS`` characters), ``skill_prefix`` (role skills are ``<prefix>-<name
 lowercased>``), ``weside_account`` (the members are weside companions: a pinned session loads its
 identity with ``/we:materialize``), ``lenses`` (per lens ``agent``, ``questions`` (the Ready
 question file), ``t2_questions`` (the T2 question file), ``registry``, ``keeper``, ``sample``;
@@ -56,7 +62,11 @@ or later whose red lenses stand on WARNINGs alone count green with those warning
 Selected row; a BLOCKING stays red, and a T2 panel never reads it; ``lens_verdict.py`` owns the
 round, and every new plan blob is one, a whitespace edit included: pick N with that in mind), ``t2_panel``, ``risk``,
 ``fallback`` (role key -> role key or ``human_bundle``), ``local_rules``, ``acceptance``,
-``oracles``, ``board``, ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
+``oracles``, ``board`` (``file``, ``ticketing``, ``states``; ``signals``: a list of objects
+``{state, role, jql_window}``, the transitions ``board.py signals`` reads: ``state`` a key of
+``STATES``, ``role`` a role key, ``jql_window`` a number with ``m``, ``h`` or ``d``; ``jql_scope``:
+a JQL clause every signal query starts with, null = none; ``claim_hours``: how long a ticket claim
+lives), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
 starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
@@ -91,6 +101,20 @@ that does not exist relative to the repo holding the crew file. It then merges t
 object (each lens over its default lens, ``board.states`` over the default states; a list
 replaces), so every reader sees the defaults without knowing them.
 
+Humans (``humans``, optional): several humans share one crew, each on their own machine with
+their own sessions; ``humans.<slug>`` (the slug ``[a-z0-9][a-z0-9_-]*``) holds ``name`` (required),
+``email`` (matched case-insensitively against ``git config user.email``, unique), ``account_id``
+(the human's ticketing account id, e.g. a Jira accountId, unique; with ``email`` the only accounts
+a ticket comment counts as that human's, ``board_humans.py``), ``decides``
+(list), ``owns_states`` (keys of ``STATES``; a state has at most one owning human), ``runs`` (what
+starts on that human's machine: role keys, member slugs of specialists, and ``masters`` for epic
+masters and their workers) and ``companions`` (role key or member slug -> the display name that
+human gives it; a name never denotes two members). Without ``humans`` the crew has one human,
+``human``, slug ``human_slug(human.name)``, who runs every bound role and ``masters`` and owns every
+state (``humans()``). ``current_human`` resolves the session's human: ``WE_HUMAN`` (a slug, else
+``CrewError``), else ``git config user.email``, else the only human; ``display_name`` gives a role's
+name for a human: ``humans.<me>.companions.<role>``, else the member's ``name``.
+
 Transition (``V7_TRANSITION``): a file may still carry the version-1 keys ``roles.product_owner``,
 ``roles.orchestrator``, ``roles.tester``, ``members.*.role`` and ``members.*.lens`` while sessions
 on the previous major read it. Each role key needs its counterpart ``product``, ``coordinator`` or
@@ -101,7 +125,8 @@ Session kind (``session_kind``, read by both SessionStart hooks): ``worker`` (``
 without a pin, a session started with ``--agent``, or the process worker the worktree's
 ``we-worker.json`` marker names: its own session id, or none recorded yet), ``consult`` (a pin with ``WE_ROLE=worker``:
 the companion answers one request and ends), ``named`` (a pin, ``WE_ROLE`` master or unset),
-``unnamed`` (no pin).
+``unnamed`` (no pin). A pin may be a human's companion name (``member`` resolves it); a member
+holding several roles is the one ``WE_ROLE_ID`` names (``role_of_session``).
 """
 
 from __future__ import annotations
@@ -147,6 +172,16 @@ LABEL_CHARS = 40
 CADENCES = ("rc_train", "bundle", "replenishment", "flow_report", "process_inbox", "goal_file")
 STATES = ("on_hold", "backlog", "selected", "in_progress", "in_review", "done")
 FALLBACK_TARGETS = (*ROLE_KEYS, "human_bundle")
+HUMAN_KEYS = {
+    "name": str,
+    "email": str,
+    "account_id": str,
+    "decides": list,
+    "owns_states": list,
+    "runs": list,
+    "companions": dict,
+}
+MASTERS = "masters"  # the pseudo role key in ``humans.<slug>.runs`` for epic masters and builders
 MEMBER_KEYS = {
     "name": str,
     "title": str,
@@ -184,6 +219,7 @@ DEFAULTS: dict[str, Any] = {
         "crew_unreadable": "crew.json not readable",
         "crew_unknown_keys": "crew.json: unknown keys ignored",
         "prompt_resolved": "prompt resolved at",
+        "to": "to",
     },
     "skill_prefix": "weside",
     "weside_account": False,
@@ -231,6 +267,9 @@ DEFAULTS: dict[str, Any] = {
             "in_review": "In Review",
             "done": "Done",
         },
+        "signals": [],
+        "jql_scope": None,
+        "claim_hours": 4,
     },
     "sla": {"hours": 4, "daytime": "08-20", "tz": "UTC", "t2_second_reviewer": None},
     "limits": {
@@ -362,6 +401,9 @@ def role_of_session(crew: dict[str, Any], env: Any, hook_input: dict | None = No
     if found is None:
         return None
     slug, entry = found
+    wanted = str(env.get("WE_ROLE_ID", "")).strip()
+    if wanted in ROLE_KEYS and crew.get("roles", {}).get(wanted) == slug:
+        return wanted
     held = next((r for r in ROLE_KEYS if crew.get("roles", {}).get(r) == slug), None)
     if held:
         return held
@@ -461,6 +503,9 @@ def _unknown_keys(data: dict[str, Any]) -> list[tuple[str, ...]]:
             for slug, entry in value.items() if isinstance(value, dict) else ():
                 known = (*MEMBER_KEYS, *V7_MEMBER_KEYS)
                 found += [(key, slug, k) for k in _keys(entry) if k not in known]
+        elif key == "humans":
+            for slug, entry in value.items() if isinstance(value, dict) else ():
+                found += [(key, slug, k) for k in _keys(entry) if k not in HUMAN_KEYS]
         elif key == "lenses":
             for name, lens in value.items() if isinstance(value, dict) else ():
                 _walk(lens, _lens(name), (key, name), found)
@@ -528,7 +573,9 @@ def _fail(path: Path, message: str) -> CrewError:
 
 def _check(path: Path, value: Any, default: Any, dotted: str) -> None:
     """``value`` has the types of ``default`` (``_unknown_keys`` already took out a new key)."""
-    if isinstance(default, dict):
+    if dotted == "board.signals":
+        _check_signals(path, value)
+    elif isinstance(default, dict):
         if not isinstance(value, dict):
             raise _fail(path, f"{dotted} must be an object")
         for key, item in value.items():
@@ -575,6 +622,28 @@ def _check_list(path: Path, value: Any, default: list, dotted: str) -> None:
 
 
 WORKER_MODES = ("auto", "bypass")
+SIGNAL_KEYS = ("state", "role", "jql_window")
+JQL_WINDOW = re.compile(r"[1-9][0-9]{0,4}[mhd]")
+
+
+def _check_signals(path: Path, value: Any) -> None:
+    if not isinstance(value, list):
+        raise _fail(path, "board.signals must be a list")
+    for i, entry in enumerate(value):
+        dotted = f"board.signals[{i}]"
+        if not isinstance(entry, dict):
+            raise _fail(path, f"{dotted} must be an object with {', '.join(SIGNAL_KEYS)}")
+        extra = [k for k in entry if k not in SIGNAL_KEYS]
+        if extra:
+            raise _fail(path, f"{dotted} has no field {', '.join(extra)}")
+        if entry.get("state") not in STATES:
+            raise _fail(path, f"{dotted}.state must be one of {', '.join(STATES)}")
+        if entry.get("role") not in ROLE_KEYS:
+            raise _fail(path, f"{dotted}.role must be a role key ({', '.join(ROLE_KEYS)})")
+        if not isinstance(entry.get("jql_window"), str) or not JQL_WINDOW.fullmatch(
+            entry["jql_window"]
+        ):
+            raise _fail(path, f"{dotted}.jql_window must be a number with m, h or d, like 35m")
 
 
 def _validate(path: Path, data: dict[str, Any]) -> None:
@@ -584,6 +653,8 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
             raise _fail(path, f"{key} must be an object")
     slugs = _validate_members(path, data["members"])
     _validate_roles(path, data["roles"], slugs)
+    if "humans" in data:
+        _validate_humans(path, data, slugs)
     for key, value in data.items():
         if key in ("lenses", "fallback") or key not in DEFAULTS:
             continue
@@ -670,7 +741,103 @@ def _validate_members(path: Path, entries: dict[str, Any]) -> set[str]:
     return set(entries)
 
 
-_KIND_NAMES = {str: "a string", list: "a list of strings", bool: "true or false"}
+_KIND_NAMES = {
+    str: "a string",
+    list: "a list of strings",
+    bool: "true or false",
+    dict: "an object of strings",
+}
+
+
+def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
+    """The ``humans`` block (module docstring § Humans)."""
+    entries = data["humans"]
+    if not isinstance(entries, dict) or not entries:
+        raise _fail(path, "humans must be an object with at least one human")
+    places = set(ROLE_KEYS) | slugs
+    emails: dict[str, str] = {}
+    ids: dict[str, str] = {}
+    owners: dict[str, str] = {}
+    names: dict[str, tuple[str, str]] = {}  # display name lowered -> (target member, where)
+    for slug, entry in data["members"].items():
+        names[str(entry.get("name") or "").strip().lower()] = (slug, f"members.{slug}.name")
+    for slug, entry in entries.items():
+        if not _SAFE.fullmatch(str(slug)):
+            raise _fail(path, f"humans.{slug}: a slug is lower case [a-z0-9_-], like alice")
+        _check_human_fields(path, slug, entry)
+        _unique(path, slug, "email", entry, emails)
+        _unique(path, slug, "account_id", entry, ids)
+        for state in entry.get("owns_states", []):
+            if state not in STATES:
+                raise _fail(
+                    path, f"humans.{slug}.owns_states: {state!r} is no state ({', '.join(STATES)})"
+                )
+            if state in owners:
+                raise _fail(
+                    path,
+                    f"humans.{slug}.owns_states: {state} is owned by humans.{owners[state]} already"
+                    " (one owning human per state)",
+                )
+            owners[state] = slug
+        for role in entry.get("runs", []):
+            if role not in places and role != MASTERS:
+                raise _fail(
+                    path,
+                    f"humans.{slug}.runs: {role!r} is no role key, member slug nor {MASTERS}",
+                )
+        _check_companions(path, data, slug, entry, (places, slugs), names)
+
+
+def _unique(path: Path, slug: str, key: str, entry: dict[str, Any], seen: dict[str, str]) -> None:
+    """``humans.<slug>.<key>`` (lowered) names one human only."""
+    value = str(entry.get(key) or "").strip().lower()
+    if not value:
+        return
+    if value in seen:
+        raise _fail(path, f"humans.{slug}.{key} is also humans.{seen[value]}.{key}")
+    seen[value] = slug
+
+
+def _check_human_fields(path: Path, slug: str, entry: Any) -> None:
+    if not isinstance(entry, dict):
+        raise _fail(path, f"humans.{slug} must be an object")
+    for key, value in entry.items():
+        kind = HUMAN_KEYS[key]
+        ok = isinstance(value, kind)
+        if ok and kind is list:
+            ok = all(isinstance(v, str) for v in value)
+        if ok and kind is dict:
+            ok = all(isinstance(v, str) and _is_label(v) for v in value.values())
+        if not ok:
+            raise _fail(path, f"humans.{slug}.{key} must be {_KIND_NAMES[kind]}")
+    if not str(entry.get("name") or "").strip():
+        raise _fail(path, f"humans.{slug}.name is missing")
+
+
+def _check_companions(
+    path: Path,
+    data: dict[str, Any],
+    slug: str,
+    entry: dict[str, Any],
+    known: tuple[set[str], set[str]],
+    names: dict[str, tuple[str, str]],
+) -> None:
+    """A human's companion names: each for a bound role or a member, none naming two members."""
+    places, slugs = known
+    for role, name in entry.get("companions", {}).items():
+        if role not in places:
+            raise _fail(path, f"humans.{slug}.companions: {role!r} is no role key nor member")
+        target = data["roles"].get(role, role)
+        if target not in slugs:
+            raise _fail(path, f"humans.{slug}.companions.{role}: the role has no member")
+        seen = names.get(name.strip().lower())
+        if seen and seen[0] != target:
+            raise _fail(
+                path,
+                f"humans.{slug}.companions.{role} {name!r} is already the name of "
+                f"{seen[1]}; a name denotes one member",
+            )
+        names[name.strip().lower()] = (target, f"humans.{slug}.companions.{role}")
 
 
 def _validate_roles(path: Path, roles: dict[str, Any], slugs: set[str]) -> None:
@@ -903,12 +1070,152 @@ def members(crew: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def member(crew: dict[str, Any], who: str) -> tuple[str, dict[str, Any]] | None:
-    """The member whose slug or name is ``who`` (case-insensitive)."""
+    """The member whose slug or name is ``who`` (case-insensitive), else the member a human's
+    companion name (``humans.*.companions``) denotes."""
     key = who.strip().lower()
     for slug, entry in members(crew).items():
         if slug.lower() == key or str(entry.get("name", "")).strip().lower() == key:
             return slug, entry
+    for entry in (crew.get("humans") or {}).values():
+        for role, name in ((entry or {}).get("companions") or {}).items():
+            if str(name).strip().lower() == key:
+                target = (crew.get("roles") or {}).get(role, role)
+                if target in members(crew):
+                    return target, members(crew)[target]
     return None
+
+
+# --- humans (module docstring § Humans) ----------------------------------------------------
+
+
+def human_slug(name: str) -> str:
+    """A slug from a human's name: lower case, every run of other characters one ``-``."""
+    slug = re.sub(r"[^a-z0-9]+", "-", str(name).strip().lower()).strip("-")
+    return slug or "human"
+
+
+def humans(crew: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Every human of the crew, each entry with all ``HUMAN_KEYS``. Without ``humans``: the one
+    ``human``, running every bound role and ``masters``, owning every state."""
+    block = crew.get("humans")
+    if isinstance(block, dict) and block:
+        return {
+            slug: {
+                "name": str(e.get("name") or slug).strip(),
+                "email": str(e.get("email") or "").strip() or None,
+                "account_id": str(e.get("account_id") or "").strip() or None,
+                "decides": list(e.get("decides") or []),
+                "owns_states": list(e.get("owns_states") or []),
+                "runs": list(e.get("runs") or []),
+                "companions": dict(e.get("companions") or {}),
+            }
+            for slug, e in block.items()
+            if isinstance(e, dict)
+        }
+    one = crew.get("human") or DEFAULTS["human"]
+    name = str(one.get("name") or DEFAULTS["human"]["name"]).strip()
+    bound = [r for r in ROLE_KEYS if (crew.get("roles") or {}).get(r)]
+    return {
+        human_slug(name): {
+            "name": name,
+            "email": None,
+            "account_id": None,
+            "decides": list(one.get("decides") or []),
+            "owns_states": list(STATES),
+            "runs": [*bound, MASTERS],
+            "companions": {},
+        }
+    }
+
+
+def several_humans(crew: dict[str, Any]) -> bool:
+    """Whether the crew names its humans (``humans``), so the process text names them too."""
+    return isinstance(crew.get("humans"), dict) and bool(crew["humans"])
+
+
+def git_email(cwd: str | Path | None = None) -> str:
+    """``git config user.email`` in ``cwd``, lower case; empty when git cannot tell."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(cwd or Path.cwd()), "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip().lower() if out.returncode == 0 else ""
+
+
+def current_human(
+    crew: dict[str, Any], env: Any = None, cwd: str | Path | None = None, email: str | None = None
+) -> tuple[str, dict[str, Any]] | None:
+    """(slug, entry) of the human this session works for: ``WE_HUMAN`` (an unknown slug raises
+    ``CrewError``), else ``email`` (default ``git config user.email`` in ``cwd``) against
+    ``humans.*.email``, else the only human; None when several humans leave it open."""
+    env = os.environ if env is None else env
+    every = humans(crew)
+    forced = str(env.get("WE_HUMAN") or "").strip().lower()
+    if forced:
+        if forced not in every:
+            raise CrewError(
+                f"WE_HUMAN={forced} is no human of the crew ({', '.join(every)}): unset "
+                "WE_HUMAN, or set it to one of them"
+            )
+        return forced, every[forced]
+    if len(every) == 1:
+        slug = next(iter(every))
+        return slug, every[slug]
+    mail = (git_email(cwd) if email is None else email).strip().lower()
+    for slug, entry in every.items():
+        if mail and str(entry.get("email") or "").lower() == mail:
+            return slug, entry
+    return None
+
+
+_EMAIL_CACHE: dict[str, str] = {}
+
+
+def env_human(crew: dict[str, Any], env: Any = None) -> str | None:
+    """The slug of the session's human for the renderer: ``current_human`` with the cwd's
+    ``git config user.email`` read once per process and directory, and a ``WE_HUMAN`` that names
+    no human of the crew passed over (the renderer never fails a session start); None when none
+    matches."""
+    env = dict(os.environ if env is None else env)
+    every = humans(crew)
+    if str(env.get("WE_HUMAN") or "").strip().lower() not in every:
+        env.pop("WE_HUMAN", None)
+    mail = ""
+    if len(every) > 1 and not env.get("WE_HUMAN"):
+        here = str(Path.cwd())
+        if here not in _EMAIL_CACHE:
+            _EMAIL_CACHE[here] = git_email(here)
+        mail = _EMAIL_CACHE[here]
+    found = current_human(crew, env, email=mail)
+    return found[0] if found else None
+
+
+def display_name(crew: dict[str, Any], role: str, human: str | None = None) -> str | None:
+    """The name ``human`` gives ``role`` (a role key or a member slug):
+    ``humans.<human>.companions.<role>``, else the member's ``name``; None when unbound."""
+    named = (humans(crew).get(human or "") or {}).get("companions", {}).get(role)
+    if isinstance(named, str) and named.strip():
+        return named.strip()
+    if role in ROLE_KEYS:
+        return holder_name(crew, role)
+    entry = members(crew).get(role)
+    return str(entry.get("name") or "").strip() or None if entry else None
+
+
+def runs(crew: dict[str, Any], human: str) -> list[str]:
+    """What starts on ``human``'s machine (``humans.<human>.runs``)."""
+    return list((humans(crew).get(human) or {}).get("runs") or [])
+
+
+def state_owner(crew: dict[str, Any], state: str) -> str | None:
+    """The slug of the human owning ``state`` (``owns_states``), else None."""
+    return next((s for s, e in humans(crew).items() if state in e["owns_states"]), None)
 
 
 def holder(crew: dict[str, Any], role: str) -> dict[str, Any] | None:
@@ -970,6 +1277,10 @@ def skill_path(name: str, cwd: str | Path, home: Path | None = None) -> tuple[Pa
     place = workplace(crew_path, found[1]) if crew_path and found else None
     if place and (place / ".claude" / "skills" / skill / "SKILL.md").is_file():
         return place / ".claude" / "skills" / skill / "SKILL.md", False
+    canonical = str(found[1].get("name") or "").strip() if found else ""
+    if canonical and canonical.lower() != name.strip().lower():
+        # a human's own name for the member: its role skill keeps the member's name
+        return skill_path(canonical, cwd, home)
     return None
 
 
@@ -1175,6 +1486,8 @@ VERBS = (
     "validate",
     "state-dir",
     "launch",
+    "human",
+    "name",
 )
 
 
@@ -1291,7 +1604,34 @@ def _validate_cli(_argv: list[str], crew_path: Path, crew: dict[str, Any]) -> in
     return 0
 
 
+def _human_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -> int:
+    found = current_human(crew)
+    if found is None:
+        print(
+            "crew: several humans and none is this session's: set WE_HUMAN=<slug> or "
+            f"git config user.email to one of humans.*.email ({', '.join(humans(crew))})",
+            file=sys.stderr,
+        )
+        return 1
+    slug, entry = found
+    print(f"{slug}\t{entry['name']}\t{','.join(entry['runs'])}")
+    return 0
+
+
+def _name_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -> int:
+    role = _positional(argv[1:], ("--from",))
+    found = current_human(crew) if role else None
+    name = display_name(crew, role, found[0] if found else None) if role else None
+    if not name:
+        print(f"crew: {role or '(none)'} has no name in this crew", file=sys.stderr)
+        return 1
+    print(name)
+    return 0
+
+
 _READERS = {
+    "human": _human_cli,
+    "name": _name_cli,
     "validate": _validate_cli,
     "show": _show_cli,
     "members": _members_cli,

@@ -37,6 +37,9 @@ silently return:
    process template and repo check file (tests aside).
 13. Plugin-root paths — every `${CLAUDE_PLUGIN_ROOT}/<path>` in hooks.json and in a shipped
    file under we/ exists (patterns and tests skipped).
+14. Carry ops — every op `ticket_adapter.py` hands a session to carry (its `VALUE_FIELD` keys)
+   is shown as `"op": "<name>"` in references/ticketing.md or docs/board.md, so the session
+   knows how to carry it with its ticketing tool.
 
 Stdlib only. Exit 1 on any finding.
 
@@ -681,6 +684,36 @@ def check_plugin_root_paths(root: Path = REPO) -> None:
 ROOT_CHECKS["plugin-root-paths"] = check_plugin_root_paths
 
 
+# --- Check 14: every carry op is documented for the session that carries it -------------------
+_VALUE_FIELD = re.compile(r"^VALUE_FIELD = \{([^}]*)\}", re.MULTILINE)
+
+
+def check_carry_ops(root: Path = REPO) -> None:
+    """Each key of `VALUE_FIELD` in we/scripts/ticket_adapter.py appears as `"op": "<key>"` in
+    we/references/ticketing.md or we/docs/board.md."""
+    adapter = root / "we" / "scripts" / "ticket_adapter.py"
+    if not adapter.is_file():
+        return
+    m = _VALUE_FIELD.search(adapter.read_text(encoding="utf-8"))
+    if m is None:
+        fail(f"{adapter.relative_to(root)}: no `VALUE_FIELD = {{...}}` line to read the ops from")
+        return
+    docs = "".join(
+        p.read_text(encoding="utf-8")
+        for p in (root / "we" / "references" / "ticketing.md", root / "we" / "docs" / "board.md")
+        if p.is_file()
+    )
+    for op in re.findall(r'"([a-z_]+)"\s*:', m.group(1)):
+        if f'"op": "{op}"' not in docs:
+            fail(
+                f'carry op {op!r} (ticket_adapter.VALUE_FIELD) is not shown as "op": "{op}" in '
+                "we/references/ticketing.md or we/docs/board.md"
+            )
+
+
+ROOT_CHECKS["carry-ops"] = check_carry_ops
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, help="run the --check checks on this tree")
@@ -705,6 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         check_install_resolver()
         check_agents_layout()
         check_plugin_root_paths()
+        check_carry_ops()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

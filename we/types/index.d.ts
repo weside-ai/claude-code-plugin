@@ -46,7 +46,7 @@ export type BoardQueueItem = {
   recommendation?: string | null
   // `merge-go`, `plan`, … (`board.py ask --cause`).
   cause?: string | null
-  // The open PR a merge question is about, and its one-way class: then no Accept, only the link.
+  // The open PR a merge question is about, and its one-way class: Accept reads "Yes, I'll do it" beside the link.
   pr_url?: string | null
   one_way?: string | null
   // `task` (`board.py ask --kind task`): the pane offers Taken instead of Accept.
@@ -55,6 +55,11 @@ export type BoardQueueItem = {
   source?: string | null
   // The member who owns the subject (`--owner`/`--component`): the deliverer carries the answer there too.
   owner?: string | null
+  // A question `board.py ask --to` sent to a human on another machine: that human's slug and name, and
+  // the ticket label. The pane shows it waiting on that human, with Withdraw only.
+  to?: string | null
+  to_name?: string | null
+  label?: string | null
 }
 
 export type BoardSession = {
@@ -165,9 +170,9 @@ export type BoardView = {
   error?: string
 }
 
-// One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info or Update on a
-// question, or of Read on a news item.
-export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'read'
+// One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info, Update or
+// Withdraw (a question sent to another human) on a question, or of Read on a news item.
+export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'withdraw' | 'read'
 // The answers the deliverer carries; Read only appends its line.
 export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
 // The texts a delivery sends, each overridable by the board's `answer_prompts`: one per delivered kind

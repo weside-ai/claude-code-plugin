@@ -39,6 +39,7 @@ existing owners first:
 | reading and moving tickets | `references/ticketing.md` |
 | board file, moves, answers, freeze, self-merge window | `docs/board.md` |
 | companion launch, pin, binding, writeback | `references/companion-session.md` |
+| several humans: crew schema and identity · the ticket verbs between machines | `scripts/crew.py` § Humans · `docs/board.md` § Several humans |
 | optimization inbox and ledger | `references/optimization-store.md` |
 | privacy before anything leaves the repo | `references/privacy-guard.md` |
 | instruction limits and wording | `references/instruction-authoring.md` |

@@ -19,8 +19,8 @@
 import type { BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
 import { answerPrompt } from './board'
 
-const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
-const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny']
+const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw']
+const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
 
 // How long a pane waits for any ledger row of an answer before it marks the coordinator not running.
 export const MARK_AFTER_MS = 60_000
@@ -162,9 +162,11 @@ type Prompts = Partial<Record<BoardPromptKind, string>> | undefined
 
 const quoteOf = (line: AnswerLine) => (line.quote ? `\nThe owner's words: "${line.quote}"` : '')
 
-// Where the answer was written: the session that wrote the line (a chat answer says so), else the pane.
+// Where the answer was written: the session that wrote the line (a chat answer says so), the ticket a
+// reply was read from (`board.py signals`, `via: ticket`), else the pane.
+const WRITTEN = { chat: 'in the chat of', ticket: 'on' } as Record<string, string>
 export const writerNote = (line: AnswerLine) =>
-  ` (answered ${line.via === 'chat' ? 'in the chat of' : 'from the board pane in'} ${line.session ?? 'a session without a name'})`
+  ` (answered ${WRITTEN[line.via ?? ''] ?? 'from the board pane in'} ${line.session ?? 'a session without a name'})`
 
 // The prompt the coordinator receives: today's text per kind, the owner's words when the owner gave them.
 export const coordinatorText = (line: AnswerLine, prompts: Prompts) =>

@@ -22,7 +22,7 @@ CREW = {
 }
 
 
-def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
+def run(tmp_path, args=(), stdin="", crew=CREW, launch=None, extra_env=None, agents=()):
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
     record = tmp_path / "record.json"
@@ -31,13 +31,22 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
         "#!/usr/bin/env python3\n"
         "import json, os, sys\n"
         "if sys.argv[1:3] == ['agents', '--json']:\n"
-        "    print('[]')\n"
+        f"    print({json.dumps(list(agents))!r})\n"
         "    sys.exit(0)\n"
         "json.dump({'companion': os.environ.get('WESIDE_COMPANION'), 'argv': sys.argv[1:]},"
         f" open({str(record)!r}, 'w'))\n"
         f"open({str(tmp_path / 'role')!r}, 'w').write(os.environ.get('WE_ROLE', ''))\n"
+        f"open({str(tmp_path / 'ids')!r}, 'w').write("
+        "os.environ.get('WE_HUMAN', '') + ' ' + os.environ.get('WE_ROLE_ID', ''))\n"
     )
     stub.chmod(0o755)
+    tmux = stub_dir / "tmux"
+    tmux.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        f"open({str(tmp_path / 'tmux.jsonl')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+    )
+    tmux.chmod(0o755)
     project = tmp_path / "project"
     cwd = project / "sub" / "dir"
     cwd.mkdir(parents=True, exist_ok=True)
@@ -51,6 +60,9 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
         "WESIDE_COMPANION": "Stale",
     }
     env.pop("WCLAUDE_PIN", None)
+    for name in ("WE_HUMAN", "WE_ROLE_ID", "TMUX"):
+        env.pop(name, None)
+    env.update(extra_env or {})
     env["WE_ROLE"] = "worker"
     if launch is not None:
         env["WCLAUDE_PIN"] = launch
@@ -350,7 +362,111 @@ def test_start_unpinned_resumes_the_last_session(tmp_path):
     }
 
 
-@pytest.mark.parametrize("args", [["--start", "--as", "Ada"], ["--fresh"]])
+def test_start_sets_the_human_and_the_role_key(tmp_path):
+    crew = {**START_CREW, "members": {"lead": {"name": "Lea"}}}
+    proc, _ = run(tmp_path, args=["--start", "--fresh"], crew=crew)
+    assert proc.returncode == 0, proc.stderr
+    assert (tmp_path / "ids").read_text() == "the-human coordinator"
+
+
+def test_start_role_starts_another_role_of_this_human_under_its_name(tmp_path):
+    crew = {
+        **START_CREW,
+        "roles": {"coordinator": "lead", "product": "po"},
+        "members": {"lead": {"name": "Lea"}, "po": {"name": "Ada"}},
+        "humans": {
+            "alice": {"name": "Alice", "runs": ["coordinator", "masters"]},
+            "bob": {"name": "Bob", "runs": ["product"], "companions": {"product": "Paula"}},
+        },
+    }
+    proc, result = run(
+        tmp_path, args=["--start", "--fresh"], crew=crew, extra_env={"WE_HUMAN": "bob"}
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": "Paula", "argv": ["--name", "Paula", "/we:start"]}
+    assert (tmp_path / "ids").read_text() == "bob product"
+    proc, _ = run(
+        tmp_path,
+        args=["--start", "--role", "coordinator"],
+        crew=crew,
+        extra_env={"WE_HUMAN": "bob"},
+    )
+    assert proc.returncode == 1 and "bob does not run coordinator" in proc.stderr
+
+
+TWO_CREW = {
+    **START_CREW,
+    "roles": {"coordinator": "lead", "product": "po"},
+    "members": {"lead": {"name": "Lea"}, "po": {"name": "Ada"}},
+}
+
+
+def tmux_calls(tmp_path):
+    path = tmp_path / "tmux.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_outside_tmux_every_start_warns_and_goes_on(tmp_path):
+    proc, result = run(tmp_path, stdin="1\n")
+    assert proc.returncode == 0, proc.stderr
+    assert "wclaude: warning: not inside tmux" in proc.stderr
+    assert result["companion"] == "Ada"
+    proc, _ = run(tmp_path, stdin="1\n", extra_env={"TMUX": "/tmp/tmux-1/default,1,0"})
+    assert "not inside tmux" not in proc.stderr
+
+
+def test_start_opens_the_coordinator_here_and_product_in_a_tmux_window(tmp_path):
+    proc, result = run(
+        tmp_path,
+        args=["--start", "--fresh"],
+        crew=TWO_CREW,
+        extra_env={"TMUX": "/tmp/tmux-1/default,1,0"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": "Lea", "argv": ["--name", "Lea", "/we:start"]}
+    [call] = tmux_calls(tmp_path)
+    assert call[:4] == ["new-window", "-d", "-n", "Ada"]
+    assert call[6:8] == ["env", "WE_HUMAN=the-human"]
+    assert call[-4:] == ["--start", "--role", "product", "--fresh"]
+    assert "Ada (product) starts in the tmux window Ada" in proc.stderr
+
+
+def test_start_without_tmux_names_the_product_command(tmp_path):
+    proc, result = run(tmp_path, args=["--start", "--fresh"], crew=TWO_CREW)
+    assert proc.returncode == 0, proc.stderr
+    assert result["companion"] == "Lea"
+    assert tmux_calls(tmp_path) == []
+    assert (
+        "start Ada (product) in a second terminal: wclaude --start --role product" in proc.stderr
+    )
+
+
+def test_start_skips_a_running_product_and_a_running_coordinator(tmp_path):
+    """Red arm of the running check: a running companion is named, never started twice."""
+    tmux = {"TMUX": "/tmp/tmux-1/default,1,0"}
+    ada = [{"name": "Ada", "pid": 1, "cwd": "/w/ada"}]
+    proc, result = run(tmp_path, args=["--start"], crew=TWO_CREW, extra_env=tmux, agents=ada)
+    assert proc.returncode == 0, proc.stderr
+    assert result["companion"] == "Lea" and tmux_calls(tmp_path) == []
+    assert "wclaude: Ada runs already (/w/ada)" in proc.stderr
+    lea = [{"name": "Lea", "pid": 1, "cwd": "/w/lea"}]
+    (tmp_path / "b").mkdir()
+    proc, result = run(tmp_path / "b", args=["--start"], crew=TWO_CREW, extra_env=tmux, agents=lea)
+    assert proc.returncode == 0, proc.stderr
+    assert result is None and "wclaude: Lea runs already (/w/lea)" in proc.stderr
+    assert [c[3] for c in tmux_calls(tmp_path / "b")] == ["Ada"]
+
+
+def test_start_role_opens_only_that_role(tmp_path):
+    tmux = {"TMUX": "/tmp/tmux-1/default,1,0"}
+    proc, result = run(
+        tmp_path, args=["--start", "--role", "product"], crew=TWO_CREW, extra_env=tmux
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert result["companion"] == "Ada" and tmux_calls(tmp_path) == []
+
+
+@pytest.mark.parametrize("args", [["--start", "--as", "Ada"], ["--fresh"], ["--role", "product"]])
 def test_start_misuse_is_refused(tmp_path, args):
     proc, _ = run(tmp_path, args=args, crew=START_CREW)
     assert proc.returncode == 2

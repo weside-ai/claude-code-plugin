@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 
-import { answerLines, deliveryLine, isFinal, keyOf, ledgerState, markerRows, noticeMatches, versionAtLeast } from './deliver'
+import { answerLines, deliveryLine, isFinal, keyOf, ledgerState, markerRows, noticeMatches, versionAtLeast, writerNote } from './deliver'
 
 type T$ = Parameters<TestBody>[0]
 type TOn = Parameters<TestBody>[1]
@@ -653,4 +653,11 @@ test('an owner who is the asker or the writer gets no second copy', async ($, on
   await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
   expect(h.sent.map(s => s.to)).toEqual(['asker'])
+})
+
+test('a reply read from a ticket names the ticket as where it was written', async () => {
+  const line = { id: 'Q4', answer: 'accept', ts: '2026-11-03T16:00:00.000Z', session: 'ticket PROJ-12 (bob)' }
+  expect(writerNote({ ...line, via: 'ticket' })).toBe(' (answered on ticket PROJ-12 (bob))')
+  expect(writerNote({ ...line, via: 'chat' })).toBe(' (answered in the chat of ticket PROJ-12 (bob))')
+  expect(writerNote(line)).toBe(' (answered from the board pane in ticket PROJ-12 (bob))')
 })
