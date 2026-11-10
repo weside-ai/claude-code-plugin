@@ -11,7 +11,7 @@ verbs in `board.py` own every write. Grammar (docs/board.md § Several humans):
 - a question to a human on another machine: the comment `<question_label> <labels.to> <Name> ·
   <ask> · <labels.recommendation>: <recommendation>` and the label `question_label(crew, human)`;
 - a reply: a comment created after the question by that human (its `author` is the human's email
-  or name) or signed `<role>@<human>` as its first word; its first word, when it is an answer kind
+  or name), or signed `<role>@<human>` as its first word from the account of a human of the crew; its first word, when it is an answer kind
   (`accept`, `deny`, `discuss`, `info`, `update`), is the answer, else `discuss`. The label taken
   off without a reply is the answer `update` (ask whether the question still stands).
 """
@@ -96,23 +96,32 @@ def live_claims(comments: list[dict], now: datetime, hours: float) -> dict[tuple
     }
 
 
-def _by_human(comment: dict, human: str, entry: dict) -> bool:
-    author = str(comment.get("author") or "").strip().lower()
-    known = {human, str(entry.get("name") or "").strip().lower()}
+def _accounts(entry: dict, slug: str) -> set[str]:
+    out = {slug, str(entry.get("name") or "").strip().lower()}
     if entry.get("email"):
-        known.add(str(entry["email"]).strip().lower())
-    if author and author in known:
+        out.add(str(entry["email"]).strip().lower())
+    return out - {""}
+
+
+def _by_human(comment: dict, human: str, every: dict) -> bool:
+    """The comment is `human`'s: its author is that human, or it is signed `<role>@<human>` and
+    written from the account of a human of the crew (one shared account); a stranger's signature
+    never counts."""
+    author = str(comment.get("author") or "").strip().lower()
+    if author and author in _accounts(every.get(human) or {}, human):
         return True
+    crew_accounts = set().union(*(_accounts(e, s) for s, e in every.items())) if every else set()
     m = SIGNED.match(str(comment.get("body") or "").strip())
-    return bool(m and m.group(2) == human)
+    return bool(m and m.group(2) == human and author in crew_accounts)
 
 
-def replies(ticket: dict, asked: datetime, human: str, entry: dict) -> list[dict]:
-    """The comments `human` wrote on the ticket after `asked`, oldest first: `{kind, quote, at}`."""
+def replies(ticket: dict, asked: datetime, human: str, every: dict) -> list[dict]:
+    """The comments `human` wrote on the ticket after `asked`, oldest first: `{kind, quote, at}`;
+    `every` is the crew's humans (``crew.humans``)."""
     out = []
     for c in (ticket or {}).get("comments") or []:
         at = parse_ts((c or {}).get("created"))
-        if at is None or at <= asked or not _by_human(c, human, entry):
+        if at is None or at <= asked or not _by_human(c, human, every):
             continue
         body = " ".join(str(c.get("body") or "").split())
         body = SIGNED.sub("", body, count=1).lstrip(" :·-")

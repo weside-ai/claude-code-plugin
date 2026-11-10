@@ -117,8 +117,8 @@ class SessionTransport(TicketAdapter):
 
 class FileReads(TicketAdapter):
     """The reads a session carried, from `--input FILE` (`{"hits": {state: [key or {key,
-    changed}]}, "tickets": {key: {labels, comments}}}`), over `inner`'s writes. A state or key the
-    file leaves out reads as no hits, no labels, no comments."""
+    changed}]}, "tickets": {key: {labels, comments}}}`), over `inner`'s writes. A state the file
+    leaves out reads as no hits; a ticket it leaves out is read again."""
 
     def __init__(self, inner: TicketAdapter, data: dict):
         self.inner = inner
@@ -139,8 +139,16 @@ class FileReads(TicketAdapter):
         return [h if isinstance(h, dict) else {"key": h} for h in self.hits.get(state) or []]
 
     def ticket(self, key: str) -> dict | None:
-        found = self.tickets.get(key) or {}
-        return {"labels": found.get("labels") or [], "comments": found.get("comments") or []}
+        """None for a key the file leaves out (the read is carried again); `labels` None when
+        the read gave none, so no label counts as removed."""
+        found = self.tickets.get(key)
+        if not isinstance(found, dict):
+            return None
+        labels = found.get("labels")
+        return {
+            "labels": labels if isinstance(labels, list) else None,
+            "comments": found.get("comments") or [],
+        }
 
 
 class FakeAdapter(TicketAdapter):

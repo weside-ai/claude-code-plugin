@@ -1158,15 +1158,27 @@ def current_human(
     return None
 
 
+_EMAIL_CACHE: dict[str, str] = {}
+
+
 def env_human(crew: dict[str, Any], env: Any = None) -> str | None:
-    """The slug ``WE_HUMAN`` names when it is a human of the crew, else the only human; no git
-    call (the renderer reads it)."""
+    """The slug of the session's human for the renderer: ``WE_HUMAN`` when it is a human of the
+    crew, else the only human, else the one whose email is ``git config user.email`` of the cwd
+    (read once per process and directory); None when none matches."""
     env = os.environ if env is None else env
     every = humans(crew)
     forced = str(env.get("WE_HUMAN") or "").strip().lower()
     if forced in every:
         return forced
-    return next(iter(every)) if len(every) == 1 else None
+    if len(every) == 1:
+        return next(iter(every))
+    here = str(Path.cwd())
+    if here not in _EMAIL_CACHE:
+        _EMAIL_CACHE[here] = git_email(here)
+    mail = _EMAIL_CACHE[here]
+    return next(
+        (s for s, e in every.items() if mail and (e.get("email") or "").lower() == mail), None
+    )
 
 
 def display_name(crew: dict[str, Any], role: str, human: str | None = None) -> str | None:

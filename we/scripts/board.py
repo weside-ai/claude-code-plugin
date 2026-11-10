@@ -1540,7 +1540,7 @@ def _read_back(state, q, ticket, every, seen, now):
     human = q["to"]
     asked = _parse_ts(q.get("ts")) or now
     out = []
-    found = board_humans.replies(ticket, asked, human, every.get(human) or {})
+    found = board_humans.replies(ticket, asked, human, every)
     for reply in found:
         rid = f"{q['id']}:reply:{reply['at']}"
         if rid in seen:
@@ -1551,7 +1551,14 @@ def _read_back(state, q, ticket, every, seen, now):
         out.append(f"answer {q['id']}: {reply['kind']} from {human} on {q['key']}")
     rid = f"{q['id']}:label-off"
     label = q.get("label")
-    if not found and label and label not in (ticket.get("labels") or []) and rid not in seen:
+    labels = ticket.get("labels")  # None: the read gave no labels, so none counts as removed
+    if (
+        not found
+        and label
+        and isinstance(labels, list)
+        and label not in labels
+        and rid not in seen
+    ):
         seen.add(rid)
         quote = f"label {label} removed on {q['key']} without a reply"
         _answer_from_ticket(state, q, "update", quote, human, now)
@@ -2266,6 +2273,20 @@ def rule_plan_on_main(m):
     ref = str((m.crew.get("risk") or {}).get("rules_from") or "origin/main")
     if rel is None:
         return [f"plan {m.plan} lies outside {m.root}"]
+    if ref.startswith("origin/"):  # a plan merged since the last fetch counts
+        try:
+            fetched = subprocess.run(
+                ["git", "-C", str(m.root), "fetch", "--quiet", "origin"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if fetched.returncode != 0:
+                m.warnings.append(
+                    f"warning: git fetch origin failed; the plan check reads the local {ref}"
+                )
+        except OSError as exc:
+            m.warnings.append(f"warning: git fetch origin not runnable ({exc.strerror})")
     try:
         done = subprocess.run(
             ["git", "-C", str(m.root), "rev-parse", "--verify", "-q", f"{ref}:{rel}"],

@@ -312,10 +312,15 @@ class TestAskTo:
             "labels": ["ask-bob"],
             "comments": [
                 {
-                    "author": "bot",
+                    "author": "eve@example.com",
+                    "body": "product@bob: accept",
+                    "created": later.isoformat(),
+                },
+                {
+                    "author": "alice@example.com",
                     "body": "product@bob: rather next week",
                     "created": later.isoformat(),
-                }
+                },
             ],
         }
         assert (
@@ -368,3 +373,24 @@ class TestAskTo:
         item = board_of(crewed)["owner_queue"][-1]
         assert "to" not in item and adapter.calls == []
         assert re.match(r"posted Q\d+", capsys.readouterr().out)
+
+
+def test_a_read_without_labels_is_no_removed_label(crewed, monkeypatch, tmp_path, capsys):
+    """Red arm of the label-off answer: a ticket read without `labels`, or left out, answers nothing."""
+    with_humans(crewed, ticketing="jira")
+    answer_with(crewed, CLEAR)
+    as_(monkeypatch, "alice", "Otto")
+    assert act(crewed, *ask_argv(), "--to", "bob") == 0
+    reads = tmp_path / "reads.json"
+    reads.write_text(json.dumps({"tickets": {"PROJ-12": {"comments": []}}}), encoding="utf-8")
+    assert act(crewed, "signals", "--input", str(reads)) == 0
+    assert jsonl(crewed / "board-answers.jsonl") == []
+    reads.write_text(json.dumps({"hits": {}}), encoding="utf-8")
+    capsys.readouterr()
+    assert act(crewed, "signals", "--input", str(reads)) == 0
+    assert carry_of(capsys.readouterr().out)[-1] == {
+        "op": "read",
+        "key": "PROJ-12",
+        "fields": "labels,comments",
+    }
+    assert jsonl(crewed / "board-answers.jsonl") == []
