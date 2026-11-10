@@ -1515,6 +1515,18 @@ def test_a_card_verdict_on_the_new_head_beats_the_carried_pass(carried: dict, mo
     assert red is not None and "the card verdict on this head is BLOCKING" in red
 
 
+def test_a_later_blocking_card_on_a_head_between_beats_the_carried_pass(
+    carried: dict, monkeypatch
+) -> None:
+    """T2 panel on #203: the carried PASS counts only while it is the last card verdict; a BLOCKING
+    card on a head between the carried head and this one still refuses."""
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    cards = [_card(carried["main"][:10]), _card("abcdef1234", "BLOCKING")]
+    fake = FakeGh([run()], head=carried["head"], cards=cards)
+    red = refuse(carried["repo"], ARM, fake, monkeypatch)
+    assert red is not None and "security card carried" not in " ".join(gate.NOTICES)
+
+
 def test_a_card_on_an_older_head_without_a_carry_still_refuses(green: dict, monkeypatch) -> None:
     """Red arm for the carry: the plain `check` reader names no carried head."""
     monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))

@@ -84,9 +84,13 @@ the change ``old..new`` touches no file the PR's class hit: the PR is classified
 ``merge-base(<rules ref>, new)..new`` by ``risk_runner`` (the merge hook's own runner, rules and
 rules ref); class ``T0`` carries, a one-way class never does (its panel opens the self-merge
 window: every head gets a fresh one), otherwise the delta's files (``git diff --name-only old
-new``) must miss every hit line's file, and a class without hit lines carries nothing. A clean merge of the
-default branch therefore carries; a delta on a risk path, a head outside the PR's history, a red
-panel, no panel and any git or classifier failure do not. ``check`` prints ``panel <ID>: carried
+new``) must miss every hit line's file, and so must the files the default branch changed between
+the PR's bases (``merge-base(<rules ref>, old)..merge-base(<rules ref>, new)``): a merge that keeps
+the branch's side of a hit file leaves it out of ``old..new`` while the PR's diff on it now undoes the
+default branch's change. A class without hit lines carries nothing. A clean merge of the
+default branch therefore carries when it moves no hit file; a delta on a risk path, a head outside the PR's history, a red
+panel, no panel and any git or classifier failure do not. The security card on ``old`` holds with the
+panel only while it is the PR's last card verdict (the merge hook). ``check`` prints ``panel <ID>: carried
 from <old> to <new> (<why>)`` in place of the stale line, or the stale line plus ``panel <ID>: not
 carried (<why>)``; ``check_t2`` returns the carried head, which the merge hook reads to take the
 security card from that head too. ``post`` posts a carried panel on the new head. The carry is
@@ -861,7 +865,7 @@ def _stale_rows(
     return [stale, f"panel {vid}: not carried ({why})"], None
 
 
-def carry(  # noqa: PLR0911
+def carry(  # noqa: PLR0911, PLR0912
     root: Path,
     old: str,
     new: str,
@@ -903,6 +907,19 @@ def carry(  # noqa: PLR0911
     if touched:
         more = f" and {len(touched) - 3} more" if len(touched) > 3 else ""
         return False, f"delta {old[:8]}..{new[:8]} touches {', '.join(touched[:3])}{more}"
+    # a merge that keeps the branch's side of a hit file leaves it out of old..new, yet the PR's
+    # diff on it now undoes main's change: a hit file main changed between the bases carries nothing
+    old_base = (git(r, "merge-base", rules_from, old) or "").strip()
+    moved = git(r, "diff", "--name-only", "--no-renames", old_base, base) if old_base else None
+    if moved is None:
+        return False, f"no merge base or diff for {old[:8]}"
+    under = sorted(hits & {f for f in moved.splitlines() if f.strip()})
+    if under:
+        more = f" and {len(under) - 3} more" if len(under) > 3 else ""
+        return False, (
+            f"main changed {', '.join(under[:3])}{more} between the PR's bases "
+            f"{old_base[:8]}..{base[:8]}"
+        )
     return True, f"delta {old[:8]}..{new[:8]} touches no risk path, T0"
 
 

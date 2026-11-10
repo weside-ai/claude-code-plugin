@@ -169,6 +169,24 @@ def test_a_clean_merge_of_main_carries(pr):
     assert "carried from" in out
 
 
+def test_a_merge_that_keeps_the_branch_side_of_a_hit_file_does_not_carry(pr):
+    """T2 panel on #203: main changes a file the PR hit; the merge keeps the branch's side, so the
+    file is not in old..new, yet the PR's diff now undoes main's change. Not carried."""
+    green_panel()
+    root = pr["root"]
+    git(root, "checkout", "-q", "main")
+    commit(root, {"risky/a.py": "x = 5  # main tightens\n"}, "main tightens")
+    git(root, "push", "-q", "origin", "main")
+    git(root, "checkout", "-q", "feat")
+    git(root, "merge", "-q", "--no-edit", "-X", "ours", "main")
+    new = git(root, "rev-parse", "HEAD")
+    assert git(root, "diff", "--name-only", pr["old"], new) == ""
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1, out
+    assert "main changed risky/a.py" in out
+
+
 def test_a_red_panel_is_never_carried(pr):
     assert run("plan", "t2", "7")[0] == 0
     for lens in LENSES[:2]:
