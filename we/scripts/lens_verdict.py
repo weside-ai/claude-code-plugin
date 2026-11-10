@@ -20,6 +20,8 @@ Usage:
   lens_verdict.py sampled ID LENS                mark a sample read
   lens_verdict.py rounds KEY                     the story's Ready rounds: per round and lens
                                                  the verdict and its BLOCKING/WARNING/NOTE count
+  lens_verdict.py carry ready-KEY                write the warnings a green panel carries into
+                                                 the plan's ``## Carried warnings`` as musts
 
 ID is ``ready-<KEY>`` or ``t2-pr<N>``. Exit 2: a usage error, the verdict directory unusable, or
 the crew file unusable.
@@ -78,6 +80,16 @@ proved nothing and the answer is refused as a finding without red arm (Kiska 04.
 in test form is never run: the finding stays ``standing`` with ``run: false``, whatever exit the
 caller recorded.
 
+Carried edit (Ready): a green panel bound to an older plan blob stays green on today's plan when
+the two texts differ only inside the sections ``CARRY_SECTIONS`` (``## Out of scope``, ``## Updates
+Log``, ``## Documentation Impact``, ``## Carried warnings``: added, removed or edited there, every
+other line equal and in order); ``check`` prints ``panel <ID>: carried from <old> to <new> (edit
+only in <sections>)``. The old text comes from the copy ``plan`` keeps per bound blob
+(``<we-lens>/plans/<blob>.md``) or the repo's object store; without either nothing carries.
+``carry ready-KEY`` writes the warnings a green panel carries (§ Carried warnings) into the
+plan's ``## Carried warnings`` as ``- [ ] must: <claim> (<lens>, <where>)``, each once: the plan,
+not only a brief, holds them, and the panel stays green over that edit.
+
 Carried panel (T2 only): a panel bound to an older head ``old`` stays green on the PR's current
 head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
 the change ``old..new`` touches no file the PR's class hit: the PR is classified on
@@ -87,7 +99,8 @@ window: every head gets a fresh one), otherwise the delta's files (``git diff --
 new``) must miss every hit line's file, and so must the files the default branch changed between
 the PR's bases (``merge-base(<rules ref>, old)..merge-base(<rules ref>, new)``): a merge that keeps
 the branch's side of a hit file leaves it out of ``old..new`` while the PR's diff on it now undoes the
-default branch's change. A class without hit lines carries nothing. A clean merge of the
+default branch's change. A pure rename (``R100``: the same blob under a new path) touches
+nothing. A class without hit lines carries nothing. A clean merge of the
 default branch therefore carries when it moves no hit file; a delta on a risk path, a head outside the PR's history, a red
 panel, no panel and any git or classifier failure do not. The security card on ``old`` holds with the
 panel only while it is the PR's last card verdict (the merge hook). ``check`` prints ``panel <ID>: carried
@@ -181,6 +194,7 @@ VERDICT_KEYS = ("verdict", "agent", "ran_at", "sample", "sampled", "findings", "
 FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm", "status")
 ANSWER_FINDING_KEYS = ("severity", "claim", "where", "question", "red_arm")
 ARM_KEYS = ("command", "exit", "run")
+CARRY_SECTIONS = ("Out of scope", "Updates Log", "Documentation Impact", "Carried warnings")
 ANSWER_ARM_KEYS = ("command", "exit")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
@@ -540,6 +554,7 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
         doc["round"], origin = next_round(path, bound)
         if origin is not None:
             doc["round_derived"] = origin
+        _keep_plan_text(root, subject, rel, bound["plan_blob"])
     _write_atomic(path, doc)
     entries = []
     for lens in chosen:
@@ -560,6 +575,90 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
             entry["head"] = bound["head"]
         entries.append(entry)
     return {"id": vid, "kind": kind, "bound_to": bound, "entries": entries}
+
+
+def _keep_plan_text(root: Path, subject: str, rel: str | None, blob: str) -> None:
+    """The bound plan's text beside the verdicts (``<we-lens>/plans/<blob>.md``): a later
+    ``check`` compares today's plan with it (§ Carried edit)."""
+    copy = verdict_dir(root) / "plans" / f"{blob}.md"
+    path = plan_path(root, subject, rel)
+    if copy.is_file() or not path.is_file():
+        return
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _plan_text(root: Path, subject: str, rel: str | None, blob: str) -> str | None:
+    """The plan text of ``blob``: today's file when it hashes to it, the kept copy, the object
+    store; None when none has it."""
+    path = plan_path(root, subject, rel)
+    if path.is_file() and _git(root, "hash-object", str(path)) == blob:
+        return path.read_text(encoding="utf-8")
+    copy = verdict_dir(root) / "plans" / f"{blob}.md"
+    if copy.is_file():
+        return copy.read_text(encoding="utf-8")
+    out = subprocess.run(
+        ["git", "-C", str(root), "cat-file", "blob", blob],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.stdout if out.returncode == 0 else None
+
+
+def _sections(text: str) -> list[tuple[str, str]]:
+    """(heading, body) per ``## `` section; the text before the first heading under ``""``."""
+    out: list[tuple[str, str]] = [("", "")]
+    for line in text.replace("\r\n", "\n").split("\n"):
+        if line.startswith("## "):
+            out.append((line[3:].strip(), ""))
+        else:
+            head, body = out[-1]
+            out[-1] = (head, body + line.rstrip() + "\n")
+    return [(h, b.strip("\n")) for h, b in out]
+
+
+def carried_edit(old: str, new: str) -> list[str] | None:
+    """The ``CARRY_SECTIONS`` an edit from ``old`` to ``new`` touched when it touched nothing
+    else, else None (§ Carried edit)."""
+
+    def rest(text: str) -> list[tuple[str, str]]:
+        return [(h, b) for h, b in _sections(text) if h not in CARRY_SECTIONS]
+
+    if rest(old) != rest(new):
+        return None
+    before = {h: b for h, b in _sections(old) if h in CARRY_SECTIONS}
+    after = {h: b for h, b in _sections(new) if h in CARRY_SECTIONS}
+    return [h for h in CARRY_SECTIONS if before.get(h) != after.get(h)]
+
+
+def carry_warnings(root: Path, vid: str) -> list[str]:
+    """Write the warnings a green Ready panel carries into the plan's ``## Carried warnings``
+    as musts, each once; returns the lines added."""
+    kind, subject = parse_id(vid)
+    if kind != "ready":
+        raise UnusableError("carry: only a Ready panel carries warnings")
+    green, _lines, carried = check_panel(root, vid)
+    if not green:
+        raise RefusedError(f"carry: panel {vid} is red; nothing is carried")
+    doc = read_file(verdict_dir(root) / f"{vid}.json")
+    path = plan_path(root, subject, doc.get("plan"))
+    if not path.is_file():
+        raise RefusedError(f"carry: {path.relative_to(root)} is not in this checkout")
+    text = path.read_text(encoding="utf-8")
+    lines = [f"- [ ] must: {c['claim']} ({c['lens']}, {c['where'] or '-'})" for c in carried]
+    new = [line for line in lines if line not in text]
+    if not new:
+        return []
+    if "\n## Carried warnings\n" in f"\n{text}":
+        head, _, tail = text.partition("## Carried warnings\n")
+        body, sep, after = tail.partition("\n## ")
+        body = body.rstrip("\n") + "\n" + "\n".join(new) + "\n"
+        text = head + "## Carried warnings\n" + body + (f"\n## {after}" if sep else "")
+    else:
+        text = text.rstrip("\n") + "\n\n## Carried warnings\n\n" + "\n".join(new) + "\n"
+    path.write_text(text, encoding="utf-8")
+    return new
 
 
 def _ready_gate_first(root: Path, subject: str, rel: str | None, blob: str) -> None:
@@ -923,7 +1022,11 @@ def _check(
             notes = sum(1 for f in v["findings"] if f["severity"] == "NOTE")
             lines.append(f"lens {lens}: green" + (f" ({notes} note)" if notes else ""))
     carried_from = None
-    if stale:
+    if stale and kind == "ready":
+        rows, edited = _ready_rows(root, vid, subject, doc, now, green)
+        green = green and edited
+        lines[stale_at:stale_at] = rows
+    elif stale:
         rows, carried_from = _stale_rows(
             root, vid, doc["bound_to"], now, kind == "t2" and green, git, timeout
         )
@@ -934,6 +1037,23 @@ def _check(
     state = "red" if not green else "green (warnings carried)" if carried else "green"
     lines.append(f"panel {vid}: {state}")
     return green, lines, carried, carried_from
+
+
+def _ready_rows(
+    root: Path, vid: str, subject: str, doc: dict[str, Any], now: dict[str, str], green: bool
+) -> tuple[list[str], bool]:
+    """The lines of a moved plan blob and whether the edit carries the green panel."""
+    was, is_ = doc["bound_to"]["plan_blob"], now["plan_blob"]
+    stale = f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})"
+    if not green:
+        return [stale], False
+    old = _plan_text(root, subject, doc.get("plan"), was)
+    new = _plan_text(root, subject, doc.get("plan"), is_)
+    touched = carried_edit(old, new) if old is not None and new is not None else None
+    if touched is None:
+        return [stale], False
+    where = ", ".join(f"## {h}" for h in touched) or "whitespace"
+    return [f"panel {vid}: carried from {was[:8]} to {is_[:8]} (edit only in {where})"], True
 
 
 # --- the carried T2 panel --------------------------------------------------------------------
@@ -965,6 +1085,20 @@ def _stale_rows(
     return [stale, f"panel {vid}: not carried ({why})"], None
 
 
+def _renamed_away(status: str | None) -> str | None:
+    """``git diff --name-status -M100%`` as the changed paths, one per line, a pure rename
+    (``R100``, the same blob under a new path) left out; None stays None."""
+    if status is None:
+        return None
+    paths = []
+    for row in status.splitlines():
+        cols = row.split("\t")
+        if not cols[0] or cols[0] == "R100":
+            continue
+        paths += [c for c in cols[1:] if c]
+    return "\n".join(paths)
+
+
 def carry(  # noqa: PLR0911, PLR0912
     root: Path,
     old: str,
@@ -989,7 +1123,7 @@ def carry(  # noqa: PLR0911, PLR0912
     if rules_from != risk_runner.RULES_FROM and not risk_runner.fetch_rules(r, rules_from, git):
         return False, f"{rules_from} could not be fetched"
     base = (git(r, "merge-base", rules_from, new) or "").strip()
-    delta = git(r, "diff", "--name-only", "--no-renames", old, new)
+    delta = _renamed_away(git(r, "diff", "--name-status", "-M100%", old, new))
     if not base or delta is None:
         return False, f"no merge base or diff for {old[:8]}..{new[:8]}"
     lines, why = risk_runner.run(r, git, found, new, base, timeout)
@@ -1172,11 +1306,19 @@ def _main(argv: list[str], stdin: Any) -> int:
         for line in _listing(root, verb, args, rest):
             print(line)
         return 0
-    if verb == "sampled" and len(args) == 2:
-        sampled(root, args[0], args[1])
-        print(f"sample {args[0]} {args[1]}: read")
+    if (verb == "sampled" and len(args) == 2) or (verb == "carry" and len(args) == 1):
+        print(_mark(root, verb, args))
         return 0
     raise UnusableError(f"{verb or '(no verb)'}: wrong arguments\n{_usage()}")
+
+
+def _mark(root: Path, verb: str, args: list[str]) -> str:
+    """The writing verbs beside a panel: ``sampled`` and ``carry``; their output."""
+    if verb == "sampled":
+        sampled(root, args[0], args[1])
+        return f"sample {args[0]} {args[1]}: read"
+    added = carry_warnings(root, args[0])
+    return "\n".join(added) if added else f"carry: nothing new for {args[0]}"
 
 
 def _listing(root: Path, verb: str, args: list[str], rest: list[str]) -> list[str]:

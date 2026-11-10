@@ -269,3 +269,24 @@ def test_a_classifier_failure_carries_nothing(pr):
     pr["point"](new)
     code, out, _ = run("check", "t2-pr7")
     assert code == 1 and "the PR's class is not computed" in out
+
+
+def test_a_pure_rename_of_a_hit_file_carries(pr):
+    """A consumer crew ran the same T2 panel three times over an R100 rename."""
+    green_panel()
+    git(pr["root"], "mv", "risky/a.py", "risky/c.py")
+    git(pr["root"], "commit", "-qm", "rename only")
+    new = git(pr["root"], "rev-parse", "HEAD")
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 0, out
+    assert f"panel t2-pr7: carried from {pr['old'][:8]} to {new[:8]}" in out
+
+
+def test_a_rename_with_an_edit_is_not_carried(pr):
+    green_panel()
+    git(pr["root"], "mv", "risky/a.py", "risky/c.py")
+    new = commit(pr["root"], {"risky/c.py": "x = 1\ny = 2\n"}, "rename and edit")
+    pr["point"](new)
+    code, out, _ = run("check", "t2-pr7")
+    assert code == 1 and "touches risky/" in out, out

@@ -1282,3 +1282,11 @@ def test_skill_path_finds_the_member_s_skill_under_a_human_s_name(tmp_path):
     skill.write_text("---\nname: acme-ada\n---\n")
     path, loadable = crew.skill_path("Paula", core, home=tmp_path / "home")
     assert path == skill and loadable
+
+
+def test_a_crew_security_lens_dispatches_the_shipped_security_agent():
+    """Three panels of a consumer crew dispatched the security lens as we:lens-architecture."""
+    merged = crew._merge({**CREW, "lenses": {"security": {}}, "t2_panel": ["security"]})
+    assert merged["lenses"]["security"]["agent"] == "we:lens-security"
+    agent = Path(crew.__file__).resolve().parent.parent / "agents" / "lens-security.md"
+    assert "name: lens-security" in agent.read_text(encoding="utf-8")

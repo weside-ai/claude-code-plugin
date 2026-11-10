@@ -1137,3 +1137,62 @@ def test_a_held_panel_lock_refuses_after_the_wait(repo, monkeypatch):
             lv.write(repo, f"ready-{KEY}", "product", answer=GREEN)
     finally:
         os.close(fd)
+
+
+# --- carried edit: a plan edit only in the margin sections keeps a green Ready panel -----------
+
+SECTIONED = "# Plan\n\n## Approach\n\nDo it.\n\n## Updates Log\n\n- 1\n"
+
+
+def green_ready(root: Path, text: str = SECTIONED) -> str:
+    (root / "docs" / "plans" / f"{KEY}-story.md").write_text(text)
+    vid = f"ready-{KEY}"
+    assert run("plan", "ready", KEY)[0] == 0
+    for lens in ("product", "architecture", "acceptance"):
+        assert run("write", vid, lens, stdin=GREEN)[0] == 0
+    return vid
+
+
+@pytest.mark.parametrize(
+    "edit, where",
+    [
+        (SECTIONED + "- 2\n", "## Updates Log"),
+        (SECTIONED + "\n## Out of scope\n\nexports\n", "## Out of scope"),
+        (SECTIONED + "\n## Documentation Impact\n\nnone\n", "## Documentation Impact"),
+    ],
+)
+def test_an_edit_only_in_a_margin_section_carries_the_panel(repo, edit, where):
+    vid = green_ready(repo)
+    (repo / "docs" / "plans" / f"{KEY}-story.md").write_text(edit)
+    code, out, _ = run("check", vid)
+    assert code == 0, out
+    assert f"(edit only in {where})" in out and out.splitlines()[-1] == f"panel {vid}: green"
+
+
+def test_an_edit_outside_the_margin_sections_stays_stale(repo):
+    vid = green_ready(repo)
+    (repo / "docs" / "plans" / f"{KEY}-story.md").write_text(
+        SECTIONED.replace("Do it.", "Do it twice.") + "- 2\n"
+    )
+    code, out, _ = run("check", vid)
+    assert code == 1 and f"panel {vid}: stale (bound to" in out
+
+
+def test_carry_writes_the_carried_warnings_into_the_plan_and_stays_green(repo):
+    set_rounds(repo, 2)
+    plan = repo / "docs" / "plans" / f"{KEY}-story.md"
+    plan.write_text(SECTIONED)
+    vid = panel_in_round(repo, 2, "WARNING")
+    assert run("check", vid)[0] == 0
+    code, out, _ = run("carry", vid)
+    assert code == 0 and out.startswith("- [ ] must: c (product, a.py:1)"), out
+    assert "## Carried warnings\n\n- [ ] must: c (product, a.py:1)\n" in plan.read_text()
+    code, out, _ = run("check", vid)
+    assert code == 0 and "(edit only in ## Carried warnings)" in out, out
+    assert run("carry", vid)[1].startswith("carry: nothing new")
+
+
+def test_carry_refuses_a_red_panel(repo):
+    vid = panel_in_round(repo, 1, "BLOCKING")
+    code, _, err = run("carry", vid)
+    assert code == 1 and "is red; nothing is carried" in err

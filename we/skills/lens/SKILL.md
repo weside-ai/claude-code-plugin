@@ -30,7 +30,7 @@ plus `plan_blob`, or `pr` plus `head`). Exit 1 (no plan file here nor on `origin
 directory): relay the line and stop.
 
 An entry whose `agent` is not one this plugin ships (`we:lens-product`, `we:lens-architecture`,
-`we:lens-acceptance`) is not dispatched: record it with `LV write <id> <lens> --failed "no agent <agent>"`.
+`we:lens-acceptance`, `we:lens-security`) is not dispatched: record it with `LV write <id> <lens> --failed "no agent <agent>"`.
 
 ## 2. Dispatch every entry in one message
 
