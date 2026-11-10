@@ -28,8 +28,12 @@ Usage:
   board.py [--board FILE] select <KEY> [--plan PATH]
   board.py [--board FILE] signals [--input FILE]
   board.py [--board FILE] claim <KEY> [--release] [--input FILE]
-  board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|done>
-           [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE]
+  board.py [--board FILE] inbox [--input FILE]
+  board.py [--board FILE] reply <KEY> <accept|deny|discuss|info|update> [--text T]
+  board.py [--board FILE] withdraw <Q> [--reason T]
+  board.py [--board FILE] supersede <Q> --by <Q2> [--reason T]
+  board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|in_test|done>
+           [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE] [--input FILE]
   board.py [--board FILE] check --jira FILE
   board.py [--board FILE] book staging --until <YYYY-MM-DDTHH:MMZ>
   board.py [--board FILE] unbook [<rc tag>]
@@ -142,10 +146,19 @@ claim    writes the claim comment `claim <role>@<human> <session>` on the ticket
          board-claims.jsonl), refused while another role or human holds a live claim
          (`board.claim_hours`, from the ticket's comments and the local claims); `--release` ends
          this session's claim. With `jira` the first run carries the read like `signals`.
+inbox    (several humans) the tickets labelled `board_humans.question_label` for this session's
+         human: the search `board_humans.inbox_jql`, carried like `signals` with `jira`.
+reply    (several humans) this human's answer on a ticket: the comment
+         `board_humans.reply_comment`, then the question label off (`unlabel`).
+withdraw takes the caller's own open question off `owner_queue` (`supersede --by Q2`: replaced
+         by a newer one), a `withdrawn` or `superseded` line in board-questions.jsonl; a question
+         asked with `--to` also gets a comment and loses its label. Only its asker (session name)
+         or the coordinator.
 move     moves a story to another state when that state's entry rule holds (docs/board.md
-         § Moves): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
+         § Moves; with `humans` first the owner of the state it leaves, read from the ticket's
+         status, § Several humans): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
          after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`),
-         `done` after an `in_review` row with --comment-file holding a `Not proven:` line (or, in
+         `in_test` after `in_review`, `done` after an `in_review` or `in_test` row with --comment-file holding a `Not proven:` line (or, in
          process from accept.py, a green verdict entry re-checked here: `move_done`); a `done`
          move carries the transition and then the acceptance comment, and every
          `acceptance.done_sample`-th `via: receipt` row adds a `sample` news item. A

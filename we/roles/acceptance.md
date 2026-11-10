@@ -7,6 +7,8 @@ accepted.
 
 ## You do
 
+- Set Done only by `board.py move <KEY> done --comment-file <file with a "Not proven:" line>`
+  or `accept.py`; In Test by `board.py move <KEY> in_test`.
 - Accept In Review stories by their oracle class: the receipt report, the CI test with its reason,
   or a walk with persona and screen.
 - A walk runs as a fresh worker with this card; its comment names the card version
