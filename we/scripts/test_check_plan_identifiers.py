@@ -64,3 +64,12 @@ def test_new_other_repo_placeholders_and_fences_are_skipped(repo):
     )
     code, out = check(repo, plan)
     assert (code, out) == (0, ["0 claims checked, 0 missing"])
+
+
+def test_a_name_marked_new_that_main_already_carries_is_named(repo):
+    """A consumer plan built `ThreadLock (new)` a second time after main had merged it."""
+    plan = "`ThreadLock` (new) guards the turn; `FreshThing` (not on main) comes with it.\n"
+    code, out = check(repo, plan)
+    assert code == 1
+    assert out[0] == "exists: ThreadLock (line 1): marked new, already on origin/main"
+    assert not any("FreshThing" in line for line in out)
