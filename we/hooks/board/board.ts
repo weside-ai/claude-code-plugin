@@ -7,11 +7,11 @@ import type { Part } from './work'
 
 const MIN = 60_000
 const DAY = 86_400_000
-const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
+const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw']
 const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker']
 const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
-// An Accept or Deny closes its question: the pane strikes it, and later lines on that id change nothing.
-const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny']
+// An Accept, Deny or Withdraw closes its question: the pane strikes it, and later lines on that id change nothing.
+const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
 const promptsOf = (raw: unknown): Partial<Record<BoardPromptKind, string>> | undefined => {
@@ -196,6 +196,7 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   discuss: "{id}: let's talk about it",
   info: '{id}: I need more information',
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
+  withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
 }
 

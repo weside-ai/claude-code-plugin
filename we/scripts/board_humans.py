@@ -8,10 +8,14 @@ verbs in `board.py` own every write. Grammar (docs/board.md § Several humans):
 - a signal query: `[<board.jql_scope> AND ]status changed to "<status>" after -<jql_window>`;
 - a claim comment: `claim <role>@<human> <session>`, its release `release <role>@<human> <session>`;
   a claim lives `board.claim_hours` from its comment's `created`, until its claimant releases it;
+  a ticket comment holds a claim only from the account of a human of the crew (`from_crew`);
 - a question to a human on another machine: the comment `<question_label> <labels.to> <Name> ·
   <ask> · <labels.recommendation>: <recommendation>` and the label `question_label(crew, human)`;
-- a reply: a comment created after the question by that human (its `author` is the human's email
-  or name), or signed `<role>@<human>` as its first word from the account of a human of the crew; its first word, when it is an answer kind
+- an account: a human's `email` or Jira `account_id` (`humans.<slug>`), never a display name,
+  which anyone can give themselves;
+- a reply: a comment created after the question by that human (its `author` is one of the human's
+  accounts), or signed `<role>@<human>` as its first word from the account of a human of the crew;
+  its first word, read in any case, when it is an answer kind
   (`accept`, `deny`, `discuss`, `info`, `update`), is the answer, else `discuss`. The label taken
   off without a reply is the answer `update` (ask whether the question still stands).
 """
@@ -96,23 +100,36 @@ def live_claims(comments: list[dict], now: datetime, hours: float) -> dict[tuple
     }
 
 
-def _accounts(entry: dict, slug: str) -> set[str]:
-    out = {slug, str(entry.get("name") or "").strip().lower()}
-    if entry.get("email"):
-        out.add(str(entry["email"]).strip().lower())
-    return out - {""}
+def _accounts(entry: dict) -> set[str]:
+    """The human's accounts: `email` and `account_id`, lowered; a display name is none."""
+    return {str(entry.get(k) or "").strip().lower() for k in ("email", "account_id")} - {""}
+
+
+def _author(comment: dict) -> str:
+    return str((comment or {}).get("author") or "").strip().lower()
+
+
+def crew_accounts(every: dict) -> set[str]:
+    return set().union(set(), *(_accounts(e) for e in (every or {}).values()))
+
+
+def from_crew(comments: list[dict], every: dict) -> list[dict]:
+    """The comments written from the account of a human of the crew (`every`: `crew.humans`)."""
+    known = crew_accounts(every)
+    return [c for c in comments or [] if _author(c) in known]
 
 
 def _by_human(comment: dict, human: str, every: dict) -> bool:
-    """The comment is `human`'s: its author is that human, or it is signed `<role>@<human>` and
-    written from the account of a human of the crew (one shared account); a stranger's signature
-    never counts."""
-    author = str(comment.get("author") or "").strip().lower()
-    if author and author in _accounts(every.get(human) or {}, human):
+    """The comment is `human`'s: its author is one of that human's accounts, or it is signed
+    `<role>@<human>` and written from the account of a human of the crew (one shared account); a
+    stranger's signature never counts."""
+    author = _author(comment)
+    if not author:
+        return False
+    if author in _accounts(every.get(human) or {}):
         return True
-    crew_accounts = set().union(*(_accounts(e, s) for s, e in every.items())) if every else set()
     m = SIGNED.match(str(comment.get("body") or "").strip())
-    return bool(m and m.group(2) == human and author in crew_accounts)
+    return bool(m and m.group(2) == human and author in crew_accounts(every))
 
 
 def replies(ticket: dict, asked: datetime, human: str, every: dict) -> list[dict]:

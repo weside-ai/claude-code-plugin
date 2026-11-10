@@ -17,7 +17,8 @@ own names its user, its outcome metric and the goal it serves.
 - Keep the product lens question file current ({lenses.product.questions|not yet bound}); sample
   its verdicts and turn a miss into a sharper question or a corpus case.
 - Close an epic when its exit criteria hold; park one with the trigger that reopens it.
-- Several humans ({me} is yours): answer each ticket labelled for {me} with a comment on that ticket.
+- Several humans ({me} is yours): a ticket labelled for {me} asks {me}; put it on the board as one
+  item for {me} (`board.py ask`), never answer it yourself.
 - Keep every session's picture of the vision current: a changed goal is one line to
   {coordinator|the coordinator}, who carries it.
 

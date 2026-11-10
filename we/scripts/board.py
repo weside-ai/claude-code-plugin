@@ -60,15 +60,17 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          `urgent: true` on the item and the log line; `bundle` lists urgent questions first.
          A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
-         `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then shows no Accept,
-         only the PR link to approve or merge. `--kind task` stamps `kind: task` (the pane labels
+         `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then names Accept
+         "Yes, I'll do it" (it writes `accept`) beside the PR link to approve or merge.
+         `--kind task` stamps `kind: task` (the pane labels
          Accept as Taken when the task carries a recommendation). `--source <command or link>` stamps where the ask's fact comes from (the
          pane shows it). `--owner <member>` or `--component <name>` (the member whose `components`
          hold it) stamps `owner`: the deliverer carries the answer to that member's session too.
          An open question on the same key draws a warning naming its id; `--replace <QID>` takes
          that question off the queue (a `replaced` line in board-questions.jsonl) and posts this one.
          `--to <human>` (a crew with `humans`, another human than this session's) asks a human on
-         another machine on the ticket `--key`: the item keeps `to` and `label`, and the carry
+         another machine on the ticket `--key`: the item keeps `to`, `to_name` and `label` (the
+         pane shows it waiting on that human, with Withdraw only), and the carry
          is the comment `board_humans.question_comment` and the label
          `board_humans.question_label`; `signals` reads the reply back.
 close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
@@ -222,8 +224,8 @@ import ticket_adapter  # noqa: E402
 import worker_launch as wl  # noqa: E402  (the one reader of `claude agents --json`)
 
 DEFAULT_BOARD = str(Path(crew_mod.DEFAULT_STATE_DIR) / crew_mod.BOARD_NAME)
-KINDS = ("accept", "deny", "discuss", "info", "update")
-CLOSING = ("accept", "deny")
+KINDS = ("accept", "deny", "discuss", "info", "update", "withdraw")
+CLOSING = ("accept", "deny", "withdraw")  # withdraw: the asker's human takes back an `ask --to`
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
 SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys")
@@ -1191,6 +1193,7 @@ def _ask_extras(args, crew):
     remote = _remote_target(args, crew)
     if remote is not None:
         extras["to"] = remote[0]
+        extras["to_name"] = remote[1]["name"]
         extras["label"] = board_humans.question_label(crew, remote[0])
     if args.ask_kind == "task":
         extras["kind"] = "task"
@@ -1475,10 +1478,8 @@ def cmd_signals(state, args, crew, now):
     adapter = _reads(args, crew)
     wanted = [sig for sig in (crew.get("board") or {}).get("signals") or [] if sig["role"] in mine]
     board = state.board()
-    remote = [
-        q
-        for q in board.get("owner_queue") or []
-        if isinstance(q, dict) and q.get("to") and q.get("to") != slug and q.get("id")
+    remote = [  # only open questions: an Accept or Deny ends the read-back
+        q for q in _open_questions(state, board)[0] if q.get("to") and q.get("to") != slug
     ]
     hits, searches, tickets, keys = [], [], {}, []
     for sig in wanted:
@@ -1592,7 +1593,8 @@ def cmd_claim(state, args, crew, now):
         if row.get("key") == key
     ]
     hours = (crew.get("board") or {}).get("claim_hours") or 4
-    live = board_humans.live_claims((ticket.get("comments") or []) + local, now, hours)
+    held = board_humans.from_crew(ticket.get("comments") or [], crew_mod.humans(crew))
+    live = board_humans.live_claims(held + local, now, hours)
     if args.release:
         body = f"release {who} {session}"
     else:
@@ -1651,8 +1653,9 @@ def cmd_decision(state, args, crew, now):
 
 
 def _open_questions(state, board):
-    """`owner_queue` questions no Accept or Deny closed: (open, obsolete). Open ones urgent first,
-    each group oldest `since` first; obsolete ones (a resolved prompt, `blocked --clear`) apart."""
+    """`owner_queue` questions no Accept, Deny or Withdraw closed: (open, obsolete). Open ones
+    urgent first, each group oldest `since` first; obsolete ones (a resolved prompt,
+    `blocked --clear`) apart."""
     closed = {a.get("id") for a in state.answers() if a.get("answer") in CLOSING}
     items = [
         q
@@ -2267,26 +2270,14 @@ def rule_selector(m):
 
 
 def rule_plan_on_main(m):
-    """The plan file is on `risk.rules_from` (default `origin/main`); its blob goes into the
-    select comment."""
+    """The plan file is on `risk.rules_from` (default `origin/main`), after the select's one
+    `git fetch` (`plan_tier.fetch_origin`); its blob goes into the select comment."""
     rel = _rel(m.root, m.plan)
     ref = str((m.crew.get("risk") or {}).get("rules_from") or "origin/main")
     if rel is None:
         return [f"plan {m.plan} lies outside {m.root}"]
-    if ref.startswith("origin/"):  # a plan merged since the last fetch counts
-        try:
-            fetched = subprocess.run(
-                ["git", "-C", str(m.root), "fetch", "--quiet", "origin"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if fetched.returncode != 0:
-                m.warnings.append(
-                    f"warning: git fetch origin failed; the plan check reads the local {ref}"
-                )
-        except OSError as exc:
-            m.warnings.append(f"warning: git fetch origin not runnable ({exc.strerror})")
+    # the one fetch of a select (bounded): the tier after it reads the same ref unfetched
+    m.warnings += plan_tier.fetch_origin(m.root, ref, "select")
     try:
         done = subprocess.run(
             ["git", "-C", str(m.root), "rev-parse", "--verify", "-q", f"{ref}:{rel}"],
@@ -2307,7 +2298,7 @@ def rule_tier(m):
     rel = _rel(m.root, m.plan)
     if rel is None:
         return [f"tier not computed: the plan lies outside {m.root}"]
-    result = plan_tier.plan_tier(m.crew, m.root, m.key, rel, fetch=True)
+    result = plan_tier.plan_tier(m.crew, m.root, m.key, rel)  # fetched by `plan on main`
     m.warnings += result.warnings
     if result.failure is not None:
         return [f"tier not computed: {result.failure}"]
@@ -3026,7 +3017,9 @@ def parser():
         q.add_argument("--" + field.replace("_", "-"), dest=field)
     q.add_argument("--urgent", action="store_true", help="bundle lists it before the others")
     q.add_argument("--pr", metavar="REF", help="the open PR a merge-go question is about")
-    q.add_argument("--one-way", metavar="CLASS", help="merge-go on a one-way PR: no Accept")
+    q.add_argument(
+        "--one-way", metavar="CLASS", help="merge-go on a one-way PR: Accept reads Yes, I'll do it"
+    )
     q.add_argument(
         "--kind",
         dest="ask_kind",

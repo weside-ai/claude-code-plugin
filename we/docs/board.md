@@ -222,7 +222,7 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 |---|---|
 | `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
+| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update`, `withdraw` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle, an escalation at stage `bundle`, and a signal `S<n>` with `for` the role and `key`, § Several humans), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned` and `info` (`board.py self-merge`), which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
@@ -231,9 +231,9 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
-| `owner_queue[].to`, `.label` | optional: a question `board.py ask --to` sent to a human on another machine and the ticket label it carries (§ Several humans); its answer comes from the ticket |
+| `owner_queue[].to`, `.to_name`, `.label` | optional: a question `board.py ask --to` sent to a human on another machine, that human's name and the ticket label it carries (§ Several humans); its answer comes from the ticket, so the card shows `waiting on <to_name> (label <label>)` and only **Withdraw** |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
-| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` instead of **Accept** (approve where the merge hook's one-way refusal names the approve as the go, else merge by hand), and `board.py close-merged` drops the question once the PR is merged or closed |
+| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` and names **Accept** **Yes, I'll do it** (it writes `accept`: the owner approves or merges by hand; the merge hook's one-way refusal stands) (approve where the merge hook's one-way refusal names the approve as the go, else merge by hand), and `board.py close-merged` drops the question once the PR is merged or closed |
 | `owner_queue[].kind`, `.source`, `.owner` | `task` (`board.py ask --kind task`: the card offers **Taken** in place of **Accept** and stamps `taken`); where the ask's fact comes from (`--source`, shown dimmed under the ask); the member who owns the subject (`--owner`, or `--component` resolved through the crew's `members.*.components`): the deliverer sends that session a copy of every answer (§ Answers) |
 | `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
@@ -254,8 +254,9 @@ Every field but `sessions[].name` may be missing or `null`; the pane leaves it o
 
 ## Answers
 
-Each question with an `id` carries the buttons **Accept** (only with a `recommendation`), **Deny**,
-**Discuss**, **More info** and **Update**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
+Each question with an `id` carries the buttons **Accept** (only with a `recommendation`; **Yes, I'll
+do it** on a one-way merge question), **Deny**, **Discuss**, **More info** and **Update**; a question
+sent to a human on another machine (`to`) carries only **Withdraw**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
 file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never writes `board.json`:
 
 ```json
@@ -265,7 +266,7 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 | Field | Meaning |
 |---|---|
 | `id` | the question's `owner_queue[].id`, or the item's `news[].id` |
-| `answer` | `accept`, `deny`, `discuss`, `info` or `update` for a question; `read` for a news item |
+| `answer` | `accept`, `deny`, `discuss`, `info`, `update` or `withdraw` for a question; `read` for a news item |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the line was written in, as `claude agents` lists it; `null` when the live column does not know it |
 | `via`, `quote` | only on a line `board.py answer` wrote (`chat`, and the owner's own words when given) or `board.py signals` read from a ticket (`ticket`, and the reply; § Several humans) |
@@ -275,12 +276,13 @@ The file only grows (`answer.py` and `board.py` append with `O_APPEND`, nothing 
 shows the newest answer beside the question (`✓ accepted 18:12 UTC (Orchestrator)`), so nobody answers
 twice, re-read with the board's three-second watch.
 
-**Accept** and **Deny** close the question at once: the card stays dim with the question struck
+**Accept**, **Deny** and **Withdraw** close the question at once: the card stays dim with the question struck
 through, no buttons, the stamp and the delivery line under it, whatever the board file still lists. A
 later line on that id changes nothing and is not delivered; a follow-up question takes a new id.
 **Update** asks for a check: the question keeps its buttons until the orchestrator rewords or removes
 it, and its `✓ update asked` lapses with the orchestrator's next write of the board file (a newer
-`updated`). **Read** sends nothing: the item leaves the pane.
+`updated`). **Withdraw** goes to the asker as `<id>: withdrawn on the board; take its label off the
+ticket and say so in one comment there`. **Read** sends nothing: the item leaves the pane.
 
 ### Delivery
 
@@ -762,12 +764,15 @@ them with its ticketing tool and hands the results back with `--input FILE`:
 | `ask … --to <human>` | as § Questions and decisions (the cold reader included), for a human on another machine: the item keeps `to` and `label`, the carry is the comment `<question_label> <labels.to> <Name> · <ask> · <labels.recommendation>: <recommendation>` and the label `<question_label lowercased>-<human>`; `--to` naming this session's own human is a plain `ask` | `--to` naming no human of the crew, or a `--key` that is a plan slug |
 
 **Replies.** `signals` reads the ticket of each open question this board sent with `--to`: a comment
-created after the question whose `author` is that human (email or name) or whose first word is
-`<role>@<human>` is a reply. Its first word, when it is one of `accept`, `deny`, `discuss`, `info`,
-`update`, is the answer kind, else `discuss`; the reply's text is the `quote`. It lands as an answer
+created after the question whose `author` is one of that human's accounts (`humans.<slug>.email` or
+`account_id`, never the display name: anyone can name themselves Bob), or whose first word is
+`<role>@<human>` from the account of a human of the crew, is a reply. Its first word, in any case,
+when it is one of `accept`, `deny`, `discuss`, `info`, `update`, is the answer kind, else `discuss`; the reply's text is the `quote`. It lands as an answer
 line with `via: ticket`, and the deliverer carries it to the asker like a press (§ Delivery); each
 reply once. The label taken off without a reply is the answer `update` (is the question still
-current?). The human who answers removes the label.
+current?). The human who answers removes the label. An Accept, Deny or Withdraw closes the
+question: `signals` reads its ticket no more, and a later comment there answers nothing. A claim
+comment counts only from the account of a human of the crew, the local claims always.
 
 ## Requirements
 

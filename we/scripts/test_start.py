@@ -198,3 +198,63 @@ def test_check_prints_the_human_line_and_the_human_s_companion(tmp_path):
     assert lines[0] == "ok    human bob (Bob), runs product"
     lines, ok = start.check(root, {**env, "WE_ROLE_ID": "coordinator"})
     assert not ok and lines[0].startswith("FAIL  human: bob does not run coordinator")
+
+
+def test_a_stale_we_human_in_a_one_human_crew_names_the_fix(tmp_path):
+    """Red arm: a WE_HUMAN left over from another crew says what to do, not only what is wrong."""
+    root = repo(tmp_path)
+    with pytest.raises(start.StartError) as err:
+        start.plan(root, True, {"WE_HUMAN": "bob"}, no_agents)
+    assert str(err.value) == (
+        "WE_HUMAN=bob is no human of the crew (the-human): unset WE_HUMAN, or set it to one of them"
+    )
+
+
+def test_a_running_companion_is_named_with_its_place_and_exits_3(tmp_path, capsys, monkeypatch):
+    root = repo(tmp_path)
+    rows = [{"name": "Lea", "pid": 7, "cwd": "/w/lea"}]
+    with pytest.raises(start.RunningError, match=r"^Lea runs already \(/w/lea\)"):
+        start.plan(root, True, {}, lambda: rows)
+    monkeypatch.setattr(start.worker_launch, "sessions", lambda: rows)
+    assert start.main(["plan", "--from", str(root), "--fresh"]) == 3
+    assert "wclaude: Lea runs already (/w/lea)" in capsys.readouterr().err
+
+
+def test_a_renamed_session_counts_by_its_companion_pin(tmp_path, monkeypatch):
+    root = repo(tmp_path)
+    monkeypatch.setattr(start, "companion_pin", lambda pid: "Lea" if pid == 9 else None)
+    with pytest.raises(start.RunningError, match="Lea runs already"):
+        start.plan(root, True, {}, lambda: [{"name": "repo-1a2b", "pid": 9, "cwd": "/w"}])
+
+
+def test_side_opens_product_beside_the_coordinator_unless_it_runs(tmp_path):
+    root = repo(tmp_path)
+    assert start.side(root, {}, no_agents) == (["product\tAda\tthe-human"], [])
+    running_ada = lambda: [{"name": "Ada", "pid": 4, "cwd": "/w/ada"}]  # noqa: E731
+    assert start.side(root, {}, running_ada) == ([], ["Ada runs already (/w/ada)"])
+    # several humans: only roles the human runs; bob's main companion is product itself
+    crowd = repo(tmp_path / "h", HUMANS)
+    assert start.side(crowd, {"WE_HUMAN": "alice"}, no_agents) == ([], [])
+    assert start.side(crowd, {"WE_HUMAN": "bob"}, no_agents) == ([], [])
+    both = json.loads(json.dumps(HUMANS))
+    both["humans"]["alice"]["runs"].append("product")
+    both["humans"]["bob"]["runs"] = []
+    crowd = repo(tmp_path / "b", both)
+    assert start.side(crowd, {"WE_HUMAN": "alice"}, no_agents) == (["product\tAda\talice"], [])
+    assert start.others(crowd, None, {"WE_HUMAN": "alice"}) == [
+        "alice also runs acceptance (Tess): wclaude --start --role acceptance"
+    ]
+
+
+def test_roster_lists_every_companion_with_roles_human_and_state(tmp_path):
+    crowd = repo(tmp_path, HUMANS)
+    rows = lambda: [{"name": "Lea", "pid": 4, "cwd": "/w/lea"}]  # noqa: E731
+    assert start.roster(crowd, {"WE_HUMAN": "alice"}, rows) == [
+        "Lea: coordinator (alice) · runs (/w/lea)",
+        "Tess: acceptance (alice) · start: wclaude --start --role acceptance",
+        "Paula: product (bob) · runs on bob's machine",
+    ]
+    assert start.roster(repo(tmp_path / "one"), {}, no_agents) == [
+        "Ada: product · start: wclaude --start --role product",
+        "Lea: coordinator · start: wclaude --start --role coordinator",
+    ]

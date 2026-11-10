@@ -19,8 +19,8 @@
 import type { BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
 import { answerPrompt } from './board'
 
-const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update']
-const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny']
+const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw']
+const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
 
 // How long a pane waits for any ledger row of an answer before it marks the coordinator not running.
 export const MARK_AFTER_MS = 60_000

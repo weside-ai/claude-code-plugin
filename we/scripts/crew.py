@@ -103,7 +103,9 @@ replaces), so every reader sees the defaults without knowing them.
 
 Humans (``humans``, optional): several humans share one crew, each on their own machine with
 their own sessions; ``humans.<slug>`` (the slug ``[a-z0-9][a-z0-9_-]*``) holds ``name`` (required),
-``email`` (matched case-insensitively against ``git config user.email``, unique), ``decides``
+``email`` (matched case-insensitively against ``git config user.email``, unique), ``account_id``
+(the human's ticketing account id, e.g. a Jira accountId, unique; with ``email`` the only accounts
+a ticket comment counts as that human's, ``board_humans.py``), ``decides``
 (list), ``owns_states`` (keys of ``STATES``; a state has at most one owning human), ``runs`` (what
 starts on that human's machine: role keys, member slugs of specialists, and ``masters`` for epic
 masters and their workers) and ``companions`` (role key or member slug -> the display name that
@@ -173,6 +175,7 @@ FALLBACK_TARGETS = (*ROLE_KEYS, "human_bundle")
 HUMAN_KEYS = {
     "name": str,
     "email": str,
+    "account_id": str,
     "decides": list,
     "owns_states": list,
     "runs": list,
@@ -753,6 +756,7 @@ def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
         raise _fail(path, "humans must be an object with at least one human")
     places = set(ROLE_KEYS) | slugs
     emails: dict[str, str] = {}
+    ids: dict[str, str] = {}
     owners: dict[str, str] = {}
     names: dict[str, tuple[str, str]] = {}  # display name lowered -> (target member, where)
     for slug, entry in data["members"].items():
@@ -761,11 +765,8 @@ def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
         if not _SAFE.fullmatch(str(slug)):
             raise _fail(path, f"humans.{slug}: a slug is lower case [a-z0-9_-], like alice")
         _check_human_fields(path, slug, entry)
-        email = str(entry.get("email") or "").strip().lower()
-        if email:
-            if email in emails:
-                raise _fail(path, f"humans.{slug}.email is also humans.{emails[email]}.email")
-            emails[email] = slug
+        _unique(path, slug, "email", entry, emails)
+        _unique(path, slug, "account_id", entry, ids)
         for state in entry.get("owns_states", []):
             if state not in STATES:
                 raise _fail(
@@ -785,6 +786,16 @@ def _validate_humans(path: Path, data: dict[str, Any], slugs: set[str]) -> None:
                     f"humans.{slug}.runs: {role!r} is no role key, member slug nor {MASTERS}",
                 )
         _check_companions(path, data, slug, entry, (places, slugs), names)
+
+
+def _unique(path: Path, slug: str, key: str, entry: dict[str, Any], seen: dict[str, str]) -> None:
+    """``humans.<slug>.<key>`` (lowered) names one human only."""
+    value = str(entry.get(key) or "").strip().lower()
+    if not value:
+        return
+    if value in seen:
+        raise _fail(path, f"humans.{slug}.{key} is also humans.{seen[value]}.{key}")
+    seen[value] = slug
 
 
 def _check_human_fields(path: Path, slug: str, entry: Any) -> None:
@@ -1092,6 +1103,7 @@ def humans(crew: dict[str, Any]) -> dict[str, dict[str, Any]]:
             slug: {
                 "name": str(e.get("name") or slug).strip(),
                 "email": str(e.get("email") or "").strip() or None,
+                "account_id": str(e.get("account_id") or "").strip() or None,
                 "decides": list(e.get("decides") or []),
                 "owns_states": list(e.get("owns_states") or []),
                 "runs": list(e.get("runs") or []),
@@ -1107,6 +1119,7 @@ def humans(crew: dict[str, Any]) -> dict[str, dict[str, Any]]:
         human_slug(name): {
             "name": name,
             "email": None,
+            "account_id": None,
             "decides": list(one.get("decides") or []),
             "owns_states": list(STATES),
             "runs": [*bound, MASTERS],
@@ -1146,7 +1159,10 @@ def current_human(
     forced = str(env.get("WE_HUMAN") or "").strip().lower()
     if forced:
         if forced not in every:
-            raise CrewError(f"WE_HUMAN={forced} is no human of the crew ({', '.join(every)})")
+            raise CrewError(
+                f"WE_HUMAN={forced} is no human of the crew ({', '.join(every)}): unset "
+                "WE_HUMAN, or set it to one of them"
+            )
         return forced, every[forced]
     if len(every) == 1:
         slug = next(iter(every))
@@ -1162,23 +1178,22 @@ _EMAIL_CACHE: dict[str, str] = {}
 
 
 def env_human(crew: dict[str, Any], env: Any = None) -> str | None:
-    """The slug of the session's human for the renderer: ``WE_HUMAN`` when it is a human of the
-    crew, else the only human, else the one whose email is ``git config user.email`` of the cwd
-    (read once per process and directory); None when none matches."""
-    env = os.environ if env is None else env
+    """The slug of the session's human for the renderer: ``current_human`` with the cwd's
+    ``git config user.email`` read once per process and directory, and a ``WE_HUMAN`` that names
+    no human of the crew passed over (the renderer never fails a session start); None when none
+    matches."""
+    env = dict(os.environ if env is None else env)
     every = humans(crew)
-    forced = str(env.get("WE_HUMAN") or "").strip().lower()
-    if forced in every:
-        return forced
-    if len(every) == 1:
-        return next(iter(every))
-    here = str(Path.cwd())
-    if here not in _EMAIL_CACHE:
-        _EMAIL_CACHE[here] = git_email(here)
-    mail = _EMAIL_CACHE[here]
-    return next(
-        (s for s, e in every.items() if mail and (e.get("email") or "").lower() == mail), None
-    )
+    if str(env.get("WE_HUMAN") or "").strip().lower() not in every:
+        env.pop("WE_HUMAN", None)
+    mail = ""
+    if len(every) > 1 and not env.get("WE_HUMAN"):
+        here = str(Path.cwd())
+        if here not in _EMAIL_CACHE:
+            _EMAIL_CACHE[here] = git_email(here)
+        mail = _EMAIL_CACHE[here]
+    found = current_human(crew, env, email=mail)
+    return found[0] if found else None
 
 
 def display_name(crew: dict[str, Any], role: str, human: str | None = None) -> str | None:

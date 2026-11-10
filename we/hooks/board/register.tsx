@@ -68,6 +68,7 @@ const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
   discuss: { label: 'discuss', color: 'warning' },
   info: { label: 'more info asked', color: 'suggestion' },
   update: { label: 'update asked', color: 'suggestion' },
+  withdraw: { label: 'withdrawn', color: 'inactive' },
   read: { label: 'read', color: 'inactive' },
 }
 
@@ -180,7 +181,7 @@ async function selfName($: $): Promise<string | undefined> {
   return ownName((await read($, live))?.sessions ?? [], id)
 }
 
-// A press of Accept, Deny, Discuss, More info, Update or Read: one appended line. The pane sends nothing:
+// A press of Accept, Deny, Discuss, More info, Update, Withdraw or Read: one appended line. The pane sends nothing:
 // the deliverer in the orchestrator's session carries the line, at once when that is this session.
 async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
   try {
@@ -738,17 +739,23 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         q.session ? [{ text: q.session, dim: struck }] : [],
         q.key ? [{ text: q.key, dim: true }] : [],
       ]
-      // A one-way merge waits for the owner's approve (repo with an approve gate) or hand merge: no Accept, the PR
-      // link instead (board.py close-merged drops the question once the PR merged).
+      // A one-way merge waits for the owner's approve (repo with an approve gate) or hand merge: the PR link, and
+      // Accept as "Yes, I'll do it" (board.py close-merged drops the question once the PR merged).
       const handMerge = q.one_way && q.pr_url ? `approve or merge (${q.one_way}): ${q.pr_url}` : undefined
+      // A question sent to a human on another machine (board.py ask --to): its answer comes from the ticket, so
+      // the local human only withdraws it.
+      const remote = q.to ? `waiting on ${q.to_name || q.to}${q.label ? ` (label ${q.label})` : ''}` : undefined
+      const acceptLabel = handMerge ? "Yes, I'll do it" : q.kind === 'task' ? 'Taken' : 'Accept'
       const buttons = q.id && !struck
-        ? [
-            ...(q.recommendation && !handMerge ? [{ key: `accept-${q.id}`, label: q.kind === 'task' ? 'Taken' : 'Accept', on: press('accept') }] : []),
-            { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
-            { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
-            { key: `info-${q.id}`, label: 'More info', on: press('info') },
-            { key: `update-${q.id}`, label: 'Update', on: press('update') },
-          ]
+        ? remote
+          ? [{ key: `withdraw-${q.id}`, label: 'Withdraw', on: press('withdraw') }]
+          : [
+              ...(q.recommendation ? [{ key: `accept-${q.id}`, label: acceptLabel, on: press('accept') }] : []),
+              { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
+              { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
+              { key: `info-${q.id}`, label: 'More info', on: press('info') },
+              { key: `update-${q.id}`, label: 'Update', on: press('update') },
+            ]
         : []
       const answered = last
         ? `✓ ${q.kind === 'task' && last.answer === 'accept' ? 'taken' : ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`
@@ -762,6 +769,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           {q.source && !struck && <Text dimColor>{clip(`source: ${q.source}`, inner)}</Text>}
           {q.recommendation && !struck && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
           {handMerge && !struck && <Text key={`hand-${q.id}`} color="warning">{handMerge}</Text>}
+          {remote && !struck && <Text key={`remote-${q.id}`} color="suggestion">{clip(remote, inner)}</Text>}
           {pack(row, r => r.width, inner, 1).map((line, j) => (
             <Box key={`q-${i}-row-${j}`} flexDirection="row" gap={1}>
               {line.map(r =>

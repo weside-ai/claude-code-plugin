@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from datetime import timedelta
 
 import pytest
@@ -32,6 +33,7 @@ HUMANS = {
     "bob": {
         "name": "Bob",
         "email": "bob@example.com",
+        "account_id": "5b10ac8d82e05b22cc7d4ef5",
         "owns_states": ["backlog"],
         "runs": ["product"],
         "companions": {"product": "Paula"},
@@ -131,6 +133,28 @@ class TestSelect:
         assert f"board.py select {KEY}: refused (lenses)" in capsys.readouterr().err
         assert adapter.calls == []
 
+    def test_without_humans_the_role_group_drops_and_one_fetch_serves(
+        self, moving, monkeypatch, capsys
+    ):
+        """A crew without `humans`: any caller selects (no `role` group), and the select fetches
+        origin once, bounded, for both the plan check and the tier (red arm: two fetches)."""
+        green_lenses(moving)
+        monkeypatch.setenv("WESIDE_COMPANION", "Otto")  # the coordinator, not product
+        fetches = []
+        real = subprocess.run
+
+        def counting(argv, *a, **kw):
+            if "fetch" in argv:
+                fetches.append(kw.get("timeout"))
+            return real(argv, *a, **kw)
+
+        monkeypatch.setattr(subprocess, "run", counting)
+        adapter = ticket_adapter.FakeAdapter({KEY: "Backlog"})
+        assert act(moving, "select", KEY, adapter=adapter) == 0, capsys.readouterr().err
+        assert adapter.calls[0] == ("move", KEY, "Selected for Development")
+        assert adapter.calls[1][2].startswith("selected by coordinator@")
+        assert len(fetches) == 1 and fetches[0], fetches
+
 
 # --- signals ---------------------------------------------------------------------------------
 
@@ -207,17 +231,30 @@ class TestClaim:
     def test_an_old_or_released_claim_lets_the_next_claim(self, crewed, monkeypatch, capsys):
         with_humans(crewed)
         as_(monkeypatch, "alice", "Otto")
+        bob = "bob@example.com"
         for comments in (
-            [{"body": "claim product@bob Paula", "created": ago(hours=5)}],
+            [{"author": bob, "body": "claim product@bob Paula", "created": ago(hours=5)}],
             [
-                {"body": "claim product@bob Paula", "created": ago(hours=2)},
-                {"body": "release product@bob Paula", "created": ago(hours=1)},
+                {"author": bob, "body": "claim product@bob Paula", "created": ago(hours=2)},
+                {"author": bob, "body": "release product@bob Paula", "created": ago(hours=1)},
             ],
         ):
             adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": {"comments": comments}})
             assert act(crewed, "claim", "PROJ-12", adapter=adapter) == 0
             assert adapter.calls == [("comment", "PROJ-12", "claim coordinator@alice lead-12")]
         assert capsys.readouterr().out.startswith("PROJ-12: claim coordinator@alice lead-12")
+
+    def test_a_claim_from_a_stranger_s_account_blocks_nothing(self, crewed, monkeypatch):
+        """Red arm of the author filter: only a crew account's comment holds a claim."""
+        with_humans(crewed)
+        as_(monkeypatch, "alice", "Otto")
+        for author in ("eve@example.com", "Bob", ""):
+            comments = [{"body": "claim product@bob Paula", "created": ago(hours=1)}]
+            if author:
+                comments[0]["author"] = author
+            adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": {"comments": comments}})
+            assert act(crewed, "claim", "PROJ-12", adapter=adapter) == 0, author
+            assert adapter.calls == [("comment", "PROJ-12", "claim coordinator@alice lead-12")]
 
     def test_the_local_claim_counts_and_release_ends_it(self, crewed, monkeypatch, capsys):
         with_humans(crewed, claim_hours=2)
@@ -263,6 +300,7 @@ class TestAskTo:
         adapter = ticket_adapter.FakeAdapter()
         item = self.asked(crewed, monkeypatch, adapter)
         assert item["to"] == "bob" and item["label"] == "ask-bob" and item["key"] == "PROJ-12"
+        assert item["to_name"] == "Bob"
         assert adapter.calls == [
             (
                 "comment",
@@ -347,6 +385,69 @@ class TestAskTo:
         lines = jsonl(crewed / "board-answers.jsonl")
         assert lines[-1]["answer"] == "update" and "label ask-bob removed" in lines[-1]["quote"]
         assert item["id"] == lines[-1]["id"]
+
+    def test_a_display_name_is_no_account(self, crewed, monkeypatch):
+        """Red arm: a stranger whose display name is a crew human's answers nothing, plain or
+        signed; the Jira accountId of the human counts."""
+        item = self.asked(crewed, monkeypatch, ticket_adapter.FakeAdapter())
+        later = NOW + timedelta(minutes=5)
+        spoofed = {
+            "labels": ["ask-bob"],
+            "comments": [
+                {"author": "Bob", "body": "accept · go", "created": later.isoformat()},
+                {"author": "Alice", "body": "product@bob: accept", "created": later.isoformat()},
+            ],
+        }
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": spoofed})
+        assert act(crewed, "signals", adapter=adapter, now=later) == 0
+        assert jsonl(crewed / "board-answers.jsonl") == []
+        by_id = {
+            "labels": ["ask-bob"],
+            "comments": [
+                {
+                    "author": "5b10ac8d82e05b22cc7d4ef5",
+                    "body": "Deny: not tonight",
+                    "created": later.isoformat(),
+                }
+            ],
+        }
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": by_id})
+        assert act(crewed, "signals", adapter=adapter, now=later) == 0
+        [line] = jsonl(crewed / "board-answers.jsonl")
+        assert (line["id"], line["answer"]) == (item["id"], "deny")
+
+    def test_a_comment_after_accept_is_no_answer(self, crewed, monkeypatch, capsys):
+        """Red arm: `signals` reads only open questions; a closed one is neither read nor answered."""
+        item = self.asked(crewed, monkeypatch, ticket_adapter.FakeAdapter())
+        later = NOW + timedelta(hours=1)
+        bob = "bob@example.com"
+        ticket = {
+            "labels": ["ask-bob"],
+            "comments": [{"author": bob, "body": "accept", "created": later.isoformat()}],
+        }
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": ticket})
+        assert act(crewed, "signals", adapter=adapter, now=later) == 0
+        weeks = later + timedelta(days=20)
+        ticket["comments"].append(
+            {"author": bob, "body": "the logo is still blurry", "created": weeks.isoformat()}
+        )
+        adapter = ticket_adapter.FakeAdapter(tickets={"PROJ-12": ticket})
+        assert act(crewed, "signals", adapter=adapter, now=weeks) == 0
+        assert [a["answer"] for a in jsonl(crewed / "board-answers.jsonl")] == ["accept"]
+        assert item["id"] in capsys.readouterr().out
+
+    def test_a_closed_question_carries_no_read(self, crewed, monkeypatch, capsys):
+        with_humans(crewed, ticketing="jira")
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "alice", "Otto")
+        assert act(crewed, *ask_argv(), "--to", "bob") == 0
+        qid = board_of(crewed)["owner_queue"][-1]["id"]
+        line = {"id": qid, "answer": "accept", "ts": NOW.isoformat(), "session": None}
+        with (crewed / "board-answers.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(line) + "\n")
+        capsys.readouterr()
+        assert act(crewed, "signals") == 0
+        assert [o["op"] for o in carry_of(capsys.readouterr().out)] == ["search"]
 
     @pytest.mark.parametrize(
         "to, key, message",

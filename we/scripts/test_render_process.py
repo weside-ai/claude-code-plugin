@@ -841,7 +841,8 @@ def test_several_humans_render_per_human(monkeypatch):
     assert "Adalinde moves a story to Selected only with `board.py select <KEY>`" in part
     assert rp.humans_part(crew, "worker") is None
     card = rp.render_card(crew, "product")
-    assert "Several humans (Marisol is yours): answer each ticket labelled for Marisol" in card
+    assert "a ticket labelled for Marisol asks Marisol" in card
+    assert "never answer it yourself" in card and "answer each ticket" not in card
 
 
 def test_one_human_renders_as_before():

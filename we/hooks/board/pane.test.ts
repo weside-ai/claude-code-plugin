@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+const URL5 = 'https://github.com/o/r/pull/5'
+const ONE_WAY_YES = "Yes, I'll do it"
 const BOARD = JSON.stringify({
   updated: '2026-10-30T18:10:00+01:00',
   updated_by: 'Orchestrator',
@@ -307,20 +309,50 @@ test('Accept in the orchestrator session appends one line, sends nothing itself 
   await ui.unmount()
 })
 
-test('a one-way merge question shows the PR link to approve or merge and no Accept', async ($, on) => {
+test('a one-way merge question offers Yes, I will do it (accept) beside the PR link', async ($, on) => {
+  // Red arm: a one-way question without Accept leaves the owner no way to say yes on the board.
   const clock = mock.clock(on)
   mock.store(on)
-  const url = 'https://github.com/o/r/pull/5'
-  const file = JSON.parse(BOARD)
-  file.owner_queue[0] = { ...file.owner_queue[0], cause: 'merge-go', pr_url: url, one_way: 'money' }
-  answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' }, JSON.stringify(file))
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' }, (() => {
+    const file = JSON.parse(BOARD)
+    file.owner_queue[0] = { ...file.owner_queue[0], cause: 'merge-go', pr_url: URL5, one_way: 'money' }
+    return JSON.stringify(file)
+  })())
 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
-  expect(await ui.find({ key: 'accept-Q1' })).toBeUndefined()
+  const accept = await ui.find({ key: 'accept-Q1' })
+  expect(accept).toBeDefined()
+  expect(JSON.stringify(accept)).toContain(ONE_WAY_YES)
   expect(await ui.find({ key: 'deny-Q1' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: `approve or merge (money): ${url}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: `approve or merge (money): ${URL5}` })).toBeDefined()
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  expect(home.appended[0]?.slice(1, 3)).toEqual(['Q1', 'accept'])
+  await ui.unmount()
+})
+
+test('a question to a human on another machine waits on that human: only Withdraw', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-orch', name: 'Orchestrator' }, (() => {
+    const file = JSON.parse(BOARD)
+    file.owner_queue[0] = { ...file.owner_queue[0], to: 'bob', to_name: 'Bob', label: 'question-bob' }
+    return JSON.stringify(file)
+  })())
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ type: 'Text', text: /waiting on Bob/ })).toBeDefined()
+  for (const kind of ['accept', 'deny', 'discuss', 'info', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
+  // the other questions keep their buttons
+  expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
+  await ui.press({ key: 'withdraw-Q1' })
+  await clock.settle()
+  expect(home.appended[0]?.slice(1, 3)).toEqual(['Q1', 'withdraw'])
+  expect(await ui.find({ type: 'Text', text: /✓ withdrawn/ })).toBeDefined()
   await ui.unmount()
 })
 

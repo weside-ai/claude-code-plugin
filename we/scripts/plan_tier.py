@@ -67,6 +67,21 @@ class TierError(Exception):
     pass
 
 
+def fetch_origin(root: Path, ref: str, reader: str = "the tier") -> list[str]:
+    """One `git fetch origin` (bounded by `RUN_TIMEOUT`) when `ref` is a remote ref, so a plan merged
+    since the last fetch counts; a failure is one warning line, never a refusal."""
+    if not ref.startswith("origin/"):
+        return []
+    done = _git(root, "fetch", "--quiet", "origin", check=False)
+    if done.returncode == 0:
+        return []
+    why = done.stderr.decode(errors="replace").strip().splitlines()
+    return [
+        f"warning: git fetch origin failed ({why[-1] if why else 'exit ' + str(done.returncode)}); "
+        f"{reader} reads the local {ref}"
+    ]
+
+
 def plan_tier(
     crew: dict[str, Any], repo_root: Path, key: str, plan_rel: str, fetch: bool = False
 ) -> TierResult:
@@ -75,15 +90,7 @@ def plan_tier(
     if not command:
         return TierResult("none", None, [NO_COMMAND])
     ref = str(risk.get("rules_from") or "origin/main")
-    warnings: list[str] = []
-    if fetch and ref.startswith("origin/"):
-        done = _git(repo_root, "fetch", "--quiet", "origin", check=False)
-        if done.returncode != 0:
-            why = done.stderr.decode(errors="replace").strip().splitlines()
-            warnings.append(
-                f"warning: git fetch origin failed ({why[-1] if why else 'exit ' + str(done.returncode)}); "
-                f"the tier reads the local {ref}"
-            )
+    warnings = fetch_origin(repo_root, ref) if fetch else []
     try:
         return TierResult(_run(risk, repo_root, ref, key, plan_rel, str(command)), None, warnings)
     except TierError as exc:

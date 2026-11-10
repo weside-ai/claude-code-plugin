@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Appends one answer (or news ack) of the /board pane to the answers file, as one JSON line.
 
-Usage: answer.py <file> <id> <accept|deny|discuss|info|update|read> <ts> [<session>]
+Usage: answer.py <file> <id> <accept|deny|discuss|info|update|withdraw|read> <ts> [<session>]
 
 Opens the file for appending only (O_APPEND) and writes the line in one write: two panes clicking
 at once each add a whole line, and nothing already in the file is rewritten. Never touches
@@ -14,7 +14,7 @@ import json
 import os
 import sys
 
-ANSWERS = ("accept", "deny", "discuss", "info", "update", "read")
+ANSWERS = ("accept", "deny", "discuss", "info", "update", "withdraw", "read")
 
 
 def append(path, qid, answer, ts, session, via=None, quote=None):
