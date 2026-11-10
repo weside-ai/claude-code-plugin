@@ -35,6 +35,11 @@ You judge, you never edit, commit or push; Bash is for reading (`git show`, `git
   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lens_verdict.py" arm "<command>"` accepts (exit 0; it owns the
   rule). A command it refuses is never run and its finding stays standing; when no existing test or
   gate shows the defect, make it a NOTE.
+- A NOTE, and every Ready finding, carries no `red_arm` key at all (not `{}`, not `""`):
+  `{"severity": "NOTE", "claim": "…", "where": "a.py:12", "question": "…"}`. Only a T2 BLOCKING or
+  WARNING carries one: `"red_arm": {"command": "pytest tests/test_a.py::test_b"}`.
+- On Ready the entry names `ref`: read the epic plan and every file the plan names at that ref
+  (`git show <ref>:<path>` when it is not `worktree`), the same version the plan came from.
 - No other key: the answer schema is closed (a skip, a confirmation or an override is refused). You
   never set a verdict; `lens_verdict.py` computes it from your findings.
 
