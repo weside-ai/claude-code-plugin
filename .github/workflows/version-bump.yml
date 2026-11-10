@@ -1,0 +1,79 @@
+# The plugin version rises by itself after every merge to main; no PR sets it (AGENTS.md § Versioning).
+#
+# On every push to main, `scripts/version_bump.py prepare` reads the Conventional Commits since the
+# last bump and writes the next version into plugin.json's version line; with nothing since (the
+# merge of the bump PR itself) it writes nothing and this job ends: no loop. The job pushes the line
+# onto the rolling branch `chore/version-bump`, opens or retitles its PR and arms auto-merge, all
+# with the token of the `weside-agent` GitHub App: an App's PR runs every workflow and gets the
+# normal Claude review, and the required `Version Bump Check` lets it through only as the App's
+# one-step bump of the version line alone (version_bump.py check).
+#
+# Write identity: the App token, minted here with contents and pull-requests write on this repo
+# only. Repository secret GITHUB_APP_WESIDE_AGENT_PEM (the App key), repository variable
+# BOT_APP_CLIENT_ID (the App's client ID, public).
+
+name: Version bump
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Rolling bump PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Write the next version
+        id: prep
+        run: echo "version=$(python3 scripts/version_bump.py prepare)" >> "$GITHUB_OUTPUT"
+
+      - name: Mint the App's token
+        if: steps.prep.outputs.version != ''
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITHUB_APP_WESIDE_AGENT_PEM }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Push the bump branch, open or retitle its PR, arm auto-merge
+        if: steps.prep.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          APP_SLUG: ${{ steps.bot.outputs.app-slug }}
+          VERSION: ${{ steps.prep.outputs.version }}
+          BRANCH: chore/version-bump
+          REPO: ${{ github.repository }}
+        run: |
+          id=$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git commit -q -m "chore: bump we to ${VERSION}" -- we/.claude-plugin/plugin.json
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
+          title="chore: bump we to ${VERSION}"
+          number=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" -R "$REPO" --title "$title"
+          else
+            printf '%s\n\n%s\n' \
+              "The version after the merges since the last bump (scripts/version_bump.py, workflow version-bump.yml)." \
+              "Opened by the workflow with the weside-agent App: it changes the version line of we/.claude-plugin/plugin.json and nothing else." \
+              > "$RUNNER_TEMP/body.md"
+            gh pr create -R "$REPO" --base main --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            number=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          fi
+          gh pr merge "$number" -R "$REPO" --auto --merge

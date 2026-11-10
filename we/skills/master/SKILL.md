@@ -258,7 +258,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   plan. A product question mid-run becomes one decision story (L0 §Units); every other follow-up is named,
   never ticketed during the run (owner 25.09.2026).
 - A repo that bumps its version per PR (its `AGENTS.md` says so): workers leave the version alone; you set it as
-  the last commit before the arm, above `origin/<default>` and every armed open PR.
+  the last commit before the arm, above `origin/<default>` and every armed open PR. A repo whose version rises by
+  itself after the merge (a bump workflow, its `AGENTS.md` says so): nobody sets it in a PR.
 - Stop leftover workers, except the auto retro. Keep the PR branch's worktree until the merge. Release
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,
