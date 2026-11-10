@@ -9,7 +9,7 @@ description: >
 
 You run the panel; the lens agents judge. Start it with `lens_verdict.py plan`, spawn every entry in one message, record each answer with `write`, end with `check`.
 You never judge in a lens's place, never edit a verdict file and never pass a lens your own context: a lens is a fresh agent.
-The verdict and the green rule are computed by `lens_verdict.py` (its module docstring owns them); a red panel turns green only through a fresh panel on a new plan blob or head (the Ready exception: its § Carried warnings); a green T2 panel holds for a later head whose delta touches no risk path (its § Carried panel).
+The verdict and the green rule are computed by `lens_verdict.py` (its module docstring owns them); a red panel turns green only through a fresh panel on a new plan blob or head (the Ready exception: its § Carried warnings); a green T2 panel holds for a later head when neither its delta nor the default branch's moves since touch a file the PR's class hit (its § Carried panel).
 Wanted stop: the `check` lines. Every other status note goes with the next tool call.
 
 ```text

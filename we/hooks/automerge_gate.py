@@ -902,10 +902,13 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
     verdict, last_head = _card_verdict(bodies, head)
     if verdict == "PASS":
         return None
-    # a carried panel's delta touches no hit file, so the card on the carried head holds
+    # a carried panel's delta touches no hit file, so the card on the carried head holds, while
+    # it is the last card verdict: a card on a head after it decides (T2 panel on #203)
     if (
         verdict is None
         and cls.carried_from
+        and last_head is not None
+        and cls.carried_from.startswith(last_head)
         and _card_verdict(bodies, cls.carried_from)[0] == "PASS"
     ):
         NOTICES.append(f"security card carried from {cls.carried_from[:10]} with the panel")
