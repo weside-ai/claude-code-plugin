@@ -9,7 +9,7 @@ followed by `(new)` (the plan builds it) or `(other repo)` is skipped. A path mu
 (default `origin/HEAD`, else `origin/main`), also as the tail of a longer path; a name must occur
 in a file there (`git grep -F`). Misses print as `missing: <token> (line <n>)`, exit 1: strike
 the claim or mark it `(new)`. A span marked `(new)` or `(not on main)` that already exists on
-`--ref` prints `exists: <token> (line <n>): marked new, already on <ref>`, exit 1: a plan update
+`--ref` outside `docs/plans/` prints `exists: <token> (line <n>): marked new, already on <ref>`, exit 1: a plan update
 builds on what main carries now, never a second copy. Exit 2 on a git error.
 """
 
@@ -73,7 +73,12 @@ def _default_ref() -> str:
         return "origin/main"
 
 
-def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
+def missing(
+    found: list[tuple[str, int]], ref: str, code_only: bool = False
+) -> list[tuple[str, int]]:
+    """The claims absent from ``ref``; ``code_only`` leaves `docs/plans/` out of the name search,
+    so a committed plan never proves its own `(new)` names exist."""
+    spec = ["--", ".", ":(exclude)docs/plans"] if code_only else ["--"]
     paths: set[str] = set()
     for f in _git(["ls-tree", "-r", "--name-only", ref]).splitlines():
         parts = f.split("/")
@@ -84,7 +89,7 @@ def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
     seen: set[str] = set()
     if names:
         out = subprocess.run(
-            ["git", "grep", "-h", "-o", "-F", *[a for n in names for a in ("-e", n)], ref, "--"],
+            ["git", "grep", "-h", "-o", "-F", *[a for n in names for a in ("-e", n)], ref, *spec],
             capture_output=True,
             text=True,
             check=False,
@@ -98,7 +103,7 @@ def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
             ok = (
                 token in seen
                 or subprocess.run(
-                    ["git", "grep", "-q", "-F", "-e", token, ref, "--"], check=False
+                    ["git", "grep", "-q", "-F", "-e", token, ref, *spec], check=False
                 ).returncode
                 == 0
             )
@@ -117,7 +122,7 @@ def main() -> int:
     ref = args.ref or _default_ref()
     try:
         misses = missing(found, ref)
-        absent = set(missing(marked, ref))
+        absent = set(missing(marked, ref, code_only=True))
     except RuntimeError as exc:
         print(f"check-plan-identifiers: {exc}", file=sys.stderr)
         return 2

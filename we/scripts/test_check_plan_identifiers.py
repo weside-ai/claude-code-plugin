@@ -73,3 +73,31 @@ def test_a_name_marked_new_that_main_already_carries_is_named(repo):
     assert code == 1
     assert out[0] == "exists: ThreadLock (line 1): marked new, already on origin/main"
     assert not any("FreshThing" in line for line in out)
+
+
+def test_a_committed_plan_never_proves_its_own_new_names(repo):
+    """Red arm of `exists:`: the plan on main names `FreshThing (new)`; that is no code."""
+    plans = repo / "docs" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "PROJ-1-story.md").write_text("`FreshThing` (new) lands here.\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.email=a@b",
+            "-c",
+            "user.name=a",
+            "commit",
+            "-qm",
+            "plan",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True
+    )
+    code, out = check(repo, "`FreshThing` (new) lands here.\n")
+    assert code == 0 and not any(line.startswith("exists:") for line in out), out

@@ -149,7 +149,8 @@ claim    writes the claim comment `claim <role>@<human> <session>` on the ticket
 inbox    (several humans) the tickets labelled `board_humans.question_label` for this session's
          human: the search `board_humans.inbox_jql`, carried like `signals` with `jira`.
 reply    (several humans) this human's answer on a ticket: the comment
-         `board_humans.reply_comment`, then the question label off (`unlabel`).
+         `board_humans.reply_comment`, then the question labels of this human and its
+         `board_humans.peers` off (`unlabel`).
 withdraw takes the caller's own open question off `owner_queue` (`supersede --by Q2`: replaced
          by a newer one), a `withdrawn` or `superseded` line in board-questions.jsonl; a question
          asked with `--to` also gets a comment and loses its label. Only its asker (session name)
@@ -1727,17 +1728,24 @@ def cmd_inbox(state, args, crew, now):
 
 
 def cmd_reply(state, args, crew, now):
-    """The answer of this session's human on the ticket: a signed comment, then its question
-    label off (`board_humans.reply_comment`)."""
+    """The answer of this session's human on the ticket: a signed comment
+    (`board_humans.reply_comment`), then the question labels of this human and its peers off."""
     failures = _key_failure(crew, args.key, "reply")
     if failures:
         raise BoardError("\n".join(failures))
     who = _who(crew, verb="reply")
     adapter = _adapter(args, crew)
     text = board_humans.reply_comment(who, args.kind, args.text or "")
-    label = board_humans.question_label(crew, who.split("@", 1)[1])
+    every = crew_mod.humans(crew)
+    labels = [  # a peer's answer settles the question for every human of the same role
+        board_humans.question_label(crew, h)
+        for h in board_humans.peers(who.split("@", 1)[1], every)
+    ]
     print(f"{args.key}: {text}")
-    _print_carry(adapter.comment(args.key, text) + adapter.unlabel(args.key, label))
+    ops = adapter.comment(args.key, text)
+    for label in labels:
+        ops += adapter.unlabel(args.key, label)
+    _print_carry(ops)
     return 0
 
 

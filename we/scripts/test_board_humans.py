@@ -771,3 +771,11 @@ class TestMergeGoReadsTheTicket:
         adapter = ticket_adapter.FakeAdapter({"PROJ-12": "In Progress"})
         act(crewed, *argv, adapter=adapter)  # past the hold, the PR check decides
         assert "On Hold" not in capsys.readouterr().err
+
+
+def test_a_peers_reply_takes_off_every_label_of_its_role(crewed, monkeypatch, capsys):
+    shared(crewed, ticketing="jira")
+    as_(monkeypatch, "cleo", "Pia")
+    assert act(crewed, "reply", "PROJ-12", "accept") == 0
+    removed = [o["remove"] for o in carry_of(capsys.readouterr().out) if o["op"] == "unlabel"]
+    assert removed == ["ask-cleo", "ask-bob"]

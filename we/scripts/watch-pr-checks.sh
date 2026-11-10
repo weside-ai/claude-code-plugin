@@ -219,13 +219,13 @@ quota_exit() {  # quota_exit <why>: the review did not judge; auto-merge stays a
   echo "final $SHA: review quota ($1) · auto-merge stays $(field 4) — quota: rerun after the next verdict"
   exit 11
 }
-zero_steps() {  # zero_steps <run id>: "<job>\t<annotation>" per failed job of the run that ran no step
+zero_steps() {  # zero_steps <run id> <job id>: "<job>\t<annotation>" when that failed job ran no step
   local jobs job id
-  [ -n "$1" ] || return 0
+  [ -n "$1" ] && [ -n "$2" ] || return 0
   jobs=$(gh run view "$1" -R "$REPO" --json jobs \
     --jq '.jobs[] | select(.conclusion == "failure" and ((.steps // []) | length) == 0) | "\(.databaseId)\t\(.name)"' 2>/dev/null) || return 0
   while IFS=$'\t' read -r id job; do
-    [ -n "$id" ] || continue
+    [ "$id" = "$2" ] || continue  # only the job behind this check, never a sibling in its run
     printf '%s\t%s\n' "$job" "$(gh api "repos/$REPO/check-runs/$id/annotations" --jq '.[0].message // "no annotation"' 2>/dev/null | head -n 1)"
   done <<<"$jobs"
 }
@@ -235,15 +235,15 @@ infra_exit() {  # every failed check is a job that never started: no red, no rer
 }
 red_exit() {  # red_exit <failed names>: the red final line; a failed review check disarms first
   local note="" name run reason zero="" why="" all=1
-  while IFS=$'\t' read -r name run; do
+  while IFS=$'\t' read -r name run job; do
     [ -n "$name" ] || continue
-    reason=$(zero_steps "$run" | head -n 1)
+    reason=$(zero_steps "$run" "$job" | head -n 1)
     if [ -n "$reason" ]; then zero="${zero:+$zero, }$name"; why=${why:-$(cut -f2 <<<"$reason")}; else all=""; fi
   done <<<"$FAILED_RUNS"
   [ -n "$zero" ] && [ -n "$all" ] && infra_exit "$zero" "$why"
   if grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$1")"; then
     # A review that failed on its quota judged nothing: no disarm, its own exit.
-    while IFS=$'\t' read -r name run; do
+    while IFS=$'\t' read -r name run _job; do
       grep -qiE "$REVIEW_RX" <<<"$name" || continue
       reason=$(error_lines "$run" | grep -oiE "$QUOTA_RX" | head -n 1)
       [ -n "$reason" ] && quota_exit "$name: $reason"
@@ -345,7 +345,7 @@ while :; do
         fail|cancelled)
           if [ "$verdict" = fail ] && infra_rerun "$name" "$run"; then PENDING=1; continue; fi
           FAILED="${FAILED:+$FAILED, }$name"
-          FAILED_RUNS="${FAILED_RUNS:+$FAILED_RUNS$'\n'}$name"$'\t'"$run"
+          FAILED_RUNS="${FAILED_RUNS:+$FAILED_RUNS$'\n'}$name"$'\t'"$run"$'\t'"$(sed -n 's#.*/job/\([0-9]*\).*#\1#p' <<<"$url")"
           case $'\n'"$SEEN"$'\n' in
             *$'\n'"$name $url"$'\n'*) ;;
             *) echo "$verdict: $name"; SEEN="$SEEN"$'\n'"$name $url"

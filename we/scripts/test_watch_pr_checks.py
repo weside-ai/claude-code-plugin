@@ -673,3 +673,16 @@ def test_until_merged_ends_red_when_the_pr_cannot_merge(tmp_path):
     }
     code, out = run(tmp_path, [blocked], "--until-merged")
     assert code == 1 and "red · failed: auto-merge" in out[-1], out
+
+
+def test_a_real_failure_beside_a_job_that_never_started_stays_red(tmp_path):
+    """The zero-step job is a sibling in the same run, not the job behind this check (job 99)."""
+    sibling = json.dumps(
+        {"jobs": [{"databaseId": 7, "name": "deploy", "conclusion": "failure", "steps": []}]}
+    )
+    code, out = run(
+        tmp_path,
+        [_failed_with_run()],
+        env_extra={"GH_RUN_JOBS": sibling, "GH_ANNOTATIONS": BILLING},
+    )
+    assert code == 1 and out[-1].startswith(f"final {SHA}: red · failed: Lint"), out
