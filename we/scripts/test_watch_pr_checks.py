@@ -69,9 +69,11 @@ def run(
         f'a="$*"; echo "$(pwd) | ${{a%%--json*}}" >> "{log}"\n'
         'if [ "$1 $2" = "repo view" ]; then [ -n "$GH_REPO_VIEW_FAIL" ] && exit 1; echo o/r; exit 0; fi\n'
         'if [ "$1 $2" = "pr merge" ]; then [ -n "$GH_MERGE_FAIL" ] && { echo "$GH_MERGE_FAIL" >&2; exit 1; }; exit 0; fi\n'
+        'if [ "$1 $2" = "run view" ] && [[ " $* " == *" --json "* ]]; then f=$(mktemp); printf "%s" "${GH_RUN_JOBS:-{\\"jobs\\":[]\\}}" > "$f"; '
+        'while [ $# -gt 0 ]; do [ "$1" = --jq ] && q=$2; shift; done; jq -r "$q" "$f"; exit 0; fi\n'
         'if [ "$1 $2" = "run view" ]; then printf "%s\\n" "${GH_LOG_FAILED:-}"; exit 0; fi\n'
         'if [ "$1 $2" = "run rerun" ]; then exit 0; fi\n'
-        'if [ "$1" = api ]; then f=$(mktemp); case "$2" in *compare*) printf "%s" "${GH_COMPARE:-{\\"ahead_by\\":0,\\"commits\\":[]\\}}" > "$f" ;; *) echo \'{"default_branch":"main"}\' > "$f" ;; esac; '
+        'if [ "$1" = api ]; then f=$(mktemp); case "$2" in *annotations*) printf "%s" "${GH_ANNOTATIONS:-[]}" > "$f" ;; *compare*) printf "%s" "${GH_COMPARE:-{\\"ahead_by\\":0,\\"commits\\":[]\\}}" > "$f" ;; *) echo \'{"default_branch":"main"}\' > "$f" ;; esac; '
         'while [ $# -gt 0 ]; do [ "$1" = --jq ] && q=$2; shift; done; jq -r "$q" "$f"; exit 0; fi\n'
         'if [ "$1 $2" = "run list" ]; then '
         + _queue(tmp_path, "runs", list(runs))
@@ -92,6 +94,7 @@ def run(
         "WATCH_QUIET": quiet,
         "WATCH_REGISTER_TIMEOUT": timeout_s,
         "WATCH_MAX_ERRORS": max_errors,
+        "WATCH_MAX_INTERVAL": "0",
         **(env_extra or {}),
     }
     env.pop("WATCH_REPO", None)
@@ -610,3 +613,63 @@ def test_a_failing_assertion_on_a_500_is_no_infra(tmp_path):
     log = "E   assert resp.status_code == 500\nerror: status 500 in test_api"
     code, out = run(tmp_path, [_only_failing(lint)], env_extra={"GH_LOG_FAILED": log})
     assert code == 1 and not any(line.startswith("infra:") for line in out)
+
+
+# A consumer crew's masters each reran a job blind that had never started (billing): zero steps.
+ZERO_JOBS = json.dumps(
+    {"jobs": [{"databaseId": 99, "name": "lint", "conclusion": "failure", "steps": []}]}
+)
+BILLING = json.dumps([{"message": "The job was not started because of a billing issue"}])
+
+
+def _failed_with_run(name="Lint", run_id=123):
+    d = _green()
+    d["statusCheckRollup"][0].update(
+        name=name, conclusion="FAILURE", detailsUrl=RUN_URL.format(run_id, 99)
+    )
+    return d
+
+
+def test_a_failed_job_with_zero_steps_is_infra_not_red(tmp_path):
+    code, out = run(
+        tmp_path,
+        [_failed_with_run()],
+        env_extra={"GH_RUN_JOBS": ZERO_JOBS, "GH_ANNOTATIONS": BILLING},
+    )
+    assert code == 13, out
+    assert out[-1] == (
+        f"final {SHA}: infra · Lint: job never started (The job was not started because of a "
+        "billing issue) — do not rerun, tell the coordinator"
+    )
+    assert "run rerun" not in (tmp_path / "calls.log").read_text()
+
+
+def test_a_failed_job_that_ran_steps_stays_red(tmp_path):
+    ran = json.dumps(
+        {"jobs": [{"databaseId": 99, "name": "lint", "conclusion": "failure", "steps": [{}]}]}
+    )
+    code, out = run(tmp_path, [_failed_with_run()], env_extra={"GH_RUN_JOBS": ran})
+    assert code == 1 and out[-1].startswith(f"final {SHA}: red · failed: Lint"), out
+
+
+def test_until_merged_watches_past_a_red_non_required_check_to_the_merge(tmp_path):
+    armed = {
+        **_failed_with_run("auto-merge"),
+        "autoMergeRequest": {"enabledAt": "x"},
+        "mergeStateStatus": "UNSTABLE",
+    }
+    merged = {**armed, "state": "MERGED"}
+    code, out = run(tmp_path, [armed, armed, armed, merged], "--until-merged")
+    assert code == 7, out
+    assert out[-1] == f"final {SHA}: merged"
+    assert sum(line.startswith("still merging: auto-merge red") for line in out) == 1
+
+
+def test_until_merged_ends_red_when_the_pr_cannot_merge(tmp_path):
+    blocked = {
+        **_failed_with_run("auto-merge"),
+        "autoMergeRequest": {"enabledAt": "x"},
+        "mergeStateStatus": "BLOCKED",
+    }
+    code, out = run(tmp_path, [blocked], "--until-merged")
+    assert code == 1 and "red · failed: auto-merge" in out[-1], out
