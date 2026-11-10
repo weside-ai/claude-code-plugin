@@ -5,7 +5,7 @@ Usage: deliveries.py append <file> <row-json> [<row-json> ...]
 
 A row is either the deliverer's start, {"epoch": "<ts>"}, or one recipient's outcome of one
 answer line: {"id", "answer_ts", "to", "role", "click_ts", "ts", "delivered"[, "reason"]}, with
-role coordinator, asker or route. Every row is checked before any is written; then all go out in
+role coordinator, asker, owner (the key's owner gets a copy) or route. Every row is checked before any is written; then all go out in
 one write on a file opened O_APPEND, so two writers each add whole lines and nothing already in
 the file is rewritten. Never touches board.json or the answers file.
 """
@@ -14,7 +14,7 @@ import json
 import os
 import sys
 
-ROLES = ("coordinator", "asker", "route")
+ROLES = ("coordinator", "asker", "owner", "route")
 TEXT_FIELDS = ("id", "answer_ts", "to", "click_ts", "ts")
 
 

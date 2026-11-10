@@ -49,6 +49,12 @@ export type BoardQueueItem = {
   // The open PR a merge question is about, and its one-way class: then no Accept, only the link.
   pr_url?: string | null
   one_way?: string | null
+  // `task` (`board.py ask --kind task`): the pane offers Taken instead of Accept.
+  kind?: string | null
+  // Where the ask's fact comes from (`--source`), shown under the ask.
+  source?: string | null
+  // The member who owns the subject (`--owner`/`--component`): the deliverer carries the answer there too.
+  owner?: string | null
 }
 
 export type BoardSession = {
@@ -183,7 +189,7 @@ export type BoardAnswer = {
 // One row of <stem>-deliveries.jsonl beside the answers file (docs/board.md § Answers): whether one
 // answer line reached one recipient. Readers fold the rows of one key (id, answer_ts, role) to the
 // newest by `ts`. The first row the deliverer ever writes is `{ "epoch": ts }` instead.
-export type BoardDeliveryRole = 'coordinator' | 'asker' | 'route'
+export type BoardDeliveryRole = 'coordinator' | 'asker' | 'owner' | 'route'
 
 export type BoardDelivery = {
   id: string
