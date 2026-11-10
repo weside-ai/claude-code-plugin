@@ -363,31 +363,40 @@ def test_expected_head_never_arriving_has_its_own_exit(tmp_path):
 
 @pytest.mark.parametrize("verdict", ["WARNING", "BLOCKING"])
 def test_codex_warning_on_the_head_returns_before_the_merge(tmp_path, verdict):
-    armed = {**_with_codex(_pending(_green())), "autoMergeRequest": {"enabledAt": "x"}}
+    armed = {**_with_codex(_pending(_green()), "FAILURE"), "autoMergeRequest": {"enabledAt": "x"}}
     code, out = run(tmp_path, [armed], "--until-merged", comments=[_codex(verdict)])
     assert code == 6
-    assert out == [f"final {SHA}: codex {verdict} · auto-merge disarmed — then /we:ci-review"]
+    assert out == [
+        "fail: Codex Review",
+        f"final {SHA}: codex {verdict} · auto-merge disarmed — then /we:ci-review",
+    ]
     assert "pr merge 57 -R o/r --disable-auto" in (tmp_path / "calls.log").read_text()
 
 
 def test_codex_warning_on_an_unarmed_pr_disarms_nothing(tmp_path):
-    code, out = run(tmp_path, [_with_codex(_pending(_green()))], comments=[_codex("WARNING")])
+    code, out = run(
+        tmp_path, [_with_codex(_pending(_green()), "FAILURE")], comments=[_codex("WARNING")]
+    )
     assert (code, out) == (
         6,
-        [f"final {SHA}: codex WARNING · auto-merge off — then /we:ci-review"],
+        [
+            "fail: Codex Review",
+            f"final {SHA}: codex WARNING · auto-merge off — then /we:ci-review",
+        ],
     )
     assert "pr merge" not in (tmp_path / "calls.log").read_text()
 
 
 def test_a_failed_disarm_names_the_command(tmp_path):
-    armed = {**_with_codex(_pending(_green())), "autoMergeRequest": {"enabledAt": "x"}}
+    armed = {**_with_codex(_pending(_green()), "FAILURE"), "autoMergeRequest": {"enabledAt": "x"}}
     code, out = run(
         tmp_path, [armed], comments=[_codex("BLOCKING")], env_extra={"GH_MERGE_FAIL": "HTTP 403"}
     )
     assert code == 6
     assert out == [
+        "fail: Codex Review",
         f"final {SHA}: codex BLOCKING · auto-merge on (disarm failed: HTTP 403) — run "
-        "`gh pr merge 57 --disable-auto` — then /we:ci-review"
+        "`gh pr merge 57 --disable-auto` — then /we:ci-review",
     ]
 
 
@@ -404,6 +413,15 @@ def test_a_red_check_that_is_no_review_leaves_auto_merge_armed(tmp_path):
     code, out = run(tmp_path, [armed], env_extra={"WATCH_REVIEW_RX": "^lint$"})
     assert code == 1
     assert "disarm" not in out[-1]
+    assert "pr merge" not in (tmp_path / "calls.log").read_text()
+
+
+def test_a_codex_warning_with_its_check_green_after_a_skip_does_not_stop(tmp_path):
+    """core #6266: every finding was skipped with a reason, the `Codex Review` check turned green;
+    the comment still says WARNING and must not disarm or stop the watch."""
+    armed = {**_with_codex(_green()), "autoMergeRequest": {"enabledAt": "x"}}
+    code, out = run(tmp_path, [armed], comments=[_codex("WARNING")])
+    assert (code, out[-1]) == (0, f"final {SHA}: green · {MERGE}")
     assert "pr merge" not in (tmp_path / "calls.log").read_text()
 
 
