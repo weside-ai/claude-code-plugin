@@ -492,8 +492,11 @@ def test_is_worker_is_the_one_owner_of_the_rule(tmp_path, kind, code):
     assert run(project, env, "is-worker", "x1").returncode == code
 
 
-@pytest.mark.parametrize(("kind", "state"), [("background", "working"), ("interactive", "busy")])
-def test_checkpoint_refuses_a_worker_that_is_still_working(tmp_path, kind, state):
+@pytest.mark.parametrize(
+    ("kind", "field", "state"),
+    [("background", "state", "working"), ("interactive", "status", "busy")],
+)
+def test_checkpoint_refuses_a_worker_that_is_still_working(tmp_path, kind, field, state):
     """One writer per worktree: a checkpoint commits only in an idle or stopped worker's tree."""
     tree = _checkpoint_tree(tmp_path, "feat/x")
     if kind == "interactive":  # a window worker, recognised by the launcher's marker
@@ -510,7 +513,7 @@ def test_checkpoint_refuses_a_worker_that_is_still_working(tmp_path, kind, state
             "name": "w",
             "kind": kind,
             "pid": 1,
-            "state": state,
+            field: state,  # claude agents: background rows say state, interactive rows status
             "cwd": str(tree),
         }
     ]

@@ -106,7 +106,9 @@ _resolve_any() { # <name|id> -> "id pid kind sessionId state cwd" of the newest 
   _agents | python3 -I -c 'import json,sys
 k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if k in (a.get("name"),a.get("id"))]
 d.sort(key=lambda a:a.get("startedAt",0))
-print(*(str(d[-1].get(f) or "-") for f in ("id","pid","kind","sessionId","state","cwd")) if d else "")' "$1"
+a=d[-1] if d else {}
+a["state"]=a.get("status") or a.get("state")  # an interactive row says busy/idle in status only
+print(*(str(a.get(f) or "-") for f in ("id","pid","kind","sessionId","state","cwd")) if d else "")' "$1"
 }
 _is_worker() { # <kind> <pid> <cwd>: a background session, a worktree with the launcher's marker,
   # or a process started as a worker (WE_ROLE=worker, readable on Linux); never a master/companion
