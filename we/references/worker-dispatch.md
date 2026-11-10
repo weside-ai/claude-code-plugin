@@ -109,7 +109,8 @@ The plugin ships a launcher: `scripts/we-worker` (installed next to `wclaude` by
 `scripts/install_launcher.py`; `we-worker --help`), with the verbs
 `status|stop|logs|waiting|checkpoint`; `worker_launch.py stop` uses its `stop` when the template
 starts with it. `stop` and `checkpoint` touch workers only: a name that hits a master or companion
-refuses and names `claude stop <id>`. Where a launcher brings
+refuses (`stop` names `claude stop <id>`); `checkpoint` runs on an idle or stopped worker only, one writer
+per worktree. Where a launcher brings
 such verbs, the Lead steers and inspects through them instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
 from `claude agents --json`, never from a log or a quiet tail.
 
