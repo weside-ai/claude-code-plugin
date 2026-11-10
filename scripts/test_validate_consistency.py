@@ -223,3 +223,61 @@ def test_this_repos_resolver_copies_pass():
         check=False,
     )
     assert out.returncode == 0, out.stdout
+
+
+def test_agents_layout_names_every_file(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "AGENTS.md": "# x\n\n## Layout\n\nwe/hooks: automerge_gate council-member\n\n## Conventions\n",
+            "we/hooks/automerge_gate.py": "",
+            "we/hooks/test_automerge_gate.py": "",
+        },
+    )
+    assert run(root, "agents-layout").returncode == 0
+
+
+def test_agents_layout_fails_naming_the_missing_file(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "AGENTS.md": "# x\n\n## Layout\n\nwe/hooks: automerge_gate council-member\n\n## Conventions\nnew_gate\n",
+            "we/hooks/automerge_gate.py": "",
+            "we/hooks/new_gate.py": "",
+        },
+    )
+    result = run(root, "agents-layout")
+    assert result.returncode == 1
+    assert "we/hooks/new_gate.py is not named" in result.stdout
+
+
+def test_a_plugin_root_path_that_does_not_exist_fails(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "we/hooks/hooks.json": '{"hooks": {"Stop": [{"hooks": [{"type": "command", '
+            '"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gone.py"}]}]}}',
+            "we/hooks/here.py": "",
+            "we/skills/master/SKILL.md": "---\nname: master\n---\n"
+            "Run `${CLAUDE_PLUGIN_ROOT}/scripts/missing.sh` and `${CLAUDE_PLUGIN_ROOT}/hooks/here.py`"
+            " and `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`.\n",
+        },
+    )
+    out = run(root, "plugin-root-paths")
+    assert out.returncode == 1
+    assert (
+        "we/hooks/hooks.json:1: '${CLAUDE_PLUGIN_ROOT}/hooks/gone.py' does not exist" in out.stdout
+    )
+    assert "we/skills/master/SKILL.md:4: '${CLAUDE_PLUGIN_ROOT}/scripts/missing.sh'" in out.stdout
+    assert "here.py" not in out.stdout and "<name>" not in out.stdout
+
+
+def test_existing_plugin_root_paths_pass(tmp_path):
+    root = tree(
+        tmp_path,
+        {
+            "we/scripts/run.sh": "echo\n",
+            "we/references/ticketing.md": "`${CLAUDE_PLUGIN_ROOT}/scripts/run.sh`\n",
+        },
+    )
+    assert run(root, "plugin-root-paths").returncode == 0

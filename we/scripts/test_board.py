@@ -649,7 +649,8 @@ class TestSet:
         "assignment, message",
         [
             ("waiting_on=legal", "waiting_on 'legal' is no role key"),
-            ("topic=x", "field 'topic' is not settable"),
+            ("color=x", "field 'color' is not settable"),
+            ("keys=nope", "keys nope do not match the crew's naming.key"),
             ("state=running", "state 'running' is not one of"),
             ("waiting", "'waiting' is no <field>=<value>"),
         ],
@@ -3251,3 +3252,75 @@ def test_a_transition_row_is_built_and_appended_under_the_board_lock(tmp_path):
     row = state.record_transition("AC-1", build)
     assert held == [True, True]
     assert row["from"] == "selected"
+
+
+# Review 09.11. (/we:optimize § A): set topic/keys, ask --kind task/--source/--owner, duplicates.
+
+
+def test_set_writes_topic_and_keys_and_clears_them(crewless):
+    assert go(crewless, "set", "topic=Handoff", "keys=PROJ-12,PROJ-13") == 0
+    line = line_of(crewless, "lead-12")
+    assert line["topic"] == "Handoff" and line["keys"] == ["PROJ-12", "PROJ-13"]
+    assert go(crewless, "set", "topic=", "keys=") == 0
+    line = line_of(crewless, "lead-12")
+    assert "topic" not in line and "keys" not in line
+
+
+def test_ask_stamps_kind_source_and_owner_by_component(crewed, capsys):
+    answer_with(crewed, CLEAR)
+    argv = [
+        *ask_argv(),
+        "--kind",
+        "task",
+        "--source",
+        "gh run view 41",
+        "--component",
+        "architecture",
+    ]
+    assert go(crewed, *argv) == 0
+    item = board_of(crewed)["owner_queue"][-1]
+    assert item["kind"] == "task" and item["source"] == "gh run view 41" and item["owner"] == "Vic"
+
+
+def test_ask_owner_by_name_and_an_unknown_owner_is_refused(crewed, capsys):
+    answer_with(crewed, CLEAR)
+    assert go(crewed, *ask_argv(), "--owner", "ada") == 0
+    assert board_of(crewed)["owner_queue"][-1]["owner"] == "Ada"
+    assert go(crewed, *ask_argv(), "--owner", "nobody") == 1
+    assert "--owner 'nobody' is no crew member" in capsys.readouterr().err
+
+
+def test_a_second_question_on_an_open_key_warns_and_replace_takes_the_first_off(crewless, capsys):
+    answer_with(crewless, CLEAR)
+    assert go(crewless, *ask_argv()) == 0
+    first = capsys.readouterr().out.strip().split()[-1]
+    assert go(crewless, *ask_argv()) == 0
+    out = capsys.readouterr()
+    assert f"warning: {first} on PROJ-12 is still open" in out.err
+    second = out.out.strip().split()[-1]
+    assert go(crewless, *ask_argv(), "--replace", second) == 0
+    out = capsys.readouterr()
+    queue_ids = [q["id"] for q in board_of(crewless)["owner_queue"]]
+    assert second not in queue_ids and first in queue_ids
+    lines = jsonl(crewless / "board-questions.jsonl")
+    assert {"id": second, "outcome": "replaced"}.items() <= next(
+        x for x in lines if x.get("outcome") == "replaced"
+    ).items()
+
+
+def test_replace_of_an_unknown_id_is_refused(crewless, capsys):
+    answer_with(crewless, CLEAR)
+    assert go(crewless, *ask_argv(), "--replace", "Q999999") == 1
+    assert "--replace Q999999: no open question with that id" in capsys.readouterr().err
+
+
+def test_replace_of_a_question_on_another_key_is_refused(crewless, capsys):
+    """Claude Review on #201: a mistyped id never drops an unrelated question."""
+    answer_with(crewless, CLEAR)
+    assert go(crewless, *ask_argv()) == 0
+    first = capsys.readouterr().out.strip().split()[-1]
+    assert go(crewless, *ask_argv(**{"--key": "PROJ-13"}), "--replace", first) == 1
+    assert f"--replace {first}: that question is on 'PROJ-12', not 'PROJ-13'" in (
+        capsys.readouterr().err
+    )
+    assert first in [q["id"] for q in board_of(crewless)["owner_queue"]]

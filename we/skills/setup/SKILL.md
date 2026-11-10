@@ -69,7 +69,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "stack": ["python", "node"],
   "tools": { "graphify": false, "turbovault": false },
   "test_discipline": "tests-after",
-  "verification": { "required": true, "recipe": ".weside/verify.md", "staging_needs_ask": true,
+  "verification": { "required": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
   "agents": { "visible_teammates": false, "worker_launch": "subagent" },
@@ -99,7 +99,7 @@ block (stack, ticketing, goals, test discipline, verification, review gates, mis
 "Set up this repo's council now? `/we:council` convenes it; without a weside account
 every lens is generic and still works." On yes:
 
-1. Extend `config.json` (never re-emit its keys) with `vault`, `framework_version: 1`, and the
+1. Extend `config.json` (never re-emit its keys) with `vault` and the
    roster `/we:council` reads: `"council": {"default": ["product_owner","architect","scrum_master"]}`.
 2. TurboVault: check whether this repo's vault is in `list_vaults` by name (another repo's vault
    passing a loose "any vault" check leaves every later search answering from the wrong tree).
@@ -131,7 +131,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    bypass mode (Shift+Tab), while the start mode stays your `permissions.defaultMode`?" yes →
    `launch.allow_bypass: true`. A re-run shows the diff and asks before replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
-   creates them from `templates/companion-skill/SKILL.md`, never overwriting.
+   creates them from `templates/companion-skill/SKILL.md` (a member with a `.weside/roles/<slug>.md`
+   addendum gets the pointer skill `pointer.md`), never overwriting.
 5. A crew without `weside_account: true` → merge `"deniedMcpServers": [{"serverName":
    "plugin:we:weside-mcp"}]` into the tracked `.claude/settings.json` (other keys kept): the only
    per-repo switch that keeps the plugin's weside MCP from connecting (a `permissions.deny` blocks
@@ -164,7 +165,7 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
   worker launcher `we-worker`: a `NOTE` naming it (missing, differing or someone else's) → ask once, on yes
   `--apply` (`--apply --force` for someone else's); declined while the crew's `launch.worker` starts with
   `we-worker` → rewrite it to `claude --bg -n {name} --agent {agent} {brief}` (step 4a.3).
-- The statusline, the launcher and the council agents are the only user-scope files setup touches.
+- The statusline and the two launchers (`wclaude`, `we-worker`) are the only user-scope files setup touches.
 
 ## 6. Instruction loop (optional, ask once)
 
