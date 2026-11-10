@@ -65,7 +65,7 @@ docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
 scripts/                          repo checks: validate-frontmatter.py, validate-plugin-structure.sh,
                                   validate-consistency.py (also checks this layout names every file), full_test_run.py,
-                                  version_bump.py, check_compat_line.py, claude_review_gate.py
+                                  check-version-bump.sh, check_compat_line.py, claude_review_gate.py
 ```
 
 ## Conventions
@@ -107,13 +107,11 @@ release that touches rule loading; a fixture the matcher disagrees with means th
 
 ## Versioning
 
-`/plugin update` compares `version` in `we/.claude-plugin/plugin.json`. No PR sets it: after every
-merge to `main`, `.github/workflows/version-bump.yml` opens or updates the rolling PR
-`chore: bump we to X` and arms its auto-merge (`scripts/version_bump.py`: the Conventional Commits
-since the last bump decide, `!`/`BREAKING CHANGE` major, `feat` minor, anything else patch). The
-required `Version Bump Check` refuses a PR that moves the version and is no bump PR (its diff is the
-version line alone, its head commit's author `github-actions[bot]`). After the bump PR merged:
-`claude plugins update we@weside-ai`.
+`/plugin update` compares `version` in `we/.claude-plugin/plugin.json`; a push to `main` without a
+bump stays invisible to users. Workers do not bump: the master sets the version as the last commit
+before it arms auto-merge; `scripts/check-version-bump.sh` checks it is above `main`, and with
+`--armed` also against every open PR with auto-merge armed. Patch for fixes and docs, minor for new or changed behaviour, major
+for removed or renamed verbs. After a pushed bump: `claude plugins update we@weside-ai`.
 
 ## Plugin and weside backend
 
