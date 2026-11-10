@@ -40,7 +40,7 @@ def test_append_keeps_what_the_file_holds(tmp_path):
 @pytest.mark.parametrize(
     "bad",
     [
-        {**ROW, "role": "owner"},
+        {**ROW, "role": "reader"},
         {**ROW, "delivered": "yes"},
         {**ROW, "reason": 3},
         {**ROW, "extra": 1},
@@ -73,3 +73,11 @@ def test_the_held_notice_fixture_is_the_text_the_delivery_tests_raise():
     assert notice.startswith("[Cross-session delivery notice]")
     assert "'" not in notice
     assert f"'{notice}'" in (here / "deliver.test.ts").read_text(encoding="utf-8")
+
+
+def test_an_owner_copy_is_a_ledger_row(tmp_path):
+    """Claude Review on #201: the deliverer writes `owner` rows; refusing them sent the copy again
+    on every tick."""
+    path = tmp_path / "board-deliveries.jsonl"
+    deliveries.append(str(path), [{**ROW, "role": "owner", "to": "ada"}])
+    assert json.loads(path.read_text())["role"] == "owner"
