@@ -81,10 +81,12 @@ gh pr checks $PR --required; gh pr checks $PR                                  #
 gh api graphql -f query="$THREADS_Q" -F pr=$PR -F owner="$OWNER" -F repo="$NAME" \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)'   # 2 open threads, any author
 gh api repos/$REPO/pulls/$PR/reviews --jq 'group_by(.user.login)[]|last|select(.user.login|endswith("[bot]"))|"=== \(.user.login)\n\(.body)"'  # 3 review bodies
-gh api repos/$REPO/issues/$PR/comments --paginate --jq '[.[]|select(.user.type=="Bot")|select(.body|test("VERDICT:|SEV:|Code Review"))]|group_by(.user.login)[]|last|.body'  # 4 summary comments
+gh api repos/$REPO/issues/$PR/comments --paginate | jq -rs '[add[]|select(.user.type=="Bot")|select(.body|test("VERDICT:|SEV:|Code Review"))]|group_by(.body|split("\n")[0])[]|sort_by(.updated_at)|last|"=== \(.user.login) \(.updated_at)\n\(.body)"'  # 4 summary comments
 ```
 
-Claude Review can post as `claude[bot]` or as `github-actions[bot]`. Source 4 filters on the comment's shape so it catches both.
+Claude Review can post as `claude[bot]` or as `github-actions[bot]`. Source 4 filters on the comment's shape so it catches both,
+and keeps per review (the comment's marker line) the one updated last: the summary is edited in place, so an older
+error comment of the other author never stands for the head's verdict.
 Each comment carries `<!-- SEV:… -->` per finding and a final `<!-- VERDICT:BLOCKING|WARNING|PASS -->`.
 
 **Every non-pass check is a BLOCKING row**, even when no bot commented on it. Read the failure with `gh run view <run-id> --log-failed`
