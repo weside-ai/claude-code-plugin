@@ -1991,7 +1991,8 @@ class TestSelectLenses:
                     lens_verdict.write(root, vid, entry["lens"], answer=GREEN_LENS)
         if verdict == "stale":
             plan = root / "docs" / "plans" / f"{KEY}-story.md"
-            plan.write_text(plan.read_text() + "\n<!-- edited -->\n")
+            # an edit outside the margin sections (lens_verdict § Carried edit) moves the panel
+            plan.write_text(plan.read_text().replace("\n## ", "\n<!-- edited -->\n\n## ", 1))
         before = (moving / "board.json").read_bytes()
         adapter = fake()
         assert act(moving, "select", KEY, adapter=adapter) == 1
