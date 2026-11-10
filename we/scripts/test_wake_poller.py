@@ -904,6 +904,31 @@ class PollerTest(unittest.TestCase):
         self.assertEqual(self.sent, [])
         self.assertEqual(self.state()["cursor"], 150)
 
+    def test_a_cursor_another_poller_moves_during_the_send_is_never_written_back(self):
+        """Claude Review #197: the send runs outside the lock, so the block after it checks the
+        cursor again; a second poller that advanced meanwhile keeps its cursor and its marks."""
+        self.seed_cursor(100)
+
+        def send_while_another_advances(_path, _token, text):
+            self.sent.append(text)
+            with wp.locked_state("Nox") as s:
+                s["cursor"] = 150
+                s["delivered"] = {"room:9": 3}
+
+        self.send = send_while_another_advances
+        p = self.poller()
+        p.first = False
+
+        def news(url, bearer, companion, after, handoffs=False):
+            return FLOOD if handoffs else self.rooms(("room:384", 2), cursor=102)
+
+        p.news = news
+        self.assertEqual(p.poll_once(), "ok")
+        self.assertEqual(len(self.sent), 1)
+        state = self.state()
+        self.assertEqual(state["cursor"], 150)
+        self.assertEqual(state["delivered"], {"room:9": 3})
+
     def test_saturated_room_shows_a_plus(self):
         text = wp.render("Nox", [{"room": "room:1", "count": 50, "saturated": True}])
         self.assertIn("room:1 (50+)", text)

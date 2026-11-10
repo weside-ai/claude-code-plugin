@@ -1367,7 +1367,7 @@ def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc
     assert (red is None) is counts, red
 
 
-# Robustness review 09.11.: a broken import refuses merges; a read-only inline query passes.
+# Robustness review 09.11.: a broken import refuses merges; a query piped in from stdin stays refused.
 
 
 def _run_copy_without_modules(tmp_path: Path, command: str) -> str:

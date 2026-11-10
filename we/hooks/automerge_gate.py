@@ -286,7 +286,6 @@ def _api_method(args: list[str]) -> str:
     return "POST" if any(a in fields or a.startswith(fields) for a in args) else "GET"
 
 
-# A read-only GraphQL document: names a query (`"query":"query {…"`, `"query":"{…"`, `query {`), no mutation.
 def _graphql_text(args: list[str], command: str, cwd: str | None) -> tuple[str, str | None]:
     """(the command's own text plus every query file it names, why a query is unseen or None).
 

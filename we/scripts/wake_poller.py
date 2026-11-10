@@ -807,14 +807,15 @@ class Poller:
                 bump(state, "errors", now)
                 self.log(f"pending note rooms={len(rooms)}")
                 return "error:socket"
+            # the send ran outside the lock: another poller that advanced meanwhile owns the
+            # cursor and its marks, this answer writes neither
+            moved = state["cursor"] != base
+            if not moved:
+                self._mark(delivered, delivered_row, wakeable)
             for f in wakeable:
-                if "unanswered" in f:
-                    delivered_row[f["room"]] = f["unanswered_newest"]
-                else:
-                    delivered[f["room"]] = f["count"]
                 state["holdoff"][f["room"]] = now + HOLDOFF_S
             bump(state, "wakes", now)
-            if len(wakeable) == len(fresh):
+            if not moved and len(wakeable) == len(fresh):
                 self._advance(state, base, answer["cursor"])
             self.log(f"wake delivered rooms={len(rooms)}")
             return "ok"
@@ -848,6 +849,15 @@ class Poller:
             if new > 0:
                 fresh.append(dict(item, new=new, waiting=False))
         return fresh
+
+    @staticmethod
+    def _mark(delivered: dict, delivered_row: dict, wakeable: list[dict]) -> None:
+        """Mark the woken rooms delivered: the newest unanswered row, else the count."""
+        for f in wakeable:
+            if "unanswered" in f:
+                delivered_row[f["room"]] = f["unanswered_newest"]
+            else:
+                delivered[f["room"]] = f["count"]
 
     @staticmethod
     def _advance(state: dict, base: int | None, cursor: int) -> None:
