@@ -27,9 +27,10 @@ Templates: ``process/L0.md`` (every session but a worker) and ``process/L0-worke
 ``{key}`` or ``{key|fallback}``. ``key`` is a role key of ``crew.ROLE_KEYS`` (the name this
 session's human gives the role, ``crew.display_name`` with ``crew.env_human``: ``WE_HUMAN``, which
 ``wclaude --start`` sets; else the holder's name, else the fallback, else the role's title),
-``human`` (this session's human's name in a crew with ``humans``, else ``human.name``),
-``human.decides`` (that human's ``decides``), ``me`` (that name only in a crew with ``humans``: the
-line holding it is dropped otherwise), ``single`` (empty, the line holding it is dropped in a crew
+``human`` (in a crew with ``humans`` the deciding human, ``crew.deciding_human``, else
+``human.name``), ``human.decides`` (that human's ``decides``), ``me`` (this session's human's name,
+only in a crew with ``humans``: the line holding it is dropped otherwise), ``me.decides`` (that
+human's ``decides``; the line holding it is dropped when they decide nothing), ``single`` (empty, the line holding it is dropped in a crew
 with ``humans``), ``humans`` (one bullet per human: name, slug, owned states, decides, runs; only
 in ``process/humans.md``, which ``card_parts`` adds after the card of every session but a worker in
 a crew with ``humans``), ``specialists (``Name
@@ -212,15 +213,24 @@ def _local_human(crew: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _human(crew: dict[str, Any]) -> str | None:
-    local = _local_human(crew)
-    return local["name"] if local else _show((crew.get("human") or {}).get("name"))
+    """The deciding human (``crew.deciding_human``) in a crew with ``humans``, never the local
+    one: T3, prod and the core merges stay with whoever ``decides`` names."""
+    if crewlib.several_humans(crew):
+        return crewlib.deciding_human(crew)[1]["name"]
+    return _show((crew.get("human") or {}).get("name"))
 
 
 def _decides(crew: dict[str, Any]) -> str | None:
+    if crewlib.several_humans(crew):
+        return _show(crewlib.deciding_human(crew)[1]["decides"])
+    return _show((crew.get("human") or {}).get("decides"))
+
+
+def _me_decides(crew: dict[str, Any]) -> str | None:
+    """This session's human's ``decides``; None (the line drops) when empty: no fallback claims
+    a decision for them."""
     local = _local_human(crew)
-    if local is None:
-        return _show((crew.get("human") or {}).get("decides"))
-    return _show(local["decides"])
+    return _show(local["decides"]) if local else None
 
 
 def _me(crew: dict[str, Any]) -> str | None:
@@ -249,6 +259,7 @@ SPECIAL = {
     "crew_notice": crew_notice,
     "human": _human,
     "human.decides": _decides,
+    "me.decides": _me_decides,
     "me": _me,
     "single": lambda crew: None if crewlib.several_humans(crew) else "",
     "humans": _humans,
@@ -271,6 +282,7 @@ def render(template: str, crew: dict[str, Any]) -> str:
     drop_lines = {
         "specialists": _resolve(crew, "specialists") is None,
         "me": _resolve(crew, "me") is None,
+        "me.decides": _resolve(crew, "me.decides") is None,
         "single": _resolve(crew, "single") is None,
     }
     for key in crewlib.OPTIONAL_ROLE_KEYS:

@@ -831,6 +831,8 @@ def test_several_humans_render_per_human(monkeypatch):
     l0 = rp.render_l0(crew)
     assert "- **Marisol** decides product direction on this machine;" in l0
     assert "and whatever else they choose" not in l0
+    # decider sentences name the deciding human, not the local one
+    assert "| T3 company | Hale," in l0 and "| T3 company | Marisol" not in l0
     assert "Adalinde" in l0 and "Ada " not in l0.replace("Adalinde", "")
     part = rp.humans_part(crew, "product")
     assert part.startswith("**Several humans** (this crew; you work for Marisol)")
@@ -843,6 +845,15 @@ def test_several_humans_render_per_human(monkeypatch):
     card = rp.render_card(crew, "product")
     assert "a ticket labelled for Marisol asks Marisol" in card
     assert "never answer it yourself" in card and "answer each ticket" not in card
+
+
+def test_a_human_who_decides_nothing_claims_no_decision(monkeypatch):
+    crew = all_bound()
+    crew["humans"]["marisol"]["decides"] = []
+    monkeypatch.setenv("WE_HUMAN", "marisol")
+    l0 = rp.render_l0(crew)
+    assert "on this machine; other humans" not in l0
+    assert "Marisol** decides vision" not in l0
 
 
 def test_one_human_renders_as_before():

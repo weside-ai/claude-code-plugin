@@ -2,7 +2,8 @@
 // owe whom a message, how the ledger folds, which notice means a hold. register.tsx wires the events.
 //
 // One deliverer, in the coordinator's session (its live name is the board's `updated_by`, while that is
-// empty the coordinator of the crew whose board.file it is, coordinatorName), carries
+// empty the session `crew.py deliverer` names for this machine: the coordinator, or on a machine of a
+// crew with several humans that runs none, the first role its human runs), carries
 // each answer line to up to three recipients and writes one ledger row per recipient:
 //   coordinator  `$.prompt.submit` as the person; delivered once its user row is stored. No row by
 //                the end of a turn that started after the submit (or 30 s idle): submit once more,
@@ -213,19 +214,6 @@ export const markerRows = (lines: readonly AnswerLine[], ledger: Ledger, coordin
     .map(line =>
       rowOf({ line, role: 'coordinator', to: coordinator }, new Date(Date.parse(line.ts) + MARK_AFTER_MS).toISOString(), false, NOT_RUNNING),
     )
-}
-
-// The coordinator's name from `crew.py show`: the member that `roles.coordinator` names; undefined
-// without a crew or without that role, and the board's `updated_by` decides.
-export const coordinatorName = (show: string): string | undefined => {
-  try {
-    const crew = JSON.parse(show) as { roles?: Record<string, unknown>; members?: Record<string, { name?: unknown }> }
-    const slug = str(crew?.roles?.coordinator)
-    const name = slug ? crew.members?.[slug]?.name : undefined
-    return typeof name === 'string' && name.trim() ? name.trim() : undefined
-  } catch {
-    return undefined
-  }
 }
 
 // How long a pressed answer may wait without any delivered row before the pane says so.
