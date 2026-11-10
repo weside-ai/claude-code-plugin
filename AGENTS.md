@@ -50,7 +50,7 @@ we/                               plugin root
                                   state_move.py, council_lens.py
     board                         board.py, board_freeze.py, board_self_merge.py, board_staging.py, cold_reader.py,
                                   accept.py, ticket_adapter.py, epic_state.py
-    gates                         ready_gate.py, plan_tier.py, risk_paths.py, lens_verdict.py,
+    gates                         ready_gate.py, plan_tier.py, risk_paths.py, risk_runner.py, lens_verdict.py,
                                   check-plan-identifiers.py, check-instruction-budget.py
     rules                         rule_loading.py, load-rules.py, probe-rule-loading.py, probe-hook-cap.py (fixtures/)
     launch                        wclaude, we-worker, install_launcher.py, worker_launch.py, pin.sh, identity_cache.py,
