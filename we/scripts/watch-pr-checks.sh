@@ -17,7 +17,7 @@
 #   no checks on <sha> after <n>s                           exit 4
 #   head never reached <expected> (still <sha>) after <n>s  exit 5
 #   final <sha>: codex <WARNING|BLOCKING> · auto-merge <disarmed|off> — then /we:ci-review   exit 6
-#       (the head's `<!-- codex-review -->` comment judged it)
+#       (the head's `<!-- codex-review -->` comment judged it and its check is not green: a skip with a reason turns it green)
 #   final <sha>: merged                                     exit 7
 #   final <sha>: closed                                     exit 8
 #   gave up after <n>s on <sha>                             exit 9  (--max-hours reached)
@@ -229,7 +229,8 @@ infra_rerun() {  # infra_rerun <name> <run id>: rerun a first-attempt run that f
   echo "infra: $name failed on \"$match\" — rerun once (run $run)"
   return 0
 }
-codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or BLOCKING
+codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or BLOCKING and the
+  # Codex check is not green: a finding skipped with a reason turns the check green, the comment stays
   local reviewed verdict
   gh_try BODY pr view "$PR" -R "$REPO" --json comments --jq "$CODEX_BODY" || return 0
   reviewed=$(sed -n 's/.*Reviewed commit `\([0-9a-f]\{7,40\}\)`.*/\1/p' <<<"$BODY" | head -n 1)
@@ -238,6 +239,10 @@ codex_exit() {  # exit 6 when the Codex comment for this head carries WARNING or
   verdict=$(grep -o 'VERDICT:[A-Z]*' <<<"$BODY" | head -n 1 | cut -d: -f2)
   case "$verdict" in
     WARNING|BLOCKING)
+      if [ -n "$CODEX_GREEN" ]; then
+        echo "codex $verdict on $SHA, its check green: skipped with a reason, the watch goes on"
+        return 0
+      fi
       echo "final $SHA: codex $verdict · $(disarm) — then /we:ci-review"
       exit 6 ;;
     ERROR)
@@ -290,12 +295,14 @@ while :; do
     FAILED_RUNS=""
     STATE=""
     CODEX_DONE=""
+    CODEX_GREEN=""
     while IFS=$'\t' read -r verdict name run url; do
       [ -z "$name" ] && continue
       # A stale failure whose run was re-queued is pending, not failed.
       if [ -n "$run" ] && grep -qx "$run" <<<"$OPEN_RUNS"; then verdict=pending; fi
       STATE="$STATE"$'\n'"$verdict"$'\t'"$name"
       [ "$name" = "$CODEX_CHECK" ] && [ "$verdict" != pending ] && CODEX_DONE=1
+      [ "$name" = "$CODEX_CHECK" ] && [ "$verdict" = pass ] && CODEX_GREEN=1
       case "$verdict" in
         pending) PENDING=1 ;;
         fail|cancelled)

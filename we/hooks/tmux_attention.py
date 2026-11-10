@@ -59,10 +59,8 @@ def plugin_options() -> dict:
         base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
         with open(os.path.join(base, "settings.json")) as fh:
             configs = json.load(fh).get("pluginConfigs", {})
-        for key in sorted(configs):
-            if key.split("@")[0] == "we" and isinstance(configs[key].get("options"), dict):
-                return configs[key]["options"]
-        return {}
+        opts = (configs.get("we@weside-ai") or {}).get("options")
+        return opts if isinstance(opts, dict) else {}
     except Exception:
         return {}
 

@@ -64,7 +64,7 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
      `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`. Real phases even for a small story, each independently
      committable; `rg` the changed symbols under the test trees for call sites that break. Every AC is checkable
      against a running system, not against the diff. A sentence users read about privacy, retention, consent,
-     security or a crisis carries, in its AC, the verdict of the crew's legal specialist where the crew has one.
+     security or a crisis carries, in its AC, the verdict of the crew member with `specialist: legal` where the crew has one.
    - Every `receipt` AC gets its check in the staging-check file `.weside/verify.md` names, in the planned state it
      names, check id `AC<n>` (story-plan.md § Verification); `**Staging checks:**` names the file. A repo whose
      `.weside/verify.md` names no staging checks gets no file and no `receipt` marker.

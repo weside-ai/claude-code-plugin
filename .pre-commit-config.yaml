@@ -19,6 +19,7 @@ repos:
     rev: v0.17.2
     hooks:
       - id: markdownlint-cli2
+        language_version: system
 
   - repo: local
     hooks:
