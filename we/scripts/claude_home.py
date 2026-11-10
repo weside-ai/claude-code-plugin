@@ -11,7 +11,7 @@ read one board, one news cursor, one identity cache. Those paths do not come fro
 
 ``plugin_option(key)`` reads a ``userConfig`` option of the we plugin: ``CLAUDE_PLUGIN_OPTION_<KEY>``
 first (Claude Code sets it for the plugin's hooks; ``false``/``0``/``no``/``off`` read as False),
-else ``pluginConfigs["we@<any marketplace>"].options`` in ``config_dir()/settings.json``. A missing
+else ``pluginConfigs["we@weside-ai"].options`` in ``config_dir()/settings.json``. A missing
 or unreadable settings file reads as no option.
 """
 
@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-PLUGIN = "we"
+PLUGIN_ID = "we@weside-ai"
 _FALSE = ("false", "0", "no", "off", "")
 
 
@@ -46,16 +46,12 @@ def settings(env: Mapping[str, str] | None = None) -> dict[str, Any]:
 
 
 def plugin_options(env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """The we plugin's options from settings.json, whatever marketplace installed it."""
+    """The we plugin's options from settings.json, from the ``we@weside-ai`` entry only: a fork
+    installed from another marketplace never switches an option of this one."""
     configs = settings(env).get("pluginConfigs")
-    if not isinstance(configs, dict):
-        return {}
-    for key in sorted(configs):
-        if key.split("@")[0] == PLUGIN and isinstance(configs[key], dict):
-            opts = configs[key].get("options")
-            if isinstance(opts, dict):
-                return opts
-    return {}
+    entry = configs.get(PLUGIN_ID) if isinstance(configs, dict) else None
+    opts = entry.get("options") if isinstance(entry, dict) else None
+    return opts if isinstance(opts, dict) else {}
 
 
 def plugin_option(key: str, env: Mapping[str, str] | None = None) -> Any:
