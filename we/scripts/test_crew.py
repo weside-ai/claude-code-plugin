@@ -737,6 +737,7 @@ def test_labels_default_merge_and_warn_on_an_unknown_key(tmp_path):
         "crew_unreadable": "crew.json not readable",
         "crew_unknown_keys": "crew.json: unknown keys ignored",
         "prompt_resolved": "prompt resolved at",
+        "to": "to",
     }
     assert json.loads(run(core, "show").stdout)["labels"] == defaults
     core.joinpath(".weside", "crew.json").write_text(json.dumps(with_(labels__ready="bereit")))
@@ -1064,3 +1065,179 @@ def test_a_retired_nested_key_loads_with_one_stderr_line(tmp_path, extra, dotted
     assert loaded["unknown_keys"] == []
     parent, _, leaf = dotted.rpartition(".")
     assert leaf not in (loaded.get(parent) if parent else loaded)
+
+
+# --- humans: several humans, one crew -------------------------------------------------------
+
+HUMANS = {
+    "alice": {
+        "name": "Alice",
+        "email": "alice@example.com",
+        "decides": ["money", "prod"],
+        "owns_states": ["selected", "in_progress", "in_review"],
+        "runs": ["coordinator", "hr", "acceptance", "masters"],
+    },
+    "bob": {
+        "name": "Bob",
+        "email": "Bob@Example.com",
+        "decides": ["product"],
+        "owns_states": ["backlog"],
+        "runs": ["product", "lex"],
+        "companions": {"product": "Paula", "lex": "Lexi"},
+    },
+}
+
+
+def test_without_humans_the_one_human_runs_everything():
+    one = crew.humans({**CREW, "human": {"name": "Fay Doe", "decides": ["prod"]}})
+    assert list(one) == ["fay-doe"]
+    entry = one["fay-doe"]
+    assert entry["runs"] == ["product", "acceptance", "coordinator", "hr", "masters"]
+    assert entry["owns_states"] == list(crew.STATES) and entry["decides"] == ["prod"]
+    assert crew.current_human(CREW, {}, email="") == ("the-human", crew.humans(CREW)["the-human"])
+    assert not crew.several_humans(CREW)
+
+
+def test_humans_load_and_resolve_the_session_s_human(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    loaded = crew.load(core / ".weside" / "crew.json", strict=True)
+    assert crew.several_humans(loaded)
+    assert crew.current_human(loaded, {"WE_HUMAN": "bob"})[0] == "bob"
+    assert crew.current_human(loaded, {}, email="BOB@example.com")[0] == "bob"
+    assert crew.current_human(loaded, {}, email="eve@example.com") is None
+    with pytest.raises(crew.CrewError, match="WE_HUMAN=eve is no human"):
+        crew.current_human(loaded, {"WE_HUMAN": "eve"})
+    assert crew.state_owner(loaded, "backlog") == "bob"
+    assert crew.state_owner(loaded, "done") is None
+    assert crew.runs(loaded, "bob") == ["product", "lex"]
+
+
+def test_display_name_per_human_and_member_lookup_by_it(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    loaded = crew.load(core / ".weside" / "crew.json")
+    assert crew.display_name(loaded, "product", "bob") == "Paula"
+    assert crew.display_name(loaded, "product", "alice") == "Ada"
+    assert crew.display_name(loaded, "lex", "bob") == "Lexi"
+    assert crew.display_name(loaded, "lex", None) == "Lex"
+    assert crew.display_name(loaded, "security", "bob") is None
+    assert crew.member(loaded, "paula")[0] == "ada"
+    env = {"WESIDE_COMPANION": "Paula", "WE_ROLE": "master"}
+    assert crew.role_of_session(loaded, env) == "product"
+    assert crew.holds_role(loaded, "product", env)
+
+
+def test_we_role_id_picks_among_the_roles_one_member_holds():
+    two = with_(roles__escalation="otto")
+    env = {"WESIDE_COMPANION": "Otto", "WE_ROLE": "master"}
+    assert crew.role_of_session(two, env) == "coordinator"
+    assert crew.role_of_session(two, {**env, "WE_ROLE_ID": "escalation"}) == "escalation"
+    assert crew.role_of_session(two, {**env, "WE_ROLE_ID": "product"}) == "coordinator"
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        ({"alice": {"email": "a@x"}}, "humans.alice.name is missing"),
+        ({"Alice": {"name": "Alice"}}, "a slug is lower case"),
+        ({"alice": {"name": "A", "runs": "coordinator"}}, "humans.alice.runs must be a list"),
+        ({"alice": {"name": "A", "runs": ["pilot"]}}, "'pilot' is no role key, member slug"),
+        ({"alice": {"name": "A", "owns_states": ["review"]}}, "'review' is no state"),
+        (
+            {
+                "alice": {"name": "A", "owns_states": ["done"]},
+                "bob": {"name": "B", "owns_states": ["done"]},
+            },
+            "done is owned by humans.alice already",
+        ),
+        (
+            {"alice": {"name": "A", "email": "x@y"}, "bob": {"name": "B", "email": "X@Y"}},
+            "humans.bob.email is also humans.alice.email",
+        ),
+        ({"alice": {"name": "A", "companions": {"product": 3}}}, "must be an object of strings"),
+        (
+            {"alice": {"name": "A", "companions": {"pilot": "P"}}},
+            "'pilot' is no role key nor member",
+        ),
+        ({"alice": {"name": "A", "companions": {"security": "S"}}}, "the role has no member"),
+        (
+            {"alice": {"name": "A", "companions": {"product": "Otto"}}},
+            "'Otto' is already the name of members.otto.name",
+        ),
+        (
+            {
+                "alice": {"name": "A", "companions": {"product": "Max"}},
+                "bob": {"name": "B", "companions": {"hr": "Max"}},
+            },
+            "a name denotes one member",
+        ),
+        ({}, "humans must be an object with at least one human"),
+    ],
+)
+def test_humans_validation_names_the_key(tmp_path, change, message):
+    core, _ = workspace(tmp_path, with_(humans=change))
+    with pytest.raises(crew.CrewError, match=message):
+        crew.load(core / ".weside" / "crew.json")
+
+
+def test_an_unknown_human_field_warns_and_strict_refuses(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans={"alice": {"name": "A", "phone": "1"}}))
+    path = core / ".weside" / "crew.json"
+    assert crew.load(path)["unknown_keys"] == ["humans.alice.phone"]
+    with pytest.raises(crew.CrewError, match=r"unknown key humans\.alice\.phone"):
+        crew.load(path, strict=True)
+
+
+@pytest.mark.parametrize(
+    "signals, message",
+    [
+        ("x", "board.signals must be a list"),
+        ([{"state": "selected", "role": "coordinator"}], r"jql_window must be a number"),
+        ([{"state": "picked", "role": "coordinator", "jql_window": "5m"}], "state must be one of"),
+        ([{"state": "selected", "role": "boss", "jql_window": "5m"}], "role must be a role key"),
+        ([{"state": "selected", "role": "hr", "jql_window": "5m", "x": 1}], "has no field x"),
+    ],
+)
+def test_board_signals_validation(tmp_path, signals, message):
+    core, _ = workspace(tmp_path, with_(board__signals=signals))
+    with pytest.raises(crew.CrewError, match=message):
+        crew.load(core / ".weside" / "crew.json")
+
+
+def test_human_and_name_verbs(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    env = {**os.environ, "WE_HUMAN": "bob"}
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "human", "--from", str(core)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert out.stdout == "bob\tBob\tproduct,lex\n"
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "name", "product", "--from", str(core)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert out.stdout == "Paula\n"
+    env["WE_HUMAN"] = ""
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "human", "--from", str(core)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        check=False,
+    )
+    assert out.returncode == 1 and "set WE_HUMAN=<slug>" in out.stderr
+
+
+def test_skill_path_finds_the_member_s_skill_under_a_human_s_name(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    skill = core / ".claude" / "skills" / "acme-ada" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("---\nname: acme-ada\n---\n")
+    path, loadable = crew.skill_path("Paula", core, home=tmp_path / "home")
+    assert path == skill and loadable

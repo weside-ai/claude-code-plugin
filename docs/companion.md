@@ -59,8 +59,9 @@ in a fixed claude-swap profile). `/we:pin status` names the account that bills t
 
 `wclaude --start` starts the crew's main companion (`roles.coordinator`) in its `workplace`, pinned
 when its member sets `"pin": true`, resuming its newest session unless `--fresh`; it refuses while
-that session runs and opens with `/we:start` (the check of companion, role and pin, then the crew's
-restore after a crash, then `/board`).
+that session runs and opens with `/we:start` (the check of human, companion, role and pin, then the
+crew's restore after a crash, then `/board`). In a crew with several humans it starts the roles of
+your human only, under your names for them; `--role <key>` starts another of them.
 
 **Permission mode.** A session starts in your `permissions.defaultMode`. A crew with
 `launch.allow_bypass: true` adds `--allow-dangerously-skip-permissions` to every start through

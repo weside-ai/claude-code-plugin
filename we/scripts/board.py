@@ -10,7 +10,7 @@ Usage:
   board.py [--board FILE] set [--for NAME] <field>=<value> …       fields: waiting_on, state, now
   board.py [--board FILE] ask --session NAME --key KEY --key-title T --ask Q --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
-           [--pr REF [--one-way CLASS]]
+           [--pr REF [--one-way CLASS]] [--to HUMAN]
   board.py [--board FILE] close-merged
   board.py [--board FILE] prune
   board.py [--board FILE] log correction <session> <kind>
@@ -26,6 +26,8 @@ Usage:
   board.py [--board FILE] escalation advise E<n> --recommendation T
   board.py [--board FILE] escalation settle E<n> --outcome T [--via human]
   board.py [--board FILE] select <KEY> [--plan PATH]
+  board.py [--board FILE] signals [--input FILE]
+  board.py [--board FILE] claim <KEY> [--release] [--input FILE]
   board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|done>
            [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE]
   board.py [--board FILE] check --jira FILE
@@ -65,6 +67,10 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          hold it) stamps `owner`: the deliverer carries the answer to that member's session too.
          An open question on the same key draws a warning naming its id; `--replace <QID>` takes
          that question off the queue (a `replaced` line in board-questions.jsonl) and posts this one.
+         `--to <human>` (a crew with `humans`, another human than this session's) asks a human on
+         another machine on the ticket `--key`: the item keeps `to` and `label`, and the carry
+         is the comment `board_humans.question_comment` and the label
+         `board_humans.question_label`; `signals` reads the reply back.
 close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
          `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
          `bundle` runs it first.
@@ -114,9 +120,24 @@ escalation the decision story between two owners (docs/board.md § Escalations):
          pair in this ISO week and warns past two. With `board.ticketing: jira`, `open` and
          `settle` print a `carry:` `comment` op on the story's ticket as the last line.
 select   moves a story to Selected when its `ENTRY_RULES["selected"]` hold, in order: the Ready
-         gate (`ready_gate.story_failures`), the plan-only tier (`plan_tier.py`) and a green
-         `ready-<KEY>` lens verdict (`lens_verdict.check`). The first failing group refuses with
-         `board.py select <KEY>: refused (<group>)` and its lines; no rule asks a human.
+         gate (`ready_gate.story_failures`), the plan on `risk.rules_from` (main), the plan-only
+         tier (`plan_tier.py`) and a green `ready-<KEY>` lens verdict (`lens_verdict.check`); in a
+         crew with `humans` the caller holds `roles.product` first. The first failing group
+         refuses with `board.py select <KEY>: refused (<group>)` and its lines; no rule asks a
+         human. A passing select comments `selected by <role>@<human>, plan <blob>, panel <id>`
+         on the ticket after the transition.
+signals  (several humans, docs/board.md § Several humans) for each `board.signals` entry whose
+         role this session's human runs: the ticket search `board_humans.signal_jql`; each hit
+         is one `todo` news item `S<n>` for that role, once per key, state and change time
+         (board-signals.jsonl). Each open question this board sent to another human
+         (`ask --to`) reads its ticket: a reply is an answer line (`via: ticket`) the deliverer
+         carries to the asker, once per reply; the label taken off without a reply is `update`.
+         With `board.ticketing: jira` the script reads nothing itself: it prints the reads as
+         `carry:` (`search`, `read`) and the session hands their results back with `--input`.
+claim    writes the claim comment `claim <role>@<human> <session>` on the ticket (and a line in
+         board-claims.jsonl), refused while another role or human holds a live claim
+         (`board.claim_hours`, from the ticket's comments and the local claims); `--release` ends
+         this session's claim. With `jira` the first run carries the read like `signals`.
 move     moves a story to another state when that state's entry rule holds (docs/board.md
          § Moves): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
          after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`),
@@ -188,6 +209,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import board_humans  # noqa: E402
 import board_self_merge  # noqa: E402
 import board_staging  # noqa: E402
 import cold_reader  # noqa: E402
@@ -303,6 +325,8 @@ class StateDir:
         self.transitions_path = self.log_path("transitions")
         self.waits_path = self.log_path("waits")
         self.deliveries_path = self.log_path("deliveries")
+        self.signals_path = self.log_path("signals")
+        self.claims_path = self.log_path("claims")
         self.lock_path = self.board_path.with_name(self.board_path.name + ".lock")
 
     def log_path(self, kind):
@@ -1161,8 +1185,13 @@ def _is_plan_slug(crew, key):
 
 
 def _ask_extras(args, crew):
-    """The optional fields of a question: `kind: task`, `source`, `owner`."""
+    """The optional fields of a question: `kind: task`, `source`, `owner`, and `to` and `label`
+    for a human on another machine (`_remote_target`)."""
     extras = {}
+    remote = _remote_target(args, crew)
+    if remote is not None:
+        extras["to"] = remote[0]
+        extras["label"] = board_humans.question_label(crew, remote[0])
     if args.ask_kind == "task":
         extras["kind"] = "task"
     if args.source and args.source.strip():
@@ -1281,6 +1310,23 @@ def _is_return_note(note):
     return isinstance(note, str) and note.startswith(RETURN_PREFIX)
 
 
+def _remote_target(args, crew):
+    """(slug, entry) of the human `--to` names on another machine, None for a local ask; a
+    refusal (`BoardError`) for an unknown human, this session's own or a key that is no ticket."""
+    to = (getattr(args, "to", None) or "").strip().lower()
+    if not to:
+        return None
+    every = crew_mod.humans(crew)
+    if not crew_mod.several_humans(crew) or to not in every:
+        raise BoardError(f"board.py ask: --to {to!r} is no human of the crew ({', '.join(every)})")
+    me = crew_mod.current_human(crew)
+    if me is not None and me[0] == to:
+        return None  # the local human: the question goes to this board as ever
+    if _key_failure(crew, (args.key or "").strip(), "ask"):
+        raise BoardError("board.py ask: --to asks on a ticket: --key must be a ticket key")
+    return to, every[to]
+
+
 def cmd_ask(state, args, crew, now):
     failures = _ask_failures(args, crew)
     if failures:
@@ -1365,6 +1411,195 @@ def cmd_ask(state, args, crew, now):
         state.append_question({"id": qid, **base, "outcome": "posted", "reader": reader})
 
     print(f"posted {state.write_board(posted, after=log_posted)}")
+    _print_carry(_remote_ops(args, crew, fields))
+    return 0
+
+
+def _remote_ops(args, crew, fields):
+    """The comment and the label that carry an `ask --to` question to its ticket; [] local."""
+    if not fields.get("to"):
+        return []
+    adapter = _adapter(args, crew)
+    name = crew_mod.humans(crew)[fields["to"]]["name"]
+    text = board_humans.question_comment(crew, name, fields["ask"], fields["recommendation"])
+    return adapter.comment(fields["key"], text) + adapter.label(fields["key"], fields["label"])
+
+
+# --- several humans: signals, claims (docs/board.md § Several humans) -----------------------
+
+
+def _reads(args, crew):
+    """The adapter, over the reads the session handed back with `--input FILE`."""
+    adapter = _adapter(args, crew)
+    path = getattr(args, "input", None)
+    if not path:
+        return adapter
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise BoardError(
+            f"board.py {args.verb}: --input {path}: unreadable ({exc})", code=2
+        ) from None
+    if not isinstance(data, dict):
+        raise BoardError(f"board.py {args.verb}: --input {path}: needs an object", code=2)
+    return ticket_adapter.FileReads(adapter, data)
+
+
+def _me(crew, verb):
+    try:
+        found = crew_mod.current_human(crew)
+    except crew_mod.CrewError as exc:
+        raise BoardError(f"board.py {verb}: {exc}") from None
+    if found is None:
+        raise BoardError(
+            f"board.py {verb}: several humans and none is this session's: set WE_HUMAN=<slug> "
+            "or git config user.email to one of humans.*.email"
+        )
+    return found
+
+
+def _carry_reads(verb, searches, keys):
+    _print_carry(ticket_adapter.read_ops(searches, keys))
+    print(
+        f"board.py {verb}: carry the reads with your ticketing tool, then run it again with "
+        '--input FILE ({"hits": {state: [key or {key, changed}]}, "tickets": {key: {labels, '
+        "comments}}})",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def cmd_signals(state, args, crew, now):
+    slug, entry = _me(crew, "signals")
+    mine = set(entry["runs"])
+    adapter = _reads(args, crew)
+    wanted = [sig for sig in (crew.get("board") or {}).get("signals") or [] if sig["role"] in mine]
+    board = state.board()
+    remote = [
+        q
+        for q in board.get("owner_queue") or []
+        if isinstance(q, dict) and q.get("to") and q.get("to") != slug and q.get("id")
+    ]
+    hits, searches, tickets, keys = [], [], {}, []
+    for sig in wanted:
+        jql = board_humans.signal_jql(crew, sig["state"], sig["jql_window"])
+        found = adapter.search(sig["state"], jql)
+        if found is None:
+            searches.append((sig["state"], jql))
+        else:
+            hits += [(sig, h) for h in found if isinstance(h, dict) and h.get("key")]
+    for q in remote:
+        if q["key"] not in tickets:
+            found = adapter.ticket(q["key"])
+            if found is None:
+                keys.append(q["key"])
+            tickets[q["key"]] = found
+    if searches or keys:
+        return _carry_reads("signals", searches, sorted(set(keys)))
+    seen = {row.get("id") for row in _read_jsonl(state.signals_path)}
+    every = crew_mod.humans(crew)
+    lines = []
+
+    def mutate(board):
+        added = []
+        for sig, hit in hits:
+            sid = f"{hit['key']}:{sig['state']}:{hit.get('changed') or ''}"
+            if sid in seen:
+                continue
+            seen.add(sid)
+            status = (crew.get("board") or {}).get("states", {}).get(sig["state"], sig["state"])
+            item = {
+                "id": state.next_id("S", board),
+                "kind": "todo",
+                "title": f"{hit['key']} → {status} (signal for {sig['role']})",
+                "ts": _iso(now),
+                "for": sig["role"],
+                "key": hit["key"],
+            }
+            board.setdefault("news", []).append(item)
+            added.append({"id": sid, "kind": "signal", "news": item["id"], "ts": _iso(now)})
+            lines.append(f"signal {item['id']}: {item['title']}")
+        return added or UNCHANGED
+
+    def log(added):
+        for row in added:
+            _append_jsonl(state.signals_path, row)
+
+    state.write_board(mutate, after=log)
+    for q in remote:
+        lines += _read_back(state, q, tickets.get(q["key"]) or {}, every, seen, now)
+    for line in lines:
+        print(line)
+    if not lines:
+        print("signals: nothing new")
+    return 0
+
+
+def _read_back(state, q, ticket, every, seen, now):
+    """The answer lines for one question sent to another human, each once (board-signals.jsonl)."""
+    human = q["to"]
+    asked = _parse_ts(q.get("ts")) or now
+    out = []
+    found = board_humans.replies(ticket, asked, human, every.get(human) or {})
+    for reply in found:
+        rid = f"{q['id']}:reply:{reply['at']}"
+        if rid in seen:
+            continue
+        seen.add(rid)
+        _answer_from_ticket(state, q, reply["kind"], reply["quote"], human, now)
+        _append_jsonl(state.signals_path, {"id": rid, "kind": "answer", "ts": _iso(now)})
+        out.append(f"answer {q['id']}: {reply['kind']} from {human} on {q['key']}")
+    rid = f"{q['id']}:label-off"
+    label = q.get("label")
+    if not found and label and label not in (ticket.get("labels") or []) and rid not in seen:
+        seen.add(rid)
+        quote = f"label {label} removed on {q['key']} without a reply"
+        _answer_from_ticket(state, q, "update", quote, human, now)
+        _append_jsonl(state.signals_path, {"id": rid, "kind": "answer", "ts": _iso(now)})
+        out.append(f"answer {q['id']}: update ({quote})")
+    return out
+
+
+def _answer_from_ticket(state, q, kind, quote, human, now):
+    stamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    state.append_answer(
+        q["id"], kind, f"ticket {q['key']} ({human})", via="ticket", quote=quote, ts=stamp
+    )
+
+
+def cmd_claim(state, args, crew, now):
+    key = args.key
+    failures = _key_failure(crew, key, "claim")
+    if failures:
+        raise BoardError("\n".join(failures))
+    who = _who(crew)
+    role, human = who.split("@", 1)
+    session = _caller()
+    adapter = _reads(args, crew)
+    ticket = adapter.ticket(key)
+    if ticket is None:
+        return _carry_reads("claim", [], [key])
+    local = [
+        {"body": row.get("body"), "created": row.get("ts")}
+        for row in _read_jsonl(state.claims_path)
+        if row.get("key") == key
+    ]
+    hours = (crew.get("board") or {}).get("claim_hours") or 4
+    live = board_humans.live_claims((ticket.get("comments") or []) + local, now, hours)
+    if args.release:
+        body = f"release {who} {session}"
+    else:
+        others = [c for w, c in live.items() if w != (role, human)]
+        if others:
+            c = others[-1]
+            raise BoardError(
+                f"board.py claim {key}: refused: claimed by {c['role']}@{c['human']} "
+                f"({c['session'] or 'no session'}) at {_iso(c['at'])}, live for {hours} h"
+            )
+        body = f"claim {who} {session}"
+    _append_jsonl(state.claims_path, {"key": key, "body": body, "ts": _iso(now)})
+    print(f"{key}: {body}")
+    _print_carry(adapter.comment(key, body))
     return 0
 
 
@@ -1686,7 +1921,7 @@ def _open_failures(args, crew):
 
 def _adapter(args, crew):
     """The ticketing adapter, built only by the verbs that call it (`select`, `move`,
-    `escalation open|settle`) and before their first write; an unknown `board.ticketing`
+    `escalation open|settle`, `signals`, `claim`, `ask --to`) and before their first write; an unknown `board.ticketing`
     leaves every other verb working. `args.adapter_given` is the tests' FakeAdapter."""
     if args.adapter_given is not None:
         return args.adapter_given
@@ -1982,6 +2217,7 @@ class Move:
         self.root, self.plan, self.crew, self.args = root, plan, crew, args
         self.extra = {}
         self.warnings = []
+        self.selected = {}  # what the select comment names (plan blob)
 
 
 def _toplevel(verb):
@@ -2011,6 +2247,38 @@ def rule_gate(m):
         return [f"{m.plan}: unreadable ({type(exc).__name__})"]
     m.warnings += warnings
     return failures
+
+
+def rule_selector(m):
+    """With several humans only the product role selects: the start signal is its move."""
+    if not crew_mod.several_humans(m.crew):
+        return []
+    role = crew_mod.role_of_session(m.crew, os.environ) or "none"
+    if role != "product":
+        return [f"only the product role selects (roles.product); this session is {role}"]
+    return []
+
+
+def rule_plan_on_main(m):
+    """The plan file is on `risk.rules_from` (default `origin/main`); its blob goes into the
+    select comment."""
+    rel = _rel(m.root, m.plan)
+    ref = str((m.crew.get("risk") or {}).get("rules_from") or "origin/main")
+    if rel is None:
+        return [f"plan {m.plan} lies outside {m.root}"]
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(m.root), "rev-parse", "--verify", "-q", f"{ref}:{rel}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"git not runnable: {exc.strerror}"]
+    if done.returncode != 0:
+        return [f"plan {rel} is not on {ref}: merge the plan first"]
+    m.selected["plan"] = done.stdout.strip()
+    return []
 
 
 def rule_tier(m):
@@ -2279,7 +2547,13 @@ def done_comment(entry, rc, run_url):
 ENTRY_RULES = {
     "on_hold": [("reopen", rule_reopen)],
     "backlog": [("epic", rule_epic_approved)],
-    "selected": [("ready gate", rule_gate), ("tier", rule_tier), ("lenses", rule_lenses)],
+    "selected": [
+        ("role", rule_selector),
+        ("ready gate", rule_gate),
+        ("plan on main", rule_plan_on_main),
+        ("tier", rule_tier),
+        ("lenses", rule_lenses),
+    ],
     "in_progress": [("pulled", rule_pulled)],
     "in_review": [("pr", rule_pr_merged_and_linked)],
     "done": [("in review", rule_in_review), ("evidence", rule_done_evidence)],
@@ -2333,6 +2607,8 @@ def _transition(state, args, crew, now, target, head):
         },
     )
     ops = adapter.move(key, status)
+    if target == "selected":
+        ops += adapter.comment(key, _select_comment(m))
     if "tier" in m.extra:
         print(f"tier: {m.extra['tier']}")
     if "round" in m.extra:
@@ -2342,6 +2618,22 @@ def _transition(state, args, crew, now, target, head):
     print(json.dumps(row, ensure_ascii=False))
     _print_carry(ops)
     return 0
+
+
+def _who(crew, env=None):
+    """`<role>@<human>` of the calling session, as a ticket comment names it across machines."""
+    env = os.environ if env is None else env
+    role = crew_mod.role_of_session(crew, env) or "session"
+    try:
+        found = crew_mod.current_human(crew, env)
+    except crew_mod.CrewError:
+        found = None
+    return f"{role}@{found[0] if found else 'unknown'}"
+
+
+def _select_comment(m):
+    plan = str(m.selected.get("plan") or "")[:12] or "-"
+    return f"selected by {_who(m.crew)}, plan {plan}, panel ready-{m.key}"
 
 
 def cmd_select(state, args, crew, now):
@@ -2644,6 +2936,17 @@ def _add_move_verbs(verbs):
     ck.set_defaults(run=cmd_check)
 
 
+def _add_human_verbs(verbs):
+    sg = verbs.add_parser("signals", help="ticket transitions and replies for this human's roles")
+    sg.add_argument("--input", metavar="FILE", help="the reads the session carried")
+    sg.set_defaults(run=cmd_signals)
+    cl = verbs.add_parser("claim", help="claim a ticket for this role and human, or --release")
+    cl.add_argument("key")
+    cl.add_argument("--release", action="store_true", help="end this session's claim")
+    cl.add_argument("--input", metavar="FILE", help="the ticket read the session carried")
+    cl.set_defaults(run=cmd_claim)
+
+
 def _add_flow_verbs(verbs):
     lg = verbs.add_parser("log", help="a line in the flow log (the coordinator)")
     lv = lg.add_subparsers(dest="what", required=True)
@@ -2716,7 +3019,9 @@ def parser():
         "--component", metavar="NAME", help="owner: the member whose components hold it"
     )
     q.add_argument("--replace", metavar="QID", help="replace this open question on the same --key")
+    q.add_argument("--to", metavar="HUMAN", help="a human on another machine: asked on the ticket")
     q.set_defaults(run=cmd_ask)
+    _add_human_verbs(verbs)
     verbs.add_parser(
         "close-merged", help="drop merge-go questions whose PR merged or closed"
     ).set_defaults(run=cmd_close_merged)
@@ -2758,12 +3063,9 @@ def _verb_name(args):
 
 
 def _is_member(crew, pin):
-    """Whether the companion `pin` (WESIDE_COMPANION) is a member of `crew`, by slug or name."""
-    want = pin.strip().lower()
-    for slug, entry in crew_mod.members(crew or {}).items():
-        if want in (str(slug).lower(), str(entry.get("name") or "").strip().lower()):
-            return True
-    return False
+    """Whether the companion `pin` (WESIDE_COMPANION) is a member of `crew`, by slug, name or a
+    human's name for it (`crew.member`)."""
+    return crew_mod.member(crew or {}, pin) is not None
 
 
 def _session_crew(cwd, env):

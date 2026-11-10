@@ -7,7 +7,9 @@
 #   wclaude -c              menu, then claude -c (claude's own --continue)
 #   wclaude --as <Name> ... no menu; the rest goes to claude
 #   wclaude --pin ...       start through $WCLAUDE_PIN instead of claude (combines with --as)
-#   wclaude --start [--fresh]  the crew's main companion (references/companion-session.md § Launch and pin)
+#   wclaude --start [--fresh] [--role <key>]  the crew's main companion, or another role this
+#                           human runs (references/companion-session.md § Launch and pin); sets
+#                           WE_HUMAN (the human) and WE_ROLE_ID (the role key)
 # Choice 0 starts claude with the companion pin cleared (WESIDE_COMPANION empty = no companion).
 # Every session it starts is a master: WE_ROLE=master. Without --pin it runs on the same login as a
 # plain `claude` and follows your account switcher. WCLAUDE_PIN names one executable that takes
@@ -19,7 +21,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: wclaude [--as <Name>] [--pin] [--start [--fresh]] [claude arguments...]" >&2
+  echo "usage: wclaude [--as <Name>] [--pin] [--start [--fresh] [--role <key>]] [claude arguments...]" >&2
   exit 2
 }
 
@@ -28,6 +30,7 @@ picked=0
 pin=0
 start=0
 fresh=""
+role=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --as)
@@ -47,6 +50,11 @@ while [[ $# -gt 0 ]]; do
     --fresh)
       fresh=--fresh
       shift
+      ;;
+    --role)
+      [[ $# -ge 2 && -n "$2" ]] || usage
+      role=$2
+      shift 2
       ;;
     *) break ;;
   esac
@@ -101,8 +109,9 @@ if [[ $start -eq 1 ]]; then
   command -v python3 >/dev/null 2>&1 || { echo "wclaude: --start needs python3" >&2; exit 1; }
   resolver=$(crew_script)
   [[ -n "$resolver" ]] || { echo "wclaude: --start needs the we plugin (crew.py not found)" >&2; exit 1; }
-  row=$(python3 "$(dirname "$resolver")/start.py" plan ${fresh:+"$fresh"}) || exit 1
-  IFS=$'\t' read -r pick s_pin s_dir s_sid <<<"$row"
+  row=$(python3 "$(dirname "$resolver")/start.py" plan ${fresh:+"$fresh"} ${role:+--role "$role"}) || exit 1
+  IFS=$'\t' read -r pick s_pin s_dir s_human s_role s_sid <<<"$row"
+  export WE_HUMAN=$s_human WE_ROLE_ID=$s_role
   picked=1
   if [[ "$s_pin" == 1 && $pin -eq 0 ]]; then
     pin=1
@@ -118,8 +127,8 @@ if [[ $start -eq 1 ]]; then
     echo "wclaude: $pick starts fresh in $s_dir" >&2
   fi
   set -- "$@" "/we:start"
-elif [[ -n "$fresh" ]]; then
-  echo "wclaude: --fresh goes with --start" >&2
+elif [[ -n "$fresh" || -n "$role" ]]; then
+  echo "wclaude: --fresh and --role go with --start" >&2
   exit 2
 fi
 

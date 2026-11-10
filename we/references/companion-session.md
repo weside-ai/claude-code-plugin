@@ -33,12 +33,17 @@ one Shift+Tab away.
 cannot switch, because the profile's credential belongs to the switcher (a link to the global login
 lets the switcher write through it, so the profile stays a plain file).
 
-`wclaude --start [--fresh]` starts the crew's main companion (`roles.coordinator`) from a shell: in its
+`wclaude --start [--fresh] [--role <key>]` starts the crew's main companion (`roles.coordinator`) from a shell: in its
 `workplace`, pinned when its member sets `"pin": true`, with `--resume` of its newest transcript
 titled with its name unless `--fresh`, refused while it runs (`scripts/start.py plan`). It sets
 `WE_START=1`, so the coordinator's session opens `/board` whatever `boardAutoOpen` says, and opens
-with `/we:start`: the check of companion, `WE_ROLE` and pin against the crew, then the crew's
-`launch.restore` after a crash (`skills/start/SKILL.md`).
+with `/we:start`: the check of human, companion, `WE_ROLE` and pin against the crew, then the crew's
+`launch.restore` after a crash (`skills/start/SKILL.md`). In a crew with `humans` it resolves the
+human of this machine (`WE_HUMAN`, else `git config user.email`), starts only a role in that
+human's `runs` (the coordinator when it runs, else the first; `--role` another, each further one
+named on stderr) under that human's name for it (`humans.<me>.companions.<role>`, else the member's
+name), and sets `WE_HUMAN` and `WE_ROLE_ID` (the role key) beside `WESIDE_COMPANION`. Skills and
+hooks key on the role key, never on the name.
 
 A companion session is a normal Claude Code session; what binds it to its companion is the pin
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the

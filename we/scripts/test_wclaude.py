@@ -22,7 +22,7 @@ CREW = {
 }
 
 
-def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
+def run(tmp_path, args=(), stdin="", crew=CREW, launch=None, extra_env=None):
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir(exist_ok=True)
     record = tmp_path / "record.json"
@@ -36,6 +36,8 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
         "json.dump({'companion': os.environ.get('WESIDE_COMPANION'), 'argv': sys.argv[1:]},"
         f" open({str(record)!r}, 'w'))\n"
         f"open({str(tmp_path / 'role')!r}, 'w').write(os.environ.get('WE_ROLE', ''))\n"
+        f"open({str(tmp_path / 'ids')!r}, 'w').write("
+        "os.environ.get('WE_HUMAN', '') + ' ' + os.environ.get('WE_ROLE_ID', ''))\n"
     )
     stub.chmod(0o755)
     project = tmp_path / "project"
@@ -51,6 +53,9 @@ def run(tmp_path, args=(), stdin="", crew=CREW, launch=None):
         "WESIDE_COMPANION": "Stale",
     }
     env.pop("WCLAUDE_PIN", None)
+    for name in ("WE_HUMAN", "WE_ROLE_ID"):
+        env.pop(name, None)
+    env.update(extra_env or {})
     env["WE_ROLE"] = "worker"
     if launch is not None:
         env["WCLAUDE_PIN"] = launch
@@ -350,7 +355,39 @@ def test_start_unpinned_resumes_the_last_session(tmp_path):
     }
 
 
-@pytest.mark.parametrize("args", [["--start", "--as", "Ada"], ["--fresh"]])
+def test_start_sets_the_human_and_the_role_key(tmp_path):
+    crew = {**START_CREW, "members": {"lead": {"name": "Lea"}}}
+    proc, _ = run(tmp_path, args=["--start", "--fresh"], crew=crew)
+    assert proc.returncode == 0, proc.stderr
+    assert (tmp_path / "ids").read_text() == "the-human coordinator"
+
+
+def test_start_role_starts_another_role_of_this_human_under_its_name(tmp_path):
+    crew = {
+        **START_CREW,
+        "roles": {"coordinator": "lead", "product": "po"},
+        "members": {"lead": {"name": "Lea"}, "po": {"name": "Ada"}},
+        "humans": {
+            "alice": {"name": "Alice", "runs": ["coordinator", "masters"]},
+            "bob": {"name": "Bob", "runs": ["product"], "companions": {"product": "Paula"}},
+        },
+    }
+    proc, result = run(
+        tmp_path, args=["--start", "--fresh"], crew=crew, extra_env={"WE_HUMAN": "bob"}
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert result == {"companion": "Paula", "argv": ["--name", "Paula", "/we:start"]}
+    assert (tmp_path / "ids").read_text() == "bob product"
+    proc, _ = run(
+        tmp_path,
+        args=["--start", "--role", "coordinator"],
+        crew=crew,
+        extra_env={"WE_HUMAN": "bob"},
+    )
+    assert proc.returncode == 1 and "bob does not run coordinator" in proc.stderr
+
+
+@pytest.mark.parametrize("args", [["--start", "--as", "Ada"], ["--fresh"], ["--role", "product"]])
 def test_start_misuse_is_refused(tmp_path, args):
     proc, _ = run(tmp_path, args=args, crew=START_CREW)
     assert proc.returncode == 2

@@ -5,8 +5,9 @@ Usage: answer.py <file> <id> <accept|deny|discuss|info|update|read> <ts> [<sessi
 
 Opens the file for appending only (O_APPEND) and writes the line in one write: two panes clicking
 at once each add a whole line, and nothing already in the file is rewritten. Never touches
-board.json. A pane's line carries no `via`; `append` takes one only from `board.py answer`, the
-one writer of a chat answer, and the command line here refuses it.
+board.json. A pane's line carries no `via`; `append` takes one only from `board.py answer` (the
+one writer of a chat answer, `chat`) and `board.py signals` (a reply read from a ticket,
+`ticket`), and the command line here refuses it.
 """
 
 import json

@@ -115,6 +115,34 @@ progress (a session that runs `/we:master`) and carries what goes to you through
 Every session loads the crew process at start (`we/process/L0.md`) and its role card
 (`we/roles/`). The crew file: [we/references/companion-session.md](../we/references/companion-session.md) § Crew.
 
+### Several humans
+
+Several people can work on one project, each running `wclaude --start` with their own crew sessions
+on their own machine; the machines share only the repo, the ticketing system and chat. The crew file
+names them under `humans` (schema: `we/scripts/crew.py` § Humans):
+
+```json
+"humans": {
+  "alice": {"name": "Alice", "email": "alice@example.com", "decides": ["money", "prod"],
+            "owns_states": ["selected", "in_progress", "in_review"],
+            "runs": ["coordinator", "architecture", "acceptance", "masters"]},
+  "bob":   {"name": "Bob", "email": "bob@example.com", "decides": ["product"],
+            "owns_states": ["backlog"], "runs": ["product"],
+            "companions": {"product": "Paula"}}
+},
+"board": {"ticketing": "jira", "jql_scope": "project = PROJ",
+          "signals": [{"state": "selected", "role": "coordinator", "jql_window": "35m"}]}
+```
+
+- `wclaude --start` finds who you are (`WE_HUMAN`, else `git config user.email`) and starts the
+  coordinator if you run it, else your first role; `--role <key>` starts another of your roles. Each
+  session gets `WE_HUMAN`, `WE_ROLE_ID` (the role key) and `WESIDE_COMPANION` (your name for it).
+- Each state has one owning human. The product role moves a story to Selected only with
+  `board.py select`; that move is the coordinator's start signal, which `board.py signals` puts on
+  its board.
+- Across machines, a question is a ticket comment plus a label (`board.py ask --to <human>`), a
+  claim a ticket comment (`board.py claim`); chat only wakes someone. Verbs: [we/docs/board.md](../we/docs/board.md) § Several humans.
+
 ## The effort rule
 
 - The default worker is `we:dev-medium` (Opus, effort `medium`).

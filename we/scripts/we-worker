@@ -24,7 +24,8 @@
 #
 # Start: every CLAUDE* variable of the calling session is dropped, CLAUDE_CONFIG_DIR above all: started
 # from a pinned master, the worker would otherwise bill the pinned account. WESIDE_COMPANION is dropped
-# too (a worker is never the companion of its starter) and WE_ROLE=worker is set.
+# too (a worker is never the companion of its starter), so is WE_ROLE_ID (nor its role), and
+# WE_ROLE=worker is set; WE_HUMAN stays (it works for the same human).
 #   default  interactive in a tmux window <name> (the caller's tmux session, else the attached one)
 #   --bg     a background session (`claude --bg`): listed in `claude agents`, steered with SendMessage
 #   --limit  the time limit handed to the timer (default 3h; 90m, 2h30m; a bare number is minutes)
@@ -449,7 +450,7 @@ if [[ -n "$timer" ]]; then
 fi
 
 for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
-unset WESIDE_COMPANION
+unset WESIDE_COMPANION WE_ROLE_ID
 export WE_ROLE=worker
 
 if [[ $bg -eq 1 ]]; then
@@ -469,5 +470,6 @@ if [[ -z "${TMUX:-}" ]]; then
 fi
 args=$(printf ' %q' -n "$name" ${extra[@]+"${extra[@]}"} "$@")
 # tmux starts the window with the server's environment, not this shell's: clear it there.
-tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION WE_ROLE=worker claude$args"
+human=${WE_HUMAN:+ WE_HUMAN=$(printf '%q' "$WE_HUMAN")}
+tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION -u WE_ROLE_ID$human WE_ROLE=worker claude$args"
 echo "we-worker: $name starts in tmux window $name${target:+ of ${target%:}} (global login${timer:+; time limit $limit})"

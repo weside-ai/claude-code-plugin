@@ -2,19 +2,25 @@
 """The crew's main companion (``roles.coordinator``): plan its start, check a started session.
 
 Usage:
-  start.py plan [--from DIR] [--fresh]   one line "<name>\\t<pin 0|1>\\t<workplace>\\t<session id or empty>"
-                                         for ``wclaude --start``; exit 1 (reason on stderr) without a
-                                         crew, without a coordinator, or while the coordinator runs
-  start.py check [--from DIR]            in the session (``/we:start``): one line per check of
-                                         WESIDE_COMPANION, WE_ROLE and the pin against the crew, exit 1
-                                         on a mismatch
+  start.py plan [--from DIR] [--fresh] [--role ROLE]
+                                         one line "<name>\t<pin 0|1>\t<workplace>\t<human>\t<role>\t
+                                         <session id or empty>" for ``wclaude --start``; exit 1
+                                         (reason on stderr) without a crew, without the role's member,
+                                         for a role the human does not run, or while it runs
+  start.py check [--from DIR]            in the session (``/we:start``): one line per check of the
+                                         human, WESIDE_COMPANION, WE_ROLE and the pin against the
+                                         crew, exit 1 on a mismatch
   start.py restore [--from DIR]          the crew's ``launch.restore`` command, exit 1 when unset
 
-The crew decides, never this code: who starts (``roles.coordinator``), pinned or not
-(``members.<slug>.pin``), where (``members.<slug>.workplace``), the restore command
-(``launch.restore``). The last session is the newest transcript under
-``<config>/projects/<workplace slug>/`` whose title or agent name is the coordinator's name
-(``--name`` writes both); ``--fresh`` skips the lookup. Python stdlib only, 3.9.
+The crew decides, never this code: whose machine this is (``crew.current_human``: ``WE_HUMAN``,
+else ``git config user.email``), what starts here (``humans.<me>.runs``; a crew without ``humans``
+runs every role on one machine), which role ``--start`` opens (``--role``, else
+``roles.coordinator`` when the human runs it, else the first role key of ``runs``), under which
+name (``crew.display_name``), pinned or not (``members.<slug>.pin``), where
+(``members.<slug>.workplace``), the restore command (``launch.restore``). ``plan`` names the
+human's other roles on stderr, one ``wclaude --start --role <key>`` each. The last session is the
+newest transcript under ``<config>/projects/<workplace slug>/`` whose title or agent name is the
+display name (``--name`` writes both); ``--fresh`` skips the lookup. Python stdlib only, 3.9.
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
@@ -43,14 +49,66 @@ class StartError(Exception):
     pass
 
 
-def coordinator(start: str | Path | None) -> tuple[Path, dict[str, Any], str, dict[str, Any]]:
+class Target(NamedTuple):
+    """What ``plan`` and ``check`` start or check: the human, the role and its member."""
+
+    path: Path
+    crew: dict
+    human: str
+    human_entry: dict
+    role: str
+    slug: str
+    member: dict
+    name: str
+
+
+def _crew(start: str | Path | None) -> tuple[Path, dict[str, Any]]:
     path = crewlib.find(start)
     if path is None:
         raise StartError("no .weside/crew.json here; run /we:setup")
     try:
-        crew = crewlib.load(path)
+        return path, crewlib.load(path)
     except crewlib.CrewError as exc:
         raise StartError(str(exc)) from exc
+
+
+def startable(crew: dict[str, Any], human: str) -> list[str]:
+    """The roles ``human`` runs that a session opens as (``masters`` is no session of its own)."""
+    return [r for r in crewlib.runs(crew, human) if r != crewlib.MASTERS]
+
+
+def target(start: str | Path | None, role: str | None = None, env: Any = None) -> Target:
+    env = os.environ if env is None else env
+    path, crew = _crew(start)
+    try:
+        found = crewlib.current_human(crew, env, path.parent)
+    except crewlib.CrewError as exc:
+        raise StartError(str(exc)) from exc
+    if found is None:
+        raise StartError(
+            "several humans and none is you: set WE_HUMAN=<slug> or git config user.email to "
+            f"one of humans.*.email ({', '.join(crewlib.humans(crew))})"
+        )
+    human, entry = found
+    mine = startable(crew, human)
+    if role is None and not crewlib.several_humans(crew):
+        role = "coordinator"  # one human: the main companion is the coordinator, as ever
+    elif role is None:
+        role = "coordinator" if "coordinator" in mine else next(iter(mine), None)
+        if role is None:
+            raise StartError(f"humans.{human}.runs names no role to start")
+    elif role not in mine and crewlib.several_humans(crew):
+        raise StartError(f"{human} does not run {role} (humans.{human}.runs: {', '.join(mine)})")
+    slug = (crew.get("roles") or {}).get(role, role if role not in crewlib.ROLE_KEYS else "")
+    member = (crew.get("members") or {}).get(slug or "")
+    if not member:
+        raise StartError(f"{path}: roles.{role} names no member")
+    name = crewlib.display_name(crew, role, human) or member["name"]
+    return Target(path, crew, human, entry, role, slug, member, name)
+
+
+def coordinator(start: str | Path | None) -> tuple[Path, dict[str, Any], str, dict[str, Any]]:
+    path, crew = _crew(start)
     slug = (crew.get("roles") or {}).get("coordinator")
     member = (crew.get("members") or {}).get(slug or "")
     if not member:
@@ -111,30 +169,58 @@ def running(name: str, sessions: Any = None) -> bool:
     )
 
 
-def plan(start: str | Path | None, fresh: bool, env: Any = None, sessions: Any = None) -> str:
-    path, crew, slug, member = coordinator(start)
-    name = member["name"]
-    if running(name, sessions):
+def plan(
+    start: str | Path | None,
+    fresh: bool,
+    env: Any = None,
+    sessions: Any = None,
+    role: str | None = None,
+) -> str:
+    t = target(start, role, env)
+    if running(t.name, sessions):
         raise StartError(
-            f"{name} runs already (claude agents); attach to it instead of starting a second one"
+            f"{t.name} runs already (claude agents); attach to it instead of starting a second one"
         )
     try:
-        place = crewlib.workplace_path(path, crew, slug)
+        place = crewlib.workplace_path(t.path, t.crew, t.slug)
     except crewlib.CrewError as exc:
         raise StartError(str(exc)) from exc
-    sid = "" if fresh else last_session(name, place, projects_dir(env))
-    return "\t".join((name, "1" if member.get("pin") else "0", str(place), sid))
+    sid = "" if fresh else last_session(t.name, place, projects_dir(env))
+    return "\t".join(
+        (t.name, "1" if t.member.get("pin") else "0", str(place), t.human, t.role, sid)
+    )
+
+
+def others(start: str | Path | None, role: str | None = None, env: Any = None) -> list[str]:
+    """One line per further role the human runs: how to start it."""
+    t = target(start, role, env)
+    if not crewlib.several_humans(t.crew):
+        return []
+    return [
+        f"{t.human} also runs {r} ({crewlib.display_name(t.crew, r, t.human) or r}): "
+        f"wclaude --start --role {r}"
+        for r in startable(t.crew, t.human)
+        if r != t.role
+    ]
 
 
 def check(start: str | Path | None, env: Any = None) -> tuple[list[str], bool]:
     env = os.environ if env is None else env
-    _, _, _, member = coordinator(start)
-    name, want_pin = member["name"], bool(member.get("pin"))
+    try:
+        t = target(start, str(env.get("WE_ROLE_ID") or "").strip() or None, env)
+    except StartError as exc:
+        return [f"FAIL  human: {exc}"], False
+    want_pin = bool(t.member.get("pin"))
     pinned = bool(env.get("CLAUDE_CONFIG_DIR"))
     rows = [
         (
-            env.get("WESIDE_COMPANION") == name,
-            f"companion {env.get('WESIDE_COMPANION') or '(none)'}, crew: {name}",
+            True,
+            f"human {t.human} ({t.human_entry['name']}), runs "
+            + ", ".join(crewlib.runs(t.crew, t.human)),
+        ),
+        (
+            env.get("WESIDE_COMPANION") == t.name,
+            f"companion {env.get('WESIDE_COMPANION') or '(none)'}, crew: {t.name}",
         ),
         (
             env.get("WE_ROLE") == "master",
@@ -158,7 +244,10 @@ def main(argv: list[str] | None = None) -> int:
     start = rest[rest.index("--from") + 1] if "--from" in rest[:-1] else None
     try:
         if cmd == "plan":
-            print(plan(start, "--fresh" in rest))
+            role = rest[rest.index("--role") + 1] if "--role" in rest[:-1] else None
+            print(plan(start, "--fresh" in rest, role=role))
+            for line in others(start, role):
+                print(f"wclaude: {line}", file=sys.stderr)
             return 0
         if cmd == "check":
             lines, ok = check(start)

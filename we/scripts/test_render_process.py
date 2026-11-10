@@ -696,6 +696,12 @@ def all_bound() -> dict:
     return crewlib._merge(json.loads(ALL_BOUND.read_text()))
 
 
+@pytest.fixture(autouse=True)
+def _all_bound_human(monkeypatch):
+    """The all-bound crew names three humans; its sessions render for the one with most roles."""
+    monkeypatch.setenv("WE_HUMAN", "hale")
+
+
 def _l0_from_ref(tmp_path: Path) -> Path:
     """``rp.PROCESS``, or a copy of it holding ``L0.md`` from ``L0_BUDGET_REF``."""
     if not L0_BUDGET_REF:
@@ -736,15 +742,19 @@ def test_the_all_bound_fixture_binds_every_optional_line():
     template = (rp.PROCESS / "L0.md").read_text(encoding="utf-8")
     for match in rp.TOKEN.finditer(template):
         key = match.group(1)
-        if key != "crew_notice":
+        if key == "single":  # the one-human arm: dropped in a crew with humans, like this one
+            assert rp._resolve({**crew, "humans": {}}, key) == "", key
+        elif key != "crew_notice":
             assert rp._resolve(crew, key), key
 
 
 def test_the_l0_fits_the_budget_with_every_role_bound(tmp_path):
     """A bound optional role adds its lines (7.71.0 put the security owner's L0 over ``BUDGET``,
     and ``process_on_start`` then loads no L0 at all); the unbound fixtures cannot see that."""
-    overrun = l0_overrun(all_bound(), _l0_from_ref(tmp_path))
-    assert overrun is None, overrun
+    process = _l0_from_ref(tmp_path)
+    for crew in (all_bound(), {**all_bound(), "humans": {}}):  # both arms of the human line
+        overrun = l0_overrun(crew, process)
+        assert overrun is None, overrun
 
 
 def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
@@ -810,3 +820,35 @@ def test_the_subagent_fallback_lives_in_the_cards_not_in_l0():
         card = rp.render_card(crew, role)
         assert "launch.subagent_fallback" in card, role
         assert "`worker-dispatch.md` § Worker launch backend" in card, role
+
+
+# --- several humans: names per human, the human line, the humans part after the card ----------
+
+
+def test_several_humans_render_per_human(monkeypatch):
+    crew = all_bound()
+    monkeypatch.setenv("WE_HUMAN", "marisol")
+    l0 = rp.render_l0(crew)
+    assert "- **Marisol** decides product direction on this machine;" in l0
+    assert "and whatever else they choose" not in l0
+    assert "Adalinde" in l0 and "Ada " not in l0.replace("Adalinde", "")
+    part = rp.humans_part(crew, "product")
+    assert part.startswith("**Several humans** (this crew; you work for Marisol)")
+    assert (
+        "- **Quentin** (`quentin`): owns Done; decides domain, acceptance; runs acceptance."
+        in part
+    )
+    assert "Adalinde moves a story to Selected only with `board.py select <KEY>`" in part
+    assert rp.humans_part(crew, "worker") is None
+    card = rp.render_card(crew, "product")
+    assert "Several humans (Marisol is yours): move a story to Selected only with" in card
+
+
+def test_one_human_renders_as_before():
+    crew = generic()
+    l0 = rp.render_l0(crew)
+    assert "and whatever else they choose, and talks to any companion directly." in l0
+    assert "on this machine; other humans" not in l0
+    assert rp.humans_part(crew, "coordinator") is None
+    assert "Several humans" not in rp.render_card(crew, "coordinator")
+    assert "Several humans" not in rp.render_card(crew, "product")

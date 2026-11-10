@@ -1948,7 +1948,13 @@ class TestSelect:
             "ticket": "fake",
             "by": "lead-12",
         }
-        assert adapter.calls == [("move", KEY, "Selected for Development")]
+        assert adapter.calls[0] == ("move", KEY, "Selected for Development")
+        op, key, text = adapter.calls[1]
+        assert (op, key) == ("comment", KEY)
+        assert re.fullmatch(
+            rf"selected by master@hal, plan [0-9a-f]{{12}}, panel ready-{KEY}", text
+        ), text
+        assert len(adapter.calls) == 2
 
     def test_select_never_asks(self, moving):
         green_lenses(moving)
@@ -1961,7 +1967,13 @@ class TestSelect:
         sub = board.parser()._subparsers._group_actions[0].choices["select"]
         options = {s for a in sub._actions for s in a.option_strings} - {"-h", "--help"}
         assert options == {"--plan"}
-        assert [g for g, _ in board.ENTRY_RULES["selected"]] == ["ready gate", "tier", "lenses"]
+        assert [g for g, _ in board.ENTRY_RULES["selected"]] == [
+            "role",
+            "ready gate",
+            "plan on main",
+            "tier",
+            "lenses",
+        ]
 
 
 class TestSelectLenses:
@@ -2214,9 +2226,10 @@ class TestJiraTransport:
         assert act(moving, "select", KEY) == 0
         out = capsys.readouterr().out
         assert out.splitlines()[-1].startswith("carry: ")
-        assert carry_of(out) == [
-            {"op": "transition", "key": KEY, "status": "Selected for Development"}
-        ]
+        carried = carry_of(out)
+        assert carried[0] == {"op": "transition", "key": KEY, "status": "Selected for Development"}
+        assert carried[1]["op"] == "comment" and carried[1]["text"].startswith("selected by ")
+        assert len(carried) == 2
         assert transitions(moving)[-1]["ticket"] == "carried"
 
     def test_a_refused_move_carries_nothing(self, moving, capsys):

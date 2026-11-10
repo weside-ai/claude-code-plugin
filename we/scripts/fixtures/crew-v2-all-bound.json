@@ -118,5 +118,69 @@
     "A draft PR may not merge even green; its first line names the reason and when it is ready.",
     "Any session may resolve a monitoring issue that names its fix, with a link to the fix.",
     "Never print a token, a cookie or a one-time code; pass browser flags on every browser call."
-  ]
+  ],
+  "humans": {
+    "hale": {
+      "name": "Hale",
+      "email": "hale@example.com",
+      "decides": [
+        "vision",
+        "money",
+        "legal",
+        "prod",
+        "native builds"
+      ],
+      "owns_states": [
+        "selected",
+        "in_progress",
+        "in_review"
+      ],
+      "runs": [
+        "coordinator",
+        "architecture",
+        "machinery",
+        "escalation",
+        "hr",
+        "security",
+        "masters"
+      ],
+      "companions": {
+        "coordinator": "Otta"
+      }
+    },
+    "marisol": {
+      "name": "Marisol",
+      "email": "marisol@example.com",
+      "decides": [
+        "product direction"
+      ],
+      "owns_states": [
+        "on_hold",
+        "backlog"
+      ],
+      "runs": [
+        "product"
+      ],
+      "companions": {
+        "product": "Adalinde"
+      }
+    },
+    "quentin": {
+      "name": "Quentin",
+      "email": "quentin@example.com",
+      "decides": [
+        "domain",
+        "acceptance"
+      ],
+      "owns_states": [
+        "done"
+      ],
+      "runs": [
+        "acceptance"
+      ],
+      "companions": {
+        "acceptance": "Tessaline"
+      }
+    }
+  }
 }

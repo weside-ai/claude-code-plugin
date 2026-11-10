@@ -50,8 +50,9 @@ def test_plan_names_coordinator_pin_workplace_and_last_session(tmp_path):
         cfg / "projects", root, "other", [{"type": "custom-title", "customTitle": "Ada"}], 300
     )
     env = {"CLAUDE_CONFIG_DIR": str(cfg)}
-    assert start.plan(root, False, env, no_agents) == f"Lea\t1\t{root}\tnew"
-    assert start.plan(root, True, env, no_agents) == f"Lea\t1\t{root}\t"
+    row = f"Lea\t1\t{root}\tthe-human\tcoordinator\t"
+    assert start.plan(root, False, env, no_agents) == row + "new"
+    assert start.plan(root, True, env, no_agents) == row
 
 
 def test_plan_unpinned_member_and_no_transcript(tmp_path):
@@ -59,7 +60,7 @@ def test_plan_unpinned_member_and_no_transcript(tmp_path):
     root = repo(tmp_path, crew)
     assert (
         start.plan(root, False, {"CLAUDE_CONFIG_DIR": str(tmp_path / "none")}, no_agents)
-        == f"Lea\t0\t{root}\t"
+        == f"Lea\t0\t{root}\tthe-human\tcoordinator\t"
     )
 
 
@@ -99,9 +100,10 @@ def test_plan_without_coordinator_fails(tmp_path):
 def test_check_against_the_crew(tmp_path, env, ok):
     lines, result = start.check(repo(tmp_path), env)
     assert result is ok
-    assert len(lines) == 3
+    assert len(lines) == 4
+    assert lines[0] == "ok    human the-human (the human), runs product, coordinator, masters"
     if "CLAUDE_CONFIG_DIR" not in env:
-        assert lines[2].startswith("FAIL") and "/we:pin on" in lines[2]
+        assert lines[3].startswith("FAIL") and "/we:pin on" in lines[3]
 
 
 def test_restore_prints_the_crew_command_or_fails(tmp_path, capsys):
@@ -127,3 +129,72 @@ def test_pin_is_a_known_member_key(tmp_path):
         check=False,
     )
     assert out.returncode == 0, out.stderr
+
+
+HUMANS = {
+    "version": 2,
+    "roles": {"coordinator": "lead", "product": "po", "acceptance": "qa"},
+    "members": {
+        "lead": {"name": "Lea", "pin": True},
+        "po": {"name": "Ada"},
+        "qa": {"name": "Tess"},
+    },
+    "humans": {
+        "alice": {
+            "name": "Alice",
+            "email": "alice@example.com",
+            "owns_states": ["selected", "in_progress"],
+            "runs": ["coordinator", "acceptance", "masters"],
+        },
+        "bob": {
+            "name": "Bob",
+            "email": "Bob@Example.com",
+            "owns_states": ["backlog"],
+            "runs": ["product"],
+            "companions": {"product": "Paula"},
+        },
+    },
+}
+
+
+def test_plan_starts_the_role_the_human_runs_under_the_human_s_name(tmp_path):
+    root = repo(tmp_path, HUMANS)
+    bob = {"WE_HUMAN": "bob", "CLAUDE_CONFIG_DIR": str(tmp_path / "none")}
+    assert start.plan(root, True, bob, no_agents) == f"Paula\t0\t{root}\tbob\tproduct\t"
+    with pytest.raises(start.StartError, match="bob does not run coordinator"):
+        start.plan(root, True, bob, no_agents, role="coordinator")
+    alice = {"WE_HUMAN": "alice"}
+    assert start.plan(root, True, alice, no_agents).startswith("Lea\t1\t")
+    assert start.plan(root, True, alice, no_agents, role="acceptance").startswith("Tess\t0\t")
+    assert start.others(root, None, alice) == [
+        "alice also runs acceptance (Tess): wclaude --start --role acceptance"
+    ]
+    # a running Paula refuses a second one, by the display name
+    with pytest.raises(start.StartError, match="Paula runs already"):
+        start.plan(root, True, bob, lambda: [{"name": "Paula", "pid": 3}])
+
+
+def test_plan_resolves_the_human_from_git_email(tmp_path, monkeypatch):
+    root = repo(tmp_path, HUMANS)
+    monkeypatch.setattr(start.crewlib, "git_email", lambda _cwd=None: "bob@example.com")
+    assert start.plan(root, True, {}, no_agents).split("\t")[3:5] == ["bob", "product"]
+    monkeypatch.setattr(start.crewlib, "git_email", lambda _cwd=None: "eve@example.com")
+    with pytest.raises(start.StartError, match="none is you"):
+        start.plan(root, True, {}, no_agents)
+    with pytest.raises(start.StartError, match="WE_HUMAN=eve is no human"):
+        start.plan(root, True, {"WE_HUMAN": "eve"}, no_agents)
+
+
+def test_check_prints_the_human_line_and_the_human_s_companion(tmp_path):
+    root = repo(tmp_path, HUMANS)
+    env = {
+        "WE_HUMAN": "bob",
+        "WE_ROLE_ID": "product",
+        "WESIDE_COMPANION": "Paula",
+        "WE_ROLE": "master",
+    }
+    lines, ok = start.check(root, env)
+    assert ok, lines
+    assert lines[0] == "ok    human bob (Bob), runs product"
+    lines, ok = start.check(root, {**env, "WE_ROLE_ID": "coordinator"})
+    assert not ok and lines[0].startswith("FAIL  human: bob does not run coordinator")

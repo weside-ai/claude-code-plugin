@@ -19,7 +19,7 @@ we/                               plugin root
   .claude-plugin/plugin.json      name, version, userConfig
   .mcp.json                       weside-mcp (OAuth, optional)
   AUTHORING.md                    authoring contract
-  process/                        the crew process: L0.md, L0-worker.md (rendered by scripts/render_process.py)
+  process/                        the crew process: L0.md, L0-worker.md, humans.md (rendered by scripts/render_process.py)
   roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens),
@@ -48,7 +48,7 @@ we/                               plugin root
   scripts/
     crew                          crew.py (the one reader of .weside/crew.json), render_process.py, start.py,
                                   state_move.py, council_lens.py
-    board                         board.py, board_freeze.py, board_self_merge.py, board_staging.py, cold_reader.py,
+    board                         board.py, board_freeze.py, board_humans.py, board_self_merge.py, board_staging.py, cold_reader.py,
                                   accept.py, ticket_adapter.py, epic_state.py
     gates                         ready_gate.py, plan_tier.py, risk_paths.py, risk_runner.py, lens_verdict.py,
                                   check-plan-identifiers.py, check-instruction-budget.py

@@ -224,13 +224,14 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle and an escalation at stage `bundle`), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned` and `info` (`board.py self-merge`), which the pane draws as info until it has glyphs for them |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle, an escalation at stage `bundle`, and a signal `S<n>` with `for` the role and `key`, § Several humans), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned` and `info` (`board.py self-merge`), which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `staging` | optional, written by `board.py staging`, `book` and `unbook` only: `synced`, `repo`, `sla_hours`, `booking` (`issue`, `holder`, `until`) and `acceptance` (`issue`, `rc`, `opened`, `due`, `keys`, `past_sla`, `news`), each `null` when none is open; the pane draws one `◇ Staging` line per open one, a booking past its `until` as expired, and the past-SLA mark with the block's `sla_hours` (§ Staging) |
 | `self_merge` | optional, written by `board.py self-merge` only: `synced`, `repos` and `seen` (the news ids already mirrored, newest 200); the pane does not draw it (§ Self-merge window) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
+| `owner_queue[].to`, `.label` | optional: a question `board.py ask --to` sent to a human on another machine and the ticket label it carries (§ Several humans); its answer comes from the ticket |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
 | `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` instead of **Accept** (approve where the merge hook's one-way refusal names the approve as the go, else merge by hand), and `board.py close-merged` drops the question once the PR is merged or closed |
 | `owner_queue[].kind`, `.source`, `.owner` | `task` (`board.py ask --kind task`: the card offers **Taken** in place of **Accept** and stamps `taken`); where the ask's fact comes from (`--source`, shown dimmed under the ask); the member who owns the subject (`--owner`, or `--component` resolved through the crew's `members.*.components`): the deliverer sends that session a copy of every answer (§ Answers) |
@@ -267,7 +268,7 @@ file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never write
 | `answer` | `accept`, `deny`, `discuss`, `info` or `update` for a question; `read` for a news item |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the line was written in, as `claude agents` lists it; `null` when the live column does not know it |
-| `via`, `quote` | only on a line `board.py answer` wrote: `chat`, and the owner's own words when given |
+| `via`, `quote` | only on a line `board.py answer` wrote (`chat`, and the owner's own words when given) or `board.py signals` read from a ticket (`ticket`, and the reply; § Several humans) |
 
 The file only grows (`answer.py` and `board.py` append with `O_APPEND`, nothing rewrites it);
 `board.py` removes the question from `owner_queue`, or the item from `news`, once handled (§ Pruning). The pane
@@ -299,7 +300,7 @@ minutes. Per line it writes one row per recipient to
 
 | Recipient (`role`) | When | Carrier | Delivered when |
 |---|---|---|---|
-| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more information` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)` or `(answered in the chat of <session>)` after a space: transparency, no check), the owner's words on a line of their own when the line has a `quote` | the session stored the prompt as a user row |
+| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more information` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)`, `(answered in the chat of <session>)` or `(answered on ticket <KEY> (<human>))` after a space: transparency, no check), the owner's words on a line of their own when the line has a `quote` | the session stored the prompt as a user row |
 | `asker` (`owner_queue[].session`) | unless the line was written in the asker's own session; a question no longer on the board has none | a message to that session: the same text, for **Update** `check whether <id> is still current and well worded; re-ask it with a new id or withdraw it` | the engine queued it there |
 | `owner` (`owner_queue[].owner`) | unless it is the coordinator, the asker or the session that wrote the line | a message to that session: the coordinator's text plus `(copy for the owner of this subject)`; a refusal is a ledger row only, no routing line | the engine queued it there |
 | `route` (the orchestrator) | the asker was not reached | a prompt: `<id>: the owner's answer (<kind>) did not reach <asker> (<reason>); wake that session or route the answer` | as `coordinator` |
@@ -594,7 +595,8 @@ adds. Every rule runs before any write; a refusal writes no row, calls no adapte
 | `move <KEY> done --comment-file FILE` | the key's last row is `in_review` (`last move is <state>, not in_review`), and the file holds a line matching `^Not proven:\s*\S`; the row says `via: comment` and the file's text is the comment. A receipts verdict reaches `done` only through `accept.py` (§ Acceptance), which calls `move_done` in process with the entry; the CLI has no `--verdict` | as above |
 
 `select` has no option that waits for, asks
-for or records an approval: the gate, the tier and the lenses decide.
+for or records an approval: the gate, the tier and the lenses decide. Every select also needs the
+plan on `risk.rules_from` (`plan on main`), and with `humans` the product role (§ Several humans).
 
 **Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
 `HEAD`'s tree and the diff `<base>...HEAD`, prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs
@@ -735,6 +737,37 @@ worker's line shows the lamp alone. A red or yellow lamp names its reason on the
 without claude-swap's number (`me_example.com` matches `3-me_example.com`); a master runs there pinned or
 outside it on the global login (`/we:pin`). Left empty, the two
 red rules are off and only the yellow one holds.
+
+## Several humans
+
+A crew with `humans` (`scripts/crew.py` § Humans) spans several machines: each human runs
+`wclaude --start` with their own sessions, and the machines share only the repo, the ticketing
+system and chat. The ticket is the bus between them; chat only wakes a human. Each verb below reads
+this session's human (`WE_HUMAN`, else `git config user.email`) and names callers `<role>@<human>`.
+With `board.ticketing: jira` no verb reads the ticketing system itself: a first run prints the reads
+as `carry:` (`{"op": "search", "state", "jql"}`, `{"op": "read", "key", "fields"}`), the session runs
+them with its ticketing tool and hands the results back with `--input FILE`:
+
+```json
+{"hits": {"selected": ["PROJ-12", {"key": "PROJ-13", "changed": "2026-11-10T09:12:00.000+0000"}]},
+ "tickets": {"PROJ-20": {"labels": ["question-bob"],
+                         "comments": [{"author": "bob@example.com", "body": "accept · go", "created": "…"}]}}}
+```
+
+| Verb | What it does | Refusal |
+|---|---|---|
+| `select <KEY>` | as § Moves; in a crew with `humans` the caller must hold `roles.product` (group `role`), and the plan must be on `risk.rules_from` (group `plan on main`, every crew); after the transition it comments `selected by <role>@<human>, plan <blob>, panel ready-<KEY>` | `board.py select <KEY>: refused (role\|plan on main\|…)` |
+| `signals [--input FILE]` | for each `board.signals` entry `{state, role, jql_window}` whose role this human runs: the search `[<jql_scope> AND ]status changed to "<status>" after -<jql_window>`; each hit is one `todo` news item `S<n>` with `for` the role and `key`, once per key, state and `changed` (`board-signals.jsonl`); then the replies to this board's open `ask --to` questions (below) | — |
+| `claim <KEY> [--release] [--input FILE]` | the comment `claim <role>@<human> <session>` (or `release …`) on the ticket and a line in `board-claims.jsonl`; a claim lives `board.claim_hours` (default 4) from its comment, until released | `board.py claim <KEY>: refused: claimed by <role>@<human> (<session>) at <ts>, live for <n> h`, when another role or human holds a live claim on the ticket or in the local claims |
+| `ask … --to <human>` | as § Questions and decisions (the cold reader included), for a human on another machine: the item keeps `to` and `label`, the carry is the comment `<question_label> <labels.to> <Name> · <ask> · <labels.recommendation>: <recommendation>` and the label `<question_label lowercased>-<human>`; `--to` naming this session's own human is a plain `ask` | `--to` naming no human of the crew, or a `--key` that is a plan slug |
+
+**Replies.** `signals` reads the ticket of each open question this board sent with `--to`: a comment
+created after the question whose `author` is that human (email or name) or whose first word is
+`<role>@<human>` is a reply. Its first word, when it is one of `accept`, `deny`, `discuss`, `info`,
+`update`, is the answer kind, else `discuss`; the reply's text is the `quote`. It lands as an answer
+line with `via: ticket`, and the deliverer carries it to the asker like a press (§ Delivery); each
+reply once. The label taken off without a reply is the answer `update` (is the question still
+current?). The human who answers removes the label.
 
 ## Requirements
 
