@@ -123,6 +123,23 @@ class NewsOnPromptTest(unittest.TestCase):
         self.assertEqual(state["days"][wp.utc_day(time.time())]["hook_delivered"], 1)
         self.assertEqual(state["handoff_cursor"], 10, "the poller kept its cursor")
 
+    def test_a_busy_cursor_lock_still_shows_the_claimed_line(self):
+        """T2 acceptance lens on #197: the note is claimed before the lock; a busy lock skips
+        only the count, never the line."""
+        self.bind()
+        self.refused_wake()
+        target = wp.state_path("Nox")
+        fd = os.open(str(target.with_name(target.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o600)
+        wp.fcntl.flock(fd, wp.fcntl.LOCK_EX)
+        try:
+            line = self.run_hook()
+        finally:
+            os.close(fd)
+        self.assertIsNotNone(line)
+        self.assertIn("handoff for Nox from room:384", line)
+        day = wp.read_state("Nox")["days"].get(wp.utc_day(time.time()), {})
+        self.assertEqual(day.get("hook_delivered", 0), 0)
+
     def test_a_handoff_note_with_text_in_its_source_prints_nothing(self):
         self.news.mkdir(parents=True)
         wp.pending_path(SOCKET).write_text(

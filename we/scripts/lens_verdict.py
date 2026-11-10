@@ -116,6 +116,8 @@ loses one count, never a verdict.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -123,6 +125,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -540,6 +543,23 @@ def write(
     kind, subject = parse_id(vid)
     vdir = verdict_dir(root)
     path = vdir / f"{vid}.json"
+    with _locked(path):
+        return _write_locked(root, vid, lens, kind, subject, vdir, path, answer, failed, now)
+
+
+def _write_locked(
+    root: Path,
+    vid: str,
+    lens: str,
+    kind: str,
+    subject: str,
+    vdir: Path,
+    path: Path,
+    answer: str | None,
+    failed: str | None,
+    now: str | None,
+) -> dict[str, Any]:
+    """`write`'s read-modify-write, run under the panel's lock (two lenses recorded at once)."""
     doc = read_file(path)
     if lens not in doc["expected"]:
         raise RefusedError(f"lens {lens}: not expected in panel {vid}")
@@ -664,6 +684,33 @@ def _sample_slot(vdir: Path, lens: str, vid: str, binding: str, every: Any) -> b
     return isinstance(every, int) and every > 0 and (len(greens) + 1) % every == 0
 
 
+LOCK_WAIT_S = 10.0
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """An exclusive flock on `<verdict file>.lock`, waiting at most `LOCK_WAIT_S`."""
+    try:
+        fd = os.open(str(path.with_name(path.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise UnusableError(f"{path}.lock: {exc.strerror}") from exc
+    try:
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise UnusableError(
+                        f"{path}.lock: held longer than {LOCK_WAIT_S:g} s"
+                    ) from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)
+
+
 def _append(path: Path, obj: dict[str, Any]) -> None:
     try:
         fd = os.open(str(path), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
@@ -777,11 +824,12 @@ def sampled(root: Path, vid: str, lens: str) -> None:
         _append(vdir / "samples.jsonl", {**x, "read": True})
     path = vdir / f"{vid}.json"
     if path.is_file():
-        doc = read_file(path)
-        verdict = doc["verdicts"].get(lens)
-        if verdict is not None and verdict.get("sample"):
-            verdict["sampled"] = True
-            _write_atomic(path, doc)
+        with _locked(path):
+            doc = read_file(path)
+            verdict = doc["verdicts"].get(lens)
+            if verdict is not None and verdict.get("sample"):
+                verdict["sampled"] = True
+                _write_atomic(path, doc)
 
 
 # --- the panel comment ----------------------------------------------------------------------

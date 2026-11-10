@@ -38,6 +38,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import claude_home
+
 _FENCE = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1[^\n]*$", re.MULTILINE | re.DOTALL)
 _INLINE = re.compile(r"`[^`\n]*`")
 _URL = re.compile(r"https?://\S+")
@@ -168,7 +171,7 @@ _MANAGED = (
 
 def settings_files(payload: dict) -> list[Path]:
     """The settings files whose `permissions.deny` applies to this session."""
-    config = os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude")
+    config = str(claude_home.config_dir())
     project = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
     files = [Path(config) / "settings.json", *_MANAGED]
     if project:

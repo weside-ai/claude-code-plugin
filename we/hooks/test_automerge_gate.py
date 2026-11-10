@@ -1365,3 +1365,111 @@ def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc
         green["repo"], ARM, FakeGh([run()], head=green["head"], cards=[card]), monkeypatch
     )
     assert (red is None) is counts, red
+
+
+# Robustness review 09.11.: a broken import refuses merges; a query piped in from stdin stays refused.
+
+
+def _run_copy_without_modules(tmp_path: Path, command: str) -> str:
+    lonely = tmp_path / "lonely"
+    lonely.mkdir()
+    (lonely / "automerge_gate.py").write_text(Path(gate.__file__).read_text())
+    payload = {"tool_name": "Bash", "cwd": "/", "tool_input": {"command": command}}
+    proc = subprocess.run(
+        [sys.executable, "-I", str(lonely / "automerge_gate.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout
+
+
+def test_a_failed_import_denies_a_merge(tmp_path: Path) -> None:
+    out = json.loads(_run_copy_without_modules(tmp_path, ARM))["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert "cannot load its modules (ModuleNotFoundError" in out["permissionDecisionReason"]
+
+
+def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
+    assert _run_copy_without_modules(tmp_path, "ls -la") == ""
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
+        """echo '{"query": "{ repository(owner: o) { id } }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input - 0<arm.json""",
+    ],
+)
+def test_any_piped_stdin_query_stays_unseen(repo: Path, monkeypatch, command) -> None:
+    """T2 panel on #197, four rounds: every reading of `echo … | gh` had a way past it (printf,
+    braces, a redefined echo, `0<file`), so a piped query is refused as on main."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh api graphql -f query='query { viewer { login } }' && gh api graphql --input - < arm.json",
+        "cat payload.json | gh api graphql --input -  # query {",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - < arm.json""",
+    ],
+)
+def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
+    repo: Path, monkeypatch, command
+) -> None:
+    """Claude Review on #197: only the echo piped straight into this gh call counts."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """printf '%.0s%s' 'query {' "$(cat m.json)" | gh api graphql --input -""",
+        r"""printf '{"query":"query{a} m\165tation{e\156ablePullRequestAutoMerge(x)}"}' | gh api graphql --input -""",
+        """echo -e '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo "query { $Q }" | gh api graphql --input -""",
+        """echo `cat m.json` 'query {' | gh api graphql --input -""",
+        """echo {mu,}tation '{x:__typename' {mergePull,mergePull}'Request(input:{pullRequestId:"PR_kwDOabc",commitHeadline:"query {"}){clientMutationId}' 'y:__typename}' | gh api graphql -F query=@-""",
+        """echo 'query {' {a..b} | gh api graphql --input -""",
+        """echo 'query {' m* | gh api graphql --input -""",
+        """echo 'query {' ~/m.json | gh api graphql --input -""",
+        'echo() { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """echo() { cat m.json; } ; echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        'function echo { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """PATH=/tmp/x echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        """printf '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - && echo done""",
+        """printf '%s' '{"query": "{ repository(owner:\\"o\\") { id } }"}' | gh api graphql --input -""",
+    ],
+)
+def test_an_expanded_echo_or_printf_is_unseen_stdin(repo: Path, monkeypatch, command) -> None:
+    """T2 architecture lens on #197: the shell expands these after the hook reads them, so a
+    mutation can hide behind a read-only-looking word."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+def test_a_mutation_spelled_in_the_command_still_refuses_unseen(repo: Path, monkeypatch) -> None:
+    command = """echo '{"query":"mutation { x }"}' | gh api graphql --input -"""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+def test_a_body_edit_chained_before_the_arm_is_named_in_the_refusal(
+    repo: Path, monkeypatch
+) -> None:
+    chained = "gh pr edit 7 --body-file /tmp/b.md && " + ARM
+    reason = refuse(receipt_repo(repo), chained, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "receipt red on #7" in reason
+    assert "change the body in a command of its own, then arm" in reason
+
+
+def test_a_plain_refusal_carries_no_body_chain_note(repo: Path, monkeypatch) -> None:
+    reason = refuse(receipt_repo(repo), ARM, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "command of its own" not in reason

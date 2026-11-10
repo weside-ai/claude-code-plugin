@@ -52,7 +52,10 @@ Per cycle
     (``hooks/news_on_prompt.py``), cursor kept.
 
 Cursor file ``<dir>/<companion slug>.json`` (mode 600, read-modify-write under ``flock`` on
-``<file>.lock``, atomic replace), shared by every session of that companion:
+``<file>.lock``, atomic replace), shared by every session of that companion. The poller takes
+the lock as long as it takes, the prompt hook with a timeout (``LockTimeout`` past it), and nobody
+holds it across a delivery: a
+cycle decides under the lock, sends without it, then records the outcome under it again.
     ``handoff_cursor`` int or null — every handoff id up to it is delivered
     ``server_shape`` ``handoffs`` (default) or ``rooms`` — the rule the last cycle applied
                    (for ``status``; every cycle asks ``handoffs=true`` first)
@@ -292,16 +295,38 @@ def write_state(companion: str, state: dict) -> None:
     _write_atomic(state_path(companion), json.dumps(state, sort_keys=True))
 
 
+LOCK_WAIT_S = 10.0
+
+
+class LockTimeout(OSError):  # noqa: N818  (reads as the event, like TimeoutError's peers)
+    """The cursor file's lock stayed taken past the wait."""
+
+
 @contextlib.contextmanager
-def locked_state(companion: str):
-    """Yield the cursor file's state under its lock; the state is written back on exit."""
+def locked_state(companion: str, wait_s: float | None = LOCK_WAIT_S):
+    """Yield the cursor file's state under its lock; the state is written back on exit.
+
+    Raises ``LockTimeout`` when the lock is not free within ``wait_s`` seconds; ``None`` waits as
+    long as it takes (the poller: its own process, and a cursor it records after a delivery must
+    not be dropped, or the next cycle delivers again).
+    """
     target = state_path(companion)
     target.parent.mkdir(parents=True, exist_ok=True)
     lock = target.with_name(target.name + ".lock")
     fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        if fcntl is not None:
+        if fcntl is not None and wait_s is None:
             fcntl.flock(fd, fcntl.LOCK_EX)
+        elif fcntl is not None:
+            deadline = time.monotonic() + wait_s
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise LockTimeout(f"{lock} held longer than {wait_s:.0f} s") from None
+                    time.sleep(0.05)
         state = read_state(companion)
         yield state
         write_state(companion, state)
@@ -636,13 +661,13 @@ class Poller:
         self.resumed = False
 
     def start(self) -> None:
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             self.resumed = state["cursor"] is not None
             state["started"] = iso(self.clock())
 
     def _fail(self, cls: str, detail: str | None = None) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_error"] = {"class": cls, "at": iso(now)}
             if detail:
                 state["last_error"]["detail"] = detail
@@ -660,7 +685,7 @@ class Poller:
     def poll_once(self) -> str:
         """One cycle; returns ``ok``, ``error:<class>``, ``auth-exit`` or ``gone``."""
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             last_shape = state["server_shape"]
             bases = {"handoffs": state["handoff_cursor"], "rooms": state["cursor"]}
             bump(state, "polls", now)
@@ -682,7 +707,7 @@ class Poller:
                 if shape_of(answer) != "rooms":
                     raise PollError("format")
             if shape != last_shape:
-                with locked_state(self.companion) as state:
+                with locked_state(self.companion, wait_s=None) as state:
                     state["server_shape"] = shape
                 self.log(f"server shape {shape}")
         except PollError as exc:
@@ -696,7 +721,7 @@ class Poller:
 
     def _apply_handoffs(self, base: int | None, answer: dict) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_ok"] = iso(now)
             if state["handoff_cursor"] != base:
                 self.log("ok skipped (cursor moved by another poller)")
@@ -711,19 +736,29 @@ class Poller:
                 self.log(f"ok handoffs={len(handoffs)} held")
                 return "ok"
             text = render_handoffs(self.companion, handoffs)
-            try:
-                self.send(self.socket_path, self._token, text)
-            except SessionGoneError:
-                self.log("exit session gone")
-                return "gone"
-            except PollError:
+            # claim the send before the lock goes: a second poller of this companion sees the
+            # holdoff and holds instead of delivering the same handoff
+            state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
+        failed = self._send(text)
+        if failed == "gone":
+            with locked_state(self.companion, wait_s=None) as state:
+                state["holdoff"].pop(HANDOFF_KEY, None)  # the claim goes: the next session wakes
+            return "gone"
+        with locked_state(self.companion, wait_s=None) as state:
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            if failed:
                 write_pending(self.socket_path, self.companion, {"handoffs": handoffs}, now)
                 state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
                 state["last_error"] = {"class": "socket", "at": iso(now)}
                 bump(state, "errors", now)
                 self.log(f"pending note handoffs={len(handoffs)}")
                 return "error:socket"
-            state["handoff_cursor"] = answer["cursor"]
+            # as given (a reset server may go back), unless another poller moved it meanwhile:
+            # then never back
+            moved = state["handoff_cursor"] != base
+            state["handoff_cursor"] = (
+                max(answer["cursor"], state["handoff_cursor"] or 0) if moved else answer["cursor"]
+            )
             state["holdoff"][HANDOFF_KEY] = now + HOLDOFF_S
             bump(state, "wakes", now)
             self.log(f"wake delivered handoffs={len(handoffs)}")
@@ -731,7 +766,7 @@ class Poller:
 
     def _apply(self, base: int | None, answer: dict, since: bool) -> str:
         now = self.clock()
-        with locked_state(self.companion) as state:
+        with locked_state(self.companion, wait_s=None) as state:
             state["last_ok"] = iso(now)
             if state["cursor"] != base:
                 self.log("ok skipped (cursor moved by another poller)")
@@ -752,12 +787,18 @@ class Poller:
                 for f in wakeable
             ]
             text = render(self.companion, rooms, since)
-            try:
-                self.send(self.socket_path, self._token, text)
-            except SessionGoneError:
-                self.log("exit session gone")
-                return "gone"
-            except PollError:
+            for f in wakeable:  # the claim, as for handoffs
+                state["holdoff"][f["room"]] = now + HOLDOFF_S
+        failed = self._send(text)
+        if failed == "gone":
+            with locked_state(self.companion, wait_s=None) as state:
+                for f in wakeable:  # the claims go: the next session wakes
+                    state["holdoff"].pop(f["room"], None)
+            return "gone"
+        with locked_state(self.companion, wait_s=None) as state:
+            state["holdoff"] = {r: t for r, t in state["holdoff"].items() if t > now}
+            delivered, delivered_row = state["delivered"], state["delivered_row"]
+            if failed:
                 news = {"rooms": rooms, "since_last_session": since}
                 write_pending(self.socket_path, self.companion, news, now)
                 for f in wakeable:
@@ -766,17 +807,29 @@ class Poller:
                 bump(state, "errors", now)
                 self.log(f"pending note rooms={len(rooms)}")
                 return "error:socket"
+            # the send ran outside the lock: another poller that advanced meanwhile owns the
+            # cursor and its marks, this answer writes neither
+            moved = state["cursor"] != base
+            if not moved:
+                self._mark(delivered, delivered_row, wakeable)
             for f in wakeable:
-                if "unanswered" in f:
-                    delivered_row[f["room"]] = f["unanswered_newest"]
-                else:
-                    delivered[f["room"]] = f["count"]
                 state["holdoff"][f["room"]] = now + HOLDOFF_S
             bump(state, "wakes", now)
-            if len(wakeable) == len(fresh):
+            if not moved and len(wakeable) == len(fresh):
                 self._advance(state, base, answer["cursor"])
             self.log(f"wake delivered rooms={len(rooms)}")
             return "ok"
+
+    def _send(self, text: str) -> str | None:
+        """Deliver outside the cursor lock: None when sent, ``gone`` or ``failed``."""
+        try:
+            self.send(self.socket_path, self._token, text)
+        except SessionGoneError:
+            self.log("exit session gone")
+            return "gone"
+        except PollError:
+            return "failed"
+        return None
 
     def _fresh(self, rooms: list[dict], delivered: dict, delivered_row: dict) -> list[dict]:
         """The rooms with a line not yet delivered; ``waiting`` marks one still in its grace.
@@ -796,6 +849,15 @@ class Poller:
             if new > 0:
                 fresh.append(dict(item, new=new, waiting=False))
         return fresh
+
+    @staticmethod
+    def _mark(delivered: dict, delivered_row: dict, wakeable: list[dict]) -> None:
+        """Mark the woken rooms delivered: the newest unanswered row, else the count."""
+        for f in wakeable:
+            if "unanswered" in f:
+                delivered_row[f["room"]] = f["unanswered_newest"]
+            else:
+                delivered[f["room"]] = f["count"]
 
     @staticmethod
     def _advance(state: dict, base: int | None, cursor: int) -> None:

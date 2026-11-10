@@ -14,6 +14,8 @@ Deliberately narrow:
     an unreadable `--body-file`) it lets through: a hook that guesses wrong is
     worse than no hook. A `create` carrying **no** body flag at all (`--fill`)
     is not unresolvable — it is a claim with no receipt, and it blocks.
+  * Fail open on its own error: an exception while judging lets the command through with
+    one stderr line (`main`), for the reason above.
   * One transport. A PR opened through an MCP tool never reaches this code, and
     `--web` types its body in a browser we cannot read — the gate is armed against
     one spelling of the action.
@@ -425,7 +427,11 @@ def main() -> None:
     except Exception:
         return
 
-    reason = _refusal(payload)
+    try:
+        reason = _refusal(payload)
+    except Exception as exc:  # fail open: a gate that guesses wrong is worse than none (above)
+        print(f"verification_gate: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return
     if reason is None:
         return
 

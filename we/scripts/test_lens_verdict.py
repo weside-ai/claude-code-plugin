@@ -1007,3 +1007,40 @@ def test_a_corpus_case_names_an_added_line_and_its_panel_flags_it(repo, case):
         assert any(f["severity"] in severities and f["status"] == "standing" for f in hits), (
             f"{where}: stored {[f['severity'] for f in hits]}, expected one of {sorted(severities)}"
         )
+
+
+def test_parallel_writes_keep_every_lens(repo):
+    """Review 09.11.: three lenses recorded at once each land (read-modify-write under a lock)."""
+    import threading  # noqa: PLC0415
+
+    run("plan", "ready", KEY)
+    codes = []
+    threads = [
+        threading.Thread(
+            target=lambda lens=lens: codes.append(
+                run("write", f"ready-{KEY}", lens, stdin=GREEN)[0]
+            )
+        )
+        for lens in ("product", "architecture", "acceptance")
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert codes == [0, 0, 0]
+    assert run("check", f"ready-{KEY}")[1].splitlines()[-1] == f"panel ready-{KEY}: green"
+
+
+def test_a_held_panel_lock_refuses_after_the_wait(repo, monkeypatch):
+    import fcntl  # noqa: PLC0415
+
+    run("plan", "ready", KEY)
+    path = verdict_file(repo, f"ready-{KEY}")
+    fd = os.open(str(path.with_name(path.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    monkeypatch.setattr(lv, "LOCK_WAIT_S", 0.2)
+    try:
+        with pytest.raises(lv.UnusableError, match="held longer than"):
+            lv.write(repo, f"ready-{KEY}", "product", answer=GREEN)
+    finally:
+        os.close(fd)

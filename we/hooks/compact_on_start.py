@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """SessionStart hook, matcher ``compact``: give a compacted session its live context back.
 
+Fail open: an exception while rendering prints one stderr line and no context.
+
 Only in a repo with a crew; a ``--agent`` session (``agent_type``) gets nothing. A crew
 ``crew.py`` refuses (``CrewError``) is never silence: the head, the line
 ``<labels.crew_unreadable>: <reason>`` (``render_process.crew_notice`` over ``crew.fallback``),
@@ -276,7 +278,11 @@ def main() -> int:
         data = json.loads(sys.stdin.read() or "{}")
     except (ValueError, OSError):
         data = {}
-    text, error = render(data if isinstance(data, dict) else {}, os.environ)
+    try:
+        text, error = render(data if isinstance(data, dict) else {}, os.environ)
+    except Exception as exc:  # fail open: lost context is a comfort, never a reason to stall
+        print(f"compact_on_start: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return 0
     if error:
         print(error, file=sys.stderr)
         return 1

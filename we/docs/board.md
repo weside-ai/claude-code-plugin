@@ -220,7 +220,7 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 
 | Field | Meaning |
 |---|---|
-| `updated` | ISO timestamp of the last write; the header shows its age, yellow from 2 h, red from 8 h |
+| `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
@@ -406,7 +406,7 @@ the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--f
 another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
 `since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting
 line clears all three and on any other line changes nothing, so a hand-written `since` survives.
-`state` and `now` never touch `since`, and `set` never writes `updated` or `updated_by`.
+`state` and `now` never touch `since`; every `board.py` write of the coordinator stamps `updated`, none writes `updated_by`.
 
 **`ask` — a question for the owner.** Each session asks its own question with `board.py ask`;
 the coordinator owns the queue (answers, re-routing). The call is
