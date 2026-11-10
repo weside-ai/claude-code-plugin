@@ -78,10 +78,24 @@ proved nothing and the answer is refused as a finding without red arm (Kiska 04.
 in test form is never run: the finding stays ``standing`` with ``run: false``, whatever exit the
 caller recorded.
 
+Carried panel (T2 only): a panel bound to an older head ``old`` stays green on the PR's current
+head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
+the change ``old..new`` touches no file the PR's class hit: the PR is classified on
+``merge-base(<rules ref>, new)..new`` by ``risk_runner`` (the merge hook's own runner, rules and
+rules ref); class ``T0`` carries, a one-way class never does (its panel opens the self-merge
+window: every head gets a fresh one), otherwise the delta's files (``git diff --name-only old
+new``) must miss every hit line's file, and a class without hit lines carries nothing. A clean merge of the
+default branch therefore carries; a delta on a risk path, a head outside the PR's history, a red
+panel, no panel and any git or classifier failure do not. ``check`` prints ``panel <ID>: carried
+from <old> to <new> (<why>)`` in place of the stale line, or the stale line plus ``panel <ID>: not
+carried (<why>)``; ``check_t2`` returns the carried head, which the merge hook reads to take the
+security card from that head too. ``post`` posts a carried panel on the new head. The carry is
+computed on every ``check``; nothing is written.
+
 No skip, no override: no field can skip, confirm, waive or lift anything; ``skip``, ``override``,
 ``one_way``, ``go`` and every other unknown key are refused. A red panel turns green only through a
-fresh panel on a new plan blob or head. Any session can write this file, so it gates only a two-way
-T2 merge and the move to Selected; the one-way brake never reads it.
+fresh panel on a new plan blob or head; a green T2 panel is carried only as above. Any session
+can write this file, so it gates only a two-way T2 merge and the move to Selected; the one-way brake never reads it.
 
 Panel comment (T2): ``post`` puts the panel's state on GitHub, where a repo's self-merge judge reads
 it (a one-way PR outside the brake's core merges itself 2 h after a green panel on its head). The
@@ -116,6 +130,8 @@ loses one count, never a verdict.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -123,6 +139,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -133,6 +150,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew as crew_mod  # noqa: E402
+import risk_runner  # noqa: E402
 
 VERSION = 1
 TEXT_CHARS = 500
@@ -540,6 +558,23 @@ def write(
     kind, subject = parse_id(vid)
     vdir = verdict_dir(root)
     path = vdir / f"{vid}.json"
+    with _locked(path):
+        return _write_locked(root, vid, lens, kind, subject, vdir, path, answer, failed, now)
+
+
+def _write_locked(
+    root: Path,
+    vid: str,
+    lens: str,
+    kind: str,
+    subject: str,
+    vdir: Path,
+    path: Path,
+    answer: str | None,
+    failed: str | None,
+    now: str | None,
+) -> dict[str, Any]:
+    """`write`'s read-modify-write, run under the panel's lock (two lenses recorded at once)."""
     doc = read_file(path)
     if lens not in doc["expected"]:
         raise RefusedError(f"lens {lens}: not expected in panel {vid}")
@@ -664,6 +699,33 @@ def _sample_slot(vdir: Path, lens: str, vid: str, binding: str, every: Any) -> b
     return isinstance(every, int) and every > 0 and (len(greens) + 1) % every == 0
 
 
+LOCK_WAIT_S = 10.0
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """An exclusive flock on `<verdict file>.lock`, waiting at most `LOCK_WAIT_S`."""
+    try:
+        fd = os.open(str(path.with_name(path.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise UnusableError(f"{path}.lock: {exc.strerror}") from exc
+    try:
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise UnusableError(
+                        f"{path}.lock: held longer than {LOCK_WAIT_S:g} s"
+                    ) from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)
+
+
 def _append(path: Path, obj: dict[str, Any]) -> None:
     try:
         fd = os.open(str(path), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
@@ -693,11 +755,28 @@ def _carry_after(root: Path) -> int | None:
 def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, Any]]]:
     """``check`` plus the warnings a green Ready panel carries (``lens``, ``claim``, ``where``);
     the list is empty whenever the panel is red."""
+    green, lines, carried, _from = _check(root, vid)
+    return green, lines, carried
+
+
+def check_t2(
+    root: Path, vid: str, git: risk_runner.Git | None = None, timeout: float | None = None
+) -> tuple[bool, list[str], str | None]:
+    """``check`` plus the head a green T2 panel was carried from (see Carried panel), else None.
+    The merge hook reads it to take the security card from that head too, and passes its own
+    ``git`` and ``timeout`` so the carry stays inside its time budget."""
+    green, lines, _carried, carried_from = _check(root, vid, git, timeout)
+    return green, lines, carried_from
+
+
+def _check(
+    root: Path, vid: str, git: risk_runner.Git | None = None, timeout: float | None = None
+) -> tuple[bool, list[str], list[dict[str, Any]], str | None]:
     kind, subject = parse_id(vid)
     try:
         doc = read_file(verdict_dir(root) / f"{vid}.json")
     except RefusedError as exc:
-        return False, [str(exc), f"panel {vid}: red"], []
+        return False, [str(exc), f"panel {vid}: red"], [], None
     lines, green, carried = [], True, []
     carry_after: int | None = None
     round_, origin = panel_round(verdict_dir(root), doc)
@@ -708,10 +787,7 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
     except RefusedError as exc:
         now, green = None, False
         lines.append(str(exc))
-    if now is not None and now != doc["bound_to"]:
-        green = False
-        was, is_ = next(iter(doc["bound_to"].values())), next(iter(now.values()))
-        lines.append(f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})")
+    stale_at, stale = len(lines), now is not None and now != doc["bound_to"]
     for lens in doc["expected"]:
         v = doc["verdicts"].get(lens)
         if v is None:
@@ -742,11 +818,92 @@ def check_panel(root: Path, vid: str) -> tuple[bool, list[str], list[dict[str, A
         else:
             notes = sum(1 for f in v["findings"] if f["severity"] == "NOTE")
             lines.append(f"lens {lens}: green" + (f" ({notes} note)" if notes else ""))
+    carried_from = None
+    if stale:
+        rows, carried_from = _stale_rows(
+            root, vid, doc["bound_to"], now, kind == "t2" and green, git, timeout
+        )
+        green = green and carried_from is not None
+        lines[stale_at:stale_at] = rows
     if not green:
         carried = []
     state = "red" if not green else "green (warnings carried)" if carried else "green"
     lines.append(f"panel {vid}: {state}")
-    return green, lines, carried
+    return green, lines, carried, carried_from
+
+
+# --- the carried T2 panel --------------------------------------------------------------------
+
+
+def _stale_rows(
+    root: Path,
+    vid: str,
+    bound: dict[str, str],
+    now: dict[str, str],
+    may_carry: bool,
+    git: risk_runner.Git | None = None,
+    timeout: float | None = None,
+) -> tuple[list[str], str | None]:
+    """The lines of a moved binding and the head a green T2 panel was carried from, else None."""
+    was, is_ = next(iter(bound.values())), next(iter(now.values()))
+    stale = f"panel {vid}: stale (bound to {was[:8]}, now {is_[:8]})"
+    if not may_carry:
+        return [stale], None
+    carries, why = carry(
+        root,
+        was,
+        is_,
+        git or risk_runner.plain_git,
+        risk_runner.CLASSIFY_TIMEOUT if timeout is None else timeout,
+    )
+    if carries:
+        return [f"panel {vid}: carried from {was[:8]} to {is_[:8]} ({why})"], was
+    return [stale, f"panel {vid}: not carried ({why})"], None
+
+
+def carry(  # noqa: PLR0911
+    root: Path,
+    old: str,
+    new: str,
+    git: risk_runner.Git = risk_runner.plain_git,
+    timeout: float = risk_runner.CLASSIFY_TIMEOUT,
+) -> tuple[bool, str]:
+    """(carries, why): whether a green T2 panel on head ``old`` holds for head ``new`` (see
+    Carried panel). Any failure carries nothing. ``git`` and ``timeout`` are the caller's: the
+    merge hook passes its own, cut to its time budget."""
+    r = str(root)
+    found = risk_runner.rules(r, git)
+    if isinstance(found, str):
+        return False, f"the rules are not readable: {found}"
+    if git(r, "cat-file", "-e", f"{new}^{{commit}}") is None:
+        git(r, "fetch", "-q", "--no-tags", "origin", new, timeout=60)
+    if git(r, "merge-base", "--is-ancestor", old, new) is None:
+        return False, f"{old[:8]} is no ancestor of {new[:8]}"
+    if found is None:
+        return True, f"delta {old[:8]}..{new[:8]}: no risk rules here, T0"
+    rules_from = found[2]
+    if rules_from != risk_runner.RULES_FROM and not risk_runner.fetch_rules(r, rules_from, git):
+        return False, f"{rules_from} could not be fetched"
+    base = (git(r, "merge-base", rules_from, new) or "").strip()
+    delta = git(r, "diff", "--name-only", "--no-renames", old, new)
+    if not base or delta is None:
+        return False, f"no merge base or diff for {old[:8]}..{new[:8]}"
+    lines, why = risk_runner.run(r, git, found, new, base, timeout)
+    if lines is None:
+        return False, f"the PR's class is not computed: {why}"
+    if lines[0] == "T0":
+        return True, f"delta {old[:8]}..{new[:8]}: the PR is T0"
+    if risk_runner.CLASS_LINE.match(lines[0]).group(2):
+        # a one-way PR's panel opens its self-merge window: every head gets a fresh panel
+        return False, f"the PR is {lines[0]}; a one-way PR never carries its panel"
+    hits = {row.split("\t", 1)[0] for row in lines[2:] if "\t" in row}
+    if not hits:
+        return False, f"the PR is {lines[0]} and names no file it hit"
+    touched = sorted(hits & {f for f in delta.splitlines() if f.strip()})
+    if touched:
+        more = f" and {len(touched) - 3} more" if len(touched) > 3 else ""
+        return False, f"delta {old[:8]}..{new[:8]} touches {', '.join(touched[:3])}{more}"
+    return True, f"delta {old[:8]}..{new[:8]} touches no risk path, T0"
 
 
 def samples(root: Path, keeper: str | None = None) -> list[dict[str, Any]]:
@@ -777,11 +934,12 @@ def sampled(root: Path, vid: str, lens: str) -> None:
         _append(vdir / "samples.jsonl", {**x, "read": True})
     path = vdir / f"{vid}.json"
     if path.is_file():
-        doc = read_file(path)
-        verdict = doc["verdicts"].get(lens)
-        if verdict is not None and verdict.get("sample"):
-            verdict["sampled"] = True
-            _write_atomic(path, doc)
+        with _locked(path):
+            doc = read_file(path)
+            verdict = doc["verdicts"].get(lens)
+            if verdict is not None and verdict.get("sample"):
+                verdict["sampled"] = True
+                _write_atomic(path, doc)
 
 
 # --- the panel comment ----------------------------------------------------------------------
@@ -807,17 +965,17 @@ def post(root: Path, vid: str) -> tuple[bool, list[str]]:
     doc = read_file(verdict_dir(root) / f"{vid}.json")
     bound = doc["bound_to"].get("head", "")
     now = current_binding(root, kind, subject)["head"]
-    if now != bound:
+    green, lines, carried_from = check_t2(root, vid)
+    if now != bound and carried_from is None:
         raise RefusedError(
             f"post: panel {vid} is stale (bound to {bound[:8]}, now {now[:8]}); nothing posted"
         )
-    green, lines = check(root, vid)
     gh = shutil.which("gh")
     if gh is None:
         raise RefusedError("post: gh not found; nothing posted")
     out = subprocess.run(
         [gh, "pr", "comment", subject, "--body-file", "-"],
-        input=panel_comment(int(subject), bound, green, lines),
+        input=panel_comment(int(subject), now, green, lines),
         capture_output=True,
         text=True,
         check=False,
@@ -827,7 +985,7 @@ def post(root: Path, vid: str) -> tuple[bool, list[str]]:
         why = (out.stderr.strip().splitlines() or [f"exit {out.returncode}"])[-1]
         raise RefusedError(f"post: gh pr comment failed ({why}); nothing posted")
     word = "PASS" if green else "FAIL"
-    return green, [f"posted: t2-panel {word} on #{subject} @ {bound[:12]}"]
+    return green, [f"posted: t2-panel {word} on #{subject} @ {now[:12]}"]
 
 
 # --- CLI -------------------------------------------------------------------------------------

@@ -66,7 +66,7 @@ background nobody answers a prompt; a window worker stays ``auto`` with selectab
 the background answers no prompt); ``worker_timer``: a script ``we-worker`` registers each worker's time
 limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
 and starts with ``--apply``; ``/we:start`` offers it), ``release``, ``cadences``,
-``files``, ``coldstart``, ``state_dir`` (the folder of the crew's board family and
+``files``, ``state_dir`` (the folder of the crew's board family and
 ``l0-served.jsonl``: a ``~`` path or one relative to the crew file's directory in the repo's main
 worktree, so every worktree names the same folder; null, the default,
 is ``~/.claude/we-state``; ``WE_STATE_DIR`` wins over it, see ``state_dir()``), ``flow`` (the flow log: ``log_dir`` (null = no sampler bound, every
@@ -217,7 +217,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "oracles": {
         "receipt_dir": None,
-        "receipt_schema": None,
         "receipt_check": None,
         "walk_paths": [],
     },
@@ -253,9 +252,7 @@ DEFAULTS: dict[str, Any] = {
         "restore": None,
     },
     "release": {
-        "rc_job": None,
         "runbook": None,
-        "prod_on": "human",
         "staging_booking_label": "staging-booking",
         "staging_acceptance_label": "staging-acceptance",
         "staging_past_sla_label": "past-sla",
@@ -270,7 +267,6 @@ DEFAULTS: dict[str, Any] = {
         "goal_file": "monthly",
     },
     "files": {"goals": None, "dod": None, "verify": None},
-    "coldstart": {"suite": None},
     "flow": {"log_dir": None, "stale_min": 15, "starter_wait_min": 30, "urgent_commands": []},
 }
 # a null default takes a string or null; these take a number or null
@@ -282,9 +278,18 @@ NUMBER_OR_NULL = (
 # a number default that also takes null (null = off)
 NUMBER_OR_OFF = ("acceptance.done_sample",)
 # keys no release reads any more: skipped with a stderr line instead of refused as unknown
-RETIRED_KEYS = ("capacity",)
+RETIRED_KEYS = (
+    "capacity",
+    "coldstart",
+    "release.prod_on",
+    "release.rc_job",
+    "oracles.receipt_schema",
+)
 STUB_MARKER = "<!-- we:stub"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "companion-skill" / "SKILL.md"
+# A member whose working notes already live in the repo addendum (`.weside/roles/<slug>.md`) gets
+# the pointer skill: it names the addendum instead of a skeleton to fill.
+POINTER_TEMPLATE = TEMPLATE.with_name("pointer.md")
 _SAFE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
 DEFAULT_STATE_DIR = "~/.claude/we-state"
 BOARD_NAME = "board.json"
@@ -493,10 +498,14 @@ def _without(data: dict[str, Any], paths: list[tuple[str, ...]]) -> dict[str, An
 
 
 def _drop_retired(path: Path, data: dict[str, Any]) -> None:
-    for key in RETIRED_KEYS:
-        if key in data:
-            del data[key]
-            print(f"crew: {key} is no longer read; remove it from {path}", file=sys.stderr)
+    for dotted in RETIRED_KEYS:
+        *parents, leaf = dotted.split(".")
+        node: Any = data
+        for part in parents:
+            node = node.get(part) if isinstance(node, dict) else None
+        if isinstance(node, dict) and leaf in node:
+            del node[leaf]
+            print(f"crew: {dotted} is no longer read; remove it from {path}", file=sys.stderr)
 
 
 def _drop_former_lenses(path: Path, data: dict[str, Any]) -> None:
@@ -965,7 +974,9 @@ def skill_path(name: str, cwd: str | Path, home: Path | None = None) -> tuple[Pa
     return None
 
 
-def render_stub(crew: dict[str, Any], slug: str) -> str:
+def render_stub(crew: dict[str, Any], slug: str, pointer: bool = False) -> str:
+    """The member's role skill: the stub to fill, or with ``pointer`` the skill that names its
+    repo addendum ``.weside/roles/<slug>.md``."""
     entry = members(crew)[slug]
     name = str(entry.get("name") or slug).strip()
     components = ", ".join(str(c) for c in entry.get("components") or []) or "none"
@@ -975,8 +986,9 @@ def render_stub(crew: dict[str, Any], slug: str) -> str:
         "role": label(crew, slug) or "member",
         "components": components,
         "coordinator": holder_name(crew, "coordinator") or "the coordinator",
+        "slug": slug,
     }
-    text = TEMPLATE.read_text(encoding="utf-8")
+    text = (POINTER_TEMPLATE if pointer else TEMPLATE).read_text(encoding="utf-8")
     end = text.index("\n---", 3) + 4  # the frontmatter: values go into double-quoted YAML
     head, body = text[:end], text[end:]
     for key, value in values.items():
@@ -987,7 +999,8 @@ def render_stub(crew: dict[str, Any], slug: str) -> str:
 
 
 def stubs(crew_path: Path, crew: dict[str, Any], write: bool = False) -> list[str]:
-    """One line per member without a role skill in its workplace: the path (written with --write)."""
+    """One line per member without a role skill in its workplace: the path (written with --write;
+    the pointer skill when ``.weside/roles/<slug>.md`` exists beside the crew file)."""
     lines = []
     for slug, entry in members(crew).items():
         name = str(entry.get("name") or "").strip()
@@ -999,8 +1012,9 @@ def stubs(crew_path: Path, crew: dict[str, Any], write: bool = False) -> list[st
         if target.exists():
             continue
         if write:
+            addendum = crew_path.parent / "roles" / f"{slug}.md"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(render_stub(crew, slug), encoding="utf-8")
+            target.write_text(render_stub(crew, slug, addendum.is_file()), encoding="utf-8")
         lines.append(str(target))
     return lines
 

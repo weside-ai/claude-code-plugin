@@ -16,7 +16,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
 ## Choosing the worker
 
 - Dispatch shape: § Worker launch backend. A repo with a crew starts every `we:dev-*` worker through
-  `agents.worker_launch` as a session of its own; only a repo without a crew (or a crew's
+  the template `worker_launch.py backend` prints (the crew's `launch.worker`) as a session of its own; only a repo without a crew (or a crew's
   fallback, § Worker launch backend) uses `Agent(name=…, subagent_type="we:dev-medium" | "we:dev-high", isolation="worktree", description=…, prompt=<brief>)`.
   A `name` without `isolation` opens a teammate pane; off by default (owner, 30.10.2026), the hook
   `teammate_gate.py` refuses it unless `.weside/config.json` sets `agents.visible_teammates: true`.
@@ -67,8 +67,8 @@ master role card. `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py backen
 template in force; the master's boot check and `/we:accept` read it there.
 
 - A repo with a crew: a command template (below), never `"subagent"` (L0 §Sessions: build only in
-  workers; a subagent reads and reviews, never builds). Until the launcher refuses the `subagent`
-  backend itself, the master checks the setting before the first dispatch and asks the coordinator
+  workers; a subagent reads and reviews, never builds). The launcher does not refuse the `subagent`
+  backend itself: the master checks the setting before the first dispatch and asks the coordinator
   for a template when it is unset. One opt-in exception, checked at boot: when the first word of the
   template `worker_launch.py backend` prints is not on the host's `PATH` (`command -v`; a
   colleague's machine without the launcher), a crew with `launch.subagent_fallback: true` lets the
@@ -105,7 +105,7 @@ With a template, the Lead:
    `TaskStop`, once its report is integrated or dropped, also after exit 4: it removes the marker
    and the brief, then the worktree can go or the Lead can work in it.
 
-The plugin ships such a launcher: `scripts/we-worker` (installed next to `wclaude` by
+The plugin ships a launcher: `scripts/we-worker` (installed next to `wclaude` by
 `scripts/install_launcher.py`; `we-worker --help`), with the verbs
 `status|stop|logs|waiting|checkpoint`; `worker_launch.py stop` uses its `stop` when the template
 starts with it. `stop` and `checkpoint` touch workers only: a name that hits a master or companion
@@ -131,11 +131,9 @@ refuses its merge as for a subagent.
   default branch, or edits files outside its chunk. It pushes only when the brief says `Push: yes`, or when the Lead
   says a quota end is near: then it commits its phase and pushes it to `wip/<KEY>-<slug>`. Every push
   is preceded by the conflict check of `/we:ci-review` § 3 (merge `origin/<default-branch>` only on a conflict).
-- No wait loops and no `sleep` in the foreground (`for … sleep … gh pr checks`, `for f in …; git
-  show …`): the auto mode holds them as a permission prompt, and the worker then waits for a human.
-  The worker waits on CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background
-  (`run_in_background`) or through a Monitor. Background output is not polled with `tail` or `cat`
-  on its task file (that, too, stops as a prompt): wait for the notification.
+- No wait loops and no `sleep` in the foreground: the auto mode holds them as a permission prompt. Wait on
+  CI with `watch-pr-checks.sh` or `gh pr checks --watch` in the background, or for the notification;
+  never poll a task file with `tail`/`cat` (a process worker's card says the same: `roles/worker.md`).
 - The worker reads and searches with the Read, Grep and Glob tools on absolute paths, never with
   `cd <dir> && grep …` or `cat`/`rg` through Bash: a compound `cd` asks for permission and leaves the
   worker in a tree that is not its own; git runs as `git -C <worktree> …`.
@@ -150,11 +148,8 @@ refuses its merge as for a subagent.
   a network service is skipped and listed, unless the brief names an integration suite for a
   critical chunk (money, auth, tenant isolation, migration): then the worker runs it and quotes the
   last 20 lines in the report.
-- A gate run that ended without a verdict (killed, aborted, timed out, out of memory, a worker pool
-  that broke) is never restarted automatically, neither by the worker nor by a loop or a monitor: the
-  worker reads why it ended and reports it, and only a run it has answered with a fix runs again. On a
-  shared host the cause is usually another heavy run; a second start doubles the load (30.10.2026:
-  restarted gate runs took a shared host past its memory limit twice).
+- A gate run that ended without a verdict, and the other measured traps of shared trees:
+  `references/session-traps.md`; only a run the worker answered with a fix runs again.
 - A mutation run the plan or repo asks for happens inside the chunk, right after its seam tests are
   green and before the report, never as a step after the PR: run after a green PR it cost a second
   CI round and let a parallel migration land first (64 of 201 min, 17.10.2026).

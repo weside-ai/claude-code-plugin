@@ -12,7 +12,7 @@ export type Evidence = {
   aheadBranches: string[]
 }
 
-// Codex Review is advisory (AUTHORING.md § Measured facts): its red never makes a PR red here.
+// Codex Review never makes a PR red here; the merge gate (hooks/automerge_gate.py) waits for its verdict instead.
 const ADVISORY = /codex review/i
 const RED = new Set(['FAILURE', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR'])
 

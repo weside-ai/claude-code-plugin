@@ -34,9 +34,8 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
    follow-up PR from `origin/<base>`, never a push to the merged branch. Ticket: link the PR to it and move
    no status (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`); In Review follows the merge through
    `/we:merged` (L0 §Lifecycle).
-5. Report the URL. Auto-merge is the default: when the base branch requires the Codex check, arm it on a
-   ready PR right after create, otherwise `/we:ci-review <PR>` arms it once green. The one merge brake is
-   the one-way class (master § Close the run).
+5. Report the URL. Who arms and when: the table in `/we:master` § Close the run (a `T0` PR whose base
+   branch requires the Codex check is armed right after create, otherwise `/we:ci-review <PR>` arms it once green).
    A body with a `receipt red` line is not armed (`automerge_gate.py` refuses): rerun step 3 once the receipt is green.
 6. Arm the watcher as a background command: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <head>
    --until-merged`. The watch follows L0 §Sessions (a worker until green, its starter until the merge).

@@ -63,12 +63,14 @@ class FakeGh:
         node: dict | None = None,
         view_fail: bool = False,
         cards: list | None = None,
+        names: tuple[str, str] = ("feat/x", "A change"),
     ):
         self.runs, self.comments, self.fail, self.calls = runs, list(comments), fail, []
         self.body, self.head, self.node, self.view_fail = body, head, node, view_fail
         self.rules, self.protection, self.rules_fail = rules or [], protection, rules_fail
         # issue comments for the card read: a body (by a MEMBER) or (body, association, user type)
         self.cards = [c if isinstance(c, tuple) else (c, "MEMBER", "User") for c in cards or []]
+        self.names = names
 
     def __call__(self, args: list[str], _cwd: str | None) -> str | None:  # noqa: PLR0911
         self.calls.append(args)
@@ -85,6 +87,7 @@ class FakeGh:
         if args[:2] == ["pr", "view"]:
             url = "https://github.com/o/r/pull/7"
             pr = {"headRefOid": self.head, "number": 7, "url": url, "baseRefName": "main"}
+            pr["headRefName"], pr["title"] = self.names
             return json.dumps(pr)
         if args[0] == "api" and args[1] == "repos/o/r/issues/7/comments":
             rows = [{"body": b, "assoc": a, "type": t} for b, a, t in self.cards]
@@ -1365,3 +1368,223 @@ def test_only_the_crew_or_an_installed_app_signs(green: dict, monkeypatch, assoc
         green["repo"], ARM, FakeGh([run()], head=green["head"], cards=[card]), monkeypatch
     )
     assert (red is None) is counts, red
+
+
+# Robustness review 09.11.: a broken import refuses merges; a query piped in from stdin stays refused.
+
+
+def _run_copy_without_modules(tmp_path: Path, command: str) -> str:
+    lonely = tmp_path / "lonely"
+    lonely.mkdir()
+    (lonely / "automerge_gate.py").write_text(Path(gate.__file__).read_text())
+    payload = {"tool_name": "Bash", "cwd": "/", "tool_input": {"command": command}}
+    proc = subprocess.run(
+        [sys.executable, "-I", str(lonely / "automerge_gate.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout
+
+
+def test_a_failed_import_denies_a_merge(tmp_path: Path) -> None:
+    out = json.loads(_run_copy_without_modules(tmp_path, ARM))["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert "cannot load its modules (ModuleNotFoundError" in out["permissionDecisionReason"]
+
+
+def test_a_failed_import_lets_other_commands_go(tmp_path: Path) -> None:
+    assert _run_copy_without_modules(tmp_path, "ls -la") == ""
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input -""",
+        """echo '{"query": "{ repository(owner: o) { id } }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { viewer { login } }"}' | gh api graphql --input - 0<arm.json""",
+    ],
+)
+def test_any_piped_stdin_query_stays_unseen(repo: Path, monkeypatch, command) -> None:
+    """T2 panel on #197, four rounds: every reading of `echo … | gh` had a way past it (printf,
+    braces, a redefined echo, `0<file`), so a piped query is refused as on main."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh api graphql -f query='query { viewer { login } }' && gh api graphql --input - < arm.json",
+        "cat payload.json | gh api graphql --input -  # query {",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - < arm.json""",
+    ],
+)
+def test_a_read_only_query_elsewhere_does_not_open_this_stdin(
+    repo: Path, monkeypatch, command
+) -> None:
+    """Claude Review on #197: only the echo piped straight into this gh call counts."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        """printf '%.0s%s' 'query {' "$(cat m.json)" | gh api graphql --input -""",
+        r"""printf '{"query":"query{a} m\165tation{e\156ablePullRequestAutoMerge(x)}"}' | gh api graphql --input -""",
+        """echo -e '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo "query { $Q }" | gh api graphql --input -""",
+        """echo `cat m.json` 'query {' | gh api graphql --input -""",
+        """echo {mu,}tation '{x:__typename' {mergePull,mergePull}'Request(input:{pullRequestId:"PR_kwDOabc",commitHeadline:"query {"}){clientMutationId}' 'y:__typename}' | gh api graphql -F query=@-""",
+        """echo 'query {' {a..b} | gh api graphql --input -""",
+        """echo 'query {' m* | gh api graphql --input -""",
+        """echo 'query {' ~/m.json | gh api graphql --input -""",
+        'echo() { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """echo() { cat m.json; } ; echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        'function echo { cat m.json; }\necho \'{"query":"query { x }"}\' | gh api graphql --input -',
+        """PATH=/tmp/x echo '{"query":"query { x }"}' | gh api graphql --input -""",
+        """printf '{"query":"query { x }"}' | gh api graphql --input -""",
+        """echo '{"query":"query { x }"}' | gh api graphql --input - && echo done""",
+        """printf '%s' '{"query": "{ repository(owner:\\"o\\") { id } }"}' | gh api graphql --input -""",
+    ],
+)
+def test_an_expanded_echo_or_printf_is_unseen_stdin(repo: Path, monkeypatch, command) -> None:
+    """T2 architecture lens on #197: the shell expands these after the hook reads them, so a
+    mutation can hide behind a read-only-looking word."""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+def test_a_mutation_spelled_in_the_command_still_refuses_unseen(repo: Path, monkeypatch) -> None:
+    command = """echo '{"query":"mutation { x }"}' | gh api graphql --input -"""
+    reason = refuse(repo, command, FakeGh([run()], node=NODE), monkeypatch)
+    assert reason is not None and "comes from stdin" in reason
+
+
+def test_a_body_edit_chained_before_the_arm_is_named_in_the_refusal(
+    repo: Path, monkeypatch
+) -> None:
+    chained = "gh pr edit 7 --body-file /tmp/b.md && " + ARM
+    reason = refuse(receipt_repo(repo), chained, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "receipt red on #7" in reason
+    assert "change the body in a command of its own, then arm" in reason
+
+
+def test_a_plain_refusal_carries_no_body_chain_note(repo: Path, monkeypatch) -> None:
+    reason = refuse(receipt_repo(repo), ARM, FakeGh([run()], body=RED), monkeypatch)
+    assert reason is not None and "command of its own" not in reason
+
+
+# The carried T2 panel (lens_verdict.check_t2): the card on the carried head holds too.
+
+FAKE_LENS_T2 = """
+from pathlib import Path
+def check(root, vid):
+    raise AssertionError("check_t2 is preferred")
+def check_t2(root, vid, git=None, timeout=None):
+    assert git is not None and timeout is not None, "the hook passes its own git and budget"
+    old = Path(root, ".lens-carried").read_text()
+    return True, ["panel " + vid + ": carried from " + old[:8], "panel " + vid + ": green"], old
+"""
+
+
+@pytest.fixture()
+def carried(classed: dict, monkeypatch, tmp_path_factory) -> dict:
+    path = tmp_path_factory.mktemp("lens2") / "lens_verdict.py"
+    path.write_text(FAKE_LENS_T2)
+    monkeypatch.setattr(gate, "LENS_VERDICT", path)
+    (classed["repo"] / ".lens-carried").write_text(classed["main"])
+    return classed
+
+
+def test_a_card_pass_on_the_carried_head_lets_it_merge(carried: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    fake = FakeGh([run()], head=carried["head"], cards=[_card(carried["main"][:10])])
+    assert refuse(carried["repo"], ARM, fake, monkeypatch) is None
+    assert any("security card carried from" in n for n in gate.NOTICES)
+
+
+def test_a_card_verdict_on_the_new_head_beats_the_carried_pass(carried: dict, monkeypatch) -> None:
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    cards = [_card(carried["main"][:10]), _card(carried["head"][:10], "BLOCKING")]
+    fake = FakeGh([run()], head=carried["head"], cards=cards)
+    red = refuse(carried["repo"], ARM, fake, monkeypatch)
+    assert red is not None and "the card verdict on this head is BLOCKING" in red
+
+
+def test_a_card_on_an_older_head_without_a_carry_still_refuses(green: dict, monkeypatch) -> None:
+    """Red arm for the carry: the plain `check` reader names no carried head."""
+    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
+    fake = FakeGh([run()], head=green["head"], cards=[_card(green["main"][:10])])
+    assert "the last card verdict is on the older head" in refuse(
+        green["repo"], ARM, fake, monkeypatch
+    )
+
+
+# Plan first: a story's code PR merges once its plan is on origin/main and the story is Selected.
+
+PLAN = "docs/plans/PROJ-5-story.md"
+STORY = ("feat/PROJ-5-thing", "PROJ-5 the thing")
+
+
+def _move(state: Path, to: str) -> None:
+    with (state / "board-transitions.jsonl").open("a") as f:
+        f.write(json.dumps({"key": "PROJ-5", "from": "x", "to": to}) + "\n")
+
+
+@pytest.fixture()
+def story(classed: dict, monkeypatch) -> dict:
+    monkeypatch.setenv("FAKE_CLASS", "T0")
+    return classed
+
+
+def test_a_story_pr_whose_plan_is_not_on_main_is_refused(story: dict, monkeypatch) -> None:
+    head = _commit(story["repo"], {PLAN: "# plan\n", "app.py": "x = 1\n"}, "plan and code")
+    for command in (ARM, "gh pr merge 7 --squash"):
+        red = refuse(story["repo"], command, FakeGh([run()], head=head, names=STORY), monkeypatch)
+        assert red is not None, command
+        assert f"story PROJ-5, whose plan `{PLAN}` is not on origin/main yet: plan first" in red
+
+
+def test_the_plan_pr_itself_passes(story: dict, monkeypatch) -> None:
+    _git(story["repo"], "reset", "-q", "--hard", story["main"])
+    head = _commit(story["repo"], {PLAN: "# plan\n"}, "plan only")
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+
+
+def _plan_on_main(story: dict) -> str:
+    main = _commit(story["repo"], {PLAN: "# plan\n"}, "plan lands")
+    _publish_main(story["repo"], main)
+    return _commit(story["repo"], {"app.py": "x = 1\n"}, "code")
+
+
+@pytest.mark.parametrize("state", ["backlog", "on_hold"])
+def test_a_story_before_selected_is_refused(
+    story: dict, monkeypatch, _isolated_state: Path, state: str
+) -> None:
+    head = _plan_on_main(story)
+    _move(_isolated_state, "selected")
+    _move(_isolated_state, state)
+    red = refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch)
+    assert red is not None and f"story PROJ-5, which is `{state}` on the board" in red
+    assert "`board.py select PROJ-5`" in red
+
+
+@pytest.mark.parametrize("moves", [["selected"], ["selected", "in_progress"], []])
+def test_a_selected_or_unlogged_story_with_its_plan_on_main_passes(
+    story: dict, monkeypatch, _isolated_state: Path, moves: list
+) -> None:
+    head = _plan_on_main(story)
+    for to in moves:
+        _move(_isolated_state, to)
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+
+
+def test_a_pr_without_a_story_plan_is_untouched(story: dict, monkeypatch) -> None:
+    head = _commit(story["repo"], {"app.py": "x = 1\n"}, "code")
+    assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
+    fake = FakeGh([run()], head=head, names=("fix/typo", "Fix a typo"))
+    assert refuse(story["repo"], ARM, fake, monkeypatch) is None

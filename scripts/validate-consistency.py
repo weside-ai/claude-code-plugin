@@ -33,6 +33,11 @@ silently return:
    cache (`plugins/cache/weside-ai/we/*`), and every file of RESOLVER_FILES carries the one
    resolver RESOLVER verbatim (a copy in a Markdown list or YAML block indented by 3 or 8 spaces), two crews, AC7.
 
+12. Layout — the `## Layout` block of AGENTS.md names every hook, plugin script, agent,
+   process template and repo check file (tests aside).
+13. Plugin-root paths — every `${CLAUDE_PLUGIN_ROOT}/<path>` in hooks.json and in a shipped
+   file under we/ exists (patterns and tests skipped).
+
 Stdlib only. Exit 1 on any finding.
 
 Usage:
@@ -609,6 +614,73 @@ def check_install_resolver(root: Path = REPO) -> None:
 ROOT_CHECKS["install-resolver"] = check_install_resolver
 
 
+# --- Check 12: AGENTS.md § Layout names every file it maps -------------------------------------
+LAYOUT_GLOBS = ("we/hooks/*.py", "we/scripts/*", "we/agents/*.md", "we/process/*.md", "scripts/*")
+
+
+def check_agents_layout(root: Path = REPO) -> None:
+    """Every hook, plugin script, agent, process template and repo check file (tests aside) is
+    named in the `## Layout` block of AGENTS.md, by file name or by stem."""
+    agents = root / "AGENTS.md"
+    if not agents.is_file():
+        fail("AGENTS.md: missing, the layout check has nothing to read")
+        return
+    text = agents.read_text(encoding="utf-8")
+    start = text.find("## Layout")
+    end = text.find("\n## ", start + 1)
+    layout = text[start : end if end != -1 else None] if start != -1 else ""
+    if not layout:
+        fail("AGENTS.md: no `## Layout` section")
+        return
+    for pattern in LAYOUT_GLOBS:
+        for path in sorted(root.glob(pattern)):
+            if not path.is_file() or _is_test_file(path) or path.name.startswith("."):
+                continue
+            if path.name not in layout and path.stem not in layout:
+                fail(f"AGENTS.md § Layout: {path.relative_to(root).as_posix()} is not named")
+
+
+ROOT_CHECKS["agents-layout"] = check_agents_layout
+
+
+# --- Check 13: every path under the plugin root exists ------------------------------------------
+_PLUGIN_ROOT_PATH = re.compile(r"\$\{?CLAUDE_PLUGIN_ROOT\}?/([A-Za-z0-9_./-]+)")
+
+
+def check_plugin_root_paths(root: Path = REPO) -> None:
+    """Every `${CLAUDE_PLUGIN_ROOT}/<path>` in hooks.json and in a shipped skill, reference,
+    agent, role, process file or script names a file of the plugin (a path with `<`, `*` or `{`
+    is a pattern and skipped; test files are fixtures). A renamed script otherwise breaks the
+    hook or the skill only when it runs."""
+    we = root / "we"
+    files = [we / "hooks" / "hooks.json"] + [
+        p
+        for p in sorted(we.rglob("*"))
+        if p.is_file()
+        and p.suffix in (".md", ".sh", ".py", ".ts", ".tsx", ".json")
+        and not _is_test_file(p)
+    ]
+    seen: set[Path] = set()
+    for path in files:
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for m in _PLUGIN_ROOT_PATH.finditer(text):
+            rel = m.group(1).rstrip(".")
+            end = m.end()
+            if not rel or (end < len(text) and text[end] in "<*{"):
+                continue
+            if not (we / rel).exists():
+                line = text.count("\n", 0, m.start()) + 1
+                fail(
+                    f"{path.relative_to(root)}:{line}: '${{CLAUDE_PLUGIN_ROOT}}/{rel}' does not exist"
+                )
+
+
+ROOT_CHECKS["plugin-root-paths"] = check_plugin_root_paths
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, help="run the --check checks on this tree")
@@ -631,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
         check_orchestrate_template()
         check_neutral_skills()
         check_install_resolver()
+        check_agents_layout()
+        check_plugin_root_paths()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")

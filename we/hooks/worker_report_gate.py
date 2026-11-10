@@ -97,7 +97,11 @@ def main() -> None:
         payload = json.load(sys.stdin)
     except ValueError:
         return
-    reason = decide(payload)
+    try:
+        reason = decide(payload)
+    except Exception as exc:  # fail open: a comfort gate never traps a worker in its turn
+        print(f"worker_report_gate: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return
     if reason:
         print(json.dumps({"decision": "block", "reason": reason}))
 

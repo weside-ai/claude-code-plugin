@@ -88,12 +88,13 @@ no confirm: the invocation is the go.
 
 ## Refine lane
 
-A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start (L0 §Lifecycle: the epic's
+A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start in a detached worktree of its own
+(`git worktree add --detach <path> origin/<default>`; the brief's `Tree:` names it) (L0 §Lifecycle: the epic's
 master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
 fork you cannot settle → write `## Open Fork` and stop". It ends with the tree limits, verbatim
-(refiners that `cd`'d into the main checkout or a job directory read and wrote the wrong tree):
+(a refiner that `cd`s out of its tree reads and writes the wrong one):
 
 ```
 Tree: <absolute path of the tree you were started in> is your only tree; every path you use is absolute and inside it.
@@ -118,8 +119,12 @@ merged artifact its plan names, not the whole story) and every story without a p
 limit (L0 §Sessions) is reached. Two stories whose plans touch the same files never run in parallel: the second
 waits for the first one's merge.
 
-**Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it),
-pull the story: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
+**Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it).
+When only CI holds the plan's docs PR, the build may start once the Ready panel is green on the plan
+blob, before the pull: `board.py select` needs the plan on the default branch (with a crew
+`risk.command` its tier fails until then), and In Progress needs Selected. The code PR carries the
+line `plan: waits for <docs PR> and Selected`; once the docs PR merged, run `board.py select`, pull
+the story, then arm (L0 §Units; no gate checks this yet). Otherwise pull the story first: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
 (L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
 § Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
@@ -134,6 +139,7 @@ Branch: <type>/<KEY>-<slug> (-p<N> for a parallel chunk); rename `worktree-…` 
 [Base: first `git merge <PR branch>` — the chunk builds on it.]
 Bootstrap: <commands from .weside/orchestrate.md>.
 Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker contract.
+Traps: ${CLAUDE_PLUGIN_ROOT}/references/session-traps.md (stash, HEAD after commit, watcher exit 0, gate lock).
 Tests: <test_discipline from .weside/config.json, spelled out; absent → tests after the code, same change>.
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 [Code graph: graphify affected "<symbol>" … | graph query "<question>" | not needed (<reason>)]   (only when tools.graphify is true)
@@ -144,7 +150,7 @@ Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot p
   (Order verification whenever `.weside/config.json` has `verification.required: true`.)
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
 Tools: read and search with the Read, Grep and Glob tools on absolute paths; never `cd <dir> && grep …` or `cat`/`rg` through Bash.
-Report: worker-dispatch.md § Report fields, as your final message or to your `Lead:`; a skill's output is never it.
+Report: worker-dispatch.md § Report, as your final message or to your `Lead:`; a skill's output is never it.
   Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
 ```
 
@@ -160,8 +166,7 @@ replacement while the original may be alive: stop it, verify, then re-dispatch o
 
 **Parallel chunks** (per the plan's `parallel_groups` or § Choosing the worker): create the integration worktree
 `git worktree add <repo>-<KEY>-integration -b <type>/<KEY>-<slug> origin/<default>`, dispatch
-the wave in one message, and merge each branch as it returns, not after the wave (chunks sat 20–35
-min unmerged, 17.10.2026): `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`.
+the wave in one message, and merge each branch as it returns, not after the wave: `git -C <int> merge --no-ff <branch> -m "chore(<KEY>): integrate <branch>"`.
 A serial successor is dispatched on its predecessor's head the moment that one reports. A result without
 commits is a lost dispatch: re-dispatch, never integrate an empty tree. After each merge run
 `worker-dispatch.md` § After each lane merge; a contract change breaks a sibling no chunk gate covered. Conflicts resolve by the plan's Constraints; a non-trivial one goes to the human.
@@ -181,7 +186,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    Point the statusline at it: `~/.claude/we-focus/$CLAUDE_CODE_SESSION_ID.json` with
    `{"dir":"<wt>","branch":"<branch>","pr":<n>}` (add `pr` after step 3).
 3. A "push now" relay to a worker says "push; merge `origin/<default>` first only on a conflict". `gh pr create --body-file <file>`: ticket link, AC → evidence, the plan's `## Verification` block
-   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
+   spliced in by `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>` in the PR branch's worktree (never retyped), the test line per `/we:pr` step 3, and one line naming money, auth or tenant work when the diff has it. `--draft` only per
    `/we:pr` step 4. The `receipt …` line comes only from that script (`/we:pr` step 3). Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
@@ -208,33 +213,37 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 
 ## Close the run
 
-- **Auto-merge is the default** (L0 §Risk tiers and who waits on whom): run `gh pr merge <PR> --auto --merge` right after
-  `gh pr create` when the base branch requires the Codex check (`review.codex_check`, default
-  `Codex Review`; GitHub then waits for Codex), else when `/we:ci-review` ends green with every Codex
-  finding read (`--squash`/`--rebase` when `.weside/orchestrate.md`
-  names it; gh refuses `--auto` without a method outside a terminal). A T2 diff arms after the lens
-  panel's verdict. The hook `automerge_gate.py` refuses an early arm while that
-  check is not required, and refuses any merge from a worker. The only merge brake is the **one-way
-  class**, computed by the crew's `risk.command` on the diff (code that computes money, destructive migration,
-  Terraform or secrets, the brake's core `brake-change`): no session merges or arms it. Run the
-  T2 panel on it and post it (`/we:lens t2 <PR>`); where the repo runs a self-merge window
-  (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Self-merge window) it merges itself 2 h after that comment unless vetoed. The
-  brake's core, and every one-way PR in a repo without the window, only the human merges, from a
-  board item with the PR link, the class and the panel verdict (`board.py ask --cause merge-go --pr <url>
-  --one-way <class>`); until the merge hook computes the
-  class, run the command yourself before you arm. The closing message then says
-  `user merge: one-way (<class>)`. Where the merge hook's one-way refusal names the human's
-  approve as the go (the repo runs an approve gate), the GitHub approve on the head is that go, from the phone too: the repo arms auto-merge
-  itself and the session does nothing after it, so a question to the human about a one-way PR asks
-  "please approve", not "please merge". A `T2` line 1 with a `trust-loosening:`, `money-path:` or
-  `brake-review:` hit line (a card hit) is no merge brake: once the panel is green, start a security
-  card worker on the head (`we-worker <KEY>-card --bg "/<security holder's skill> …"`, brief per
-  `references/worker-dispatch.md` § Card worker) and arm after its `Overall: PASS` comment; a push
-  needs a new verdict, and `automerge_gate.py` refuses the arm until one stands on the head. A draft reason (a follow-up still on the branch, an unmerged
-  dependency) keeps the PR a draft per `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner 03.10.2026): the
-  second PR arms only after the first landed, merging `origin/<default>`, checking for one migration
-  head, and pushing first. A fix round
-  on an armed PR starts with `gh pr merge <PR> --disable-auto` and never drafts (`/we:ci-review` § 1).
+- **Who merges what** (the one table; `/we:pr`, the master card and the epic template point here, L0 states the one-way class in brief). Line 1 of the
+  crew's `risk.command` on the diff gives the class; `automerge_gate.py` refuses every merge or arm
+  that breaks a row, every merge from a worker, all of them during a freeze (`board.py freeze`), and
+  an arm while the PR body says `receipt red` (`verification.pre_merge_receipt`).
+
+  | Class | Who arms or merges | Condition |
+  |---|---|---|
+  | `T0` | you: `gh pr merge <PR> --auto --merge` | the Codex check has a verdict on the head (below) |
+  | `T2` | you, the same arm | as `T0`, plus a green T2 panel on the head (`/we:lens t2 <PR>`) |
+  | `T2` with a card hit (`trust-loosening:`, `money-path:`, `brake-review:` hit line) | you, the same arm | as `T2`, plus the security card worker's `Overall: PASS` comment on the head; never the human |
+  | `T2 one-way <class>` outside the core | nobody arms: the repo's self-merge window, else the human | window: 2 h after the green T2 panel comment, unless a `veto` label (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Self-merge window) |
+  | `T2 one-way brake-change` (the brake's core) | only the human | by hand, from a board item |
+
+  - **Codex:** whether Codex reviews is the repo's setting (`review.codex_check`, default `Codex
+    Review`, a workflow job). Where the base branch requires that check, arm right after `gh pr
+    create` (GitHub waits); else arm once `/we:ci-review` ends green with every Codex finding read.
+    `--squash`/`--rebase` when `.weside/orchestrate.md` names it; gh refuses `--auto` without a
+    method outside a terminal.
+  - **Card hit:** once the panel is green, start a security card worker on the head
+    (`<KEY>-card`, through the crew's launcher like any worker, brief per
+    `references/worker-dispatch.md` § Card worker); a push needs a new verdict.
+  - **One-way:** post the T2 panel. For the human's merge write one board item with the PR link, the
+    class and the panel verdict (`board.py ask --cause merge-go --pr <url> --one-way <class>`); the
+    closing message says `user merge: one-way (<class>)`. Where the gate's one-way refusal names the
+    human's approve as the go (the repo runs an approve gate), the GitHub approve on the head is that
+    go and the repo arms itself: ask "please approve", not "please merge", and do nothing after it.
+  - A draft reason (a follow-up still on the branch, an unmerged dependency) keeps the PR a draft per
+    `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner
+    03.10.2026): the second PR arms only after the first landed, merging `origin/<default>`,
+    checking for one migration head, and pushing first. A fix round on an armed PR starts with `gh pr
+    merge <PR> --disable-auto` and never drafts (`/we:ci-review` § 1).
 - **Auto retro** only when you can name a concrete, new friction of the run that an instruction change
   would prevent (a wrong assumption the files should have held, a script that misled, a repeated user
   correction); round counts alone are no reason (owner 28.10.2026). Then dispatch it per

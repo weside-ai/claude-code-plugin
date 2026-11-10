@@ -1029,3 +1029,38 @@ def test_launch_worker_mode_is_auto_or_bypass(tmp_path):
     bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"worker_mode": "yolo"}})
     out = run(bad, "validate")
     assert out.returncode == 1 and "launch.worker_mode must be one of auto, bypass" in out.stderr
+
+
+def test_a_member_with_a_role_addendum_gets_the_pointer_skill(tmp_path):
+    core, biz = workspace(tmp_path)
+    path = core / ".weside" / "crew.json"
+    (core / ".weside" / "roles").mkdir(parents=True, exist_ok=True)
+    (core / ".weside" / "roles" / "lex.md").write_text("# Lex\n")
+    crew.stubs(path, CREW, write=True)
+    lex = biz / ".claude" / "skills" / "acme-lex" / "SKILL.md"
+    text = lex.read_text()
+    assert not crew.is_stub(lex)
+    assert "name: acme-lex" in text and "`.weside/roles/lex.md`" in text
+    assert "{{" not in text
+
+
+@pytest.mark.parametrize(
+    ("extra", "dotted"),
+    [
+        ({"release": {"prod_on": "human"}}, "release.prod_on"),
+        ({"release": {"rc_job": "rc.yml"}}, "release.rc_job"),
+        ({"oracles": {"receipt_schema": "x.json"}}, "oracles.receipt_schema"),
+        ({"coldstart": {"suite": "tests/coldstart"}}, "coldstart"),
+    ],
+)
+def test_a_retired_nested_key_loads_with_one_stderr_line(tmp_path, extra, dotted):
+    """2b: keys no release reads any more leave the schema and load with one line, never an
+    unknown-key refusal under --strict."""
+    core, _ = workspace(tmp_path, with_(**extra))
+    out = run(core, "validate", "--strict")
+    assert out.returncode == 0, out.stderr
+    assert out.stderr.count(f"crew: {dotted} is no longer read") == 1
+    loaded = crew.load(core / ".weside" / "crew.json")
+    assert loaded["unknown_keys"] == []
+    parent, _, leaf = dotted.rpartition(".")
+    assert leaf not in (loaded.get(parent) if parent else loaded)

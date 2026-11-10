@@ -3,13 +3,17 @@
 //
 // One deliverer, in the coordinator's session (its live name is the board's `updated_by`, while that is
 // empty the coordinator of the crew whose board.file it is, coordinatorName), carries
-// each answer line to two recipients and writes one ledger row per recipient:
+// each answer line to up to three recipients and writes one ledger row per recipient:
 //   coordinator  `$.prompt.submit` as the person; delivered once its user row is stored. No row by
 //                the end of a turn that started after the submit (or 30 s idle): submit once more,
 //                row `resubmitted`; still none: `delivered: false`.
 //   asker        `$.session.send`; `isDelivered: false` (no such name, several, gone) or a held notice
 //                later: `delivered: false` with the reason, and a routing prompt to the coordinator
 //                (role `route`, confirmed like the coordinator's).
+//   owner        the question's `owner` (`board.py ask --owner/--component`), `$.session.send` like the
+//                asker; a refusal is a ledger row, no routing line. Skipped when it is the coordinator,
+//                the asker or the session that wrote the line.
+// Every text names where the answer was written (`writerNote`): transparency, no gate.
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
 import type { BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
@@ -72,7 +76,7 @@ export const keyOf = (id: string, answerTs: string, role: BoardDeliveryRole) => 
 
 export type Ledger = { epoch?: string; rows: Record<string, BoardDelivery> }
 
-const ROLES: readonly BoardDeliveryRole[] = ['coordinator', 'asker', 'route']
+const ROLES: readonly BoardDeliveryRole[] = ['coordinator', 'asker', 'owner', 'route']
 
 // Folds the ledger: per key the row with the newest `ts`, a later line winning a tie, so two equal
 // marker rows read as one. The first epoch row is the deliverer's start; a torn line is skipped.
@@ -108,9 +112,10 @@ export type Recipient = { role: BoardDeliveryRole; to: string }
 
 // Who a line goes to: the coordinator unless the line came from its own chat; the asker unless the line
 // was written in the asker's session. A question no longer on the board, or without `session`, has no asker.
-export const recipientsOf = (line: AnswerLine, coordinator: string, asker: string | undefined): Recipient[] => [
+export const recipientsOf = (line: AnswerLine, coordinator: string, asker: string | undefined, owner?: string): Recipient[] => [
   ...(line.via === 'chat' && line.session === coordinator ? [] : [{ role: 'coordinator' as const, to: coordinator }]),
   ...(asker && line.session !== asker ? [{ role: 'asker' as const, to: asker }] : []),
+  ...(owner && owner !== coordinator && owner !== asker && line.session !== owner ? [{ role: 'owner' as const, to: owner }] : []),
 ]
 
 const after = (ts: string, epoch: string) => Date.parse(ts) > Date.parse(epoch)
@@ -126,6 +131,7 @@ export const pendingLines = (
   ledger: Ledger,
   coordinator: string,
   askerOf: (id: string) => string | undefined,
+  ownerOf: (id: string) => string | undefined = () => undefined,
 ): Delivery[] => {
   const epoch = ledger.epoch
   if (!epoch) return []
@@ -133,7 +139,7 @@ export const pendingLines = (
   return lines
     .filter(line => after(line.ts, epoch))
     .flatMap(line => {
-      const own: Delivery[] = recipientsOf(line, coordinator, askerOf(line.id)).map(r => ({ ...r, line }))
+      const own: Delivery[] = recipientsOf(line, coordinator, askerOf(line.id), ownerOf(line.id)).map(r => ({ ...r, line }))
       const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
       const route: Delivery[] = refused && isFinal(refused) && !refused.delivered ? [{ role: 'route', to: coordinator, line, about: refused }] : []
       return [...own, ...route]
@@ -156,12 +162,20 @@ type Prompts = Partial<Record<BoardPromptKind, string>> | undefined
 
 const quoteOf = (line: AnswerLine) => (line.quote ? `\nThe owner's words: "${line.quote}"` : '')
 
+// Where the answer was written: the session that wrote the line (a chat answer says so), else the pane.
+export const writerNote = (line: AnswerLine) =>
+  ` (answered ${line.via === 'chat' ? 'in the chat of' : 'from the board pane in'} ${line.session ?? 'a session without a name'})`
+
 // The prompt the coordinator receives: today's text per kind, the owner's words when the owner gave them.
-export const coordinatorText = (line: AnswerLine, prompts: Prompts) => `${answerPrompt(line.answer, line.id, prompts)}${quoteOf(line)}`
+export const coordinatorText = (line: AnswerLine, prompts: Prompts) =>
+  `${answerPrompt(line.answer, line.id, prompts)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to the asker: the same answer; for Update, the request to check the question.
 export const askerText = (line: AnswerLine, prompts: Prompts) =>
-  `${answerPrompt(line.answer === 'update' ? 'update_asker' : line.answer, line.id, prompts)}${quoteOf(line)}`
+  `${answerPrompt(line.answer === 'update' ? 'update_asker' : line.answer, line.id, prompts)}${writerNote(line)}${quoteOf(line)}`
+
+// The peer message to the subject's owner: the answer as the coordinator gets it, marked as a copy.
+export const ownerText = (line: AnswerLine, prompts: Prompts) => `${coordinatorText(line, prompts)}\n(copy for the owner of this subject)`
 
 const oneLine = (reason: string) => reason.replace(/\s+/g, ' ').trim()
 

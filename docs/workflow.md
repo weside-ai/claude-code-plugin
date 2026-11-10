@@ -28,7 +28,7 @@ flowchart TD
         O3[["dev worker per chunk<br/>we:dev-medium | we:dev-high<br/>own worktree, runs /we:develop"]]
         O4("phases: tests + code + commit<br/>local deterministic gates")
         O5("finish: code-review only on<br/>money · auth · tenant · migration<br/>verification · plan deviations")
-        O6{"SubagentStop hook:<br/>report present?"}
+        O6{"report gate (Stop for a process worker,<br/>SubagentStop for a subagent):<br/>report present?"}
         O7("Lead checks report<br/>runs named tests · AC → evidence · DoD")
         O8("integration worktree<br/>merge each lane + after-merge checks")
         O9("merge origin/main + after-merge check<br/>push once · one PR per story, ready, linked")
@@ -42,7 +42,7 @@ flowchart TD
 
     %% ---------- GitHub ----------
     subgraph GH["GitHub — /we:ci-review, one watcher per PR, max 3 rounds"]
-        G1("CI: required checks<br/>+ Claude Review (gate)<br/>+ Codex Review (advisory)")
+        G1("CI: required checks<br/>+ Claude Review (gate)<br/>+ Codex Review where the repo runs it<br/>(the arm waits for its verdict)")
         G2("collect: red checks, review<br/>findings, bot threads")
         G3("fix · validate locally<br/>commit once · resolve threads")
         G4("merge origin/main<br/>after-merge checks · push once")
@@ -54,7 +54,7 @@ flowchart TD
 
     %% ---------- Close ----------
     subgraph CLOSE["Close"]
-        C1("auto-merge armed<br/>(user merge: the computed one-way class)")
+        C1("auto-merge armed per class<br/>(one-way: self-merge window or the owner)")
         C2{{"owner merges"}}
         C3("/we:merged<br/>verify · tear down worktrees, branches, ports<br/>tickets → In Review")
         C4[["auto retro<br/>we:dev-medium runs /we:retro --auto"]]
@@ -138,4 +138,4 @@ worker or you moved the story. Its buttons start the verb the state calls for (`
 
 ## Deliver
 
-Claude arms auto-merge once the checks and the Codex verdict are in; the computed one-way class (`/we:master` § Close the run) waits for you. `/we:merged` closes out: worktrees, branches, processes, each landed story to In Review once its PR is linked; Done follows acceptance.
+Claude arms auto-merge once the checks and the Codex verdict are in; the computed one-way class merges through the repo's self-merge window or by you (`/we:master` § Close the run). `/we:merged` closes out: worktrees, branches, processes, each landed story to In Review once its PR is linked; Done follows acceptance.

@@ -1,6 +1,6 @@
 # we — Agentic Product Ownership for Claude Code
 
-`we` is a Claude Code plugin with two halves:
+`we` is a Claude Code plugin in three parts; the third is optional:
 
 - **Plans:** an epic (one outcome, serving a metric of your goal file) and its stories, each story
   one PR with a build-ready plan. `/we:epic` writes the epic; a refiner worker writes each story plan.
@@ -12,7 +12,7 @@
   the repo's crew; every session then starts with the crew process and its role card.
   [docs/workflow.md](docs/workflow.md#crew)
 
-Claude arms auto-merge once CI and the Codex review are through, unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, a loosened tenant, auth or trust rule); you merge those. `/we:merged` cleans up afterwards.
+Claude arms auto-merge once CI is green (and, where the repo runs a Codex review, once it has a verdict on the head), unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, the brake's own code): those merge through the repo's self-merge window or by you. Who merges what: [`/we:master` § Close the run](we/skills/master/SKILL.md#close-the-run). `/we:merged` cleans up afterwards.
 
 `/flow` shows where each story stands while this runs: a pane with one traffic light per pipeline
 step, refreshed from git and GitHub, with buttons for the next command.
@@ -53,7 +53,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 **Around the pipeline**
 
 - `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
-- `/board` — a pane with the workspace board an orchestrator session keeps in `~/.claude/we-state/board.json`: what waits for the owner, which sessions run and on what, with live and start-mode lamps. [we/docs/board.md](we/docs/board.md)
+- `/board` — a pane with the workspace board the crew's coordinator keeps (the crew's `board.file`, else `board.json` in its state folder, `~/.claude/we-state` by default): what waits for the owner, which sessions run and on what, with live and start-mode lamps. [we/docs/board.md](we/docs/board.md)
 - `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
 - `/we:accept` — carries a receipts job's verdict for one release candidate: green stories to Done with a generated comment, walks queued for an acceptance worker, red findings routed to their owner.
 - `/we:decide` — escalation as one decision story: both owners' positions and costs, settled by the parties within the SLA, else routed to the escalation role or the human's bundle.

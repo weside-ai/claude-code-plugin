@@ -13,7 +13,8 @@ same text. Claude Code replaces a hook output over its cap (``AUTHORING.md`` § 
 a preview, so the text is gated at ``render_process.BUDGET``: over it, nothing is printed, one
 stderr line names the template to read, exit 1.
 
-After printing, it appends ``{ts, session_id, pid, source, by: "plugin"}`` to ``l0-served.jsonl``
+After printing, it appends ``{ts, session_id, pid, source, by: "plugin", crew}`` (``crew``:
+``crew.crew_id``) to ``l0-served.jsonl`` under a flock with a 2 s wait, replaced atomically,
 in the crew's state directory (``crew.state_dir``: ``WE_STATE_DIR``, the crew's ``state_dir``, else
 ``~/.claude/we-state``; the last ``LOG_KEEP`` lines kept), so two crews with their own folders
 keep two logs; a write failure is ignored, the log is evidence of doubles, not a gate.
@@ -21,11 +22,18 @@ keep two logs; a write failure is ignored, the log is evidence of doubles, not a
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import os
 import sys
+import time
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - no flock on Windows
+    fcntl = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -68,13 +76,41 @@ def log_served(
         "source": str(hook_input.get("source") or ""),
         "by": by,
     }
+    if crew_path is not None:
+        with contextlib.suppress(OSError, crewlib.CrewError):
+            line["crew"] = crewlib.crew_id(crew_path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        old = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-        lines = [*old, json.dumps(line)][-LOG_KEEP:]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    except OSError:
-        pass
+        with _locked(path.with_name(path.name + ".lock")):
+            old = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+            lines = [*old, json.dumps(line)][-LOG_KEEP:]
+            tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+            tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            os.replace(tmp, path)
+    except (OSError, TimeoutError):
+        pass  # a log line, never a reason to fail a session start
+
+
+LOCK_WAIT_S = 2.0
+
+
+@contextlib.contextmanager
+def _locked(lock: Path):
+    """An exclusive flock on ``lock``, waiting at most ``LOCK_WAIT_S``; TimeoutError past it."""
+    fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while fcntl is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(str(lock)) from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)
 
 
 def output(hook_input: dict, environ: dict | None = None) -> tuple[str | None, str | None]:

@@ -24,8 +24,7 @@ Member brief: `${CLAUDE_PLUGIN_ROOT}/skills/council/references/brief.md`.
 
 - No topic: ask for one.
 - Roles, first hit wins: `--council=`; `.weside/config.json` `council.default`; the shipped
-  default `product_owner`, `architect`, `scrum_master`. A config's `council.meetings` is no longer
-  read: say once that the key can go.
+  default `product_owner`, `architect`, `scrum_master`.
 - `orchestrator` in a resolved roster is you: drop it and note it for the synthesis. Seat it as a
   member only when `--council=` names it.
 - Run the lens helper once on the resolved roster, the roles one per line on stdin, never inside
