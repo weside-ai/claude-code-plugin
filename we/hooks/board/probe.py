@@ -14,6 +14,9 @@ pointers share it) stays, one in another crew's repo or in a repo without a
 crew drops out, and one whose `cwd` is missing or no longer exists stays with `crew: "unknown"`.
 Without the flag every session on the host is listed.
 
+A failing or unparsable `claude agents --json` prints `{"error": …}` (fail open: the pane shows
+the error, nothing brakes on it).
+
 Usage: probe.py [--crew FILE]
 """
 
@@ -25,10 +28,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+import claude_home
 import crew as crewlib
 
 SWAP_SESSIONS = os.path.expanduser("~/.local/share/claude-swap/sessions/")
-CLAUDE_HOME = os.path.expanduser("~/.claude")
+CLAUDE_HOME = str(claude_home.config_dir({"HOME": os.path.expanduser("~")}))
 TAIL_BYTES = 262_144
 MODE = re.compile(rb'"permissionMode":"(\w+)"')
 WANTED = (b"WE_ROLE=", b"CLAUDE_CONFIG_DIR=")
@@ -99,14 +103,25 @@ def main(argv=None):
     if len(argv) >= 2 and argv[0] == "--crew":
         want = crewlib.crew_id(Path(argv[1]).expanduser())
     cache = {"want": want, "by_cwd": {}}
-    run = subprocess.run(
-        ["claude", "agents", "--json"], capture_output=True, text=True, timeout=20, check=False
-    )
+    try:
+        run = subprocess.run(
+            ["claude", "agents", "--json"], capture_output=True, text=True, timeout=20, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(json.dumps({"error": f"claude agents --json: {exc}"}))
+        return 0
     if run.returncode != 0:
         print(json.dumps({"error": f"claude agents --json: exit {run.returncode}"}))
         return 0
+    try:
+        agents = json.loads(run.stdout)
+    except ValueError:
+        print(json.dumps({"error": "claude agents --json printed no JSON"}))
+        return 0
     out = []
-    for agent in json.loads(run.stdout):
+    for agent in agents if isinstance(agents, list) else []:
+        if not isinstance(agent, dict):
+            continue
         crew = crew_of(agent.get("cwd"), cache) if want is not None else None
         if crew == "other":
             continue

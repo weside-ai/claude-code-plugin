@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=SC2034  # ORIGIN_REPO is read by the watcher that sources this file
 # Sourced by the PR watchers (watch-pr-checks.sh, watch-pr-conflicts.sh): where their `gh` calls run.
 #
 # gh_anchor: changes to the repo's main checkout, the parent of `git rev-parse --git-common-dir`,

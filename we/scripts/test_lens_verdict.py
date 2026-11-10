@@ -1085,3 +1085,40 @@ def test_plan_ready_reads_the_plan_from_origin_main_when_this_checkout_lacks_it(
     assert entry["plan_blob"] == blob and entry["ref"] == "origin/main"
     assert Path(entry["plan"]).read_text() == "# Plan on main\n"
     assert run("write", f"ready-{KEY}", "product", stdin=GREEN)[0] == 0
+
+
+def test_parallel_writes_keep_every_lens(repo):
+    """Review 09.11.: three lenses recorded at once each land (read-modify-write under a lock)."""
+    import threading  # noqa: PLC0415
+
+    run("plan", "ready", KEY)
+    codes = []
+    threads = [
+        threading.Thread(
+            target=lambda lens=lens: codes.append(
+                run("write", f"ready-{KEY}", lens, stdin=GREEN)[0]
+            )
+        )
+        for lens in ("product", "architecture", "acceptance")
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert codes == [0, 0, 0]
+    assert run("check", f"ready-{KEY}")[1].splitlines()[-1] == f"panel ready-{KEY}: green"
+
+
+def test_a_held_panel_lock_refuses_after_the_wait(repo, monkeypatch):
+    import fcntl  # noqa: PLC0415
+
+    run("plan", "ready", KEY)
+    path = verdict_file(repo, f"ready-{KEY}")
+    fd = os.open(str(path.with_name(path.name + ".lock")), os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    monkeypatch.setattr(lv, "LOCK_WAIT_S", 0.2)
+    try:
+        with pytest.raises(lv.UnusableError, match="held longer than"):
+            lv.write(repo, f"ready-{KEY}", "product", answer=GREEN)
+    finally:
+        os.close(fd)

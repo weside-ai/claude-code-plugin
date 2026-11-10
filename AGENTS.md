@@ -59,6 +59,7 @@ we/                               plugin root
     flow                          flow_log.py (the flow log's one owner), sampler_age.py
     PR and plan                   pr-body-receipt.py, test-delta.py, session_tokens.py, retro_claim.sh
     statusline                    statusline.js, install_statusline.py
+    hook state                    state_prune.py (ages out per-session hook files), claude_home.py (Claude Code's config dir)
     test support                  node_test_procs.py (the node binary and process reaping for statusline tests)
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
@@ -92,7 +93,8 @@ waits for the test slot (`$WESIDE_TESTS_LOCK`, default `/tmp/weside-tests.lock`)
 peak process count and RSS; a single suite runs with plain `pytest <file>`.
 
 `claude plugin test` runs the `*.test.ts` files under `we/hooks/` against Claude Code's own
-engine; CI does not run it, so a change to the hooks module runs it locally before the push.
+engine; CI runs it (job Hooks Module, a pinned CLI), and a change to the hooks module runs it
+locally before the push too.
 The module's types come from Claude Code: `claude plugin validate` prints what it hooks and calls.
 The engine takes one `session.start` hook per module (`register.ts` starts both panes), follows
 `$` past an import only into `function` declarations, and a pane's button that runs the plugin's

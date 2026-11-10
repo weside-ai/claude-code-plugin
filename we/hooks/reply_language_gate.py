@@ -24,6 +24,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import claude_home
+
 MIN_WORDS = 25
 MIN_FOREIGN = 6
 RATIO = 2
@@ -110,7 +113,7 @@ _WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?", re.UNICODE)
 
 
 def _settings_language(cwd: str | None) -> str | None:
-    paths = [Path.home() / ".claude" / "settings.json"]
+    paths = [claude_home.config_dir() / "settings.json"]
     if cwd:
         paths += [
             Path(cwd) / ".claude" / "settings.json",

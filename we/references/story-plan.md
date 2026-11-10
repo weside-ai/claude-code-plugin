@@ -39,7 +39,7 @@ parallel_groups: []
 | `story` | Roster and branch key; the file name is the fallback. |
 | `epic` | An epic run rosters by it; without it the story is invisible there. Omit the line only for a standalone story. |
 | `depends_on` | Keys that must be built before this story is dispatched. |
-| `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the plan passes the Ready gate in an epic its owner approved: the master sets it after the Ready gate and the owner's approval, in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's unconfirmed-fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
+| `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the DoR scan and the claim check pass: the master sets it in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. The `/flow` pane and the `/board` work tree read it for the Approval lamp; Selected itself comes from `board.py select`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
 | `comments_read_through` | Id or timestamp of the newest ticket comment the plan answers, or `none`. A newer comment means the plan may be stale. |
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |
 | `type`, `created` | Informational. |
@@ -100,7 +100,7 @@ Answering the fork deletes the section.>
 <Patterns, primitives, the seam; the architecture refs used; how the `**Files:**` lists were
 derived — code graph, or "grep-derived, no code graph".>
 
-Three lists here each cost review rounds when missing (Codex rounds, 10/2026):
+Three lists here each cost review rounds when missing:
 
 - **Writes into two systems** (a table and an API, a table and a cache, two transactions): every outcome
   combination — both succeed, the first fails, the second fails, a timeout after the first — and what the
@@ -164,7 +164,7 @@ The block is copied into the PR body, where a hook reads the `**Oracle:**` line 
 undecorated. It must pick one value; `not-applicable` (no runtime behaviour) and `not-observed`
 (behaviour not observed, e.g. unit tests only) each need their reason. `**Seed:**`, `**Asserted:**`
 and `**Not proven:**` are what a reviewer needs to repeat the run; the hook does not check them.
-`**Staging checks:**` names the file of checks the Tester runs on staging after the deploy
+`**Staging checks:**` names the file of checks the acceptance owner runs on staging after the deploy
 (L0 §Sessions, the acceptance role). Its path, format, planned state and validate command are
 the repo's, named in `.weside/verify.md`; each check carries the `id` of the AC it proves (`AC<n>`,
 more than one per AC `AC<n>-b`), so the run's report maps back to the ACs. The refiner writes the
@@ -288,6 +288,5 @@ measures its token use appends one line through `${CLAUDE_PLUGIN_ROOT}/scripts/s
 `<date> <step> tokens:` then either the four counts (input, output, cache read, cache write),
 followed by optional `key=value` pairs (`models`, `session` as the first eight characters,
 `skipped` = unreadable transcript lines), or `absent (<reason>)` with no `)` in the reason. A value
-nobody measured is `absent`, never `0`. Only a session of its own is measured (`agents.worker_launch`
-is a command template, `references/worker-dispatch.md` § Worker launch backend): a subagent shares
+nobody measured is `absent`, never `0`. Only a session of its own is measured (the worker template, `references/worker-dispatch.md` § Worker launch backend): a subagent shares
 its caller's session id. The message the step sends after the line is not counted.

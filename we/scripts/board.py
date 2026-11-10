@@ -46,8 +46,10 @@ set      writes the caller's own session line (found by `name` through `claude a
          writes another line and is the coordinator's. `waiting_on=<role>` stamps `since` and
          `sla_due` (the crew's `sla`, counted in daytime hours); the same role keeps them, another
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
-         `since`. It stamps the line's `updated_at` (UTC minute); it never writes `updated` or
-         `updated_by`.
+         `since`. `topic=<text>` and `keys=<KEY>[,<KEY>…]` (each a match of the crew's
+         `naming.key`) write the line's own topic and keys; an empty value clears them. It stamps
+         the line's `updated_at` (UTC minute); the board's `updated` moves with every write of the
+         coordinator (`write_board`), `updated_by` never.
 ask      posts a question for the owner after a cold reader (`cold_reader.py`) understood it
          without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
          lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
@@ -57,7 +59,12 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
          `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then shows no Accept,
-         only the PR link to approve or merge.
+         only the PR link to approve or merge. `--kind task` stamps `kind: task` (the pane labels
+         Accept as Taken when the task carries a recommendation). `--source <command or link>` stamps where the ask's fact comes from (the
+         pane shows it). `--owner <member>` or `--component <name>` (the member whose `components`
+         hold it) stamps `owner`: the deliverer carries the answer to that member's session too.
+         An open question on the same key draws a warning naming its id; `--replace <QID>` takes
+         that question off the queue (a `replaced` line in board-questions.jsonl) and posts this one.
 close-merged removes every open `merge-go` question whose PR is MERGED or CLOSED from
          `owner_queue` (one `closed` line each in board-questions.jsonl) and prints the ids;
          `bundle` runs it first.
@@ -162,6 +169,7 @@ only grow (O_APPEND). FILE defaults to the crew's `board.file` (relative to the 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import fcntl
 import importlib.util
@@ -196,7 +204,7 @@ KINDS = ("accept", "deny", "discuss", "info", "update")
 CLOSING = ("accept", "deny")
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
-SET_FIELDS = ("waiting_on", "state", "now")
+SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys")
 CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "info")
 DECISION_KINDS = ("cut", "fence")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
@@ -282,9 +290,11 @@ def _append_jsonl(path, record):
 class StateDir:
     """The board file and the JSONL files beside it: every path and every read or write of them."""
 
-    def __init__(self, board_file, now=None):
+    def __init__(self, board_file, now=None, stamps_updated=False):
         self.board_path = Path(board_file).expanduser()
         self.now = now  # the pruning clock; None reads the wall clock
+        # True for the coordinator's writes (board.py main): only they move the board's `updated`.
+        self.stamps_updated = stamps_updated
         self.last_pruned = []  # the `pruned` lines of the last write_board
         self.answers_path = self.log_path("answers")
         self.questions_path = self.log_path("questions")
@@ -316,7 +326,18 @@ class StateDir:
         mutated board (temp file + `os.replace`) unless `mutate` returned `UNCHANGED` and the pruning
         pass (`prune`) dropped nothing. `after(result)` runs once the file is replaced, still under
         the lock: the place for a JSONL line that must not exist without its board change. Returns
-        what `mutate` returned. The plugin's only writer of board.json."""
+        what `mutate` returned. A write of the coordinator (`stamps_updated`) stamps the board's
+        `updated` (the header's age, and the lapse of an Update mark once the orchestrator rewrote
+        the board: `board.ts` `shownAnswer`); another session's write leaves it; `updated_by`
+        stays as it was.
+        The plugin's only writer of board.json."""
+        with self.locked():
+            return self._write_board_locked(mutate, after)
+
+    @contextlib.contextmanager
+    def locked(self):
+        """The board lock (`<board>.lock`, flock, `LOCK_WAIT_S`): board.json and every JSONL line
+        whose content depends on what the log already holds are written under it."""
         self.board_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT, 0o644)
         try:
@@ -331,30 +352,35 @@ class StateDir:
                             f"lock {self.lock_path} not taken within {LOCK_WAIT_S:g} s"
                         ) from None
                     time.sleep(0.05)
-            board = self.board()
-            result = mutate(board)
-            pruned = self.last_pruned = prune(board, self, self.now or _now())
-            if result is UNCHANGED and not pruned:
-                return result
-            tmp_fd, tmp_name = tempfile.mkstemp(
-                dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
-            )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp:
-                    json.dump(board, tmp, ensure_ascii=False, indent=2)
-                    tmp.write("\n")
-                os.replace(tmp_name, str(self.board_path))
-            except BaseException:
-                if os.path.exists(tmp_name):
-                    os.unlink(tmp_name)
-                raise
-            for line in pruned:
-                self.append_question(line)
-            if after is not None and result is not UNCHANGED:
-                after(result)
-            return result
+            yield
         finally:
             os.close(fd)
+
+    def _write_board_locked(self, mutate, after):
+        board = self.board()
+        result = mutate(board)
+        pruned = self.last_pruned = prune(board, self, self.now or _now())
+        if result is UNCHANGED and not pruned:
+            return result
+        if self.stamps_updated:
+            board["updated"] = (self.now or _now()).astimezone().isoformat(timespec="seconds")
+        tmp_fd, tmp_name = tempfile.mkstemp(
+            dir=str(self.board_path.parent), prefix=self.board_path.name + ".", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp:
+                json.dump(board, tmp, ensure_ascii=False, indent=2)
+                tmp.write("\n")
+            os.replace(tmp_name, str(self.board_path))
+        except BaseException:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+            raise
+        for line in pruned:
+            self.append_question(line)
+        if after is not None and result is not UNCHANGED:
+            after(result)
+        return result
 
     def ids(self):
         board = self.board()
@@ -403,6 +429,14 @@ class StateDir:
 
     def append_transition(self, row):
         return _append_jsonl(self.transitions_path, row)
+
+    def record_transition(self, key, build):
+        """Under the board lock: `build(last row of key or None)` makes the row, which is appended.
+        Two moves of one key at once cannot both read the same `from`. Returns the row."""
+        with self.locked():
+            row = build(self.last_rows().get(key))
+            self.append_transition(row)
+        return row
 
     def append_wait(self, row):
         return _append_jsonl(self.waits_path, row)
@@ -606,8 +640,18 @@ def _parse_assignments(items, crew):
             failures.append(
                 f"board.py set: state {value!r} is not one of {', '.join(SESSION_STATES)}"
             )
-        elif key == "now" and "\n" in value:
-            failures.append("board.py set: now is one line")
+        elif key in ("now", "topic") and "\n" in value:
+            failures.append(f"board.py set: {key} is one line")
+        elif key == "keys":
+            keys = [k for k in re.split(r"[,\s]+", value) if k]
+            key_rx = (crew.get("naming") or {}).get("key") or crew_mod.DEFAULTS["naming"]["key"]
+            bad = [k for k in keys if not re.fullmatch(key_rx, k)]
+            if bad:
+                failures.append(
+                    f"board.py set: keys {', '.join(bad)} do not match the crew's naming.key {key_rx}"
+                )
+            else:
+                fields[key] = keys
         else:
             fields[key] = value
     return fields, failures
@@ -698,9 +742,12 @@ def cmd_set(state, args, crew, now):
             # the session set its own wait: a `blocked` mark of the old wait is over
             if ended[-1] is not None:
                 line.pop("blocked", None)
-        for key in ("state", "now"):
+        for key in ("state", "now", "topic", "keys"):
             if key in fields:
-                line[key] = fields[key]
+                if fields[key] in ("", []):
+                    line.pop(key, None)  # `topic=` / `keys=` clears it
+                else:
+                    line[key] = fields[key]
         line["updated_at"] = now.strftime(MINUTE_FMT)
         return dict(line)
 
@@ -1113,6 +1160,66 @@ def _is_plan_slug(crew, key):
     return bool(_key_failure(crew, key.upper(), "ask"))
 
 
+def _ask_extras(args, crew):
+    """The optional fields of a question: `kind: task`, `source`, `owner`."""
+    extras = {}
+    if args.ask_kind == "task":
+        extras["kind"] = "task"
+    if args.source and args.source.strip():
+        extras["source"] = args.source.strip()
+    owner = _key_owner(crew, args.owner, args.component)
+    if owner:
+        extras["owner"] = owner
+    return extras
+
+
+def _take_off(board, qid, key=None):
+    """Remove the open question `qid` (on `key`) from the queue for `ask --replace`; [] without
+    one. A question on another key is refused: a mistyped id never drops an unrelated question."""
+    if not qid:
+        return []
+    queue = board.get("owner_queue") or []
+    old = [q for q in queue if isinstance(q, dict) and q.get("id") == qid]
+    if not old:
+        raise BoardError(f"board.py ask: --replace {qid}: no open question with that id")
+    if key and old[0].get("key") != key:
+        raise BoardError(
+            f"board.py ask: --replace {qid}: that question is on {old[0].get('key')!r}, not {key!r}"
+        )
+    board["owner_queue"] = [q for q in queue if q not in old]
+    return [qid]
+
+
+def _warn_same_key(state, key, replacing):
+    """One stderr warning per open question on `key` (not the one `--replace` names)."""
+    for q in state.board().get("owner_queue") or []:
+        if isinstance(q, dict) and q.get("key") == key and q.get("id") != replacing:
+            print(
+                f"board.py ask: warning: {q.get('id')} on {key} is still open "
+                f"({str(q.get('ask') or '')[:80]!r}); this posts a second question — "
+                f"`--replace {q.get('id')}` replaces it",
+                file=sys.stderr,
+            )
+
+
+def _key_owner(crew, owner, component):
+    """The member name that owns the question's subject: `--owner` (a member name or slug), else
+    the member whose `components` holds `--component`; None when neither is given. An unknown
+    name or component is a refusal (`BoardError`)."""
+    if owner:
+        found = crew_mod.member(crew, owner.strip())
+        if found is None:
+            raise BoardError(f"board.py ask: --owner {owner!r} is no crew member")
+        return str(found[1].get("name") or found[0])
+    if component:
+        want = component.strip().lower()
+        for slug, entry in crew_mod.members(crew).items():
+            if want in [str(c).lower() for c in entry.get("components") or []]:
+                return str(entry.get("name") or slug)
+        raise BoardError(f"board.py ask: --component {component!r} belongs to no crew member")
+    return None
+
+
 def _ask_failures(args, crew):
     failures = []
     for field in ASK_FIELDS:
@@ -1189,6 +1296,7 @@ def cmd_ask(state, args, crew, now):
         fields["pr_url"] = pr_url
     if args.one_way and args.one_way.strip():
         fields["one_way"] = args.one_way.strip()
+    fields.update(_ask_extras(args, crew))
     base = {"ts": _iso(now), **fields}
     labels = crew.get("labels") or {}
     question = {
@@ -1238,16 +1346,22 @@ def cmd_ask(state, args, crew, now):
         )
         raise BoardError(f"board.py ask: {text}")
 
+    _warn_same_key(state, fields["key"], args.replace)
+    replaced = []
+
     def posted(board):
         for line in asker_lines(board):
             if _is_return_note(line.get("note")):
                 del line["note"]
+        replaced.extend(_take_off(board, args.replace, args.key))
         qid = state.next_id("Q", board)
         item = {"id": qid, **fields, "since": now.strftime("%Y-%m-%d"), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)
         return qid
 
     def log_posted(qid):
+        for old in replaced:
+            state.append_question({"id": old, "ts": base["ts"], "outcome": "replaced", "by": qid})
         state.append_question({"id": qid, **base, "outcome": "posted", "reader": reader})
 
     print(f"posted {state.write_board(posted, after=log_posted)}")
@@ -2206,17 +2320,18 @@ def _transition(state, args, crew, now, target, head):
     status = (crew.get("board") or {}).get("states", {}).get(target) or (
         crew_mod.DEFAULTS["board"]["states"][target]
     )
-    last = state.last_rows().get(key)
-    row = {
-        "key": key,
-        "from": last.get("to") if last else None,
-        "to": target,
-        "ts": _iso(now),
-        "by": _caller(),
-        **m.extra,
-        "ticket": adapter.name,
-    }
-    state.append_transition(row)
+    row = state.record_transition(
+        key,
+        lambda last: {
+            "key": key,
+            "from": last.get("to") if last else None,
+            "to": target,
+            "ts": _iso(now),
+            "by": _caller(),
+            **m.extra,
+            "ticket": adapter.name,
+        },
+    )
     ops = adapter.move(key, status)
     if "tier" in m.extra:
         print(f"tier: {m.extra['tier']}")
@@ -2316,7 +2431,7 @@ def move_done(
         "by": _caller(),
         "ticket": adapter.name,
     }
-    state.append_transition(row)
+    state.record_transition(key, lambda _last: row)
     ops = adapter.move(key, status) + adapter.comment(key, m.comment)
     sample = _sample(state, crew, key, now) if row["via"] == "receipt" else None
     return row, ops, sample
@@ -2588,6 +2703,19 @@ def parser():
     q.add_argument("--urgent", action="store_true", help="bundle lists it before the others")
     q.add_argument("--pr", metavar="REF", help="the open PR a merge-go question is about")
     q.add_argument("--one-way", metavar="CLASS", help="merge-go on a one-way PR: no Accept")
+    q.add_argument(
+        "--kind",
+        dest="ask_kind",
+        choices=("question", "task"),
+        default="question",
+        help="task: the pane labels Accept as Taken",
+    )
+    q.add_argument("--source", metavar="CMD_OR_LINK", help="where the fact in the ask comes from")
+    q.add_argument("--owner", metavar="MEMBER", help="the member who owns the subject")
+    q.add_argument(
+        "--component", metavar="NAME", help="owner: the member whose components hold it"
+    )
+    q.add_argument("--replace", metavar="QID", help="replace this open question on the same --key")
     q.set_defaults(run=cmd_ask)
     verbs.add_parser(
         "close-merged", help="drop merge-go questions whose PR merged or closed"
@@ -2707,7 +2835,9 @@ def main(argv=None, now=None, adapter=None):
         refusal, stamp_board = crew_guard(args)
         if refusal:
             raise BoardError(refusal, code=3)
-        code = args.run(StateDir(args.board or default_board(), now=now), args, crew, now)
+        coordinator = bool(crew) and crew_mod.holds_role(crew, "coordinator", os.environ)
+        state = StateDir(args.board or default_board(), now=now, stamps_updated=coordinator)
+        code = args.run(state, args, crew, now)
         if stamp_board is not None and code == 0 and Path(stamp_board).expanduser().exists():
             cid, *_ = _session_crew(Path.cwd(), os.environ)
             if cid is not None:

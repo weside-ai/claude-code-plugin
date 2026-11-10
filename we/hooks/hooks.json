@@ -8,19 +8,23 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/materialize_on_start.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/materialize_on_start.py\"",
+            "timeout": 30
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/process_on_start.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/process_on_start.py\"",
+            "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/role_on_start.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/role_on_start.py\"",
+            "timeout": 60
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/optimization_reminder.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/optimization_reminder.py\"",
+            "timeout": 15
           },
           {
             "type": "command",
@@ -56,7 +60,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/news_on_prompt.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/news_on_prompt.py\"",
+            "timeout": 10
           },
           {
             "type": "command",
@@ -76,7 +81,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/store_conversation_hook.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/store_conversation_hook.py\"",
+            "timeout": 30
           },
           {
             "type": "command",
@@ -85,15 +91,18 @@
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/reply_language_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/reply_language_gate.py\"",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/question_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/question_gate.py\"",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/worker_report_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/worker_report_gate.py\"",
+            "timeout": 15
           },
           {
             "type": "command",
@@ -109,7 +118,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/verification_gate.py\"",
+            "timeout": 30
           },
           {
             "type": "command",
@@ -118,7 +128,8 @@
           },
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/draft_reason_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/draft_reason_gate.py\"",
+            "timeout": 45
           }
         ]
       },
@@ -127,7 +138,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/teammate_gate.py\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/teammate_gate.py\"",
+            "timeout": 10
           }
         ]
       },
@@ -137,6 +149,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
+            "timeout": 10,
             "async": true
           }
         ]
@@ -158,6 +171,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
+            "timeout": 10,
             "async": true
           }
         ]
@@ -169,6 +183,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
+            "timeout": 10,
             "async": true
           }
         ]
@@ -191,6 +206,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
+            "timeout": 10,
             "async": true
           }
         ]
@@ -202,6 +218,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent_timing.py\"",
+            "timeout": 10,
             "async": true
           }
         ]

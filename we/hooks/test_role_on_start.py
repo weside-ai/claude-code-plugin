@@ -220,9 +220,7 @@ def _second_crew(tmp_path: Path, name: str, **top) -> Path:
 
 def test_the_second_crew_on_a_held_state_dir_gets_one_collision_note(tmp_path):
     first = _second_crew(tmp_path, "crew-one")
-    second = _second_crew(
-        tmp_path, "crew-two", board={"file": "~/.claude/we-state/two-board.json"}
-    )
+    second = _second_crew(tmp_path, "crew-two")
     master = {"WE_ROLE": "master"}
     assert "state dir" not in (context(run(tmp_path, first, master)) or "")
     stamp = tmp_path / "home" / ".claude" / "we-state" / "crew.id"
@@ -234,8 +232,18 @@ def test_the_second_crew_on_a_held_state_dir_gets_one_collision_note(tmp_path):
     assert "state dir" not in (context(run(tmp_path, first, master)) or "")
     data = json.loads((second / ".weside" / "crew.json").read_text())
     data["state_dir"] = "~/.claude/we-state/two"
-    data["board"] = {}
     (second / ".weside" / "crew.json").write_text(json.dumps(data))
+    assert "state dir" not in (context(run(tmp_path, second, master)) or "")
+
+
+def test_a_crew_with_a_board_file_of_its_own_shares_the_folder_silently(tmp_path):
+    """Review 09.11. (colenet): its board family is named after its own file, nothing collides."""
+    first = _second_crew(tmp_path, "crew-one")
+    second = _second_crew(
+        tmp_path, "crew-two", board={"file": "~/.claude/we-state/two-board.json"}
+    )
+    master = {"WE_ROLE": "master"}
+    run(tmp_path, first, master)
     assert "state dir" not in (context(run(tmp_path, second, master)) or "")
 
 

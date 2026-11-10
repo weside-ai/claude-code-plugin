@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parent / "conflict_gate.py"
@@ -159,3 +160,16 @@ def test_a_session_without_own_prs_calls_no_gh(tmp_path):
     t.write_text("")
     assert _run(tmp_path, _pr(), {"transcript_path": str(t)}) is None
     assert not (tmp_path / "calls.log").exists()
+
+
+def test_an_old_session_state_ages_out_on_the_next_stop(tmp_path):
+    """T2 acceptance lens on #197: the gate sweeps its own state folder (state_prune)."""
+    folder = tmp_path / "state" / "conflict-gate"
+    folder.mkdir(parents=True)
+    old = folder / "gone.json"
+    old.write_text("{}")
+    past = time.time() - 60 * 86400
+    os.utime(old, (past, past))
+    _run(tmp_path, _pr())
+    assert not old.exists()
+    assert (folder / "s1.json").exists()

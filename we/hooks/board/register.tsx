@@ -17,7 +17,7 @@ import {
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
-  NOTICE, RESUBMITTED, STUCK_MS, answerLines, coordinatorName, stuckAnswers, askerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
+  NOTICE, RESUBMITTED, STUCK_MS, answerLines, coordinatorName, stuckAnswers, askerText, ownerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
   storedHits, versionAtLeast,
 } from './deliver'
 import type { Awaiting, Delivery, Ledger } from './deliver'
@@ -314,18 +314,18 @@ async function submitAwaited($: $, ledgerPath: string, d: Delivery, text: string
 // One recipient of one line: the asker by peer message, a refusal answered with the routing line to
 // the coordinator; the coordinator and the routing line by prompt.
 async function deliverOne($: $, ledgerPath: string, coordinator: string, d: Delivery, prompts: Prompts) {
-  if (d.role !== 'asker') return submitAwaited($, ledgerPath, d, promptTextOf(d, prompts), 1)
+  if (d.role !== 'asker' && d.role !== 'owner') return submitAwaited($, ledgerPath, d, promptTextOf(d, prompts), 1)
   const key = keyOf(d.line.id, d.line.ts, d.role)
   delivery.sending.add(key)
   try {
     let sent: { isDelivered: boolean; reason?: string }
     try {
-      sent = await $.session.send({ to: d.to, text: askerText(d.line, prompts) })
+      sent = await $.session.send({ to: d.to, text: d.role === 'owner' ? ownerText(d.line, prompts) : askerText(d.line, prompts) })
     } catch (err) {
       sent = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
     }
     const row = rowOf(d, isoOf(await $.clock.now()), sent.isDelivered, sent.isDelivered ? undefined : sent.reason || 'not delivered')
-    if (!(await appendRows($, ledgerPath, [row])) || row.delivered) return
+    if (!(await appendRows($, ledgerPath, [row])) || row.delivered || d.role === 'owner') return
     const route: Delivery = { role: 'route', to: coordinator, line: d.line, about: row }
     if (!isInFlight(keyOf(d.line.id, d.line.ts, 'route'))) await submitAwaited($, ledgerPath, route, promptTextOf(route, prompts), 1)
   } finally {
@@ -374,7 +374,8 @@ async function deliverTick($: $, file: string) {
     }
     const lines = answerLines((await readText($, c.answersPath)) ?? '')
     const askerOf = (id: string) => c.board.queue.find(q => q.id === id)?.session ?? undefined
-    for (const d of pendingLines(lines, ledger, c.name, askerOf)) {
+    const ownerOf = (id: string) => c.board.queue.find(q => q.id === id)?.owner ?? undefined
+    for (const d of pendingLines(lines, ledger, c.name, askerOf, ownerOf)) {
       if (!isInFlight(keyOf(d.line.id, d.line.ts, d.role))) await deliverOne($, c.ledgerPath, c.name, d, c.board.answerPrompts)
     }
     await checkAwaiting($)
@@ -742,7 +743,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
       const handMerge = q.one_way && q.pr_url ? `approve or merge (${q.one_way}): ${q.pr_url}` : undefined
       const buttons = q.id && !struck
         ? [
-            ...(q.recommendation && !handMerge ? [{ key: `accept-${q.id}`, label: 'Accept', on: press('accept') }] : []),
+            ...(q.recommendation && !handMerge ? [{ key: `accept-${q.id}`, label: q.kind === 'task' ? 'Taken' : 'Accept', on: press('accept') }] : []),
             { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
             { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
             { key: `info-${q.id}`, label: 'More info', on: press('info') },
@@ -750,7 +751,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           ]
         : []
       const answered = last
-        ? `✓ ${ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`
+        ? `✓ ${q.kind === 'task' && last.answer === 'accept' ? 'taken' : ANSWER[last.answer].label} ${last.ts.slice(11, 16)} UTC${last.session ? ` (${last.session})` : ''}`
         : undefined
       // Buttons and the last answer share a row while they fit; the answer moves under them when not.
       const row = [...buttons.map(b => ({ ...b, width: b.label.length + 4 })), ...(answered ? [{ key: 'answered', label: answered, width: answered.length }] : [])]
@@ -758,6 +759,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         <Box key={`q-${q.id ?? i}`} flexDirection="column" marginTop={i ? 1 : 0}>
           {lines(head, inner, `q-${i}-head`)}
           {q.ask && <Text dimColor={struck} strikethrough={struck}>{q.ask}</Text>}
+          {q.source && !struck && <Text dimColor>{clip(`source: ${q.source}`, inner)}</Text>}
           {q.recommendation && !struck && <Text color="suggestion">{`→ ${q.recommendation}`}</Text>}
           {handMerge && !struck && <Text key={`hand-${q.id}`} color="warning">{handMerge}</Text>}
           {pack(row, r => r.width, inner, 1).map((line, j) => (

@@ -101,9 +101,13 @@ file of `board_freeze.watched_board_files` (the crew's `board.file`, else `board
 crew's state directory, `crew.state_dir`) and only
 for the repos the flag names (`board_freeze.covers`: `*`, no list or a repo the hook cannot name
 count as covered). Any exception while checking a
-command that looks like a merge refuses it. Every `git`, `gh` and classifier call takes its timeout
-from one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s in `hooks.json`; a call cut
-short by it fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
+command that looks like a merge refuses it, and so does a failed import of the hook's own modules
+(`_import_failure`). A query piped in from stdin stays unseen and refused, whatever
+piped it (four T2 panel rounds found a way past every reading of `echo … | gh`); only a heredoc in
+the command is read. The whole hook
+shares one budget of `BUDGET_SECONDS` (540 s), below the hook's 600 s `timeout` in `hooks.json`:
+each `git`, `gh` and classifier call has its own timeout, cut to what is left of it (`_left`); a call cut short
+fails, which refuses on the class path and lets the arm through on the Codex wait. Fail open on the Codex wait and the
 receipt read (7, 8) as before: Codex is advisory, an arm is reversible with `--disable-auto`.
 Pinned by `test_automerge_gate.py`.
 """
@@ -123,12 +127,52 @@ from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-import board_freeze
-import crew
-import risk_paths
-import risk_runner
-import verification_gate as vg
-from worker_launch import worker_marker
+
+# Defined before the module imports, so a failed import can still judge the command.
+_LOOKS_LIKE_MERGE = re.compile(
+    r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
+    re.DOTALL,
+)
+
+
+def _import_failure(exc: BaseException) -> None:
+    """Run as a hook whose imports failed: refuse a merge-like command, let every other one go."""
+    try:
+        payload = json.load(sys.stdin)
+        command = str(((payload or {}).get("tool_input") or {}).get("command", ""))
+    except Exception:
+        return
+    if not _LOOKS_LIKE_MERGE.search(command):
+        return
+    reason = (
+        f"Merge refused: the merge gate cannot load its modules ({type(exc).__name__}: {exc}). "
+        "Fix the plugin install (`claude plugins update we@weside-ai`) or run the merge by hand."
+    )
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+    )
+
+
+try:
+    import board_freeze
+    import crew
+    import risk_paths
+    import risk_runner
+    import verification_gate as vg
+    from worker_launch import worker_marker
+except Exception as _exc:  # a brake: a broken import refuses merges instead of opening them
+    if __name__ == "__main__":
+        _import_failure(_exc)
+        sys.exit(0)
+    raise
 
 DEFAULT_CHECK = "Codex Review"
 # `gh pr merge` flags that take a value — their value is not the PR selector.
@@ -168,10 +212,6 @@ CARD_MARKER = "<!-- security-card-review -->"
 _CARD_HEAD = re.compile(r"^#+\s*Security card review\b.*?@\s*`?([0-9a-f]{7,40})`?", re.MULTILINE)
 _CARD_OVERALL = re.compile(r"\bOverall:\**\s*([A-Z]+)")
 _CARD_AUTHORS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
-_LOOKS_LIKE_MERGE = re.compile(
-    r"\bgh\b.*(\bpr\s+merge\b|/merge\b|mergePullRequest|enablePullRequestAutoMerge|graphql)",
-    re.DOTALL,
-)
 RULES_FROM = risk_runner.RULES_FROM
 # The whole hook stays inside this many seconds, below hooks.json's 600: a hook Claude Code kills
 # on its timeout is a non-blocking error, and the command would run unbraked.
@@ -1045,8 +1085,32 @@ def _refusal(payload: dict) -> str | None:
     for call in _merge_calls(argv, command, payload.get("cwd")):
         reason = _call_refusal(payload, argv, call, payload.get("cwd"))
         if reason is not None:
+            if _edits_body_before(argv, call.at):
+                reason += " " + BODY_CHAIN_NOTE
             return reason
     return None
+
+
+BODY_CHAIN_NOTE = (
+    "This command also edits the PR body before the merge, but the hook judged the body as it is "
+    "now (it runs before the command): change the body in a command of its own, then arm."
+)
+
+
+def _edits_body_before(argv: list[str], stop: int) -> bool:
+    """Whether a `gh pr edit` with a body flag runs before `argv[stop]`."""
+    for i in range(min(stop, len(argv))):
+        found = _gh_at(argv, i)
+        if found is None:
+            continue
+        _repo, j = found
+        if j < stop and argv[j : j + 2] == ["pr", "edit"]:
+            args = vg._args_from(argv, j + 2)
+            if any(
+                a in ("--body", "-b", "--body-file", "-F") or a.startswith("--body") for a in args
+            ):
+                return True
+    return False
 
 
 def main() -> None:
