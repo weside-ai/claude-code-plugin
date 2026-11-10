@@ -568,12 +568,18 @@ def _ready_gate_first(root: Path, subject: str, rel: str | None, blob: str) -> N
     source, _ref = plan_source(root, subject, rel, blob)
     plan = plan_path(root, subject, rel)
     if source != plan:  # the gate finds the crew from the plan's own folder
+        made = [d for d in reversed(plan.parents) if not d.exists()]
         plan.parent.mkdir(parents=True, exist_ok=True)
         plan.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         try:
             failures, _warnings = ready_gate.story_failures(plan)
         finally:
             plan.unlink()
+            for d in reversed(made):  # the folders it made go too, deepest first, when still empty
+                try:
+                    d.rmdir()
+                except OSError:
+                    break
     else:
         failures, _warnings = ready_gate.story_failures(plan)
     if failures:

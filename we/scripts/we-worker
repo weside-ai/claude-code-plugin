@@ -13,7 +13,8 @@
 #                                  no launcher marker, no WE_ROLE=worker: a master, a companion) refuses
 #   we-worker checkpoint <name|id> commits a worker's tracked changes in its worktree (never on main; new files are named, not
 #                                  committed) and pushes them
-#                                  to wip/<branch without its type prefix> (before a quota pause)
+#                                  to wip/<branch without its type prefix> (before a quota pause);
+#                                  refuses a worker that is working or busy (one writer per worktree)
 #   we-worker logs <name|id> [-n N] [--raw]
 #                                  the last N (default 5) assistant texts from its transcript, plain;
 #                                  --raw (or no transcript) prints `claude logs` with ANSI codes removed
@@ -101,11 +102,11 @@ d.sort(key=lambda a:a.get("startedAt",0))
 print(*(str(d[-1].get(f) or "-") for f in ("id","pid","state","sessionId")) if d else "")' "$1"
 }
 
-_resolve_any() { # <name|id> -> "id pid kind sessionId cwd" of the newest agent of any kind, else empty
+_resolve_any() { # <name|id> -> "id pid kind sessionId state cwd" of the newest agent of any kind, else empty
   _agents | python3 -I -c 'import json,sys
 k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if k in (a.get("name"),a.get("id"))]
 d.sort(key=lambda a:a.get("startedAt",0))
-print(*(str(d[-1].get(f) or "-") for f in ("id","pid","kind","sessionId","cwd")) if d else "")' "$1"
+print(*(str(d[-1].get(f) or "-") for f in ("id","pid","kind","sessionId","state","cwd")) if d else "")' "$1"
 }
 _is_worker() { # <kind> <pid> <cwd>: a background session, a worktree with the launcher's marker,
   # or a process started as a worker (WE_ROLE=worker, readable on Linux); never a master/companion
@@ -209,16 +210,18 @@ for x in json.load(sys.stdin):
     ;;
   is-worker) # <id|name>: exit 0 for a worker; the one owner of the rule (worker_launch.is_worker)
     [[ $# -ge 2 && -n "$2" ]] || usage
-    read -r id _pid kind _sid cwd <<<"$(_resolve_any "$2")" || true
+    read -r id _pid kind _sid _state cwd <<<"$(_resolve_any "$2")" || true
     [[ -n "${id:-}" ]] && _is_worker "${kind:--}" "${_pid:--}" "${cwd:--}"
     exit
     ;;
   checkpoint)
     [[ $# -ge 2 && -n "$2" ]] || usage
     key=$2
-    read -r id _pid kind _sid cwd <<<"$(_resolve_any "$key")" || true
+    read -r id _pid kind _sid state cwd <<<"$(_resolve_any "$key")" || true
     [[ -n "${id:-}" && "${cwd:-}" != - ]] || { echo "we-worker: no worker '$key' with a working directory in claude agents" >&2; exit 1; }
     _is_worker "${kind:--}" "${_pid:--}" "$cwd" || { echo "we-worker: '$key' ($id, $kind) is no worker; checkpoint commits only in a worker's tree" >&2; exit 1; }
+    # one writer per worktree: a working worker commits in this tree itself
+    case "${state:-}" in working | busy) echo "we-worker: '$key' ($id) is $state; checkpoint an idle or stopped worker (one writer per worktree)" >&2; exit 1 ;; esac
     branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null) || { echo "we-worker: $cwd is no git worktree" >&2; exit 1; }
     [[ "$branch" != HEAD ]] || { echo "we-worker: $cwd has a detached HEAD; nothing to name the wip branch after" >&2; exit 1; }
     case "$branch" in main | master) echo "we-worker: $cwd is on $branch; a checkpoint commits only on a worker's own branch" >&2; exit 1 ;; esac
@@ -241,7 +244,7 @@ for x in json.load(sys.stdin):
   stop)
     [[ $# -ge 2 && -n "$2" ]] || usage
     key=$2
-    read -r id _pid kind sid _cwd <<<"$(_resolve_any "$key")" || true
+    read -r id _pid kind sid _state _cwd <<<"$(_resolve_any "$key")" || true
     [[ -n "${id:-}" ]] || { echo "we-worker: no worker '$key' in claude agents" >&2; exit 1; }
     if ! _is_worker "${kind:--}" "${_pid:--}" "${_cwd:--}"; then
       echo "we-worker: '$key' ($id, $kind) is no worker (not background, no we-worker marker, no WE_ROLE=worker); a typo protects a master or companion here. To stop it anyway: claude stop $id${_pid:+ or kill $_pid}" >&2
@@ -256,7 +259,7 @@ for x in json.load(sys.stdin):
     fi
     gone=""
     for _ in $(seq 1 "${WE_WORKER_STOP_WAIT:-30}"); do
-      read -r id2 pid2 _k _sid _cwd <<<"$(_resolve_any "$id")" || true
+      read -r id2 pid2 _k _sid _state _cwd <<<"$(_resolve_any "$id")" || true
       if [[ -z "${id2:-}" || "${pid2:-}" == - ]] || ! kill -0 "$pid2" 2>/dev/null; then gone=1; break; fi
       sleep 1
     done

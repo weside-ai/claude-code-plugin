@@ -490,3 +490,34 @@ def test_is_worker_is_the_one_owner_of_the_rule(tmp_path, kind, code):
     rows = [{"id": "x1", "name": "x", "kind": kind, "pid": "-", "cwd": "-"}]
     project, env = setup(tmp_path, rows)
     assert run(project, env, "is-worker", "x1").returncode == code
+
+
+@pytest.mark.parametrize(("kind", "state"), [("background", "working"), ("interactive", "busy")])
+def test_checkpoint_refuses_a_worker_that_is_still_working(tmp_path, kind, state):
+    """One writer per worktree: a checkpoint commits only in an idle or stopped worker's tree."""
+    tree = _checkpoint_tree(tmp_path, "feat/x")
+    if kind == "interactive":  # a window worker, recognised by the launcher's marker
+        gd = subprocess.run(
+            ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        Path(gd, "we-worker.json").write_text(json.dumps({"name": "w"}))
+    rows = [
+        {
+            "id": "ab1",
+            "name": "w",
+            "kind": kind,
+            "pid": 1,
+            "state": state,
+            "cwd": str(tree),
+        }
+    ]
+    project, env = setup(tmp_path, rows)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and f"is {state}" in proc.stderr
+    log = subprocess.run(
+        ["git", "-C", str(tree), "log", "--oneline"], capture_output=True, text=True, check=True
+    )
+    assert "checkpoint" not in log.stdout

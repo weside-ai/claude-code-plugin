@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -1040,7 +1041,8 @@ def test_a_ready_write_after_the_plan_worktree_is_gone(repo):
     run("plan", "ready", KEY)
     (repo / "docs" / "plans" / f"{KEY}-story.md").unlink()
     code, out, err = run("write", f"ready-{KEY}", "product", stdin=GREEN)
-    assert code == 0, err and "lens product: green" in out
+    assert code == 0, err
+    assert "lens product: green" in out
 
 
 def test_a_ready_write_on_an_unknown_blob_still_refuses(repo):
@@ -1085,6 +1087,19 @@ def test_plan_ready_reads_the_plan_from_origin_main_when_this_checkout_lacks_it(
     assert entry["plan_blob"] == blob and entry["ref"] == "origin/main"
     assert Path(entry["plan"]).read_text() == "# Plan on main\n"
     assert run("write", f"ready-{KEY}", "product", stdin=GREEN)[0] == 0
+
+
+def test_the_ready_gate_leaves_no_folder_it_made_for_main_s_plan(repo):
+    """The gate reads main's plan from its own path for a moment; the folders that took go too."""
+    plan = repo / "docs" / "plans" / f"{KEY}-story.md"
+    plan.write_text("# Plan on main\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "plan")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    shutil.rmtree(repo / "docs")
+    code, _out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    assert not (repo / "docs").exists()
 
 
 def test_parallel_writes_keep_every_lens(repo):
