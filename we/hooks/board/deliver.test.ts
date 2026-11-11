@@ -711,3 +711,30 @@ test('a reply read from a ticket names the ticket as where it was written', asyn
   expect(writerNote({ ...line, via: 'chat' })).toBe(' (answered in the chat of ticket PROJ-12 (bob))')
   expect(writerNote(line)).toBe(' (answered from the board pane in ticket PROJ-12 (bob))')
 })
+
+test('a one-way "Yes, I\'ll do it" tells coordinator and asker the owner merges by hand, never "proposal accepted"', async ($, on) => {
+  const pr = 'https://github.com/acme/shop/pull/7'
+  const board = boardOf({
+    owner_queue: [
+      { id: 'Q1', session: 'asker', key: 'PROJ-40', ask: 'Merge it?', since: '2026-11-03', recommendation: 'yes', pr_url: pr, one_way: 'money' },
+    ],
+  })
+  const { clock, h } = await coordinator($, on, { board })
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  const text = `Q1: the owner approves or merges ${pr} by hand — do not merge or arm it; the question stays open until the PR is merged (answered from the board pane in foxy)`
+  expect(h.submitted).toEqual([text])
+  expect(h.sent).toEqual([{ to: 'asker', text }])
+  expect([...h.submitted, ...h.sent.map(s => s.text)].some(t => t.includes('proposal accepted'))).toBe(false)
+})
+
+test('Taken on a task says the owner does it; an accept_hand wording leaves the task text alone', async ($, on) => {
+  const board = boardOf({
+    owner_queue: [{ id: 'Q1', session: 'asker', key: 'PROJ-40', ask: 'Rotate the key', since: '2026-11-03', recommendation: 'today', kind: 'task' }],
+    answer_prompts: { accept_hand: '{id}: ich merge {pr} selbst' },
+  })
+  const { clock, h } = await coordinator($, on, { board })
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.submitted).toEqual(['Q1: taken — the owner does this task; do not do it yourself (answered from the board pane in foxy)'])
+})

@@ -13,7 +13,8 @@
   humans can share one crew, each with their own sessions on their own machine (`humans` in the
   crew file); `wclaude --start` opens your coordinator and product owner in tmux. The ticket is
   the bus between machines: only the asked human answers a question to them, a state's owners move
-  a story on from it, and an In Test step exists only where the crew maps it. [docs/workflow.md](docs/workflow.md#crew)
+  a story on from it, and an In Test step exists only where the crew maps it.
+  [docs/workflow.md](docs/workflow.md#several-humans) · tour page: [Several humans, one crew](https://plugin.weside.ai/tour/humans/)
 
 Claude arms auto-merge once CI is green (and, where the repo runs a Codex review, once it has a verdict on the head), unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, the brake's own code): those merge through the repo's self-merge window or by you. Who merges what: [`/we:master` § Close the run](we/skills/master/SKILL.md#close-the-run). `/we:merged` cleans up afterwards.
 
@@ -50,14 +51,14 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 - `/we:pr` — opens the PR: merges the base, pushes once, writes the body with AC evidence and the net test delta.
 - `/we:ci-review` — collects every CI and review finding, fixes by severity, resolves threads, pushes once.
 - `/we:ac-review` — checks a branch against its story's acceptance criteria and the DoD.
-- `/we:lens` — the lens panel: fresh lens agents judge a plan (`ready`) or a PR diff (`t2`) in parallel; one verdict file per subject, green only with every lens and no standing BLOCKING or WARNING.
+- `/we:lens` — the lens panel: fresh lens agents (product, architecture, acceptance, and security where the crew defines that lens) judge a plan (`ready`) or a PR diff (`t2`) in parallel; one verdict file per subject, green only with every lens and no standing BLOCKING or WARNING.
 - `/we:merged` — after your merge: tears down worktrees and branches, moves each landed story to In Review once its PR is linked; Done follows acceptance.
 
 **Around the pipeline**
 
 - `/flow` — a pane with traffic lights per pipeline step for a story, an epic's stories or this session's work; buttons run the next verb. [docs/flow.md](docs/flow.md)
 - `/board` — a pane with the workspace board the crew's coordinator keeps (the crew's `board.file`, else `board.json` in its state folder, `~/.claude/we-state` by default): what waits for the owner, which sessions run and on what, with live and start-mode lamps. [we/docs/board.md](we/docs/board.md)
-- `/we:setup` — per-repo configuration, council rosters, rule bridge, statusline.
+- `/we:setup` — per-repo configuration, council rosters, the crew and its humans, rule bridge, statusline.
 - `/we:accept` — carries a receipts job's verdict for one release candidate: green stories to Done with a generated comment, walks queued for an acceptance worker, red findings routed to their owner.
 - `/we:decide` — escalation as one decision story: both owners' positions and costs, settled by the parties within the SLA, else routed to the escalation role or the human's bundle.
 - `/we:standup` — picks you back up: what we work on, where it stands, what you must do next; read-only (`--branch` for the branch view).
@@ -66,7 +67,7 @@ Requirements: Claude Code (2.1.302 or later for the `/flow` pane), Git, Python 3
 - `/we:optimize` — decides inbox candidates with evidence, applies the approved ones, keeps the ledger.
 - `/we:resume` — after a usage-limit stop ("weiter"): resumes open items, workers and CI watches.
 - `/we:pin` — which account bills this master session; `on`/`off` restarts it on a fixed account or on the global login. [docs/companion.md](docs/companion.md)
-- `/we:start` — the crew's main companion after `wclaude --start`: checks companion, role and pin against `crew.json`, offers the crew restore after a crash, opens the board. [docs/companion.md](docs/companion.md)
+- `/we:start` — the crew's main companion after `wclaude --start`: checks human, companion, role and pin against `crew.json`, offers the crew restore after a crash and the start of the rest of your crew (default no), opens the board. [docs/companion.md](docs/companion.md)
 - `/we:sideload` — works in a neighbour repo from here.
 - `/we:find-dead-code` — finds and removes dead code in Python backends.
 - `/we:codex-task` — sends one task to Codex; ends with the Codex subscription.

@@ -71,11 +71,11 @@
   <h2>1 · Who runs</h2>
   <div class="steps">
     <div class="step"><b>You, the human</b><span>vision, money and prod, and whatever else you choose; one inbox: the board</span></div>
-    <div class="step"><b>Companions (owners)</b><span>product, architecture, acceptance, machinery, coordinator, escalation, HR; each guards one cornerstone and advises. They judge, they do not build</span></div>
+    <div class="step"><b>Companions (owners)</b><span>product, architecture, acceptance, machinery, coordinator, escalation, HR, and security where the crew binds it; each guards one cornerstone and advises. They judge, they do not build</span></div>
     <div class="step"><b>A master per epic</b><span><code>/we:master</code>: pulls the epic's stories, starts workers, opens and merges the PRs, cleans up; no product decision</span></div>
     <div class="step"><b>Workers</b><span>one chunk each in its own worktree (<code>we-worker</code>), report once and end. A subagent reads and reviews, never builds</span></div>
   </div>
-  <p class="note" style="margin-top:12px">Who holds which role lives in <code>.weside/crew.json</code>; <code>/we:setup</code> writes it. Every session then starts with the crew process and its role card.</p>
+  <p class="note" style="margin-top:12px">Who holds which role lives in <code>.weside/crew.json</code>; <code>/we:setup</code> writes it. Every session then starts with the crew process and its role card. Several people can share one crew, each on their own machine: <a href="humans/">Several humans, one crew</a>.</p>
 
   <h2>2 · What is built</h2>
   <div class="flowline"><span>Goal file</span><i>→</i><span>Epic + scope fence</span><i>→</i><span>Story = one PR</span><i>→</i><span>Plan first</span></div>
@@ -89,12 +89,13 @@
   <div class="lc">
     <div><b>ON_HOLD</b><span>filed, reopen trigger named</span></div>
     <div><b>Backlog</b><span>its epic is approved</span></div>
-    <div><b>Selected</b><span>Ready gate green, tier computed, the three lenses green (<code>/we:lens ready</code>)</span></div>
+    <div><b>Selected</b><span>plan on the default branch, Ready gate green, tier computed, the lens panel green (<code>/we:lens ready</code>)</span></div>
     <div><b>In Progress</b><span>a master pulled it</span></div>
     <div><b>In Review</b><span>PR merged and linked (<code>/we:merged</code>)</span></div>
+    <div><b>In Test</b><span>optional: only where the crew maps the status</span></div>
     <div><b>Done</b><span>receipt report green, or an acceptance comment with <code>Not proven:</code></span></div>
   </div>
-  <p class="note" style="margin-top:12px"><code>board.py</code> makes every move and refuses one whose entry rule fails.</p>
+  <p class="note" style="margin-top:12px"><code>board.py</code> makes every move and refuses one whose entry rule fails; with several humans, also one by a human who does not own the state the story leaves.</p>
 
   <h2>4 · Who waits on whom: the risk class</h2>
   <p>A classifier over <code>.weside/risk-paths</code> computes each PR's class. The merge gate (a hook on every merge and auto-merge arm) refuses what breaks the table, refuses any merge from a worker, and holds everything during a freeze.</p>
@@ -104,13 +105,13 @@
       <tr><td><code>T0</code></td><td>the master arms auto-merge</td><td>green CI, and the Codex verdict where the repo runs Codex</td></tr>
       <tr><td><code>T2</code></td><td>the master</td><td>as T0, plus a green T2 lens panel on the PR head (<code>/we:lens t2</code>)</td></tr>
       <tr><td><code>T2</code> with a card hit (trust loosening, money path, brake review)</td><td>the master</td><td>as T2, plus a security card worker's <code>PASS</code> on the head; never you</td></tr>
-      <tr><td><code>T2 one-way</code> (money, destructive migration, Terraform or secrets)</td><td>nobody arms</td><td>the repo's self-merge window (2 h after the green panel, a <code>veto</code> label stops it), else you</td></tr>
+      <tr><td><code>T2 one-way</code> (money, destructive migration, Terraform or secrets)</td><td>nobody arms</td><td>the repo's self-merge window (2 h after the green panel, a <code>veto</code> label stops it), else you: your board card offers <b>Yes, I'll do it</b></td></tr>
       <tr><td>one-way in the brake's own code</td><td>only you</td><td>your merge</td></tr>
     </table>
   </div>
 
   <h2>5 · Your one inbox: the board</h2>
-  <p>A session that needs you sends one question line with its recommendation to the coordinator, who puts it on the board with <code>board.py ask</code>; a cold reader first checks that it stands on its own. The <code>/board</code> pane shows what waits for you, which sessions run and on what. You answer with a button; the coordinator's session carries the answer back to the session that asked, and bundles what is not urgent on the crew's cadence.</p>
+  <p>A session that needs you sends one question line with its recommendation to the coordinator, who puts it on the board with <code>board.py ask</code>; a cold reader first checks that it stands on its own. The <code>/board</code> pane shows what waits for you, which sessions run and on what. You answer with a button; the coordinator's session carries the answer back to the session that asked, and bundles what is not urgent on the crew's cadence. The session that asked withdraws or supersedes its own question when it is settled otherwise.</p>
   <pre><code>QUESTION · PROJ-12 Export as CSV · Should the export include archived rows? · Recommendation: no, add a filter later</code></pre>
 
   <h2>6 · Acceptance</h2>
@@ -157,7 +158,7 @@
   <h2>8 · Limits and restarts</h2>
   <ul>
     <li>A session that hits its usage limit resumes with <code>/we:resume</code> (or "weiter"): open items, workers, CI watches.</li>
-    <li><code>we-worker status</code> shows each worker, its last activity and a usage limit with its resume command; <code>we-worker stop</code> stops one before a replacement starts.</li>
+    <li><code>we-worker status</code> shows each worker, its last activity and a usage limit with its resume command; <code>we-worker stop</code> stops one before a replacement starts and ends what it left running; <code>we-worker checkpoint</code> pushes an idle worker's tracked changes to a <code>wip/</code> branch before a quota pause.</li>
     <li>Parked work goes to a pushed <code>wip/</code> branch; after a compaction a session rebuilds its state from the plan, git, the PR and the ticket.</li>
   </ul>
 
@@ -168,6 +169,9 @@
     <div class="step"><b><code>/we:council</code> · <code>/we:grill</code></b><span>role lenses on a question; one question at a time until a plan holds</span></div>
     <div class="step"><b><code>/we:retro</code> · <code>/we:optimize</code></b><span>frictions become inbox candidates; you decide, the ledger keeps them</span></div>
   </div>
+
+  <h2>10 · Several humans, one crew</h2>
+  <p>Two or more people can run one crew, each on their own machine with their own companions. They share the crew file, the repo and the ticketing system; the ticket carries moves, claims and questions between the machines, and each state has its owners. <a href="humans/">The walk-through: two machines, one ticket, one day</a>.</p>
 
   <h2>The effort rule</h2>
   <ul>

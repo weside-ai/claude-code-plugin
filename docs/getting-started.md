@@ -17,7 +17,9 @@ Issues through `gh`, or none), then asks up to five skippable questions: goals, 
 verification, review gates, council. The answers go to `.weside/config.json`. A re-run shows the
 current value and asks before replacing it. When a crew works in the repo, setup also writes
 `.weside/crew.json` (who is Product Owner, coordinator, HR, Tester, who owns which component) and a
-stub role skill per member without one ([workflow.md](workflow.md#crew)).
+stub role skill per member without one ([workflow.md](workflow.md#crew)). It asks once whether
+several people work in the repo, each on their own machine; yes adds the `humans` block
+([workflow.md](workflow.md#several-humans)).
 
 Setup also offers the rule bridge for non-Claude agents (when the repo has `.claude/rules/`), the
 shipped statusline (model, branch, PR, context, background sessions, cost) and the companion launcher `wclaude`
