@@ -23,7 +23,7 @@ we/                               plugin root
   roles/<role>.md                 role cards (L1), rendered by scripts/render_process.py
   skills/<verb>/SKILL.md          one directory per /we:<verb>
   agents/                         dev-medium, dev-high, explore-medium, council-member (every council lens),
-                                  lens-product, lens-architecture, lens-acceptance (the lens panel)
+                                  lens-product, lens-architecture, lens-acceptance, lens-security (the lens panel)
   references/                     shared contracts, one owner per fact (.claude/rules/plugin-authoring.md § Single owner)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
   docs/board.md                   the /board pane, board.json schema, moves, answers, freeze, self-merge, staging

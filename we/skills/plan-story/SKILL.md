@@ -30,13 +30,20 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
 - **Stopping is not writing nothing.** Write the plan as far as the fork allows, keep `status: draft`, and put
   `## Open Fork` directly after `## Context` (the format file says what goes in). Say in the section and in the
   report that the plan is not ready to dispatch; the Ready gate refuses such a plan.
+- **A specialist's answer that changes what a user sees is a product decision.** Before the report, send it to
+  the crew's product role as a proposed business AC (`<when> → <the user sees>`), checked against your
+  `## Technical Approach` (the approach delivers exactly that), and name it in the report under `decisions not
+  in the brief`; never take it into the plan as settled on the specialist's word alone.
 - **The dispatcher verifies.** You proofread your file (step 4); running the DoR or claiming it passed is the
   dispatcher's job.
 
 ## Workflow
 
 0. **Re-dispatch.** The plan already exists and the brief names what changed: edit only that, keep the rest,
-   say in the report what you changed, and skip steps 1–2. A `MISSING:` item that already looks satisfied →
+   say in the report what you changed, and skip steps 1–2. First `git fetch origin` and run step 4's
+   `check-plan-identifiers.py`: each `exists:` name is marked `(new)` or `(not on main)` yet main carries it now;
+   rewrite its phase to build on main's version (good: "extend `ThreadLock` in `app/lock.py`"; bad: a second
+   `ThreadLock (new)`). A `MISSING:` item that already looks satisfied →
    report `blocked` with that sentence. An answered fork → write the phases it unblocks, record the decision
    and its author in `## Design Decisions`, and delete `## Open Fork`.
 1. **Ticket with comments first** (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`): one call, and a blocking
@@ -59,6 +66,9 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
      map names the keys its callers pass and what a miss does; every caller of the changed seam is traced and
      each path that skips the new guard is named; every behaviour change on an existing path is an AC or a
      `## Design Decisions` line.
+   - A plan that maps an external format (an import, an export, a foreign API) lists that schema's required
+     fields, each with the field it lands in (good: "`original` → `source_text`"; bad: "map the fields"), read
+     from the schema itself, never from a sample file.
 3. **Write the file.**
    - Sections, phases (`**Files:**`, `**Repo:**`, `**Risk:**`), AC form and oracle-class marker:
      `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`. Real phases even for a small story, each independently
@@ -73,7 +83,8 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
      no wrap inside a code span or a table.
 4. **Proofread.** Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>` and fix each line it
    prints; `## Context` is a paragraph. Then `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`:
-   each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it. With a staging-check
+   each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it; each `exists:` name
+   loses its `(new)` and the plan builds on main's version. With a staging-check
    file, run the validate command `.weside/verify.md` names on the plan until it exits 0. Do the same after a
    step-0 edit.
 5. **Token line.** `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/session_tokens.py --plan <plan> --step refine` as the

@@ -45,6 +45,9 @@ def _git(root: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
 
 
+REAL_GATE = lv.ready_gate.story_failures
+
+
 @pytest.fixture(autouse=True)
 def _gate_passes(monkeypatch):
     """The Ready gate has its own suite; here every plan passes it unless a test says otherwise."""
@@ -1137,3 +1140,12 @@ def test_a_held_panel_lock_refuses_after_the_wait(repo, monkeypatch):
             lv.write(repo, f"ready-{KEY}", "product", answer=GREEN)
     finally:
         os.close(fd)
+
+
+def test_the_real_ready_gate_refuses_a_bare_plan(repo, monkeypatch):
+    """Every other test stubs the gate; this one runs it: a plan of one heading starts no panel."""
+    monkeypatch.setattr(lv.ready_gate, "story_failures", REAL_GATE)
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 1 and out == ""
+    assert "the Ready gate refuses it, no lens runs" in err
+    assert not verdict_file(repo, f"ready-{KEY}").exists()

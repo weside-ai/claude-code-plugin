@@ -356,9 +356,27 @@ def launcher_with_verbs(repo: Path | None) -> str | None:
     return first
 
 
+def _ident(row: dict) -> str | None:
+    """The handle `we-worker` resolves a row by: its `id`, else (an interactive row of `claude
+    agents --json` has none) its `sessionId`; None when the row has neither."""
+    for field in ("id", "sessionId"):
+        value = str(row.get(field) or "").strip()
+        if value and value != "None":
+            return value
+    return None
+
+
 def _stop_one(row: dict, launcher: str | None) -> str:
-    """Stop one session row; returns its id. A refusal names the id and the pid."""
-    rid = str(row.get("id"))
+    """Stop one session row; returns its handle (`_ident`). A refusal names the handle and the
+    pid. A row without `id` (a window worker) only `we-worker stop` ends: `claude stop` knows
+    background jobs alone."""
+    rid = _ident(row)
+    pid = row.get("pid", "<pid>")
+    if rid is None or (row.get("id") in (None, "") and launcher is None):
+        raise LaunchError(
+            f"{row.get('name')} has no background id (a window worker); `claude stop` cannot end "
+            f"it: `kill {pid}` does"
+        )
     argv = [launcher or "claude", "stop", rid]
     try:
         out = subprocess.run(
@@ -379,9 +397,12 @@ def is_worker(row: dict) -> bool:
     session, a worktree with the launcher's marker, or a process started as a worker; never a
     master or companion session. Any failure counts as no worker."""
     script = Path(__file__).resolve().with_name("we-worker")
+    ident = _ident(row)
+    if ident is None:
+        return False
     try:
         out = subprocess.run(
-            ["bash", str(script), "is-worker", str(row.get("id"))],
+            ["bash", str(script), "is-worker", ident],
             capture_output=True,
             text=True,
             check=False,
@@ -397,12 +418,19 @@ def stop(name: str, worktree: Path | None = None, wait_s: float = STOP_WAIT_S) -
     session of that name that is no worker (`is_worker`) is never stopped: a typo guard."""
     cwd = str(worktree) if worktree else None
     named = _running(sessions(), name, cwd)
+    trees = sorted({str(r.get("cwd") or "-") for r in named})
+    if cwd is None and len(trees) > 1:
+        raise LaunchError(
+            f"{len(named)} sessions are named {name}, in {', '.join(trees)}; stop one with "
+            "--worktree <its tree>, never all at once"
+        )
     rows = [r for r in named if is_worker(r)]
     if not rows and named:
         r = named[-1]
         raise LaunchError(
-            f"{name} ({r.get('id')}, {r.get('kind')}) is no worker; a master or companion is never "
-            f"stopped by name. To stop it anyway: claude stop {r.get('id')}"
+            f"{name} ({_ident(r) or 'no id'}, {r.get('kind')}) is no worker; a master or companion "
+            "is never stopped by name. To stop it anyway: "
+            + (f"claude stop {r['id']}" if r.get("id") else f"kill {r.get('pid', '<pid>')}")
         )
     if not rows:
         clear_marker(worktree)

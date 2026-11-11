@@ -11,7 +11,9 @@
   Tester, component owners — with one master per epic and workers that build. `/we:setup` writes
   the repo's crew; every session then starts with the crew process and its role card. Several
   humans can share one crew, each with their own sessions on their own machine (`humans` in the
-  crew file); `wclaude --start` opens your coordinator and product owner in tmux. [docs/workflow.md](docs/workflow.md#crew)
+  crew file); `wclaude --start` opens your coordinator and product owner in tmux. The ticket is
+  the bus between machines: only the asked human answers a question to them, a state's owners move
+  a story on from it, and an In Test step exists only where the crew maps it. [docs/workflow.md](docs/workflow.md#crew)
 
 Claude arms auto-merge once CI is green (and, where the repo runs a Codex review, once it has a verdict on the head), unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, the brake's own code): those merge through the repo's self-merge window or by you. Who merges what: [`/we:master` § Close the run](we/skills/master/SKILL.md#close-the-run). `/we:merged` cleans up afterwards.
 

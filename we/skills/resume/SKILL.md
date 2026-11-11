@@ -14,10 +14,9 @@ the user is the whole instruction: ask nothing the open-items list already decid
 1. **Open items.** Read the open-items list ("Offen", "what's left", "next") of the last report in
    this session. After a compaction, read the transcript tail for it. No list → name the last task
    in one line and continue it.
-2. **Workers.** `ListAgents`, then per worker (before a quota pause a Lead secures each worker's
-   tree with `worker_launch.py checkpoint --name <name>` or `we-worker checkpoint <name>`: its
-   tracked changes committed and pushed to `wip/<branch without its type prefix>`, new files named, not
-   committed; the parked work is there and in the worktree's last commit):
+2. **Workers.** `ListAgents`, then per worker (before a quota pause a Lead secured each worker's
+   tree with a checkpoint (**Checkpoint** in `references/worker-dispatch.md`): the parked work is on
+   `wip/<branch without its type prefix>` and in the worktree's last commit):
    - stopped mid-task → `SendMessage(to=<name>, "continue where you stopped")`;
    - already reported → shut it down and verify it is gone (`TaskStop`, or no process under
      `/proc`); never restart it.

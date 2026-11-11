@@ -10,9 +10,10 @@ stays under ``~/.claude`` on purpose: a pinned master and the unpinned sessions 
 read one board, one news cursor, one identity cache. Those paths do not come from here.
 
 ``plugin_option(key)`` reads a ``userConfig`` option of the we plugin: ``CLAUDE_PLUGIN_OPTION_<KEY>``
-first (Claude Code sets it for the plugin's hooks; ``false``/``0``/``no``/``off`` read as False),
-else ``pluginConfigs["we@weside-ai"].options`` in ``config_dir()/settings.json``. A missing
-or unreadable settings file reads as no option.
+first (Claude Code sets it for the plugin's hooks), else ``pluginConfigs["we@weside-ai"].options``
+in ``config_dir()/settings.json``. Either way a string ``false``/``0``/``no``/``off``/empty reads as
+False, ``true``/``1``/``yes``/``on`` as True, other digits as an int; a JSON bool or number stays as
+it is. A missing or unreadable settings file reads as no option.
 """
 
 from __future__ import annotations
@@ -54,13 +55,21 @@ def plugin_options(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     return opts if isinstance(opts, dict) else {}
 
 
+def _typed(raw: Any) -> Any:
+    """A string option as the bool or int it spells; anything else unchanged."""
+    if not isinstance(raw, str):
+        return raw
+    word = raw.strip().lower()
+    if word in _FALSE:
+        return False
+    if word in ("true", "1", "yes", "on"):
+        return True
+    return int(word) if word.isdigit() else raw
+
+
 def plugin_option(key: str, env: Mapping[str, str] | None = None) -> Any:
     env = os.environ if env is None else env
     raw = env.get("CLAUDE_PLUGIN_OPTION_" + key.upper())
     if raw is not None:
-        if raw.strip().lower() in _FALSE:
-            return False
-        if raw.strip().lower() in ("true", "1", "yes", "on"):
-            return True
-        return raw
-    return plugin_options(env).get(key)
+        return _typed(raw)
+    return _typed(plugin_options(env).get(key))

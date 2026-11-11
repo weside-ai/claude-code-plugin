@@ -1023,13 +1023,19 @@ def test_the_launch_verb_without_a_crew_prints_the_default(tmp_path):
     assert out.returncode == 0 and out.stdout == "false\n"
 
 
-def test_launch_worker_mode_is_auto_or_bypass(tmp_path):
-    assert crew.DEFAULTS["launch"]["worker_mode"] == "auto"
+def test_launch_worker_mode_is_default_or_bypass(tmp_path):
+    """The default says what it does: no --permission-mode; `auto` still validates."""
+    assert crew.DEFAULTS["launch"]["worker_mode"] == "default"
+    old, _ = workspace(tmp_path / "o", {**CREW, "launch": {"worker_mode": "auto"}})
+    assert run(old, "validate").returncode == 0
     core, _ = workspace(tmp_path, {**CREW, "launch": {"worker_mode": "bypass"}})
     assert run(core, "launch", "worker_mode").stdout == "bypass\n"
     bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"worker_mode": "yolo"}})
     out = run(bad, "validate")
-    assert out.returncode == 1 and "launch.worker_mode must be one of auto, bypass" in out.stderr
+    assert (
+        out.returncode == 1
+        and "launch.worker_mode must be one of default, bypass, auto" in out.stderr
+    )
 
 
 def test_a_member_with_a_role_addendum_gets_the_pointer_skill(tmp_path):
@@ -1107,9 +1113,73 @@ def test_humans_load_and_resolve_the_session_s_human(tmp_path):
     assert crew.current_human(loaded, {}, email="eve@example.com") is None
     with pytest.raises(crew.CrewError, match="WE_HUMAN=eve is no human"):
         crew.current_human(loaded, {"WE_HUMAN": "eve"})
-    assert crew.state_owner(loaded, "backlog") == "bob"
-    assert crew.state_owner(loaded, "done") is None
+    assert crew.state_owners(loaded, "backlog") == ["bob"]
+    assert crew.state_owners(loaded, "done") == []
     assert crew.runs(loaded, "bob") == ["product", "lex"]
+
+
+def test_several_humans_share_a_state_and_in_test_is_a_state(tmp_path):
+    shared = {
+        **HUMANS,
+        "alice": {**HUMANS["alice"], "owns_states": ["backlog", "in_review"]},
+        "bob": {**HUMANS["bob"], "owns_states": ["backlog", "in_test"]},
+    }
+    core, _ = workspace(tmp_path, with_(humans=shared))
+    loaded = crew.load(core / ".weside" / "crew.json", strict=True)
+    assert crew.state_owners(loaded, "backlog") == ["alice", "bob"]
+    assert crew.state_owners(loaded, "in_test") == ["bob"]
+    # in_test is optional: unmapped by default, mapped only where the crew names a status
+    assert loaded["board"]["states"]["in_test"] is None and not crew.maps_state(loaded, "in_test")
+    core2, _ = workspace(
+        tmp_path / "mapped", with_(humans=shared, board__states={"in_test": "In Test"})
+    )
+    mapped = crew.load(core2 / ".weside" / "crew.json", strict=True)
+    assert crew.maps_state(mapped, "in_test")
+    assert (
+        crew.STATES.index("in_review") < crew.STATES.index("in_test") < crew.STATES.index("done")
+    )
+    assert crew.RUNNING_STATES[0] == "in_progress"
+
+
+def test_the_deciding_human_is_the_first_with_decides(tmp_path):
+    first = {
+        "bob": {**HUMANS["bob"], "decides": []},
+        "alice": HUMANS["alice"],
+    }
+    core, _ = workspace(tmp_path, with_(humans=first))
+    loaded = crew.load(core / ".weside" / "crew.json", strict=True)
+    assert crew.deciding_human(loaded)[0] == "alice"
+
+
+def test_the_deliverer_is_the_coordinator_or_the_first_role_this_human_runs(tmp_path):
+    core, _ = workspace(tmp_path, with_(humans=HUMANS))
+    loaded = crew.load(core / ".weside" / "crew.json")
+    assert crew.deliverer(loaded, {"WE_HUMAN": "alice"}) == "Otto"
+    # bob's machine runs no coordinator: his product session delivers, by his name for it
+    assert crew.deliverer(loaded, {"WE_HUMAN": "bob"}) == "Paula"
+    assert crew.deliverer(CREW, {}) == crew.holder_name(CREW, "coordinator")
+    out = run(core, "deliverer", env={"WE_HUMAN": "bob"})
+    assert out.returncode == 0 and out.stdout.strip() == "Paula"
+
+
+@pytest.mark.parametrize("value, ok", [(["ops@example.com"], True), ([], True), ("ops", False)])
+def test_shared_accounts_is_a_list_of_accounts(tmp_path, value, ok):
+    core, _ = workspace(tmp_path, with_(board__shared_accounts=value))
+    if ok:
+        assert crew.load(core / ".weside" / "crew.json")["board"]["shared_accounts"] == value
+    else:
+        with pytest.raises(crew.CrewError, match="shared_accounts must be a list"):
+            crew.load(core / ".weside" / "crew.json")
+
+
+def test_a_companion_name_that_is_another_member_s_slug_is_refused(tmp_path):
+    """Red arm (Codex, core #6316): member() resolves a slug first, so a companion name equal to
+    another member's slug would point at that member."""
+    members = {**CREW["members"], "vic": {"name": "Victor", "workplace": "."}}
+    named = {**HUMANS, "bob": {**HUMANS["bob"], "companions": {"product": "Vic"}}}
+    core, _ = workspace(tmp_path, with_(humans=named, members=members))
+    with pytest.raises(crew.CrewError, match="a name denotes one member"):
+        crew.load(core / ".weside" / "crew.json")
 
 
 def test_display_name_per_human_and_member_lookup_by_it(tmp_path):
@@ -1142,13 +1212,6 @@ def test_we_role_id_picks_among_the_roles_one_member_holds():
         ({"alice": {"name": "A", "runs": "coordinator"}}, "humans.alice.runs must be a list"),
         ({"alice": {"name": "A", "runs": ["pilot"]}}, "'pilot' is no role key, member slug"),
         ({"alice": {"name": "A", "owns_states": ["review"]}}, "'review' is no state"),
-        (
-            {
-                "alice": {"name": "A", "owns_states": ["done"]},
-                "bob": {"name": "B", "owns_states": ["done"]},
-            },
-            "done is owned by humans.alice already",
-        ),
         (
             {"alice": {"name": "A", "email": "x@y"}, "bob": {"name": "B", "email": "X@Y"}},
             "humans.bob.email is also humans.alice.email",
@@ -1241,3 +1304,11 @@ def test_skill_path_finds_the_member_s_skill_under_a_human_s_name(tmp_path):
     skill.write_text("---\nname: acme-ada\n---\n")
     path, loadable = crew.skill_path("Paula", core, home=tmp_path / "home")
     assert path == skill and loadable
+
+
+def test_a_crew_security_lens_dispatches_the_shipped_security_agent():
+    """Three panels of a consumer crew dispatched the security lens as we:lens-architecture."""
+    merged = crew._merge({**CREW, "lenses": {"security": {}}, "t2_panel": ["security"]})
+    assert merged["lenses"]["security"]["agent"] == "we:lens-security"
+    agent = Path(crew.__file__).resolve().parent.parent / "agents" / "lens-security.md"
+    assert "name: lens-security" in agent.read_text(encoding="utf-8")

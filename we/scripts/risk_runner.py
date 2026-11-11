@@ -8,8 +8,8 @@ crew's `risk.command` blob (from `risk.rules_from`), else the plugin's `risk_pat
 own blob of `we/scripts/risk_paths.py` when it carries one) over `.weside/risk-paths`, else no
 rules (class T0) — unless `RULES_FROM` carries a crew file: a crew without rules is a reason, never
 T0. `run(root, git, found, head, base, timeout)` writes the classifier to a temp file and runs it
-with `base` in a no-checkout worktree of `head`; line 1 must match `CLASS_LINE`. `classify` is both
-in one call. The worktree and the temp dir go whatever happens.
+with `base` in a no-checkout worktree of `head`; line 1 must match `CLASS_LINE`. The worktree and
+the temp dir go whatever happens.
 
 `git(root, *args, timeout=...)` is the caller's git: stdout, or None on any failure (the hook passes
 its own, cut to its time budget). Python 3.9, stdlib only.
@@ -179,18 +179,3 @@ def run(
         last = (out.stderr.strip().splitlines() or [line or "no output"])[-1]
         return None, f"the classifier exited {out.returncode}: {last}"
     return [line, *lines[1:]], None
-
-
-def classify(
-    root: str, head: str, base: str, git: Git = plain_git, timeout: float = CLASSIFY_TIMEOUT
-) -> tuple[list[str] | None, str | None]:
-    """(output lines, class first, None) or (None, why) of `base...head` under `RULES_FROM`'s
-    rules; a repo without rules gives `["T0"]`."""
-    found = rules(root, git)
-    if isinstance(found, str):
-        return None, found
-    if found is None:
-        return ["T0"], None
-    if found[2] != RULES_FROM and not fetch_rules(root, found[2], git):
-        return None, f"`git fetch` of {found[2]} failed; the rules must be current"
-    return run(root, git, found, head, base, timeout)

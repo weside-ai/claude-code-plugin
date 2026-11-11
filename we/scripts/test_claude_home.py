@@ -71,3 +71,16 @@ def test_tmux_attention_keeps_the_same_option_rule(tmp_path, monkeypatch):
         _settings(tmp_path / "p", configs)
         monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "p"))
         assert tmux_attention.plugin_options() == claude_home.plugin_options()
+
+
+def test_a_string_option_in_settings_reads_as_its_type(tmp_path):
+    """Red arm: `"autoMaterialize": "true"` in settings.json is True, not the string, so an
+    `is True` reader switches it on; digits read as an int."""
+    _settings(
+        tmp_path / "p",
+        {"we@weside-ai": {"options": {"autoMaterialize": "true", "n": "30", "off": "no"}}},
+    )
+    env = {"CLAUDE_CONFIG_DIR": str(tmp_path / "p")}
+    assert claude_home.plugin_option("autoMaterialize", env) is True
+    assert claude_home.plugin_option("n", env) == 30
+    assert claude_home.plugin_option("off", env) is False

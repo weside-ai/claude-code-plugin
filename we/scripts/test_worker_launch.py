@@ -367,12 +367,55 @@ def test_stop_ends_every_session_of_the_name_and_names_their_ids(env):
     rows = [
         *_rows(env),
         {"id": "w1a", "name": "w1", "cwd": "/a", "kind": "background", "pid": 1},
-        {"id": "w1b", "name": "w1", "cwd": "/b", "kind": "background", "pid": 2},
+        {"id": "w1b", "name": "w1", "cwd": "/a", "kind": "background", "pid": 2},
     ]
     env["state"].write_text(json.dumps(rows))
     assert wl.stop("w1") == ["w1a", "w1b"]
     argvs = [c["argv"] for c in _calls(env)]
     assert ["stop", "w1a"] in argvs and ["stop", "w1b"] in argvs
+
+
+def test_stop_without_worktree_refuses_one_name_in_several_trees(env):
+    """Red arm: `stop --name w1` without --worktree never ends the w1 of another tree too."""
+    rows = [
+        *_rows(env),
+        {"id": "w1a", "name": "w1", "cwd": "/a", "kind": "background", "pid": 1},
+        {"id": "w1b", "name": "w1", "cwd": "/b", "kind": "background", "pid": 2},
+    ]
+    env["state"].write_text(json.dumps(rows))
+    with pytest.raises(wl.LaunchError, match=r"2 sessions are named w1, in /a, /b.*--worktree"):
+        wl.stop("w1")
+    assert not any(c["argv"][:1] == ["stop"] for c in _calls(env))
+
+
+def test_a_row_without_id_is_named_by_its_session_never_none(env, monkeypatch):
+    """Red arm: an interactive row of `claude agents --json` has no `id`; the refusal names its
+    pid, never `claude stop None`, and is-worker is asked by its sessionId."""
+    asked = []
+    pid = os.getpid()
+    row = {
+        "name": "Wina",
+        "cwd": "/nowhere",
+        "kind": "interactive",
+        "pid": pid,
+        "sessionId": "s-77",
+    }
+    with monkeypatch.context() as m:
+        m.setattr(
+            wl.subprocess,
+            "run",
+            lambda argv, **_kw: (
+                asked.append(argv) or wl.subprocess.CompletedProcess(argv, 1, "", "")
+            ),
+        )
+        assert wl.is_worker(row) is False and asked[-1][-1] == "s-77"
+        assert wl.is_worker({"name": "x"}) is False and len(asked) == 1
+    env["state"].write_text(json.dumps([*_rows(env), row]))
+    with pytest.raises(wl.LaunchError) as exc:
+        wl.stop("Wina")
+    assert "None" not in str(exc.value) and f"kill {pid}" in str(exc.value)
+    with pytest.raises(wl.LaunchError, match=rf"no background id .*`kill {pid}` does"):
+        wl._stop_one(row, None)
 
 
 def test_stop_refuses_a_session_of_the_name_that_is_no_worker(env):

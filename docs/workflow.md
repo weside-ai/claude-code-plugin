@@ -166,4 +166,4 @@ worker or you moved the story. Its buttons start the verb the state calls for (`
 
 ## Deliver
 
-Claude arms auto-merge once the checks and the Codex verdict are in; the computed one-way class merges through the repo's self-merge window or by you (`/we:master` § Close the run). `/we:merged` closes out: worktrees, branches, processes, each landed story to In Review once its PR is linked; Done follows acceptance.
+Claude arms auto-merge once the checks and the Codex verdict are in; the computed one-way class merges through the repo's self-merge window or by you (`/we:master` § Close the run). Plan first: a code PR of a story whose plan `docs/plans/<KEY>-story.md` is not on `origin/main` yet, or whose story is still On Hold or Backlog on the board, is never merged or armed (the merge hook; every story key the branch and title name counts), and a one-way refusal names it too, for your hand merge. `/we:merged` closes out: worktrees, branches, processes, each landed story to In Review once its PR is linked; Done follows acceptance.

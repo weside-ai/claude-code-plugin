@@ -4,7 +4,8 @@
 After each meaningful turn, store the last exchange directly
 via the weside MCP endpoint.
 
-Auth: Claude Code's own MCP OAuth token from ~/.claude/.credentials.json
+Auth: Claude Code's own MCP OAuth token from <config dir>/.credentials.json (``claude_home.config_dir``:
+$CLAUDE_CONFIG_DIR, else ~/.claude)
 (auto-refreshed by Claude Code at session start — always fresh while
 a session with the we plugin is active).
 
@@ -529,7 +530,7 @@ def main() -> None:
     token = _get_valid_token()
     if not token:
         _warn(
-            "no valid MCP OAuth token in ~/.claude/.credentials.json. "
+            f"no valid MCP OAuth token in {CLAUDE_CODE_CREDENTIALS_PATH}. "
             "Reconnect the we MCP server (e.g. /mcp) — this turn was NOT "
             "stored as memory."
         )

@@ -82,8 +82,7 @@ else the component owner), what only the human decides as one question line to t
 question never stops independent work: first dispatch everything that does not depend on an answer,
 then ask early, and park only the chunk an answer blocks. An important question is
 still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase and
-push; a worker that no longer answers, once idle or stopped, gets `we-worker checkpoint <name>` (one writer
-per worktree; tracked changes to `wip/<branch without its type prefix>`). Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
+push; a worker that no longer answers gets a checkpoint (**Checkpoint** in `references/worker-dispatch.md`). Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. A Selected plan needs
 no confirm: the invocation is the go.
 
@@ -207,6 +206,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    - exit 10 (no workflow ran on the head) → push an empty commit once; again 10 → report.
    - exit 11 (the review hit its quota; auto-merge left as it was) → rerun the review check after the
      quota resets, then watch again.
+   - exit 13 (a failed job never started: zero steps, billing or runner) → no rerun; one line to the
+     coordinator with the watcher's annotation.
    Bounds, no `/loop` or `/goal`: ci-review's three rounds; the watcher's 6-h lifetime (exit 9 →
    report); at most three re-arms per PR head; a repeat finding (ci-review § 4) stops and reports.
 6. A conflict exit of `watch-pr-conflicts.sh` (or the `conflict_gate.py` Stop hook) goes back to the
