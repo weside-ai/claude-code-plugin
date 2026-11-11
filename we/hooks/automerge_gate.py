@@ -927,8 +927,9 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
         f"head {head[:10]}"
     )
     how = (
-        f'Start a card worker: `we-worker <KEY>-card --bg "{_security_skill(root)} security card '
-        f'review of PR #{cls.number} on {head[:10]}"`; its comment carries `{CARD_MARKER}`, '
+        f'Start a card worker: `we-worker <KEY>-card --bg "<brief>"`, its Goal heading '
+        f'"{_security_skill(root)} security card review of PR #{cls.number} on {head[:10]}" '
+        f"(four headings, worker-dispatch.md § Name and brief); its comment carries `{CARD_MARKER}`, "
         f"`@ {head[:10]}` and `Overall: PASS` (worker-dispatch.md § Card worker)."
     )
     if bodies is None:

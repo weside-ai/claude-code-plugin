@@ -13,6 +13,7 @@ import pytest
 
 SCRIPT = Path(__file__).parent / "we-worker"
 FLAG = "--allow-dangerously-skip-permissions"
+GO = (Path(__file__).parent / "fixtures" / "briefs" / "complete-en.md").read_text()
 
 pytestmark = pytest.mark.skipif(not shutil.which("bash"), reason="we-worker is a bash script")
 
@@ -24,7 +25,8 @@ args = sys.argv[1:]
 with open(os.environ["STUB_LOG"], "a") as fh:
     fh.write(json.dumps({"argv": args, "role": os.environ.get("WE_ROLE"),
                          "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
-                         "companion": os.environ.get("WESIDE_COMPANION")}) + "\n")
+                         "companion": os.environ.get("WESIDE_COMPANION"),
+                         "key": os.environ.get("WE_STORY_KEY")}) + "\n")
 if args[:2] == ["agents", "--json"]:
     print(json.dumps(rows)); sys.exit(0)
 if args[:1] == ["stop"]:
@@ -118,17 +120,20 @@ def test_a_flag_is_no_worker_name(tmp_path):
 
 def test_bg_start_drops_the_callers_claude_variables_and_needs_no_timer(tmp_path):
     project, env = setup(tmp_path)
-    proc = run(project, env, "AC-12-impl", "--bg", "do it")
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 0, proc.stderr
     (call,) = started(tmp_path)
-    assert call["argv"] == ["--bg", "-n", "AC-12-impl", "do it"]
+    settings = str(
+        tmp_path / "home" / ".claude" / "we-state" / "workers" / "AC-12-impl.settings.json"
+    )
+    assert call["argv"] == ["--bg", "-n", "AC-12-impl", "--settings", settings, GO]
     assert call["role"] == "worker" and call["config_dir"] is None and call["companion"] is None
     assert "warning" not in proc.stderr
 
 
 def test_allow_bypass_of_the_crew_adds_the_flag(tmp_path):
     project, env = setup(tmp_path, crew={**CREW, "launch": {"allow_bypass": True}})
-    run(project, env, "AC-12-impl", "--bg", "go")
+    run(project, env, "AC-12-impl", "--bg", GO)
     (call,) = started(tmp_path)
     assert FLAG in call["argv"]
 
@@ -141,12 +146,12 @@ def test_the_timer_registers_and_arms_a_session_start_hook(tmp_path):
         "print('/state/w.json')\n"
     )
     project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_timer": str(timer)}})
-    proc = run(project, env, "AC-12-impl", "--bg", "--limit", "90m", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", "--limit", "90m", GO)
     assert proc.returncode == 0, proc.stderr
     args = json.loads((tmp_path / "timer.args").read_text())
     assert args[:5] == ["register", "--name", "AC-12-impl", "--limit", "90m"]
     (call,) = started(tmp_path)
-    settings = json.loads(call["argv"][call["argv"].index("--settings") + 1])
+    settings = json.loads(Path(call["argv"][call["argv"].index("--settings") + 1]).read_text())
     hook = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
     assert hook.endswith("arm /state/w.json")
 
@@ -154,7 +159,7 @@ def test_the_timer_registers_and_arms_a_session_start_hook(tmp_path):
 def test_a_missing_timer_warns_and_still_starts(tmp_path):
     project, env = setup(tmp_path)
     env["WE_WORKER_TIMER"] = str(tmp_path / "absent.py")
-    proc = run(project, env, "AC-12-impl", "--bg", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 0 and "starts without a time limit" in proc.stderr
     assert started(tmp_path)
 
@@ -171,7 +176,7 @@ def test_a_name_held_by_a_living_session_refuses(tmp_path):
         }
     ]
     project, env = setup(tmp_path, rows)
-    proc = run(project, env, "AC-12-impl", "--bg", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 2 and "already holds the name AC-12-impl" in proc.stderr
     assert not started(tmp_path)
 
@@ -188,19 +193,112 @@ def test_a_name_held_by_a_dead_session_starts(tmp_path):
         }
     ]
     project, env = setup(tmp_path, rows)
-    assert run(project, env, "AC-12-impl", "--bg", "go").returncode == 0
+    assert run(project, env, "AC-12-impl", "--bg", GO).returncode == 0
     assert started(tmp_path)
+
+
+@pytest.mark.parametrize("name", ["AC-12-impl", "AC-12"])
+def test_a_name_with_the_story_key_starts(tmp_path, name):
+    project, env = setup(tmp_path)
+    proc = run(project, env, name, "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert started(tmp_path)
+
+
+@pytest.mark.parametrize("name", ["build-fix", "launch-owner-p1", "helper"])
+def test_a_name_without_the_story_key_refuses_before_claude(tmp_path, name):
+    project, env = setup(tmp_path)
+    proc = run(project, env, name, "--bg", GO)
+    assert proc.returncode == 2
+    assert proc.stderr.startswith(
+        f"we-worker: worker name {name} carries no story key ([A-Z]+-\\d+), e.g. "
+    )
+    assert not started(tmp_path)
 
 
 @pytest.mark.parametrize(
-    "name,warns", [("AC-12-impl", False), ("launch-owner-p1", False), ("helper", True)]
+    "args",
+    [
+        ("--bg", "fix it"),
+        ("--bg",),
+        ("--bg", "--agent", "we:dev-medium"),
+        ("--bg", "## Goal\nx\n## Output\n"),
+    ],
 )
-def test_a_name_without_key_or_plan_slug_warns_but_starts(tmp_path, name, warns):
+def test_an_incomplete_brief_warns_with_the_template_and_starts(tmp_path, args):
+    """Warn first (Vyra 11.11.): the finding and the template on stderr, the worker starts, a
+    `brief` line with ok false in brakes.jsonl; refusing is worker_launch.BRIEF_ENFORCED's."""
     project, env = setup(tmp_path)
-    proc = run(project, env, name, "--bg", "go")
-    assert proc.returncode == 0
-    assert ("carries no story key" in proc.stderr) is warns
+    proc = run(project, env, "AC-12-impl", *args)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stderr.startswith("we-worker: warning: the brief lacks ")
+    assert "## Grenzen und wann stoppen (Limits and when to stop)" in proc.stderr
     assert started(tmp_path)
+    (line,) = brakes(tmp_path)
+    assert line["type"] == "brief" and line["name"] == "AC-12-impl" and line["ok"] is False
+
+
+def brakes(tmp_path):
+    log = tmp_path / "home" / ".claude" / "we-state" / "brakes.jsonl"
+    return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+
+
+def test_a_pointer_brief_is_read_from_its_file(tmp_path):
+    project, env = setup(tmp_path)
+    good = Path(__file__).parent / "fixtures" / "briefs" / "complete-de.md"
+    assert run(project, env, "AC-12-impl", "--bg", f"Read {good} and follow it.").returncode == 0
+    bad = good.with_name("missing-goal.md")
+    proc = run(project, env, "AC-12-other", "--bg", f"Read {bad} and follow it.")
+    assert proc.returncode == 0 and "warning: the brief lacks Ziel / Goal" in proc.stderr
+    assert [x["ok"] for x in brakes(tmp_path)] == [True, False]
+
+
+def test_a_resumed_worker_checks_the_name_only(tmp_path):
+    project, env = setup(tmp_path)
+    sid = "0123abcd-0000-0000-0000-000000000000"
+    assert run(project, env, "AC-12-impl", "--bg", "--resume", sid).returncode == 0
+    assert run(project, env, "helper", "--bg", "--resume", sid).returncode == 2
+
+
+def test_the_worker_gets_its_settings_file_and_key(tmp_path):
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    path = Path(call["argv"][call["argv"].index("--settings") + 1])
+    assert (
+        path == tmp_path / "home" / ".claude" / "we-state" / "workers" / "AC-12-impl.settings.json"
+    )
+    doc = json.loads(path.read_text())
+    assert (
+        "Bash(*gh secret *)" in doc["permissions"]["deny"]
+        and doc["env"]["WE_STORY_KEY"] == "AC-12"
+    )
+    assert call["key"] == "AC-12"
+
+
+def test_a_window_worker_carries_settings_and_key_too(tmp_path):
+    project, env = setup(tmp_path)
+    run(project, env, "AC-12-impl", GO)
+    (window,) = [c["tmux"] for c in calls(tmp_path) if c.get("tmux", [""])[0] == "new-window"]
+    assert "WE_STORY_KEY=AC-12" in window[-1] and "--settings" in window[-1]
+
+
+def test_without_the_plugin_script_no_worker_starts(tmp_path):
+    project, env = setup(tmp_path)
+    lone = tmp_path / "lone"
+    lone.mkdir()
+    (lone / "we-worker").write_text(SCRIPT.read_text())
+    proc = subprocess.run(
+        ["bash", str(lone / "we-worker"), "AC-12-impl", "--bg", GO],
+        capture_output=True,
+        text=True,
+        cwd=project,
+        env=env,
+        check=False,
+    )
+    assert proc.returncode == 2 and "plugin we not installed" in proc.stderr
+    assert not started(tmp_path)
 
 
 def _transcript(tmp_path, sid, entries):
@@ -288,9 +386,13 @@ def test_stop_waits_until_the_row_is_gone_and_ends_what_it_left(tmp_path):
             {"id": "ab12", "name": "w", "kind": "background", "pid": worker.pid, "sessionId": "s"}
         ]
         project, env = setup(tmp_path, rows)
+        settings = tmp_path / "home" / ".claude" / "we-state" / "workers" / "w.settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text("{}")
         proc = run(project, env, "stop", "w")
         assert proc.returncode == 0, proc.stderr
         assert f"w (ab12) stopped; also ended: {child} sleep" in proc.stdout
+        assert not settings.exists()  # the stop clears the worker's settings file
     finally:
         worker.kill()
 
@@ -343,17 +445,17 @@ def test_stop_never_ends_a_session_that_is_no_worker(tmp_path, role):
         subprocess.run(["kill", str(pid)], capture_output=True, check=False)
 
 
-@pytest.mark.parametrize(("name", "warns"), [("AC-12-impl", False), ("helper", True)])
-def test_without_a_crew_the_default_key_pattern_decides(tmp_path, name, warns):
+@pytest.mark.parametrize(("name", "code"), [("AC-12-impl", 0), ("helper", 2)])
+def test_without_a_crew_the_default_key_pattern_decides(tmp_path, name, code):
     project, env = setup(tmp_path, crew=None)
-    proc = run(project, env, name, "--bg", "go")
-    assert proc.returncode == 0
-    assert ("carries no story key ([A-Z]+-\\d+)" in proc.stderr) is warns
+    proc = run(project, env, name, "--bg", GO)
+    assert proc.returncode == code
+    assert ("carries no story key ([A-Z]+-\\d+)" in proc.stderr) is bool(code)
 
 
 def test_an_unknown_flag_before_the_claude_args_refuses(tmp_path):
     project, env = setup(tmp_path)
-    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", "/x", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", "/x", GO)
     assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
     assert "cd <tree> && we-worker AC-12-impl" in proc.stderr
     assert not started(tmp_path)
@@ -361,17 +463,15 @@ def test_an_unknown_flag_before_the_claude_args_refuses(tmp_path):
 
 def test_an_unknown_flag_later_among_the_claude_args_refuses(tmp_path):
     project, env = setup(tmp_path)
-    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "x", "--cwd", "/x", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "x", "--cwd", "/x", GO)
     assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
     assert not started(tmp_path)
 
 
 def test_a_claude_flag_passes(tmp_path):
     project, env = setup(tmp_path)
-    assert (
-        run(project, env, "AC-12-impl", "--bg", "--agent", "we:dev-medium", "go").returncode == 0
-    )
-    assert started(tmp_path)[0]["argv"][-3:] == ["--agent", "we:dev-medium", "go"]
+    assert run(project, env, "AC-12-impl", "--bg", "--agent", "we:dev-medium", GO).returncode == 0
+    assert started(tmp_path)[0]["argv"][-3:] == ["--agent", "we:dev-medium", GO]
 
 
 @pytest.mark.parametrize(
@@ -381,7 +481,7 @@ def test_a_claude_flag_passes(tmp_path):
 def test_worker_mode_bypass_starts_only_a_bg_worker_in_bypass(tmp_path, mode, args, bypass):
     project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": mode}})
     env["TMUX"] = ""
-    run(project, env, "AC-12-impl", *args, "go")
+    run(project, env, "AC-12-impl", *args, GO)
     argv = [c["argv"] for c in calls(tmp_path) if c["argv"] and c["argv"][0] in ("--bg", "-n")]
     if args:
         assert ("--permission-mode" in argv[0]) is bypass
@@ -393,7 +493,7 @@ def test_worker_mode_bypass_starts_only_a_bg_worker_in_bypass(tmp_path, mode, ar
 
 def test_a_permission_mode_of_the_caller_wins(tmp_path):
     project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": "bypass"}})
-    run(project, env, "AC-12-impl", "--bg", "--permission-mode", "plan", "go")
+    run(project, env, "AC-12-impl", "--bg", "--permission-mode", "plan", GO)
     (call,) = started(tmp_path)
     assert call["argv"].count("--permission-mode") == 1 and "plan" in call["argv"]
 
@@ -534,7 +634,7 @@ def test_without_a_crew_the_allow_bypass_variable_adds_the_flag(tmp_path, value,
     project, env = setup(tmp_path, crew=None)
     if value:
         env["WE_WORKER_ALLOW_BYPASS"] = value
-    run(project, env, "AC-12-impl", "--bg", "go")
+    run(project, env, "AC-12-impl", "--bg", GO)
     (call,) = started(tmp_path)
     assert (FLAG in call["argv"]) is flag
 
@@ -542,14 +642,14 @@ def test_without_a_crew_the_allow_bypass_variable_adds_the_flag(tmp_path, value,
 def test_a_crew_value_wins_over_the_allow_bypass_variable(tmp_path):
     project, env = setup(tmp_path, crew={**CREW, "launch": {"allow_bypass": False}})
     env["WE_WORKER_ALLOW_BYPASS"] = "1"
-    run(project, env, "AC-12-impl", "--bg", "go")
+    run(project, env, "AC-12-impl", "--bg", GO)
     (call,) = started(tmp_path)
     assert FLAG not in call["argv"]
 
 
 def test_a_permission_mode_with_equals_wins_too(tmp_path):
     project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": "bypass"}})
-    run(project, env, "AC-12-impl", "--bg", "--permission-mode=plan", "go")
+    run(project, env, "AC-12-impl", "--bg", "--permission-mode=plan", GO)
     (call,) = started(tmp_path)
     assert "bypassPermissions" not in call["argv"] and "--permission-mode=plan" in call["argv"]
 
@@ -668,7 +768,7 @@ def test_an_unreadable_claude_help_refuses_no_flag(tmp_path):
     """Fail-open by design: without claude's own help nothing is refused (and nothing is named)."""
     project, env = setup(tmp_path)
     env["STUB_NO_HELP"] = "1"
-    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", "go")
+    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", GO)
     assert proc.returncode == 0, proc.stderr
     (call,) = started(tmp_path)
     assert "--cwd" in call["argv"]

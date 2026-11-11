@@ -39,6 +39,7 @@ sys.exit(9)
 """
 
 TEMPLATE = "claude --bg -n {name} --agent {agent} {brief}"
+BRIEFS = Path(__file__).parent / "fixtures" / "briefs"
 
 
 def _git(cwd, *args):
@@ -92,7 +93,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-lead")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     brief = tmp_path / "brief.md"
-    brief.write_text('Run Skill("we:develop") for KEY.\n')
+    brief.write_text(
+        'Run Skill("we:develop") for KEY.\n\n' + (BRIEFS / "complete-en.md").read_text()
+    )
 
     def configure(value):
         (wt / ".weside").mkdir(exist_ok=True)
@@ -150,7 +153,13 @@ def test_invalid_template_refuses_and_launches_nothing(env, template, message):
     out = _run("backend", "--repo", str(env["wt"]))
     assert out.returncode == 2 and message in out.stderr
     out = _run(
-        "launch", "--worktree", str(env["wt"]), "--name", "w1", "--brief-file", str(env["brief"])
+        "launch",
+        "--worktree",
+        str(env["wt"]),
+        "--name",
+        "KEY-1-w1",
+        "--brief-file",
+        str(env["brief"]),
     )
     assert out.returncode == 2 and message in out.stderr
     assert not any("--bg" in c["argv"] for c in _calls(env))
@@ -163,7 +172,7 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
         "--worktree",
         str(env["wt"]),
         "--name",
-        "w1",
+        "KEY-1-w1",
         "--agent",
         "we:dev-medium",
         "--brief-file",
@@ -174,20 +183,20 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
     brief = (gd / wl.BRIEF).read_text()
     assert brief.startswith("Lead: LEAD-1 — ") and 'Run Skill("we:develop") for KEY.' in brief
     marker = wl.read_marker(env["wt"])
-    assert marker["name"] == "w1" and marker["lead"] == "LEAD-1"
+    assert marker["name"] == "KEY-1-w1" and marker["lead"] == "LEAD-1"
     assert marker["agent"] == "we:dev-medium" and marker["launched_at"] > 0
-    assert marker["session_id"] == "s-w1"
+    assert marker["session_id"] == "s-KEY-1-w1"
     launch = _launch_call(env)
     assert launch["argv"] == [
         "--bg",
         "-n",
-        "w1",
+        "KEY-1-w1",
         "--agent",
         "we:dev-medium",
         f"Read {gd / wl.BRIEF} and follow it.",
     ]
     assert Path(launch["cwd"]).resolve() == env["wt"].resolve()
-    assert [r["cwd"] for r in _rows(env) if r["name"] == "w1"] == [launch["cwd"]]
+    assert [r["cwd"] for r in _rows(env) if r["name"] == "KEY-1-w1"] == [launch["cwd"]]
     timing = list((Path(os.environ["HOME"]) / ".claude" / "we-timing").glob("*.jsonl"))
     assert json.loads(timing[0].read_text().splitlines()[0])["event"] == "WorkerLaunch"
 
@@ -195,17 +204,19 @@ def test_launch_writes_brief_and_marker_and_runs_in_the_worktree(env):
 def test_agent_placeholder_needs_an_agent(env):
     env["configure"](TEMPLATE)
     with pytest.raises(wl.LaunchError, match="pass --agent") as exc:
-        wl.launch(env["wt"], "w2", env["brief"])
+        wl.launch(env["wt"], "KEY-1-w2", env["brief"])
     assert exc.value.code == 2 and wl.read_marker(env["wt"]) is None
     env["configure"]("claude --bg -n {name} {brief}")
-    wl.launch(env["wt"], "w2", env["brief"])
-    assert _launch_call(env)["argv"][:3] == ["--bg", "-n", "w2"]
+    wl.launch(env["wt"], "KEY-1-w2", env["brief"])
+    assert _launch_call(env)["argv"][:3] == ["--bg", "-n", "KEY-1-w2"]
 
 
 def test_lead_in_the_worker_tree_is_no_worker(env):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
-    assert wl.worker_marker({"cwd": str(env["wt"]), "session_id": "s-w1"})["name"] == "w1"
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
+    assert (
+        wl.worker_marker({"cwd": str(env["wt"]), "session_id": "s-KEY-1-w1"})["name"] == "KEY-1-w1"
+    )
     assert wl.worker_marker({"cwd": str(env["wt"]), "session_id": "s-lead"}) is None
     assert wl.worker_marker({"cwd": str(env["wt"])}) is None
 
@@ -214,7 +225,7 @@ def test_unnamed_lead_refuses(env, monkeypatch):
     env["configure"]("claude --bg -n {name} {brief}")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s-unknown")
     with pytest.raises(wl.LaunchError, match="name this session first"):
-        wl.launch(env["wt"], "w1", env["brief"])
+        wl.launch(env["wt"], "KEY-1-w1", env["brief"])
     assert wl.read_marker(env["wt"]) is None
     assert not any("--bg" in c["argv"] for c in _calls(env))
 
@@ -223,45 +234,45 @@ def test_failed_launch_removes_its_files(env, monkeypatch):
     env["configure"]("claude --bg -n {name} {brief}")
     monkeypatch.setenv("STUB_LAUNCH_FAILS", "1")
     with pytest.raises(wl.LaunchError, match="exited 7: boom"):
-        wl.launch(env["wt"], "w1", env["brief"])
+        wl.launch(env["wt"], "KEY-1-w1", env["brief"])
     gd = wl.git_dir(env["wt"])
     assert not (gd / wl.MARKER).exists() and not (gd / wl.BRIEF).exists()
 
 
 def test_launch_refuses_on_the_subagent_backend(env):
     with pytest.raises(wl.LaunchError, match="Agent\\(isolation"):
-        wl.launch(env["wt"], "w1", env["brief"])
+        wl.launch(env["wt"], "KEY-1-w1", env["brief"])
 
 
 def test_stop_and_alive(env):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
-    assert _run("alive", "--name", "w1").returncode == 0
-    out = _run("stop", "--name", "w1", "--worktree", str(env["wt"]))
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
+    assert _run("alive", "--name", "KEY-1-w1").returncode == 0
+    out = _run("stop", "--name", "KEY-1-w1", "--worktree", str(env["wt"]))
     assert out.returncode == 0, out.stderr
     assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]
-    assert _run("alive", "--name", "w1").returncode == 1
+    assert _run("alive", "--name", "KEY-1-w1").returncode == 1
     gd = wl.git_dir(env["wt"])
     assert not (gd / wl.MARKER).exists() and not (gd / wl.BRIEF).exists()
-    out = _run("stop", "--name", "w1")
-    assert out.returncode == 1 and "no running session named w1" in out.stderr
+    out = _run("stop", "--name", "KEY-1-w1")
+    assert out.returncode == 1 and "no running session named KEY-1-w1" in out.stderr
 
 
 def test_stop_of_an_ended_session_clears_its_marker(env):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
-    env["state"].write_text(json.dumps([r for r in _rows(env) if r["name"] != "w1"]))
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
+    env["state"].write_text(json.dumps([r for r in _rows(env) if r["name"] != "KEY-1-w1"]))
     with pytest.raises(wl.LaunchError, match="no running session"):
-        wl.stop("w1", env["wt"])
+        wl.stop("KEY-1-w1", env["wt"])
     assert wl.read_marker(env["wt"]) is None
 
 
 def test_stop_reports_a_session_that_keeps_running(env, monkeypatch):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
     monkeypatch.setenv("STUB_STOP_IGNORED", "1")
     with pytest.raises(wl.LaunchError, match="still running") as exc:
-        wl.stop("w1", wait_s=0)
+        wl.stop("KEY-1-w1", wait_s=0)
     assert exc.value.code == 3
 
 
@@ -337,9 +348,9 @@ def test_stop_goes_through_the_we_worker_stop_verb(env, tmp_path):
     )
     ww.chmod(0o755)
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
     _crew(env, {"worker": "we-worker {name} --bg --agent {agent} {brief}"})
-    wl.stop("w1", env["wt"])
+    wl.stop("KEY-1-w1", env["wt"])
     argvs = [c["argv"] for c in _calls(env)]
     assert ["we-worker", "stop", "bg1"] in argvs
     assert ["stop", "bg1"] not in argvs
@@ -354,9 +365,9 @@ def test_a_broken_crew_leaves_the_config_in_charge(env, capsys):
 
 def test_stop_falls_back_to_claude_stop_when_we_worker_is_not_on_path(env):
     env["configure"](TEMPLATE)
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-medium")
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
     _crew(env, {"worker": "we-worker {name} --bg --agent {agent} {brief}"})
-    wl.stop("w1", env["wt"])
+    wl.stop("KEY-1-w1", env["wt"])
     assert ["stop", "bg1"] in [c["argv"] for c in _calls(env)]
 
 
@@ -366,25 +377,27 @@ def test_stop_falls_back_to_claude_stop_when_we_worker_is_not_on_path(env):
 def test_stop_ends_every_session_of_the_name_and_names_their_ids(env):
     rows = [
         *_rows(env),
-        {"id": "w1a", "name": "w1", "cwd": "/a", "kind": "background", "pid": 1},
-        {"id": "w1b", "name": "w1", "cwd": "/a", "kind": "background", "pid": 2},
+        {"id": "w1a", "name": "KEY-1-w1", "cwd": "/a", "kind": "background", "pid": 1},
+        {"id": "w1b", "name": "KEY-1-w1", "cwd": "/a", "kind": "background", "pid": 2},
     ]
     env["state"].write_text(json.dumps(rows))
-    assert wl.stop("w1") == ["w1a", "w1b"]
+    assert wl.stop("KEY-1-w1") == ["w1a", "w1b"]
     argvs = [c["argv"] for c in _calls(env)]
     assert ["stop", "w1a"] in argvs and ["stop", "w1b"] in argvs
 
 
 def test_stop_without_worktree_refuses_one_name_in_several_trees(env):
-    """Red arm: `stop --name w1` without --worktree never ends the w1 of another tree too."""
+    """Red arm: `stop --name KEY-1-w1` without --worktree never ends the KEY-1-w1 of another tree too."""
     rows = [
         *_rows(env),
-        {"id": "w1a", "name": "w1", "cwd": "/a", "kind": "background", "pid": 1},
-        {"id": "w1b", "name": "w1", "cwd": "/b", "kind": "background", "pid": 2},
+        {"id": "w1a", "name": "KEY-1-w1", "cwd": "/a", "kind": "background", "pid": 1},
+        {"id": "w1b", "name": "KEY-1-w1", "cwd": "/b", "kind": "background", "pid": 2},
     ]
     env["state"].write_text(json.dumps(rows))
-    with pytest.raises(wl.LaunchError, match=r"2 sessions are named w1, in /a, /b.*--worktree"):
-        wl.stop("w1")
+    with pytest.raises(
+        wl.LaunchError, match=r"2 sessions are named KEY-1-w1, in /a, /b.*--worktree"
+    ):
+        wl.stop("KEY-1-w1")
     assert not any(c["argv"][:1] == ["stop"] for c in _calls(env))
 
 
@@ -441,7 +454,7 @@ def test_a_refused_stop_names_the_pid(env, monkeypatch):
 
 def test_an_agent_the_template_cannot_carry_is_named(env, capsys):
     env["configure"]("claude --bg -n {name} {brief}")
-    wl.launch(env["wt"], "w1", env["brief"], "we:dev-high")
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-high")
     assert "--agent we:dev-high is dropped" in capsys.readouterr().err
 
 
@@ -453,13 +466,16 @@ def test_checkpoint_pushes_the_tracked_changes_to_a_wip_branch(env, tmp_path, mo
     _git(env["wt"], "add", "a.txt")
     _git(env["wt"], "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a")
     (env["wt"] / "a.txt").write_text("two\n")
-    rows = [*_rows(env), {"id": "w1", "name": "w1", "cwd": str(env["wt"]), "kind": "background"}]
+    rows = [
+        *_rows(env),
+        {"id": "KEY-1-w1", "name": "KEY-1-w1", "cwd": str(env["wt"]), "kind": "background"},
+    ]
     env["state"].write_text(json.dumps(rows))
     monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
     monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@t")
     monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
-    line = wl.checkpoint("w1")
+    line = wl.checkpoint("KEY-1-w1")
     assert line.endswith("pushed to wip/x")
     shown = subprocess.run(
         ["git", "--git-dir", str(origin), "show", "wip/x:a.txt"],
@@ -468,3 +484,171 @@ def test_checkpoint_pushes_the_tracked_changes_to_a_wip_branch(env, tmp_path, mo
         check=True,
     )
     assert shown.stdout == "two\n"
+
+
+# ---------------------------------------------------------------- name, brief, settings
+
+
+class TestCheckName:
+    @pytest.mark.parametrize(
+        "name,key", [("AB-2856-hook", "AB-2856"), ("AB-2856", "AB-2856"), ("XY-1-p2-x", "XY-1")]
+    )
+    def test_a_name_with_a_key_gives_the_key(self, name, key):
+        assert wl.check_name(name) == key
+
+    @pytest.mark.parametrize("name", ["build-fix", "fix-AB-2856", "wa-2856-hook", "AB-2856hook"])
+    def test_a_name_without_a_leading_key_refuses(self, name):
+        with pytest.raises(wl.LaunchError) as exc:
+            wl.check_name(name, example="AB-2856")
+        assert exc.value.code == 2
+        assert str(exc.value) == (
+            f"worker name {name} carries no story key ([A-Z]+-\\d+), e.g. AB-2856-{name}"
+        )
+
+    def test_the_crews_key_pattern_decides(self, env):
+        (env["wt"] / ".weside").mkdir(exist_ok=True)
+        crew = {
+            "version": 2,
+            "roles": {"product": "po"},
+            "members": {"po": {"name": "Ada"}},
+            "naming": {"key": "#\\d+"},
+        }
+        (env["wt"] / ".weside" / "crew.json").write_text(json.dumps(crew))
+        assert wl.key_pattern(env["wt"]) == "#\\d+"
+        out = _run(
+            "check",
+            "--name",
+            "#12-fix",
+            "--brief-file",
+            str(BRIEFS / "complete-de.md"),
+            "--repo",
+            str(env["wt"]),
+        )
+        assert out.returncode == 0 and out.stdout.strip() == "#12"
+
+    def test_launch_refuses_before_writing_a_file(self, env):
+        env["configure"](TEMPLATE)
+        out = _run(
+            "launch",
+            "--worktree",
+            str(env["wt"]),
+            "--name",
+            "build-fix",
+            "--agent",
+            "we:dev-medium",
+            "--brief-file",
+            str(env["brief"]),
+        )
+        assert (
+            out.returncode == 2
+            and "worker_launch: worker name build-fix carries no story key" in out.stderr
+        )
+        gd = wl.git_dir(env["wt"])
+        assert not (gd / wl.BRIEF).exists() and not (gd / wl.MARKER).exists()
+        assert not any("--bg" in c["argv"] for c in _calls(env))
+
+
+class TestCheckBrief:
+    @pytest.mark.parametrize(
+        "fixture,missing",
+        [
+            ("missing-goal.md", ["Ziel / Goal"]),
+            ("missing-output.md", ["Ausgabe / Output"]),
+            ("missing-tools.md", ["Werkzeuge und Quellen / Tools and sources"]),
+            ("missing-limits.md", ["Grenzen und wann stoppen / Limits and when to stop"]),
+            ("empty-body.md", ["Ausgabe / Output"]),
+            ("fenced-heading.md", ["Ziel / Goal"]),
+            ("complete-de.md", []),
+            ("complete-en.md", []),
+        ],
+    )
+    def test_each_field_counts(self, fixture, missing):
+        assert wl.check_brief((BRIEFS / fixture).read_text()) == missing
+
+    def test_a_brief_without_headings_lacks_all_four(self):
+        assert len(wl.check_brief("fix it")) == 4
+
+    def test_the_template_passes_its_own_check(self):
+        assert wl.check_brief(wl.TEMPLATE) == []
+
+    def test_a_pointer_line_is_the_file_it_names(self, tmp_path):
+        assert wl.check_brief(f"Read {BRIEFS / 'complete-de.md'} and follow it.") == []
+        assert len(wl.check_brief(f"Read {BRIEFS / 'missing-goal.md'} and follow it.")) == 1
+        with pytest.raises(wl.LaunchError, match="brief: "):
+            wl.check_brief(f"Read {tmp_path / 'absent.md'} and follow it.")
+
+    def test_check_names_each_missing_field_and_prints_the_template(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("WE_STATE_DIR", str(tmp_path))
+        out = _run(
+            "check",
+            "--name",
+            "AB-1-x",
+            "--brief-file",
+            str(BRIEFS / "missing-limits.md"),
+            "--prefix",
+            "we-worker",
+        )
+        assert out.returncode == 0 and out.stdout.strip() == "AB-1"
+        assert out.stderr.startswith(
+            "we-worker: warning: the brief lacks Grenzen und wann stoppen / Limits and when to stop;"
+        )
+        assert "## Ziel (Goal)" in out.stderr
+        assert "## Grenzen und wann stoppen (Limits and when to stop)" in out.stderr
+        (line,) = [json.loads(x) for x in (tmp_path / "brakes.jsonl").read_text().splitlines()]
+        assert line["type"] == "brief" and line["key"] == "AB-1" and line["ok"] is False
+        assert line["missing"] == ["Grenzen und wann stoppen / Limits and when to stop"]
+        assert line["ts"].endswith("Z")
+
+    def test_an_enforced_check_refuses(self, monkeypatch):
+        monkeypatch.setattr(wl, "BRIEF_ENFORCED", True)
+        with pytest.raises(wl.LaunchError, match="the brief lacks") as exc:
+            wl.check("AB-1-x", (BRIEFS / "missing-goal.md").read_text())
+        assert exc.value.code == 2
+
+    def test_check_reads_stdin(self):
+        out = subprocess.run(
+            [sys.executable, str(SCRIPT), "check", "--name", "AB-1-x", "--brief-file", "-"],
+            input=(BRIEFS / "complete-en.md").read_text(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert out.returncode == 0 and out.stdout.strip() == "AB-1"
+
+    @pytest.mark.parametrize("fixture", ["missing-goal.md", "empty-body.md"])
+    def test_launch_refuses_an_incomplete_brief_before_writing_a_file(
+        self, env, fixture, monkeypatch
+    ):
+        monkeypatch.setattr(wl, "BRIEF_ENFORCED", True)
+        env["configure"](TEMPLATE)
+        with pytest.raises(wl.LaunchError, match="the brief lacks") as exc:
+            wl.launch(env["wt"], "KEY-1-w1", BRIEFS / fixture, "we:dev-medium")
+        assert exc.value.code == 2 and wl.read_marker(env["wt"]) is None
+        assert not (wl.git_dir(env["wt"]) / wl.BRIEF).exists()
+
+    def test_the_marker_carries_the_key(self, env):
+        env["configure"](TEMPLATE)
+        wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
+        assert wl.read_marker(env["wt"])["key"] == "KEY-1"
+
+
+class TestSettings:
+    def test_settings_writes_the_rights_file_with_the_timer_hook(self, env, tmp_path):
+        out_file = tmp_path / "state" / "KEY-1-w1.settings.json"
+        out = _run(
+            "settings",
+            "--repo",
+            str(env["wt"]),
+            "--key",
+            "KEY-1",
+            "--out",
+            str(out_file),
+            "--session-start",
+            "timer arm x",
+        )
+        assert out.returncode == 0, out.stderr
+        doc = json.loads(out_file.read_text())
+        assert doc["permissions"]["allow"] == []  # no crew, no rights
+        assert "Bash(*gh secret *)" in doc["permissions"]["deny"]
+        assert doc["env"] == {"WE_ROLE": "worker", "WE_STORY_KEY": "KEY-1"}
+        assert doc["hooks"]["SessionStart"][0]["hooks"][0]["command"] == "timer arm x"

@@ -1267,7 +1267,8 @@ def test_a_card_hit_without_card_verdict_is_refused(green: dict, monkeypatch, se
         assert red is not None, command
         assert f"PR #7 is T2 with a `{section}` hit" in red
         assert "no card verdict is on the PR" in red
-        assert "we-worker <KEY>-card --bg \"/<security holder's skill> security card" in red
+        assert "we-worker <KEY>-card --bg" in red
+        assert "\"/<security holder's skill> security card review" in red
         assert "<!-- security-card-review -->" in red
 
 
@@ -1332,7 +1333,7 @@ def test_the_crews_security_holder_names_the_skill(
     monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
     (repo / ".lens-green").write_text("")
     red = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
-    assert red is not None and '--bg "/weside-lars security card review of PR #7' in red
+    assert red is not None and '"/weside-lars security card review of PR #7' in red
 
 
 def test_t2_without_a_card_hit_merges_on_the_panel_alone(green: dict, monkeypatch) -> None:
