@@ -126,13 +126,14 @@ def _strip_prefixes(argv: list[str]) -> list[str]:
     return argv[i:]
 
 
-def parse(command: str, depth: int = 0) -> Parsed:
-    """Split `command` (see the module docstring); recursion stops at `MAX_DEPTH` with a refusal."""
+def parse(command: str, depth: int = 0, bodies: list[str] | None = None) -> Parsed:
+    """Split `command` (see the module docstring); recursion stops at `MAX_DEPTH` with a refusal.
+    `bodies` is shared down the recursion: a heredoc lifted out here may be used inside a `$( … )`."""
     out = Parsed()
     if depth > MAX_DEPTH:
         out.problems.append(f"nested deeper than {MAX_DEPTH} levels")
         return out
-    bodies: list[str] = []
+    bodies = [] if bodies is None else bodies
 
     def take(match: re.Match[str]) -> str:
         bodies.append(match.group("body"))
@@ -141,7 +142,7 @@ def parse(command: str, depth: int = 0) -> Parsed:
     stripped = HEREDOC.sub(take, command)
     for inner in _substitutions(stripped):
         out.compound = True
-        _merge(out, parse(inner, depth + 1))
+        _merge(out, parse(inner, depth + 1, bodies))
     try:
         tokens = _tokens(stripped.replace("\n", " ; "))
     except ValueError as exc:

@@ -332,6 +332,15 @@ def test_a_master_is_not_touched(world, command, item):
         "cat <<'EOF' > body.md\nnever --no-verify here? it is data\nEOF",
         "git commit -m 'main and master'",
         "grep -rn secret src/",
+        "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nnot --no-verify, data\nEOF\n)\" && git log --oneline -1",
+        "gh pr create --title x --body \"$(cat <<'EOF'\n## Verification\nEOF\n)\"",
+        "for f in a b; do echo $f; done",
+        "[[ -f x ]] && echo $((1+2))",
+        "python3 - <<'EOF'\nprint(1)\nEOF",
+        'grep -c x <<<"$y"',
+        "python3 -m pytest -q we/hooks 2>&1 | tail -3",
+        "git fetch -q origin && git rebase origin/main",
+        "sed -n '1,5p' f; cat > /tmp/x <<EOF\ngh secret set X\nEOF",
     ],
 )
 def test_ordinary_work_passes(world, command):
