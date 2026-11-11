@@ -698,3 +698,19 @@ def test_stop_never_ends_a_reused_pid(tmp_path):
     finally:
         worker.kill()
         subprocess.run(["kill", str(child)], capture_output=True, check=False)
+
+
+def test_a_window_worker_whose_tree_path_holds_a_space_is_still_a_worker(tmp_path):
+    """Review: fields are tab-separated, so a space in the cwd keeps the marker check right."""
+    tree = tmp_path / "my tree"
+    subprocess.run(["git", "init", "-q", "-b", "feat/x", str(tree)], check=True)
+    gd = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    Path(gd, "we-worker.json").write_text(json.dumps({"name": "w"}))
+    rows = [{"sessionId": "s-w", "name": "w", "kind": "interactive", "pid": "-", "cwd": str(tree)}]
+    project, env = setup(tmp_path, rows)
+    assert run(project, env, "is-worker", "w").returncode == 0

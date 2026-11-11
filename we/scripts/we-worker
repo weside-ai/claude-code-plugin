@@ -116,7 +116,8 @@ d.sort(key=lambda a:a.get("startedAt",0))
 print(*(str(d[-1].get(f) or "-") for f in ("id","pid","state","sessionId")) if d else "")' "$1"
 }
 
-_resolve_any() { # <name|id|sessionId> -> "id pid kind sessionId state name cwd" of the newest agent of any
+_resolve_any() { # <name|id|sessionId> -> "id pid kind sessionId state name cwd" (tab-separated: a name or cwd
+  # may hold a space) of the newest agent of any
   # kind, else empty; an interactive row has no id: its sessionId stands in
   _agents | python3 -I -c 'import json,sys
 k=sys.argv[1]; d=[a for a in json.load(sys.stdin) if k in (a.get("name"),a.get("id"),a.get("sessionId"))]
@@ -126,7 +127,7 @@ a["id"]=a.get("id") or a.get("sessionId")
 # an interactive row says busy/idle in status only; a background row blocked on a prompt says idle
 # in status and blocked in state: blocked wins
 a["state"]="blocked" if a.get("state")=="blocked" else (a.get("status") or a.get("state"))
-print(*(str(a.get(f) or "-") for f in ("id","pid","kind","sessionId","state","name","cwd")) if d else "")' "$1"
+print("\t".join(str(a.get(f) or "-") for f in ("id","pid","kind","sessionId","state","name","cwd")) if d else "")' "$1"
 }
 _is_worker() { # <kind> <pid> <cwd> [<name>]: a background session, a worktree whose launcher marker
   # names this session, or a process started as a worker (WE_ROLE=worker, readable on Linux); never a
@@ -231,14 +232,14 @@ for x in json.load(sys.stdin):
     ;;
   is-worker) # <id|name>: exit 0 for a worker; the one owner of the rule (worker_launch.is_worker)
     [[ $# -ge 2 && -n "$2" ]] || usage
-    read -r id _pid kind _sid _state aname cwd <<<"$(_resolve_any "$2")" || true
+    IFS=$'\t' read -r id _pid kind _sid _state aname cwd <<<"$(_resolve_any "$2")" || true
     [[ -n "${id:-}" ]] && _is_worker "${kind:--}" "${_pid:--}" "${cwd:--}" "${aname:--}"
     exit
     ;;
   checkpoint)
     [[ $# -ge 2 && -n "$2" ]] || usage
     key=$2
-    read -r id _pid kind _sid state aname cwd <<<"$(_resolve_any "$key")" || true
+    IFS=$'\t' read -r id _pid kind _sid state aname cwd <<<"$(_resolve_any "$key")" || true
     [[ -n "${id:-}" && "${cwd:-}" != - ]] || { echo "we-worker: no worker '$key' with a working directory in claude agents" >&2; exit 1; }
     _is_worker "${kind:--}" "${_pid:--}" "$cwd" "${aname:--}" || { echo "we-worker: '$key' ($id, $kind) is no worker; checkpoint commits only in a worker's tree" >&2; exit 1; }
     # one writer per worktree: a working worker commits in this tree itself
@@ -269,7 +270,7 @@ for x in json.load(sys.stdin):
   stop)
     [[ $# -ge 2 && -n "$2" ]] || usage
     key=$2
-    read -r id _pid kind sid _state aname _cwd <<<"$(_resolve_any "$key")" || true
+    IFS=$'\t' read -r id _pid kind sid _state aname _cwd <<<"$(_resolve_any "$key")" || true
     [[ -n "${id:-}" ]] || { echo "we-worker: no worker '$key' in claude agents" >&2; exit 1; }
     if ! _is_worker "${kind:--}" "${_pid:--}" "${_cwd:--}" "${aname:--}"; then
       echo "we-worker: '$key' ($id, $kind) is no worker (not background, no we-worker marker, no WE_ROLE=worker); a typo protects a master or companion here. To stop it anyway: claude stop $id${_pid:+ or kill $_pid}" >&2
@@ -284,7 +285,7 @@ for x in json.load(sys.stdin):
     fi
     gone=""
     for _ in $(seq 1 "${WE_WORKER_STOP_WAIT:-30}"); do
-      read -r id2 pid2 _k _sid _state _name _cwd <<<"$(_resolve_any "$id")" || true
+      IFS=$'\t' read -r id2 pid2 _k _sid _state _name _cwd <<<"$(_resolve_any "$id")" || true
       if [[ -z "${id2:-}" || "${pid2:-}" == - ]] || ! kill -0 "$pid2" 2>/dev/null; then gone=1; break; fi
       sleep 1
     done

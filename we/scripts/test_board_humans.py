@@ -9,6 +9,7 @@ import subprocess
 from datetime import timedelta
 
 import board
+import crew as crew_mod
 import pytest
 import test_board as tb
 import ticket_adapter
@@ -51,6 +52,7 @@ def with_humans(state_dir, **board):
     data["board"] = {
         "signals": SIGNALS,
         "jql_scope": "project = PROJ",
+        "ticketing": "jira",  # the ticket is the bus; the tests hand their reads in as fakes
         **board,
     }
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -876,3 +878,47 @@ def test_a_reply_takes_off_only_the_own_label(crewed, monkeypatch, capsys):
     assert act(crewed, "reply", "PROJ-12", "accept") == 0
     removed = [o["remove"] for o in carry_of(capsys.readouterr().out) if o["op"] == "unlabel"]
     assert removed == ["ask-cleo"]
+
+
+def test_without_ticketing_a_crew_with_humans_moves_by_its_local_rows(moving, monkeypatch):
+    """Red arm (review): `board.ticketing: none` holds no status; the move reads the local row
+    instead of refusing every move as "status None"."""
+    shared(moving, ticketing="none")
+    as_(monkeypatch, "alice", "Otto")
+    tb.with_row(moving, KEY, "selected")
+    adapter = ticket_adapter.NoneAdapter()
+    assert act(moving, "move", KEY, "in_progress", adapter=adapter) == 0
+    assert transitions(moving)[-1]["from"] == "selected"
+
+
+def test_a_done_from_accept_reads_the_ticket_not_the_local_row(moving, monkeypatch):
+    """Red arm (review): accept.py's Done in a crew with humans takes the ticket's state; a
+    stale local in_review never passes a story another machine put On Hold."""
+    shared(moving)
+    as_(monkeypatch, "cleo", "Pia")
+    tb.with_row(moving, KEY, "in_review")
+    entry = {"key": KEY, "verdict": "done"}
+    adapter = ticket_adapter.FakeAdapter({KEY: "On Hold"})
+    with pytest.raises(board.BoardError, match="last move is on_hold"):
+        board.move_done(
+            board.StateDir(moving / "board.json"),
+            KEY,
+            board_crew(moving),
+            tb.NOW,
+            adapter,
+            entry=entry,
+        )
+    session = ticket_adapter.SessionTransport()
+    with pytest.raises(board.BoardError, match="carry the read"):
+        board.move_done(
+            board.StateDir(moving / "board.json"),
+            KEY,
+            board_crew(moving),
+            tb.NOW,
+            session,
+            entry=entry,
+        )
+
+
+def board_crew(state_dir):
+    return crew_mod.load(state_dir / "work" / ".weside" / "crew.json")

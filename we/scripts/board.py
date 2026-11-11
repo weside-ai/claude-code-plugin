@@ -1363,7 +1363,7 @@ def _remote_target(args, crew):
 def _on_hold_refusal(state, args, crew):
     """A merge-go in a crew with humans reads the ticket's status first: a story another machine
     put On Hold gets no merge question. `CARRY` while the session has to read it."""
-    if args.cause != "merge-go" or not crew_mod.several_humans(crew):
+    if args.cause != "merge-go" or not _status_bus(crew):
         return None
     if _key_failure(crew, (args.key or "").strip(), "ask"):
         return None  # a plan slug has no ticket yet
@@ -2932,12 +2932,19 @@ def state_of_status(crew, status):
     )
 
 
+def _status_bus(crew):
+    """Several humans whose ticketing system carries the status (`board.ticketing` is not
+    `none`): only then is the ticket's status the state every machine shares."""
+    ticketing = str((crew.get("board") or {}).get("ticketing") or "none")
+    return crew_mod.several_humans(crew) and ticketing != "none"
+
+
 def _source_state(state, adapter, crew, key, verb="move"):
     """The state a story leaves: with several humans the ticket's status (every machine moves
     the ticket, each keeps its own rows), `CARRY` while the session has to read it, refused
     (`BoardError`) for a status no `board.states` entry maps, since its owner is unknown; else
-    the key's last local row."""
-    if crew_mod.several_humans(crew):
+    the key's last local row (also with `board.ticketing: none`, where no ticket holds a status)."""
+    if _status_bus(crew):
         ticket = adapter.ticket(key)
         if ticket is None:
             return CARRY
@@ -3040,8 +3047,14 @@ def move_done(
     m = Move(state, key, "done", None, None, crew, args)
     m.comment = None
     if source is None:
-        last = state.last_rows().get(key)
-        source = last.get("to") if last else None
+        # accept.py: with several humans the ticket's status decides, never the local row
+        source = _source_state(state, adapter, crew, key, "move")
+        if source is CARRY:
+            raise BoardError(
+                f"{head}: refused: several humans: the story's state comes from its ticket, which "
+                f"this run cannot read; carry the read and run `board.py move {key} done "
+                "--comment-file <the receipt comment> --input FILE`"
+            )
     m.source = source
     for _group, rule in ENTRY_RULES["done"]:
         lines = rule(m)
