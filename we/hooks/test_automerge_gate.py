@@ -1567,6 +1567,49 @@ def test_the_plan_pr_itself_passes(story: dict, monkeypatch) -> None:
     assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
 
 
+RECEIPTS = "tests/staging_receipts"
+
+
+@pytest.fixture()
+def receipts(story: dict) -> dict:
+    """`story` whose origin/main crew names `oracles.receipt_dir`; HEAD back on that main."""
+    crew = {**CREW, "oracles": {"receipt_dir": RECEIPTS + "/"}}
+    main = _commit(story["repo"], {".weside/crew.json": json.dumps(crew)}, "receipt dir")
+    _publish_main(story["repo"], main)
+    return story
+
+
+def test_a_plan_pr_with_its_own_receipt_passes(receipts: dict, monkeypatch) -> None:
+    """Red arm (core #6344, #6345): the refiner writes the story's receipt with its plan; that
+    plan PR is no build PR."""
+    head = _commit(
+        receipts["repo"], {PLAN: "# plan\n", f"{RECEIPTS}/PROJ-5.yaml": "a: 1\n"}, "plan"
+    )
+    fake = FakeGh([run()], head=head, names=STORY)
+    assert refuse(receipts["repo"], ARM, fake, monkeypatch) is None
+
+
+@pytest.mark.parametrize(
+    "other", [f"{RECEIPTS}/PROJ-6.yaml", f"{RECEIPTS}/PROJ-55.yaml", "tests/test_thing.py"]
+)
+def test_a_plan_pr_with_another_receipt_or_a_test_is_refused(
+    receipts: dict, monkeypatch, other: str
+) -> None:
+    """Red arm: only this story's own receipt rides with the plan; another story's receipt or
+    any other test file makes it a build PR."""
+    head = _commit(receipts["repo"], {PLAN: "# plan\n", other: "a: 1\n"}, "plan and more")
+    red = refuse(receipts["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch)
+    assert red is not None and "plan first" in red
+
+
+def test_without_a_receipt_dir_the_receipt_makes_a_build_pr(story: dict, monkeypatch) -> None:
+    """Red arm: no `oracles.receipt_dir` on main, no exemption."""
+    _git(story["repo"], "reset", "-q", "--hard", story["main"])
+    head = _commit(story["repo"], {PLAN: "# plan\n", f"{RECEIPTS}/PROJ-5.yaml": "a: 1\n"}, "plan")
+    red = refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch)
+    assert red is not None and "plan first" in red
+
+
 def _plan_on_main(story: dict) -> str:
     main = _commit(story["repo"], {PLAN: "# plan\n"}, "plan lands")
     _publish_main(story["repo"], main)
