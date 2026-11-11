@@ -90,10 +90,11 @@ no confirm: the invocation is the go.
 
 A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start in a detached worktree of its own
 (`git worktree add --detach <path> origin/<default>`; the brief's `Tree:` names it) (L0 §Lifecycle: the epic's
-master starts it; the owner judges, never starts), whose brief begins: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
+master starts it; the owner judges, never starts), whose brief (the four headings of `references/worker-dispatch.md`
+§ Name and brief) begins under its goal: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The
 brief carries the context a human would give: epic frame (3–5 lines), the story's intent, scope
 in/out, known constraints and seams, one to three architecture docs to read first, and "a design
-fork you cannot settle → write `## Open Fork` and stop". It ends with the tree limits, verbatim
+fork you cannot settle → write `## Open Fork` and stop". Its limits section ends with the tree limits, verbatim
 (a refiner that `cd`s out of its tree reads and writes the wrong one):
 
 ```
@@ -131,12 +132,20 @@ the story, then arm (L0 §Units; no gate checks this yet). Otherwise pull the st
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
 into `description`.
 
-**Worker brief** (the worker reads nothing else reliably, so the brief carries the contract):
+**Worker brief** (the worker reads nothing else reliably, so the brief carries the contract; the four
+headings are the brief contract the launcher checks, `references/worker-dispatch.md` § Name and brief):
 
 ```
+## Goal
 Run Skill("we:develop") for <KEY> [--phases N]. Plan: docs/plans/<KEY>-story.md.
+[Must-dos carried from the Ready panel: <each `carried` item of the story's last `selected` row in board-transitions.jsonl, as `<lens>: <claim> (<where>)`>]
+## Output
 Branch: <type>/<KEY>-<slug> (-p<N> for a parallel chunk); rename `worktree-…` to it before the first commit.
 [Base: first `git merge <PR branch>` — the chunk builds on it.]
+Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
+  (Order verification whenever `.weside/config.json` has `verification.required: true`.)
+Report: worker-dispatch.md § Report, as your final message or to your `Lead:`; a skill's output is never it.
+## Tools and sources
 Bootstrap: <commands from .weside/orchestrate.md>.
 Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker contract.
 Traps: ${CLAUDE_PLUGIN_ROOT}/references/session-traps.md (stash, HEAD after commit, watcher exit 0, gate lock).
@@ -144,14 +153,11 @@ Tests: <test_discipline from .weside/config.json, spelled out; absent → tests 
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
 [Code graph: graphify affected "<symbol>" … | graph query "<question>" | not needed (<reason>)]   (only when tools.graphify is true)
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
-[Must-dos carried from the Ready panel: <each `carried` item of the story's last `selected` row in board-transitions.jsonl, as `<lens>: <claim> (<where>)`>]
-Finish: [you are the last writer: run the finish sequence | not yours]. Verification: [<journeys> | none].
-Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
-  (Order verification whenever `.weside/config.json` has `verification.required: true`.)
-Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
 Tools: read and search with the Read, Grep and Glob tools on absolute paths; never `cd <dir> && grep …` or `cat`/`rg` through Bash.
-Report: worker-dispatch.md § Report, as your final message or to your `Lead:`; a skill's output is never it.
-  Before it, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question.
+## Limits and when to stop
+Push: no — the Lead pushes once (write `Push: yes` only when the Lead cannot push from the worker's tree).
+Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
+Before the report, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question. Stop after the report.
 ```
 
 **While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog), never a

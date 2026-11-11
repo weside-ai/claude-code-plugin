@@ -20,7 +20,8 @@ rules the task touches.
 
 **Editing** (a change lands in the other repo): never edit it from this session, because its
 path-bound rules, hooks and worktree conventions do not apply here. Start a native session there:
-`cd <repo> && we-worker <name> --bg "<task, with the context a human would give>"` (the plugin's
+`cd <repo> && we-worker <KEY>-<chunk> --bg "<brief: the four headings of
+${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Name and brief, with the context a human would give>"` (the plugin's
 launcher, `${CLAUDE_PLUGIN_ROOT}/scripts/we-worker`; it drops the caller's `CLAUDE_*` variables and
 `WESIDE_COMPANION`). A `--bg` session still takes the `claude daemon`'s environment
 (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Launch and pin): from a companion session drop

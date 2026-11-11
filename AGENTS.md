@@ -37,8 +37,9 @@ we/                               plugin root
                                   optimization_reminder, compact_on_start (matcher compact)
     UserPromptSubmit              news_on_prompt (wake counter), sampler_on_prompt (dead sampler, blocked worker)
     PreToolUse                    automerge_gate (every merge form: worker refusal, freeze, risk class, T2 panel,
-                                  security card PASS, Codex verdict on the head, receipt red), verification_gate,
-                                  draft_reason_gate, teammate_gate
+                                  security card PASS, Codex verdict on the head, receipt red), worker_rights_gate
+                                  (a process worker's rights and never-list), verification_gate, draft_reason_gate,
+                                  teammate_gate
     Stop                          store_conversation_hook, conflict_gate (own DIRTY PRs), reply_language_gate,
                                   question_gate, worker_report_gate (process workers)
     PreCompact                    epic_age_precompact (stale Updates Log)
@@ -53,7 +54,7 @@ we/                               plugin root
     gates                         ready_gate.py, plan_tier.py, risk_paths.py, risk_runner.py, lens_verdict.py,
                                   check-plan-identifiers.py, check-instruction-budget.py
     rules                         rule_loading.py, load-rules.py, probe-rule-loading.py, probe-hook-cap.py (fixtures/)
-    launch                        wclaude, we-worker, install_launcher.py, worker_launch.py, pin.sh, identity_cache.py,
+    launch                        wclaude, we-worker, install_launcher.py, worker_launch.py, worker_rights.py, pin.sh, identity_cache.py,
                                   wake_poller.py, gh_anchor.sh
     watch                         watch-pr-checks.sh (CI to the merge), watch-pr-conflicts.sh, watch-worker.sh
     flow                          flow_log.py (the flow log's one owner), sampler_age.py

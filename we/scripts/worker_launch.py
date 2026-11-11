@@ -16,9 +16,18 @@ placeholder inside a token (`--x={name}`). `{name}` and `{brief}` are required. 
 one-line prompt `Read <git-dir>/we-brief.md and follow it.`: the brief never passes through a
 shell. The command runs without a shell, cwd = the worker's worktree.
 
-`launch` writes two files into the worktree's own git dir (untracked, removed with the worktree):
-`we-brief.md` (the brief under a first `Lead:` line) and `we-worker.json` (the marker: name, lead, agent,
-launched_at, and the worker's `session_id` from `claude agents --json`). The hooks treat a session
+Name and brief (one owner, read by `launch`, by `check` and through `check` by `we-worker`): a worker
+name starts with a match of the crew's `naming.key` (default `[A-Z]+-\\d+`), alone or followed by
+`-<chunk>` (`check_name`). A brief carries four fields as Markdown headings outside fenced code, each
+with a non-blank body up to the next heading of its level or above (`check_brief`); a heading counts
+when its text starts, case-insensitively, with one of the field's two names: `Ziel`/`Goal`,
+`Ausgabe`/`Output`, `Werkzeuge und Quellen`/`Tools and sources`, `Grenzen und wann stoppen`/`Limits
+and when to stop`. A brief that is exactly `Read <path> and follow it.` is that file's text. A refusal
+prints `TEMPLATE`, which passes its own check.
+
+`launch` checks name and brief first, then writes two files into the worktree's own git dir (untracked,
+removed with the worktree): `we-brief.md` (the brief under a first `Lead:` line) and `we-worker.json`
+(the marker: name, key, lead, agent, launched_at, and the worker's `session_id` from `claude agents --json`). The hooks treat a session
 as a process worker only when the marker's `session_id` is its own (`worker_marker`), so the Lead
 working in the same worktree is never one (`hooks/worker_report_gate.py`,
 `hooks/automerge_gate.py`); `scripts/watch-worker.sh` reads the marker by name. `stop` removes both
@@ -26,6 +35,15 @@ files, also for a session that already ended.
 
 Usage:
   worker_launch.py backend [--repo <dir>]          prints `subagent` or the template; 2 = invalid
+  worker_launch.py check --name <n> (--brief-file <f|-> | --no-brief) [--repo <dir>] [--prefix <p>]
+                                                   prints the story key; 2 with the refusal lines
+                                                   (and the template) on stderr
+  worker_launch.py settings --repo <dir> --key <K> --out <file> [--session-start <command>]
+                                                   writes the worker's `--settings` file: the
+                                                   granted rights of that repo as permissions.allow,
+                                                   the never-list as permissions.deny
+                                                   (`worker_rights.py`), the command as its
+                                                   SessionStart hook
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
                                                    with --worktree it removes marker and brief;
@@ -255,7 +273,137 @@ def _timing(event: str, **fields) -> None:
             fh.write(json.dumps({"ts": time.time(), "event": event, **fields}) + "\n")
 
 
+FIELDS = (
+    ("Ziel", "Goal", "what is done when you stop; the story key and the plan"),
+    ("Ausgabe", "Output", "what you deliver and how you report it, to whom"),
+    ("Werkzeuge und Quellen", "Tools and sources", "the tree, the files and commands to use"),
+    (
+        "Grenzen und wann stoppen",
+        "Limits and when to stop",
+        "what you never do; when you stop and report",
+    ),
+)
+TEMPLATE = "\n".join(f"## {de} ({en})\n<{hint}>\n" for de, en, hint in FIELDS)
+DEFAULT_KEY = "[A-Z]+-\\d+"
+_POINTER = re.compile(r"Read (?P<path>\S.*?) and follow it\.")
+_HEADING = re.compile(r"^[ ]{0,3}(?P<level>#{1,6})[ \t]+(?P<text>.*?)[ \t#]*$")
+_FENCE = re.compile(r"^[ ]{0,3}(```|~~~)")
+
+
+def key_pattern(repo: Path | None) -> str:
+    """The crew's `naming.key` of the repo holding `repo`, else the default."""
+    import crew as crew_mod  # noqa: PLC0415  (lazy: crew.py imports this module)
+
+    try:
+        _path, crew = crew_mod.find_and_load(repo or Path.cwd())
+    except crew_mod.CrewError:
+        crew = None
+    value = ((crew or {}).get("naming") or {}).get("key")
+    return value if isinstance(value, str) and value else DEFAULT_KEY
+
+
+def check_name(name: str, key_re: str = DEFAULT_KEY, example: str | None = None) -> str:
+    """The story key the worker name starts with; a `LaunchError` (exit 2) without one."""
+    try:
+        found = re.match(rf"(?P<key>{key_re})(?:-(?P<chunk>.+))?$", name)
+    except re.error as exc:
+        raise LaunchError(f"naming.key {key_re!r} is no regex ({exc})", 2) from exc
+    if found and found.group("key"):
+        return found.group("key")
+    raise LaunchError(
+        f"worker name {name} carries no story key ({key_re}), e.g. {example or 'ABC-123'}-{name}",
+        2,
+    )
+
+
+def _brief_text(text: str, base: Path | None = None) -> str:
+    """The brief itself: a pointer line `Read <path> and follow it.` becomes that file's text."""
+    found = _POINTER.fullmatch(text.strip())
+    if not found:
+        return text
+    path = Path(found.group("path"))
+    if not path.is_absolute() and base is not None:
+        path = base / path
+    try:
+        return path.read_text()
+    except OSError as exc:
+        raise LaunchError(f"brief: {path}: {exc.strerror or exc}", 2) from exc
+
+
+def check_brief(text: str, base: Path | None = None) -> list[str]:
+    """The fields the brief lacks, as `Ziel / Goal`; empty when all four carry a body."""
+    lines = _brief_text(text, base).splitlines()
+    headings: list[tuple[int, int, str]] = []  # (line, level, text) outside fences
+    fence = None
+    for i, line in enumerate(lines):
+        opened = _FENCE.match(line)
+        if fence:
+            if opened and opened.group(1) == fence:
+                fence = None
+            continue
+        if opened:
+            fence = opened.group(1)
+            continue
+        found = _HEADING.match(line)
+        if found:
+            headings.append((i, len(found.group("level")), found.group("text")))
+    present = set()
+    for n, (i, level, heading) in enumerate(headings):
+        end = next((j for j, lv, _t in headings[n + 1 :] if lv <= level), len(lines))
+        if not any(line.strip() for line in lines[i + 1 : end] if not _HEADING.match(line)):
+            continue
+        for de, en, _hint in FIELDS:
+            if heading.casefold().startswith((de.casefold(), en.casefold())):
+                present.add(de)
+    return [f"{de} / {en}" for de, en, _hint in FIELDS if de not in present]
+
+
+def brief_refusal(missing: list[str]) -> str:
+    return (
+        f"the brief lacks {', '.join(missing)}; a brief carries four Markdown headings, each with "
+        f"a body:\n\n{TEMPLATE}"
+    )
+
+
+def _example_key(repo: Path | None, key_re: str) -> str | None:
+    branch = _git(repo or Path.cwd(), "branch", "--show-current") or ""
+    try:
+        found = re.search(key_re, branch)
+    except re.error:
+        return None
+    return found.group(0) if found else None
+
+
+def check(name: str, brief: str, repo: Path | None = None) -> str:
+    """`check_name`, then `check_brief`: the key, or a `LaunchError` (exit 2) naming what is wrong."""
+    key_re = key_pattern(repo)
+    key = check_name(name, key_re, _example_key(repo, key_re))
+    missing = check_brief(brief, repo)
+    if missing:
+        raise LaunchError(brief_refusal(missing), 2)
+    return key
+
+
+def write_settings(repo: Path, key: str, out: Path, session_start: str | None = None) -> dict:
+    """The worker's `--settings` file (`worker_rights.settings`), with the timer's hook."""
+    import worker_rights  # noqa: PLC0415
+
+    doc = worker_rights.settings(repo, key)
+    if session_start:
+        doc["hooks"] = {
+            "SessionStart": [{"hooks": [{"type": "command", "command": session_start}]}]
+        }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=2) + "\n")
+    return doc
+
+
 def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None) -> Path:
+    try:
+        brief = brief_file.read_text()
+    except OSError as exc:
+        raise LaunchError(f"brief: {exc}") from exc
+    key = check(name, brief, worktree)
     template = backend(worktree)
     if template == SUBAGENT:
         raise LaunchError(
@@ -274,16 +422,12 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
     lead = lead_address(sessions(), os.environ.get("CLAUDE_CODE_SESSION_ID"))
-    try:
-        brief = brief_file.read_text()
-    except OSError as exc:
-        raise LaunchError(f"brief: {exc}") from exc
     brief_path, marker_path = gd / BRIEF, gd / MARKER
     brief_path.write_text(
         f"Lead: {lead} — send your report as one SendMessage to it; "
         f"your plain text never reaches it.\n\n{brief.rstrip()}\n"
     )
-    marker = {"name": name, "lead": lead, "agent": agent, "launched_at": time.time()}
+    marker = {"name": name, "key": key, "lead": lead, "agent": agent, "launched_at": time.time()}
     marker_path.write_text(json.dumps(marker, indent=2) + "\n")
     argv = render(
         tokens,
@@ -469,11 +613,24 @@ def checkpoint(name: str) -> str:
     return out.stdout.strip().removeprefix("we-worker: ")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("backend")
     p.add_argument("--repo", type=Path, default=Path.cwd())
+    p = sub.add_parser("check")
+    p.add_argument("--name", required=True)
+    p.add_argument("--brief-file")
+    p.add_argument(
+        "--no-brief", action="store_true", help="check the name only (a resumed session)"
+    )
+    p.add_argument("--repo", type=Path, default=Path.cwd())
+    p.add_argument("--prefix", default="worker_launch")
+    p = sub.add_parser("settings")
+    p.add_argument("--repo", type=Path, required=True)
+    p.add_argument("--key", required=True)
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--session-start")
     p = sub.add_parser("launch")
     p.add_argument("--worktree", type=Path, required=True)
     p.add_argument("--name", required=True)
@@ -486,10 +643,39 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--name", required=True)
     p = sub.add_parser("checkpoint")
     p.add_argument("--name", required=True)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _check_verb(args: argparse.Namespace) -> int:
+    """`check`: the key on stdout, or exit 2 with the refusal under `--prefix`."""
+    try:
+        if args.no_brief:
+            key_re = key_pattern(args.repo)
+            print(check_name(args.name, key_re, _example_key(args.repo, key_re)))
+            return 0
+        if not args.brief_file:
+            raise LaunchError("check needs --brief-file <f|-> or --no-brief", 2)
+        brief = sys.stdin.read() if args.brief_file == "-" else Path(args.brief_file).read_text()
+        print(check(args.name, brief, args.repo))
+    except OSError as exc:
+        print(f"{args.prefix}: brief: {exc}", file=sys.stderr)
+        return 2
+    except LaunchError as exc:
+        print(f"{args.prefix}: {exc}", file=sys.stderr)
+        return exc.code
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if args.cmd == "check":
+        return _check_verb(args)
     try:
         if args.cmd == "backend":
             print(backend(args.repo))
+        elif args.cmd == "settings":
+            write_settings(args.repo.resolve(), args.key, args.out, args.session_start)
+            print(args.out)
         elif args.cmd == "launch":
             marker = launch(args.worktree.resolve(), args.name, args.brief_file, args.agent)
             print(f"launched: {args.name} · marker {marker}")

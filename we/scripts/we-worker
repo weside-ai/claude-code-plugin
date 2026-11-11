@@ -39,7 +39,13 @@
 # A start under a name a running background session holds refuses as well: steer it, or stop it first.
 # A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
 # `--cwd` would otherwise reach claude as a prompt): run `cd <tree> && we-worker …` instead.
-# A name without the story key (crew `naming.key`) or a plan slug of docs/plans/ gets a warning, no refusal.
+# A start refuses (exit 2, before any claude call) a name that does not start with the story key (crew
+# `naming.key`, `<key>-<chunk>`) and a brief, the last argument, that lacks one of the four fields
+# (`worker_launch.py check`: Ziel/Goal, Ausgabe/Output, Werkzeuge und Quellen/Tools and sources, Grenzen
+# und wann stoppen/Limits and when to stop); a last argument starting with `-`, or none, is an empty
+# brief. A --resume/--continue start checks the name only. Without the plugin's worker_launch.py no worker
+# starts. Every worker starts with `--settings <state dir>/<name>.settings.json` (`worker_launch.py
+# settings`: its rights in this repo, the never-list, WE_ROLE and WE_STORY_KEY) and WE_STORY_KEY=<key>.
 # The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
 #   launch.allow_bypass true   --allow-dangerously-skip-permissions: the start mode stays
 #                              permissions.defaultMode, bypass is one Shift+Tab away; without a crew
@@ -57,11 +63,14 @@ usage() {
   exit 2
 }
 
-crew_script() {
+crew_script() { plugin_script scripts/crew.py; }
+
+# A script of the plugin: beside this file (the plugin's own copy), else in the installed plugin.
+plugin_script() {
   local here
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  if [[ -f "$here/crew.py" ]]; then
-    echo "$here/crew.py"
+  if [[ -f "$here/${1#scripts/}" ]]; then
+    echo "$here/${1#scripts/}"
     return 0
   fi
   # we-install-resolver (scripts/validate-consistency.py keeps every copy equal)
@@ -87,7 +96,7 @@ crew_script() {
     if run:
         os.execvp(sys.executable, [sys.executable, path] + sys.argv[3:])
     print(path)
-' scripts/crew.py || true
+' "$1" || true
 }
 
 
@@ -366,30 +375,6 @@ if [[ -n "${held_id:-}" && "${held_pid:-}" != - ]] && kill -0 "$held_pid" 2>/dev
   exit 2
 fi
 
-# Story key or plan slug in the name: a warning for the reader of `claude agents`, no refusal.
-key_re=$(python3 "$(crew_script 2>/dev/null || echo /nonexistent)" show 2>/dev/null |
-  python3 -I -c 'import json,sys
-try: print(((json.load(sys.stdin).get("naming") or {}).get("key")) or "")
-except ValueError: print("")' 2>/dev/null || true)
-python3 -I - "$name" "${key_re:-[A-Z]+-\\d+}" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" <<'PY' || true
-import os, re, sys
-name, key, top = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    if re.search(key, name, re.I):
-        sys.exit(0)
-except re.error:
-    pass
-plans = os.path.join(top, "docs", "plans") if top else ""
-slugs = []
-if plans and os.path.isdir(plans):
-    for f in os.listdir(plans):
-        if f.endswith(".md"):
-            slugs.append(re.sub(r"(-story|-epic)?\.md$", "", f).lower())
-if any(s and s in name.lower() for s in slugs):
-    sys.exit(0)
-sys.stderr.write("we-worker: warning: the name %s carries no story key (%s) and no plan slug; "
-                 "its master and the board find it by key\n" % (name, key))
-PY
 
 # --resume/-r with a short id or a name: resolve to the full session id first, or claude opens the
 # session picker ("No sessions match") and the worker hangs without a word.
@@ -434,6 +419,23 @@ if [[ -n "$known_flags" && $# -gt 0 ]]; then
     fi
   done
 fi
+# The story key in the name and the four fields of the brief: refused before anything starts.
+wl=$(plugin_script scripts/worker_launch.py 2>/dev/null)
+if [[ -z "$wl" || ! -f "$wl" ]]; then
+  echo "we-worker: plugin we not installed (no worker_launch.py); no worker started" >&2
+  exit 2
+fi
+resuming=0
+for a in "$@"; do
+  case $a in --resume | -r | --resume=* | --continue | -c) resuming=1 ;; esac
+done
+brief=""
+[[ $# -gt 0 && "${!#}" != -* ]] && brief=${!#}
+if [[ $resuming -eq 1 ]]; then
+  key=$(python3 "$wl" check --name "$name" --no-brief --prefix we-worker) || exit 2
+else
+  key=$(printf '%s' "$brief" | python3 "$wl" check --name "$name" --brief-file - --prefix we-worker) || exit 2
+fi
 cargs=()
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -459,6 +461,7 @@ for a in "$@"; do [[ "$a" == --permission-mode || "$a" == --permission-mode=* ]]
 if [[ $bg -eq 1 && $mode_given -eq 0 && "$(crew_launch worker_mode)" == bypass ]]; then
   extra+=(--permission-mode bypassPermissions)
 fi
+hook=""
 timer=${WE_WORKER_TIMER:-$(crew_launch worker_timer)}
 timer=${timer/#\~/$HOME}
 mode="tmux"
@@ -470,16 +473,20 @@ if [[ -n "$timer" ]]; then
       --starter-session "${CLAUDE_CODE_SESSION_ID:-}" ${WE_WORKER_STARTER+--starter "$WE_WORKER_STARTER"}) ||
       { echo "we-worker: the timer $timer refused to register $name; no worker started" >&2; exit 2; }
     hook=$(printf 'python3 -I %q arm %q' "$timer" "$state")
-    settings=$(python3 -I -c 'import json,sys; print(json.dumps({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": sys.argv[1]}]}]}}))' "$hook")
-    extra+=(--settings "$settings")
   else
     echo "we-worker: warning: timer $timer not found; $name starts without a time limit" >&2
   fi
 fi
 
+# The worker's rights and never-list as its settings file, the timer's hook in it.
+settings_file="${WE_WORKER_STATE_DIR:-$HOME/.claude/we-state/workers}/$name.settings.json"
+python3 "$wl" settings --repo "$PWD" --key "$key" --out "$settings_file" ${hook:+--session-start "$hook"} >/dev/null ||
+  { echo "we-worker: the settings of $name could not be written; no worker started" >&2; exit 2; }
+extra+=(--settings "$settings_file")
+
 for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
 unset WESIDE_COMPANION WE_ROLE_ID
-export WE_ROLE=worker
+export WE_ROLE=worker WE_STORY_KEY="$key"
 
 if [[ $bg -eq 1 ]]; then
   exec claude --bg -n "$name" ${extra[@]+"${extra[@]}"} "$@"
@@ -499,5 +506,5 @@ fi
 args=$(printf ' %q' -n "$name" ${extra[@]+"${extra[@]}"} "$@")
 # tmux starts the window with the server's environment, not this shell's: clear it there.
 human=${WE_HUMAN:+ WE_HUMAN=$(printf '%q' "$WE_HUMAN")}
-tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION -u WE_ROLE_ID$human WE_ROLE=worker claude$args"
+tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION -u WE_ROLE_ID$human WE_ROLE=worker WE_STORY_KEY=$(printf '%q' "$key") claude$args"
 echo "we-worker: $name starts in tmux window $name${target:+ of ${target%:}} (global login${timer:+; time limit $limit})"
