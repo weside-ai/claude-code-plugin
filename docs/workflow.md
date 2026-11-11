@@ -119,7 +119,8 @@ Every session loads the crew process at start (`we/process/L0.md`) and its role 
 
 Several people can work on one project, each running `wclaude --start` with their own crew sessions
 on their own machine; the machines share only the repo, the ticketing system and chat. The crew file
-names them under `humans` (schema: `we/scripts/crew.py` § Humans):
+names them under `humans` (schema: `we/scripts/crew.py` § Humans; `/we:setup` § Crew asks for them,
+[we/skills/setup/references/humans.md](../we/skills/setup/references/humans.md)):
 
 ```json
 "humans": {

@@ -40,6 +40,9 @@ silently return:
 14. Carry ops — every op `ticket_adapter.py` hands a session to carry (its `VALUE_FIELD` keys)
    is shown as `"op": "<name>"` in references/ticketing.md or docs/board.md, so the session
    knows how to carry it with its ticketing tool.
+15. Setup humans — the example crew file in we/skills/setup/references/humans.md § Example passes
+   `crew.py validate --strict`, shows every `humans` field of crew.py's HUMAN_KEYS (each also named
+   in that file's table), and sets `board.jql_scope` wherever it sets `board.signals`.
 
 Stdlib only. Exit 1 on any finding.
 
@@ -55,6 +58,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -714,6 +718,66 @@ def check_carry_ops(root: Path = REPO) -> None:
 ROOT_CHECKS["carry-ops"] = check_carry_ops
 
 
+# --- Check 15: /we:setup's humans example is a crew crew.py accepts ------------------------------
+SETUP_HUMANS = Path("we/skills/setup/references/humans.md")
+_HUMAN_KEYS = re.compile(r"^HUMAN_KEYS = \{([^}]*)\}", re.MULTILINE)
+
+
+def check_setup_humans(root: Path = REPO) -> None:
+    """The § Example block of the setup humans reference validates strict against the tree's
+    crew.py and covers every field of its `HUMAN_KEYS`: a field crew.py adds or renames turns this
+    red until setup asks for it."""
+    ref, crew_py = root / SETUP_HUMANS, root / "we" / "scripts" / "crew.py"
+    if not ref.is_file() or not crew_py.is_file():
+        return
+    text = ref.read_text(encoding="utf-8")
+    m = re.search(r"^## Example\n.*?```json\n(.*?)```", text, re.S | re.M)
+    if m is None:
+        fail(f"{SETUP_HUMANS}: no ```json block under `## Example`")
+        return
+    try:
+        crew = json.loads(m.group(1))
+    except json.JSONDecodeError as exc:
+        fail(f"{SETUP_HUMANS} § Example: no JSON ({exc})")
+        return
+    keys = _HUMAN_KEYS.search(crew_py.read_text(encoding="utf-8"))
+    if keys is None:
+        fail("we/scripts/crew.py: no `HUMAN_KEYS = {...}` to read the humans fields from")
+        return
+    shown = {
+        k
+        for entry in (crew.get("humans") or {}).values()
+        if isinstance(entry, dict)
+        for k in entry
+    }
+    for key in re.findall(r'"([a-z_]+)"\s*:', keys.group(1)):
+        if key not in shown:
+            fail(f"{SETUP_HUMANS} § Example: no human shows `{key}` (crew.py HUMAN_KEYS)")
+        if f"`{key}`" not in text.split("## Example")[0]:
+            fail(f"{SETUP_HUMANS}: `{key}` (crew.py HUMAN_KEYS) is not asked for above § Example")
+    board = crew.get("board") or {}
+    if board.get("signals") and not board.get("jql_scope"):
+        fail(
+            f"{SETUP_HUMANS} § Example: board.signals without board.jql_scope (board.py signals refuses)"
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / ".git").mkdir()
+        (Path(tmp) / ".weside").mkdir()
+        (Path(tmp) / ".weside" / "crew.json").write_text(m.group(1), encoding="utf-8")
+        done = subprocess.run(
+            [sys.executable, str(crew_py), "validate", "--strict", "--from", tmp],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if done.returncode != 0:
+        why = (done.stderr.strip().splitlines() or ["no output"])[-1]
+        fail(f"{SETUP_HUMANS} § Example: crew.py validate --strict refuses it: {why}")
+
+
+ROOT_CHECKS["setup-humans"] = check_setup_humans
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, help="run the --check checks on this tree")
@@ -739,6 +803,7 @@ def main(argv: list[str] | None = None) -> int:
         check_agents_layout()
         check_plugin_root_paths()
         check_carry_ops()
+        check_setup_humans()
 
     if errors:
         print(f"FAILED: {len(errors)} consistency finding(s):\n")
