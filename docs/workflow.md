@@ -125,10 +125,10 @@ names them under `humans` (schema: `we/scripts/crew.py` § Humans; `/we:setup` �
 ```json
 "humans": {
   "alice": {"name": "Alice", "email": "alice@example.com", "decides": ["money", "prod"],
-            "owns_states": ["selected", "in_progress", "in_review"],
+            "owns_states": ["selected", "in_progress", "in_review", "done"],
             "runs": ["coordinator", "architecture", "acceptance", "masters"]},
-  "bob":   {"name": "Bob", "email": "bob@example.com", "decides": ["product"],
-            "owns_states": ["backlog"], "runs": ["product"],
+  "bob":   {"name": "Bob", "email": "bob@example.com", "decides": ["product direction"],
+            "owns_states": ["on_hold", "backlog"], "runs": ["product"],
             "companions": {"product": "Paula"}}
 },
 "board": {"ticketing": "jira", "jql_scope": "project = PROJ",
@@ -136,13 +136,26 @@ names them under `humans` (schema: `we/scripts/crew.py` § Humans; `/we:setup` �
 ```
 
 - `wclaude --start` finds who you are (`WE_HUMAN`, else `git config user.email`) and starts the
-  coordinator if you run it, else your first role; `--role <key>` starts another of your roles. Each
-  session gets `WE_HUMAN`, `WE_ROLE_ID` (the role key) and `WESIDE_COMPANION` (your name for it).
-- Each state has one owning human. The product role moves a story to Selected only with
-  `board.py select`; that move is the coordinator's start signal, which `board.py signals` puts on
-  its board.
-- Across machines, a question is a ticket comment plus a label (`board.py ask --to <human>`), a
-  claim a ticket comment (`board.py claim`); chat only wakes someone. Verbs: [we/docs/board.md](../we/docs/board.md) § Several humans.
+  coordinator if you run it, else your first role, and opens the product owner in a second tmux
+  window if you run that; `/we:start` offers the rest of your `runs`, default no. `--role <key>`
+  starts one more of your roles. Each session gets `WE_HUMAN`, `WE_ROLE_ID` (the role key) and
+  `WESIDE_COMPANION` (your name for it).
+- A state may have several owning humans (`owns_states`); only an owner moves a story on from it,
+  and a state nobody owns, anyone moves. Out of a running state (In Progress and later) a
+  non-owner asks the owner instead (`board.py ask --to <owner>`). Every move reads the ticket's
+  status first: each machine keeps its own log, the ticket is the one state all share.
+- The product role moves a story to Selected only with `board.py select`, once the plan is on the
+  default branch and the Ready lenses are green; that move is the coordinator's start signal, which
+  `board.py signals` puts on its board.
+- Across machines, a question is a ticket comment plus a label (`board.py ask --to <human>`). The
+  asked human sees it with `board.py inbox` and answers with `board.py reply`; only that human's
+  accounts answer it, and the reply comes back to the asker's board. The asker withdraws or
+  supersedes its own question (`withdraw`, `supersede`). A claim is a ticket comment
+  (`board.py claim`); chat only wakes someone.
+- An In Test step exists only where the crew maps it (`board.states.in_test`); with an owner of
+  In Test, Done comes only from In Test.
+- Verbs and refusals: [we/docs/board.md](../we/docs/board.md) § Several humans. A walk through one
+  day: [the tour page](https://plugin.weside.ai/tour/humans/).
 
 ## The effort rule
 

@@ -61,19 +61,29 @@ in a fixed claude-swap profile). `/we:pin status` names the account that bills t
 when its member sets `"pin": true`, resuming its newest session unless `--fresh`; it refuses while
 that session runs and opens with `/we:start` (the check of human, companion, role and pin, then the
 crew's restore after a crash, the crew list with the offer to start the rest, default no, then
-`/board`). Inside tmux it also opens the product owner in a second window; outside tmux it warns and
-names the command. A companion that already runs is named, never started twice. In a crew with
+`/board`). Inside tmux it also opens the product owner in a second window; outside tmux every
+`wclaude` start warns that the session ends with the terminal, and `--start` names the product
+owner's command instead of opening it. A companion that already runs is named, never started twice. In a crew with
 several humans it starts the roles of your human only, under your names for them; `--role <key>`
 starts exactly one of them.
 
 **Permission mode.** A session starts in your `permissions.defaultMode`. A crew with
 `launch.allow_bypass: true` adds `--allow-dangerously-skip-permissions` to every start through
 `wclaude` (without a pin), `/we:pin` and `we-worker`, so bypass is one Shift+Tab away; it never
-starts in bypass by itself.
+starts in bypass by itself. In a repo without a crew, `WE_WORKER_ALLOW_BYPASS=1` does the same for
+`we-worker`. `launch.worker_mode: bypass` starts every `we-worker --bg` worker in bypass, since in
+the background nobody answers a prompt (`default`: no `--permission-mode`); a window worker keeps
+the default mode, a `--permission-mode` you pass wins, and `permissions.deny`/`ask` and the
+plugin's guards still hold under bypass.
 
 **Workers.** `we-worker <name> [--bg] "<brief>"` starts a worker session on the global login:
-every `CLAUDE*` variable and `WESIDE_COMPANION` of the caller dropped, `WE_ROLE=worker` set; in a
-tmux window by default, as a background session with `--bg` (steered with `SendMessage`). `we-worker
-status`, `stop`, `logs` and `waiting` show and steer them. `/we:setup` installs it next to `wclaude`.
+every `CLAUDE*` variable, `WESIDE_COMPANION` and `WE_ROLE_ID` of the caller dropped, `WE_HUMAN` kept,
+`WE_ROLE=worker` set; in a tmux window by default, as a background session with `--bg` (steered with
+`SendMessage`), with a time limit (`--limit`, default 3h). `we-worker status`, `logs` and `waiting`
+show them. `we-worker stop` stops a worker and ends what it left running (watchers, dev servers),
+naming each; it refuses a session that is no worker. `we-worker checkpoint` commits an idle or
+stopped worker's tracked changes and pushes them to `wip/<branch without its type prefix>` before a
+quota pause (never on `main`; new files are named, not committed). `/we:setup` installs it next to
+`wclaude`.
 
 Settings: [getting-started.md](getting-started.md#plugin-settings).

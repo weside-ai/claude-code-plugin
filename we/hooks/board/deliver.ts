@@ -17,7 +17,7 @@
 // Every text names where the answer was written (`writerNote`): transparency, no gate.
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
-import type { BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
+import type { BoardAcceptVariant, BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
 import { answerPrompt } from './board'
 
 const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw']
@@ -121,8 +121,13 @@ export const recipientsOf = (line: AnswerLine, coordinator: string, asker: strin
 
 const after = (ts: string, epoch: string) => Date.parse(ts) > Date.parse(epoch)
 
-// One recipient of one line; a routing line carries the asker row it reports (`about`).
-export type Delivery = Recipient & { line: AnswerLine; about?: BoardDelivery }
+// The question an Accept answers, when that Accept means "I do it myself" (`acceptVariantOf` in board.ts):
+// its variant and, for a hand merge, the PR link.
+export type AcceptAs = { as: BoardAcceptVariant; pr?: string }
+
+// One recipient of one line; a routing line carries the asker row it reports (`about`), an Accept the
+// variant of its question (`accept`).
+export type Delivery = Recipient & { line: AnswerLine; about?: BoardDelivery; accept?: AcceptAs }
 
 // board.py PRUNE_AFTER_H: an answer its asker has not taken by then goes to the coordinator as a
 // routing line, so board.py prune never drops an answer nobody received.
@@ -138,6 +143,7 @@ export const pendingLines = (
   askerOf: (id: string) => string | undefined,
   ownerOf: (id: string) => string | undefined,
   now: number,
+  acceptOf: (id: string) => AcceptAs | undefined = () => undefined,
 ): Delivery[] => {
   const epoch = ledger.epoch
   if (!epoch) return []
@@ -146,7 +152,8 @@ export const pendingLines = (
     .filter(line => after(line.ts, epoch))
     .flatMap(line => {
       const asker = askerOf(line.id)
-      const own: Delivery[] = recipientsOf(line, coordinator, asker, ownerOf(line.id)).map(r => ({ ...r, line }))
+      const accept = line.answer === 'accept' ? acceptOf(line.id) : undefined
+      const own: Delivery[] = recipientsOf(line, coordinator, asker, ownerOf(line.id)).map(r => ({ ...r, line, ...(accept ? { accept } : {}) }))
       const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
       const overdue: BoardDelivery | undefined =
         asker && line.session !== asker && asker !== coordinator && !refused?.delivered && now - Date.parse(line.ts) >= ROUTE_AFTER_MS
@@ -180,16 +187,21 @@ const WRITTEN = { chat: 'in the chat of', ticket: 'on' } as Record<string, strin
 export const writerNote = (line: AnswerLine) =>
   ` (answered ${WRITTEN[line.via ?? ''] ?? 'from the board pane in'} ${line.session ?? 'a session without a name'})`
 
+// The text kind of an answer: an Accept that means "I do it myself" takes its own (`accept`), never
+// "proposal accepted", which a coordinator would read as a go to merge or to do the task.
+const kindOf = (line: AnswerLine, accept?: AcceptAs): BoardPromptKind => (line.answer === 'accept' && accept ? accept.as : line.answer)
+
 // The prompt the coordinator receives: today's text per kind, the owner's words when the owner gave them.
-export const coordinatorText = (line: AnswerLine, prompts: Prompts) =>
-  `${answerPrompt(line.answer, line.id, prompts)}${writerNote(line)}${quoteOf(line)}`
+export const coordinatorText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
+  `${answerPrompt(kindOf(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to the asker: the same answer; for Update, the request to check the question.
-export const askerText = (line: AnswerLine, prompts: Prompts) =>
-  `${answerPrompt(line.answer === 'update' ? 'update_asker' : line.answer, line.id, prompts)}${writerNote(line)}${quoteOf(line)}`
+export const askerText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
+  `${answerPrompt(line.answer === 'update' ? 'update_asker' : kindOf(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to the subject's owner: the answer as the coordinator gets it, marked as a copy.
-export const ownerText = (line: AnswerLine, prompts: Prompts) => `${coordinatorText(line, prompts)}\n(copy for the owner of this subject)`
+export const ownerText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
+  `${coordinatorText(line, prompts, accept)}\n(copy for the owner of this subject)`
 
 const oneLine = (reason: string) => reason.replace(/\s+/g, ' ').trim()
 
@@ -199,7 +211,7 @@ export const routeText = (line: AnswerLine, asker: string, reason: string) =>
 
 // The text a coordinator-side delivery submits: the answer itself, or the routing line.
 export const promptTextOf = (d: Delivery, prompts: Prompts) =>
-  d.role === 'route' ? routeText(d.line, d.about?.to ?? '?', d.about?.reason ?? 'not delivered') : coordinatorText(d.line, prompts)
+  d.role === 'route' ? routeText(d.line, d.about?.to ?? '?', d.about?.reason ?? 'not delivered') : coordinatorText(d.line, prompts, d.accept)
 
 export const NOTICE = '[Cross-session delivery notice]'
 

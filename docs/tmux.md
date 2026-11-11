@@ -20,3 +20,10 @@ session: every error exits 0 without output.
 Options (`/plugin` → we → Configure): `tmuxAttention`, default `true`; `false` turns it off.
 `tmuxAttentionStyle`, default `bg=white,fg=black`, and `tmuxIdleStyle`, default
 `bg=colour240,fg=white`, take any tmux style, e.g. `bg=yellow,fg=black,bold`.
+
+## Crew sessions in windows
+
+`wclaude --start` opens the product owner in a second window of your tmux session, `/we:start`
+starts the rest of your crew one window each (only on your yes), and `we-worker` without `--bg`
+starts a worker in a window named after it. Outside tmux every `wclaude` start warns: the session
+ends with its terminal, and no second window opens.

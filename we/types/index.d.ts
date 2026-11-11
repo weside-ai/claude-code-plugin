@@ -176,8 +176,11 @@ export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' 
 // The answers the deliverer carries; Read only appends its line.
 export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
 // The texts a delivery sends, each overridable by the board's `answer_prompts`: one per delivered kind
-// for the orchestrator (and the asker), and `update_asker`, what Update asks of the asking session.
-export type BoardPromptKind = BoardDeliveredKind | 'update_asker'
+// for the orchestrator (and the asker), `update_asker`, what Update asks of the asking session, and the
+// two Accepts that mean "I do it myself": `accept_hand` ("Yes, I'll do it" on a one-way merge-go with its
+// PR, `{pr}` standing for the PR link) and `accept_task` (Taken on a task).
+export type BoardAcceptVariant = 'accept_hand' | 'accept_task'
+export type BoardPromptKind = BoardDeliveredKind | 'update_asker' | BoardAcceptVariant
 
 export type BoardAnswer = {
   id: string
