@@ -767,8 +767,8 @@ above with `jira`): each machine keeps its own transitions log, so the status is
 share. Only a human who owns the state a story leaves (`owns_states`; several humans may own one
 state) moves it on; a refusal out of a running state (In Progress and later, `crew.RUNNING_STATES`)
 names the question to its owner, `board.py ask --to <owner>`, instead of the move. A status no
-`board.states` entry maps (a Jira "Blocked") has no known owner: the move is refused, never decided
-by the local row. With an owner of `in_test`, Done comes only from In Test.
+`board.states` entry maps (a Jira "Blocked") has no known owner: with a ticketing system the move is
+refused, never decided by the local row. With an owner of `in_test`, Done comes only from In Test.
 
 | Verb | What it does | Refusal |
 |---|---|---|
