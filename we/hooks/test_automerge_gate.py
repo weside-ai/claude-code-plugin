@@ -1573,24 +1573,30 @@ RECEIPTS = "tests/staging_receipts"
 @pytest.fixture()
 def receipts(story: dict) -> dict:
     """`story` whose origin/main crew names `oracles.receipt_dir`; HEAD back on that main."""
-    crew = {**CREW, "oracles": {"receipt_dir": RECEIPTS + "/"}}
+    crew = {**CREW, "oracles": {"receipt_dir": "./" + RECEIPTS + "/"}}
     main = _commit(story["repo"], {".weside/crew.json": json.dumps(crew)}, "receipt dir")
     _publish_main(story["repo"], main)
     return story
 
 
-def test_a_plan_pr_with_its_own_receipt_passes(receipts: dict, monkeypatch) -> None:
+@pytest.mark.parametrize("name", ["PROJ-5.yaml", "PROJ-5.yml", "PROJ-5.json"])
+def test_a_plan_pr_with_its_own_receipt_passes(receipts: dict, monkeypatch, name: str) -> None:
     """Red arm (core #6344, #6345): the refiner writes the story's receipt with its plan; that
-    plan PR is no build PR."""
-    head = _commit(
-        receipts["repo"], {PLAN: "# plan\n", f"{RECEIPTS}/PROJ-5.yaml": "a: 1\n"}, "plan"
-    )
+    plan PR is no build PR, whatever format the repo's receipts take."""
+    head = _commit(receipts["repo"], {PLAN: "# plan\n", f"{RECEIPTS}/{name}": "a: 1\n"}, "plan")
     fake = FakeGh([run()], head=head, names=STORY)
     assert refuse(receipts["repo"], ARM, fake, monkeypatch) is None
 
 
 @pytest.mark.parametrize(
-    "other", [f"{RECEIPTS}/PROJ-6.yaml", f"{RECEIPTS}/PROJ-55.yaml", "tests/test_thing.py"]
+    "other",
+    [
+        f"{RECEIPTS}/PROJ-6.yaml",
+        f"{RECEIPTS}/PROJ-55.yaml",
+        f"{RECEIPTS}/PROJ-5",
+        f"{RECEIPTS}/sub/PROJ-5.yaml",
+        "tests/test_thing.py",
+    ],
 )
 def test_a_plan_pr_with_another_receipt_or_a_test_is_refused(
     receipts: dict, monkeypatch, other: str

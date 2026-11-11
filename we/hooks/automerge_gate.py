@@ -64,7 +64,7 @@ Refusals, in this order (the first one wins):
   6. Plan first, for every story key the PR's head branch and title name (the crew's
      `naming.key` on `origin/main`, else the default) whose plan `docs/plans/<KEY>-story.md` is
      on the head or on `origin/main`, and the PR changes a file outside `docs/` other than the
-     story's own receipt (`<oracles.receipt_dir>/<KEY>.yaml` on `origin/main`): the plan must be
+     story's own receipt (`<oracles.receipt_dir>/<KEY>.<ext>` on `origin/main`): the plan must be
      on `origin/main`, and the story's last row in the board's transitions log
      (`<board stem>-transitions.jsonl` beside `board_freeze.watched_board_files`) must not be
      `on_hold` or `backlog`. A story the log does not know passes; a PR without a key or a plan
@@ -119,6 +119,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -815,19 +816,26 @@ def _plan_refusal(root: str, cls: ClassResult) -> str | None:
     return None
 
 
-def _own_receipt(root: str, key: str) -> str | None:
-    """`<oracles.receipt_dir>/<key>.yaml` from the crew on `origin/main`, or None without a dir."""
+def _receipt_dir(root: str) -> str | None:
+    """`oracles.receipt_dir` from the crew on `origin/main`, normalised; None without one."""
     oracles = _crew_on_main(root).get("oracles")
     rdir = oracles.get("receipt_dir") if isinstance(oracles, dict) else None
-    if not isinstance(rdir, str) or not rdir.strip("/ "):
+    if not isinstance(rdir, str):
         return None
-    return f"{rdir.strip().strip('/')}/{key}.yaml"
+    rdir = posixpath.normpath(rdir.strip())
+    return None if rdir in (".", "/") or rdir.startswith("..") else rdir
 
 
-def _plan_pr_file(path: str, receipt: str | None) -> bool:
-    """A file a plan PR may carry: anything under `docs/`, or the story's own receipt (the
-    refiner writes it with the plan). Any other file makes it a build PR."""
-    return path.startswith("docs/") or (receipt is not None and path == receipt)
+def _plan_pr_file(path: str, key: str, rdir: str | None) -> bool:
+    """A file a plan PR may carry: anything under `docs/`, or the story's own receipt
+    `<receipt_dir>/<KEY>.<ext>` (the refiner writes it with the plan; the format is the repo's).
+    Any other file, another story's receipt among them, makes it a build PR."""
+    if path.startswith("docs/"):
+        return True
+    if rdir is None or posixpath.dirname(path) != rdir:
+        return False
+    stem, ext = posixpath.splitext(posixpath.basename(path))
+    return stem == key and bool(ext)
 
 
 def _story_refusal(root: str, cls: ClassResult, key: str) -> str | None:
@@ -838,8 +846,8 @@ def _story_refusal(root: str, cls: ClassResult, key: str) -> str | None:
         return None
     changed = _git(root, "diff", "--name-only", "--no-renames", f"{cls.base}...{cls.head}")
     files = [f for f in (changed or "").splitlines() if f.strip()]
-    receipt = _own_receipt(root, key)
-    if changed is not None and all(_plan_pr_file(f, receipt) for f in files):
+    rdir = _receipt_dir(root)
+    if changed is not None and all(_plan_pr_file(f, key, rdir) for f in files):
         return None
     if not on_main:
         return (
