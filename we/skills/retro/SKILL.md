@@ -14,7 +14,9 @@ description: >
 3. Create no ticket unless the user asks.
 
 Invocation: `/we:retro` (this branch and its last PR) · `--pr <N>` · `--session <id>` (read that
-session's transcript instead of this one) · `--auto` (§ Auto mode: asks nothing, writes entries only).
+session's transcript instead of this one) · `--key <KEY>` (a ticket or epic across every session and
+PR that names it, § Gather) · `--focus "<question>"` (the question an owner asked: every finding says
+how it answers it, the close line answers it) · `--auto` (§ Auto mode: asks nothing, writes entries only).
 
 ## Where entries go
 
@@ -42,6 +44,14 @@ then dispatch it here the same way:
 - The transcript: in context, or `~/.claude/projects/<repo-id>/<session>.jsonl` (after a compaction,
   or the `--session` id), scoped to this cycle. Look for user corrections, nudges ("go on"), stops
   that announced instead of acting, avoidable questions, loops on one problem, false "green" reports.
+- `--key <KEY>`: every PR that names it (`gh pr list --state all --search <KEY>`, for an epic each
+  story key of its plan too), the commits on `origin/<default>` that name it, its plan and Updates
+  Log, and the transcripts under `~/.claude/projects/*/` that name it (privacy guard first); one
+  session's view of a ticket misses the scope that grew across sessions.
+- Flow, not only conversation: per waiting stretch who waited on whom and how long (the board's
+  transitions and questions logs where a crew keeps them, else the transcript times), PRs per
+  ticket and titles counting parts ("part N", "Teil N"), heads per PR, and ticket state against git
+  (`board.py check`, a merged PR under a ticket still Selected).
 - With authenticated `gh`: `gh pr view <N> --json commits,reviews,comments,statusCheckRollup`,
   `gh pr checks <N>`, the failing part of each red run (`gh run view <id> --log-failed`). Without
   `gh`: `git log --oneline origin/<default>..HEAD` and say that PR/CI data is missing.
@@ -54,11 +64,13 @@ then dispatch it here the same way:
 ## Findings
 
 Each friction: what happened, the evidence (transcript turn, duration, commit range or run id), the
-root cause, and the instruction line that caused it, or that was missing. A friction with no
-instruction-file remedy is dropped.
+root cause, and the instruction line that caused it, or that was missing. A process finding (who
+waits on whom, a wake window, a crew setting) is kept: its target is the crew file
+(`.weside/crew.json`), the process L0 (`plugin:process/L0.md`) or the role file that sets it. Only a
+friction no file in the repo or the plugin could change is dropped.
 
-Map each to an entry: target file (path-bound rule > always-loaded instruction file > `docs/` >
-plugin file), pattern (`gap` for a missing instruction; otherwise the audit id it matches, e.g.
+Map each to an entry: target file (path-bound rule > always-loaded instruction file > crew file or
+role file > `docs/` > plugin file, the L0 included), pattern (`gap` for a missing instruction; otherwise the audit id it matches, e.g.
 `G2-volatile` for a line the code contradicts, `G2-conflict` for two files that disagree,
 `G2-recency` for a rule that steered the session around a problem that was not there), action and
 confidence (High when the transcript shows the user correcting it, else Medium). The entry body
@@ -72,4 +84,5 @@ carries the proposed lines. Evidence line: `- <date> retro PR #<N> | session <id
    describes the same failure gains the evidence line under its key (store reference § Inbox entry,
    stable keys). Only then a new file. A target outside the repo is written as `target: ~/<path>`.
 2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land), except `--auto` in staging.
-3. Close with one line: entries created, entries repeated (with their new counts), where they are.
+3. Close with one line: entries created, entries repeated (with their new counts), where they are;
+   with `--focus`, a second line answering the question.

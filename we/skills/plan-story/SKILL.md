@@ -69,6 +69,9 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
    - A plan that maps an external format (an import, an export, a foreign API) lists that schema's required
      fields, each with the field it lands in (good: "`original` → `source_text`"; bad: "map the fields"), read
      from the schema itself, never from a sample file.
+   - A new table names its row-access form per the repo's auth doc (an ownership-join policy, or no
+     policy plus the bypass call at each call site) and, for rows that expire, the job and batch that
+     delete them (WA-2991: an allow-all policy and no purge passed three panels, two review rounds later).
 3. **Write the file.**
    - Sections, phases (`**Files:**`, `**Repo:**`, `**Risk:**`), AC form and oracle-class marker:
      `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`. Real phases even for a small story, each independently

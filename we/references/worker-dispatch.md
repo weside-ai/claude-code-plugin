@@ -241,8 +241,14 @@ acceptance walk; L0 § Against the waterfall) runs as a read-only worker the mas
 
 The verdict goes on the PR or the board item, never into a ticket the worker files. A security card
 verdict on a card hit is a PR comment in the form `automerge_gate.py` reads (its docstring, refusal 5):
-the marker `<!-- security-card-review -->`, the heading `## Security card review — #<N> @ \`<head sha>\``
+the marker `<!-- security-card-review -->`, the heading ``## Security card review — #<N> @ `<head sha>` ``
 and `**Overall: PASS**` or `BLOCKING`; only a PASS on the current head lets the merge through.
+The card worker never posts it: `worker_rights_gate.py` denies a worker a comment on a PR that is not
+its own branch's. It writes the verdict to the file its brief names under `## Ausgabe` (marker,
+heading with the head sha, `Overall:` last) and sends the path to its Lead. The Lead checks the
+marker, the sha against the PR's current head and the file's mtime against the worker's start, then
+posts it unchanged: `gh pr comment <N> --body-file <file>` (the Lead acting on a denied action, plan
+WA-2856b § Out of scope).
 
 ## Lead checks around a worker
 
