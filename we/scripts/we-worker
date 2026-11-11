@@ -9,7 +9,7 @@
 #   we-worker stop <name|id>       stops a worker (a background session with `claude stop`, a window
 #                                  worker with SIGTERM to its pid) and waits until it is gone (30 s);
 #                                  then ends what it left running (watchers, dev servers: its process
-#                                  tree) and names each one. A session that is no worker (no background,
+#                                  tree) and names each one; removes its settings file. A session that is no worker (no background,
 #                                  no launcher marker, no WE_ROLE=worker: a master, a companion) refuses
 #   we-worker checkpoint <name|id> commits a worker's tracked changes in its worktree (never on main; new files are named, not
 #                                  committed) and pushes them
@@ -40,10 +40,11 @@
 # A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
 # `--cwd` would otherwise reach claude as a prompt): run `cd <tree> && we-worker …` instead.
 # A start refuses (exit 2, before any claude call) a name that does not start with the story key (crew
-# `naming.key`, `<key>-<chunk>`) and a brief, the last argument, that lacks one of the four fields
+# `naming.key`, `<key>-<chunk>`). A brief, the last argument, that lacks one of the four fields
 # (`worker_launch.py check`: Ziel/Goal, Ausgabe/Output, Werkzeuge und Quellen/Tools and sources, Grenzen
-# und wann stoppen/Limits and when to stop); a last argument starting with `-`, or none, is an empty
-# brief. A --resume/--continue start checks the name only. Without the plugin's worker_launch.py no worker
+# und wann stoppen/Limits and when to stop) gets a warning with the template while the check only warns
+# (worker_launch.BRIEF_ENFORCED), a refusal once it is enforced; a last argument starting with `-`, or
+# none, is an empty brief. A --resume/--continue start checks the name only. Without the plugin's worker_launch.py no worker
 # starts. Every worker starts with `--settings <state dir>/<name>.settings.json` (`worker_launch.py
 # settings`: its rights in this repo, the never-list, WE_ROLE and WE_STORY_KEY) and WE_STORY_KEY=<key>.
 # The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
@@ -307,6 +308,7 @@ for x in json.load(sys.stdin):
       kill -TERM "$cpid" 2>/dev/null && ended="${ended:+$ended, }$cpid $comm"
     done <<<"$left"
     if [[ -n "$gone" ]]; then
+      [[ "${aname:--}" == - ]] || rm -f "${WE_WORKER_STATE_DIR:-$HOME/.claude/we-state/workers}/$aname.settings.json"
       echo "we-worker: $key ($id) stopped${ended:+; also ended: $ended}"
       exit 0
     fi

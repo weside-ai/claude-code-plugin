@@ -92,11 +92,13 @@ template in force; the master's boot check and `/we:accept` read it there.
 ### Name and brief
 
 `we-worker` and `worker_launch.py launch` refuse a start (exit 2, before any file or session) whose
-name does not start with the story key (crew `naming.key`, `<KEY>-<chunk>`) or whose brief lacks one
-of four Markdown headings with a body: `Ziel`/`Goal`, `Ausgabe`/`Output`, `Werkzeuge und
+name does not start with the story key (crew `naming.key`, `<KEY>-<chunk>`). They warn, and once the
+check is enforced refuse, a brief that lacks one of four Markdown headings with a body: `Ziel`/`Goal`, `Ausgabe`/`Output`, `Werkzeuge und
 Quellen`/`Tools and sources`, `Grenzen und wann stoppen`/`Limits and when to stop` (a heading counts
 when its text starts with the name). The grammar, the refusal template and `worker_launch.py check`
 are owned by `scripts/worker_launch.py` (its docstring). A `--resume` start checks the name only.
+Every start and every denial of the worker rights brake is one line in `<state dir>/brakes.jsonl`
+(`worker_rights.brake_log`): the count of false alarms and of passing briefs.
 
 ### Worker rights
 

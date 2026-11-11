@@ -389,6 +389,23 @@ def test_a_bare_push_from_main_is_denied(world):
     assert decision == "deny" and "main (a bare git push from main)" in reason
 
 
+def test_every_denial_is_one_line_in_brakes_jsonl_without_the_command(world):
+    state = world["tmp"] / "state"
+    decision, _reason = hook(world, "printf s3cr3t-value | wsec put NAME", WE_STATE_DIR=str(state))
+    assert decision == "deny"
+    hook(world, "gh pr ready 8", WE_STATE_DIR=str(state))
+    hook(world, "git status", WE_STATE_DIR=str(state))  # no denial, no line
+    text = (state / "brakes.jsonl").read_text()
+    assert "s3cr3t-value" not in text
+    first, second = [json.loads(x) for x in text.splitlines()]
+    assert set(first) == {"ts", "type", "gate", "item", "name", "key", "session_id", "argv0"}
+    assert first["type"] == "deny" and first["gate"] == "worker_rights_gate"
+    assert first["item"] == "never for a worker (secrets (crew deny_commands: wsec put))"
+    assert first["key"] == KEY and first["argv0"] == "printf" and first["ts"].endswith("Z")
+    assert second["item"].startswith("not a worker right (PR 8 is not this branch's PR")
+    assert second["argv0"] == "gh"
+
+
 def test_a_marker_worker_names_its_lead(world):
     gd = subprocess.run(
         ["git", "-C", str(world["repo"]), "rev-parse", "--absolute-git-dir"],

@@ -225,12 +225,22 @@ def test_a_name_without_the_story_key_refuses_before_claude(tmp_path, name):
         ("--bg", "## Goal\nx\n## Output\n"),
     ],
 )
-def test_an_incomplete_brief_refuses_with_the_template(tmp_path, args):
+def test_an_incomplete_brief_warns_with_the_template_and_starts(tmp_path, args):
+    """Warn first (Vyra 11.11.): the finding and the template on stderr, the worker starts, a
+    `brief` line with ok false in brakes.jsonl; refusing is worker_launch.BRIEF_ENFORCED's."""
     project, env = setup(tmp_path)
     proc = run(project, env, "AC-12-impl", *args)
-    assert proc.returncode == 2 and proc.stderr.startswith("we-worker: the brief lacks ")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stderr.startswith("we-worker: warning: the brief lacks ")
     assert "## Grenzen und wann stoppen (Limits and when to stop)" in proc.stderr
-    assert not started(tmp_path)
+    assert started(tmp_path)
+    (line,) = brakes(tmp_path)
+    assert line["type"] == "brief" and line["name"] == "AC-12-impl" and line["ok"] is False
+
+
+def brakes(tmp_path):
+    log = tmp_path / "home" / ".claude" / "we-state" / "brakes.jsonl"
+    return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
 
 
 def test_a_pointer_brief_is_read_from_its_file(tmp_path):
@@ -239,7 +249,8 @@ def test_a_pointer_brief_is_read_from_its_file(tmp_path):
     assert run(project, env, "AC-12-impl", "--bg", f"Read {good} and follow it.").returncode == 0
     bad = good.with_name("missing-goal.md")
     proc = run(project, env, "AC-12-other", "--bg", f"Read {bad} and follow it.")
-    assert proc.returncode == 2 and "Ziel / Goal" in proc.stderr
+    assert proc.returncode == 0 and "warning: the brief lacks Ziel / Goal" in proc.stderr
+    assert [x["ok"] for x in brakes(tmp_path)] == [True, False]
 
 
 def test_a_resumed_worker_checks_the_name_only(tmp_path):
@@ -375,9 +386,13 @@ def test_stop_waits_until_the_row_is_gone_and_ends_what_it_left(tmp_path):
             {"id": "ab12", "name": "w", "kind": "background", "pid": worker.pid, "sessionId": "s"}
         ]
         project, env = setup(tmp_path, rows)
+        settings = tmp_path / "home" / ".claude" / "we-state" / "workers" / "w.settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text("{}")
         proc = run(project, env, "stop", "w")
         assert proc.returncode == 0, proc.stderr
         assert f"w (ab12) stopped; also ended: {child} sleep" in proc.stdout
+        assert not settings.exists()  # the stop clears the worker's settings file
     finally:
         worker.kill()
 

@@ -15,12 +15,15 @@ For a worker it
   3. allows a held right that is the whole command, without a prompt; a held right inside a
      compound command only passes this gate.
 `ask …` names the marker's Lead (`ask your Lead <name>`), else `ask your starter`. Fail closed: an
-exception while judging a worker's command denies it. A PreToolUse deny holds under
+exception while judging a worker's command denies it. Every denial is one `deny` line in
+`<state dir>/brakes.jsonl` (`worker_rights.brake_log`), so the false alarms can be counted; a failed
+write never changes the decision. A PreToolUse deny holds under
 `bypassPermissions`.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -82,6 +85,27 @@ def decide(payload: dict, env: dict) -> tuple[str, str] | None:
     return None
 
 
+def record(payload: dict, env: dict, reason: str) -> None:
+    """One `deny` line in `brakes.jsonl` (`worker_rights.brake_log`); silent on any failure."""
+    with contextlib.suppress(Exception):
+        import worker_rights as wr  # noqa: PLC0415
+
+        marker = _marker(payload) or {}
+        command = str((payload.get("tool_input") or {}).get("command", ""))
+        wr.brake_log(
+            payload.get("cwd"),
+            {
+                "type": "deny",
+                "gate": "worker_rights_gate",
+                "item": reason.rsplit(": ask ", 1)[0],
+                "name": marker.get("name"),
+                "key": env.get("WE_STORY_KEY") or marker.get("key"),
+                "session_id": payload.get("session_id"),
+                "argv0": wr.argv0(command),
+            },
+        )
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -104,6 +128,8 @@ def main() -> None:
             f"worker_rights_gate failed ({type(exc).__name__}: {exc}); fail closed: ask your starter",
         )
     if verdict:
+        if verdict[0] == "deny":
+            record(payload, dict(os.environ), verdict[1])
         _out(*verdict)
 
 

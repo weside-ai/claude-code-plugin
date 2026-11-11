@@ -724,6 +724,53 @@ def right_refusal(  # noqa: PLR0911
     return None
 
 
+# ---------------------------------------------------------------- the brake log
+
+
+BRAKE_LOG = "brakes.jsonl"
+
+
+def brake_log(cwd: str | Path | None, record: dict) -> Path | None:
+    """Append one JSON line to `<state dir>/brakes.jsonl` (`crew.state_dir`: `WE_STATE_DIR`, else
+    the crew's `state_dir`, else `~/.claude/we-state`); best effort, None when nothing was written.
+
+    Line shape (this function owns it): `ts` (UTC ISO, stamped here), `type`, then per type
+      `deny`  (the worker rights gate): `gate`, `item` (the never-list item or the failed right),
+              `name`, `key`, `session_id`, `argv0` (the first word of the command; never the
+              command itself, which may carry a secret value)
+      `brief` (every worker start): `name`, `key`, `ok`, `missing` (the fields the brief lacks).
+    One line per event, so a brake's false alarms and the brief check's pass rate can be counted."""
+    import contextlib  # noqa: PLC0415
+    import datetime as dt  # noqa: PLC0415
+
+    import crew as crew_mod  # noqa: PLC0415
+
+    with contextlib.suppress(Exception):
+        try:
+            path, crew = crew_mod.find_and_load(cwd or Path.cwd())
+        except crew_mod.CrewError:
+            path, crew = None, None
+        out = crew_mod.state_dir(path, crew) / BRAKE_LOG
+        line = {"ts": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), **record}
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(out), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.write(fd, (json.dumps(line, ensure_ascii=False) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+        return out
+    return None
+
+
+def argv0(command: str) -> str:
+    """The first word of `command` (its basename), for a log line that must not carry values."""
+    try:
+        words = _strip_prefixes(_tokens(HEREDOC.sub("", command).split("\n", 1)[0]))
+    except ValueError:
+        words = command.split()[:1]
+    return os.path.basename(words[0]) if words else ""
+
+
 # ---------------------------------------------------------------- the settings record
 
 

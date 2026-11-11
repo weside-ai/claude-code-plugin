@@ -577,7 +577,8 @@ class TestCheckBrief:
         with pytest.raises(wl.LaunchError, match="brief: "):
             wl.check_brief(f"Read {tmp_path / 'absent.md'} and follow it.")
 
-    def test_check_names_each_missing_field_and_prints_the_template(self):
+    def test_check_names_each_missing_field_and_prints_the_template(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("WE_STATE_DIR", str(tmp_path))
         out = _run(
             "check",
             "--name",
@@ -587,14 +588,22 @@ class TestCheckBrief:
             "--prefix",
             "we-worker",
         )
-        assert out.returncode == 2
+        assert out.returncode == 0 and out.stdout.strip() == "AB-1"
         assert out.stderr.startswith(
-            "we-worker: the brief lacks Grenzen und wann stoppen / Limits and when to stop;"
+            "we-worker: warning: the brief lacks Grenzen und wann stoppen / Limits and when to stop;"
         )
-        assert (
-            "## Ziel (Goal)" in out.stderr
-            and "## Grenzen und wann stoppen (Limits and when to stop)" in out.stderr
-        )
+        assert "## Ziel (Goal)" in out.stderr
+        assert "## Grenzen und wann stoppen (Limits and when to stop)" in out.stderr
+        (line,) = [json.loads(x) for x in (tmp_path / "brakes.jsonl").read_text().splitlines()]
+        assert line["type"] == "brief" and line["key"] == "AB-1" and line["ok"] is False
+        assert line["missing"] == ["Grenzen und wann stoppen / Limits and when to stop"]
+        assert line["ts"].endswith("Z")
+
+    def test_an_enforced_check_refuses(self, monkeypatch):
+        monkeypatch.setattr(wl, "BRIEF_ENFORCED", True)
+        with pytest.raises(wl.LaunchError, match="the brief lacks") as exc:
+            wl.check("AB-1-x", (BRIEFS / "missing-goal.md").read_text())
+        assert exc.value.code == 2
 
     def test_check_reads_stdin(self):
         out = subprocess.run(
@@ -607,7 +616,10 @@ class TestCheckBrief:
         assert out.returncode == 0 and out.stdout.strip() == "AB-1"
 
     @pytest.mark.parametrize("fixture", ["missing-goal.md", "empty-body.md"])
-    def test_launch_refuses_an_incomplete_brief_before_writing_a_file(self, env, fixture):
+    def test_launch_refuses_an_incomplete_brief_before_writing_a_file(
+        self, env, fixture, monkeypatch
+    ):
+        monkeypatch.setattr(wl, "BRIEF_ENFORCED", True)
         env["configure"](TEMPLATE)
         with pytest.raises(wl.LaunchError, match="the brief lacks") as exc:
             wl.launch(env["wt"], "KEY-1-w1", BRIEFS / fixture, "we:dev-medium")

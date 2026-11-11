@@ -22,10 +22,13 @@ name starts with a match of the crew's `naming.key` (default `[A-Z]+-\\d+`), alo
 with a non-blank body up to the next heading of its level or above (`check_brief`); a heading counts
 when its text starts, case-insensitively, with one of the field's two names: `Ziel`/`Goal`,
 `Ausgabe`/`Output`, `Werkzeuge und Quellen`/`Tools and sources`, `Grenzen und wann stoppen`/`Limits
-and when to stop`. A brief that is exactly `Read <path> and follow it.` is that file's text. A refusal
-prints `TEMPLATE`, which passes its own check.
+and when to stop`. A brief that is exactly `Read <path> and follow it.` is that file's text. The name
+check refuses; the brief check warns while `BRIEF_ENFORCED` is false (it prints the finding and
+`TEMPLATE`, which passes its own check, and the worker starts) and refuses once a follow-up sets it.
+Every checked start is one `brief` line in `brakes.jsonl` (`worker_rights.brake_log`): the switch
+is due when the last 30 logged starts pass.
 
-`launch` checks name and brief first, then writes two files into the worktree's own git dir (untracked,
+`launch` checks name (and, once enforced, brief) first, then writes two files into the worktree's own git dir (untracked,
 removed with the worktree): `we-brief.md` (the brief under a first `Lead:` line) and `we-worker.json`
 (the marker: name, key, lead, agent, launched_at, and the worker's `session_id` from `claude agents --json`). The hooks treat a session
 as a process worker only when the marker's `session_id` is its own (`worker_marker`), so the Lead
@@ -285,6 +288,7 @@ FIELDS = (
 )
 TEMPLATE = "\n".join(f"## {de} ({en})\n<{hint}>\n" for de, en, hint in FIELDS)
 DEFAULT_KEY = "[A-Z]+-\\d+"
+BRIEF_ENFORCED = False  # warn first (Vyra 11.11.); a brake-change follow-up sets it
 _POINTER = re.compile(r"Read (?P<path>\S.*?) and follow it\.")
 _HEADING = re.compile(r"^[ ]{0,3}(?P<level>#{1,6})[ \t]+(?P<text>.*?)[ \t#]*$")
 _FENCE = re.compile(r"^[ ]{0,3}(```|~~~)")
@@ -374,13 +378,21 @@ def _example_key(repo: Path | None, key_re: str) -> str | None:
     return found.group(0) if found else None
 
 
-def check(name: str, brief: str, repo: Path | None = None) -> str:
-    """`check_name`, then `check_brief`: the key, or a `LaunchError` (exit 2) naming what is wrong."""
+def check(name: str, brief: str, repo: Path | None = None, prefix: str = "worker_launch") -> str:
+    """`check_name`, then `check_brief`: the key, or a `LaunchError` (exit 2) naming what is wrong;
+    a brief finding is a stderr warning while `BRIEF_ENFORCED` is false. Logs one `brief` line."""
+    import worker_rights  # noqa: PLC0415
+
     key_re = key_pattern(repo)
     key = check_name(name, key_re, _example_key(repo, key_re))
     missing = check_brief(brief, repo)
-    if missing:
+    worker_rights.brake_log(
+        repo, {"type": "brief", "name": name, "key": key, "ok": not missing, "missing": missing}
+    )
+    if missing and BRIEF_ENFORCED:
         raise LaunchError(brief_refusal(missing), 2)
+    if missing:
+        print(f"{prefix}: warning: {brief_refusal(missing)}", file=sys.stderr)
     return key
 
 
@@ -656,7 +668,7 @@ def _check_verb(args: argparse.Namespace) -> int:
         if not args.brief_file:
             raise LaunchError("check needs --brief-file <f|-> or --no-brief", 2)
         brief = sys.stdin.read() if args.brief_file == "-" else Path(args.brief_file).read_text()
-        print(check(args.name, brief, args.repo))
+        print(check(args.name, brief, args.repo, args.prefix))
     except OSError as exc:
         print(f"{args.prefix}: brief: {exc}", file=sys.stderr)
         return 2
