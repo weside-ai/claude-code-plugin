@@ -722,7 +722,7 @@ test('a one-way "Yes, I\'ll do it" tells coordinator and asker the owner merges 
   const { clock, h } = await coordinator($, on, { board })
   await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
-  const text = `Q1: the owner merges ${pr} by hand — do not merge or arm it; the question stays open until the PR is merged (answered from the board pane in foxy)`
+  const text = `Q1: the owner approves or merges ${pr} by hand — do not merge or arm it; the question stays open until the PR is merged (answered from the board pane in foxy)`
   expect(h.submitted).toEqual([text])
   expect(h.sent).toEqual([{ to: 'asker', text }])
   expect([...h.submitted, ...h.sent.map(s => s.text)].some(t => t.includes('proposal accepted'))).toBe(false)

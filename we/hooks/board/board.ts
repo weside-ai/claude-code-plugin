@@ -200,7 +200,7 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
   withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
-  accept_hand: '{id}: the owner merges {pr} by hand — do not merge or arm it; the question stays open until the PR is merged',
+  accept_hand: '{id}: the owner approves or merges {pr} by hand — do not merge or arm it; the question stays open until the PR is merged',
   accept_task: '{id}: taken — the owner does this task; do not do it yourself',
 }
 
