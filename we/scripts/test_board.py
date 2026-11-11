@@ -466,7 +466,7 @@ class TestFreezePerCrew:
 import fcntl  # noqa: E402
 import os  # noqa: E402
 import shutil  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
 
 import cold_reader  # noqa: E402
 
@@ -1966,9 +1966,10 @@ class TestSelect:
         assert after == before, "select wrote board.json or the answers file"
         sub = board.parser()._subparsers._group_actions[0].choices["select"]
         options = {s for a in sub._actions for s in a.option_strings} - {"-h", "--help"}
-        assert options == {"--plan"}
+        assert options == {"--plan", "--input"}
         assert [g for g, _ in board.ENTRY_RULES["selected"]] == [
             "role",
+            "owner",
             "ready gate",
             "plan on main",
             "tier",
@@ -3136,8 +3137,39 @@ class TestPrune:
         assert board_of(crewless)["owner_queue"] == []
 
     def test_an_undelivered_close_stays_however_old(self, crewless):
+        """Red arm: prune never drops an answer its asker has not received; after
+        PRUNE_AFTER_H the deliverer routes it to the coordinator (deliver.ts) and the delivered
+        route row lets it go."""
         epoch_row(crewless)
-        answered(crewless, "Q7", "accept", "2026-11-01T09:00:00.000Z")
+        ts = "2026-11-01T09:00:00.000Z"
+        answered(crewless, "Q7", "accept", ts)
+        go(crewless, "prune", now=NOW + timedelta(days=3))
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+        delivered_row(crewless, "Q7", ts, "2026-11-02T09:00:01.000Z", role="route")
+        go(crewless, "prune", now=NOW + timedelta(days=3))
+        assert board_of(crewless)["owner_queue"] == []
+
+    def test_a_duplicate_answer_before_delivery_keeps_it(self, crewless):
+        """Red arm: a second answer names the question (`closed_by`), yet the first one has not
+        reached its asker: it stays."""
+        epoch_row(crewless)
+        answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
+        assert go(crewless, "answer", "Q7", "deny", "--session", "foxy", "--via", "chat") == 0
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    def test_an_accepted_one_way_merge_go_stays_until_close_merged(self, crewless):
+        """Red arm: "Yes, I'll do it" on a one-way merge-go is the human's promise to merge by
+        hand; the reminder stays on the board until close-merged sees the PR merged."""
+        path = crewless / "board.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
+        q7.update({"cause": "merge-go", "one_way": "money", "pr_url": PR_URL})
+        path.write_text(json.dumps(data), encoding="utf-8")
+        epoch_row(crewless)
+        ts = "2026-11-03T09:59:00.000Z"
+        answered(crewless, "Q7", "accept", ts)
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
 

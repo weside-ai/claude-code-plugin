@@ -27,7 +27,8 @@ refresh), `/we:master` (the plans its refiner workers wrote), `/we:merged`,
    (its `**Staging checks:**` line) travels with it, to the same relative path.
 4. **Commit and check.** A story plan first passes
    `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`: a
-   `missing:` name goes back to its writer (struck, or marked `(new)`), never committed as existing.
+   `missing:` name goes back to its writer (struck, or marked `(new)`), never committed as existing; an
+   `exists:` name (marked new, already on main) goes back the same way, to build on main's version.
    Plan and staging-check file go into one commit, so neither lands without the other, and the
    subject names the story key (`docs(<KEY>): plan — …`): the repo's staging run finds a story by
    the keys in commit subjects.

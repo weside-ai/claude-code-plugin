@@ -38,8 +38,10 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
 - Several humans (`docs/board.md` § Several humans): `board.py select` carries the transition, then
   the comment `selected by <role>@<human>, …`; `board.py claim` a comment; `board.py ask --to` a
   comment, then a label (`{"op": "label", "key", "add"}`: add it to the ticket's labels, keep the
-  others). The reads `board.py signals` and `claim` print (`search`: run the JQL, give back each
-  hit's key and the time of the change; `read`: the ticket's labels and comments with created and
-  author, the author as the account's email, else its accountId, never the display name) go back as `--input FILE`; Rovo: `searchJiraIssuesUsingJql`, the labels from
+  others); `board.py reply` and `withdraw` an `unlabel` (`{"op": "unlabel", "key", "remove"}`).
+  The reads `board.py signals`, `claim`, `inbox`, `select`, `move` and a merge-go `ask` print
+  (`search`: run the JQL, give back each hit's key and the time of the change; `read`: the
+  ticket's status, labels and comments with created and author, the author as the account's
+  email, else its accountId, never the display name) go back as `--input FILE`; Rovo: `searchJiraIssuesUsingJql`, the labels from
   `getJiraIssue`, the comments from `listJiraIssueComments`; `jira_*`: `jira_search`,
   `jira_get_issue` with `comment_limit`.

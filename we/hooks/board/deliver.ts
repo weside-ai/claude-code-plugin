@@ -2,7 +2,8 @@
 // owe whom a message, how the ledger folds, which notice means a hold. register.tsx wires the events.
 //
 // One deliverer, in the coordinator's session (its live name is the board's `updated_by`, while that is
-// empty the coordinator of the crew whose board.file it is, coordinatorName), carries
+// empty the session `crew.py deliverer` names for this machine: the coordinator, or on a machine of a
+// crew with several humans that runs none, the first role its human runs), carries
 // each answer line to up to three recipients and writes one ledger row per recipient:
 //   coordinator  `$.prompt.submit` as the person; delivered once its user row is stored. No row by
 //                the end of a turn that started after the submit (or 30 s idle): submit once more,
@@ -123,15 +124,20 @@ const after = (ts: string, epoch: string) => Date.parse(ts) > Date.parse(epoch)
 // One recipient of one line; a routing line carries the asker row it reports (`about`).
 export type Delivery = Recipient & { line: AnswerLine; about?: BoardDelivery }
 
+// board.py PRUNE_AFTER_H: an answer its asker has not taken by then goes to the coordinator as a
+// routing line, so board.py prune never drops an answer nobody received.
+export const ROUTE_AFTER_MS = 24 * 3600_000
+
 // What the deliverer still owes: every recipient of a line newer than the epoch whose key holds no
-// verdict, and the coordinator's routing line for an asker refused without one yet. Without an epoch
-// nothing is owed: the deliverer writes one first.
+// verdict, and the coordinator's routing line for an asker refused, or not reached ROUTE_AFTER_MS
+// after the answer, without one yet. Without an epoch nothing is owed: the deliverer writes one first.
 export const pendingLines = (
   lines: readonly AnswerLine[],
   ledger: Ledger,
   coordinator: string,
   askerOf: (id: string) => string | undefined,
-  ownerOf: (id: string) => string | undefined = () => undefined,
+  ownerOf: (id: string) => string | undefined,
+  now: number,
 ): Delivery[] => {
   const epoch = ledger.epoch
   if (!epoch) return []
@@ -139,9 +145,15 @@ export const pendingLines = (
   return lines
     .filter(line => after(line.ts, epoch))
     .flatMap(line => {
-      const own: Delivery[] = recipientsOf(line, coordinator, askerOf(line.id), ownerOf(line.id)).map(r => ({ ...r, line }))
+      const asker = askerOf(line.id)
+      const own: Delivery[] = recipientsOf(line, coordinator, asker, ownerOf(line.id)).map(r => ({ ...r, line }))
       const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
-      const route: Delivery[] = refused && isFinal(refused) && !refused.delivered ? [{ role: 'route', to: coordinator, line, about: refused }] : []
+      const overdue: BoardDelivery | undefined =
+        asker && line.session !== asker && asker !== coordinator && !refused?.delivered && now - Date.parse(line.ts) >= ROUTE_AFTER_MS
+          ? { id: line.id, answer_ts: line.ts, to: asker, role: 'asker', click_ts: line.ts, ts: line.ts, delivered: false, reason: 'not reached within 24 h' }
+          : undefined
+      const about = refused && isFinal(refused) && !refused.delivered ? refused : overdue
+      const route: Delivery[] = about ? [{ role: 'route', to: coordinator, line, about }] : []
       return [...own, ...route]
     })
     .filter(owed)
@@ -213,19 +225,6 @@ export const markerRows = (lines: readonly AnswerLine[], ledger: Ledger, coordin
     .map(line =>
       rowOf({ line, role: 'coordinator', to: coordinator }, new Date(Date.parse(line.ts) + MARK_AFTER_MS).toISOString(), false, NOT_RUNNING),
     )
-}
-
-// The coordinator's name from `crew.py show`: the member that `roles.coordinator` names; undefined
-// without a crew or without that role, and the board's `updated_by` decides.
-export const coordinatorName = (show: string): string | undefined => {
-  try {
-    const crew = JSON.parse(show) as { roles?: Record<string, unknown>; members?: Record<string, { name?: unknown }> }
-    const slug = str(crew?.roles?.coordinator)
-    const name = slug ? crew.members?.[slug]?.name : undefined
-    return typeof name === 'string' && name.trim() ? name.trim() : undefined
-  } catch {
-    return undefined
-  }
 }
 
 // How long a pressed answer may wait without any delivered row before the pane says so.

@@ -17,6 +17,8 @@ own names its user, its outcome metric and the goal it serves.
 - Keep the product lens question file current ({lenses.product.questions|not yet bound}); sample
   its verdicts and turn a miss into a sharper question or a corpus case.
 - Close an epic when its exit criteria hold; park one with the trigger that reopens it.
+- Move stories only by `board.py`: `select <KEY>`, `move <KEY> backlog --epic <EPIC>`,
+  `move <KEY> on_hold --reopen "<trigger>"`.
 - Several humans ({me} is yours): a ticket labelled for {me} asks {me}; put it on the board as one
   item for {me} (`board.py ask`), never answer it yourself.
 - Keep every session's picture of the vision current: a changed goal is one line to
@@ -29,7 +31,8 @@ own names its user, its outcome metric and the goal it serves.
 - Never hold a story inside an approved fence for your approval; let its master pull it (the one
   exception: an epic whose fence {human} has not confirmed yet).
 - Never start masters or workers; ask {coordinator|the coordinator} for the slot.
-- Never mark a story Done; acceptance does that from its receipt or walk.
+- Never mark a story Done; acceptance does that from its receipt or walk.{no_in_test}
+- Never mark a story Done unless your human owns In Test; else acceptance does.{in_test}
 
 ## At start
 

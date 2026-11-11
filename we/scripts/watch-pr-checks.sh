@@ -5,8 +5,11 @@
 #                           [--max-hours <h>] [-R <owner/repo>]
 #   --sha <expected>  judge nothing until the PR's head is <expected> (after a push:
 #                     `--sha "$(git rev-parse HEAD)"`; GitHub reports the old head for seconds).
-#   --until-merged    for an auto-merge PR: on green keep watching until MERGED or CLOSED; exit 0
-#                     then means green but not merging (conflict, behind, auto-merge off).
+#   --until-merged    for an auto-merge PR: on green keep watching until MERGED or CLOSED, the
+#                     interval doubling up to WATCH_MAX_INTERVAL while it waits; exit 0 then means
+#                     green but not merging (conflict, behind, auto-merge off). A failed check that is
+#                     no review does not end it while the PR can still merge (armed, mergeStateStatus
+#                     CLEAN, UNSTABLE or HAS_HOOKS: GitHub merges past a red non-required check).
 #   --max-hours <h>   lifetime cap, default 6.
 # Prints a failed or cancelled check once, when it concludes, and one final line:
 #   final <sha>: green · merge: <state>                     exit 0
@@ -18,7 +21,8 @@
 #   head never reached <expected> (still <sha>) after <n>s  exit 5
 #   final <sha>: codex <WARNING|BLOCKING> · auto-merge <disarmed|off> — then /we:ci-review   exit 6
 #       (the head's `<!-- codex-review -->` comment judged it and its check is not green: a skip with a reason turns it green)
-#   final <sha>: merged                                     exit 7
+#   final <sha>: merged [(red: <names>)]                    exit 7  (with --until-merged, the red
+#       non-required checks it watched past stay in the line)
 #   final <sha>: closed                                     exit 8
 #   gave up after <n>s on <sha>                             exit 9  (--max-hours reached)
 #   no workflow ran on <sha> after <n>s                     exit 10 (no run and no check: a path
@@ -29,6 +33,11 @@
 #       nothing is disarmed; the step's echoed script and the log's other lines never count)
 #   final <sha>: conflicts with the base — merge it          exit 12 (mergeable CONFLICTING: no check
 #       result can make it mergeable, so the watcher does not wait for them)
+#   final <sha>: infra · <names>: job never started (<annotation>) — do not rerun, tell the coordinator
+#                                                            exit 13 (every failed check is a job with
+#       zero steps: the runner never ran it, billing or runner trouble; a rerun cannot fix that;
+#       never when the PR changes a file under .github/workflows/, or its files are unreadable:
+#       a broken `runs-on:` or `if:` fails a job before its first step too, so that stays red)
 # A failed job whose failed-step log names a GitHub/registry 5xx or a network timeout
 # (INFRA_RX) is rerun once (`gh run rerun <id> --failed`, only on its first attempt) with the line
 # `infra: <name> failed on "<match>" — rerun once (run <id>)`, and counts as pending again.
@@ -53,6 +62,7 @@
 # Needs only `gh` (its built-in --jq).
 # Env: WATCH_INTERVAL (s, default 30), WATCH_QUIET (s, default 60), WATCH_REGISTER_TIMEOUT (s,
 # default 900), WATCH_HEAD_TIMEOUT (s, default 300), WATCH_MAX_ERRORS (default 10),
+# WATCH_MAX_INTERVAL (s, the --until-merged backoff's cap, default 300),
 # WATCH_CODEX_CHECK (default `Codex Review`), WATCH_CODEX_READS (comment reads per head after that
 # check completed, default 10), WATCH_MAX_LIFETIME (s, overrides --max-hours), WATCH_REVIEW_RX
 # (extended regex, case-insensitive, of the check names that count as a review, default `review`).
@@ -88,6 +98,7 @@ CODEX_CHECK=${WATCH_CODEX_CHECK:-Codex Review}
 CODEX_READS=${WATCH_CODEX_READS:-10}
 REVIEW_RX=${WATCH_REVIEW_RX:-review}
 NO_RUN_TIMEOUT=${WATCH_NO_RUN_TIMEOUT:-600}
+MAX_INTERVAL=${WATCH_MAX_INTERVAL:-300}
 # A failed job is infra, not code, when its failed-step log says so (case-insensitive).
 # Anchored on runner and registry phrasing, so a failing assertion on a 500 is no infra.
 INFRA_RX=${WATCH_INFRA_RX:-'HTTP/[0-9.]+ 50[0-9]|(returned|received|got|responded with)( status)?( code)? 50[0-9]|HTTP (error )?50[0-9]|50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)|ETIMEDOUT|ECONNRESET|i/o timeout|TLS handshake timeout|context deadline exceeded|Connection timed out'}
@@ -131,6 +142,14 @@ tick() {  # sleep one interval, or exit 9 once the lifetime cap is reached
   fi
   sleep "$INTERVAL"
 }
+backoff() {  # --until-merged, waiting for the merge: the interval doubles up to MAX_INTERVAL
+  INTERVAL=$((INTERVAL * 2))
+  [ "$INTERVAL" -ge 1 ] 2>/dev/null || INTERVAL=1
+  [ "$INTERVAL" -le "$MAX_INTERVAL" ] || INTERVAL=$MAX_INTERVAL
+}
+can_merge() {  # armed and GitHub would merge it past a red non-required check
+  [ "$(field 4)" = on ] && case "$(field 1)" in CLEAN|UNSTABLE|HAS_HOOKS) true ;; *) false ;; esac
+}
 
 . "$(dirname "${BASH_SOURCE[0]}")/gh_anchor.sh"
 gh_anchor
@@ -148,7 +167,7 @@ view() {
 field() { sed -n 2p <<<"$OUT" | cut -f"$1"; }
 closed_exit() {  # a merged or closed PR ends the watch with its own line, never "red"
   case "$(field 3)" in
-    MERGED) echo "final $1: merged"; exit 7 ;;
+    MERGED) echo "final $1: merged${WAITING:+ (red: $WAITING)}"; exit 7 ;;
     CLOSED) echo "final $1: closed"; exit 8 ;;
   esac
 }
@@ -203,11 +222,36 @@ quota_exit() {  # quota_exit <why>: the review did not judge; auto-merge stays a
   echo "final $SHA: review quota ($1) · auto-merge stays $(field 4) — quota: rerun after the next verdict"
   exit 11
 }
+zero_steps() {  # zero_steps <run id> <job id>: "<job>\t<annotation>" when that failed job ran no step
+  local jobs job id
+  [ -n "$1" ] && [ -n "$2" ] || return 0
+  jobs=$(gh run view "$1" -R "$REPO" --json jobs \
+    --jq '.jobs[] | select(.conclusion == "failure" and ((.steps // []) | length) == 0) | "\(.databaseId)\t\(.name)"' 2>/dev/null) || return 0
+  while IFS=$'\t' read -r id job; do
+    [ "$id" = "$2" ] || continue  # only the job behind this check, never a sibling in its run
+    printf '%s\t%s\n' "$job" "$(gh api "repos/$REPO/check-runs/$id/annotations" --jq '.[0].message // "no annotation"' 2>/dev/null | head -n 1)"
+  done <<<"$jobs"
+}
+touches_workflows() {  # the PR changes .github/workflows/, or its file list is unreadable (fail-closed)
+  local files
+  files=$(gh pr view "$PR" -R "$REPO" --json files --jq '.files[].path' 2>/dev/null) || return 0
+  grep -q '^\.github/workflows/' <<<"$files"
+}
+infra_exit() {  # every failed check is a job that never started: no red, no rerun
+  echo "final $SHA: infra · $1: job never started ($2) — do not rerun, tell the coordinator"
+  exit 13
+}
 red_exit() {  # red_exit <failed names>: the red final line; a failed review check disarms first
-  local note="" name run reason
+  local note="" name run reason zero="" why="" all=1
+  while IFS=$'\t' read -r name run job; do
+    [ -n "$name" ] || continue
+    reason=$(zero_steps "$run" "$job" | head -n 1)
+    if [ -n "$reason" ]; then zero="${zero:+$zero, }$name"; why=${why:-$(cut -f2 <<<"$reason")}; else all=""; fi
+  done <<<"$FAILED_RUNS"
+  [ -n "$zero" ] && [ -n "$all" ] && ! touches_workflows && infra_exit "$zero" "$why"
   if grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$1")"; then
     # A review that failed on its quota judged nothing: no disarm, its own exit.
-    while IFS=$'\t' read -r name run; do
+    while IFS=$'\t' read -r name run _job; do
       grep -qiE "$REVIEW_RX" <<<"$name" || continue
       reason=$(error_lines "$run" | grep -oiE "$QUOTA_RX" | head -n 1)
       [ -n "$reason" ] && quota_exit "$name: $reason"
@@ -277,6 +321,7 @@ READS=0
 CODEX_SEEN=""
 CODEX_TRIES=0
 RERUN=""
+WAITING=""
 while :; do
   if view && gh_try RUNROWS run list -R "$REPO" --commit "$SHA" --limit 100 --json databaseId,attempt,status --jq "$RUNS"; then
     closed_exit "$SHA"
@@ -308,7 +353,7 @@ while :; do
         fail|cancelled)
           if [ "$verdict" = fail ] && infra_rerun "$name" "$run"; then PENDING=1; continue; fi
           FAILED="${FAILED:+$FAILED, }$name"
-          FAILED_RUNS="${FAILED_RUNS:+$FAILED_RUNS$'\n'}$name"$'\t'"$run"
+          FAILED_RUNS="${FAILED_RUNS:+$FAILED_RUNS$'\n'}$name"$'\t'"$run"$'\t'"$(sed -n 's#.*/job/\([0-9]*\).*#\1#p' <<<"$url")"
           case $'\n'"$SEEN"$'\n' in
             *$'\n'"$name $url"$'\n'*) ;;
             *) echo "$verdict: $name"; SEEN="$SEEN"$'\n'"$name $url"
@@ -335,8 +380,16 @@ while :; do
     SNAP="$(sort <<<"$STATE")"$'\n--\n'"$(sort <<<"$RUNROWS")"
     if [ "$SNAP" != "$LAST" ]; then LAST=$SNAP; STABLE_SINCE=$NOW; READS=1; else READS=$((READS + 1)); fi
     if [ -n "$ROWS" ] && [ -z "$PENDING" ] && [ "$READS" -ge 2 ] && [ $((NOW - STABLE_SINCE)) -ge "$QUIET" ]; then
-      if [ -n "$FAILED" ]; then red_exit "$FAILED"; fi
+      if [ -n "$FAILED" ]; then
+        # A red non-required check (an auto-merge workflow) does not stop a PR GitHub still merges.
+        if [ -n "$UNTIL_MERGED" ] && can_merge && ! grep -qiE "$REVIEW_RX" <<<"$(tr ',' '\n' <<<"$FAILED")"; then
+          [ "$WAITING" = "$FAILED" ] || echo "still merging: $FAILED red, $(merge_note) — watching to the merge"
+          WAITING=$FAILED; backoff; tick; continue
+        fi
+        red_exit "$FAILED"
+      fi
       if [ -z "$UNTIL_MERGED" ] || merge_stuck; then echo "final $SHA: green · $(merge_note)"; exit 0; fi
+      backoff
     fi
   fi
   tick

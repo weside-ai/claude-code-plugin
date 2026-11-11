@@ -45,6 +45,15 @@ type Opts = {
   crew?: { board: string; show: Record<string, unknown> }
   // A crew whose board.py path fails: crew.py path and show answer, board.py path exits 1.
   show?: Record<string, unknown>
+  // What crew.py deliverer prints; '' exits 1 (no role on this machine). Default: the coordinator of `show`.
+  deliverer?: string
+}
+
+// The default crew.py deliverer of a crew without humans: the coordinator's name, else exit 1.
+const delivererOf = (show: Record<string, unknown>) => {
+  const crew = show as { roles?: Record<string, string>; members?: Record<string, { name?: string }> }
+  const name = crew.roles?.coordinator ? crew.members?.[crew.roles.coordinator]?.name : undefined
+  return name ? RUN(`${name}\n`) : RUN('', 1, 'no deliverer')
 }
 
 // A fake home: the board, its answers file and the delivery ledger, with answer.py and deliveries.py
@@ -80,7 +89,10 @@ function home($: T$, on: TOn, o: Opts) {
       const show = o.crew?.show ?? o.show
       if (!show) return RUN('', 1, 'no crew')
       // crew.py path: the crew file in force (the pane resolves its board and live column from it)
-      return e.argv[3] === 'path' ? RUN(`${String(show.path ?? '/work/acme/.weside/crew.json')}\n`) : RUN(JSON.stringify(show))
+      if (e.argv[3] === 'path') return RUN(`${String(show.path ?? '/work/acme/.weside/crew.json')}\n`)
+      // crew.py deliverer: the session that delivers on this machine (crew.py owns the rule; test_crew.py)
+      if (e.argv[3] === 'deliverer') return o.deliverer !== undefined ? RUN(o.deliverer ? `${o.deliverer}\n` : '', o.deliverer ? 0 : 1) : delivererOf(show)
+      return RUN(JSON.stringify(show))
     }
     if (script.endsWith('/answer.py')) {
       const [path, id, answer, ts, session] = e.argv.slice(3)
@@ -283,6 +295,24 @@ for (const [name, reason] of [
     expect([h.sent.length, h.submitted.length]).toEqual([1, 2])
   })
 }
+
+test('an answer its asker has not taken 24 h after it is routed to the coordinator', async ($, on) => {
+  // Red arm: the deliverer was off past a day; board.py prune waits for the asker or the route row, so the
+  // route row is what lets an answered question leave the board, never a silent drop.
+  const old = `${JSON.stringify({ epoch: '2026-11-01T00:00:00.000Z' })}\n`
+  const { clock, h } = await coordinator($, on, { ledger: old })
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 - 25 * 3600_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.rows('Q1', 'route')).toEqual([expect.objectContaining({ to: 'coord', delivered: true })])
+  expect(h.submitted).toContain("Q1: the owner's answer (accept) did not reach asker (not reached within 24 h); wake that session or route the answer")
+})
+
+test('a fresh answer delivered to its asker routes nothing', async ($, on) => {
+  const { clock, h } = await coordinator($, on)
+  await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.rows('Q1', 'route')).toHaveLength(0)
+})
 
 test('a send that rejects is written as not delivered with its message', async ($, on) => {
   // A test hook that throws is skipped and the kit then rejects the call: the rejection's message is the reason.
@@ -566,6 +596,26 @@ test('a crew whose board has no updated_by: its coordinator from crew.json deliv
   // The first crew's files stay untouched: the ledger is the crew's own.
   expect([...h.files.keys()].filter(k => k.startsWith(`${DIR}/board`))).toEqual([])
   expect(h.files.has(`${DIR}/acme-board-deliveries.jsonl`)).toBe(true)
+})
+
+// Several humans: a machine that runs no coordinator delivers through the session crew.py deliverer names
+// (its human's first role); before, only the crew's coordinator delivered, so answers read back from a
+// ticket on such a machine never reached anyone.
+test('a machine without the coordinator delivers through the session crew.py deliverer names', async ($, on) => {
+  const { clock, h } = await crewSession($, on, 'Bea', { crew: acmeCrew(), board: acmeBoard(), deliverer: 'Bea' })
+  await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Bea' })
+  await clock.advance(3_000)
+  expect(h.rows('Q7').map(r => [r.role, r.to, r.delivered])).toEqual([
+    ['asker', 'Tess', true],
+    ['coordinator', 'Bea', true],
+  ])
+})
+
+test('no deliverer on this machine: nothing is delivered', async ($, on) => {
+  const { clock, h } = await crewSession($, on, 'Bea', { crew: acmeCrew(), board: acmeBoard(), deliverer: '' })
+  await h.click({ id: 'Q7', answer: 'accept', ts: iso(T0 + 1_000), session: 'Bea' })
+  await clock.advance(6_000)
+  expect([h.submitted, h.sent, h.rows('Q7')]).toEqual([[], [], []])
 })
 
 test('a set updated_by still names the deliverer; the crew coordinator steps in only when it is empty', async ($, on) => {

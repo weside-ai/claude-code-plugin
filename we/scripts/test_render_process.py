@@ -142,7 +142,7 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
     process.mkdir()
     old = (rp.PROCESS / "L0.md").read_text()
     old = old.replace(
-        "- **The board is {human}'s only inbox:** the push line, the bundle and an "
+        "- **The board is {human.local}'s only inbox:** the push line, the bundle and an "
         "escalation each point at a board item.\n",
         "",
     )
@@ -831,6 +831,8 @@ def test_several_humans_render_per_human(monkeypatch):
     l0 = rp.render_l0(crew)
     assert "- **Marisol** decides product direction on this machine;" in l0
     assert "and whatever else they choose" not in l0
+    # decider sentences name the deciding human, not the local one
+    assert "| T3 company | Hale," in l0 and "| T3 company | Marisol" not in l0
     assert "Adalinde" in l0 and "Ada " not in l0.replace("Adalinde", "")
     part = rp.humans_part(crew, "product")
     assert part.startswith("**Several humans** (this crew; you work for Marisol)")
@@ -843,6 +845,50 @@ def test_several_humans_render_per_human(monkeypatch):
     card = rp.render_card(crew, "product")
     assert "a ticket labelled for Marisol asks Marisol" in card
     assert "never answer it yourself" in card and "answer each ticket" not in card
+
+
+def test_a_human_who_decides_nothing_claims_no_decision(monkeypatch):
+    crew = all_bound()
+    crew["humans"]["marisol"]["decides"] = []
+    monkeypatch.setenv("WE_HUMAN", "marisol")
+    l0 = rp.render_l0(crew)
+    assert "on this machine; other humans" not in l0
+    assert "Marisol** decides vision" not in l0
+
+
+def test_inbox_lines_name_the_local_human_decider_lines_the_deciding_one(monkeypatch):
+    """Red arm: on Marisol's machine the board is Marisol's inbox and her coordinator carries
+    her questions, while T3, prod and the core merges stay with the deciding human (Hale)."""
+    crew = all_bound()
+    monkeypatch.setenv("WE_HUMAN", "marisol")
+    l0 = rp.render_l0(crew)
+    assert "The board is Marisol's only inbox" in l0 and "Hale's only inbox" not in l0
+    assert "carries what goes to Marisol," in l0
+    assert "| T3 company | Hale," in l0
+    assert "Prod ships an accepted RC's commit, only on Hale's word" in l0
+    coord = rp.render_card(crew, "coordinator")
+    assert "Questions for Marisol reach you" in coord and "Never answer for Marisol;" in coord
+    assert "native build needs Hale's word" in coord
+    sec = rp.render_card(crew, "security")
+    assert "every human's personal data" in sec
+    assert "a question for Marisol goes to" in rp.render_l0(crew, "worker")
+
+
+def test_in_test_lines_only_for_a_crew_that_maps_in_test():
+    """A crew without board.states.in_test (weside-core) renders no In Test line; one that maps it
+    gets the move and the Done rule (red arm: the mapped crew's lines)."""
+    plain = generic()
+    for role in ("product", "acceptance", "master"):
+        assert "in_test" not in rp.render_card(plain, role)
+        assert "In Test" not in rp.render_card(plain, role)
+    assert "Never mark a story Done; acceptance does that" in rp.render_card(plain, "product")
+    mapped = crewlib._merge(
+        {**json.loads(GENERIC.read_text()), "board": {"states": {"in_test": "In Test"}}}
+    )
+    assert "`board.py move <KEY> in_test` from In Review" in rp.render_card(mapped, "acceptance")
+    product = rp.render_card(mapped, "product")
+    assert "unless your human owns In Test" in product
+    assert "Never mark a story Done; acceptance does that" not in product
 
 
 def test_one_human_renders_as_before():

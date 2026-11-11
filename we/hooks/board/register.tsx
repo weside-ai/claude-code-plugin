@@ -17,7 +17,7 @@ import {
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
-  NOTICE, RESUBMITTED, STUCK_MS, answerLines, coordinatorName, stuckAnswers, askerText, ownerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
+  NOTICE, RESUBMITTED, STUCK_MS, answerLines, stuckAnswers, askerText, ownerText, deliveryLine, isMissed, keyOf, ledgerState, markerRows, noticeMatches, pendingLines, promptTextOf, rowOf,
   storedHits, versionAtLeast,
 } from './deliver'
 import type { Awaiting, Delivery, Ledger } from './deliver'
@@ -376,7 +376,7 @@ async function deliverTick($: $, file: string) {
     const lines = answerLines((await readText($, c.answersPath)) ?? '')
     const askerOf = (id: string) => c.board.queue.find(q => q.id === id)?.session ?? undefined
     const ownerOf = (id: string) => c.board.queue.find(q => q.id === id)?.owner ?? undefined
-    for (const d of pendingLines(lines, ledger, c.name, askerOf, ownerOf)) {
+    for (const d of pendingLines(lines, ledger, c.name, askerOf, ownerOf, await $.clock.now())) {
       if (!isInFlight(keyOf(d.line.id, d.line.ts, d.role))) await deliverOne($, c.ledgerPath, c.name, d, c.board.answerPrompts)
     }
     await checkAwaiting($)
@@ -521,7 +521,7 @@ let crewBoard: string | undefined
 // The crew file of the session's repo (crew.py path, once at session start): the live column lists only
 // this crew's sessions (probe.py --crew), so the deliverer's name match never reaches another crew.
 let crewFile: string | undefined
-// The crew's coordinator by name (crew.py show, once at session start). It names the delivering session
+// The crew's deliverer by name (crew.py deliverer, once at session start). It names the delivering session
 // when the board's `updated_by` is empty (a board.py write never sets that field), and only on the crew's
 // own board: a crewless fallback board keeps one deliverer.
 let crewCoordinator: string | undefined
@@ -550,10 +550,13 @@ async function crewBoardOf($: $): Promise<string | undefined> {
   return pathFrom($, ['python3', '-I', `${$.plugin.root}/scripts/board.py`, 'path'])
 }
 
+// crew.py deliverer prints the session that delivers on this machine (the coordinator, or where a crew with
+// several humans runs none, the first role this human runs) and exits 1 without one.
 async function crewCoordinatorOf($: $): Promise<string | undefined> {
   try {
-    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'show'], { timeoutMs: 10_000 })
-    return run.exitCode === 0 ? coordinatorName(run.stdout) : undefined
+    const run = await $.process.run(['python3', '-I', `${$.plugin.root}/scripts/crew.py`, 'deliverer'], { timeoutMs: 10_000 })
+    const name = run.stdout.trim()
+    return run.exitCode === 0 && name && !name.includes('\n') ? name : undefined
   } catch {
     return undefined
   }

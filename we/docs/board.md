@@ -465,14 +465,15 @@ the board lock (`prune` in `board.py`), and `board.py prune` runs it alone and p
 
 | Entry | Leaves when |
 |---|---|
-| a question (or item) an Accept or Deny closed | nothing is owed to its asker any more, since the deliverer finds the asker only on the board: each answer line on the id is older than the ledger's `epoch`, written in the asker's own session, or has an asker row `delivered: true` in `board-deliveries.jsonl` (refused: a delivered `route` row). A close no one carried stays, however old, and the pane's stuck-answer line names it |
+| a question (or item) an Accept or Deny closed | nothing is owed to its asker any more, since the deliverer finds the asker only on the board: each answer line on the id is older than the ledger's `epoch`, written in the asker's own session, or has an asker row `delivered: true` in `board-deliveries.jsonl` (refused, or not taken 24 h after the answer: a delivered `route` row, which the deliverer writes to the coordinator then, `ROUTE_AFTER_MS` in `deliver.ts`). A close no one carried stays however old, a `duplicate-answer` line changes nothing, and an Accept ("Yes, I'll do it") on a one-way merge-go stays until `close-merged` sees its PR merged or closed |
+| a question its asker took back, unanswered | a `withdrawn` or `superseded` line names it (`board.py withdraw`, `supersede`; § Several humans) |
 | a news item | its newest answer line is `read` |
 | a `returned` item, a bundle `B-<date>` | 24 h after its `ts` (`PRUNE_AFTER_H`) |
 | an escalation item `E<n>`, `E<n>a` | never: `escalation settle` drops it |
 
 Discuss, More info and Update keep a question. Each drop appends one line
 `{id, ts, outcome: "pruned", field, reason, answer?}` to `board-questions.jsonl`
-(`reason` `answered`, `read` or `expired`), so a dropped id is never handed out again. Leftovers from before the pass go on the
+(`reason` `answered`, `withdrawn`, `read` or `expired`), so a dropped id is never handed out again. Leftovers from before the pass go on the
 first write after the update.
 
 ### Blocked workers
@@ -581,7 +582,7 @@ A/B and B/A count together) over the records opened in this ISO week, and past t
 
 ## Moves
 
-`board.py select` and `board.py move` move a story between the six states. Each state's entry rule
+`board.py select` and `board.py move` move a story between the seven states. Each state's entry rule
 is the process template's §Lifecycle (`process/L0.md`); this section names only what the script
 adds. Every rule runs before any write; a refusal writes no row, calls no adapter and prints no
 `carry:` line, and exits 1.
@@ -593,12 +594,14 @@ adds. Every rule runs before any write; a refusal writes no row, calls no adapte
 | `move <KEY> backlog --epic EPIC` | exactly one `*-epic.md` under `docs/plans/` names `EPIC` (`ticket:`, `epic:` or `linked_epics:`), and its `status:` starts `approved` | as above |
 | `move <KEY> selected` | always refused: `use board.py select` | as above |
 | `move <KEY> in_progress` | the key's last row in the transitions log is `selected` | as above |
+| `move <KEY> in_test` | the crew maps an In Test status (`board.states.in_test`, default null: no In Test step) and the key is `in_review`; owned per § Several humans | as above; `the crew maps no in_test status` without the mapping |
 | `move <KEY> in_review --pr REF…` | every `REF` (a URL, `<owner>/<repo>#<n>`, or a bare number) is `MERGED` by `gh pr view` and carries `<KEY>` as a whole token in its head branch or title; a bare number is refused as ambiguous when the plan's phases name a `**Repo:**` other than the checkout's `origin` | as above |
-| `move <KEY> done --comment-file FILE` | the key's last row is `in_review` (`last move is <state>, not in_review`), and the file holds a line matching `^Not proven:\s*\S`; the row says `via: comment` and the file's text is the comment. A receipts verdict reaches `done` only through `accept.py` (§ Acceptance), which calls `move_done` in process with the entry; the CLI has no `--verdict` | as above |
+| `move <KEY> done --comment-file FILE` | the key's last row is `in_review` or `in_test` (`last move is <state>, not in_review`; with an owner of `in_test` only `in_test`, § Several humans), and the file holds a line matching `^Not proven:\s*\S`; the row says `via: comment` and the file's text is the comment. A receipts verdict reaches `done` only through `accept.py` (§ Acceptance), which calls `move_done` in process with the entry; the CLI has no `--verdict` | as above |
 
 `select` has no option that waits for, asks
 for or records an approval: the gate, the tier and the lenses decide. Every select also needs the
-plan on `risk.rules_from` (`plan on main`), and with `humans` the product role (§ Several humans).
+plan on `risk.rules_from` (`plan on main`), and with `humans` the product role and the state's
+owner (§ Several humans).
 
 **Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
 `HEAD`'s tree and the diff `<base>...HEAD`, prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs
@@ -752,27 +755,46 @@ them with its ticketing tool and hands the results back with `--input FILE`:
 
 ```json
 {"hits": {"selected": ["PROJ-12", {"key": "PROJ-13", "changed": "2026-11-10T09:12:00.000+0000"}]},
- "tickets": {"PROJ-20": {"labels": ["question-bob"],
+ "tickets": {"PROJ-20": {"status": "In Progress", "labels": ["question-bob"],
                          "comments": [{"author": "bob@example.com", "body": "accept · go", "created": "…"}]}}}
 ```
 
+Give `changed` with every hit when the tool has it: a hit
+without it signals again only a whole `jql_window` after the last signal of its key and state.
+
+**Owners.** In a crew with `humans` every move reads the ticket's status first (the `read` carry
+above with `jira`): each machine keeps its own transitions log, so the status is the one state all
+share. Only a human who owns the state a story leaves (`owns_states`; several humans may own one
+state) moves it on; a refusal out of a running state (In Progress and later, `crew.RUNNING_STATES`)
+names the question to its owner, `board.py ask --to <owner>`, instead of the move. A status no
+`board.states` entry maps (a Jira "Blocked") has no known owner: the move is refused, never decided
+by the local row. With an owner of `in_test`, Done comes only from In Test.
+
 | Verb | What it does | Refusal |
 |---|---|---|
-| `select <KEY>` | as § Moves; in a crew with `humans` the caller must hold `roles.product` (group `role`), and the plan must be on `risk.rules_from` (group `plan on main`, every crew); after the transition it comments `selected by <role>@<human>, plan <blob>, panel ready-<KEY>` | `board.py select <KEY>: refused (role\|plan on main\|…)` |
-| `signals [--input FILE]` | for each `board.signals` entry `{state, role, jql_window}` whose role this human runs: the search `[<jql_scope> AND ]status changed to "<status>" after -<jql_window>`; each hit is one `todo` news item `S<n>` with `for` the role and `key`, once per key, state and `changed` (`board-signals.jsonl`); then the replies to this board's open `ask --to` questions (below) | — |
-| `claim <KEY> [--release] [--input FILE]` | the comment `claim <role>@<human> <session>` (or `release …`) on the ticket and a line in `board-claims.jsonl`; a claim lives `board.claim_hours` (default 4) from its comment, until released | `board.py claim <KEY>: refused: claimed by <role>@<human> (<session>) at <ts>, live for <n> h`, when another role or human holds a live claim on the ticket or in the local claims |
+| `select <KEY> [--input FILE]` | as § Moves; in a crew with `humans` the caller must hold `roles.product` on the machine of a human who runs `product` (group `role`) and own the state it leaves (group `owner`), and the plan must be on `risk.rules_from` (group `plan on main`, every crew); after the transition it comments `selected by <role>@<human>, plan <blob>, panel ready-<KEY>` | `board.py select <KEY>: refused (role\|owner\|plan on main\|…)`; an unknown human is refused, never written as `unknown` |
+| `move <KEY> <state> [--input FILE]` | as § Moves, after the owner rule above | `board.py move <KEY> <state>: refused: <KEY> is <state>, owned by <human>; …` |
+| `signals [--input FILE]` | refused while `board.jql_scope` is unset (a query without it reads every project); for each `board.signals` entry `{state, role, jql_window}` whose role this human runs: the search `[<jql_scope> AND ]status changed to "<status>" after -<jql_window>`; each hit is one `todo` news item `S<n>` with `for` the role and `key`, once per key, state and `changed` (`board-signals.jsonl`); then the replies to this board's open `ask --to` questions (below) | — |
+| `claim <KEY> [--release] [--input FILE]` | the comment `claim <role>@<human> <session>` (or `release …`) on the ticket and a line in `board-claims.jsonl`; a claim lives `board.claim_hours` (default 4) from its comment, until the same role, human and session releases it; only a claim on a comment's first line counts, from the account of the human it names or one of `board.shared_accounts` | `board.py claim <KEY>: refused: claimed by <role>@<human> (<session>) at <ts>, live for <n> h`, when another claimant (role, human or session) holds a live claim on the ticket or in the local claims |
+| `inbox [--input FILE]` | the search `[<jql_scope> AND ]labels = "<question label>-<me>"`: every ticket that holds an open question to this session's human | — |
+| `reply <KEY> <accept\|deny\|discuss\|info\|update> [--text T]` | the answer of this session's human on the ticket: the comment `<role>@<human> <kind> · <T>`, then this human's question label off (`{"op": "unlabel", "key", "remove"}`); another human's question stays theirs | an unknown human |
+| `withdraw <Q> [--reason T]`, `supersede <Q> --by <Q2> [--reason T]` | the asker (its session name, matched in any case; a nameless `unknown` never matches) or the coordinator takes its own open question off the board: a `withdrawn` or `superseded` line (with `by`) in `board-questions.jsonl`; a question asked with `--to` also gets the comment `<Q> withdrawn` (or `superseded by <Q2>`) and loses its label | another session's question, an id not open, `--by` naming no other open question |
+| `ask … [--input FILE]` | a `merge-go` in a crew with `humans` reads the ticket's status first | `board.py ask: refused: <KEY> is <status> on the ticket` when it is On Hold; refused too for a status no `board.states` entry maps |
 | `ask … --to <human>` | as § Questions and decisions (the cold reader included), for a human on another machine: the item keeps `to` and `label`, the carry is the comment `<question_label> <labels.to> <Name> · <ask> · <labels.recommendation>: <recommendation>` and the label `<question_label lowercased>-<human>`; `--to` naming this session's own human is a plain `ask` | `--to` naming no human of the crew, or a `--key` that is a plan slug |
 
 **Replies.** `signals` reads the ticket of each open question this board sent with `--to`: a comment
 created after the question whose `author` is one of that human's accounts (`humans.<slug>.email` or
 `account_id`, never the display name: anyone can name themselves Bob), or whose first word is
-`<role>@<human>` from the account of a human of the crew, is a reply. Its first word, in any case,
+`<role>@<human>` from that human's account or one of `board.shared_accounts` (accounts several humans
+write from), is a reply; another human with the same role never answers for them, and the question
+comment itself is never one. Its first word, in any case,
 when it is one of `accept`, `deny`, `discuss`, `info`, `update`, is the answer kind, else `discuss`; the reply's text is the `quote`. It lands as an answer
 line with `via: ticket`, and the deliverer carries it to the asker like a press (§ Delivery); each
 reply once. The label taken off without a reply is the answer `update` (is the question still
-current?). The human who answers removes the label. An Accept, Deny or Withdraw closes the
-question: `signals` reads its ticket no more, and a later comment there answers nothing. A claim
-comment counts only from the account of a human of the crew, the local claims always.
+current?). `board.py reply` writes the answer and takes the label off in one carry. An Accept, Deny
+or Withdraw closes the question: `signals` reads its ticket no more, and a later comment there
+answers nothing. A claim comment counts only from the account of the human it names or a shared
+account, the local claims always.
 
 ## Requirements
 

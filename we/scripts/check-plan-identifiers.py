@@ -8,7 +8,11 @@ Reads the plan's inline code spans (fenced blocks skipped) that look like code: 
 followed by `(new)` (the plan builds it) or `(other repo)` is skipped. A path must exist in the tree of `--ref`
 (default `origin/HEAD`, else `origin/main`), also as the tail of a longer path; a name must occur
 in a file there (`git grep -F`). Misses print as `missing: <token> (line <n>)`, exit 1: strike
-the claim or mark it `(new)`. Exit 2 on a git error.
+the claim or mark it `(new)`. A span marked `(new)` or `(not on main)` that already exists on
+`--ref` outside `docs/plans/`, as a whole word (`send_email` is not `send_email_batch`), prints
+`exists: <token> (line <n>): marked new, already on <ref>`, exit 1: a plan update builds on what main
+carries now, never a second copy; a name a commit naming the plan's own story key added (the story
+merged, file `<KEY>-story.md`) is no such hit. Exit 2 on a git error.
 """
 
 from __future__ import annotations
@@ -20,7 +24,8 @@ import sys
 from pathlib import Path
 
 SPAN = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
-NEW = re.compile(r"^\s*\((new|other repo)\)")
+NEW = re.compile(r"^\s*\((new|other repo|not on main)\)")
+MARKED_NEW = re.compile(r"^\s*\((new|not on main)\)")
 PLACEHOLDER = re.compile(r"[\s<>*?{}\[\]$|=@'\"\\…]|://|^-|^~|^/")
 PATH = re.compile(r"^[\w.-]+(/[\w.-]+)*(/|\.[A-Za-z0-9]{1,5})$")
 NAME = re.compile(r"^[A-Za-z_][\w]*(\.[A-Za-z_]\w*)*$")
@@ -37,8 +42,9 @@ def _code_like(token: str) -> bool:
     return "_" in token or "." in token or bool(re.search(r"[a-z][A-Z]", token))
 
 
-def claims(text: str) -> list[tuple[str, int]]:
-    """(token, line) for every span the plan treats as existing code."""
+def claims(text: str, marked: bool = False) -> list[tuple[str, int]]:
+    """(token, line) for every span the plan treats as existing code; with ``marked`` every
+    span it marks `(new)` or `(not on main)` instead."""
     found, fenced = [], False
     for number, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith(("```", "~~~")):
@@ -47,7 +53,8 @@ def claims(text: str) -> list[tuple[str, int]]:
         if fenced:
             continue
         for match in SPAN.finditer(line):
-            if NEW.match(line[match.end() :]):
+            after = line[match.end() :]
+            if (not MARKED_NEW.match(after)) if marked else NEW.match(after):
                 continue
             token = re.sub(r"(::.*|:\d+(-\d+)?|\(\)|\[\w*\])$", "", match.group(1).strip()).rstrip(
                 ".,;:"
@@ -68,7 +75,13 @@ def _default_ref() -> str:
         return "origin/main"
 
 
-def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
+def missing(
+    found: list[tuple[str, int]], ref: str, code_only: bool = False
+) -> list[tuple[str, int]]:
+    """The claims absent from ``ref``; ``code_only`` leaves `docs/plans/` out of the name search,
+    so a committed plan never proves its own `(new)` names exist."""
+    spec = ["--", ".", ":(exclude)docs/plans"] if code_only else ["--"]
+    word = ["-w"] if code_only else []  # `send_email` is not on main because `send_email_batch` is
     paths: set[str] = set()
     for f in _git(["ls-tree", "-r", "--name-only", ref]).splitlines():
         parts = f.split("/")
@@ -79,7 +92,17 @@ def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
     seen: set[str] = set()
     if names:
         out = subprocess.run(
-            ["git", "grep", "-h", "-o", "-F", *[a for n in names for a in ("-e", n)], ref, "--"],
+            [
+                "git",
+                "grep",
+                "-h",
+                "-o",
+                "-F",
+                *word,
+                *[a for n in names for a in ("-e", n)],
+                ref,
+                *spec,
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -93,7 +116,7 @@ def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
             ok = (
                 token in seen
                 or subprocess.run(
-                    ["git", "grep", "-q", "-F", "-e", token, ref, "--"], check=False
+                    ["git", "grep", "-q", "-F", *word, "-e", token, ref, *spec], check=False
                 ).returncode
                 == 0
             )
@@ -102,21 +125,47 @@ def missing(found: list[tuple[str, int]], ref: str) -> list[tuple[str, int]]:
     return result
 
 
+KEY = re.compile(r"^([A-Z][A-Z0-9]*-\d+)-")
+
+
+def built_by_story(token: str, ref: str, key: str | None) -> bool:
+    """A commit on ``ref`` whose message names the plan's own story key added ``token``: the
+    story merged and built its `(new)` name, so the plan is right, not stale."""
+    if not key:
+        return False
+    out = subprocess.run(
+        ["git", "log", ref, "--format=%B", "-S", token, "--", ".", ":(exclude)docs/plans"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return re.search(rf"(?<![A-Z0-9-]){re.escape(key)}(?!\d)", out.stdout) is not None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("plan")
     parser.add_argument("--ref")
     args = parser.parse_args()
-    found = claims(Path(args.plan).read_text(encoding="utf-8"))
+    text = Path(args.plan).read_text(encoding="utf-8")
+    found, marked = claims(text), claims(text, marked=True)
+    ref = args.ref or _default_ref()
     try:
-        misses = missing(found, args.ref or _default_ref())
+        misses = missing(found, ref)
+        absent = set(missing(marked, ref, code_only=True))
     except RuntimeError as exc:
         print(f"check-plan-identifiers: {exc}", file=sys.stderr)
         return 2
+    found_key = KEY.match(Path(args.plan).name)
+    key = found_key.group(1) if found_key else None
+    present = [m for m in marked if m not in absent and not built_by_story(m[0], ref, key)]
     for token, line in misses:
         print(f"missing: {token} (line {line})")
-    print(f"{len(found)} claims checked, {len(misses)} missing")
-    return 1 if misses else 0
+    for token, line in present:
+        print(f"exists: {token} (line {line}): marked new, already on {ref}")
+    more = f", {len(present)} marked new but present" if present else ""
+    print(f"{len(found)} claims checked, {len(misses)} missing{more}")
+    return 1 if misses or present else 0
 
 
 if __name__ == "__main__":

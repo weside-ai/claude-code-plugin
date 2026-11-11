@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """The ticketing adapter behind `board.py`'s moves: one protocol, one implementation per transport.
 
-Writes: `TicketAdapter.move(key, status_name)`, `.comment(key, text)` and `.label(key, label)`
+Writes: `TicketAdapter.move(key, status_name)`, `.comment(key, text)`, `.label(key, label)` and
+`.unlabel(key, label)`
 return the list of `CarryOp`s the calling session still has to carry out with its own ticketing
 tool; an empty list means nothing is left to carry. Reads: `.search(state, jql)` (the tickets a
-JQL query finds, each `{key, changed?}`) and `.ticket(key)` (`{labels, comments}`, each comment
-`{author, body, created}`) return the data, or None when the session has to read it: then
+JQL query finds, each `{key, changed?}`) and `.ticket(key)` (`{status, labels, comments}`, `status`
+the ticket's status name, each comment `{author, body, created}`, `author` as the ticketing system
+shows it: account id, display name or email) return the data, or None when the session has to read it: then
 `read_ops` names the reads (`search`, `read`) and the session hands their results back with
 `board.py <verb> --input FILE` (`FileReads`). `adapter_for(crew)` picks the transport by the crew
 file's `board.ticketing`:
@@ -31,9 +33,13 @@ VALUE_FIELD = {
     "transition": "status",
     "comment": "text",
     "label": "add",
+    "unlabel": "remove",
     "search": "jql",
     "read": "fields",
 }
+
+
+READ_FIELDS = "status,labels,comments"
 
 
 class CarryOp(NamedTuple):
@@ -63,6 +69,9 @@ class TicketAdapter:
     def label(self, key: str, label: str) -> list[CarryOp]:
         raise NotImplementedError
 
+    def unlabel(self, key: str, label: str) -> list[CarryOp]:
+        raise NotImplementedError
+
     def search(self, state: str, jql: str) -> list[dict] | None:
         raise NotImplementedError
 
@@ -73,7 +82,7 @@ class TicketAdapter:
 def read_ops(searches: list[tuple[str, str]], keys: list[str]) -> list[CarryOp]:
     """The reads a session carries: one `search` per (state, jql), one `read` per ticket key."""
     return [CarryOp("search", state, jql) for state, jql in searches] + [
-        CarryOp("read", key, "labels,comments") for key in keys
+        CarryOp("read", key, READ_FIELDS) for key in keys
     ]
 
 
@@ -89,11 +98,14 @@ class NoneAdapter(TicketAdapter):
     def label(self, key: str, label: str) -> list[CarryOp]:  # noqa: ARG002
         return []
 
+    def unlabel(self, key: str, label: str) -> list[CarryOp]:  # noqa: ARG002
+        return []
+
     def search(self, state: str, jql: str) -> list[dict] | None:  # noqa: ARG002
         return []
 
     def ticket(self, key: str) -> dict | None:  # noqa: ARG002
-        return {"labels": [], "comments": []}
+        return {"status": None, "labels": [], "comments": []}
 
 
 class SessionTransport(TicketAdapter):
@@ -108,6 +120,9 @@ class SessionTransport(TicketAdapter):
     def label(self, key: str, label: str) -> list[CarryOp]:
         return [CarryOp("label", key, label)]
 
+    def unlabel(self, key: str, label: str) -> list[CarryOp]:
+        return [CarryOp("unlabel", key, label)]
+
     def search(self, state: str, jql: str) -> list[dict] | None:  # noqa: ARG002
         return None
 
@@ -117,7 +132,7 @@ class SessionTransport(TicketAdapter):
 
 class FileReads(TicketAdapter):
     """The reads a session carried, from `--input FILE` (`{"hits": {state: [key or {key,
-    changed}]}, "tickets": {key: {labels, comments}}}`), over `inner`'s writes. A state the file
+    changed}]}, "tickets": {key: {status, labels, comments}}}`), over `inner`'s writes. A state the file
     leaves out reads as no hits; a ticket it leaves out is read again."""
 
     def __init__(self, inner: TicketAdapter, data: dict):
@@ -135,6 +150,9 @@ class FileReads(TicketAdapter):
     def label(self, key: str, label: str) -> list[CarryOp]:
         return self.inner.label(key, label)
 
+    def unlabel(self, key: str, label: str) -> list[CarryOp]:
+        return self.inner.unlabel(key, label)
+
     def search(self, state: str, jql: str) -> list[dict] | None:  # noqa: ARG002
         return [h if isinstance(h, dict) else {"key": h} for h in self.hits.get(state) or []]
 
@@ -145,7 +163,9 @@ class FileReads(TicketAdapter):
         if not isinstance(found, dict):
             return None
         labels = found.get("labels")
+        status = found.get("status")
         return {
+            "status": status if isinstance(status, str) and status.strip() else None,
             "labels": labels if isinstance(labels, list) else None,
             "comments": found.get("comments") or [],
         }
@@ -180,13 +200,21 @@ class FakeAdapter(TicketAdapter):
         self.calls.append(("label", key, label))
         return []
 
+    def unlabel(self, key: str, label: str) -> list[CarryOp]:
+        self.calls.append(("unlabel", key, label))
+        return []
+
     def search(self, state: str, jql: str) -> list[dict] | None:
         self.calls.append(("search", state, jql))
         return [h if isinstance(h, dict) else {"key": h} for h in self.searches.get(jql, [])]
 
     def ticket(self, key: str) -> dict | None:
         found = self.tickets.get(key) or {}
-        return {"labels": found.get("labels") or [], "comments": found.get("comments") or []}
+        return {
+            "status": found.get("status") or self.statuses.get(key),
+            "labels": found.get("labels") or [],
+            "comments": found.get("comments") or [],
+        }
 
 
 TRANSPORTS = {"none": NoneAdapter, "jira": SessionTransport}

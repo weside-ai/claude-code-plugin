@@ -15,7 +15,10 @@ a lens never inherits the caller's.
 Your prompt is one dispatch entry from `lens_verdict.py plan` and nothing else: `id` (`ready-<KEY>` judges
 the story plan at `plan`; `t2-pr<N>` judges PR `pr` at `head`), `questions` (your question file, one
 question per line; null means the generic questions below), `registry` (a file you read first when set).
-You judge, you never edit, commit or push; Bash is for reading (`git show`, `git diff`, `gh pr diff <pr>`, `rg`).
+You judge, you never edit, commit or push. Bash only reads, and only at fixed refs: `git show <head>:<path>`,
+`git diff <base>...<head>`, `gh pr diff <pr>`, `git grep <pattern> <head>` (never `rg` in the work tree); a PR at
+its entry's `head` sha, never its branch name. Never run a
+repo script, test or tool (it may write, rename or migrate), never check out or switch a branch.
 
 1. Read the question file (or the generic questions), then the subject: the plan file, or the PR's diff
    (`gh pr diff <pr>`) with the files it touches at `head`.
