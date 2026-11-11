@@ -26,7 +26,9 @@ flow is owned by `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Laun
      (`tmux new-window -d -n <name> <command>`), never one marked `runs`; no answer, no start.
 4. Board: a session started by `wclaude --start` opened `/board` itself (`WE_START=1`, checked
    against `roles.coordinator`). Started otherwise, tell the user to type `/board`: a skill cannot
-   run a pane command.
+   run a pane command. In a crew with `humans`, the board's answers on this machine go out through
+   the session `crew.py deliverer` names (the coordinator, else the first role this human runs);
+   relay its name once.
 
 Done when:
 - [ ] the four check lines are relayed, every FAIL with its fix

@@ -135,3 +135,10 @@ def test_a_worker_in_a_worktree_of_the_crew_repo_stays(tmp_path, monkeypatch, ca
     assert probe.main(["--crew", str(repo / ".weside" / "crew.json")]) == 0
     rows = json.loads(capsys.readouterr().out)["sessions"]
     assert [r["name"] for r in rows] == ["master", "worker"]
+
+
+def test_an_answer_that_is_no_list_is_an_error_not_an_empty_host(monkeypatch, capsys):
+    """Red arm: `{"agents": [...]}` from a changed CLI read as no session at all."""
+    _agents(monkeypatch, {"agents": [{"name": "x"}]})
+    assert probe.main([]) == 0
+    assert json.loads(capsys.readouterr().out) == {"error": "claude agents --json printed no list"}

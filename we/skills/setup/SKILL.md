@@ -129,7 +129,9 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    rewritten to `claude --bg -n {name} --agent {agent} {brief}`); the user corrects it (§ Worker launch backend of
    `references/worker-dispatch.md` lists the placeholders). Ask once: "Should every start offer
    bypass mode (Shift+Tab), while the start mode stays your `permissions.defaultMode`?" yes →
-   `launch.allow_bypass: true`. A re-run shows the diff and asks before replacing.
+   `launch.allow_bypass: true`. Ask once: "Should a background worker start in bypass mode, since
+   nobody answers its prompts?" yes → `launch.worker_mode: bypass` (else `default`: its start mode stays
+   `permissions.defaultMode`). A re-run shows the diff and asks before replacing.
 4. `crew.py stubs` lists members without a role skill in their workplace; on yes `--write`
    creates them from `templates/companion-skill/SKILL.md` (a member with a `.weside/roles/<slug>.md`
    addendum gets the pointer skill `pointer.md`), never overwriting.

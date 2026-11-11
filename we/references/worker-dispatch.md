@@ -41,7 +41,7 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   schema, API and types merges into the integration branch, and the disjoint chunks start with
   `Base: git merge <int>`. Migrations, lockfiles, generated artifacts (`openapi.json`, typed
   clients) and gate baselines always serialize.
-- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches; the same file gets `InstructionsLoaded` and skill-run lines for `/we:retro` and `/we:instruction-audit`.
+- Timing: the plugin hook `hooks/subagent_timing.py` appends one line per `SubagentStart`/`SubagentStop` (`ts`, `event`, `agent_id`, `agent_type`, `cwd`) to `~/.claude/we-timing/<session_id>.jsonl`, the measurement for comparing orchestration approaches; the same file gets `InstructionsLoaded` and skill-run lines for `/we:retro` and `/we:instruction-audit`. A file older than 45 days is deleted (`scripts/state_prune.py`: the audit's 30-day span plus a margin).
 
 ### What `isolation: "worktree"` does (Claude Code 2.1.283)
 
@@ -83,7 +83,9 @@ template in force; the master's boot check and `/we:accept` read it there.
   {agent}`, so its effort and model apply). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
   the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
-  a `--bg` worker in bypass, a window worker keeps its default mode: in the background
+  a `--bg` worker in bypass (`default`: no `--permission-mode`), a window worker keeps its default
+  mode; `launch.allow_bypass: true` adds `--allow-dangerously-skip-permissions`, and in a repo
+  without a crew `WE_WORKER_ALLOW_BYPASS=1` does (a crew's value always wins): in the background
   nobody answers a prompt, and the `permissions.deny`/`ask` rules and the plugin's guards still
   hold under bypass.
 
@@ -107,10 +109,15 @@ With a template, the Lead:
 
 The plugin ships a launcher: `scripts/we-worker` (installed next to `wclaude` by
 `scripts/install_launcher.py`; `we-worker --help`), with the verbs
-`status|stop|logs|waiting|checkpoint`; `worker_launch.py stop` uses its `stop` when the template
+`status|stop|logs|waiting|checkpoint|is-worker`; `worker_launch.py stop` uses its `stop` when the template
 starts with it. `stop` and `checkpoint` touch workers only: a name that hits a master or companion
-refuses (`stop` names `claude stop <id>`); `checkpoint` runs on an idle or stopped worker only and refuses
-one `claude agents` shows working or busy (one writer per worktree). Where a launcher brings
+refuses (`stop` names `claude stop <id>`, or `kill <pid>` for a window session); a launcher marker
+counts only for the session it names. `worker_launch.py stop` without `--worktree` refuses a name
+that runs in several trees. **Checkpoint** (`we-worker checkpoint <name>`, or
+`worker_launch.py checkpoint --name <name>`): on an idle or stopped worker only, refused while
+`claude agents` shows it working, busy or blocked on a prompt (one writer per worktree); commits
+its tracked changes and pushes them to `wip/<branch without its type prefix>`; a new file, staged or
+not, is named and never committed. Where a launcher brings
 such verbs, the Lead steers and inspects through them instead of calling `claude logs` or `claude stop` itself; whether a worker still lives comes only
 from `claude agents --json`, never from a log or a quiet tail.
 

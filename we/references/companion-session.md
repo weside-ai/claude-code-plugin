@@ -48,7 +48,9 @@ human of this machine (`WE_HUMAN`, else `git config user.email`), starts only a 
 human's `runs` (the coordinator when it runs, else the first; `--role` another, each further one
 named on stderr) under that human's name for it (`humans.<me>.companions.<role>`, else the member's
 name), and sets `WE_HUMAN` and `WE_ROLE_ID` (the role key) beside `WESIDE_COMPANION`. Skills and
-hooks key on the role key, never on the name.
+hooks key on the role key, never on the name. On a machine whose human runs no coordinator, the
+board's deliverer is the first role that human runs (`crew.py deliverer`); a companion name that is
+another member's slug is refused (`crew.py validate`), since a slug resolves first.
 
 A companion session is a normal Claude Code session; what binds it to its companion is the pin
 header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the

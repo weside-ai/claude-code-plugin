@@ -61,14 +61,15 @@ Refusals, in this order (the first one wins):
      check holds only once the panel is green or the panel check is off. When the panel was
      carried and no card comment is on the current head, a card PASS on the carried head counts:
      the carried delta touches no file the class hit.
-  6. Plan first: the PR's head branch, else its title, names a story key (the crew's
+  6. Plan first, for every story key the PR's head branch and title name (the crew's
      `naming.key` on `origin/main`, else the default) whose plan `docs/plans/<KEY>-story.md` is
      on the head or on `origin/main`, and the PR changes a file outside `docs/`: the plan must be
      on `origin/main`, and the story's last row in the board's transitions log
      (`<board stem>-transitions.jsonl` beside `board_freeze.watched_board_files`) must not be
      `on_hold` or `backlog`. A story the log does not know passes; a PR without a key or a plan
      file, and the plan PR itself (only `docs/`), are untouched. Only where the class was
-     computed (a repo with rules).
+     computed (a repo with rules); a one-way PR, refused by 3, names this refusal too, so the
+     human who merges it by hand sees it.
   7. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
      `.weside/config.json`, default `Codex Review`), unless the base branch requires that check
      itself (rulesets or classic protection); a repo whose workflows name no such job has none.
@@ -763,20 +764,21 @@ PLAN_DIR = "docs/plans"
 _BEFORE_SELECTED = frozenset(crew.STATES[: crew.STATES.index("selected")])
 
 
-def _story_key(root: str, names: list[str]) -> str | None:
-    """The first match of the crew's `naming.key` (on `origin/main`, else the default) in the
-    PR's head branch, else in its title."""
+def _story_keys(root: str, names: list[str]) -> list[str]:
+    """Every match of the crew's `naming.key` (on `origin/main`, else the default) in the PR's
+    head branch and title, each once, in that order: a PR of two stories answers for both."""
     naming = _crew_on_main(root).get("naming")
     rx = naming.get("key") if isinstance(naming, dict) else None
     try:
         pattern = re.compile(rx if isinstance(rx, str) and rx else crew.DEFAULTS["naming"]["key"])
     except re.error:
-        return None
+        return []
+    keys: list[str] = []
     for name in names:
-        found = pattern.search(name)
-        if found:
-            return found.group(0)
-    return None
+        for found in pattern.finditer(name):
+            if found.group(0) not in keys:
+                keys.append(found.group(0))
+    return keys
 
 
 def _last_move(root: str, key: str) -> str | None:
@@ -804,9 +806,15 @@ def _plan_refusal(root: str, cls: ClassResult) -> str | None:
     no plan file, and a PR that changes nothing outside `docs/` (the plan PR itself) pass."""
     if not cls.head or not cls.base or cls.number is None:
         return None
-    key = _story_key(root, cls.names)
-    if key is None:
-        return None
+    for key in _story_keys(root, cls.names):
+        red = _story_refusal(root, cls, key)
+        if red:
+            return red
+    return None
+
+
+def _story_refusal(root: str, cls: ClassResult, key: str) -> str | None:
+    """Plan first for one story key of the PR (`_plan_refusal`)."""
     plan = f"{PLAN_DIR}/{key}-story.md"
     on_main = _git(root, "cat-file", "-e", f"{RULES_FROM}:{plan}") is not None
     if not on_main and _git(root, "cat-file", "-e", f"{cls.head}:{plan}") is None:
@@ -1020,7 +1028,8 @@ def _class_refusal(
     if cls.line is None:
         return f"Merge refused, class not computed: {cls.reason}.", False
     if cls.one_way:
-        return _one_way_refusal(root, cls), False
+        plan = _plan_refusal(root, cls)  # the hand merge must see it as well
+        return _one_way_refusal(root, cls) + (f" Also: {plan}" if plan else ""), False
     if cls.line == "T2" and cls.number is not None:
         red = _panel_refusal(root, cls.number, cls) or _card_refusal(root, cls, cwd)
         if red:

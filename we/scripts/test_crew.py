@@ -1023,13 +1023,19 @@ def test_the_launch_verb_without_a_crew_prints_the_default(tmp_path):
     assert out.returncode == 0 and out.stdout == "false\n"
 
 
-def test_launch_worker_mode_is_auto_or_bypass(tmp_path):
-    assert crew.DEFAULTS["launch"]["worker_mode"] == "auto"
+def test_launch_worker_mode_is_default_or_bypass(tmp_path):
+    """The default says what it does: no --permission-mode; `auto` still validates."""
+    assert crew.DEFAULTS["launch"]["worker_mode"] == "default"
+    old, _ = workspace(tmp_path / "o", {**CREW, "launch": {"worker_mode": "auto"}})
+    assert run(old, "validate").returncode == 0
     core, _ = workspace(tmp_path, {**CREW, "launch": {"worker_mode": "bypass"}})
     assert run(core, "launch", "worker_mode").stdout == "bypass\n"
     bad, _ = workspace(tmp_path / "b", {**CREW, "launch": {"worker_mode": "yolo"}})
     out = run(bad, "validate")
-    assert out.returncode == 1 and "launch.worker_mode must be one of auto, bypass" in out.stderr
+    assert (
+        out.returncode == 1
+        and "launch.worker_mode must be one of default, bypass, auto" in out.stderr
+    )
 
 
 def test_a_member_with_a_role_addendum_gets_the_pointer_skill(tmp_path):

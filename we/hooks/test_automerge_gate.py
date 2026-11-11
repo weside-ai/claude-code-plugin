@@ -1600,3 +1600,21 @@ def test_a_pr_without_a_story_plan_is_untouched(story: dict, monkeypatch) -> Non
     assert refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch) is None
     fake = FakeGh([run()], head=head, names=("fix/typo", "Fix a typo"))
     assert refuse(story["repo"], ARM, fake, monkeypatch) is None
+
+
+def test_a_pr_of_two_stories_answers_for_the_second_key_too(story: dict, monkeypatch) -> None:
+    """Red arm: the branch names PROJ-4 (no plan), the title PROJ-5, whose plan is not on main;
+    the first key alone let the PR through."""
+    head = _commit(story["repo"], {PLAN: "# plan\n", "app.py": "x = 1\n"}, "plan and code")
+    names = ("feat/PROJ-4-other", "PROJ-4 and PROJ-5 together")
+    red = refuse(story["repo"], ARM, FakeGh([run()], head=head, names=names), monkeypatch)
+    assert red is not None and "story PROJ-5, whose plan" in red
+
+
+def test_a_one_way_refusal_names_plan_first_for_the_hand_merge(story: dict, monkeypatch) -> None:
+    """Red arm: a one-way PR is refused for its class; the human who merges it by hand also learns
+    that its story's plan is not on main yet."""
+    monkeypatch.setenv("FAKE_CLASS", "T2 one-way money")
+    head = _commit(story["repo"], {PLAN: "# plan\n", "app.py": "x = 1\n"}, "plan and code")
+    red = refuse(story["repo"], ARM, FakeGh([run()], head=head, names=STORY), monkeypatch)
+    assert red is not None and "one-way" in red and "plan first" in red

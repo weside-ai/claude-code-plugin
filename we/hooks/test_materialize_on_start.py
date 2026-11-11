@@ -44,7 +44,15 @@ class MaterializeOnStartTest(unittest.TestCase):
         env = {
             k: v
             for k, v in os.environ.items()
-            if k not in ("WESIDE_COMPANION", "WE_SESSION_DIR", "WE_NEWS_DIR", "CLAUDE_JOB_DIR")
+            # CLAUDE_CONFIG_DIR: a pinned caller's profile would hide the test's settings.json
+            if k
+            not in (
+                "WESIDE_COMPANION",
+                "WE_SESSION_DIR",
+                "WE_NEWS_DIR",
+                "CLAUDE_JOB_DIR",
+                "CLAUDE_CONFIG_DIR",
+            )
             # never reach the real session's inbox socket from a test
             and not k.startswith("CLAUDE_CODE_MESSAGING_")
         }

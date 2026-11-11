@@ -761,7 +761,7 @@ class TestDoneByHumans:
         assert "in_test needs the key to be in_review" in capsys.readouterr().err
 
     def test_in_test_is_refused_in_a_crew_that_maps_no_in_test(self, moving, monkeypatch, capsys):
-        """Red arm: a crew without board.states.in_test (weside-core maps none) gets no move to a
+        """Red arm: a crew without board.states.in_test (a consumer that maps none) gets no move to a
         status its ticketing system lacks."""
         shared(moving, states={})
         as_(monkeypatch, "alice", "Otto")

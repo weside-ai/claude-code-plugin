@@ -875,7 +875,7 @@ def test_inbox_lines_name_the_local_human_decider_lines_the_deciding_one(monkeyp
 
 
 def test_in_test_lines_only_for_a_crew_that_maps_in_test():
-    """A crew without board.states.in_test (weside-core) renders no In Test line; one that maps it
+    """A crew without board.states.in_test (a consumer crew) renders no In Test line; one that maps it
     gets the move and the Done rule (red arm: the mapped crew's lines)."""
     plain = generic()
     for role in ("product", "acceptance", "master"):

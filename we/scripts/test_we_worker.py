@@ -30,6 +30,8 @@ if args[:2] == ["agents", "--json"]:
 if args[:1] == ["stop"]:
     json.dump([r for r in rows if r["id"] != args[1]], open(state, "w")); sys.exit(0)
 if args[:1] == ["--help"]:
+    if os.environ.get("STUB_NO_HELP"):
+        sys.exit(1)
     print("Options:\n  --bg  --agent <a>  --permission-mode <m>  -n, --name <n>  --resume  --settings  --allow-dangerously-skip-permissions"); sys.exit(0)
 if args[:1] == ["logs"]:
     print("\x1b[1mhello\x1b[0m world\r"); sys.exit(0)
@@ -524,3 +526,175 @@ def test_checkpoint_refuses_a_worker_that_is_still_working(tmp_path, kind, field
         ["git", "-C", str(tree), "log", "--oneline"], capture_output=True, text=True, check=True
     )
     assert "checkpoint" not in log.stdout
+
+
+@pytest.mark.parametrize(("value", "flag"), [("1", True), (None, False)])
+def test_without_a_crew_the_allow_bypass_variable_adds_the_flag(tmp_path, value, flag):
+    """Red arm: in a repo without a crew, WE_WORKER_ALLOW_BYPASS=1 adds the flag; unset, it does not."""
+    project, env = setup(tmp_path, crew=None)
+    if value:
+        env["WE_WORKER_ALLOW_BYPASS"] = value
+    run(project, env, "AC-12-impl", "--bg", "go")
+    (call,) = started(tmp_path)
+    assert (FLAG in call["argv"]) is flag
+
+
+def test_a_crew_value_wins_over_the_allow_bypass_variable(tmp_path):
+    project, env = setup(tmp_path, crew={**CREW, "launch": {"allow_bypass": False}})
+    env["WE_WORKER_ALLOW_BYPASS"] = "1"
+    run(project, env, "AC-12-impl", "--bg", "go")
+    (call,) = started(tmp_path)
+    assert FLAG not in call["argv"]
+
+
+def test_a_permission_mode_with_equals_wins_too(tmp_path):
+    project, env = setup(tmp_path, crew={**CREW, "launch": {"worker_mode": "bypass"}})
+    run(project, env, "AC-12-impl", "--bg", "--permission-mode=plan", "go")
+    (call,) = started(tmp_path)
+    assert "bypassPermissions" not in call["argv"] and "--permission-mode=plan" in call["argv"]
+
+
+def test_checkpoint_refuses_a_background_worker_blocked_on_a_prompt(tmp_path):
+    """Red arm: a background row blocked on a prompt says `idle` in status, `blocked` in state."""
+    tree = _checkpoint_tree(tmp_path, "feat/x")
+    rows = [
+        {
+            "id": "ab1",
+            "name": "w",
+            "kind": "background",
+            "pid": 1,
+            "status": "idle",
+            "state": "blocked",
+            "cwd": str(tree),
+        }
+    ]
+    project, env = setup(tmp_path, rows)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and "is blocked" in proc.stderr
+
+
+def _wip_tree(tmp_path):
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    tree = _checkpoint_tree(tmp_path, "feat/AC-12-slug")
+    subprocess.run(["git", "-C", str(tree), "remote", "add", "origin", str(origin)], check=True)
+    rows = [{"id": "ab12", "name": "w", "kind": "background", "pid": 1, "cwd": str(tree)}]
+    project, env = setup(tmp_path, rows)
+    env.update(
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@t",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@t",
+    )
+    return origin, tree, project, env
+
+
+def _shown(origin, path):
+    return subprocess.run(
+        ["git", "--git-dir", str(origin), "show", f"wip/AC-12-slug:{path}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_checkpoint_leaves_a_staged_new_file_out(tmp_path):
+    """Red arm: `git add secret.env` before the pause stays local; only tracked changes go."""
+    origin, tree, project, env = _wip_tree(tmp_path)
+    (tree / "secret.env").write_text("X=1\n")
+    subprocess.run(["git", "-C", str(tree), "add", "secret.env"], check=True)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 0, proc.stderr
+    assert _shown(origin, "a.txt").stdout == "two\n"
+    assert _shown(origin, "secret.env").returncode != 0
+    assert "secret.env" in proc.stdout
+
+
+def test_checkpoint_without_a_tracked_change_pushes_the_commits(tmp_path):
+    origin, tree, project, env = _wip_tree(tmp_path)
+    subprocess.run(["git", "-C", str(tree), "checkout", "-q", "a.txt"], check=True)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 0 and "no tracked change" in proc.stdout
+    assert _shown(origin, "a.txt").stdout == "one\n"
+
+
+def test_checkpoint_refuses_a_detached_head_and_a_failed_push(tmp_path):
+    _origin, tree, project, env = _wip_tree(tmp_path)
+    head = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    subprocess.run(["git", "-C", str(tree), "checkout", "-q", "--detach", head], check=True)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and "detached HEAD" in proc.stderr
+    subprocess.run(["git", "-C", str(tree), "checkout", "-q", "feat/AC-12-slug"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tree), "remote", "set-url", "origin", str(tmp_path / "gone")], check=True
+    )
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and "push of wip/AC-12-slug failed" in proc.stderr
+
+
+def test_checkpoint_names_a_failed_commit_and_pushes_nothing(tmp_path):
+    origin, tree, project, env = _wip_tree(tmp_path)
+    hook = tree / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    proc = run(project, env, "checkpoint", "w")
+    assert proc.returncode == 1 and "checkpoint commit" in proc.stderr
+    assert _shown(origin, "a.txt").returncode != 0
+
+
+def test_a_marker_counts_only_for_the_session_it_names(tmp_path):
+    """Red arm: a master sitting in a worker's tree is no worker because the tree has a marker."""
+    tree = _checkpoint_tree(tmp_path, "feat/x")
+    gd = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    Path(gd, "we-worker.json").write_text(json.dumps({"name": "w"}))
+    rows = [
+        {"id": "m1", "name": "lead", "kind": "interactive", "pid": "-", "cwd": str(tree)},
+        {"sessionId": "s-w", "name": "w", "kind": "interactive", "pid": "-", "cwd": str(tree)},
+    ]
+    project, env = setup(tmp_path, rows)
+    assert run(project, env, "is-worker", "m1").returncode == 1
+    # an interactive row has no id: its sessionId resolves it
+    assert run(project, env, "is-worker", "s-w").returncode == 0
+
+
+def test_an_unreadable_claude_help_refuses_no_flag(tmp_path):
+    """Fail-open by design: without claude's own help nothing is refused (and nothing is named)."""
+    project, env = setup(tmp_path)
+    env["STUB_NO_HELP"] = "1"
+    proc = run(project, env, "AC-12-impl", "--bg", "--cwd", "go")
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    assert "--cwd" in call["argv"]
+
+
+def test_stop_never_ends_a_reused_pid(tmp_path):
+    """Red arm: a descendant pid read before the stop that runs another command by the kill (the
+    pid was reused) is left alone. A stub `ps` reports another command for that pid."""
+    worker, child = _fake_worker()
+    try:
+        rows = [
+            {"id": "ab12", "name": "w", "kind": "background", "pid": worker.pid, "sessionId": "s"}
+        ]
+        project, env = setup(tmp_path, rows)
+        real = shutil.which("ps")
+        stub = tmp_path / "bin" / "ps"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f'if [ "$*" = "-o comm= -p {child}" ]; then echo postgres; exit 0; fi\n'
+            f'exec {real} "$@"\n'
+        )
+        stub.chmod(0o755)
+        proc = run(project, env, "stop", "w")
+        assert proc.returncode == 0, proc.stderr
+        assert "also ended" not in proc.stdout
+        assert subprocess.run(["kill", "-0", str(child)], check=False).returncode == 0
+    finally:
+        worker.kill()
+        subprocess.run(["kill", str(child)], capture_output=True, check=False)

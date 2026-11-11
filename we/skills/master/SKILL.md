@@ -82,8 +82,7 @@ else the component owner), what only the human decides as one question line to t
 question never stops independent work: first dispatch everything that does not depend on an answer,
 then ask early, and park only the chunk an answer blocks. An important question is
 still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase and
-push; a worker that no longer answers, once idle or stopped, gets `we-worker checkpoint <name>` (one writer
-per worktree; tracked changes to `wip/<branch without its type prefix>`). Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
+push; a worker that no longer answers gets a checkpoint (**Checkpoint** in `references/worker-dispatch.md`). Whether to create a ticket or a story is never a queue item. A resume word ("weiter") answers the run, never an open
 decision. A story with no answer yet is parked in the repo's backlog status. A Selected plan needs
 no confirm: the invocation is the go.
 

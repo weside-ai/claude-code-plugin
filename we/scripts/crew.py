@@ -68,14 +68,15 @@ round, and every new plan blob is one, a whitespace edit included: pick N with t
 ``in_test`` default null: only a crew that maps it has an In Test step; ``signals``: a list of objects
 ``{state, role, jql_window}``, the transitions ``board.py signals`` reads: ``state`` a key of
 ``STATES``, ``role`` a role key, ``jql_window`` a number with ``m``, ``h`` or ``d``; ``jql_scope``:
-a JQL clause every signal query starts with, null = none; ``claim_hours``: how long a ticket claim
+a JQL clause every signal query starts with, null = signals refused; ``claim_hours``: how long a ticket claim
 lives; ``shared_accounts``: ticketing accounts several humans write from (email or account id); a
 comment signed ``<role>@<human>`` speaks for that human only from that human's own account or one
 of these, ``board_humans.py``), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
 starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
-``permissions.defaultMode``; ``worker_mode``: ``auto`` (the default) or ``bypass``, the mode a
+``permissions.defaultMode``; ``worker_mode``: ``default`` (the default: no ``--permission-mode``, the
+worker starts in ``permissions.defaultMode``; ``auto`` reads the same) or ``bypass``, the mode a
 ``we-worker --bg`` worker starts in (``bypass`` adds ``--permission-mode bypassPermissions``, because
 in the background nobody answers a prompt; a window worker keeps the default mode); ``worker_timer``: a script ``we-worker`` registers each worker's time
 limit with, null = none; ``restore``: the crew's restore command after a host crash, which prints its plan without arguments
@@ -296,7 +297,7 @@ DEFAULTS: dict[str, Any] = {
         "worker": None,
         "subagent_fallback": False,
         "allow_bypass": False,
-        "worker_mode": "auto",
+        "worker_mode": "default",
         "worker_timer": None,
         "restore": None,
     },
@@ -632,7 +633,7 @@ def _check_list(path: Path, value: Any, default: list, dotted: str) -> None:
         raise _fail(path, f"{dotted} must be a list of strings")
 
 
-WORKER_MODES = ("auto", "bypass")
+WORKER_MODES = ("default", "bypass", "auto")  # auto: the same as default
 SIGNAL_KEYS = ("state", "role", "jql_window")
 JQL_WINDOW = re.compile(r"[1-9][0-9]{0,4}[mhd]")
 
@@ -689,7 +690,7 @@ def _validate(path: Path, data: dict[str, Any]) -> None:
     reviewer = data.get("sla", {}).get("t2_second_reviewer")
     if reviewer is not None and reviewer not in slugs:
         raise _fail(path, f"sla.t2_second_reviewer {reviewer!r} is no member")
-    mode = data.get("launch", {}).get("worker_mode", "auto")
+    mode = data.get("launch", {}).get("worker_mode", "default")
     if mode not in WORKER_MODES:
         raise _fail(path, f"launch.worker_mode must be one of {', '.join(WORKER_MODES)}")
     _validate_local_rules(path, data.get("local_rules", []))

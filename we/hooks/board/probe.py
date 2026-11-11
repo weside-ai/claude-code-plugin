@@ -14,8 +14,8 @@ pointers share it) stays, one in another crew's repo or in a repo without a
 crew drops out, and one whose `cwd` is missing or no longer exists stays with `crew: "unknown"`.
 Without the flag every session on the host is listed.
 
-A failing or unparsable `claude agents --json` prints `{"error": …}` (fail open: the pane shows
-the error, nothing brakes on it).
+A failing, unparsable or non-list `claude agents --json` prints `{"error": …}`: the pane shows the
+error instead of an empty live column; nothing brakes on it.
 
 Usage: probe.py [--crew FILE]
 """
@@ -118,8 +118,12 @@ def main(argv=None):
     except ValueError:
         print(json.dumps({"error": "claude agents --json printed no JSON"}))
         return 0
+    if not isinstance(agents, list):
+        # an answer of another shape is unreadable, never an empty host: the pane names it
+        print(json.dumps({"error": "claude agents --json printed no list"}))
+        return 0
     out = []
-    for agent in agents if isinstance(agents, list) else []:
+    for agent in agents:
         if not isinstance(agent, dict):
             continue
         crew = crew_of(agent.get("cwd"), cache) if want is not None else None

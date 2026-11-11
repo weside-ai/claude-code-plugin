@@ -44,4 +44,7 @@ description: Reading a ticket with its comments and moving it safely. Shared by 
   ticket's status, labels and comments with created and author, the author as the account's
   email, else its accountId, never the display name) go back as `--input FILE`; Rovo: `searchJiraIssuesUsingJql`, the labels from
   `getJiraIssue`, the comments from `listJiraIssueComments`; `jira_*`: `jira_search`,
-  `jira_get_issue` with `comment_limit`.
+  `jira_get_issue` with `comment_limit`. `board.py signals` refuses while `board.jql_scope` is unset, so no
+  query reads every project. A ticket status that no `board.states` entry maps (a "Blocked")
+  refuses a move and a merge-go: map it in the crew file. The In Test status exists only where
+  `board.states.in_test` names it.

@@ -939,7 +939,11 @@ class TestCrewGuard:
         args = board.parser().parse_args(["freeze", "--reason", "stop"])
         assert board.crew_guard(args, env={}, cwd=crewless / "work") == (None, None)
 
-    def test_unfreeze_passes_the_crewless_rule_but_not_another_crews_stamp(self, crewless):
+    def test_unfreeze_passes_the_crewless_rule_but_not_another_crews_stamp(
+        self, crewless, monkeypatch
+    ):
+        # the default board is the test's own, never the host's (a crew may have stamped that one)
+        monkeypatch.setattr(board, "DEFAULT_BOARD", str(crewless / "board.json"))
         args = board.parser().parse_args(["unfreeze"])
         assert board.crew_guard(args, env={}, cwd=crewless / "work")[0] is None
         (crewless / "crew.id").write_text("acme/second-crew\n")
