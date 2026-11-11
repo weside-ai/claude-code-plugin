@@ -9,6 +9,8 @@ Run with: python3 -m pytest -q scripts/test_validate_consistency.py
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
 from importlib import util
@@ -309,3 +311,61 @@ def test_an_undocumented_carry_op_fails(tmp_path):
     result = run(root, "carry-ops")
     assert result.returncode == 1
     assert "carry op 'label'" in result.stdout
+
+
+# --- check 15: the setup humans example validates against crew.py -----------------------------
+SETUP_HUMANS = REPO / "we" / "skills" / "setup" / "references" / "humans.md"
+
+
+def humans_tree(tmp_path: Path, mutate) -> Path:
+    """The real reference and crew.py, the example's JSON passed through ``mutate``."""
+    text = SETUP_HUMANS.read_text(encoding="utf-8")
+    m = re.search(r"```json\n(.*?)```", text.split("## Example")[1], re.S)
+    crew = json.loads(m.group(1))
+    mutate(crew)
+    body = text.replace(m.group(1), json.dumps(crew, indent=2) + "\n")
+    scripts = REPO / "we" / "scripts"
+    return tree(
+        tmp_path,
+        {
+            "we/skills/setup/references/humans.md": body,
+            "we/scripts/crew.py": (scripts / "crew.py").read_text(encoding="utf-8"),
+            "we/scripts/worker_launch.py": (scripts / "worker_launch.py").read_text(
+                encoding="utf-8"
+            ),
+        },
+    )
+
+
+def test_setup_humans_example_is_green(tmp_path):
+    done = run(humans_tree(tmp_path, lambda _crew: None), "setup-humans")
+    assert done.returncode == 0, done.stdout
+
+
+def test_setup_humans_example_crew_py_refuses_fails(tmp_path):
+    def unknown(crew):
+        crew["humans"]["bob"]["phone"] = "1"
+
+    done = run(humans_tree(tmp_path, unknown), "setup-humans")
+    assert done.returncode == 1, done.stdout
+    assert "crew.py validate --strict refuses it" in done.stdout
+    assert "phone" in done.stdout
+
+
+def test_setup_humans_example_missing_a_human_key_fails(tmp_path):
+    def drop(crew):
+        for entry in crew["humans"].values():
+            entry.pop("account_id", None)
+
+    done = run(humans_tree(tmp_path, drop), "setup-humans")
+    assert done.returncode == 1, done.stdout
+    assert "no human shows `account_id` (crew.py HUMAN_KEYS)" in done.stdout
+
+
+def test_setup_humans_signals_without_scope_fails(tmp_path):
+    def unscoped(crew):
+        del crew["board"]["jql_scope"]
+
+    done = run(humans_tree(tmp_path, unscoped), "setup-humans")
+    assert done.returncode == 1, done.stdout
+    assert "board.signals without board.jql_scope" in done.stdout
