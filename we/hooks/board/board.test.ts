@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  ageDays, answerPrompt, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterProfile, isResting, lastAnswers,
+  acceptVariantOf, ageDays, answerPrompt, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterProfile, isResting, lastAnswers,
   liveByName,
   majorityMode, ownName, pack, parseBoard, sessionAge, shownAnswer, sortQueue, startModeOf, unreadNews,
 } from './board'
@@ -188,6 +188,15 @@ test('update_asker words the asker\'s Update; answer_prompts overrides it like t
   expect(answerPrompt('update_asker', 'Q4', own)).toBe('Q4: bitte prüfen')
   expect(deliveriesPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/team-deliveries.jsonl')
   expect(deliveriesPathOf('/home/me/.claude/we-state/board.json')).toBe('/home/me/.claude/we-state/board-deliveries.jsonl')
+})
+
+test('acceptVariantOf: a one-way merge-go with its PR is a hand merge, a task is taken, the rest a plain Accept', () => {
+  expect(acceptVariantOf({ one_way: 'money', pr_url: 'u', kind: null })).toBe('accept_hand')
+  expect(acceptVariantOf({ one_way: 'money', pr_url: null, kind: null })).toBeUndefined()
+  expect(acceptVariantOf({ one_way: null, pr_url: null, kind: 'task' })).toBe('accept_task')
+  expect(acceptVariantOf(undefined)).toBeUndefined()
+  const own = parseBoard('{"answer_prompts":{"accept_hand":"{id}: ich merge {pr} selbst"}}').answerPrompts
+  expect(answerPrompt('accept_hand', 'Q4', own, 'https://x/pull/1')).toBe('Q4: ich merge https://x/pull/1 selbst')
 })
 
 test('an Accept or Deny closes the id: later lines on it change nothing; legacy lines read without error', () => {

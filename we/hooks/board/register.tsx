@@ -12,7 +12,7 @@ import type {
   BoardWork, FlowPhase, LiveView, WorkNode,
 } from '../../types'
 import {
-  ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
+  acceptVariantOf, ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
   liveByName, majorityMode, ownName, pack, parseBoard, sessionAge, shownAnswer, sortQueue, stagingLines, startModeOf, unreadNews,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
@@ -321,7 +321,7 @@ async function deliverOne($: $, ledgerPath: string, coordinator: string, d: Deli
   try {
     let sent: { isDelivered: boolean; reason?: string }
     try {
-      sent = await $.session.send({ to: d.to, text: d.role === 'owner' ? ownerText(d.line, prompts) : askerText(d.line, prompts) })
+      sent = await $.session.send({ to: d.to, text: d.role === 'owner' ? ownerText(d.line, prompts, d.accept) : askerText(d.line, prompts, d.accept) })
     } catch (err) {
       sent = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
     }
@@ -376,7 +376,12 @@ async function deliverTick($: $, file: string) {
     const lines = answerLines((await readText($, c.answersPath)) ?? '')
     const askerOf = (id: string) => c.board.queue.find(q => q.id === id)?.session ?? undefined
     const ownerOf = (id: string) => c.board.queue.find(q => q.id === id)?.owner ?? undefined
-    for (const d of pendingLines(lines, ledger, c.name, askerOf, ownerOf, await $.clock.now())) {
+    const acceptOf = (id: string) => {
+      const q = c.board.queue.find(x => x.id === id)
+      const as = acceptVariantOf(q)
+      return as ? { as, ...(q?.pr_url ? { pr: q.pr_url } : {}) } : undefined
+    }
+    for (const d of pendingLines(lines, ledger, c.name, askerOf, ownerOf, await $.clock.now(), acceptOf)) {
       if (!isInFlight(keyOf(d.line.id, d.line.ts, d.role))) await deliverOne($, c.ledgerPath, c.name, d, c.board.answerPrompts)
     }
     await checkAwaiting($)

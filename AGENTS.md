@@ -63,6 +63,7 @@ we/                               plugin root
     test support                  node_test_procs.py (the node binary and process reaping for statusline tests)
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
+tour/humans/index.html            tour page "Several humans, one crew", served at plugin.weside.ai/tour/humans/
 scripts/                          repo checks: validate-frontmatter.py, validate-plugin-structure.sh,
                                   validate-consistency.py (also checks this layout names every file), full_test_run.py,
                                   check-version-bump.sh, check_compat_line.py, claude_review_gate.py

@@ -222,7 +222,7 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 |---|---|
 | `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `deny`, `discuss`, `info`, `update`, `withdraw` and `update_asker` texts the deliverer sends (§ Answers) |
+| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `discuss`, `info`, `update`, `withdraw` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle, an escalation at stage `bundle`, and a signal `S<n>` with `for` the role and `key`, § Several humans), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned` and `info` (`board.py self-merge`), which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
@@ -233,8 +233,8 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `owner_queue[].to`, `.to_name`, `.label` | optional: a question `board.py ask --to` sent to a human on another machine, that human's name and the ticket label it carries (§ Several humans); its answer comes from the ticket, so the card shows `waiting on <to_name> (label <label>)` and only **Withdraw** |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `info`) and when it was posted (ISO UTC); `board.py ask` writes all three |
-| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` and names **Accept** **Yes, I'll do it** (it writes `accept`: the owner approves or merges by hand; the merge hook's one-way refusal stands) (approve where the merge hook's one-way refusal names the approve as the go, else merge by hand), and `board.py close-merged` drops the question once the PR is merged or closed |
-| `owner_queue[].kind`, `.source`, `.owner` | `task` (`board.py ask --kind task`: the card offers **Taken** in place of **Accept** and stamps `taken`); where the ask's fact comes from (`--source`, shown dimmed under the ask); the member who owns the subject (`--owner`, or `--component` resolved through the crew's `members.*.components`): the deliverer sends that session a copy of every answer (§ Answers) |
+| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `approve or merge (<class>): <url>` and names **Accept** **Yes, I'll do it** (it writes `accept`: the owner approves where the merge hook's one-way refusal names the approve as the go, else merges by hand; the refusal stands, and the deliverer sends `accept_hand`, § Answers), and `board.py close-merged` drops the question once the PR is merged or closed |
+| `owner_queue[].kind`, `.source`, `.owner` | `task` (`board.py ask --kind task`: the card offers **Taken** in place of **Accept** and stamps `taken`; the deliverer sends `accept_task`, § Answers); where the ask's fact comes from (`--source`, shown dimmed under the ask); the member who owns the subject (`--owner`, or `--component` resolved through the crew's `members.*.components`): the deliverer sends that session a copy of every answer (§ Answers) |
 | `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
 | `sessions[].role` | `master` or `worker`; a session other sessions name as `parent` counts as a master |
@@ -302,14 +302,16 @@ minutes. Per line it writes one row per recipient to
 
 | Recipient (`role`) | When | Carrier | Delivered when |
 |---|---|---|---|
-| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted`, `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more information` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)`, `(answered in the chat of <session>)` or `(answered on ticket <KEY> (<human>))` after a space: transparency, no check), the owner's words on a line of their own when the line has a `quote` | the session stored the prompt as a user row |
+| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted` (an Accept on a one-way `merge-go` with its PR, **Yes, I'll do it**: `<id>: the owner merges <pr_url> by hand — do not merge or arm it; the question stays open until the PR is merged`; **Taken** on a task: `<id>: taken — the owner does this task; do not do it yourself`), `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more information` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)`, `(answered in the chat of <session>)` or `(answered on ticket <KEY> (<human>))` after a space: transparency, no check), the owner's words on a line of their own when the line has a `quote` | the session stored the prompt as a user row |
 | `asker` (`owner_queue[].session`) | unless the line was written in the asker's own session; a question no longer on the board has none | a message to that session: the same text, for **Update** `check whether <id> is still current and well worded; re-ask it with a new id or withdraw it` | the engine queued it there |
 | `owner` (`owner_queue[].owner`) | unless it is the coordinator, the asker or the session that wrote the line | a message to that session: the coordinator's text plus `(copy for the owner of this subject)`; a refusal is a ledger row only, no routing line | the engine queued it there |
 | `route` (the orchestrator) | the asker was not reached | a prompt: `<id>: the owner's answer (<kind>) did not reach <asker> (<reason>); wake that session or route the answer` | as `coordinator` |
 
 The board's optional `answer_prompts` words these texts in the orchestrator's own language, `{id}`
-standing for the question's id: `{"accept": "{id}: Vorschlag angenommen"}`; `update_asker` is the
-asker's Update text; a kind it leaves out keeps the default.
+standing for the question's id and `{pr}` for its PR link: `{"accept": "{id}: Vorschlag angenommen"}`;
+`update_asker` is the asker's Update text, `accept_hand` and `accept_task` the two Accepts that mean
+"I do it myself" (never `accept`'s text, which a coordinator reads as a go); a kind it leaves out
+keeps the default.
 
 Outcomes, each a row (readers fold the rows of one `id`, `answer_ts` and `role` to the newest `ts`):
 

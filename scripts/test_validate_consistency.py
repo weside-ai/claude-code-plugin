@@ -126,6 +126,13 @@ def test_dead_slash_mention_in_the_readme_and_the_tour(tmp_path):
     assert "tour/index.html:1: '/we:saga' matches no skill or command" in done.stdout
 
 
+def test_a_dead_mention_on_a_tour_subpage_is_a_finding(tmp_path):
+    root = tree(tmp_path, {"tour/humans/index.html": "<p>/we:saga</p>\n"})
+    done = run(root, "dead-references")
+    assert done.returncode == 1
+    assert "tour/humans/index.html:1: '/we:saga' matches no skill or command" in done.stdout
+
+
 def test_a_non_utf8_tour_page_is_a_finding_not_a_crash(tmp_path):
     root = tree(tmp_path, {"tour/index.html": b"<p>caf\xe9</p>\n"})
     done = run(root, "dead-references")

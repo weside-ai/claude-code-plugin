@@ -10,7 +10,7 @@ silently return:
    `we:<name>` mention, and `subagent_type="..."` value must resolve to an existing
    file / skill / command / agent (a bare `we:<name>` to a skill or an agent). Files:
    we/**/*.md, the code files under we/ (`*.py`, `*.ts`, `*.tsx`, `*.js`, `*.json`),
-   README.md, docs/*.md (not docs/plans/) and tour/index.html; a file that is not
+   README.md, docs/*.md (not docs/plans/) and every tour page (tour/**/*.html); a file that is not
    UTF-8 is a finding, not a crash.
 5. userConfig readers — every option declared in plugin.json userConfig must
    be referenced somewhere outside plugin.json.
@@ -144,7 +144,7 @@ def check_command_skill_collision() -> None:
 
 def mention_files(root: Path) -> list[Path]:
     """The files check 4 reads: we/**/*.md and the code files under we/, the repo README,
-    docs/*.md (docs/plans/ is history) and the tour page."""
+    docs/*.md (docs/plans/ is history) and every tour page."""
     we = root / "we"
     files = [
         p
@@ -154,7 +154,8 @@ def mention_files(root: Path) -> list[Path]:
         and "__pycache__" not in p.parts
         and "node_modules" not in p.parts
     ]
-    files += [p for p in (root / "README.md", root / "tour" / "index.html") if p.is_file()]
+    files += [p for p in (root / "README.md",) if p.is_file()]
+    files += sorted((root / "tour").rglob("*.html"))
     files += sorted((root / "docs").glob("*.md"))
     return sorted(set(files))
 

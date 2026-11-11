@@ -1,6 +1,6 @@
 // Pure logic of the /board pane: parse the orchestrator's board file, order it, judge each session's start mode.
 import type {
-  BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession,
+  BoardAcceptVariant, BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardFile, BoardNewsItem, BoardNewsKind, BoardPromptKind, BoardQueueItem, BoardSession,
   BoardStaging, LiveSession, SessionAgeHours,
 } from '../../types'
 import type { Part } from './work'
@@ -8,7 +8,7 @@ import type { Part } from './work'
 const MIN = 60_000
 const DAY = 86_400_000
 const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw']
-const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker']
+const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task']
 const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
 // An Accept, Deny or Withdraw closes its question: the pane strikes it, and later lines on that id change nothing.
 const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
@@ -189,7 +189,9 @@ export const shownAnswer = (last: BoardAnswer | undefined, updated: string | und
 }
 
 // The texts the deliverer sends: per kind to the orchestrator and the asker, `update_asker` to the asker
-// on Update; the board's `answer_prompts` replaces a default, `{id}` standing for the question's id.
+// on Update, and for an Accept that means "I do it myself" (`accept_hand`, `accept_task`) in place of
+// `accept`; the board's `answer_prompts` replaces a default, `{id}` standing for the question's id and
+// `{pr}` for its PR link.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   accept: '{id}: proposal accepted',
   deny: '{id}: proposal denied',
@@ -198,10 +200,17 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
   withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
+  accept_hand: '{id}: the owner merges {pr} by hand — do not merge or arm it; the question stays open until the PR is merged',
+  accept_task: '{id}: taken — the owner does this task; do not do it yourself',
 }
 
-export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>) =>
-  (own?.[answer] ?? DEFAULT_PROMPT[answer]).split('{id}').join(id)
+export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>, pr?: string) =>
+  (own?.[answer] ?? DEFAULT_PROMPT[answer]).split('{id}').join(id).split('{pr}').join(pr ?? 'its PR')
+
+// Which Accept a question's Accept is: "Yes, I'll do it" on a one-way merge-go with its PR (the pane's
+// label), Taken on a task, else the plain Accept (undefined).
+export const acceptVariantOf = (q: Pick<BoardQueueItem, 'one_way' | 'pr_url' | 'kind'> | undefined): BoardAcceptVariant | undefined =>
+  !q ? undefined : q.one_way && q.pr_url ? 'accept_hand' : q.kind === 'task' ? 'accept_task' : undefined
 
 // This session's name as `claude agents` lists it, matched on the transcript id.
 export const ownName = (live: readonly LiveSession[], sessionId: string): string | undefined =>
