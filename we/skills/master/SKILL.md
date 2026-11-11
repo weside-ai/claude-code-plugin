@@ -88,7 +88,7 @@ no confirm: the invocation is the go.
 
 ## Refine lane
 
-A refiner is a `we:dev-high` worker `refiner-<KEY>` that you start in a detached worktree of its own
+A refiner is a `we:dev-high` worker `<KEY>-refiner` that you start in a detached worktree of its own
 (`git worktree add --detach <path> origin/<default>`; the brief's `Tree:` names it) (L0 §Lifecycle: the epic's
 master starts it; the owner judges, never starts), whose brief (the four headings of `references/worker-dispatch.md`
 § Name and brief) begins under its goal: "Use the Skill tool with skill `we:plan-story` and args `<KEY>`" (a bare `/we:plan-story` in a subagent prompt is not proven to run the skill, probe 27.09.2026). Refiners may run in parallel (up to three); each writes its plan and, for `receipt` ACs, the staging-check file the plan's `**Staging checks:**` line names. The

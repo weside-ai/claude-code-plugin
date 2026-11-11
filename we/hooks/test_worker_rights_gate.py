@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
@@ -50,6 +51,22 @@ def make_repo(tmp_path: Path, name="app", rights=RIGHTS, branch=BRANCH, crew=Tru
     repo = tmp_path / name
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
+    if crew:
+        (repo / ".weside").mkdir()
+        body = {**CREW, "worker_rights": rights} if rights is not None else CREW
+        (repo / ".weside" / "crew.json").write_text(json.dumps(body))
+        _git(repo, "add", ".weside")
+    _commit(repo)
+    _git(repo, "remote", "add", "origin", f"git@github.com:{owner}/{name}.git")
+    _publish(repo)
+    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+    _git(repo, "tag", "v1.2.3-rc.1")
+    if branch != "main":
+        _git(repo, "checkout", "-q", "-b", branch)
+    return repo
+
+
+def _commit(repo, message="i"):
     _git(
         repo,
         "-c",
@@ -60,19 +77,13 @@ def make_repo(tmp_path: Path, name="app", rights=RIGHTS, branch=BRANCH, crew=Tru
         "-q",
         "--allow-empty",
         "-m",
-        "i",
+        message,
     )
-    _git(repo, "remote", "add", "origin", f"git@github.com:{owner}/{name}.git")
+
+
+def _publish(repo):
+    """The current commit becomes origin's default branch (what the gate reads the crew from)."""
     _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    _git(repo, "tag", "v1.2.3-rc.1")
-    if branch != "main":
-        _git(repo, "checkout", "-q", "-b", branch)
-    if crew:
-        (repo / ".weside").mkdir()
-        body = {**CREW, "worker_rights": rights} if rights is not None else CREW
-        (repo / ".weside" / "crew.json").write_text(json.dumps(body))
-    return repo
 
 
 @pytest.fixture
@@ -151,6 +162,7 @@ def hook(world, command, cwd=None, session="s-1", **env):
         "gh pr comment -R acme/app 7 -b x",
         "gh pr comment https://github.com/acme/app/pull/7 --body x",
         "a release staging",
+        'gh pr comment --body "Fixed \\`foo\\` in bar"',
     ],
 )
 def test_a_held_right_is_allowed_without_a_prompt(world, command):
@@ -221,10 +233,14 @@ def test_a_repo_without_a_crew_is_denied(world):
 
 def test_a_repo_pointing_at_another_repos_crew_is_denied(world):
     """The infrastructure case: its config.json points `crew` at the core repo's crew file."""
-    infra = make_repo(world["tmp"], name="infra", crew=False)
+    infra = make_repo(world["tmp"], name="infra", crew=False, branch="main")
     (infra / ".weside").mkdir()
     pointer = os.path.relpath(world["repo"] / ".weside" / "crew.json", infra)
     (infra / ".weside" / "config.json").write_text(json.dumps({"crew": pointer}))
+    _git(infra, "add", ".weside")
+    _commit(infra, "pointer")
+    _publish(infra)
+    _git(infra, "checkout", "-q", "-b", BRANCH)
     decision, reason = hook(world, "gh pr ready", cwd=infra)
     assert decision == "deny" and "acme/infra grants no worker rights" in reason
 
@@ -305,11 +321,27 @@ NEVER = [
     ("eval 'gh secret set X'", "secrets (gh secret)"),
     ('source "$F"', "unreadable command: source of a non-literal argument"),
     ("echo 'unclosed", "unreadable command: unparsable"),
+    # review round 1
+    ("git push origin \\\n  main", "main (git push to main)"),
+    ("cat <<EOF\n$(gh secret list)\nEOF", "secrets (gh secret)"),
+    ("nice -n 5 git push origin main", "main (git push to main)"),
+    ("stdbuf -oL gh secret list", "secrets (gh secret)"),
+    ("time -p gh secret list", "secrets (gh secret)"),
+    ("command -p gh secret list", "secrets (gh secret)"),
+    ("git push origin 'refs/heads/*:refs/heads/*'", "main (git push of the pattern"),
+    ("git push --dele origin feat/x", "delete (git push --delete)"),
+    ("git push --no-verif origin HEAD", "guard bypass (--no-verify)"),
+    ("git config core.hookspath /dev/null", "guard bypass (core.hooksPath)"),
+    ('echo "`gh secret list`"', "secrets (gh secret)"),
+    ("cd ../main-checkout && git push", None),
 ]
 
 
 @pytest.mark.parametrize("command,item", NEVER, ids=[c for c, _ in NEVER])
 def test_the_never_list_is_denied_for_a_worker(world, command, item):
+    if item is None:  # the bare push runs in the tree the `cd` names, here on main
+        main = make_repo(world["tmp"], name="main-checkout", branch="main")
+        command, item = f"cd {main} && git push", "main (a bare git push from main)"
     decision, reason = hook(world, command)
     assert decision == "deny", reason
     assert reason.startswith(f"never for a worker ({item}") and reason.endswith("ask your starter")
@@ -331,6 +363,10 @@ def test_a_master_is_not_touched(world, command, item):
         "gh pr create --body-file b.md",
         "cat <<'EOF' > body.md\nnever --no-verify here? it is data\nEOF",
         "git commit -m 'main and master'",
+        "git push origin HEAD:refs/heads/feat/ABC-12-mainline",
+        'git commit -m "Fixed \\`foo\\` in bar"',
+        "git commit -m 'drop `git push --delete` from the docs'",
+        "echo 'literal $(gh secret set X)'",
         "grep -rn secret src/",
         "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nnot --no-verify, data\nEOF\n)\" && git log --oneline -1",
         "gh pr create --title x --body \"$(cat <<'EOF'\n## Verification\nEOF\n)\"",
@@ -372,11 +408,51 @@ def test_a_marker_worker_names_its_lead(world):
     assert hook(world, "gh secret set X", session="s-lead", WE_ROLE=None) == (None, "")
 
 
-def test_an_error_while_judging_fails_closed(world):
-    (world["repo"] / ".weside" / "crew.json").write_text("{not json")
-    decision, reason = hook(world, "git status")
-    assert decision == "deny" and "fail closed" in reason
-    assert hook(world, "git status", WE_ROLE="master") == (None, "")
+def test_an_error_while_judging_fails_closed(world, monkeypatch, capsys):
+    sys.path.insert(0, str(HOOK.parent))
+    import worker_rights_gate as gate  # noqa: PLC0415
+
+    def boom(_payload, _env):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(gate, "decide", boom)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status"},
+        "cwd": str(world["repo"]),
+    }
+    for role, denied in (("worker", True), ("master", False)):
+        monkeypatch.setenv("WE_ROLE", role)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        gate.main()
+        assert ("fail closed" in capsys.readouterr().out) is denied
+
+
+def test_a_broken_crew_costs_the_rights_not_the_worker(world):
+    (world["repo"] / ".weside" / "crew.json").write_text(
+        json.dumps({**CREW, "worker_rights": {"repos": "acme/app"}})
+    )
+    _git(world["repo"], "add", ".weside")
+    _commit(world["repo"], "broken")
+    _publish(world["repo"])
+    assert hook(world, "git status") == (None, "")
+    assert hook(world, "gh pr ready")[0] == "deny"
+    assert hook(world, "gh secret set X")[0] == "deny"
+
+
+def test_the_worktrees_own_crew_edit_grants_nothing(world):
+    repo = make_repo(world["tmp"], name="plain", rights=None)
+    (repo / ".weside" / "crew.json").write_text(
+        json.dumps({**CREW, "worker_rights": {**RIGHTS, "repos": ["acme/plain"]}})
+    )
+    decision, reason = hook(world, "gh pr ready", cwd=repo)
+    assert decision == "deny" and "grants no worker rights" in reason
+
+
+def test_a_shorter_key_does_not_own_a_longer_keys_branch(world):
+    _git(world["repo"], "checkout", "-q", "-b", "feat/ABC-123-other")
+    decision, reason = hook(world, "gh pr ready")
+    assert decision == "deny" and "does not carry the key ABC-12" in reason
 
 
 # ---------------------------------------------------------------- the settings record (AC 8)

@@ -7,7 +7,8 @@ comment), not a barrier against one that goes around it on purpose: a script fil
 another `gh` binary, `curl` with the token all pass every text check. The boundaries are server-side
 (branch rules, the merge gate, the app rights of the token).
 
-Rights (crew `worker_rights`, opt-in per repo, all off by default): in a repo whose `origin` is one
+Rights (crew `worker_rights`, read from the default branch of origin, never from the worktree; opt-in
+per repo, all off by default): in a repo whose `origin` is one
 of `worker_rights.repos`, a worker with a story key, on a branch that is not the default branch and
 carries that key, may run without asking
   `gh pr ready` (`pr_ready`) and `gh pr comment` (`pr_comment`), with no selector or one naming the PR
@@ -38,14 +39,15 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 INLINE = {"python": "-c", "python3": "-c", "node": "-e", "perl": "-e", "ruby": "-e"}
-PREFIXES = {"command", "exec", "nohup", "time", "builtin", "nice", "stdbuf"}
+PREFIXES = {"nohup", "builtin"}
 KEYWORDS = {"if", "then", "do", "else", "elif", "while", "until", "!", "{", "}", "fi", "done"}
-FLAG_PREFIXES = {"sudo", "env", "timeout", "xargs"}
+FLAG_PREFIXES = {"sudo", "env", "timeout", "xargs", "nice", "stdbuf", "time", "command", "exec"}
 MAX_DEPTH = 4
 GIT_TIMEOUT_S = 10
 GH_TIMEOUT_S = 30
@@ -70,18 +72,33 @@ class Parsed:
 
 
 def _substitutions(text: str) -> list[str]:
-    """The bodies of `$( … )`, `<( … )`, `>( … )` and backticks in `text`, outermost first."""
+    """The bodies of `$( … )`, `<( … )`, `>( … )` and backticks in `text`, outermost first, as bash
+    sees them: nothing inside single quotes, no escaped backtick or `$`."""
     out: list[str] = []
-    i = 0
+    i, quote = 0, None
     while i < len(text):
-        if text[i] == "`":
-            j = text.find("`", i + 1)
-            if j < 0:
+        ch = text[i]
+        if quote == "'":
+            quote = None if ch == "'" else quote
+            i += 1
+            continue
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "'" and quote is None:
+            quote = "'"
+        elif ch == '"':
+            quote = None if quote == '"' else '"'
+        elif ch == "`":
+            j = i + 1
+            while j < len(text) and text[j] != "`":
+                j += 2 if text[j] == "\\" else 1
+            if j >= len(text):
                 break
             out.append(text[i + 1 : j])
             i = j + 1
             continue
-        if text[i] in "$<>" and text[i + 1 : i + 2] == "(" and text[i + 2 : i + 3] != "(":
+        elif ch in "$<>" and text[i + 1 : i + 2] == "(" and text[i + 2 : i + 3] != "(":
             depth, j = 1, i + 2
             while j < len(text) and depth:
                 depth += {"(": 1, ")": -1}.get(text[j], 0)
@@ -118,7 +135,12 @@ def _strip_prefixes(argv: list[str]) -> list[str]:
         elif tok in FLAG_PREFIXES:
             i += 1
             while i < len(argv) and (argv[i].startswith("-") or "=" in argv[i]):
-                i += 2 if argv[i] in ("-u", "-g", "-s", "-k", "-I", "-n", "-P", "-d") else 1
+                i += (
+                    2
+                    if argv[i]
+                    in ("-u", "-g", "-s", "-k", "-I", "-n", "-P", "-d", "-a", "-o", "-e", "-i")
+                    else 1
+                )
             if tok == "timeout" and i < len(argv) and re.fullmatch(r"[\d.]+[smhd]?", argv[i]):
                 i += 1
         else:
@@ -135,12 +157,16 @@ def parse(command: str, depth: int = 0, bodies: list[str] | None = None) -> Pars
         return out
     bodies = [] if bodies is None else bodies
 
+    expanded: list[str] = []  # bodies of unquoted heredocs: bash expands `$( … )` in them
+
     def take(match: re.Match[str]) -> str:
         bodies.append(match.group("body"))
+        if not match.group(1):
+            expanded.append(match.group("body"))
         return f"<<HEREDOC{len(bodies) - 1} " + match.group("rest")
 
-    stripped = HEREDOC.sub(take, command)
-    for inner in _substitutions(stripped):
+    stripped = HEREDOC.sub(take, command.replace("\\\n", " "))
+    for inner in [s for text in (stripped, *expanded) for s in _substitutions(text)]:
         out.compound = True
         _merge(out, parse(inner, depth + 1, bodies))
     try:
@@ -366,11 +392,13 @@ def _push_never(args: list[str], cwd: str | None) -> str | None:  # noqa: PLR091
     k = 1
     while k < len(args):
         tok = args[k]
-        if tok in ("--delete",) or re.fullmatch(r"-[a-zA-Z]*d[a-zA-Z]*", tok):
+        if _abbrev(tok, "--delete", 4) or re.fullmatch(r"-[a-zA-Z]*d[a-zA-Z]*", tok):
             return "delete (git push --delete)"
+        if _abbrev(tok, "--no-verify", 6):
+            return "guard bypass (--no-verify)"
         if tok in ("--tags", "--follow-tags"):
             return f"guard bypass (git push {tok}: a tag)"
-        if tok in ("--all", "--mirror", "--branches"):
+        if any(_abbrev(tok, flag, 4) for flag in ("--all", "--mirror", "--branches")):
             return f"main (git push {tok})"
         if tok in PUSH_VALUE_FLAGS:
             k += 2
@@ -397,11 +425,19 @@ def _push_never(args: list[str], cwd: str | None) -> str | None:  # noqa: PLR091
         ):
             return f"guard bypass (git push of the tag {dst})"
         name = dst.removeprefix("refs/heads/")
+        if "*" in dst:
+            return f"main (git push of the pattern {dst})"
         if name == "HEAD":
             name = current_branch(cwd)
         if name in protected:
             return f"main (git push to {name})"
     return None
+
+
+def _abbrev(tok: str, option: str, shortest: int) -> bool:
+    """`tok` is `option` or an abbreviation git accepts for it (at least `shortest` characters)."""
+    word = tok.split("=", 1)[0]
+    return len(word) >= shortest and option.startswith(word)
 
 
 def _git_never(argv: list[str], cwd: str | None) -> str | None:
@@ -413,6 +449,10 @@ def _git_never(argv: list[str], cwd: str | None) -> str | None:
         return None
     if args[0] == "push":
         return _push_never(args, where)
+    if args[0] in ("commit", "merge", "rebase", "am") and any(
+        _abbrev(t, "--no-verify", 6) for t in args
+    ):
+        return "guard bypass (--no-verify)"
     if args[0] == "commit" and any(
         t == "-n" or re.fullmatch(r"-[a-mo-zA-Z]*n[a-zA-Z]*", t)
         for t in args[1:]
@@ -487,13 +527,16 @@ def never(  # noqa: PLR0911, PLR0912
     if any("ALLOW_COMMIT_TO_MAIN" in t for t in seen):
         return "main (ALLOW_COMMIT_TO_MAIN)"
     for word in GUARD_WORDS:
-        if any(word in t for t in seen):
+        if any(word.lower() in t.lower() for t in seen):
             return f"guard bypass ({word})"
     for text in rights.get("deny_text") or []:
         if text and any(text in t for t in seen):
             return f"crew deny_text ({text})"
     for argv in parsed.commands:
         name = os.path.basename(argv[0])
+        if name in ("cd", "pushd") and len(argv) > 1:  # a later bare push runs there
+            cwd = os.path.join(cwd or ".", os.path.expanduser(argv[1]))
+            continue
         hit = _gh_never(argv) if name == "gh" else _git_never(argv, cwd) if name == "git" else None
         if hit:
             return hit
@@ -519,13 +562,66 @@ def never(  # noqa: PLR0911, PLR0912
 RIGHT_NAMES = ("pr_ready", "pr_comment", "branch_rc")
 
 
+def _on_default(root: str, rel: str) -> dict | None:
+    """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None."""
+    text = _git(
+        root,
+        "show",
+        f"{_git(root, 'rev-parse', '--abbrev-ref', 'origin/HEAD') or 'origin/main'}:{rel}",
+    )
+    try:
+        data = json.loads(text) if text else None
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _crew_on_default(cwd: str | Path | None) -> dict | None:
+    """The crew in force for `cwd` as the default branch holds it: its `.weside/crew.json`, or the
+    crew file its `.weside/config.json` points at, each read from that repo's origin/HEAD. A file in
+    the worktree never counts: the worker could edit the rules that brake it."""
+    root = _git(cwd, "rev-parse", "--show-toplevel")
+    if not root:
+        return None
+    own = _on_default(root, ".weside/crew.json")
+    if own is not None:
+        return own
+    pointer = (_on_default(root, ".weside/config.json") or {}).get("crew")
+    if not isinstance(pointer, str) or not pointer.strip():
+        return None
+    target = (Path(root) / pointer.strip()).resolve()
+    other = _git(target.parent, "rev-parse", "--show-toplevel")
+    if not other:
+        return None
+    return _on_default(other, str(target.relative_to(Path(other).resolve())))
+
+
 def crew_rights(cwd: str | Path | None) -> dict:
-    """The crew's `worker_rights` for `cwd` (defaults when there is no crew)."""
+    """The crew's `worker_rights` for `cwd` from the default branch, over the defaults; a block of
+    the wrong shape counts as the defaults (no rights; the built-in never-list still holds)."""
     import crew as crew_mod  # noqa: PLC0415
 
-    _path, crew = crew_mod.find_and_load(cwd or Path.cwd())
-    rights = (crew or crew_mod.DEFAULTS).get("worker_rights") or {}
-    return {**crew_mod.DEFAULTS["worker_rights"], **rights}
+    defaults = crew_mod.DEFAULTS["worker_rights"]
+    block = (_crew_on_default(cwd) or {}).get("worker_rights")
+    if not isinstance(block, dict):
+        return dict(defaults)
+    merged = {**defaults, **{k: v for k, v in block.items() if k in defaults}}
+    for key, default in defaults.items():
+        value = merged[key]
+        ok = (
+            isinstance(value, list) and all(isinstance(v, str) for v in value)
+            if isinstance(default, list)
+            else isinstance(value, bool)
+            if isinstance(default, bool)
+            else value is None or isinstance(value, str)
+        )
+        if not ok:
+            print(
+                f"worker_rights: crew worker_rights.{key} has the wrong type; no rights",
+                file=sys.stderr,
+            )
+            return dict(defaults)
+    return merged
 
 
 def opted_in(rights: dict, slug: str | None) -> bool:
@@ -604,7 +700,7 @@ def right_refusal(  # noqa: PLR0911
     branch = current_branch(cwd)
     if not branch or branch in protected_branches(cwd):
         return f"{branch or 'a detached HEAD'} is the default branch, not the worker's own"
-    if key not in branch:
+    if not re.search(rf"(?<![\w-]){re.escape(key)}(?![\d])", branch):
         return f"branch {branch} does not carry the key {key}"
     if right == "branch_rc":
         return None
