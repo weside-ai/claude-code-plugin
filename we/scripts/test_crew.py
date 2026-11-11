@@ -1175,9 +1175,9 @@ def test_shared_accounts_is_a_list_of_accounts(tmp_path, value, ok):
 def test_a_companion_name_that_is_another_member_s_slug_is_refused(tmp_path):
     """Red arm (Codex, core #6316): member() resolves a slug first, so a companion name equal to
     another member's slug would point at that member."""
-    slug = next(s for s in CREW["members"] if s != CREW["roles"]["product"])
-    named = {**HUMANS, "bob": {**HUMANS["bob"], "companions": {"product": slug}}}
-    core, _ = workspace(tmp_path, with_(humans=named))
+    members = {**CREW["members"], "vic": {"name": "Victor", "workplace": "."}}
+    named = {**HUMANS, "bob": {**HUMANS["bob"], "companions": {"product": "Vic"}}}
+    core, _ = workspace(tmp_path, with_(humans=named, members=members))
     with pytest.raises(crew.CrewError, match="a name denotes one member"):
         crew.load(core / ".weside" / "crew.json")
 
