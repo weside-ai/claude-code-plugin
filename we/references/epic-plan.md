@@ -54,7 +54,8 @@ The human approves an epic together with its finish line (L0 §Units); the line 
   epic" goes to a new epic plan; "dropped" stays as a checked line. `board.py move <KEY> backlog
   --epic <E>` refuses a key not on `line:` and names this list.
 - **Progress:** `epic_state.py line <epic plan>` prints `n/m line done · k extensions open · age`
-  against the board's last state per key; the /board work pane shows the same per epic.
+  against the board's last state per key (Done); the /board work pane shows `n/m line · k ext · age`
+  per epic, counting merged line stories, so it runs ahead of the script between merge and acceptance.
 - **Finish line reached:** when the last line key is Done (`/we:accept` § 4 tells the epic's master,
   the coordinator's sweep is the backstop), the master reports "finish line reached" to the coordinator, who asks the human on the board "good as is?": **good** → close the epic;
   **X is missing** → a small new line on this epic; **an extension** → a follow-up epic. No story of
