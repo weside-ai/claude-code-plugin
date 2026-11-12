@@ -39,6 +39,8 @@ grant no direct docs commit, it writes its entries to `~/.claude/we-inbox/<repo>
 inbox format below; `/we:optimize` moves them into `inbox/`. `<repo>` is the `origin` URL's
 `<owner>-<name>` (`org-app` for `github.com/org/app.git`), so every worktree copy stages to one place.
 Its `claims/pr-<N>` file marks an auto retro dispatched for that PR, so a second caller skips it.
+A broadcast retro's receivers (`/we:retro --collect`) stage here too, whatever the instruction files
+grant: the orchestrator decides all of them in one PR.
 
 ## Inbox entry
 
