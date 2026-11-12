@@ -55,8 +55,8 @@ The human approves an epic together with its finish line (L0 §Units); the line 
   --epic <E>` refuses a key not on `line:` and names this list.
 - **Progress:** `epic_state.py line <epic plan>` prints `n/m line done · k extensions open · age`
   against the board's last state per key; the /board work pane shows the same per epic.
-- **Finish line reached:** when the last line key is Done, the master reports "finish line reached"
-  to the coordinator, who asks the human on the board "good as is?": **good** → close the epic;
+- **Finish line reached:** when the last line key is Done (`/we:accept` § 4 tells the epic's master,
+  the coordinator's sweep is the backstop), the master reports "finish line reached" to the coordinator, who asks the human on the board "good as is?": **good** → close the epic;
   **X is missing** → a small new line on this epic; **an extension** → a follow-up epic. No story of
   the epic is built until the answer.
 - **Running epics** approved before the finish line have no `line:`: `board.py move … backlog` warns

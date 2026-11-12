@@ -28,9 +28,7 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
   `## Out of scope` as a named follow-up. Splitting it off is not a fork, and creating a ticket or story for it is
   never a question (owner 25.09.). New visible behaviour no AC of the ticket states goes, in the same run, as one
   entry under the epic's `## Extensions` (`references/epic-plan.md` § Finish line), never as an AC of this plan.
-- **A correction story lists every site before Ready.** A story that corrects a kind of statement (claims, wording,
-  copy) runs one search over all repos and languages and lists every site in `## Context`; that list is its
-  done-when (`references/story-plan.md` § Out of scope).
+- **A correction story lists every site before Ready:** `references/story-plan.md` § Out of scope.
 - **Stopping is not writing nothing.** Write the plan as far as the fork allows, keep `status: draft`, and put
   `## Open Fork` directly after `## Context` (the format file says what goes in). Say in the section and in the
   report that the plan is not ready to dispatch; the Ready gate refuses such a plan.

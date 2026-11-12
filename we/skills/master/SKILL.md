@@ -278,7 +278,7 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
   Learnings forward, the finish line per `/we:merged` § 6) and commit it before the next story starts.
   Pull only keys on the epic's `line:`; work a worker finds beyond it becomes an `## Extensions` entry,
-  never a story or a phase. Once `finish line reached` went to the coordinator, start no worker for this
+  never a story or a phase. When acceptance tells you `finish line reached`, report it to the coordinator in one line; from then on start no worker for this
   epic until the human's answer comes back. An epic without `line:`: draw it first (a proposal through
   the coordinator, approved like a new epic). After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default

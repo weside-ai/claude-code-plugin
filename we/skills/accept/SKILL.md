@@ -54,8 +54,17 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/board.py move <KEY> done --comment-file <c
 A story with no built commit in any RC range (another repo, docs only) closes the same way, with
 its own evidence in the comment.
 
+## 4 · Finish lines
+
+For each epic whose story moved to Done in this run and whose plan has `line:`, run
+`python3 ${CLAUDE_PLUGIN_ROOT}/scripts/epic_state.py line <epic plan>`. On `finish line reached`, send
+`finish line reached · <EPIC> · <line_goal>` to the epic's master (no master: the coordinator); the
+master reports it to the coordinator, who asks the human "good as is?" on the board
+(`references/epic-plan.md` § Finish line).
+
 ## Done when
 
 - [ ] every `done` entry has its row in `board-transitions.jsonl` and its `carry:` ops executed
 - [ ] every `route:` and `hold:` line reached its member
+- [ ] every epic whose line this run completed is reported to its master
 - [ ] every open walk has a worker, or is named in your report with why it waits
