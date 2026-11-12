@@ -15,6 +15,7 @@ from node_test_procs import real_node, reap
 
 SCRIPT = Path(__file__).parent / "statusline.js"
 EMAIL = "setup-token-1@example.test"
+OTHER = "setup-token-2@example.test"
 
 NODE = real_node()
 
@@ -54,6 +55,33 @@ def write_rl(path, five=None, seven=None, email=EMAIL):
     entry["fiveHour"] = five
     entry["sevenDay"] = seven
     path.write_text(json.dumps({"schemaVersion": 1, "accounts": {"k": entry}}))
+
+
+def bind_session(home, session_id, email):
+    """The binding the first render of a session writes: the account it started under."""
+    folder = home / ".claude" / "we-rl-sessions"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{session_id}.json").write_text(
+        json.dumps({"email": email, "organizationUuid": ""})
+    )
+
+
+def set_active(home, email):
+    (home / ".claude.json").write_text(
+        json.dumps({"oauthAccount": {"emailAddress": email, "organizationUuid": None}})
+    )
+
+
+def render(home, session_id, rate_limits, stub_dir=None):
+    subprocess.run(
+        [NODE, str(SCRIPT)],
+        input=json.dumps({"session_id": session_id, "rate_limits": rate_limits}),
+        env=env_for(home, accounts=f"{EMAIL},{OTHER}", stub_dir=stub_dir),
+        text=True,
+        timeout=20,
+        check=True,
+        capture_output=True,
+    )
 
 
 def dry_run(tmp_path, rl_file, accounts=EMAIL):
@@ -127,12 +155,14 @@ def test_record_merges_the_reading_and_feeds_cswap_once(tmp_path):
         "five_hour": {"used_percentage": 37.5, "resets_at": reset},
         "seven_day": {"used_percentage": 70, "resets_at": reset + 86_400},
     }
+    bind_session(tmp_path, "s1", EMAIL)
     run = [
         NODE,
         str(SCRIPT),
         "--record-rate-limits",
         str(tmp_path / ".claude.json"),
         json.dumps(rate_limits),
+        "s1",
     ]
     subprocess.run(run, env=env_for(tmp_path, stub_dir=stub_dir), timeout=20, check=True)
 
@@ -233,3 +263,64 @@ def test_render_without_a_reading_leaves_the_slot_free(tmp_path):
         capture_output=True,
     )
     assert not list((tmp_path / ".claude").glob(".we-rate-limits*"))
+
+
+def wait_for(predicate, timeout=10.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.05)
+    return predicate()
+
+
+def binding_of(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def test_a_switch_after_session_start_records_nothing_for_the_new_account(tmp_path):
+    """Session starts under A, cswap activates B: its readings never land on B."""
+    stub_dir, log = stub_cswap(tmp_path)
+    (tmp_path / ".claude").mkdir()
+    rl_file = tmp_path / ".claude" / ".we-rate-limits.json"
+    binding = tmp_path / ".claude" / "we-rl-sessions" / "sA.json"
+    reset = int(time.time()) + 3_600
+    reading = {"five_hour": {"used_percentage": 88, "resets_at": reset}}
+
+    set_active(tmp_path, EMAIL)
+    render(tmp_path, "sA", {}, stub_dir)  # first render, no reading yet: binds A
+
+    set_active(tmp_path, OTHER)
+    render(tmp_path, "sA", reading, stub_dir)
+    assert wait_for(lambda: rl_file.exists() or "foreignAt" in binding_of(binding))
+    assert not rl_file.exists(), "a reading of the session under A landed on B"
+    assert not log.exists()
+    # The slot went back: a session that runs under B records in the same minute.
+    render(tmp_path, "sB", {}, stub_dir)
+    render(tmp_path, "sB", {"five_hour": {"used_percentage": 3, "resets_at": reset}}, stub_dir)
+    assert wait_for(rl_file.exists)
+    (entry,) = json.loads(rl_file.read_text())["accounts"].values()
+    assert entry["email"] == OTHER and entry["fiveHour"]["pct"] == 3
+
+
+def test_record_without_a_bound_session_records_nothing(tmp_path):
+    (tmp_path / ".claude").mkdir()
+    set_active(tmp_path, EMAIL)
+    rate_limits = {"five_hour": {"used_percentage": 5, "resets_at": int(time.time()) + 600}}
+    subprocess.run(
+        [
+            NODE,
+            str(SCRIPT),
+            "--record-rate-limits",
+            str(tmp_path / ".claude.json"),
+            json.dumps(rate_limits),
+            "unbound",
+        ],
+        env=env_for(tmp_path),
+        timeout=20,
+        check=True,
+    )
+    assert not (tmp_path / ".claude" / ".we-rate-limits.json").exists()

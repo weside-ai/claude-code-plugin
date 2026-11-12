@@ -48,10 +48,14 @@ then dispatch it here the same way:
 One retro across every running session, decided in one PR instead of one per session. The
 orchestrator is the session holding the coordinator or hr role.
 
-1. **Brief.** `ListAgents`, then one `SendMessage` per running session (never to itself) with the
-   same brief: "Run `/we:retro --collect` on your own session, focus: <focus>. Reply with one
-   line `RETRO · <your name> · <n> entries: <keys>` or `RETRO · <your name> · nothing`. On the
-   critical path, finish your current step first." Without a focus the brief asks for lived
+1. **Brief.** `ListAgents`, then one `SendMessage` per running master or companion session of the
+   own crew (never to itself): a member of `.weside/crew.json`, without a crew file a session whose
+   `cwd` lies in this repo. Other crews share the server, so a listed session is not a crew member
+   by being listed; a worker (`WE_ROLE=worker`) gets no brief, its master's retro covers it. Every
+   briefed session gets the same brief: "Run `/we:retro --collect` on your own session, focus:
+   <focus>. Reply to <orchestrator's name> with one line `RETRO · <your name> · <n> entries:
+   <keys>` or `RETRO · <your name> · nothing`. On the critical path, finish your current step
+   first." Without a focus the brief asks for lived
    practice that beats the documented one and would be lost on a restart; no complaints, no
    one-off incidents, nothing a rule already says.
 2. **Track.** One row per briefed session until it replies; a session silent after its current
