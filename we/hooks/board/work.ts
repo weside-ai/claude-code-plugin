@@ -78,6 +78,11 @@ export const buildWork = (keys: readonly string[], files: readonly PlanFile[], p
       .map(storyNode)
       .sort((a, b) => rank(a.key!) - rank(b.key!) || PHASE_URGENCY[a.phase ?? 'idea'] - PHASE_URGENCY[b.phase ?? 'idea'] || a.key!.localeCompare(b.key!))
     const node: WorkNode = { kind: 'epic', key: e.ticket ?? e.epic, title: e.title, status: e.status, children }
+    if (e.line) {
+      node.line = { merged: e.line.filter(k => phases[k] === 'merged').length, total: e.line.length }
+      node.extensions = e.extensions ?? 0
+      if (e.created) node.created = e.created
+    }
     placed.set(e.path, node)
     if (!e.saga) {
       roots.push(node)
@@ -140,7 +145,8 @@ export type WorkLine = { depth: number; parts: Part[] }
 
 // The tree as lines no wider than `room`, indent included: at most `max` open stories, the rest as one `+ k more` line;
 // merged stories count only in their epic's line.
-export const layoutWork = (nodes: readonly WorkNode[], room: number, max = MAX_STORIES): WorkLine[] => {
+// An epic with a finish line shows `n/m line · k ext · age` instead of its merged count.
+export const layoutWork = (nodes: readonly WorkNode[], room: number, max = MAX_STORIES, now = Date.now()): WorkLine[] => {
   const out: WorkLine[] = []
   let shown = 0
   let hidden = 0
@@ -153,7 +159,11 @@ export const layoutWork = (nodes: readonly WorkNode[], room: number, max = MAX_S
     } else if (n.kind === 'epic') {
       const stories = (n.children ?? []).filter(c => c.kind === 'story')
       const merged = stories.filter(c => c.phase === 'merged').length
-      const count: Part[] = stories.length ? [{ text: ` · ${merged}/${stories.length} stories merged`, dim: true }] : []
+      const started = n.created ? Date.parse(n.created) : NaN
+      const age = Number.isNaN(started) ? '' : ` · ${Math.max(0, Math.floor((now - started) / 86_400_000))}d`
+      const count: Part[] = n.line
+        ? [{ text: ` · ${n.line.merged}/${n.line.total} line · ${n.extensions ?? 0} ext${age}`, dim: true }]
+        : stories.length ? [{ text: ` · ${merged}/${stories.length} stories merged`, dim: true }] : []
       const head: Part[] = [{ text: 'Epic', color: 'claude', bold: true }, ...(n.key ? [{ text: ` ${n.key}`, bold: true }] : [])]
       push(fit(head, n.title, [...status, ...count], width))
     } else if (n.kind === 'story') {

@@ -1,7 +1,7 @@
 # Epic template
 
 The file is `docs/plans/<epic>-epic.md`. Frontmatter values and the mirror block format:
-`references/epic-plan.md` § Links and § Mirror block. `serves:` and `fence:` (where the
+`references/epic-plan.md` § Links, § Finish line and § Mirror block. `serves:` and `fence:` (where the
 epic's stories may write) follow `references/story-plan.md` § What the Ready gate reads. `/we:plan-story` and `/we:master`
 read `## Success Criteria` and `## Scope`: keep both headings verbatim.
 
@@ -12,6 +12,8 @@ epic: <epic-slug>
 ticket: <KEY or null>
 serves: <metric of the goal file>; <metric>
 fence: [<glob>, <repo>:<glob>]
+line: [<KEY>, <KEY>]
+line_goal: <one measurable goal the line moves>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft
@@ -53,6 +55,11 @@ change. A refiner reads this first.>
 ## Success Criteria
 
 <What shipped, what a user can do that they could not before, what telemetry confirms it.>
+
+## Extensions
+
+<Work beyond the line, unbuilt until the human decides: `- [ ] <entry> (found by <session>, YYYY-MM-DD)`;
+format and decisions: references/epic-plan.md § Finish line.>
 
 ## Open Questions
 

@@ -126,7 +126,18 @@ Three lists here each cost review rounds when missing:
 ## Out of scope
 
 - <Work beyond the ticket's "done when": one named follow-up per line, with the reason it is
-  outside. Never a phase; nobody files it during the run.>
+  outside. Never a phase; nobody files it during the run. New visible behaviour goes to the epic's
+  `## Extensions` instead (`references/epic-plan.md` § Finish line), not into this plan.>
+
+A story that corrects a kind of statement (claims, wording, copy across repos) lists every site in
+`## Context` before the Ready gate, from one search over all repos and languages; its done-when is
+that list. A site found after Ready is an Extensions entry, never a "part N" of this story; a defect
+at a listed site is fixed in the story.
+
+| Correction plan | Verdict |
+|---|---|
+| `## Context`: "42 sites: landing 18, app 11, backend 7, docs 6 (search: `rg -i 'always\|never' …` over 4 repos)" | good: closed list, the search named |
+| `## Context`: "fix the absolute claims in the FAQ and wherever else we find them" | bad: no end, every round finds the next site |
 
 ## Constraints and Pins
 
@@ -272,7 +283,8 @@ appended, plus `--boundary-acs <n,…> --mock-persona <persona>` when boundary A
 crew's repo root, 60 s at most. Its stdout lines prefixed `warning:` go to stderr; every other line
 is a failure; exit 1 without a line is one failure. A receipt AC with no command set fails.
 
-`ready_gate.py epic <epic plan>` runs the `serves:`, goal-file and fence-presence parts only.
+`ready_gate.py epic <epic plan>` runs the `serves:`, goal-file and fence-presence parts and the finish
+line (`references/epic-plan.md` § Finish line).
 
 ## Updates Log lines
 

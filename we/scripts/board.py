@@ -9,7 +9,7 @@ Usage:
   board.py [--board FILE] path [--crew-only]
   board.py [--board FILE] set [--for NAME] <field>=<value> …       fields: waiting_on, state, now
   board.py [--board FILE] ask --session NAME --key KEY --key-title T --ask Q --recommendation R
-           --cause <merge-go|plan|prod|cut-fence|access-click|info> [--urgent]
+           --cause <merge-go|plan|prod|cut-fence|access-click|window-go|info> [--urgent]
            [--pr REF [--one-way CLASS]] [--to HUMAN]
   board.py [--board FILE] close-merged
   board.py [--board FILE] prune
@@ -85,7 +85,8 @@ prune    drops what is handled from board.json (docs/board.md § Pruning) and pr
          (the deliverer finds the asker only on the board): every answer line on it is older than
          the ledger's epoch, written in the asker's own session, or the asker's row in
          board-deliveries.jsonl is `delivered: true` (refused, or not taken within PRUNE_AFTER_H:
-         the route row is), except a one-way merge-go accepted, which `close-merged` takes; an
+         the route row is), except a one-way merge-go accepted, which `close-merged` takes, and a
+         `window-go` accepted, which stays until its asker runs `withdraw` once the go is typed; an
          unanswered `withdrawn` or `superseded` one; a news item the
          owner marked read; a `returned` item or a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
          items (`E<n>`, `E<n>a`) stay for `escalation settle`. Each drop appends one `pruned` line
@@ -245,7 +246,7 @@ CLOSING = ("accept", "deny", "withdraw")  # withdraw: the asker's human takes ba
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
 SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys")
-CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "info")
+CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "window-go", "info")
 DECISION_KINDS = ("cut", "fence")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
 RETURN_PREFIX = "returned to "
@@ -575,6 +576,8 @@ def prune(board, state, now):
         human still has to merge."""
         if item.get("one_way") and item.get("cause") == "merge-go" and close["answer"] == "accept":
             return None
+        if item.get("cause") == "window-go" and close["answer"] == "accept":
+            return None  # the go is typed in the asker's window; the asker withdraws it when done
         if all(asker_carried(item, line) for line in carried.get(qid, [])):
             return {"reason": "answered", "answer": close["answer"]}
         return None
@@ -2591,6 +2594,22 @@ def rule_epic_approved(m):
     status = ready_gate.frontmatter(text).get("status", "")
     if not status.startswith("approved"):
         return [f"epic {epic} is not approved ({path.name} status: {status or 'none'})"]
+    line = ready_gate.line_keys(ready_gate.frontmatter(text))
+    if line is None:
+        m.warnings.append(
+            f"warning: epic {epic} has no `line:` yet ({path.name}); its master draws the line, "
+            "until then every key moves"
+        )
+    elif m.key not in line:
+        product = crew_mod.holder_name(m.crew, "product") or "the product owner"
+        human = str((m.crew.get("human") or {}).get("name") or "the human")
+        waiting = sum(1 for is_open, _ in ready_gate.extensions(text) if is_open)
+        return [
+            f"{m.key} is not on the finish line of {epic} ({path.name} line: "
+            f"{', '.join(line) or 'empty'}); add it under `## Extensions` of {path.name} "
+            f"({waiting} open): {product} pre-sorts, {human} decides each entry (into the "
+            "epic's line, a follow-up epic, or dropped)"
+        ]
     m.extra["epic"] = epic
     return []
 

@@ -2110,6 +2110,30 @@ class TestMove:
             in (capsys.readouterr().err)
         )
 
+    def test_a_key_off_the_finish_line_is_refused_naming_the_extensions(self, moving, capsys):
+        """PROJ-1's `line:` is [PROJ-12, PROJ-13]; PROJ-40 is new work. Red arm: on the rule
+        before the finish line the move passes and writes a row."""
+        before = (moving / "board.json").read_bytes()
+        adapter = fake()
+        assert act(moving, "move", "PROJ-40", "backlog", "--epic", "PROJ-1", adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert err.splitlines()[0] == (
+            "board.py move PROJ-40 backlog: refused: PROJ-40 is not on the finish line of PROJ-1 "
+            "(PROJ-1-epic.md line: PROJ-12, PROJ-13); add it under `## Extensions` of "
+            "PROJ-1-epic.md (1 open): Ada pre-sorts, Hal decides each entry "
+            "(into the epic's line, a follow-up epic, or dropped)"
+        ), err
+        assert_untouched(moving, before, out, adapter)
+
+    def test_an_epic_without_a_line_warns_and_moves(self, moving, capsys):
+        """A running epic from before the finish line: PROJ-2 has no `line:`."""
+        assert act(moving, "move", KEY, "backlog", "--epic", "PROJ-3", adapter=fake()) == 0
+        err = capsys.readouterr().err
+        assert (
+            "warning: epic PROJ-3 has no `line:` yet (PROJ-2-epic.md); its master draws the "
+            "line, until then every key moves"
+        ) in err.splitlines()
+
     def test_in_progress_after_another_state_is_refused(self, moving, capsys):
         with_row(moving, KEY, "backlog")
         assert act(moving, "move", KEY, "in_progress", adapter=fake()) == 1
@@ -3176,6 +3200,22 @@ class TestPrune:
         delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
+
+    @pytest.mark.parametrize("answer, stays", [("accept", True), ("deny", False)])
+    def test_an_accepted_window_go_stays_until_its_asker_withdraws(self, crewless, answer, stays):
+        """Red arm: a go the human must type in the asker's window is not done by the click;
+        before `window-go` the accepted question was pruned at once."""
+        path = crewless / "board.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
+        q7["cause"] = "window-go"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        epoch_row(crewless)
+        ts = "2026-11-03T09:59:00.000Z"
+        answered(crewless, "Q7", answer, ts)
+        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == (["Q7"] if stays else [])
 
     def test_an_earlier_discuss_still_owed_to_the_asker_keeps_it(self, crewless):
         epoch_row(crewless)

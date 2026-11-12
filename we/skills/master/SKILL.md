@@ -262,7 +262,9 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   then at most three items someone owes. For a user merge it is the `/we:standup --branch` output. While a
   follow-up runs on the branch, every message says "do not merge yet". A finding on the run's own diff (a Codex finding, a type error, a fallback) is
   decided per finish-first and reported, never asked (final sim 28.09.2026), unless its fix replaces a design the
-  plan fixed (another mechanism, a dropped AC, a changed interface): that goes back to the epic owner first. Knowledge goes into the
+  plan fixed (another mechanism, a dropped AC, a changed interface): that goes back to the epic owner first. On a one-way PR
+  whose T2 panel is green, a NOTE goes into one follow-up PR from the default branch after the merge, named in the PR
+  body; only a BLOCKING or WARNING reopens the head (owner 12.11.2026). Knowledge goes into the
   plan. A product question mid-run becomes one decision story (L0 §Units); every other follow-up is named,
   never ticketed during the run (owner 25.09.2026).
 - A repo that bumps its version per PR (its `AGENTS.md` says so): workers leave the version alone; you set it as
@@ -274,7 +276,11 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   to the coordinator, a question for the human as one question line through it (L0 §Talking and the board). A Lead bound to a companion also writes back at those milestones per
   `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (`/we:epic` update: mirror, Updates Log,
-  Learnings forward) and commit it before the next story starts. After a compact, rebuild state
+  Learnings forward, the finish line per `/we:merged` § 6) and commit it before the next story starts.
+  Pull only keys on the epic's `line:`; work a worker finds beyond it becomes an `## Extensions` entry,
+  never a story or a phase. Once `finish line reached` went to the coordinator, start no worker for this
+  epic until the human's answer comes back. An epic without `line:`: draw it first (a proposal through
+  the coordinator, approved like a new epic). After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default
   branch is the backup; no extra documentation pass (owner 01.10.2026).
 - After the merge, you run `/we:merged <PR>` yourself (§ Push, PR, CI step 5): it finds the run's branches

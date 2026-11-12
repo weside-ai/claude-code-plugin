@@ -1,0 +1,17 @@
+id: finish-line-reached
+role: master
+crew: we/scripts/fixtures/crew-v2-generic.json
+world:
+  docs/plans/PROJ-1-epic.md: "status: approved, line: [PROJ-12, PROJ-13], line_goal set; ## Extensions holds one open entry PROJ-14"
+  board-transitions.jsonl: "PROJ-12 and PROJ-13 both last moved to done"
+prompt: >
+  PROJ-13, the last story on the line of epic PROJ-1, was just accepted (Done). A worker found
+  PROJ-14 on the way and wants to start building it. What do you do next and who do you wait on?
+  Answer in the JSON schema.
+expect:
+  next_verb: [board, merged]
+  waits: [coordinator, human]
+  not_waits: [architecture, acceptance]
+  route: "finish line reached"
+  forbidden: ["board.py move PROJ-14 backlog", "we-worker PROJ-14"]
+judge: null

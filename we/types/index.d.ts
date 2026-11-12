@@ -95,6 +95,10 @@ export type WorkNode = {
   status?: string
   // A story's /flow phase, which picks its lamp; merged stories only count in their epic's line.
   phase?: FlowPhase
+  // An epic's finish line (epic-plan.md § Finish line): line stories merged of all, open extensions, start date.
+  line?: { merged: number; total: number }
+  extensions?: number
+  created?: string
   children?: WorkNode[]
 }
 

@@ -35,12 +35,18 @@ export type PlanFile = {
   saga?: string
   ticket?: string
   status?: string
+  // An epic's finish line (epic-plan.md § Finish line): its story keys, its start, its open extensions.
+  line?: string[]
+  created?: string
+  extensions?: number
   title: string
 }
 
-// The `git grep` arguments that print every link field and heading of `paths` on `base`.
+// The `git grep` arguments that print every link field, the finish line, the level-1 and level-2
+// headings and the open checklist items of `paths` on `base` (an open item counts only under an
+// epic's `## Extensions`).
 export const planGrep = (base: string, paths: readonly string[]) =>
-  ['grep', '-E', '-e', '^(story|epic|saga|ticket|status):', '-e', '^# ', base, '--', ...paths]
+  ['grep', '-E', '-e', '^(story|epic|saga|ticket|status|line|created):', '-e', '^##? ', '-e', '^- \\[ \\] ', base, '--', ...paths]
 
 export const ALL_PLANS = ['docs/plans/*-saga.md', 'docs/plans/*-epic.md', 'docs/plans/*-story.md']
 
@@ -51,17 +57,26 @@ const NONE = new Set(['', 'null', '~'])
 // field wins (the frontmatter comes before the body); `null` counts as no value.
 export const parsePlanFiles = (grepOut: string): PlanFile[] => {
   const byPath = new Map<string, PlanFile>()
+  const section = new Map<string, string>()
   for (const raw of grepOut.split('\n')) {
     const m = /^[^:]+:(docs\/plans\/[^:]+):(.*)$/.exec(raw)
     const path = m?.[1]
     if (!path) continue
     const line = m?.[2] ?? ''
     const plan = byPath.get(path) ?? { path, kind: KIND.exec(path)?.[1] as PlanKind | undefined, title: '' }
-    const field = /^(story|epic|saga|ticket|status):\s*(.*)$/.exec(line)
-    if (field) {
-      const name = field[1] as 'story' | 'epic' | 'saga' | 'ticket' | 'status'
+    const field = /^(story|epic|saga|ticket|status|line|created):\s*(.*)$/.exec(line)
+    if (field && !section.has(path)) {
       const value = (field[2] ?? '').trim()
-      if (plan[name] === undefined && !NONE.has(value)) plan[name] = value
+      if (field[1] === 'line') {
+        if (plan.line === undefined) plan.line = value.replace(/^\[|\]$/g, '').split(',').map(k => k.trim()).filter(Boolean)
+      } else {
+        const name = field[1] as 'story' | 'epic' | 'saga' | 'ticket' | 'status' | 'created'
+        if (plan[name] === undefined && !NONE.has(value)) plan[name] = value
+      }
+    } else if (line.startsWith('## ')) {
+      section.set(path, line.slice(3).trim())
+    } else if (line.startsWith('- [ ] ')) {
+      if (plan.kind === 'epic' && section.get(path) === 'Extensions') plan.extensions = (plan.extensions ?? 0) + 1
     } else if (!plan.title && line.startsWith('# ')) {
       plan.title = line.replace(/^#\s*((Plan|Epic|Saga):\s*)?/, '').trim()
     }

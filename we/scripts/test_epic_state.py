@@ -87,3 +87,50 @@ def test_staleness_is_by_date_in_the_crew_zone():
     assert not es.is_stale("2026-03-08", "UTC", now)
     assert es.is_stale(None, "UTC", now)
     assert not es.is_stale("2026-03-08", "No/Such_Zone", now)
+
+
+LINED = (
+    "---\nticket: PROJ-7\nline: [PROJ-71, PROJ-72]\nline_goal: exports above 20 %\n"
+    "created: 2026-01-01\nstatus: approved\n---\n\n# Epic\n\n## Scope\n\n- [ ] not an extension\n\n"
+    "## Extensions\n\n- [ ] PROJ-75 PDF export\n- [x] header text → dropped\n- [ ] rounding\n"
+)
+
+
+def test_finish_line_counts_done_keys_open_extensions_and_age():
+    line = es.finish_line(LINED, {"PROJ-71": "done", "PROJ-72": "in_review"}, dt.date(2026, 1, 10))
+    assert line == {
+        "keys": ["PROJ-71", "PROJ-72"],
+        "done": ["PROJ-71"],
+        "open": ["PROJ-72"],
+        "extensions": 2,
+        "age": 9,
+        "reached": False,
+    }
+    assert es.line_summary(line) == "1/2 line done · 2 extensions open · 9 d old"
+
+
+def test_the_line_is_reached_when_every_key_is_done():
+    states = {"PROJ-71": "done", "PROJ-72": "done"}
+    line = es.finish_line(LINED, states, dt.date(2026, 1, 10))
+    assert line["reached"] and line["open"] == []
+    assert es.line_summary(line).endswith(" · finish line reached")
+
+
+def test_an_epic_without_line_has_no_finish_line():
+    assert es.finish_line(EPIC, {}, dt.date(2026, 1, 10)) is None
+
+
+def test_the_cli_reads_the_board_transitions(tmp_path, capsys):
+    board = tmp_path / "board.json"
+    board.write_text("{}")
+    (tmp_path / "board-transitions.jsonl").write_text(
+        '{"key": "PROJ-71", "to": "in_review"}\n{"key": "PROJ-71", "to": "done"}\n'
+    )
+    epic = tmp_path / "PROJ-7-epic.md"
+    epic.write_text(LINED)
+    assert es.main(["line", str(epic), "--board", str(board)]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("1/2 line done · 2 extensions open · ")
+    assert out[1] == "open on the line: PROJ-72"
+    (tmp_path / "plain-epic.md").write_text(EPIC)
+    assert es.main(["line", str(tmp_path / "plain-epic.md"), "--board", str(board)]) == 2

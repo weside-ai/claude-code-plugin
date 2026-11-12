@@ -17,14 +17,25 @@ Read by ``hooks/compact_on_start.py`` (the epic block after a compaction) and
   ``QUERY_CAP``), ``GH_TIMEOUT`` seconds; any failure → None ("unknown"). ``runner`` is injected.
 - ``is_stale(newest, tz)``: the newest entry is dated before yesterday in ``tz``; a plan without
   an Updates Log is stale (the first epic update adds it).
+- ``finish_line(text, last_states, today)``: the epic's finish line (``references/epic-plan.md``
+  § Finish line) against the board's last state per key: the line keys, those ``done``, the open
+  ``## Extensions`` items, the age in days since ``created:``, and ``reached`` (every line key
+  done); None without ``line:``. ``line_summary`` is its one line, the board pane's
+  ``n/m line · k ext · age`` in words.
+
+CLI: ``epic_state.py line <epic plan> [--board FILE]`` prints the summary and the keys still open
+on the line; the board file defaults to ``board.py path``. Exit 0, 2 on an unreadable plan or a plan
+without ``line:``.
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
@@ -35,6 +46,7 @@ GH_TIMEOUT = 5
 ENTRY = re.compile(r"^- \**(\d{4}-\d{2}-\d{2})\**\s*(.*)$")
 DASHES = "\u2014\u2013 "
 NUMBER = re.compile(r"(\d+)$")
+EXTENSION_OPEN = re.compile(r"^- \[ \] ")
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -180,3 +192,88 @@ def is_stale(newest: str | None, tz: str, now: dt.datetime | None = None) -> boo
     if not newest:
         return True
     return dt.date.fromisoformat(newest) < today(tz, now) - dt.timedelta(days=1)
+
+
+def open_extensions(text: str) -> int:
+    """The unchecked ``- [ ]`` items under ``## Extensions``: work beyond the line, undecided."""
+    count, inside = 0, False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line.strip() == "## Extensions"
+        elif inside and EXTENSION_OPEN.match(line):
+            count += 1
+    return count
+
+
+def finish_line(
+    text: str, last_states: dict[str, str], today_date: dt.date
+) -> dict[str, Any] | None:
+    meta = frontmatter(text)
+    if "line" not in meta:
+        return None
+    raw = meta["line"]
+    keys = raw if isinstance(raw, list) else [raw] if raw else []
+    done = [k for k in keys if last_states.get(k) == "done"]
+    try:
+        age: int | None = (today_date - dt.date.fromisoformat(str(meta.get("created")))).days
+    except ValueError:
+        age = None
+    return {
+        "keys": keys,
+        "done": done,
+        "open": [k for k in keys if k not in done],
+        "extensions": open_extensions(text),
+        "age": age,
+        "reached": bool(keys) and len(done) == len(keys),
+    }
+
+
+def line_summary(line: dict[str, Any]) -> str:
+    parts = [
+        f"{len(line['done'])}/{len(line['keys'])} line done",
+        f"{line['extensions']} extensions open",
+    ]
+    if line["age"] is not None:
+        parts.append(f"{line['age']} d old")
+    if line["reached"]:
+        parts.append("finish line reached")
+    return " · ".join(parts)
+
+
+def _board_file() -> str:
+    board = Path(__file__).resolve().parent / "board.py"
+    done = subprocess.run(
+        [sys.executable, str(board), "path"], capture_output=True, text=True, check=False
+    )
+    return done.stdout.strip()
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="epic_state.py")
+    sub = parser.add_subparsers(dest="verb", required=True)
+    cmd = sub.add_parser("line", help="the epic's finish line against the board")
+    cmd.add_argument("plan")
+    cmd.add_argument("--board")
+    args = parser.parse_args(argv)
+    try:
+        text = Path(args.plan).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"{args.plan}: unreadable ({type(exc).__name__})", file=sys.stderr)
+        return 2
+    import board as board_mod  # noqa: PLC0415 (the CLI alone needs the board)
+
+    rows = board_mod.StateDir(args.board or _board_file()).last_rows()
+    states = {k: str(r.get("to") or "") for k, r in rows.items()}
+    line = finish_line(text, states, today("UTC"))
+    if line is None:
+        print(f"{args.plan}: no `line:`; draw the finish line first", file=sys.stderr)
+        return 2
+    print(line_summary(line))
+    if line["open"]:
+        print("open on the line: " + ", ".join(line["open"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.exit(main(sys.argv[1:]))
