@@ -68,3 +68,15 @@ test('workOf keeps only nodes the pane can draw', async () => {
     ] },
   ])
 })
+
+test('an epic with a finish line shows n/m line, its open extensions and its age', async () => {
+  const files = [
+    { path: 'docs/plans/money-epic.md', kind: 'epic' as const, epic: 'money', ticket: 'PROJ-60', status: 'approved', title: 'Account currency', line: ['PROJ-61', 'PROJ-62', 'PROJ-63'], created: '2026-01-01', extensions: 2 },
+    { path: 'docs/plans/PROJ-61-story.md', kind: 'story' as const, story: 'PROJ-61', epic: 'PROJ-60', title: 'Currency column' },
+    { path: 'docs/plans/PROJ-62-story.md', kind: 'story' as const, story: 'PROJ-62', epic: 'PROJ-60', title: 'Prices' },
+  ]
+  const nodes = buildWork(['PROJ-60'], files, { 'PROJ-61': 'merged', 'PROJ-62': 'dev' })
+  expect(nodes[0]).toMatchObject({ line: { merged: 1, total: 3 }, extensions: 2, created: '2026-01-01' })
+  const lines = layoutWork(nodes, 100, 8, Date.parse('2026-01-10T12:00:00Z')).map(l => l.parts.map(p => p.text).join(''))
+  expect(lines[0]).toBe('Epic PROJ-60 Account currency (approved) · 1/3 line · 2 ext · 9d')
+})

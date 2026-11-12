@@ -7,7 +7,7 @@ description: The epic plan file — frontmatter links, mirror block, target and 
 
 ## Contents
 
-Links · Mirror block · Target and mode · Drafting an epic · Writer contract.
+Links · Finish line · Mirror block · Target and mode · Drafting an epic · Writer contract.
 
 Above an epic stands only the goal file (L0 §Units): an epic carries `serves: <metric>`, a chain is
 the epics serving one metric, and an epic too big for one outcome becomes linked epics. `/we:epic`
@@ -28,6 +28,40 @@ improves one epic and never decomposes it; it hands off by printing the next ver
   `## Scope`. The success section is `## Success Criteria` or `## Success Metrics`: readers accept
   both, writers write `## Success Criteria`.
 - A ticket description carries the one-line purpose and the plan path, never the plan's content.
+
+## Finish line
+
+The human approves an epic together with its finish line (L0 §Units); the line is where the epic ends.
+
+- **Frontmatter:** `line: [KEY, KEY, …]`, the story keys the epic delivers (at most the crew's
+  `limits.epic_stories` upper bound, ~8), and `line_goal: <one measurable goal>`, the number the
+  line moves. `ready_gate.py epic` refuses an `approved` epic without both, a key named twice or an
+  empty line, and warns above the limit.
+- **Free inside the line:** a sharper AC, a fix of a defect against an existing AC, small work at the
+  place the story already touches. None of it needs a new key.
+- **Beyond the line:** a new story, new visible behaviour or a new place (one more instance of what a
+  story corrects) is not built. It becomes one entry under `## Extensions`:
+
+  ```markdown
+  ## Extensions
+
+  - [ ] <KEY or short name> <what, one line> (found by <session>, YYYY-MM-DD)
+  - [x] <entry> → line | follow-up epic <KEY> | dropped (<human>, YYYY-MM-DD)
+  ```
+
+  The product owner pre-sorts the open (`- [ ]`) entries; the human decides each one in the decision
+  bundle. "Line" adds the key to `line:` (the master writes it with an Updates Log line); "follow-up
+  epic" goes to a new epic plan; "dropped" stays as a checked line. `board.py move <KEY> backlog
+  --epic <E>` refuses a key not on `line:` and names this list.
+- **Progress:** `epic_state.py line <epic plan>` prints `n/m line done · k extensions open · age`
+  against the board's last state per key (Done); the /board work pane shows `n/m line · k ext · age`
+  per epic, counting merged line stories, so it runs ahead of the script between merge and acceptance.
+- **Finish line reached:** when the last line key is Done (`/we:accept` § 4 tells the epic's master,
+  the coordinator's sweep is the backstop), the master reports "finish line reached" to the coordinator, who asks the human on the board "good as is?": **good** → close the epic;
+  **X is missing** → a small new line on this epic; **an extension** → a follow-up epic. No story of
+  the epic is built until the answer.
+- **Running epics** approved before the finish line have no `line:`: `board.py move … backlog` warns
+  and moves until their master draws the line (a proposal the human approves like a new epic).
 
 ## Mirror block
 

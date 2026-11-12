@@ -26,7 +26,9 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
   rule catches.
 - **The ticket's "done when" and scope bound the plan.** Work beyond them never becomes a phase; it goes into
   `## Out of scope` as a named follow-up. Splitting it off is not a fork, and creating a ticket or story for it is
-  never a question (owner 25.09.).
+  never a question (owner 25.09.). New visible behaviour no AC of the ticket states goes, in the same run, as one
+  entry under the epic's `## Extensions` (`references/epic-plan.md` § Finish line), never as an AC of this plan.
+- **A correction story lists every site before Ready:** `references/story-plan.md` § Out of scope.
 - **Stopping is not writing nothing.** Write the plan as far as the fork allows, keep `status: draft`, and put
   `## Open Fork` directly after `## Context` (the format file says what goes in). Say in the section and in the
   report that the plan is not ready to dispatch; the Ready gate refuses such a plan.

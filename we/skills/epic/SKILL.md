@@ -42,6 +42,20 @@ Tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 
 An Epic that gains a Story is doing its job; one that doubles mid-flight is a scope failure: soft-warn.
 
+## Finish line
+
+Every Create and every Refine of an epic without one drafts the finish line: `line:` (the story keys,
+at most the crew's story limit) and `line_goal:` (one measurable goal), plus an empty `## Extensions`
+(format: `epic-plan.md` § Finish line). Before the tickets exist, a draft's `line:` holds one
+short kebab name per story; the ticket step replaces each with its new key before the commit. The human
+approves the epic together with its line; `ready_gate.py epic <plan>` exits 0 on the committed plan. A Refine of a running epic
+never moves a key onto the line by itself: an addition is an Extensions entry the human decides.
+
+| Line | Verdict |
+|---|---|
+| `line: [PROJ-21, PROJ-22, PROJ-23]` · `line_goal: export rate above 20 % for a month` | good: keys, a number that moves |
+| `line: [reports part 1, part 2, …]` · `line_goal: reports are better` | bad: no keys, no end, no measure |
+
 ## Status extras
 
 On top of `epic-plan.md` § Target and mode step 3: the Refined bucket; the drift line
@@ -58,8 +72,9 @@ the master that pulls the recommended next Story.
 - Ticket step after approval, when ticketing is detected: create exactly one ticketing Epic, titled
   `<Title>`, description = one-line purpose + plan path; set `ticket:`. A source
   Story ticket is re-parented under the new Epic or closed as the user chose in the approval. The
-  approval message names this step (`epic-plan.md` § Drafting step 4); unnamed, it does not run. Never
-  create Story tickets here: the refiner's plan run creates each one (owner 25.09.2026, no unasked tickets).
+  approval message names this step (`epic-plan.md` § Drafting step 4); unnamed, it does not run. The
+  only Story tickets created here are the line's, one per short name in the draft's `line:`, named in the
+  approval, each key written into `line:` in its place; every other Story ticket comes from the refiner's plan run (owner 25.09.2026, no unasked tickets).
 - Refine with an existing ticketing Epic: update its description to the pointer form when it holds
   more.
 

@@ -4,7 +4,8 @@
 Usage:
   ready_gate.py story <plan>        a story plan and, through its ``epic:``, the epic's fence,
                                     ``serves:`` and the goal file
-  ready_gate.py epic <epic plan>    ``serves:``, the goal file and the presence of ``fence:``
+  ready_gate.py epic <epic plan>    ``serves:``, the goal file, the presence of ``fence:`` and the
+                                    finish line (``line:``, ``line_goal:``)
 
 Exit 0 ready, 1 refused (one stdout line per failure, ``<plan>: <place>: <what is missing>``),
 2 usage or an unreadable plan. Warnings go to stderr, each prefixed ``warning:``, and never
@@ -31,6 +32,11 @@ Ready gate reads); this docstring only lists the story checks in their order:
     scratch tree at ``risk.rules_from``. A success prints ``tier: <line 1>`` on stderr, a
     failure is one stdout line ``<plan>: tier: tier not computed: <reason>``; without a
     ``risk.command`` one warning. The epic mode computes no tier.
+
+The epic mode also reads the finish line (``references/epic-plan.md`` § Finish line): an epic
+whose ``status:`` starts with ``approved`` without ``line:`` is refused, any other status without
+it warns; a ``line:`` present must list keys without a repeat and come with a ``line_goal:``; more
+keys than the crew's ``limits.epic_stories`` upper bound is one warning.
 
 ``story_failures(plan)`` runs checks 1-9 for ``board.py select``, which runs the tier itself.
 
@@ -59,6 +65,8 @@ if _HOOKS not in sys.path:
     sys.path.append(_HOOKS)
 import verification_gate  # noqa: E402
 
+EXTENSIONS = "Extensions"  # the epic plan's list of what lies beyond the line
+EXTENSION_ITEM = re.compile(r"^- \[([ xX])\] (.*)$")
 USAGE = "usage: ready_gate.py story <plan> | ready_gate.py epic <epic plan>"
 REQUIRED_SECTIONS = (
     "Context",
@@ -473,9 +481,41 @@ class Gate:
             self.warnings.append(f"tier: {result.line}")
 
     def epic(self, text: str) -> None:
-        if "fence" not in frontmatter(text):
+        meta = frontmatter(text)
+        if "fence" not in meta:
             self.warnings.append(_fence_off(self.plan, self.plan))
+        self._line(meta)
         self._goals((self.plan, text))
+
+    def _line(self, meta: dict[str, str]) -> None:
+        """The finish line: ``line:`` (story keys) and ``line_goal:`` (one measurable goal)."""
+        keys = line_keys(meta)
+        if keys is None:
+            if meta.get("status", "").startswith("approved"):
+                self.fail(
+                    "line",
+                    "an approved epic has no `line:` (its story keys) and `line_goal:` (one "
+                    "measurable goal); the human approves the epic with its line",
+                )
+            else:
+                self.warnings.append(
+                    f"warning: {self.plan}: no `line:` yet; the epic is approved with its line"
+                )
+            return
+        if not keys:
+            self.fail("line", "`line:` lists no story key")
+        repeated = sorted({k for k in keys if keys.count(k) > 1})
+        if repeated:
+            self.fail("line", "`line:` names " + ", ".join(repeated) + " twice")
+        if not meta.get("line_goal", "").strip():
+            self.fail("line_goal", "`line:` without `line_goal:` (one measurable goal)")
+        bound = (self.crew.get("limits") or {}).get("epic_stories") or [0, 8]
+        upper = bound[-1] if isinstance(bound, list) else bound
+        if len(keys) > int(upper):
+            self.warnings.append(
+                f"warning: {self.plan}: `line:` holds {len(keys)} stories, above the crew's "
+                f"limit of {upper}; cut a linked epic"
+            )
 
     def _acs(self, text: str) -> dict[int, tuple[Marker, str]]:
         markers: dict[int, tuple[Marker, str]] = {}
@@ -668,6 +708,24 @@ class Gate:
                 self.failures.append(
                     f"{epic_path}: serves: `{part}` names no metric of the goal file {bound}"
                 )
+
+
+def line_keys(meta: dict[str, str]) -> list[str] | None:
+    """The finish line's story keys, None when the epic plan has no ``line:`` yet."""
+    if "line" not in meta:
+        return None
+    return inline_list(meta["line"])
+
+
+def extensions(text: str) -> list[tuple[bool, str]]:
+    """(open, entry) of each ``- [ ]``/``- [x]`` item under ``## Extensions``: open is unchecked."""
+    body = sections(text).get(EXTENSIONS, "")
+    out = []
+    for line in body.split("\n"):
+        match = EXTENSION_ITEM.match(line)
+        if match:
+            out.append((match.group(1) == " ", match.group(2).strip()))
+    return out
 
 
 def find_epic_plan(plans_dir: Path, key: str) -> list[tuple[Path, str]]:

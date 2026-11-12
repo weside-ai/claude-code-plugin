@@ -512,8 +512,9 @@ def test_an_unknown_serves_part_fails_with_no_flag(tmp_path):
     epic = root / PLANS / "PROJ-2-epic.md"
     assert out.returncode == 1
     assert out.stdout.splitlines() == [
+        f"{epic.relative_to(root)}: line: {NO_LINE}",
         f"{epic.relative_to(root)}: serves: `churn of the settings page` names no metric of the goal "
-        "file goals.md"
+        "file goals.md",
     ]
     assert "fence check off" in out.stderr
 
@@ -652,3 +653,97 @@ def test_the_epic_gate_computes_no_tier(tmp_path):
     root = tier_gate_repo(tmp_path)
     out = gate(root, "epic", plan(root, "PROJ-1-epic"))
     assert "tier" not in out.stdout + out.stderr
+
+
+# --- the finish line (references/epic-plan.md § Finish line) -------------------------------
+
+NO_LINE = (
+    "an approved epic has no `line:` (its story keys) and `line_goal:` (one measurable goal); "
+    "the human approves the epic with its line"
+)
+
+
+def _epic_with(root: Path, old: str, new: str) -> str:
+    path = root / PLANS / "PROJ-1-epic.md"
+    text = path.read_text()
+    assert old in text
+    path.write_text(text.replace(old, new))
+    return plan(root, "PROJ-1-epic")
+
+
+def test_an_approved_epic_with_its_line_passes(tmp_path):
+    root = repo(tmp_path)
+    out = gate(root, "epic", plan(root, "PROJ-1-epic"))
+    assert out.returncode == 0, out.stdout
+    assert "line" not in out.stderr
+
+
+@pytest.mark.parametrize(
+    "old, new, place, message",
+    [
+        (
+            "line: [PROJ-12, PROJ-13]\nline_goal: export rate (weekly) above 20 % for a month\n",
+            "",
+            "line",
+            NO_LINE,
+        ),
+        ("line: [PROJ-12, PROJ-13]", "line: []", "line", "`line:` lists no story key"),
+        (
+            "line: [PROJ-12, PROJ-13]",
+            "line: [PROJ-12, PROJ-12]",
+            "line",
+            "`line:` names PROJ-12 twice",
+        ),
+        (
+            "line_goal: export rate (weekly) above 20 % for a month",
+            "line_goal:",
+            "line_goal",
+            "`line:` without `line_goal:` (one measurable goal)",
+        ),
+    ],
+    ids=["approved-without-line", "empty", "repeat", "no-goal"],
+)
+def test_a_broken_line_is_refused_naming_the_key(tmp_path, old, new, place, message):
+    """Red arm: each case fails on the gate before the finish line (no `_line`), it exits 0."""
+    root = repo(tmp_path)
+    rel = _epic_with(root, old, new)
+    out = gate(root, "epic", rel)
+    assert out.returncode == 1
+    assert out.stdout.splitlines() == [f"{rel}: {place}: {message}"]
+
+
+def test_a_draft_without_line_warns_only(tmp_path):
+    root = repo(tmp_path)
+    rel = _epic_with(
+        root,
+        "line: [PROJ-12, PROJ-13]\nline_goal: export rate (weekly) above 20 % for a month\n",
+        "",
+    )
+    _epic_with(root, "status: approved", "status: draft")
+    out = gate(root, "epic", rel)
+    assert out.returncode == 0 and out.stdout == ""
+    assert f"warning: {rel}: no `line:` yet; the epic is approved with its line" in (
+        out.stderr.splitlines()
+    )
+
+
+def test_a_line_above_the_crew_limit_warns(tmp_path):
+    root = repo(tmp_path)
+    keys = ", ".join(f"PROJ-{n}" for n in range(20, 29))
+    rel = _epic_with(root, "line: [PROJ-12, PROJ-13]", f"line: [{keys}]")
+    out = gate(root, "epic", rel)
+    assert out.returncode == 0, out.stdout
+    assert (
+        f"warning: {rel}: `line:` holds 9 stories, above the crew's limit of 8; cut a linked epic"
+        in out.stderr.splitlines()
+    )
+
+
+def test_extensions_reads_open_and_decided_entries():
+    text = (FIXTURES / "plans" / "PROJ-1-epic.md").read_text()
+    assert ready_gate.extensions(text) == [
+        (True, "PROJ-14 export as PDF (found by PROJ-12-build, 2026-01-03)"),
+        (False, "CSV header translated → follow-up epic PROJ-6"),
+    ]
+    assert ready_gate.line_keys(ready_gate.frontmatter(text)) == ["PROJ-12", "PROJ-13"]
+    assert ready_gate.line_keys({}) is None
