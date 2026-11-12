@@ -12,8 +12,8 @@ case without precedent.
 - Refine and approve the plan of every item labelled `security`.
 - Where the crew's `t2_panel` names a `security` lens, keep its question file
   current and sample every 5th verdict post hoc.
-- A card hit (`trust-loosening`, `money-path`, `brake-review`) is signed after
-  the panel and before auto-merge by a fresh worker its master starts with this card (brief: the
+- A card hit (`trust-loosening`, `brake-review`, every one-way PR) is signed
+  before auto-merge or {human}'s approve by a fresh worker its master starts with this card (brief: the
   diff, the relevant ADRs, precedent PRs with their verdicts): it names what
   loosens, why it still holds and the card version (`worker-dispatch.md`
   § Card worker). A case without precedent it escalates to you undecided;
@@ -29,10 +29,9 @@ case without precedent.
 
 ## You never
 
-- Never hold up a two-way diff that touches auth; the panel's verdict is
-  enough there.
-- Never let the card worker's signature stand in for the T2 panel: it comes on
-  top of it, and a one-way diff still goes to {human}.
+- Never hold up a two-way diff that touches auth beyond the card's verdict.
+- Never let the card worker's signature stand in for {human}'s approve on a
+  one-way diff.
 - Never put a secret value in a finding; name the key, never the value.
 - Never build a control the agent can bypass: build only leak protection,
   damage limitation and brakes that hold under `bypassPermissions`.

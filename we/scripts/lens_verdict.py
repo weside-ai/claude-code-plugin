@@ -82,28 +82,25 @@ Carried panel (T2 only): a panel bound to an older head ``old`` stays green on t
 head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
 the change ``old..new`` touches no file the PR's class hit: the PR is classified on
 ``merge-base(<rules ref>, new)..new`` by ``risk_runner`` (the merge hook's own runner, rules and
-rules ref); class ``T0`` carries, a one-way class never does (its panel opens the self-merge
-window: every head gets a fresh one), otherwise the delta's files (``git diff --name-only old
+rules ref); class ``T0`` carries, every other class (one-way too) only when the delta's files (``git diff --name-only old
 new``) must miss every hit line's file, and so must the files the default branch changed between
 the PR's bases (``merge-base(<rules ref>, old)..merge-base(<rules ref>, new)``): a merge that keeps
 the branch's side of a hit file leaves it out of ``old..new`` while the PR's diff on it now undoes the
 default branch's change. A class without hit lines carries nothing. A clean merge of the
 default branch therefore carries when it moves no hit file; a delta on a risk path, a head outside the PR's history, a red
-panel, no panel and any git or classifier failure do not. The security card on ``old`` holds with the
-panel only while it is the PR's last card verdict (the merge hook). ``check`` prints ``panel <ID>: carried
+panel, no panel and any git or classifier failure do not. The merge hook carries the PR's last security card
+verdict the same way (``carry``). ``check`` prints ``panel <ID>: carried
 from <old> to <new> (<why>)`` in place of the stale line, or the stale line plus ``panel <ID>: not
-carried (<why>)``; ``check_t2`` returns the carried head, which the merge hook reads to take the
-security card from that head too. ``post`` posts a carried panel on the new head. The carry is
+carried (<why>)``; ``check_t2`` returns the carried head. ``post`` posts a carried panel on the new head. The carry is
 computed on every ``check``; nothing is written.
 
 No skip, no override: no field can skip, confirm, waive or lift anything; ``skip``, ``override``,
 ``one_way``, ``go`` and every other unknown key are refused. A red panel turns green only through a
 fresh panel on a new plan blob or head; a green T2 panel is carried only as above. Any session
-can write this file, so it gates only a two-way T2 merge and the move to Selected; the one-way brake never reads it.
+can write this file, so it gates only the move to Selected; no merge reads it.
 
-Panel comment (T2): ``post`` puts the panel's state on GitHub, where a repo's self-merge judge reads
-it (a one-way PR outside the brake's core merges itself 2 h after a green panel on its head). The
-format is that judge's contract, pinned by ``fixtures/brake-self-merge/judge.json``::
+Panel comment (T2): ``post`` puts the panel's state on GitHub as the owner's input on a one-way PR,
+in the form pinned by ``fixtures/brake-self-merge/judge.json``::
 
     <!-- t2-panel -->
     ## T2 panel — #<N> @ `<head sha, 40 hex>`
@@ -965,7 +962,7 @@ def _stale_rows(
     return [stale, f"panel {vid}: not carried ({why})"], None
 
 
-def carry(  # noqa: PLR0911, PLR0912
+def carry(  # noqa: PLR0911
     root: Path,
     old: str,
     new: str,
@@ -997,9 +994,6 @@ def carry(  # noqa: PLR0911, PLR0912
         return False, f"the PR's class is not computed: {why}"
     if lines[0] == "T0":
         return True, f"delta {old[:8]}..{new[:8]}: the PR is T0"
-    if risk_runner.CLASS_LINE.match(lines[0]).group(2):
-        # a one-way PR's panel opens its self-merge window: every head gets a fresh panel
-        return False, f"the PR is {lines[0]}; a one-way PR never carries its panel"
     hits = {row.split("\t", 1)[0] for row in lines[2:] if "\t" in row}
     if not hits:
         return False, f"the PR is {lines[0]} and names no file it hit"

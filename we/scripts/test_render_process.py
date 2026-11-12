@@ -23,12 +23,8 @@ INBOX = (
     "**The board is Hal's only inbox:** the push line, the bundle and an escalation each point at "
     "a board item."
 )
-ONE_WAY = (
-    "A one-way PR outside the\n  core merges itself, where a self-merge window runs, 2 h after "
-    "a green T2 panel on its head, once\n  Hal got the push line; a `veto` label stops it; else and "
-    "the core only Hal merges."
-)
-DECIDED_3 = "3. One-way merges via the 2 h window, the core by Hal."
+ONE_WAY = "Only Hal merges a\n  one-way PR, on their approve;"
+DECIDED_3 = "3. One-way merges on Hal's approve only."
 
 
 @pytest.fixture(autouse=True)
@@ -104,7 +100,7 @@ def test_waits_names_the_human_as_the_only_merger_of_one_way():
     text = rp.render_l0(generic())
     assert ONE_WAY in text
     assert DECIDED_3 in text
-    for old in ("one word arms auto-merge", "one push line at panel green", "reads the class"):
+    for old in ("one word arms auto-merge", "merges itself", "2 h window", "reads the class"):
         assert old not in text, old
 
 
@@ -147,9 +143,8 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
         "",
     )
     old = old.replace(
-        "else and the core only {human} merges.",
-        "else and the core only {human} merges. {human} gets one push line at panel green; one "
-        "word arms auto-merge.",
+        "on their approve;",
+        "on their approve; one word arms auto-merge;",
     )
     (process / "L0.md").write_text(old)
     text = rp.render_l0(generic(), process=process)
@@ -574,8 +569,8 @@ BOUND_SECURITY_LINE = (
     "  - Bo owns its label, runs on call; a worker with its card signs card hits."
 )
 TRUST_LINE = (
-    "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
-    "worker with {security}'s card signs on the head, then auto-merge."
+    "- On a card hit (`trust-loosening`, `brake-review`): a fresh worker with {security}'s card "
+    "signs on the head, then auto-merge; on a one-way PR its verdict goes to {human} with the T2 panel."
 )
 
 
@@ -642,8 +637,8 @@ def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
     assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
     with_owner = rp.render_card(bound(), "master")
     assert (
-        "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
-        "worker with Bo's card signs on the head, then auto-merge." in with_owner
+        "- On a card hit (`trust-loosening`, `brake-review`): a fresh worker with Bo's card "
+        "signs on the head, then auto-merge;" in with_owner
     )
     assert "trust-loosening" not in rp.render_card(generic(), "master")
 
@@ -654,10 +649,10 @@ def test_the_security_card_names_label_lens_review_and_signature(crew):
     for phrase in (
         "You own every item labelled `security`, approve its plan and keep the security check",
         "Where the crew's `t2_panel` names a `security` lens, keep its question file current",
-        "Never hold up a two-way diff that touches auth; the panel's verdict is enough there.",
+        "Never hold up a two-way diff that touches auth beyond the card's verdict.",
         "keep its question file current and sample every 5th verdict post hoc.",
-        "A card hit (`trust-loosening`, `money-path`, `brake-review`) is signed after the panel "
-        "and before auto-merge by a fresh worker its master starts with this card",
+        "A card hit (`trust-loosening`, `brake-review`, every one-way PR) is signed before "
+        "auto-merge or Hal's approve by a fresh worker its master starts with this card",
         "the card version (`worker-dispatch.md` § Card worker). A case without precedent it "
         "escalates to you undecided",
     ):
@@ -771,7 +766,7 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
 
 
 # The brake's core: a diff to the classifier, the gates, the review workflows, the crew's `risk`
-# block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged. The
+# block or one that removes a rule is `brake-change`. The
 # review workflows are named apart from the gates: a crew's `[brake-change]` lists them as paths of
 # their own. Rules live only in the rules file, so the bundled classifier sees a removed rule as a
 # change to that file, which the setup template puts under `[brake-change]`; a crew's own
@@ -792,7 +787,6 @@ def test_the_setup_template_classifies_a_removed_rule_as_brake_core():
     import risk_paths  # noqa: PLC0415
 
     rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
-    assert risk_paths.CORE == ("brake-change",)
     assert any(p.fullmatch(".weside/risk-paths") for _, p in rules["brake-change"])
 
 

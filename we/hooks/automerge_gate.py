@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """PreToolUse hook: the session-side merge brake. Every merge and every auto-merge arm of a PR passes
-here first: the freeze flag, the PR's risk class, the T2 panel verdict, the security card verdict,
+here first: the freeze flag, the PR's risk class, the security card verdict,
 the Codex verdict on the head and the pre-merge receipt.
 
 A brake against slips, not a boundary ("Bremse gegen Versehen, keine Grenze"): it sees only
 Claude Code's Bash tool calls, and a session can work around it — the bot token used directly
 (`curl`, a `gh` binary off `PATH`), a script file or `python3 -c`, a Codex run (no Claude hooks),
-an edit to the hook in the plugin cache. The freeze flag and the panel verdict are local files any
-session can write or delete, the card verdict a PR comment any crew member or the bot can post: process signals,
+an edit to the hook in the plugin cache. The freeze flag is a local file any session can write or
+delete, the card verdict a PR comment any crew member or the bot can post: process signals,
 not locks. A hook that Claude Code kills on its `hooks.json` timeout is a non-blocking error, so
 the command runs (allow); `BUDGET_SECONDS` keeps every call below it. The boundary is the
 repository's ruleset (required checks, code owners, no bypass actor for the bot) and the owner's
@@ -30,24 +30,15 @@ Refusals, in this order (the first one wins):
      merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
      reason; an unreadable flag counts as standing.
   3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; no session merges or arms it,
-     whatever a command or a chat quote says, a green panel included. The brake's core
-     (`risk_paths.CORE`) only the owner (`human.name` in the crew) merges, by hand; every other
-     one-way class merges itself through the repo's self-merge window (2 h after a green T2 panel
-     comment on its head, `lens_verdict.py post`, once the owner got the push line; a `veto` label
-     stops it), so the refusal points there. Where `origin/main` carries an approve gate
+     whatever a command or a chat quote says. Only the owner (`human.name` in the crew) merges it.
+     Where `origin/main` carries an approve gate
      (`.github/workflows/one-way-gate.yml` and a `brake_self_merge.py` that knows the state
-     `approved`), the owner's GitHub approve on the head is the go for both, and the refusal says
-     so: the session asks for an approve, not a merge, and does nothing after it.
-  4. T2 two-way without a green panel: when the plugin ships `scripts/lens_verdict.py`, its
-     `check(root, "t2-pr<N>")` must be green (missing or red refuses; the verdict file carries no
-     skip field). Without the module the check is off with one stderr line. The panel verdict is a
-     process signal, not a boundary: any session can write that file, so it never lifts 3. A
-     module with `check_t2` is read through it: a panel carried from an older head (its §
-     Carried panel) is green and names that head.
-  5. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
-     (line 3 on, `<file>\t<section>: <why>`) in `trust-loosening`, `money-path` or `brake-review`
-     needs, besides the green panel, a PR comment of the security card worker
-     (`references/worker-dispatch.md` § Card worker) in this form:
+     `approved`), the owner's GitHub approve on the head turns the gate green, and the refusal says
+     so: the session asks for an approve, not a merge.
+  4. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
+     (line 3 on, `<file>\t<section>: <why>`) in a card section (`risk_paths.CARD`) needs a PR
+     comment of the security card worker (`references/worker-dispatch.md` § Card worker) in this
+     form:
 
          <!-- security-card-review -->
          ## Security card review — #<N> @ `<head sha, at least 7 hex chars>`
@@ -56,12 +47,10 @@ Refusals, in this order (the first one wins):
      Only comments by a repo OWNER, MEMBER or COLLABORATOR or by an installed GitHub App (user
      type `Bot`, how a worker's bot token posts) count, read through the REST issue comments;
      among them only those whose `@ <sha>` is a prefix of the PR's current head; the last of those
-     decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head (missing, or
-     only on an older head) refuses, and so does a comment read that fails. 4 runs first, so this
-     check holds only once the panel is green or the panel check is off. When the panel was
-     carried and no card comment is on the current head, a card PASS on the carried head counts:
-     the carried delta touches no file the class hit.
-  6. Plan first, for every story key the PR's head branch and title name (the crew's
+     decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head refuses, and
+     so does a comment read that fails, unless the last card comment is a PASS on an older head
+     and `lens_verdict.carry` carries it: the delta since touches no file the class hit.
+  5. Plan first, for every story key the PR's head branch and title name (the crew's
      `naming.key` on `origin/main`, else the default) whose plan `docs/plans/<KEY>-story.md` is
      on the head or on `origin/main`, and the PR changes a file outside `docs/` other than the
      story's own receipt (`<oracles.receipt_dir>/<KEY>.<ext>` on `origin/main`): the plan must be
@@ -71,10 +60,10 @@ Refusals, in this order (the first one wins):
      file, and the plan PR itself (only `docs/` and its own receipt), are untouched. Only where the class was
      computed (a repo with rules); a one-way PR, refused by 3, names this refusal too, so the
      human who merges it by hand sees it.
-  7. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
+  6. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
      `.weside/config.json`, default `Codex Review`), unless the base branch requires that check
      itself (rulesets or classic protection); a repo whose workflows name no such job has none.
-  8. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
+  7. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
      `.weside/config.json` names `verification.pre_merge_receipt`.
 
 The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/crew.json` is read as
@@ -91,7 +80,7 @@ allowed merge then carries one `systemMessage` line saying so. Line 1 must match
 Before classifying, the hook fetches the rules branch (`origin/main`), so a stale local ref neither
 misses a new rule nor drags main's own commits into the diff.
 
-Fail closed on the class, the freeze, the panel and the card verdict: a classifier failure, a `gh`
+Fail closed on the class, the freeze and the card verdict: a classifier failure, a `gh`
 or fetch failure while classifying, a command that does not parse as shell words, a GraphQL query
 piped in from stdin or from an unreadable file, and a repo that uses rules but has no `origin/main` all refuse
 with the reason. Where the command starts in a checkout that uses rules (a crew file, or
@@ -208,7 +197,7 @@ _ONE_WAY_SECTION = re.compile(
 _CLASS_LINE = risk_runner.CLASS_LINE
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
-# The two-way sections whose hit needs a security card verdict besides the panel (brake stage 2).
+# The two-way sections whose hit needs a security card verdict.
 CARD_SECTIONS = risk_paths.CARD
 _CARD_HIT = re.compile(r"(?:^|\t)(" + "|".join(CARD_SECTIONS) + r"):")
 CARD_MARKER = "<!-- security-card-review -->"
@@ -557,7 +546,6 @@ class ClassResult:
     notice: str | None = None
     head: str | None = None
     hits: list[str] = field(default_factory=list)  # line 3 on: `<file>\t<section>: <why>`
-    carried_from: str | None = None  # the head a green T2 panel was carried from (Q480)
     names: list[str] = field(default_factory=list)  # the PR's head branch and title
     base: str | None = None  # the merge base the class was computed on
 
@@ -726,41 +714,6 @@ def _freeze_refusal(root: str | None, slug: str | None = None) -> str | None:
     )
 
 
-def _panel_refusal(root: str, number: int, cls: ClassResult | None = None) -> str | None:
-    """Why a two-way T2 PR may not merge yet; None when the panel is green or the check is off.
-    A panel carried from an older head (`lens_verdict.check_t2`) records that head on `cls`."""
-    path = LENS_VERDICT
-    if not path.exists():
-        print(
-            "automerge_gate: no lens_verdict.py in the plugin, T2 panel check off", file=sys.stderr
-        )
-        return None
-    vid = f"t2-pr{number}"
-    try:
-        spec = importlib.util.spec_from_file_location("we_lens_verdict", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        carried = None
-        if hasattr(module, "check_t2"):
-            # the hook's own git and timeout: the carry's calls stay inside BUDGET_SECONDS
-            green, lines, carried = module.check_t2(
-                Path(root), vid, git=_git, timeout=_left(CLASSIFY_TIMEOUT)
-            )
-        else:
-            green, lines = module.check(Path(root), vid)
-    except Exception as exc:  # a brake: a broken reader counts red, never green
-        green, lines = False, [f"the verdict reader failed ({type(exc).__name__}: {exc})"]
-    if green:
-        if cls is not None and isinstance(carried, str):
-            cls.carried_from = carried
-            NOTICES.append(f"T2 panel carried: {'; '.join(lines)}")
-        return None
-    return (
-        f"PR #{number} is T2 and its lens panel is not green: {'; '.join(lines)}. "
-        f"Run `/we:lens t2 {number}` on this head; a skip never turns a finding green."
-    )
-
-
 PLAN_DIR = "docs/plans"
 # Board states before Selected: a story there has no approved plan to build on.
 _BEFORE_SELECTED = frozenset(crew.STATES[: crew.STATES.index("selected")])
@@ -912,6 +865,17 @@ def _security_skill(root: str) -> str:
     return f"/{skill}" if skill else "/<security holder's skill>"
 
 
+def _carry(root: str, old: str, new: str) -> tuple[bool, str]:
+    """`lens_verdict.carry` with the hook's git and time budget; any failure carries nothing."""
+    try:
+        spec = importlib.util.spec_from_file_location("we_lens_verdict", LENS_VERDICT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.carry(Path(root), old, new, git=_git, timeout=_left(CLASSIFY_TIMEOUT))
+    except Exception as exc:  # a brake: a broken carry holds nothing
+        return False, f"carry failed ({type(exc).__name__}: {exc})"
+
+
 def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
     """Why a two-way T2 PR with a card hit may not merge yet; None when the card verdict on the
     head is PASS or no hit needs one. A failed comment read refuses (fail closed)."""
@@ -937,17 +901,13 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
     verdict, last_head = _card_verdict(bodies, head)
     if verdict == "PASS":
         return None
-    # a carried panel's delta touches no hit file, so the card on the carried head holds, while
-    # it is the last card verdict: a card on a head after it decides (T2 panel on #203)
-    if (
-        verdict is None
-        and cls.carried_from
-        and last_head is not None
-        and cls.carried_from.startswith(last_head)
-        and _card_verdict(bodies, cls.carried_from)[0] == "PASS"
-    ):
-        NOTICES.append(f"security card carried from {cls.carried_from[:10]} with the panel")
-        return None
+    # the last card PASS holds while the delta since its head touches no hit file
+    # (`lens_verdict.carry`)
+    if verdict is None and last_head is not None and _card_verdict(bodies, last_head)[0] == "PASS":
+        carries, why = _carry(root, last_head, head)
+        if carries:
+            NOTICES.append(f"security card carried from {last_head[:10]}: {why}")
+            return None
     if verdict is not None:
         why = f"the card verdict on this head is {verdict}"
     elif last_head is not None:
@@ -992,37 +952,19 @@ def _approve_gate(root: str) -> bool:
 
 
 def _one_way_refusal(root: str, cls: ClassResult) -> str:
-    """Refusal 3: the core waits for the owner's hand, every other class for the self-merge window;
-    where the repo runs an approve gate, the owner's approve on the head is the go for both."""
-    pr = f"PR #{cls.number} ({cls.url})"
+    """Refusal 3: every one-way class waits for the owner;
+    where the repo runs an approve gate, the owner's approve on the head is the go."""
     head = (
-        f"{pr} is `{cls.line}`: one-way ({cls.one_way}). No session merges or arms it, whatever "
-        "a command or a quoted go says"
+        f"PR #{cls.number} ({cls.url}) is `{cls.line}`: one-way ({cls.one_way}). No session merges "
+        "or arms it, whatever a command or a quoted go says"
     )
     if _approve_gate(root):
-        approve = (
-            f"{_human(root)}'s GitHub approve on its head is the go (from the phone too): the "
-            "`one-way gate` status turns green and the repo arms auto-merge itself, so the session "
-            "does nothing after it. Ask for an approve, not a merge: hand over the link and the class."
-        )
-        if cls.one_way in risk_paths.CORE:
-            return f"{head}: it is the brake's core. {approve}"
         return (
-            f"{head}. {approve} Without the approve it merges itself 2 h after a green T2 panel on "
-            f"its head (`/we:lens t2 {cls.number}`) where the repo runs a self-merge window; a "
-            "`veto` label stops it."
+            f"{head}. {_human(root)}'s GitHub approve on its head turns the `one-way gate` status "
+            f"green (from the phone too; it carries over a push that touches no hit file), then "
+            f"{_human(root)} merges. Ask for an approve, not a merge: hand over the link and the class."
         )
-    if cls.one_way in risk_paths.CORE:
-        return (
-            f"{head}: it is the brake's core, only {_human(root)} merges it, by hand. "
-            "Hand over the link and the class."
-        )
-    return (
-        f"{head}: it merges itself 2 h after a green T2 panel on its head, once {_human(root)} got "
-        "the push line, where the repo runs a self-merge window; a `veto` label stops it. "
-        f"Post the panel with `/we:lens t2 {cls.number}` if none stands on this head, then hand "
-        "over the link and the class."
-    )
+    return f"{head}: only {_human(root)} merges it, by hand; hand over the link and the class."
 
 
 def _class_refusal(
@@ -1032,7 +974,7 @@ def _class_refusal(
     cwd_known: bool = True,
     home: str | None = None,
 ) -> tuple[str | None, bool]:
-    """(refusal, go on): the class, panel and card refusals; go on is False when nothing is to
+    """(refusal, go on): the class and card refusals; go on is False when nothing is to
     merge.
     `home` is the directory the command starts in, read for rules when `root` is unknown."""
     if call.unresolved:
@@ -1058,7 +1000,7 @@ def _class_refusal(
         plan = _plan_refusal(root, cls)  # the hand merge must see it as well
         return _one_way_refusal(root, cls) + (f" Also: {plan}" if plan else ""), False
     if cls.line == "T2" and cls.number is not None:
-        red = _panel_refusal(root, cls.number, cls) or _card_refusal(root, cls, cwd)
+        red = _card_refusal(root, cls, cwd)
         if red:
             return red, False
     red = _plan_refusal(root, cls)

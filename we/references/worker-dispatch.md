@@ -240,7 +240,7 @@ acceptance walk; L0 § Against the waterfall) runs as a read-only worker the mas
 - **The exit:** a case without precedent is reported to the owner undecided; the worker never decides it.
 
 The verdict goes on the PR or the board item, never into a ticket the worker files. A security card
-verdict on a card hit is a PR comment in the form `automerge_gate.py` reads (its docstring, refusal 5):
+verdict on a card hit is a PR comment in the form `automerge_gate.py` reads (its docstring, refusal 4):
 the marker `<!-- security-card-review -->`, the heading ``## Security card review — #<N> @ `<head sha>` ``
 and `**Overall: PASS**` or `BLOCKING`; only a PASS on the current head lets the merge through.
 The card worker never posts it: `worker_rights_gate.py` denies a worker a comment on a PR that is not
