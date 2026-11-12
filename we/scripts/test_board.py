@@ -2539,7 +2539,8 @@ class TestMoveDone:
             act(crewed, "move", DONE_KEY, "done", "--comment-file", comment_file(crewed, text))
             == 0
         )
-        out = capsys.readouterr().out
+        out, err = capsys.readouterr()
+        assert "the ticket is not changed yet: run each of the 2 `carry:` ops" in err
         row = transitions(crewed)[-1]
         assert {k: row[k] for k in ("key", "from", "to", "via", "ticket")} == {
             "key": DONE_KEY,
@@ -2552,6 +2553,15 @@ class TestMoveDone:
             {"op": "transition", "key": DONE_KEY, "status": "Done"},
             {"op": "comment", "key": DONE_KEY, "text": text},
         ]
+
+    def test_a_bold_not_proven_line_counts(self, crewed):
+        with_row(crewed, DONE_KEY, "in_review")
+        text = "Walked Settings.\n**Not proven:** the small screen"
+        assert (
+            act(crewed, "move", DONE_KEY, "done", "--comment-file", comment_file(crewed, text))
+            == 0
+        )
+        assert transitions(crewed)[-1]["to"] == "done"
 
     def test_a_green_entry_moves_via_receipt_with_the_generated_comment(self, crewed):
         with_row(crewed, DONE_KEY, "in_review")

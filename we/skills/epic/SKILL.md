@@ -80,6 +80,12 @@ the master that pulls the recommended next Story.
 
 ## After approval — output
 
+Before the commit, check the epic's claims: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py
+<epic plan> --ref origin/<default>`, every command the epic names against the tool's `--help` (the flag
+exists, the id form matches), and every claim about a repo rule (risk paths, CI, a gate) as `file:line` on
+`origin/<default>`. A false claim is fixed here, before the first story's refiner copies it (a
+`-k` the command lacks and a risk-paths rule that does not exist reached the story plan).
+
 Set `updated:`, append an Updates Log line, run the ticket step, commit, then output and stop:
 
 ```text
