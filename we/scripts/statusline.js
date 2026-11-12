@@ -218,6 +218,11 @@ if (process.argv[2] === '--refresh-bg') {
 // Never in the render path: render claims a per-minute slot (one O_EXCL create per config home) and
 // spawns a detached child, which reads the identity, merges the reading and runs the feed. The
 // identity comes from the same `.claude.json` cswap reads (`oauthAccount`), never a credential.
+//
+// A session keeps the account it started under; `cswap` switching the global login does not move it.
+// So the first render of a session binds the account `oauthAccount` names then (RL_SESSIONS, one file
+// per session id), and a reading is recorded only while `oauthAccount` still names that account.
+// Otherwise a session of account A would land its readings on the account B the switch activated.
 const RL_FILE = path.join(os.homedir(), '.claude', '.we-rate-limits.json');
 const RL_INTERVAL_MS = 60_000;
 const FEED_STAMP = path.join(os.homedir(), '.claude', '.we-cswap-feed.stamp');
@@ -225,6 +230,9 @@ const FEED_STATUS = path.join(os.homedir(), '.claude', '.we-cswap-feed.last');
 // Keeps cswap's own collectors off a fed account between two feeds (cswap bounds it by the reading's
 // earliest reset and an hour). Three feed intervals: one missed feed does not hand polling back.
 const FEED_HOLD_S = 180;
+const RL_SESSIONS = path.join(os.homedir(), '.claude', 'we-rl-sessions');
+const RL_SESSIONS_MAX_AGE_MS = 45 * 86_400_000;
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 function feedAccounts() {
   return (process.env.WE_CSWAP_FEED_ACCOUNTS || '')
@@ -248,21 +256,134 @@ function shortHash(str) {
   return h.toString(16);
 }
 
+function readIdentity(cfg) {
+  try {
+    const acct = JSON.parse(fs.readFileSync(cfg, 'utf8')).oauthAccount || {};
+    if (typeof acct.emailAddress === 'string' && acct.emailAddress) {
+      return { email: acct.emailAddress, organizationUuid: acct.organizationUuid || '' };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function sessionBindingPath(sessionId) {
+  return path.join(RL_SESSIONS, `${sessionId}.json`);
+}
+
+function readBinding(sessionId) {
+  try {
+    const b = JSON.parse(fs.readFileSync(sessionBindingPath(sessionId), 'utf8'));
+    if (b && typeof b.email === 'string') return b;
+  } catch (e) {}
+  return null;
+}
+
+// The Claude Code process that runs this statusline: the parent, past a shell that wraps the command
+// (Linux, via /proc), with its start time against pid reuse. Elsewhere the plain parent pid.
+const SHELLS = new Set(['sh', 'bash', 'dash', 'zsh', 'fish']);
+function claudeProcess() {
+  let pid = process.ppid;
+  for (let i = 0; i < 3; i++) {
+    let stat;
+    try {
+      stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch (e) {
+      return String(pid);
+    }
+    const m = stat.match(/^\d+ \((.*)\) (.*)$/s);
+    if (!m) return String(pid);
+    const rest = m[2].split(' ');
+    if (!SHELLS.has(m[1]) || Number(rest[1]) <= 1) return `${pid}:${rest[19]}`;
+    pid = Number(rest[1]);
+  }
+  return String(pid);
+}
+
+// First render of a session in this Claude Code process: the account it runs under is the one
+// `oauthAccount` names now. A new process under the same session id (`--resume` after a switch)
+// binds anew; within one process every later render costs one read of this small file, never of
+// `.claude.json`. A `/login` inside a running session is not followed: its readings are dropped
+// until the session restarts, never credited to the wrong account.
+function bindSession(sessionId, cfg) {
+  const proc = claudeProcess();
+  const existing = readBinding(sessionId);
+  if (existing && existing.proc === proc) return existing;
+  const identity = readIdentity(cfg);
+  if (!identity) return null;
+  const binding = { ...identity, proc };
+  try {
+    fs.mkdirSync(RL_SESSIONS, { recursive: true });
+    const tmp = `${sessionBindingPath(sessionId)}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(binding));
+    fs.renameSync(tmp, sessionBindingPath(sessionId));
+  } catch (e) {
+    return null;
+  }
+  return binding;
+}
+
 function maybeRecordRateLimits(data) {
   if (feedAccounts().length === 0) return;
+  // Without a session id there is no binding to check a reading against: record nothing.
+  const sessionId = String(data.session_id || '');
+  if (!SESSION_ID_RE.test(sessionId)) return;
+  const cfg = claudeConfigPath();
+  const binding = bindSession(sessionId, cfg);
+  if (!binding) return;
   // No reading (API-key session, or before the first response): leave the minute's slot to a render
   // that has one. Sessions with readings run the feed.
   const rl = data.rate_limits;
   if (!rl || (!rl.five_hour && !rl.seven_day)) return;
-  const cfg = claudeConfigPath();
+  // The child found another account active: skip for a minute without taking the slot from a
+  // session whose account is active (one detached check per minute and foreign session at most).
+  if (typeof binding.foreignUntil === 'number' && Date.now() < binding.foreignUntil) return;
   if (!claimSlot(`${RL_FILE}.${shortHash(cfg)}.stamp`, RL_INTERVAL_MS)) return;
   try {
     const child = spawn(
       process.execPath,
-      [__filename, '--record-rate-limits', cfg, JSON.stringify(rl)],
+      [__filename, '--record-rate-limits', cfg, JSON.stringify(rl), sessionId],
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
+  } catch (e) {}
+}
+
+function sameAccount(a, b) {
+  return !!a && !!b && a.email.toLowerCase() === b.email.toLowerCase()
+    && (a.organizationUuid || '') === (b.organizationUuid || '');
+}
+
+// A reading belongs to the account the session is bound to. When `oauthAccount` names another one
+// (a switch after the session started), the reading is dropped, the minute's slot handed back, and
+// the binding notes a minute in which the render path skips.
+function sessionStillOnItsAccount(cfg, sessionId, identity) {
+  if (!SESSION_ID_RE.test(String(sessionId || ''))) return false;
+  const binding = readBinding(sessionId);
+  if (!binding) return false;
+  if (sameAccount(binding, identity)) return true;
+  try {
+    fs.unlinkSync(`${RL_FILE}.${shortHash(cfg)}.stamp`);
+  } catch (e) {}
+  try {
+    const tmp = `${sessionBindingPath(sessionId)}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ ...binding, foreignUntil: Date.now() + RL_INTERVAL_MS }));
+    fs.renameSync(tmp, sessionBindingPath(sessionId));
+  } catch (e) {}
+  return false;
+}
+
+// Bindings of ended sessions: at most once a day, files older than RL_SESSIONS_MAX_AGE_MS go.
+function pruneBindings() {
+  if (!claimSlot(path.join(RL_SESSIONS, '.pruned'), 86_400_000)) return;
+  try {
+    const cutoff = Date.now() - RL_SESSIONS_MAX_AGE_MS;
+    for (const name of fs.readdirSync(RL_SESSIONS)) {
+      if (!name.endsWith('.json')) continue;
+      const file = path.join(RL_SESSIONS, name);
+      try {
+        if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file);
+      } catch (e) {}
+    }
   } catch (e) {}
 }
 
@@ -282,15 +403,10 @@ function readRateLimitsFile(file) {
   return null;
 }
 
-function recordRateLimits(cfg, rateLimits, nowS) {
-  let identity = null;
-  try {
-    const acct = JSON.parse(fs.readFileSync(cfg, 'utf8')).oauthAccount || {};
-    if (typeof acct.emailAddress === 'string' && acct.emailAddress) {
-      identity = { email: acct.emailAddress, organizationUuid: acct.organizationUuid || '' };
-    }
-  } catch (e) {}
+function recordRateLimits(cfg, rateLimits, nowS, sessionId) {
+  const identity = readIdentity(cfg);
   if (!identity) return;
+  if (!sessionStillOnItsAccount(cfg, sessionId, identity)) return;
   const fiveHour = windowFromStatusline(rateLimits.five_hour);
   const sevenDay = windowFromStatusline(rateLimits.seven_day);
   if (!fiveHour && !sevenDay) return; // no observation: never bump observedAt without one
@@ -394,7 +510,10 @@ function feedCswap({ dryRun = false, file = RL_FILE } = {}) {
 
 if (process.argv[2] === '--record-rate-limits') {
   try {
-    recordRateLimits(process.argv[3], JSON.parse(process.argv[4] || '{}'), Date.now() / 1000);
+    recordRateLimits(process.argv[3], JSON.parse(process.argv[4] || '{}'), Date.now() / 1000, process.argv[5]);
+  } catch (e) {}
+  try {
+    pruneBindings();
   } catch (e) {}
   try {
     if (claimSlot(FEED_STAMP, RL_INTERVAL_MS)) feedCswap();
