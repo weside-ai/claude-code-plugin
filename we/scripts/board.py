@@ -2009,7 +2009,7 @@ def _print_carry(ops):
     if ops:
         print("carry: " + json.dumps([op.as_json() for op in ops], ensure_ascii=False))
         # "ticket": "carried" in the row reads like done; it means the session still carries
-        # (smoketest 11.11.: WA-2996 stayed In Review while the board said Done)
+        # (a ticket stayed In Review while the board said Done)
         print(
             f"board.py: the ticket is not changed yet: run each of the {len(ops)} `carry:` ops "
             "with your ticketing tool, then read the ticket back",
@@ -2705,7 +2705,7 @@ def rule_pr_merged_and_linked(m):
     return failures
 
 
-# `**Not proven:** …` (Markdown bold) is the form the crew's Done comments use (smoketest 11.11.).
+# `**Not proven:** …` (Markdown bold) is the form the crew's Done comments use.
 NOT_PROVEN = re.compile(r"^\**Not proven:\**\s*\S", re.MULTILINE)
 DONE_VIA_ACCEPT = (
     "done needs --comment-file FILE (an acceptance comment with a `Not proven:` line); "
