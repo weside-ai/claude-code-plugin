@@ -16,7 +16,9 @@ description: >
 Invocation: `/we:retro` (this branch and its last PR) · `--pr <N>` · `--session <id>` (read that
 session's transcript instead of this one) · `--key <KEY>` (a ticket or epic across every session and
 PR that names it, § Gather) · `--focus "<question>"` (the question an owner asked: every finding says
-how it answers it, the close line answers it) · `--auto` (§ Auto mode: asks nothing, writes entries only).
+how it answers it, the close line answers it) · `--auto` (§ Auto mode: asks nothing, writes entries only) ·
+`--broadcast ["<focus>"]` (an orchestrator's crew-wide retro, § Broadcast) · `--collect` (what a session
+runs on a broadcast's brief, § Broadcast).
 
 ## Where entries go
 
@@ -24,7 +26,9 @@ how it answers it, the close line answers it) · `--auto` (§ Auto mode: asks no
 - No store: manual → ask once whether to create it (`/we:setup` § Instruction loop), declined →
   print the findings only; `--auto` → write nothing and end with one line saying so.
 - The plugin's own checkout (`origin` matches `repository` in `plugin.json`): print the findings, write nothing.
-- `--auto`: where the store reference's § Staging says.
+- `--auto` and `--collect`: the staging dir, store reference § Staging.
+
+A manual single retro (no `--auto`, `--collect`, `--broadcast`) commits its entries itself (§ Write step 2).
 
 ## Auto mode
 
@@ -38,6 +42,30 @@ then dispatch it here the same way:
    (no `name`: `teammate_gate.py`) with the brief "Use the Skill tool with skill `we:retro` and args
    `--auto --pr <N> --session $CLAUDE_CODE_SESSION_ID`. Work from <main checkout path>." The caller
    does not wait for it.
+
+## Broadcast
+
+One retro across every running session, decided in one PR instead of one per session. The
+orchestrator is the session holding the coordinator or hr role.
+
+1. **Brief.** `ListAgents`, then one `SendMessage` per running session (never to itself) with the
+   same brief: "Run `/we:retro --collect` on your own session, focus: <focus>. Reply with one
+   line `RETRO · <your name> · <n> entries: <keys>` or `RETRO · <your name> · nothing`. On the
+   critical path, finish your current step first." Without a focus the brief asks for lived
+   practice that beats the documented one and would be lost on a restart; no complaints, no
+   one-off incidents, nothing a rule already says.
+2. **Track.** One row per briefed session until it replies; a session silent after its current
+   step is named in the close line, never waited on.
+3. **Decide.** In one worktree off fresh `origin/<default>`: move the staging dir's entries into
+   `inbox/` (the move empties staging), run `/we:optimize` there, commit one PR. Right before the
+   commit, read staging again: a receiver that appended an evidence line after the move found
+   no file and staged a new one under the same key. Fold each such file's evidence lines into the
+   worktree's entry of that key, then remove it from staging.
+
+`--collect` (the receiver): Gather and Findings on its own session, scoped to the focus. Write
+only to the staging dir, deduplicated by key against staging and the main checkout's `inbox/`
+(§ Write step 1); no commit, no branch, no PR. Close with exactly the one `RETRO · …` line, sent
+by `SendMessage` to the orchestrator.
 
 ## Gather (parallel)
 
@@ -83,6 +111,6 @@ carries the proposed lines. Evidence line: `- <date> retro PR #<N> | session <id
    new file, read the inbox, staging and `LEDGER.md` entries on the same target file; one that
    describes the same failure gains the evidence line under its key (store reference § Inbox entry,
    stable keys). Only then a new file. A target outside the repo is written as `target: ~/<path>`.
-2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land), except `--auto` in staging.
+2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land), except `--auto` and `--collect` in staging.
 3. Close with one line: entries created, entries repeated (with their new counts), where they are;
    with `--focus`, a second line answering the question.
