@@ -82,10 +82,10 @@ refusal line; a second refusal: `LV write <id> <lens> --failed "finding without 
 
 Run `LV check <id>` and relay its lines verbatim: one per lens, a `stale` line when the plan or head moved,
 and the panel line (forms: the script's docstring, § Carried warnings included). Exit 0 only for green. The board's move to
-Selected reads the Ready panel itself (`board.py select`); the merge of a two-way T2 PR reads the T2 panel.
-On T2, one-way PRs included, then run `LV post t2-pr<PR>`: it posts the `<!-- t2-panel -->` comment on
-the head (`Overall: PASS` or `FAIL`, its docstring owns the form), which a repo's self-merge window
-reads; a stale panel posts nothing and needs a fresh one.
+Selected reads the Ready panel itself (`board.py select`); no merge reads the T2 panel (8.42.0).
+On a one-way PR then run `LV post t2-pr<PR>`: it posts the `<!-- t2-panel -->` comment on the head
+(`Overall: PASS` or `FAIL`, its docstring owns the form) as the human's input; a stale panel that does
+not carry posts nothing and needs a fresh one.
 The verdict file lives under `<git common dir>/we-lens/`, outside the tree: never commit it, never edit
 it by hand.
 

@@ -38,7 +38,6 @@ Usage:
   board.py [--board FILE] book staging --until <YYYY-MM-DDTHH:MMZ>
   board.py [--board FILE] unbook [<rc tag>]
   board.py [--board FILE] staging
-  board.py [--board FILE] self-merge
 
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
@@ -178,9 +177,6 @@ book     books staging for the caller's session until a UTC minute (docs/board.m
          `board.py book: refused: <rc> in acceptance since <UTC>` while an acceptance is open and
          naming the holder while another booking runs. Then it syncs like `staging`.
 unbook   closes the caller's own booking early; `unbook <rc>` closes the acceptance of that RC.
-self-merge mirrors each self-merge notice on an open one-way PR of the crew's repos as one `info`
-         news item `SM<PR>-<comment id>`, once (board_self_merge.py; docs/board.md § Self-merge
-         window); prints one line per notice on a current head, `self-merge: none` without.
 staging  reads the booking and acceptance issues into board.json's `staging` block and prints one
          line each (`staging: free` without either); an acceptance past the crew's
          `release.staging_sla_hours` adds one `todo` news item `ST<issue>` for the coordinator, once.
@@ -229,7 +225,6 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import board_humans  # noqa: E402
-import board_self_merge  # noqa: E402
 import board_staging  # noqa: E402
 import cold_reader  # noqa: E402
 import crew as crew_mod  # noqa: E402
@@ -1173,8 +1168,8 @@ def cmd_freeze(state, args, _crew, _now):
     if missed:
         print(
             "board.py freeze: the local flag stands, but GitHub is not frozen in "
-            f"{', '.join(e['repo'] for e in missed)} (no `merge-freeze` issue): a self-merge window "
-            "there still merges; open the issue by hand",
+            f"{', '.join(e['repo'] for e in missed)} (no `merge-freeze` issue): "
+            "the repo's one-way gate does not see the freeze; open the issue by hand",
             file=sys.stderr,
         )
         return 1
@@ -3218,29 +3213,6 @@ def cmd_unbook(state, args, crew, now):
     return _sync_staging(state, staging, now)
 
 
-def cmd_self_merge(state, _args, _crew, now):
-    """Mirror the self-merge notices of the crew's repos into the board's news."""
-    repos = _crew_repos(_freeze_module())
-    if not repos:
-        raise BoardError("board.py self-merge: no GitHub origin for the crew's repos or the cwd")
-    notices = []
-    for repo in repos:
-        try:
-            notices += board_self_merge.read_notices(repo)
-        except board_self_merge.SelfMergeError as exc:
-            raise BoardError(f"board.py self-merge: {repo}: {exc}") from None
-    added = state.write_board(lambda board: board_self_merge.merge(board, notices, repos, now))
-    for n in notices:
-        print(
-            f"self-merge: {n['repo']}#{n['number']} one-way {n['class']} merges at {n['merge_at']}"
-        )
-    if not notices:
-        print("self-merge: none")
-    for item in added:
-        print(f"news: {item['id']} {item['title']}")
-    return 0
-
-
 def cmd_staging(state, args, crew, now):
     return _sync_staging(state, _staging(crew), now)
 
@@ -3283,9 +3255,6 @@ def _add_staging_verbs(verbs):
     verbs.add_parser(
         "staging", help="mirror booking and acceptance into the board file"
     ).set_defaults(run=cmd_staging)
-    verbs.add_parser(
-        "self-merge", help="mirror the self-merge notices of one-way PRs as board news"
-    ).set_defaults(run=cmd_self_merge)
 
 
 def _add_move_verbs(verbs):

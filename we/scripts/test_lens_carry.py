@@ -219,9 +219,8 @@ def _rules_on_main(pr, files: dict[str, str]) -> None:
     git(root, "checkout", "-q", "feat")
 
 
-def test_a_one_way_pr_never_carries_its_panel(pr):
-    """T2 panel on #203: a one-way PR's panel opens its self-merge window, so each head needs a
-    fresh one, even when the delta touches no hit file."""
+def test_q596_a_one_way_pr_carries_its_panel_past_a_delta_off_the_hits(pr):
+    """8.42.0: red arm, 8.41.0 printed `a one-way PR never carries its panel` here."""
     _rules_on_main(pr, {".weside/risk-paths": "[money]\npath risky/**\n"})
     root = pr["root"]
     git(root, "merge", "-q", "--no-edit", "main")
@@ -230,8 +229,8 @@ def test_a_one_way_pr_never_carries_its_panel(pr):
     new = commit(root, {"docs/notes.md": "receipt\n"}, "receipt only")
     pr["point"](new)
     code, out, _ = run("check", "t2-pr7")
-    assert code == 1
-    assert "a one-way PR never carries its panel" in out
+    assert code == 0, out
+    assert "carried from" in out and "never carries" not in out
 
 
 def test_a_class_without_hit_lines_carries_nothing(pr, tmp_path):

@@ -163,8 +163,8 @@ def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
 
 GENERIC_FIXTURE = "we/scripts/fixtures/crew-v2-generic.json"
 ORDER_LINE = (
-    "- On a card hit (`trust-loosening`, `money-path`, `brake-review`): the panel, then a fresh "
-    "worker with Bo's card signs on the head, then auto-merge."
+    "- On a card hit (`trust-loosening`, `brake-review`): a fresh worker with Bo's card signs on "
+    "the head, then auto-merge; on a one-way PR its verdict goes to Hal with the T2 panel."
 )
 # L0's one security line: the holder runs on call; a worker with its card signs the card hits
 SECURITY_LINE = "  - Bo owns its label, runs on call; a worker with its card signs card hits."

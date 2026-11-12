@@ -53,8 +53,7 @@ ONE_WAY = (
     "destructive-migration",
     "terraform-secrets",
 )
-# The brake's core among them: never merges itself, only the owner merges it (a repo's self-merge
-# window takes the other one-way classes 2 h after a green T2 panel; `hooks/automerge_gate.py`).
+# The brake's core among them (a removed rule, a gate): `hooks/automerge_gate.py` names it.
 CORE = ("brake-change",)
 # Two-way sections whose hit needs the security card verdict (`hooks/automerge_gate.py`).
 CARD = ("trust-loosening", "money-path", "brake-review")

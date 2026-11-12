@@ -231,25 +231,24 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
   | Class | Who arms or merges | Condition |
   |---|---|---|
   | `T0` | you: `gh pr merge <PR> --auto --merge` | the Codex check has a verdict on the head (below) |
-  | `T2` | you, the same arm | as `T0`, plus a green T2 panel on the head (`/we:lens t2 <PR>`) |
-  | `T2` with a card hit (`trust-loosening:`, `money-path:`, `brake-review:` hit line) | you, the same arm | as `T2`, plus the security card worker's `Overall: PASS` comment on the head; never the human |
-  | `T2 one-way <class>` outside the core | nobody arms: the repo's self-merge window, else the human | window: 2 h after the green T2 panel comment, unless a `veto` label (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Self-merge window) |
-  | `T2 one-way brake-change` (the brake's core) | only the human | by hand, from a board item |
+  | `T2` | you, the same arm | as `T0` |
+  | `T2` with a card hit (`trust-loosening:`, `brake-review:` hit line) | you, the same arm | as `T2`, plus the security card worker's `Overall: PASS` comment on the head (carried over a push that touches no hit file); never the human |
+  | `T2 one-way <class>` | only the human | their approve on the head, then their merge, from a board item |
 
   - **Codex:** whether Codex reviews is the repo's setting (`review.codex_check`, default `Codex
     Review`, a workflow job). Where the base branch requires that check, arm right after `gh pr
     create` (GitHub waits); else arm once `/we:ci-review` ends green with every Codex finding read.
     `--squash`/`--rebase` when `.weside/orchestrate.md` names it; gh refuses `--auto` without a
     method outside a terminal.
-  - **Card hit:** once the panel is green, start a security card worker on the head
+  - **Card hit** (and every one-way PR): start a security card worker on the head
     (`<KEY>-card`, through the crew's launcher like any worker, brief per
     `references/worker-dispatch.md` § Card worker); it writes its verdict to a file, you post it
     unchanged; a push needs a new verdict.
-  - **One-way:** post the T2 panel. For the human's merge write one board item with the PR link, the
-    class and the panel verdict (`board.py ask --cause merge-go --pr <url> --one-way <class>`); the
+  - **One-way:** post the T2 panel and the card verdict. For the human's merge write one board item
+    with the PR link, the class and both verdicts (`board.py ask --cause merge-go --pr <url> --one-way <class>`); the
     closing message says `user merge: one-way (<class>)`. Where the gate's one-way refusal names the
     human's approve as the go (the repo runs an approve gate), the GitHub approve on the head is that
-    go and the repo arms itself: ask "please approve", not "please merge", and do nothing after it.
+    go: ask "please approve", not "please merge", and do nothing after it.
   - A draft reason (a follow-up still on the branch, an unmerged dependency) keeps the PR a draft per
     `/we:pr` step 4; it is no merge brake. Non-destructive migrations auto-merge serially (owner
     03.10.2026): the second PR arms only after the first landed, merging `origin/<default>`,

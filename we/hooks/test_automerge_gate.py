@@ -458,13 +458,8 @@ def test_one_way_is_refused_in_every_call_form(classed: dict, monkeypatch, comma
     assert reason is not None
     assert "`T2 one-way money`: one-way (money)" in reason
     assert "No session merges or arms it" in reason
-    assert (
-        "merges itself 2 h after a green T2 panel on its head, once Ada got the push line"
-        in reason
-    )
-    assert "`veto` label stops it" in reason and "/we:lens t2 7" in reason
-    assert "by hand" not in reason
-    assert "hand over the link and the class" in reason
+    assert "only Ada merges it, by hand; hand over the link and the class" in reason
+    assert "merges itself" not in reason
     assert "herself" not in reason and " her " not in reason
     assert "PR #7 (https://github.com/o/r/pull/7)" in reason
     assert not any(c[:2] == ["pr", "merge"] for c in fake.calls), fake.calls
@@ -652,7 +647,7 @@ def test_risk_paths_classifies_a_repo_without_risk_command(repo: Path, monkeypat
     reason = refuse(repo, ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None
     assert "`T2 one-way brake-change`" in reason
-    assert "the brake's core, only The owner merges it, by hand" in reason
+    assert "only The owner merges it, by hand" in reason
     assert "merges itself" not in reason
 
 
@@ -830,22 +825,14 @@ def lens(monkeypatch, tmp_path_factory) -> Path:
 
 
 @pytest.mark.parametrize("command", [ARM, "gh pr merge 7 --squash", GRAPHQL_MERGE])
-def test_t2_without_green_panel_is_refused(
+def test_q597_t2_without_a_panel_passes(
     classed: dict, monkeypatch, lens: Path, command: str
 ) -> None:
+    """8.42.0: red arm, 8.41.0 refused `PR #7 is T2 and its lens panel is not green`."""
     monkeypatch.setenv("FAKE_CLASS", "T2")
-    reason = refuse(
-        classed["repo"], command, FakeGh([run()], head=classed["head"], node=NODE), monkeypatch
-    )
-    assert reason is not None
-    assert "PR #7 is T2 and its lens panel is not green: lens architecture: missing" in reason
-    assert (classed["repo"] / ".lens-called").read_text() == "t2-pr7"
-
-
-def test_t2_with_green_panel_passes(classed: dict, monkeypatch, lens: Path) -> None:
-    monkeypatch.setenv("FAKE_CLASS", "T2")
-    (classed["repo"] / ".lens-green").write_text("")
-    assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
+    fake = FakeGh([run()], head=classed["head"], node=NODE)
+    assert refuse(classed["repo"], command, fake, monkeypatch) is None
+    assert not (classed["repo"] / ".lens-called").exists()
 
 
 # Regression: a core classifier's two-way `[brake-review]` section prints line 1 `T2` with a
@@ -859,10 +846,6 @@ BRAKE_REVIEW = (
 
 def test_a_brake_review_hit_is_two_way(classed: dict, monkeypatch, lens: Path) -> None:
     monkeypatch.setenv("FAKE_CLASS", BRAKE_REVIEW)
-    red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
-    assert red is not None and "one-way" not in red
-    assert "PR #7 is T2 and its lens panel is not green" in red
-    (classed["repo"] / ".lens-green").write_text("")
     red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
     assert red is not None and "one-way" not in red and "`brake-review` hit" in red
     card = [_card(classed["head"][:10])]
@@ -905,8 +888,8 @@ def test_an_approve_gate_makes_the_owners_approve_the_go(
     head = _with_gate(classed, GATE_FILES)
     reason = refuse(classed["repo"], ARM, FakeGh([run()], head=head), monkeypatch)
     assert reason is not None and f"one-way ({cls})" in reason
-    assert "Ada's GitHub approve on its head is the go (from the phone too)" in reason
-    assert "the session does nothing after it" in reason
+    assert "Ada's GitHub approve on its head turns the `one-way gate` status green" in reason
+    assert "from the phone too" in reason and "then Ada merges" in reason
     assert "Ask for an approve, not a merge" in reason
     assert "by hand" not in reason
 
@@ -935,19 +918,6 @@ def test_a_green_panel_never_lifts_one_way(classed: dict, monkeypatch, lens: Pat
     (classed["repo"] / ".lens-green").write_text("")
     reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
     assert reason is not None and "one-way (money)" in reason
-
-
-def test_a_broken_verdict_reader_counts_red(classed: dict, monkeypatch, lens: Path) -> None:
-    monkeypatch.setenv("FAKE_CLASS", "T2")
-    lens.write_text("def check(root, vid):\n    raise RuntimeError('torn file')\n")
-    reason = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
-    assert reason is not None and "the verdict reader failed (RuntimeError: torn file)" in reason
-
-
-def test_without_lens_verdict_the_panel_check_is_off(classed: dict, monkeypatch, capsys) -> None:
-    monkeypatch.setenv("FAKE_CLASS", "T2")
-    assert refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch) is None
-    assert "T2 panel check off" in capsys.readouterr().err
 
 
 # Review round: a merge the hook cannot read is refused, not let through.
@@ -1259,7 +1229,7 @@ def green(classed: dict, lens: Path) -> dict:
     return classed
 
 
-@pytest.mark.parametrize("section", ["trust-loosening", "money-path", "brake-review"])
+@pytest.mark.parametrize("section", ["trust-loosening", "brake-review"])
 def test_a_card_hit_without_card_verdict_is_refused(green: dict, monkeypatch, section) -> None:
     monkeypatch.setenv("FAKE_CLASS", _hit(section))
     for command in (ARM, "gh pr merge 7 --squash"):
@@ -1270,6 +1240,12 @@ def test_a_card_hit_without_card_verdict_is_refused(green: dict, monkeypatch, se
         assert "we-worker <KEY>-card --bg" in red
         assert "\"/<security holder's skill> security card review" in red
         assert "<!-- security-card-review -->" in red
+
+
+def test_q598_a_money_path_hit_needs_no_card(green: dict, monkeypatch) -> None:
+    """8.42.0: red arm, 8.41.0 refused `PR #7 is T2 with a `money-path` hit`."""
+    monkeypatch.setenv("FAKE_CLASS", _hit("money-path"))
+    assert refuse(green["repo"], ARM, FakeGh([run()], head=green["head"]), monkeypatch) is None
 
 
 def test_a_card_pass_on_an_older_head_is_refused(green: dict, monkeypatch) -> None:
@@ -1289,7 +1265,7 @@ def test_a_card_pass_on_the_head_lets_it_merge(green: dict, monkeypatch) -> None
 
 
 def test_a_later_blocking_on_the_head_beats_a_pass(green: dict, monkeypatch) -> None:
-    monkeypatch.setenv("FAKE_CLASS", _hit("money-path"))
+    monkeypatch.setenv("FAKE_CLASS", _hit("brake-review"))
     head = green["head"][:10]
     fake = FakeGh([run()], head=green["head"], cards=[_card(head), _card(head, "BLOCKING")])
     red = refuse(green["repo"], ARM, fake, monkeypatch)
@@ -1342,12 +1318,6 @@ def test_t2_without_a_card_hit_merges_on_the_panel_alone(green: dict, monkeypatc
         fake = FakeGh([run()], head=green["head"])
         assert refuse(green["repo"], ARM, fake, monkeypatch) is None
         assert not any("repos/o/r/issues/7/comments" in c for c in fake.calls), fake.calls
-
-
-def test_the_panel_refuses_before_the_card(classed: dict, monkeypatch, lens: Path) -> None:
-    monkeypatch.setenv("FAKE_CLASS", _hit("trust-loosening"))
-    red = refuse(classed["repo"], ARM, FakeGh([run()], head=classed["head"]), monkeypatch)
-    assert red is not None and "lens panel is not green" in red
 
 
 @pytest.mark.parametrize(
@@ -1479,16 +1449,15 @@ def test_a_plain_refusal_carries_no_body_chain_note(repo: Path, monkeypatch) -> 
     assert reason is not None and "command of its own" not in reason
 
 
-# The carried T2 panel (lens_verdict.check_t2): the card on the carried head holds too.
+# The carried card (lens_verdict.carry, 8.42.0): the last card PASS on an older head holds
+# while the delta touches no hit file.
 
 FAKE_LENS_T2 = """
 from pathlib import Path
-def check(root, vid):
-    raise AssertionError("check_t2 is preferred")
-def check_t2(root, vid, git=None, timeout=None):
+def carry(root, old, new, git=None, timeout=None):
     assert git is not None and timeout is not None, "the hook passes its own git and budget"
-    old = Path(root, ".lens-carried").read_text()
-    return True, ["panel " + vid + ": carried from " + old[:8], "panel " + vid + ": green"], old
+    carried = Path(root, ".lens-carried").read_text()
+    return carried.startswith(old), "delta touches no risk path"
 """
 
 

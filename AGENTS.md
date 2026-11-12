@@ -26,7 +26,7 @@ we/                               plugin root
                                   lens-product, lens-architecture, lens-acceptance, lens-security (the lens panel)
   references/                     shared contracts, one owner per fact (.claude/rules/plugin-authoring.md § Single owner)
   types/index.d.ts                the hooks module's $.state contract (plugin.json `types`)
-  docs/board.md                   the /board pane, board.json schema, moves, answers, freeze, self-merge, staging
+  docs/board.md                   the /board pane, board.json schema, moves, answers, freeze, staging
   templates/                      agents-skill/ (rule bridge for non-Claude agents), companion-skill/ (role-skill stub
                                   and pointer), orchestrate.md and risk-paths (copied by /we:setup), cold-reader.md
   hooks/
@@ -36,7 +36,7 @@ we/                               plugin root
     SessionStart                  materialize_on_start, process_on_start (L0), role_on_start (role card),
                                   optimization_reminder, compact_on_start (matcher compact)
     UserPromptSubmit              news_on_prompt (wake counter), sampler_on_prompt (dead sampler, blocked worker)
-    PreToolUse                    automerge_gate (every merge form: worker refusal, freeze, risk class, T2 panel,
+    PreToolUse                    automerge_gate (every merge form: worker refusal, freeze, risk class,
                                   security card PASS, Codex verdict on the head, receipt red), worker_rights_gate
                                   (a process worker's rights and never-list), verification_gate, draft_reason_gate,
                                   teammate_gate
@@ -49,7 +49,7 @@ we/                               plugin root
   scripts/
     crew                          crew.py (the one reader of .weside/crew.json), render_process.py, start.py,
                                   state_move.py, council_lens.py
-    board                         board.py, board_freeze.py, board_humans.py, board_self_merge.py, board_staging.py, cold_reader.py,
+    board                         board.py, board_freeze.py, board_humans.py, board_staging.py, cold_reader.py,
                                   accept.py, ticket_adapter.py, epic_state.py
     gates                         ready_gate.py, plan_tier.py, risk_paths.py, risk_runner.py, lens_verdict.py,
                                   check-plan-identifiers.py, check-instruction-budget.py

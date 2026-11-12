@@ -224,10 +224,9 @@ names are those of the default board. The freeze flag follows the same stem (`fr
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `discuss`, `info`, `update`, `withdraw` and `update_asker` texts the deliverer sends (§ Answers) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle, an escalation at stage `bundle`, and a signal `S<n>` with `for` the role and `key`, § Several humans), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned` and `info` (`board.py self-merge`), which the pane draws as info until it has glyphs for them |
+| `news[]` | optional: short items with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes the kinds `decision`, `todo` (the bundle, an escalation at stage `bundle`, and a signal `S<n>` with `for` the role and `key`, § Several humans), `escalation` (a record at stage `escalation`, with `for` the role waited on), `sample` (§ Acceptance), `returned`, which the pane draws as info until it has glyphs for them |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `staging` | optional, written by `board.py staging`, `book` and `unbook` only: `synced`, `repo`, `sla_hours`, `booking` (`issue`, `holder`, `until`) and `acceptance` (`issue`, `rc`, `opened`, `due`, `keys`, `past_sla`, `news`), each `null` when none is open; the pane draws one `◇ Staging` line per open one, a booking past its `until` as expired, and the past-SLA mark with the block's `sla_hours` (§ Staging) |
-| `self_merge` | optional, written by `board.py self-merge` only: `synced`, `repos` and `seen` (the news ids already mirrored, newest 200); the pane does not draw it (§ Self-merge window) |
 | `owner_queue[]` | questions only the owner can answer, oldest `since` (YYYY-MM-DD) first, its age in days yellow from 2, red from 7 |
 | `owner_queue[].id` | the question's id; without one the row has no answer buttons |
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
@@ -354,8 +353,8 @@ the question stays open on the pane.
 `since`, `by`, `reason`, `repos`, `disarmed`, `not_disarmed`, `issues`), opens an issue labelled
 `merge-freeze` in each named repo (for `*`: the crew file's repo, each member's extra repo present
 here and the current directory's repo) unless one is open there, then disarms every open PR with
-auto-merge armed in the named repos and records each one. The issue is what a repo's self-merge
-window reads (§ Self-merge window); one that fails to open lands in `not_disarmed` and the flag
+auto-merge armed in the named repos and records each one. The issue is what a repo's one-way
+gate reads (`scripts/fixtures/brake-self-merge/judge.json`); one that fails to open lands in `not_disarmed` and the flag
 stands anyway. Without `--repo` the flag names `*` (every repo) and disarms the current directory's repo:
 a freeze from the wrong checkout must not miss the repo it is for. The hook reads the flag only
 beside the crew's board (§ The file: its `board.file`, else `board.json` in its state directory), so `freeze` and `unfreeze` refuse any other
@@ -370,28 +369,6 @@ exits 1 naming it) and prints the disarmed PRs to re-arm by hand through the hoo
 itself, so no PR comes back unchecked. The
 flag is a brake against slips, not a boundary: any session can delete it
 (`scripts/board_freeze.py`).
-
-## Self-merge window
-
-A repo can run a self-merge window: a scheduled workflow that merges a one-way PR outside the
-brake's core (`risk_paths.CORE`) 2 h after a green T2 panel on its head, unless the PR carries the
-label `veto` or an open `merge-freeze` issue stands. The plugin feeds it and mirrors it; the
-workflow alone decides. The formats are the workflow judge's, pinned by
-`scripts/fixtures/brake-self-merge/judge.json`:
-
-| Signal | Written by | Form |
-|---|---|---|
-| panel comment | `lens_verdict.py post t2-pr<N>` (`/we:lens t2`) | `<!-- t2-panel -->`, ``## T2 panel — #<N> @ `<head>` ``, `**Overall: PASS**` or `FAIL` |
-| freeze | `board.py freeze` / `unfreeze` | an open issue labelled `merge-freeze` |
-| push line | the workflow | a comment by `github-actions[bot]` with `<!-- brake-self-merge-notice -->`, ``head: `<sha>` `` and `merges itself at <UTC>` |
-
-`board.py self-merge` (the coordinator's sweep) reads the open PRs labelled `one-way` in the crew's
-repos and adds one `info` news item `SM<PR>-<comment id>` per push line on a PR's current head,
-titled `self-merge window: #<N> · one-way <class> · merges at <UTC>`, the PR link and the veto form
-in the body. The `self_merge` block (`synced`, `repos`, `seen`) remembers the ids, so a read and
-pruned item does not come back; a new push line (after a push or a lifted veto) is a new item. A
-failed read exits 1 and leaves the board as it was. The merge hook still refuses every merge and arm
-of a one-way PR from a session.
 
 ## Questions and decisions
 

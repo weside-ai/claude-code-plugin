@@ -16,7 +16,7 @@
   a story on from it, and an In Test step exists only where the crew maps it.
   [docs/workflow.md](docs/workflow.md#several-humans) · tour page: [Several humans, one crew](https://plugin.weside.ai/tour/humans/)
 
-Claude arms auto-merge once CI is green (and, where the repo runs a Codex review, once it has a verdict on the head), unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, the brake's own code): those merge through the repo's self-merge window or by you. Who merges what: [`/we:master` § Close the run](we/skills/master/SKILL.md#close-the-run). `/we:merged` cleans up afterwards.
+Claude arms auto-merge once CI is green (and, where the repo runs a Codex review, once it has a verdict on the head), unless the diff falls in the computed one-way class (money path, destructive migration, Terraform or secrets, the brake's own code): those merge on your approve or by your hand. Who merges what: [`/we:master` § Close the run](we/skills/master/SKILL.md#close-the-run). `/we:merged` cleans up afterwards.
 
 `/flow` shows where each story stands while this runs: a pane with one traffic light per pipeline
 step, refreshed from git and GitHub, with buttons for the next command.
