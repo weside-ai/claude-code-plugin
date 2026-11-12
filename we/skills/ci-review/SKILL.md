@@ -40,7 +40,9 @@ A skip is legitimate only when one of these holds:
 - **Every skipped BLOCKING or WARNING needs the evidence on the PR.** Reply in the thread, or post
   `gh pr comment $PR --body …` for a summary finding. A Codex skip is one line per finding,
   `Codex #<n> skipped: <path:line or sha> <reason>` (`<n>` = its number in the review); any other shape
-  is dropped and Codex re-posts the finding. Otherwise the re-review posts the same verdict and
+  is dropped and Codex re-posts the finding. A Codex WARNING on lines unchanged since a head whose Codex
+  check passed is skipped citing that head (`Codex #<n> skipped: unchanged since <sha> PASS`), never on a
+  one-way PR (owner 12.11.2026). Otherwise the re-review posts the same verdict and
   the gate stays red. In the report, say that the gate needs a human override.
 - **A small defect on the seam this PR touches is fixed here**, even when it is pre-existing. A finding that cannot ride along
   (a product decision, a money-path change, a foreign subsystem, a change that buries the diff) goes into
