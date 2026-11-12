@@ -117,8 +117,10 @@ Selected; move its ticket per `ticketing.md`, which names the mover for every st
 
 **Fill the slots:** each time a PR merges or a worker ends, list every story whose dependency is now met (the
 merged artifact its plan names, not the whole story) and every story without a plan, and dispatch until the worker
-limit (L0 §Sessions) is reached. Two stories whose plans touch the same files never run in parallel: the second
-waits for the first one's merge.
+limit (L0 §Sessions) is reached. Two stories whose plans touch the same files do not build from the same base:
+the second is dispatched on the first one's branch head as soon as that one reports (it merges `origin/<default>`
+after the first merged; its PR waits for that merge). Wait for the merge only while the first plan's design is
+still open (owner, 09.11.2026: "wir müssen keine tage warten").
 
 **Before every dispatch:** `git fetch origin`, re-read the plan (another session may have built it).
 When only CI holds the plan's docs PR, the build may start once the Ready panel is green on the plan
@@ -241,7 +243,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
     method outside a terminal.
   - **Card hit:** once the panel is green, start a security card worker on the head
     (`<KEY>-card`, through the crew's launcher like any worker, brief per
-    `references/worker-dispatch.md` § Card worker); a push needs a new verdict.
+    `references/worker-dispatch.md` § Card worker); it writes its verdict to a file, you post it
+    unchanged; a push needs a new verdict.
   - **One-way:** post the T2 panel. For the human's merge write one board item with the PR link, the
     class and the panel verdict (`board.py ask --cause merge-go --pr <url> --one-way <class>`); the
     closing message says `user merge: one-way (<class>)`. Where the gate's one-way refusal names the
