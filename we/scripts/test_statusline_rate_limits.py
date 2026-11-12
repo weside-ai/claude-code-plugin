@@ -295,7 +295,7 @@ def test_a_switch_after_session_start_records_nothing_for_the_new_account(tmp_pa
 
     set_active(tmp_path, OTHER)
     render(tmp_path, "sA", reading, stub_dir)
-    assert wait_for(lambda: rl_file.exists() or "foreignAt" in binding_of(binding))
+    assert wait_for(lambda: rl_file.exists() or "foreignUntil" in binding_of(binding))
     assert not rl_file.exists(), "a reading of the session under A landed on B"
     assert not log.exists()
     # The slot went back: a session that runs under B records in the same minute.
@@ -324,3 +324,23 @@ def test_record_without_a_bound_session_records_nothing(tmp_path):
         check=True,
     )
     assert not (tmp_path / ".claude" / ".we-rate-limits.json").exists()
+
+
+def test_a_resumed_session_binds_the_account_its_new_process_runs_under(tmp_path):
+    """`--resume` after a switch keeps the session id but runs under B: its readings go to B."""
+    stub_dir, _log = stub_cswap(tmp_path)
+    (tmp_path / ".claude").mkdir()
+    rl_file = tmp_path / ".claude" / ".we-rate-limits.json"
+    folder = tmp_path / ".claude" / "we-rl-sessions"
+    folder.mkdir()
+    # The binding an earlier Claude Code process left under A.
+    (folder / "sR.json").write_text(
+        json.dumps({"email": EMAIL, "organizationUuid": "", "proc": "1:0"})
+    )
+    set_active(tmp_path, OTHER)
+    reset = int(time.time()) + 3_600
+    render(tmp_path, "sR", {"five_hour": {"used_percentage": 9, "resets_at": reset}}, stub_dir)
+    assert wait_for(rl_file.exists)
+    (entry,) = json.loads(rl_file.read_text())["accounts"].values()
+    assert entry["email"] == OTHER
+    assert json.loads((folder / "sR.json").read_text())["email"] == OTHER

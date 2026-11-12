@@ -278,28 +278,48 @@ function readBinding(sessionId) {
   return null;
 }
 
-// First render of a session: the account it runs under is the one `oauthAccount` names now. Written
-// once (O_EXCL); every later render costs one read of this small file, never of `.claude.json`.
-function bindSession(sessionId, cfg) {
-  const existing = readBinding(sessionId);
-  if (existing) return existing;
-  const identity = readIdentity(cfg);
-  if (!identity) return null;
-  try {
-    fs.mkdirSync(RL_SESSIONS, { recursive: true });
-    fs.writeFileSync(sessionBindingPath(sessionId), JSON.stringify(identity), { flag: 'wx' });
-  } catch (e) {
-    return readBinding(sessionId);
+// The Claude Code process that runs this statusline: the parent, past a shell that wraps the command
+// (Linux, via /proc), with its start time against pid reuse. Elsewhere the plain parent pid.
+const SHELLS = new Set(['sh', 'bash', 'dash', 'zsh', 'fish']);
+function claudeProcess() {
+  let pid = process.ppid;
+  for (let i = 0; i < 3; i++) {
+    let stat;
+    try {
+      stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch (e) {
+      return String(pid);
+    }
+    const m = stat.match(/^\d+ \((.*)\) (.*)$/s);
+    if (!m) return String(pid);
+    const rest = m[2].split(' ');
+    if (!SHELLS.has(m[1]) || Number(rest[1]) <= 1) return `${pid}:${rest[19]}`;
+    pid = Number(rest[1]);
   }
-  return identity;
+  return String(pid);
 }
 
-function cfgMtime(cfg) {
+// First render of a session in this Claude Code process: the account it runs under is the one
+// `oauthAccount` names now. A new process under the same session id (`--resume` after a switch)
+// binds anew; within one process every later render costs one read of this small file, never of
+// `.claude.json`. A `/login` inside a running session is not followed: its readings are dropped
+// until the session restarts, never credited to the wrong account.
+function bindSession(sessionId, cfg) {
+  const proc = claudeProcess();
+  const existing = readBinding(sessionId);
+  if (existing && existing.proc === proc) return existing;
+  const identity = readIdentity(cfg);
+  if (!identity) return null;
+  const binding = { ...identity, proc };
   try {
-    return fs.statSync(cfg).mtimeMs;
+    fs.mkdirSync(RL_SESSIONS, { recursive: true });
+    const tmp = `${sessionBindingPath(sessionId)}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(binding));
+    fs.renameSync(tmp, sessionBindingPath(sessionId));
   } catch (e) {
     return null;
   }
+  return binding;
 }
 
 function maybeRecordRateLimits(data) {
@@ -314,9 +334,9 @@ function maybeRecordRateLimits(data) {
   // that has one. Sessions with readings run the feed.
   const rl = data.rate_limits;
   if (!rl || (!rl.five_hour && !rl.seven_day)) return;
-  // The child found another account active and `.claude.json` is unchanged since: skip without
-  // taking the minute's slot from a session whose account is active.
-  if (binding.foreignAt != null && binding.foreignAt === cfgMtime(cfg)) return;
+  // The child found another account active: skip for a minute without taking the slot from a
+  // session whose account is active (one detached check per minute and foreign session at most).
+  if (typeof binding.foreignUntil === 'number' && Date.now() < binding.foreignUntil) return;
   if (!claimSlot(`${RL_FILE}.${shortHash(cfg)}.stamp`, RL_INTERVAL_MS)) return;
   try {
     const child = spawn(
@@ -335,7 +355,7 @@ function sameAccount(a, b) {
 
 // A reading belongs to the account the session is bound to. When `oauthAccount` names another one
 // (a switch after the session started), the reading is dropped, the minute's slot handed back, and
-// the binding notes the `.claude.json` mtime so the render path skips until the file changes.
+// the binding notes a minute in which the render path skips.
 function sessionStillOnItsAccount(cfg, sessionId, identity) {
   if (!SESSION_ID_RE.test(String(sessionId || ''))) return false;
   const binding = readBinding(sessionId);
@@ -346,7 +366,7 @@ function sessionStillOnItsAccount(cfg, sessionId, identity) {
   } catch (e) {}
   try {
     const tmp = `${sessionBindingPath(sessionId)}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ ...binding, foreignAt: cfgMtime(cfg) }));
+    fs.writeFileSync(tmp, JSON.stringify({ ...binding, foreignUntil: Date.now() + RL_INTERVAL_MS }));
     fs.renameSync(tmp, sessionBindingPath(sessionId));
   } catch (e) {}
   return false;
