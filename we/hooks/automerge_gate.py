@@ -30,17 +30,15 @@ Refusals, in this order (the first one wins):
      merge and arm in a repo the flag names (`repos`, `*` for all) is refused, naming its
      reason; an unreadable flag counts as standing.
   3. One-way: the PR's class (`pr_class`) is `T2 one-way <class>`; no session merges or arms it,
-     whatever a command or a chat quote says. Only the owner (`human.name` in the crew) merges it
-     (8.42.0: the self-merge window is gone). Where `origin/main` carries an approve gate
+     whatever a command or a chat quote says. Only the owner (`human.name` in the crew) merges it.
+     Where `origin/main` carries an approve gate
      (`.github/workflows/one-way-gate.yml` and a `brake_self_merge.py` that knows the state
      `approved`), the owner's GitHub approve on the head turns the gate green, and the refusal says
      so: the session asks for an approve, not a merge.
-  4. (gone, 8.42.0: the T2 panel is no merge gate for a two-way PR; `/we:lens t2` stays
-     the owner's input on a one-way PR.)
-  5. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
-     (line 3 on, `<file>\t<section>: <why>`) in `trust-loosening` or `brake-review` (Q598: not
-     `money-path`) needs a PR comment of the security card worker
-     (`references/worker-dispatch.md` § Card worker) in this form:
+  4. T2 two-way with a card hit and no security card PASS on the head: a classifier hit line
+     (line 3 on, `<file>\t<section>: <why>`) in a card section (`risk_paths.CARD`) needs a PR
+     comment of the security card worker (`references/worker-dispatch.md` § Card worker) in this
+     form:
 
          <!-- security-card-review -->
          ## Security card review — #<N> @ `<head sha, at least 7 hex chars>`
@@ -51,8 +49,8 @@ Refusals, in this order (the first one wins):
      among them only those whose `@ <sha>` is a prefix of the PR's current head; the last of those
      decides (`PASS` lets it go, any other `Overall:` word refuses). None on the head refuses, and
      so does a comment read that fails, unless the last card comment is a PASS on an older head
-     and `lens_verdict.carry` carries it: the delta since touches no file the class hit (Q596).
-  6. Plan first, for every story key the PR's head branch and title name (the crew's
+     and `lens_verdict.carry` carries it: the delta since touches no file the class hit.
+  5. Plan first, for every story key the PR's head branch and title name (the crew's
      `naming.key` on `origin/main`, else the default) whose plan `docs/plans/<KEY>-story.md` is
      on the head or on `origin/main`, and the PR changes a file outside `docs/` other than the
      story's own receipt (`<oracles.receipt_dir>/<KEY>.<ext>` on `origin/main`): the plan must be
@@ -62,10 +60,10 @@ Refusals, in this order (the first one wins):
      file, and the plan PR itself (only `docs/` and its own receipt), are untouched. Only where the class was
      computed (a repo with rules); a one-way PR, refused by 3, names this refusal too, so the
      human who merges it by hand sees it.
-  7. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
+  6. An arm before the Codex review on the PR's head has a verdict (`review.codex_check` in
      `.weside/config.json`, default `Codex Review`), unless the base branch requires that check
      itself (rulesets or classic protection); a repo whose workflows name no such job has none.
-  8. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
+  7. An arm while the PR body carries a `receipt red` line (outside fenced code) in a repo whose
      `.weside/config.json` names `verification.pre_merge_receipt`.
 
 The class (`pr_class`) comes only from `origin/main`: the crew file `.weside/crew.json` is read as
@@ -199,8 +197,8 @@ _ONE_WAY_SECTION = re.compile(
 _CLASS_LINE = risk_runner.CLASS_LINE
 _SLUG = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
 _URL_SLUG = re.compile(r"github\.com/([^/]+/[^/]+)/pull/(\d+)")
-# The two-way sections whose hit needs a security card verdict (8.42.0: not `money-path`).
-CARD_SECTIONS = ("trust-loosening", "brake-review")
+# The two-way sections whose hit needs a security card verdict.
+CARD_SECTIONS = risk_paths.CARD
 _CARD_HIT = re.compile(r"(?:^|\t)(" + "|".join(CARD_SECTIONS) + r"):")
 CARD_MARKER = "<!-- security-card-review -->"
 _CARD_HEAD = re.compile(r"^#+\s*Security card review\b.*?@\s*`?([0-9a-f]{7,40})`?", re.MULTILINE)
@@ -904,7 +902,7 @@ def _card_refusal(root: str, cls: ClassResult, cwd: str | None) -> str | None:
     if verdict == "PASS":
         return None
     # the last card PASS holds while the delta since its head touches no hit file
-    # (`lens_verdict.carry`, 8.42.0)
+    # (`lens_verdict.carry`)
     if verdict is None and last_head is not None and _card_verdict(bodies, last_head)[0] == "PASS":
         carries, why = _carry(root, last_head, head)
         if carries:
@@ -954,7 +952,7 @@ def _approve_gate(root: str) -> bool:
 
 
 def _one_way_refusal(root: str, cls: ClassResult) -> str:
-    """Refusal 3: every one-way class waits for the owner (8.42.0: no self-merge window);
+    """Refusal 3: every one-way class waits for the owner;
     where the repo runs an approve gate, the owner's approve on the head is the go."""
     head = (
         f"PR #{cls.number} ({cls.url}) is `{cls.line}`: one-way ({cls.one_way}). No session merges "
@@ -976,7 +974,7 @@ def _class_refusal(
     cwd_known: bool = True,
     home: str | None = None,
 ) -> tuple[str | None, bool]:
-    """(refusal, go on): the class, panel and card refusals; go on is False when nothing is to
+    """(refusal, go on): the class and card refusals; go on is False when nothing is to
     merge.
     `home` is the directory the command starts in, read for rules when `root` is unknown."""
     if call.unresolved:

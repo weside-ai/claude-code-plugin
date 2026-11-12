@@ -9,8 +9,7 @@ one per crew, not one per folder: `{"since", "by", "reason", "repos", "disarmed"
 "issues"}`. `board.py freeze` and `board.py unfreeze` are its only writers; the hook only reads it
 (`read_flag`).
 
-The freeze also reaches GitHub, where a repo's self-merge window (a scheduled workflow that merges
-a one-way PR outside the brake's core) reads it: an open issue labelled `merge-freeze`
+The freeze also reaches GitHub, where a repo's one-way gate reads it: an open issue labelled `merge-freeze`
 (`FREEZE_LABEL`, the judge's contract in `fixtures/brake-self-merge/judge.json`) means frozen.
 
   * `freeze` opens one such issue in every repo of `issue_repos` (the named repos; for `*` every

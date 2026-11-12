@@ -17,9 +17,9 @@ Grammar, a subset of the rules file the core classifier reads:
   path <glob>
 
 `<section>` is one of the one-way classes, in this fixed order of precedence: `brake-change`,
-`money`, `destructive-migration`, `terraform-secrets`; a card section (two-way, `review: high`,
-and the merge hook also waits for a security card verdict): `trust-loosening`, `money-path`,
-`brake-review`; or `t2` (two-way).
+`money`, `destructive-migration`, `terraform-secrets`; a `review: high` section (two-way):
+`trust-loosening`, `money-path`, `brake-review`, of which the card sections `trust-loosening` and
+`brake-review` also wait in the merge hook for a security card verdict; or `t2` (two-way).
 A glob: `**/` matches zero or more whole directories, a bare `**` anything, `*` and `?` stay
 inside one directory, `{a,b}` expands. A `line` or `from` rule, an unknown keyword or section, a
 section without a rule, or a rule before the first section exits 2 naming it. A file without any
@@ -55,9 +55,11 @@ ONE_WAY = (
 )
 # The brake's core among them (a removed rule, a gate): `hooks/automerge_gate.py` names it.
 CORE = ("brake-change",)
-# Two-way sections whose hit needs the security card verdict (`hooks/automerge_gate.py`).
-CARD = ("trust-loosening", "money-path", "brake-review")
-SECTIONS = (*ONE_WAY, *CARD, "t2")
+# Two-way sections that print `review: high`; the card sections among them need the security card
+# verdict (`hooks/automerge_gate.py`).
+HIGH = ("trust-loosening", "money-path", "brake-review")
+CARD = ("trust-loosening", "brake-review")
+SECTIONS = (*ONE_WAY, *HIGH, "t2")
 
 
 class RiskError(Exception):
@@ -152,7 +154,7 @@ def classify(changed: list[str], rules: dict[str, list[tuple[str, re.Pattern[str
     one_way = next((c for c in ONE_WAY if c in found), None)
     if one_way:
         lines = [f"T2 one-way {one_way}", "review: high"]
-    elif found & set(CARD):
+    elif found & set(HIGH):
         lines = ["T2", "review: high"]
     elif "t2" in found:
         lines = ["T2", "review: standard"]

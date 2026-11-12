@@ -1,5 +1,5 @@
 {
-  "_source": "The formats a repo's one-way gate reads (its judge passes a one-way PR on the owner's approve and holds it while a freeze issue stands; the self-merge window is gone, 8.42.0), copied from its source and tests. The plugin writes the panel comment (the owner's input) and the freeze issue; a change here follows the judge, never the other way.",
+  "_source": "The formats a repo's one-way gate reads (its judge passes a one-way PR on the owner's approve and holds it while a freeze issue stands), copied from its source and tests. The plugin writes the panel comment (the owner's input) and the freeze issue; a change here follows the judge, never the other way.",
   "panel_marker": "<!-- t2-panel -->",
   "panel_head": "^## T2 panel — #(\\d+) @ `([0-9a-f]{7,40})`\\s*$",
   "overall": "^\\*\\*Overall: (\\w+)\\*\\*\\s*$",

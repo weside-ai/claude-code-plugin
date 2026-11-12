@@ -24,7 +24,7 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = "Only Hal merges a\n  one-way PR, on their approve;"
-DECIDED_3 = "3. One-way merges on Hal's approve only; no self-merge window (8.42.0)."
+DECIDED_3 = "3. One-way merges on Hal's approve only."
 
 
 @pytest.fixture(autouse=True)

@@ -82,7 +82,7 @@ Carried panel (T2 only): a panel bound to an older head ``old`` stays green on t
 head ``new`` when every expected lens is green on ``old``, ``old`` is an ancestor of ``new``, and
 the change ``old..new`` touches no file the PR's class hit: the PR is classified on
 ``merge-base(<rules ref>, new)..new`` by ``risk_runner`` (the merge hook's own runner, rules and
-rules ref); class ``T0`` carries, every other class (one-way too, 8.42.0) only when the delta's files (``git diff --name-only old
+rules ref); class ``T0`` carries, every other class (one-way too) only when the delta's files (``git diff --name-only old
 new``) must miss every hit line's file, and so must the files the default branch changed between
 the PR's bases (``merge-base(<rules ref>, old)..merge-base(<rules ref>, new)``): a merge that keeps
 the branch's side of a hit file leaves it out of ``old..new`` while the PR's diff on it now undoes the
@@ -97,7 +97,7 @@ computed on every ``check``; nothing is written.
 No skip, no override: no field can skip, confirm, waive or lift anything; ``skip``, ``override``,
 ``one_way``, ``go`` and every other unknown key are refused. A red panel turns green only through a
 fresh panel on a new plan blob or head; a green T2 panel is carried only as above. Any session
-can write this file, so it gates only the move to Selected (8.42.0: no merge reads it).
+can write this file, so it gates only the move to Selected; no merge reads it.
 
 Panel comment (T2): ``post`` puts the panel's state on GitHub as the owner's input on a one-way PR,
 in the form pinned by ``fixtures/brake-self-merge/judge.json``::
