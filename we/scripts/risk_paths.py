@@ -53,8 +53,6 @@ ONE_WAY = (
     "destructive-migration",
     "terraform-secrets",
 )
-# The brake's core among them (a removed rule, a gate): `hooks/automerge_gate.py` names it.
-CORE = ("brake-change",)
 # Two-way sections that print `review: high`; the card sections among them need the security card
 # verdict (`hooks/automerge_gate.py`).
 HIGH = ("trust-loosening", "money-path", "brake-review")

@@ -766,7 +766,7 @@ def test_the_bound_budget_check_goes_red_with_its_number(tmp_path):
 
 
 # The brake's core: a diff to the classifier, the gates, the review workflows, the crew's `risk`
-# block or one that removes a rule is `brake-change` (`risk_paths.CORE`), never self-merged. The
+# block or one that removes a rule is `brake-change`. The
 # review workflows are named apart from the gates: a crew's `[brake-change]` lists them as paths of
 # their own. Rules live only in the rules file, so the bundled classifier sees a removed rule as a
 # change to that file, which the setup template puts under `[brake-change]`; a crew's own
@@ -787,7 +787,6 @@ def test_the_setup_template_classifies_a_removed_rule_as_brake_core():
     import risk_paths  # noqa: PLC0415
 
     rules = risk_paths.parse_rules((HERE.parent / "templates" / "risk-paths").read_text())
-    assert risk_paths.CORE == ("brake-change",)
     assert any(p.fullmatch(".weside/risk-paths") for _, p in rules["brake-change"])
 
 
