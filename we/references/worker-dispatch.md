@@ -283,6 +283,9 @@ sends no notification and survives the next one (twice on 15.10.2026). When the 
 arrives or the worker is stopped, `TaskStop` its watchdog by task id in the same turn, never by a
 `pkill` pattern: a leftover watchdog later reports a stall that is not real (three on 17.10.2026).
 
+An `exited:` line naming `auth` restarts the worker at once with the resume command it names (after
+`usage-limit`: at the reset), one line to the coordinator; a worker that died stays a row in
+`claude agents`, so only its living pid counts as alive. `we-worker status` lists window workers too.
 A commit becomes one status line to the human (phase done). A stall gets evidence (`git log -3`,
 `git status`, the agent's state) before any word about it. Three runs with it had 0 idle nudges
 by the human (#4308, #4326, #4328); without it a worker sat idle 7 h 47 min (#4299).

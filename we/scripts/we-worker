@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # we-worker — start and steer a process worker on the global login (references/worker-dispatch.md).
 #   we-worker <name> [--bg] [--limit <duration>] [claude args...]   start a worker session named <name>
-#   we-worker status [<name|id>]   one line per background worker: id, name, pid, state, last=HH:MM (UTC
+#   we-worker status [<name|id>]   one line per worker, background or window (a session started with
+#                                  WE_ROLE=worker or named by its tree's launcher marker, marked
+#                                  `window`): id, name, pid, state, last=HH:MM (UTC
 #                                  of its last assistant entry), then `usage-limit` or `auth` when that
 #                                  entry is an API error of that kind, then `time-limit=HH:MM` (the
 #                                  deadline of --limit, `reached` once past); an exited worker that hit
-#                                  the usage limit gets a second line with its resume command
+#                                  the usage limit or an auth error gets a second line with its resume
+#                                  command
 #   we-worker stop <name|id>       stops a worker (a background session with `claude stop`, a window
 #                                  worker with SIGTERM to its pid) and waits until it is gone (30 s);
 #                                  then ends what it left running (watchers, dev servers: its process
@@ -36,7 +39,8 @@
 #   --limit  the time limit handed to the timer (default 3h; 90m, 2h30m; a bare number is minutes)
 #   --resume/-r <id|name>  a short id or name resolves to the full session id; ambiguous, unknown or still
 #                          running (its pid lives: claude would start a copy) refuses without starting
-# A start under a name a running background session holds refuses as well: steer it, or stop it first.
+# A start under a name a running session of any kind holds, or a tmux window already carries, refuses
+# as well: steer it, or stop it first.
 # A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
 # `--cwd` would otherwise reach claude as a prompt): run `cd <tree> && we-worker …` instead.
 # A start refuses (exit 2, before any claude call) a name that does not start with the story key (crew
@@ -210,17 +214,33 @@ def time_limit(name):  # "time-limit=HH:MM" or "time-limit=reached" from the tim
     if when.tzinfo is None: when = when.replace(tzinfo=datetime.timezone.utc)
     past = when <= datetime.datetime.now(datetime.timezone.utc)
     return "time-limit=" + ("reached" if past else when.astimezone(datetime.timezone.utc).strftime("%H:%M"))
+def window_worker(a):  # a non-background row started as a worker: WE_ROLE=worker, or its marker
+    try:
+        with open("/proc/%d/environ" % int(a.get("pid")), "rb") as f:
+            if b"WE_ROLE=worker" in f.read().split(b"\0"): return True
+    except (OSError, TypeError, ValueError): pass
+    cwd = a.get("cwd")
+    if not cwd or not a.get("name"): return False
+    import subprocess
+    gd = subprocess.run(["git", "-C", cwd, "rev-parse", "--absolute-git-dir"], capture_output=True, text=True).stdout.strip()
+    try: d = json.load(open(os.path.join(gd, "we-worker.json"))) if gd else None
+    except (OSError, ValueError): return False
+    return isinstance(d, dict) and d.get("name") == a.get("name")
 k = sys.argv[3] if len(sys.argv) > 3 else None
 for a in json.load(sys.stdin):
-    if a.get("kind") != "background" or (k and k not in (a.get("name"), a.get("id"))): continue
+    a["id"] = a.get("id") or a.get("sessionId")
+    if k and k not in (a.get("name"), a.get("id")): continue
+    window = a.get("kind") != "background"
+    if window and not window_worker(a): continue
     hm, m = last_assistant(a.get("sessionId"))
-    st = a.get("state") or a.get("status")
+    st = (a.get("status") or a.get("state")) if window else (a.get("state") or a.get("status"))
     gone = not alive(a.get("pid"))
     if gone: st = "exited(%s)" % st
     tl = time_limit(a.get("name") or "")
-    print(a.get("id"), a.get("name"), "pid=" + str(a.get("pid", "-")), st, "last=" + hm, *[x for x in (m, tl) if x])
-    if gone and m == "usage-limit" and a.get("sessionId"):
-        print("  resume after the reset: we-worker %s --bg --resume %s" % (a.get("name"), a.get("sessionId")))' \
+    print(a.get("id"), a.get("name"), "pid=" + str(a.get("pid", "-")), st, "last=" + hm, *[x for x in ("window" if window else None, m, tl) if x])
+    if gone and m in ("usage-limit", "auth") and a.get("sessionId"):
+        when = "the reset" if m == "usage-limit" else "the login is back"
+        print("  resume after %s: we-worker %s --bg --resume %s" % (when, a.get("name"), a.get("sessionId")))' \
       "$(_projects)" "${WE_WORKER_STATE_DIR:-$HOME/.claude/we-state/workers}" ${2:+"$2"}
     exit 0
     ;;
@@ -370,10 +390,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# A living session under this name: a second start would make two workers answer to one name.
-read -r held_id held_pid _s _sid <<<"$(_resolve "$name")" || true
+# A living session under this name, of any kind, or a tmux window of that name: a second start
+# would make two workers answer to one name (and write in one worktree).
+IFS=$'\t' read -r held_id held_pid _k _sid _s _n _c <<<"$(_resolve_any "$name")" || true
 if [[ -n "${held_id:-}" && "${held_pid:-}" != - ]] && kill -0 "$held_pid" 2>/dev/null; then
   echo "we-worker: a running session already holds the name $name ($held_id, pid $held_pid); steer it with SendMessage, read it with 'we-worker logs $name', or 'we-worker stop $name' first" >&2
+  exit 2
+fi
+held_window=$(tmux list-windows -a -F '#{session_name}:#{window_index} #{window_name}' 2>/dev/null | awk -v n="$name" '$2 == n {print $1; exit}' || true)
+if [[ -n "$held_window" ]]; then
+  echo "we-worker: the tmux window $held_window is already named $name (a window worker may live there); look at it, or close it first" >&2
   exit 2
 fi
 
