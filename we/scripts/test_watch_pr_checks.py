@@ -626,7 +626,10 @@ BILLING = json.dumps([{"message": "The job was not started because of a billing 
 def _failed_with_run(name="Lint", run_id=123):
     d = _green()
     d["statusCheckRollup"][0].update(
-        name=name, conclusion="FAILURE", detailsUrl=RUN_URL.format(run_id, 99)
+        name=name,
+        conclusion="FAILURE",
+        detailsUrl=RUN_URL.format(run_id, 99),
+        startedAt="2026-10-04T03:00:00Z",  # the newest run of its name on the head
     )
     return d
 
@@ -714,3 +717,27 @@ def test_a_real_failure_beside_a_job_that_never_started_stays_red(tmp_path):
         env_extra={"GH_RUN_JOBS": sibling, "GH_ANNOTATIONS": BILLING},
     )
     assert code == 1 and out[-1].startswith(f"final {SHA}: red · failed: Lint"), out
+
+
+def test_only_the_newest_run_of_a_check_counts(tmp_path):
+    """A draft run left a red `ci-summary` on the head; the ready run of the same workflow passed
+    it. Red arm: the watcher printed `fail: ci-summary` and ended red although the PR was green."""
+    d = _green()
+    old, new = copy.deepcopy(d["statusCheckRollup"][1]), copy.deepcopy(d["statusCheckRollup"][1])
+    old.update(name="ci-summary", conclusion="FAILURE", startedAt="2026-10-04T02:00:00Z")
+    new.update(name="ci-summary", conclusion="SUCCESS", startedAt="2026-10-04T02:40:00Z")
+    d["statusCheckRollup"] += [old, new]
+    code, out = run(tmp_path, [d])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    # the newer run still going keeps the check pending, the older red does not end it red
+    running = copy.deepcopy(d)
+    running["statusCheckRollup"][-1].update(status="IN_PROGRESS", conclusion="", startedAt=None)
+    (tmp_path / "b").mkdir()
+    code, out = run(tmp_path / "b", [running, d])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    # a check of the same name in another workflow is its own check
+    other = copy.deepcopy(d)
+    other["statusCheckRollup"][-2]["workflowName"] = "Nightly"
+    (tmp_path / "c").mkdir()
+    code, out = run(tmp_path / "c", [other])
+    assert code == 1 and "fail: ci-summary" in out

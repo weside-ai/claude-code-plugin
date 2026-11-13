@@ -50,6 +50,8 @@
 # <state> is `mergeStateStatus/mergeable` (UNKNOWN right after a push); `DIRTY/…` reads
 # `DIRTY/… — conflicts with the base: merge it`, a stale branch `BEHIND/… — behind the base: merge
 # it` (`mergeable` CONFLICTING ends the watch with exit 12 first).
+# A check name that ran more than once on the head (a draft run, then the ready run) is judged
+# by its newest run only (`startedAt`; a run not started yet is the newest).
 # Final means: the head's checks are non-empty, none pending, no workflow run for the head SHA
 # queued or in progress (a rerun counts as pending until it completes), and the whole set
 # unchanged for WATCH_QUIET seconds and at least two reads. Checks register seconds after a
@@ -108,10 +110,14 @@ BORN=$(date +%s)
 
 # Line 1: the head SHA. Line 2: mergeStateStatus<TAB>mergeable<TAB>state<TAB>auto-merge on|off.
 # Then one line per check: <verdict>\t<name>\t<run id or empty>\t<details url>,
-# verdict pending | pass | fail | cancelled.
-CLASSIFY='.headRefOid, ((.mergeStateStatus // "UNKNOWN") + "\t" + (.mergeable // "UNKNOWN")
+# verdict pending | pass | fail | cancelled. Only the newest run of each check (workflow and
+# name) on the head counts: a draft run's red ci-summary beside the ready run is history, not red.
+CLASSIFY='def ckey: [(.workflowName // ""), (.name // .context // "")];
+  def at: (.startedAt // .createdAt // "9999");
+  def newest: . as $all | [$all[] | . as $c | select(all($all[]; ckey != ($c | ckey) or at <= ($c | at)))];
+  .headRefOid, ((.mergeStateStatus // "UNKNOWN") + "\t" + (.mergeable // "UNKNOWN")
     + "\t" + (.state // "OPEN") + "\t" + (if .autoMergeRequest then "on" else "off" end)),
-  (.statusCheckRollup[]? |
+  (((.statusCheckRollup // []) | newest)[] | (
   (if .__typename == "StatusContext" then
      (if .state == "SUCCESS" then "pass" elif (.state == "PENDING" or .state == "EXPECTED") then "pending" else "fail" end)
    elif .status != "COMPLETED" then "pending"
@@ -120,7 +126,7 @@ CLASSIFY='.headRefOid, ((.mergeStateStatus // "UNKNOWN") + "\t" + (.mergeable //
    else "fail" end)
   + "\t" + (.name // .context)
   + "\t" + (((.detailsUrl // .targetUrl // "") | capture("/actions/runs/(?<id>[0-9]+)") | .id) // "")
-  + "\t" + (.detailsUrl // .targetUrl // ""))'
+  + "\t" + (.detailsUrl // .targetUrl // "")))'
 # One line per workflow run on the head SHA: <id>\t<attempt>\t<status>.
 RUNS='.[] | "\(.databaseId)\t\(.attempt)\t\(.status)"'
 # The body of the last Codex review comment (one sticky comment, edited per reviewed head).
