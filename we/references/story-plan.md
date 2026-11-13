@@ -121,7 +121,11 @@ Three lists here each cost review rounds when missing:
 - **Risk:** <ordinary | migration | money | auth | tenant-isolation> — <on what; also name a
   promise that must hold across several code paths, a transaction or idempotency, or a fix
   routing around a fragile path, because the Lead picks `we:dev-high` from this line>
-- **Approach:** <how>
+- **Test first:** <only with `test_discipline: tdd`: the test written first, its suite and the CI job
+  that runs it>
+- **Approach:** <how; in a phase with a `**Repo:**` line: the target and its check (which paths must
+  pass, which must not), never a code line quoted from that repo: its owner writes it at build time,
+  and a quoted line goes stale before the build>
 
 ## Out of scope
 

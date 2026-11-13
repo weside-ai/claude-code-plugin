@@ -56,8 +56,11 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
      the paths the story touches.
    - ADRs and earlier plans on the same seam; the epic plan's `## Success Criteria` (or `## Success Metrics`).
    - `.weside/dor.md`: each row becomes a labelled line in `## Constraints and Pins`.
-   - `.weside/config.json`: `test_discipline` (`tdd`, `tests-after` as the default, `off`) sets the level of
-     `## Testing Requirements`; `tools.graphify` and `tools.turbovault` say which search tools exist.
+   - `.weside/config.json`: `test_discipline` (`tdd`, `tests-after`, `off`) sets the level of
+     `## Testing Requirements`; quote the value you read, never a default (bad: "the repo default
+     (`tests-after`)" in a `tdd` repo; good: "`test_discipline: tdd` (.weside/config.json)"); key absent or
+     file unreadable → say so there. With `tdd` every phase gets its `**Test first:**` line.
+     `tools.graphify` and `tools.turbovault` say which search tools exist.
    - `.weside/verify.md` for the `## Verification` commands; absent → say so there and propose it under
      `## Documentation Impact`. A verb that cannot go red counts as missing.
    - The code: the seam the story names. With the code graph, `graphify affected "<identifier>" --relation calls
@@ -87,7 +90,9 @@ line in the plan (step 5), nothing else: no commit, no push, no ticket write. Sh
      decides; without one: prose wrapped at 80 columns, a blank line before every list (after `**Files:**` too),
      no wrap inside a code span or a table.
 4. **Proofread.** Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/ready_gate.py story <plan>` and fix each line it
-   prints; `## Context` is a paragraph. Then `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`:
+   prints; `## Context` is a paragraph. A `scope change:` line no edit of yours fixes: send the fence change
+   to the approver it names in this run (`SendMessage`, or the report's `decisions not in the brief`), and
+   report `blocked` on it, never `done`, while the gate prints it. Then `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check-plan-identifiers.py <plan> --ref origin/<default>`:
    each `missing:` name is struck, corrected, or marked `(new)` when the plan builds it; each `exists:` name
    loses its `(new)` and the plan builds on main's version. With a staging-check
    file, run the validate command `.weside/verify.md` names on the plan until it exits 0. Do the same after a
