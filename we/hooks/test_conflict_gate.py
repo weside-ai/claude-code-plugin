@@ -80,6 +80,7 @@ def _run(tmp: Path, pr: dict | str, payload: dict | None = None):
         "PATH": f"{tmp}:{os.environ['PATH']}",
         "HOME": str(tmp),
         "WE_STATE_DIR": str(tmp / "state"),
+        "WE_ROLE": (payload or {}).pop("role", ""),
     }
     body = {"session_id": "s1", "transcript_path": str(_transcript(tmp)), **(payload or {})}
     res = subprocess.run(
@@ -100,6 +101,7 @@ def _pr(**kw):
         "url": URL,
         "number": 7,
         "state": "OPEN",
+        "isDraft": False,
         "mergeStateStatus": "DIRTY",
         "mergeable": "CONFLICTING",
         "headRefOid": "a" * 40,
@@ -123,7 +125,7 @@ def test_own_dirty_pr_blocks_once_per_head(tmp_path):
     assert "PR #7" in out["reason"] and "aaaaaaaaa" in out["reason"]
     # Only the `gh pr create` URL is the session's own; pull/9 came from a `gh pr view`.
     assert (tmp_path / "calls.log").read_text().splitlines() == [
-        f"pr view {URL} --json url,number,state,mergeStateStatus,mergeable,headRefOid,"
+        f"pr view {URL} --json url,number,state,isDraft,mergeStateStatus,mergeable,headRefOid,"
         "autoMergeRequest,body,baseRefName"
     ]
     _unthrottle(tmp_path)
@@ -173,3 +175,48 @@ def test_an_old_session_state_ages_out_on_the_next_stop(tmp_path):
     _run(tmp_path, _pr())
     assert not old.exists()
     assert (folder / "s1.json").exists()
+
+
+GREEN = {"mergeStateStatus": "CLEAN", "mergeable": "MERGEABLE", "autoMergeRequest": None}
+
+
+def test_a_resolved_conflict_left_unarmed_blocks_once(tmp_path):
+    """A crew's PR was readied while conflicting, then the conflict merged away: green, never armed."""
+    assert _run(tmp_path, _pr(autoMergeRequest=None))["decision"] == "block"  # the conflict
+    _unthrottle(tmp_path)
+    out = _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN))
+    assert out["decision"] == "block"
+    assert "green and ready on head bbbbbbbbb without auto-merge" in out["reason"]
+    assert "arm it again" in out["reason"]
+    _unthrottle(tmp_path)
+    assert _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN)) is None  # named once
+    _unthrottle(tmp_path)
+    assert _run(tmp_path, _pr(headRefOid="c" * 40, **GREEN)) is None  # not seen armed since
+
+
+def test_a_fix_push_that_dropped_the_arm_blocks(tmp_path):
+    """Stacked and fix-round PRs: armed before, green and unarmed after the push."""
+    assert _run(tmp_path, _pr(mergeStateStatus="BLOCKED", mergeable="MERGEABLE")) is None  # armed
+    _unthrottle(tmp_path)
+    assert _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN))["decision"] == "block"
+
+
+def test_rearm_spares_never_armed_drafts_user_merge_and_workers(tmp_path):
+    assert _run(tmp_path, _pr(**GREEN)) is None  # never seen armed or conflicting
+    for n, extra in enumerate(
+        (
+            {"isDraft": True},
+            {"body": "user merge: one-way (money)"},
+            {"mergeStateStatus": "BLOCKED"},
+        )
+    ):
+        tmp = tmp_path / str(n)
+        tmp.mkdir()
+        _run(tmp, _pr())  # seen conflicting
+        _unthrottle(tmp)
+        assert _run(tmp, _pr(headRefOid="b" * 40, **{**GREEN, **extra})) is None
+    tmp = tmp_path / "w"
+    tmp.mkdir()
+    _run(tmp, _pr(), {"role": "worker"})
+    _unthrottle(tmp)
+    assert _run(tmp, _pr(headRefOid="b" * 40, **GREEN), {"role": "worker"}) is None
