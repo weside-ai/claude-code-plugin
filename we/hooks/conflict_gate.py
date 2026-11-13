@@ -12,6 +12,12 @@ prints the merge state once, and a worker or peer session idles while its PR con
     A new push (new head) that conflicts again is named again. No block while
     `stop_hook_active` is set.
   * No block for a PR with auto-merge off whose body carries `user merge:`: it waits for the human.
+  * Re-arm: a PR this hook saw armed (`autoMergeRequest`) in an earlier sweep that is now open,
+    ready, CLEAN (mergeable, required checks green) and without auto-merge blocks once, until the
+    sweep sees it armed again. A crew's board showed such PRs green and unarmed after a conflict
+    merge, a retargeted stacked PR and fix pushes, until someone happened to look. A PR never seen
+    armed is left alone: a master arms late on purpose (`/we:master` § Close the run). Not in a worker (`WE_ROLE=worker`): it may not
+    arm (`automerge_gate.py`); its starter's own sweep names the PR.
   * At most one `gh` sweep per THROTTLE_S per session, at most MAX_PRS PRs (the newest), at most
     SWEEP_BUDGET_S seconds of `gh` per sweep.
   * Fail-open on every error: a `gh` or parse failure lets the stop through.
@@ -119,7 +125,8 @@ def _view(selector: str, cwd: str | None) -> dict | None:
                 "view",
                 selector,
                 "--json",
-                "url,number,state,mergeStateStatus,mergeable,headRefOid,autoMergeRequest,body,baseRefName",
+                "url,number,state,isDraft,mergeStateStatus,mergeable,headRefOid,autoMergeRequest,body,"
+                "baseRefName",
             ],
             capture_output=True,
             text=True,
@@ -137,8 +144,76 @@ def _dirty(pr: dict) -> bool:
         return False
     if pr.get("mergeStateStatus") != "DIRTY" and pr.get("mergeable") != "CONFLICTING":
         return False
-    waits_for_human = not pr.get("autoMergeRequest") and "user merge:" in (pr.get("body") or "")
-    return not waits_for_human
+    return not _waits_for_human(pr)
+
+
+def _waits_for_human(pr: dict) -> bool:
+    return not pr.get("autoMergeRequest") and "user merge:" in (pr.get("body") or "")
+
+
+def _unarmed(pr: dict, watched: set) -> bool:
+    """Green, ready, unarmed, and seen armed before: it lost its arm."""
+    return (
+        pr.get("url") in watched
+        and pr.get("state") == "OPEN"
+        and not pr.get("isDraft")
+        and pr.get("mergeStateStatus") == "CLEAN"
+        and not pr.get("autoMergeRequest")
+        and not _waits_for_human(pr)
+        and os.environ.get("WE_ROLE") != "worker"
+    )
+
+
+def _sweep(targets: list[tuple[str, str | None]], state: dict) -> str | None:
+    """One `gh` pass over the session's PRs: the block reason, or None. Updates `state`."""
+    named = set(state.get("named", []))
+    watched = set(state.get("watched", []))
+    lines, rearm, seen = [], [], set()
+    started = time.monotonic()
+    for selector, cwd in targets:
+        if time.monotonic() - started > SWEEP_BUDGET_S:
+            break
+        pr = _view(selector, cwd)
+        if not pr or pr.get("url") in seen:
+            continue
+        seen.add(pr.get("url"))
+        key = f"{pr.get('url')}@{pr.get('headRefOid')}"
+        head = str(pr.get("headRefOid"))[:9]
+        if f"rearm:{key}" not in named and _unarmed(pr, watched):
+            named.add(f"rearm:{key}")  # its own key: a later conflict on this head is still named
+            watched.discard(pr.get("url"))
+            rearm.append(
+                f"PR #{pr.get('number')} ({pr.get('url')}) is green and ready on head {head} "
+                "without auto-merge"
+            )
+            continue
+        if pr.get("autoMergeRequest"):
+            watched.add(pr.get("url"))
+        dirty = _dirty(pr)
+        if key in named or not dirty:
+            continue
+        named.add(key)
+        lines.append(
+            f"PR #{pr.get('number')} ({pr.get('url')}) is {pr.get('mergeStateStatus')}/"
+            f"{pr.get('mergeable')} on head {head}"
+        )
+    state["named"] = sorted(named)
+    state["watched"] = sorted(u for u in watched if u)
+    parts = []
+    if lines:
+        parts.append(
+            "; ".join(lines)
+            + ". Merge the default branch in that PR's worktree (`git merge origin/<base>`), run the "
+            "after-merge check, push once; or name why not."
+        )
+    if rearm:
+        parts.append(
+            "; ".join(rearm)
+            + ". It lost its arm (a conflict, a ready event GitHub ran no workflow for, or a fix "
+            "round's `--disable-auto`): arm it again per `/we:master` § Close the run, or name why "
+            "not yet."
+        )
+    return " ".join(parts) + " This hook names each head once." if parts else None
 
 
 def decide(payload: dict, now: float | None = None) -> str | None:
@@ -163,31 +238,7 @@ def decide(payload: dict, now: float | None = None) -> str | None:
     reason = None
     if targets and now - state.get("checked", 0) >= THROTTLE_S:
         state["checked"] = now
-        named = set(state.get("named", []))
-        lines, seen = [], set()
-        started = time.monotonic()
-        for selector, cwd in targets:
-            if time.monotonic() - started > SWEEP_BUDGET_S:
-                break
-            pr = _view(selector, cwd)
-            if not pr or pr.get("url") in seen:
-                continue
-            seen.add(pr.get("url"))
-            key = f"{pr.get('url')}@{pr.get('headRefOid')}"
-            if key in named or not _dirty(pr):
-                continue
-            named.add(key)
-            lines.append(
-                f"PR #{pr.get('number')} ({pr.get('url')}) is {pr.get('mergeStateStatus')}/"
-                f"{pr.get('mergeable')} on head {str(pr.get('headRefOid'))[:9]}"
-            )
-        state["named"] = sorted(named)
-        if lines:
-            reason = (
-                "; ".join(lines)
-                + ". Merge the default branch in that PR's worktree (`git merge origin/<base>`), run the "
-                "after-merge check, push once; or name why not. This hook names each head once."
-            )
+        reason = _sweep(targets, state)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state))
