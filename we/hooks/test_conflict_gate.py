@@ -211,6 +211,17 @@ def test_a_fix_push_that_dropped_the_arm_blocks(tmp_path):
     assert _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN))["decision"] == "block"
 
 
+def test_a_conflict_after_a_rearm_demand_on_the_same_head_is_named(tmp_path):
+    """The master answered a re-arm demand "not yet" (waiting on Codex), then main moved and the
+    same head conflicts. Red arm: both reminders shared one key and the conflict went unnamed."""
+    assert _run(tmp_path, _pr(mergeStateStatus="BLOCKED", mergeable="MERGEABLE")) is None  # armed
+    _unthrottle(tmp_path)
+    assert "without auto-merge" in _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN))["reason"]
+    _unthrottle(tmp_path)
+    out = _run(tmp_path, _pr(headRefOid="b" * 40, autoMergeRequest=None))
+    assert out["decision"] == "block" and "is DIRTY/CONFLICTING on head bbbbbbbbb" in out["reason"]
+
+
 def test_rearm_spares_never_armed_drafts_user_merge_and_workers(tmp_path):
     assert _run(tmp_path, _pr(**GREEN)) is None  # never seen armed
     for n, extra in enumerate(

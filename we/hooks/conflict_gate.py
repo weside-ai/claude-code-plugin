@@ -179,8 +179,8 @@ def _sweep(targets: list[tuple[str, str | None]], state: dict) -> str | None:
         seen.add(pr.get("url"))
         key = f"{pr.get('url')}@{pr.get('headRefOid')}"
         head = str(pr.get("headRefOid"))[:9]
-        if key not in named and _unarmed(pr, watched):
-            named.add(key)
+        if f"rearm:{key}" not in named and _unarmed(pr, watched):
+            named.add(f"rearm:{key}")  # its own key: a later conflict on this head is still named
             watched.discard(pr.get("url"))
             rearm.append(
                 f"PR #{pr.get('number')} ({pr.get('url')}) is green and ready on head {head} "
