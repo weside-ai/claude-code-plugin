@@ -180,18 +180,28 @@ def test_an_old_session_state_ages_out_on_the_next_stop(tmp_path):
 GREEN = {"mergeStateStatus": "CLEAN", "mergeable": "MERGEABLE", "autoMergeRequest": None}
 
 
-def test_a_resolved_conflict_left_unarmed_blocks_once(tmp_path):
-    """A crew's PR was readied while conflicting, then the conflict merged away: green, never armed."""
-    assert _run(tmp_path, _pr(autoMergeRequest=None))["decision"] == "block"  # the conflict
+def test_a_conflict_merged_away_after_the_arm_blocks_once(tmp_path):
+    """A crew's armed PR conflicted, the conflict merged away and the arm was gone: green, unarmed."""
+    assert _run(tmp_path, _pr())["decision"] == "block"  # armed and conflicting
     _unthrottle(tmp_path)
     out = _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN))
     assert out["decision"] == "block"
     assert "green and ready on head bbbbbbbbb without auto-merge" in out["reason"]
-    assert "arm it again" in out["reason"]
+    assert "arm it again" in out["reason"] and "or name why not yet" in out["reason"]
+    assert "user merge:" not in out["reason"]
     _unthrottle(tmp_path)
     assert _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN)) is None  # named once
     _unthrottle(tmp_path)
     assert _run(tmp_path, _pr(headRefOid="c" * 40, **GREEN)) is None  # not seen armed since
+
+
+def test_a_master_pr_before_its_first_arm_is_not_named(tmp_path):
+    """`/we:master` arms late on purpose (version bump last, ci-review green, Codex read): a PR
+    that conflicted before its first arm and is now green is not named. Red arm: a conflict alone
+    put it on the watch list and the stop blocked with a re-arm demand."""
+    assert _run(tmp_path, _pr(autoMergeRequest=None))["decision"] == "block"  # the conflict
+    _unthrottle(tmp_path)
+    assert _run(tmp_path, _pr(headRefOid="b" * 40, **GREEN)) is None
 
 
 def test_a_fix_push_that_dropped_the_arm_blocks(tmp_path):
@@ -202,7 +212,7 @@ def test_a_fix_push_that_dropped_the_arm_blocks(tmp_path):
 
 
 def test_rearm_spares_never_armed_drafts_user_merge_and_workers(tmp_path):
-    assert _run(tmp_path, _pr(**GREEN)) is None  # never seen armed or conflicting
+    assert _run(tmp_path, _pr(**GREEN)) is None  # never seen armed
     for n, extra in enumerate(
         (
             {"isDraft": True},

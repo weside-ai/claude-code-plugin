@@ -12,11 +12,11 @@ prints the merge state once, and a worker or peer session idles while its PR con
     A new push (new head) that conflicts again is named again. No block while
     `stop_hook_active` is set.
   * No block for a PR with auto-merge off whose body carries `user merge:`: it waits for the human.
-  * Re-arm: a PR this hook saw armed or conflicting in an earlier sweep that is now open, ready,
-    CLEAN (mergeable, required checks green) and without auto-merge blocks once, until the sweep
-    sees it armed or conflicting again. A
-    crew's board showed such PRs green and unarmed after a conflict merge, a retargeted stacked PR
-    and fix pushes, until someone happened to look. Not in a worker (`WE_ROLE=worker`): it may not
+  * Re-arm: a PR this hook saw armed (`autoMergeRequest`) in an earlier sweep that is now open,
+    ready, CLEAN (mergeable, required checks green) and without auto-merge blocks once, until the
+    sweep sees it armed again. A crew's board showed such PRs green and unarmed after a conflict
+    merge, a retargeted stacked PR and fix pushes, until someone happened to look. A PR never seen
+    armed is left alone: a master arms late on purpose (`/we:master` § Close the run). Not in a worker (`WE_ROLE=worker`): it may not
     arm (`automerge_gate.py`); its starter's own sweep names the PR.
   * At most one `gh` sweep per THROTTLE_S per session, at most MAX_PRS PRs (the newest), at most
     SWEEP_BUDGET_S seconds of `gh` per sweep.
@@ -152,7 +152,7 @@ def _waits_for_human(pr: dict) -> bool:
 
 
 def _unarmed(pr: dict, watched: set) -> bool:
-    """Green, ready, unarmed, and seen armed or conflicting before: it lost its arm."""
+    """Green, ready, unarmed, and seen armed before: it lost its arm."""
     return (
         pr.get("url") in watched
         and pr.get("state") == "OPEN"
@@ -187,9 +187,9 @@ def _sweep(targets: list[tuple[str, str | None]], state: dict) -> str | None:
                 "without auto-merge"
             )
             continue
-        dirty = _dirty(pr)
-        if dirty or pr.get("autoMergeRequest"):
+        if pr.get("autoMergeRequest"):
             watched.add(pr.get("url"))
+        dirty = _dirty(pr)
         if key in named or not dirty:
             continue
         named.add(key)
@@ -210,8 +210,8 @@ def _sweep(targets: list[tuple[str, str | None]], state: dict) -> str | None:
         parts.append(
             "; ".join(rearm)
             + ". It lost its arm (a conflict, a ready event GitHub ran no workflow for, or a fix "
-            "round's `--disable-auto`): arm it again per `/we:master` § Close the run, or put "
-            "`user merge: <reason>` in its body."
+            "round's `--disable-auto`): arm it again per `/we:master` § Close the run, or name why "
+            "not yet."
         )
     return " ".join(parts) + " This hook names each head once." if parts else None
 

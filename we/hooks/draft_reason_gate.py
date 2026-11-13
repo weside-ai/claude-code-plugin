@@ -40,7 +40,7 @@ _PLACEHOLDER = re.compile(r"<[^<>\n]+>")
 _REPO_FLAGS = ("-R", "--repo")
 READY_READS = 3  # GitHub computes `mergeable` lazily: UNKNOWN right after a push
 READY_WAIT_S = 3.0
-READY_VIEW_S = 12  # READY_READS reads and their waits stay inside the hook's 45-s timeout
+READY_VIEW_S = 8  # 3 reads of 8 s and 2 waits of 3 s: 30 s, well inside the hook's 45-s timeout
 
 
 def _ready(argv: list[str]) -> tuple[int, str | None, str | None, bool] | None:
