@@ -112,8 +112,9 @@ BORN=$(date +%s)
 # Then one line per check: <verdict>\t<name>\t<run id or empty>\t<details url>,
 # verdict pending | pass | fail | cancelled. Only the newest run of each check (workflow and
 # name) on the head counts: a draft run's red ci-summary beside the ready run is history, not red.
+# A run not started yet (no startedAt, or gh's zero time 0001-01-01…) counts as the newest.
 CLASSIFY='def ckey: [(.workflowName // ""), (.name // .context // "")];
-  def at: (.startedAt // .createdAt // "9999");
+  def at: ((.startedAt // .createdAt // "") | if . == "" or startswith("0001-") then "9999" else . end);
   def newest: . as $all | [$all[] | . as $c | select(all($all[]; ckey != ($c | ckey) or at <= ($c | at)))];
   .headRefOid, ((.mergeStateStatus // "UNKNOWN") + "\t" + (.mergeable // "UNKNOWN")
     + "\t" + (.state // "OPEN") + "\t" + (if .autoMergeRequest then "on" else "off" end)),

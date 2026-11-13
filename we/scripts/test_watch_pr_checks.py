@@ -735,6 +735,14 @@ def test_only_the_newest_run_of_a_check_counts(tmp_path):
     (tmp_path / "b").mkdir()
     code, out = run(tmp_path / "b", [running, d])
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    # gh writes a queued run's unset startedAt as zero time, not null: still the newest
+    queued = copy.deepcopy(d)
+    queued["statusCheckRollup"][-1].update(
+        status="QUEUED", conclusion="", startedAt="0001-01-01T00:00:00Z"
+    )
+    (tmp_path / "q").mkdir()
+    code, out = run(tmp_path / "q", [queued, queued, d], "--fail-fast")
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
     # a check of the same name in another workflow is its own check
     other = copy.deepcopy(d)
     other["statusCheckRollup"][-2]["workflowName"] = "Nightly"
