@@ -219,7 +219,8 @@ Then one `we:dev-medium` finisher in `<int>` runs the finish sequence.
    Bounds, no `/loop` or `/goal`: ci-review's three rounds; the watcher's 6-h lifetime (exit 9 →
    report); at most three re-arms per PR head; a repeat finding (ci-review § 4) stops and reports.
 6. A conflict exit of `watch-pr-conflicts.sh` (or the `conflict_gate.py` Stop hook) goes back to the
-   PR's worker (merge the default branch, after-merge check, push) without asking; re-arm the watch after the push.
+   PR's worker (merge the default branch, after-merge check, push) without asking; re-arm the watch after the push,
+   and auto-merge once green (`conflict_gate.py` names a PR it saw armed that is now green and unarmed).
 
 ## Close the run
 
