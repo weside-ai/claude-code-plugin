@@ -115,6 +115,10 @@ carries the proposed lines. Evidence line: `- <date> retro PR #<N> | session <id
    new file, read the inbox, staging and `LEDGER.md` entries on the same target file; one that
    describes the same failure gains the evidence line under its key (store reference § Inbox entry,
    stable keys). Only then a new file. A target outside the repo is written as `target: ~/<path>`.
+   Every entry, new or a repeat, goes through `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/retro_write.py <dir> <body-file>`
+   (the whole entry written to the scratchpad first): it creates the file exclusively or appends the evidence lines
+   to the file that holds the key. Never `cat >` or the Write tool into the inbox: parallel writers of one broadcast
+   lose each other's entries.
 2. Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land), except `--auto` and `--collect` in staging.
 3. Close with one line: entries created, entries repeated (with their new counts), where they are;
    with `--focus`, a second line answering the question.
