@@ -38,7 +38,7 @@ parallel_groups: []
 |---|---|
 | `story` | Roster and branch key; the file name is the fallback. |
 | `epic` | An epic run rosters by it; without it the story is invisible there. Omit the line only for a standalone story. |
-| `depends_on` | Keys that must be built before this story is dispatched. |
+| `depends_on` | Keys that must be built before this story is dispatched. Each key's plan `docs/plans/<KEY>-story.md` must be on the default branch before a Ready panel starts (`lens_verdict.py plan ready` refuses otherwise). A key from another repo carries its repo, `repo/KEY`: it is warned, not checked. |
 | `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the DoR scan and the claim check pass: the master sets it in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. The `/flow` pane and the `/board` work tree read it for the Approval lamp; Selected itself comes from `board.py select`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
 | `comments_read_through` | Id or timestamp of the newest ticket comment the plan answers, or `none`. A newer comment means the plan may be stale. |
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |
@@ -121,7 +121,11 @@ Three lists here each cost review rounds when missing:
 - **Risk:** <ordinary | migration | money | auth | tenant-isolation> — <on what; also name a
   promise that must hold across several code paths, a transaction or idempotency, or a fix
   routing around a fragile path, because the Lead picks `we:dev-high` from this line>
-- **Approach:** <how>
+- **Test first:** <only with `test_discipline: tdd`: the test written first, its suite and the CI job
+  that runs it>
+- **Approach:** <how; in a phase with a `**Repo:**` line: the target and its check (which paths must
+  pass, which must not), never a code line quoted from that repo: its owner writes it at build time,
+  and a quoted line goes stale before the build>
 
 ## Out of scope
 

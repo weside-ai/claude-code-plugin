@@ -54,7 +54,7 @@ Usage:
                                                    printed), a refusal names the pid; a
                                                    template whose launcher has a `stop` verb
                                                    (`we-worker`) stops through it
-  worker_launch.py alive --name <n>                exit 0 running · 1 not · 2 cannot tell
+  worker_launch.py alive --name <n>                exit 0 running · 1 not (no row, or its pid is gone) · 2 cannot tell
   worker_launch.py checkpoint --name <n>           commit the worker's changes (via we-worker), push them to
                                                    wip/<branch without its type prefix>
 Exit 1 on a failed launch (files removed again), 2 on an invalid template.
@@ -486,8 +486,27 @@ def _session_of(name: str, worktree: Path) -> str | None:
         time.sleep(0.5)
 
 
+def _pid_lives(pid: object) -> bool:
+    """A row without a readable pid counts as living; a pid no process holds does not."""
+    try:
+        num = int(str(pid))
+    except ValueError:
+        return True
+    if num <= 0:
+        return True
+    try:
+        os.kill(num, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def alive(name: str) -> bool:
-    return bool(_running(sessions(), name))
+    """A session of that name whose process lives: `claude agents` keeps the row of a background
+    worker that died (an auth error, a usage limit), and the watchdog must see it end."""
+    return any(_pid_lives(r.get("pid", "-")) for r in _running(sessions(), name))
 
 
 STOP_VERB_TIMEOUT_S = 60

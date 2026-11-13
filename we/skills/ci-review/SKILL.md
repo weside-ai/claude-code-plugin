@@ -137,6 +137,10 @@ When you cannot keep that watch, push at once; a cancelled run costs less than a
 ## 2 · Fix and validate
 
 - Collect every fix before the one commit.
+- A finding about lost or stuck state (a draft, a lock, a selection) names one path, and its neighbours fail the same
+  way: list every transition of that state (load, reload, save, add, edit, remove, move, cancel, conflict), fix all of
+  them in this round, and put the list in the report. Bad: fix the move the review named, the next review finds the
+  edit. Good: one round, a table of nine transitions, each fixed or shown safe.
 - Validate the changed surface only: the repo's static gates and the affected tests by name. The push in § 3 runs the
   pre-push hooks, so they are not run by hand first, unless the clone has none installed
   (`test -x "$(git rev-parse --git-path hooks/pre-push)"` fails): then run the pre-push stage over the diff range. Never run a full sweep. CI runs the full suite on main. No local LLM review; the CI review re-reviews the fix.
@@ -202,6 +206,7 @@ When the user is away, take the safest branch, record the open question in the r
 ## 5 · Report
 
 - the findings table with the Action column (Fixed · Skipped with evidence · Re-run · Advisory skipped), and the Codex line from rule 3;
+- for a state finding, its transitions list from § 2;
 - the push SHA, each required check's status, the terminal state, and the run ids you read. A status from before the push is not current;
 - the merge state in one line: `CLEAN`, `BEHIND`, `DIRTY` with the conflicting files, `BLOCKED`, or a lasting `UNKNOWN`;
 - 0 unresolved bot threads, and every human thread quoted verbatim;

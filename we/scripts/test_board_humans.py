@@ -826,6 +826,30 @@ class TestInboxReplyWithdraw:
         outcomes = [(q["id"], q["outcome"]) for q in jsonl(crewed / "board-questions.jsonl")]
         assert (first, "superseded") in outcomes and (second, "withdrawn") in outcomes
 
+    def test_a_refused_supersede_names_who_gave_way_to_the_question(
+        self, crewed, monkeypatch, capsys
+    ):
+        """A co-asker withdrew its own question for Q_a; the supersede of Q_a meant to carry its
+        option is refused. Red arm: the refusal named no one, so the co-asker never learned."""
+        with_humans(crewed)
+        answer_with(crewed, CLEAR)
+        as_(monkeypatch, "alice", "Otto")
+        assert act(crewed, *ask_argv()) == 0
+        first = board_of(crewed)["owner_queue"][-1]["id"]
+        two_sessions(crewed, monkeypatch, "lead-13")
+        assert act(crewed, *ask_argv(**{"--session": "lead-13"})) == 0
+        mine = board_of(crewed)["owner_queue"][-1]["id"]
+        assert act(crewed, "withdraw", mine, "--for", first) == 0
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sid-12")
+        capsys.readouterr()
+        assert act(crewed, "supersede", first, "--by", "Q999") == 1
+        err = capsys.readouterr().err
+        assert "--by Q999 is no other open question" in err
+        assert "nothing was superseded: tell lead-13 at once" in err
+        assert first in [q["id"] for q in board_of(crewed)["owner_queue"]]
+        line = [q for q in jsonl(crewed / "board-questions.jsonl") if q["id"] == mine][-1]
+        assert line["outcome"] == "withdrawn" and line["for"] == first
+
     def test_another_session_cannot_withdraw(self, crewed, monkeypatch, capsys):
         with_humans(crewed)
         answer_with(crewed, CLEAR)

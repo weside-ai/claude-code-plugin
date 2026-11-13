@@ -49,6 +49,9 @@ with open(os.environ["STUB_LOG"], "a") as fh:
     fh.write(json.dumps({"argv": [], "tmux": sys.argv[1:]}) + "\n")
 if sys.argv[1:2] == ["list-sessions"]:
     print("1 stub")
+if sys.argv[1:2] == ["list-windows"]:
+    for w in filter(None, os.environ.get("STUB_WINDOWS", "").split(",")):
+        print(w)
 """
 
 
@@ -179,6 +182,72 @@ def test_a_name_held_by_a_living_session_refuses(tmp_path):
     proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 2 and "already holds the name AC-12-impl" in proc.stderr
     assert not started(tmp_path)
+
+
+def test_a_name_held_by_a_living_window_worker_or_a_tmux_window_refuses(tmp_path):
+    """A master started a second worker into the same worktree: the first one lived in a tmux
+    window, which neither the guard nor status saw (red arm: the start went through)."""
+    rows = [{"name": "PROJ-12-impl", "kind": "interactive", "pid": os.getpid(), "sessionId": "s1"}]
+    project, env = setup(tmp_path, rows)
+    proc = run(project, env, "PROJ-12-impl", "--bg", GO)
+    assert proc.returncode == 2 and "already holds the name PROJ-12-impl" in proc.stderr
+    (tmp_path / "w").mkdir()
+    project, env = setup(tmp_path / "w")
+    env["STUB_WINDOWS"] = "main:3 PROJ-12-impl"
+    proc = run(project, env, "PROJ-12-impl", "--bg", GO)
+    assert (
+        proc.returncode == 2 and "tmux window main:3 is already named PROJ-12-impl" in proc.stderr
+    )
+    assert not started(tmp_path) and not started(tmp_path / "w")
+
+
+def test_status_lists_a_window_worker_and_leaves_a_master_out(tmp_path):
+    tree = tmp_path / "tree"
+    subprocess.run(["git", "init", "-q", "-b", "feat/x", str(tree)], check=True)
+    gd = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    Path(gd, "we-worker.json").write_text(json.dumps({"name": "PROJ-12-impl"}))
+    worker, master, started_as = (_detached_sleep(r) for r in (None, "master", "worker"))
+    try:
+        rows = [
+            {
+                "name": "PROJ-12-impl",
+                "kind": "interactive",
+                "pid": worker,
+                "status": "idle",
+                "sessionId": "s-w",
+                "cwd": str(tree),
+            },
+            {
+                "name": "master-12",
+                "kind": "interactive",
+                "pid": master,
+                "status": "busy",
+                "sessionId": "s-m",
+                "cwd": str(tmp_path),
+            },
+            {
+                "name": "PROJ-13-impl",
+                "kind": "interactive",
+                "pid": started_as,
+                "status": "busy",
+                "sessionId": "s-x",
+                "cwd": str(tmp_path),
+            },
+        ]
+        project, env = setup(tmp_path, rows)
+        out = run(project, env, "status").stdout.splitlines()
+    finally:
+        for pid in (worker, master, started_as):
+            subprocess.run(["kill", str(pid)], capture_output=True, check=False)
+    assert out == [
+        f"s-w PROJ-12-impl pid={worker} idle last=- window",
+        f"s-x PROJ-13-impl pid={started_as} busy last=- window",
+    ]
 
 
 def test_a_name_held_by_a_dead_session_starts(tmp_path):

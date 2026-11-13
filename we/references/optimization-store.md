@@ -44,7 +44,9 @@ grant: the orchestrator decides all of them in one PR.
 
 ## Inbox entry
 
-One finding per file, so parallel sessions never edit the same file. `<key>` is
+One finding per file, so parallel sessions never edit the same file; a writer creates or extends
+one only through `scripts/retro_write.py` (an exclusive create, else the evidence appended under a
+lock), since two sessions can pick the same key in the same minute. `<key>` is
 `<pattern>--<target-slug>`: the pattern id in lower case, and the target path with every
 character outside `[a-z0-9]` replaced by `-` (`g2-volatile--claude-rules-git-workflow-md`). The
 date is the day the key was first seen.

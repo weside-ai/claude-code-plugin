@@ -258,6 +258,19 @@ def test_stop_and_alive(env):
     assert out.returncode == 1 and "no running session named KEY-1-w1" in out.stderr
 
 
+def test_a_row_whose_process_died_is_not_alive(env):
+    """`claude agents` keeps the row of a background worker that died on an auth error; the
+    watchdog read it as alive and never reported the end (red arm: alive exited 0)."""
+    env["configure"](TEMPLATE)
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")
+    rows = _rows(env)
+    for r in rows:
+        if r["name"] == "KEY-1-w1":
+            r["pid"] = 999999999
+    env["state"].write_text(json.dumps(rows))
+    assert _run("alive", "--name", "KEY-1-w1").returncode == 1
+
+
 def test_stop_of_an_ended_session_clears_its_marker(env):
     env["configure"](TEMPLATE)
     wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-medium")

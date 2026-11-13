@@ -58,7 +58,7 @@ we/                               plugin root
                                   wake_poller.py, gh_anchor.sh
     watch                         watch-pr-checks.sh (CI to the merge), watch-pr-conflicts.sh, watch-worker.sh
     flow                          flow_log.py (the flow log's one owner), sampler_age.py
-    PR and plan                   pr-body-receipt.py, test-delta.py, session_tokens.py, retro_claim.sh
+    PR and plan                   pr-body-receipt.py, test-delta.py, session_tokens.py, retro_claim.sh, retro_write.py
     statusline                    statusline.js, install_statusline.py
     hook state                    state_prune.py (ages out per-session hook files), claude_home.py (Claude Code's config dir)
     test support                  node_test_procs.py (the node binary and process reaping for statusline tests)

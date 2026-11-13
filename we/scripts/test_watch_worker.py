@@ -120,6 +120,36 @@ def test_an_ended_process_worker_exits_4(tmp_path, monkeypatch):
     assert _run(wt) == (4, ["exited: dev-X"])
 
 
+def test_a_worker_ended_on_an_auth_error_names_it_and_the_resume(tmp_path, monkeypatch):
+    """A worker died on an auth error and its master learned of it an hour later. Red arm: the
+    line said only `exited: dev-X`, no cause and no way back."""
+    wt = _repo(tmp_path)
+    (wt / ".git" / "we-worker.json").write_text(json.dumps({"name": "dev-X", "lead": "L"}))
+    row = {
+        "id": "ab12",
+        "name": "dev-X",
+        "kind": "background",
+        "pid": 999999999,
+        "state": "idle",
+        "sessionId": "s-9",
+    }
+    for key, value in _stub_claude(tmp_path, [row]).items():
+        monkeypatch.setenv(key, value)
+    home = tmp_path / "home"
+    folder = home / ".claude" / "projects" / "-p"
+    folder.mkdir(parents=True)
+    entry = {
+        "type": "assistant",
+        "timestamp": "2026-11-09T09:47:00Z",
+        "isApiErrorMessage": True,
+        "error": "authentication_failed",
+        "message": {"content": [{"type": "text", "text": "Please run /login"}]},
+    }
+    (folder / "s-9.jsonl").write_text(json.dumps(entry) + "\n")
+    monkeypatch.setenv("HOME", str(home))
+    assert _run(wt) == (4, ["exited: dev-X · auth · resume: we-worker dev-X --bg --resume s-9"])
+
+
 def test_a_running_process_worker_keeps_watching(tmp_path, monkeypatch):
     wt = _repo(tmp_path)
     (wt / ".git" / "we-worker.json").write_text(json.dumps({"name": "dev-X", "lead": "L"}))

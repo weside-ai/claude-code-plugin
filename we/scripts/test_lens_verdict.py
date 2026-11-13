@@ -157,6 +157,41 @@ def test_plan_without_a_plan_file_or_a_head_is_refused(repo, monkeypatch):
     assert code == 1 and "panel t2-pr7: head unknown" in err
 
 
+def test_plan_ready_refuses_while_a_depends_on_plan_is_not_on_main(repo):
+    """A panel on a plan whose depends_on plan was not merged spent a round: two lenses returned
+    BLOCKING for exactly that. Red arm: the panel started and dispatched its lenses."""
+    plans = repo / "docs" / "plans"
+    (plans / f"{KEY}-story.md").write_text("---\nstory: PROJ-1\ndepends_on: [PROJ-0]\n---\n# P\n")
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 1 and out == ""
+    assert "depends_on PROJ-0 has no plan on origin/main (docs/plans/PROJ-0-story.md)" in err
+    assert not verdict_file(repo, f"ready-{KEY}").exists()
+    (plans / "PROJ-0-story.md").write_text("# the dependency\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "dep")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    code, out, err = run("plan", "ready", KEY)
+    assert code == 0, err
+
+
+def test_a_depends_on_key_from_another_repo_is_warned_not_refused(repo):
+    """A dependency on a story in another repo (an infra story) never has its plan on this
+    repo's main. Red arm: the panel is refused for ever, with no way out."""
+    plans = repo / "docs" / "plans"
+    (plans / f"{KEY}-story.md").write_text(
+        "---\nstory: PROJ-1\ndepends_on: [infra/OPS-7]\n---\n# P\n"
+    )
+    code, _, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    assert "depends_on infra/OPS-7 lives in another repo, not checked here" in err
+    assert verdict_file(repo, f"ready-{KEY}").exists()
+    (plans / f"{KEY}-story.md").write_text(
+        "---\nstory: PROJ-1\ndepends_on: [infra/OPS-7, PROJ-0]\n---\n# P\n"
+    )
+    code, _, err = run("plan", "ready", KEY)
+    assert code == 1 and "depends_on PROJ-0 has no plan on origin/main" in err
+
+
 def test_a_verdict_id_that_is_no_subject_is_a_usage_error(repo):
     code, _, err = run("check", "../../etc")
     assert code == 2 and "expected ready-<KEY> or t2-pr<N>" in err
