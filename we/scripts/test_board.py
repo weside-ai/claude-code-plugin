@@ -743,7 +743,10 @@ class TestAsk:
     ):
         before = (crewless / "board.json").read_bytes()
         assert go(crewless, *ask_argv(**{flag: value})) == 1
-        assert capsys.readouterr().err.strip() == f"board.py ask: missing {flag}"
+        lines = capsys.readouterr().err.strip().splitlines()
+        assert lines[0] == f"board.py ask: missing {flag}"
+        # a missing key names the way out for a question without a story
+        assert lines[1:] == ([board.NO_STORY_KEY] if flag == "--key" else [])
         assert not (crewless / "reader-calls.jsonl").exists()
         assert not (crewless / "board-questions.jsonl").exists()
         assert (crewless / "board.json").read_bytes() == before
@@ -760,7 +763,9 @@ class TestAsk:
         self, crewless, capsys, flag, value, message
     ):
         assert go(crewless, *ask_argv(**{flag: value})) == 1
-        assert message in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert message in err
+        assert (board.NO_STORY_KEY in err) == (flag == "--key")
         assert not (crewless / "reader-calls.jsonl").exists()
 
     def test_a_clear_question_is_posted_with_the_next_id(self, crewless, capsys):
@@ -784,6 +789,24 @@ class TestAsk:
         assert line["id"] == "Q272" and line["outcome"] == "posted"
         assert line["ask"] == ASK["--ask"] and line["cause"] == "prod"
         assert line["reader"] == CLEAR
+
+    def test_show_prints_a_pane_answer_the_board_file_does_not_hold(self, crewless, capsys):
+        """A pane click writes only the answers file; owner_queue keeps the item without an
+        answer, so another session read it as open and repeated it (red arm: no verb read both)."""
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        qid = capsys.readouterr().out.split()[-1]
+        assert go(crewless, "show", qid) == 0
+        shown = json.loads(capsys.readouterr().out)
+        assert (shown["id"], shown["status"], shown["answers"]) == (qid, "open", [])
+        assert shown["ask"] == ASK["--ask"] and "reader" not in shown
+        line = {"id": qid, "answer": "accept", "ts": "2026-11-03T10:50:00Z", "session": "pane"}
+        (crewless / "board-answers.jsonl").write_text(json.dumps(line) + "\n")
+        assert go(crewless, "show", qid) == 0
+        shown = json.loads(capsys.readouterr().out)
+        assert shown["status"] == "answered: accept" and shown["answers"] == [line]
+        assert go(crewless, "show", "Q999") == 1
+        assert "Q999 is in neither owner_queue nor the logs" in capsys.readouterr().err
 
     def test_a_plan_slug_stands_for_a_key_before_the_ticket_exists(self, crewless, capsys):
         answer_with(crewless, CLEAR)
@@ -2138,6 +2161,26 @@ class TestMove:
         with_row(moving, KEY, "backlog")
         assert act(moving, "move", KEY, "in_progress", adapter=fake()) == 1
         assert "(its last row is backlog)" in capsys.readouterr().err
+        # --reopen does not open the way from any state: only from in_review/in_test
+        assert act(moving, "move", KEY, "in_progress", "--reopen", "x", adapter=fake()) == 1
+        assert "(its last row is backlog)" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("was", ["in_review", "in_test"])
+    def test_a_reverted_story_reopens_to_in_progress_only_with_a_reason(self, moving, capsys, was):
+        """A story whose merged PR was reverted (or whose test failed) goes back to In Progress;
+        the board followed the ticket nowhere before (red arm: no --reopen, refused)."""
+        with_row(moving, KEY, was)
+        adapter = fake()
+        assert act(moving, "move", KEY, "in_progress", adapter=adapter) == 1
+        out, err = capsys.readouterr()
+        assert f'in_progress from {was} needs --reopen "<reason>"' in err
+        assert len(transitions(moving)) == 1 and adapter.calls == [] and "carry:" not in out
+        reason = "revert of the merged PR"
+        assert act(moving, "move", KEY, "in_progress", "--reopen", reason, adapter=adapter) == 0
+        row = transitions(moving)[-1]
+        assert (row["from"], row["to"], row["reopen"]) == (was, "in_progress", reason)
+        status = board.crew_mod.DEFAULTS["board"]["states"]["in_progress"]
+        assert adapter.calls == [("move", KEY, status)]
 
     @pytest.mark.parametrize(
         "argv, extra",

@@ -30,15 +30,21 @@ Usage:
   board.py [--board FILE] claim <KEY> [--release] [--input FILE]
   board.py [--board FILE] inbox [--input FILE]
   board.py [--board FILE] reply <KEY> <accept|deny|discuss|info|update> [--text T]
-  board.py [--board FILE] withdraw <Q> [--reason T]
+  board.py [--board FILE] show <Q>
+  board.py [--board FILE] withdraw <Q> [--for <Q2>] [--reason T]
   board.py [--board FILE] supersede <Q> --by <Q2> [--reason T]
   board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|in_test|done>
-           [--reopen TRIGGER] [--epic EPIC] [--pr REF]… [--comment-file FILE] [--input FILE]
+           [--reopen TEXT] [--epic EPIC] [--pr REF]… [--comment-file FILE] [--input FILE]
   board.py [--board FILE] check --jira FILE
   board.py [--board FILE] book staging --until <YYYY-MM-DDTHH:MMZ>
   board.py [--board FILE] unbook [<rc tag>]
   board.py [--board FILE] staging
 
+show     prints one question as JSON: the open `owner_queue` item (else its `posted` line), its
+         lines from board-answers.jsonl and a `status` (`answered: <kind>` after an Accept, Deny
+         or Withdraw, `withdrawn`/`superseded`, `open`, `off the board`). The answer a pane
+         click wrote lives only in the answers file, never in board.json: read it here before
+         repeating another session's question to the owner. Read-only; exit 1 for an unknown id.
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
          session then carries like a press of the /board pane. It refuses an id that is in neither
@@ -154,11 +160,14 @@ reply    (several humans) this human's answer on a ticket: the comment
 withdraw takes the caller's own open question off `owner_queue` (`supersede --by Q2`: replaced
          by a newer one), a `withdrawn` or `superseded` line in board-questions.jsonl; a question
          asked with `--to` also gets a comment and loses its label. Only its asker (session name)
-         or the coordinator.
+         or the coordinator. `withdraw --for Q2` records that it gave way to Q2; a refused
+         `supersede` of Q2 names every session that withdrew for it (`--for`, or Q2 in the
+         reason), so the caller tells them their alternative is on no board.
 move     moves a story to another state when that state's entry rule holds (docs/board.md
          § Moves; with `humans` first the owner of the state it leaves, read from the ticket's
          status, § Several humans): `on_hold` --reopen, `backlog` --epic of an approved epic plan, `in_progress`
-         after a `selected` row, `in_review` with every --pr merged and linked (`gh pr view`),
+         after a `selected` row (from `in_review`/`in_test` with --reopen: a revert or a failed
+         test), `in_review` with every --pr merged and linked (`gh pr view`),
          `in_test` after `in_review`, `done` after an `in_review` or `in_test` row with --comment-file holding a `Not proven:` line (or, in
          process from accept.py, a green verdict entry re-checked here: `move_done`); a `done`
          move carries the transition and then the acceptance comment, and every
@@ -1090,6 +1099,45 @@ def cmd_path(state, args, _crew, _now):
     return 0
 
 
+def cmd_show(state, args, _crew, _now):
+    """One question as every session sees it: the open item (or its posted line), its answers
+    from the answers file and its last outcome; exit 1 for an id the board never had."""
+    qid = args.id
+    item = next(
+        (
+            q
+            for q in state.board().get("owner_queue") or []
+            if isinstance(q, dict) and q.get("id") == qid
+        ),
+        None,
+    )
+    lines = [q for q in state.questions() if isinstance(q, dict) and q.get("id") == qid]
+    answers = [a for a in state.answers() if isinstance(a, dict) and a.get("id") == qid]
+    if item is None and not lines and not answers:
+        raise BoardError(f"board.py show: {qid} is in neither owner_queue nor the logs")
+    posted = next((q for q in lines if q.get("outcome") == "posted"), None)
+    question = dict(item or posted or {"id": qid})
+    question.pop("reader", None)
+    question.pop("outcome", None)
+    closing = [a for a in answers if a.get("answer") in ("accept", "deny", "withdraw")]
+    gone = [q for q in lines if q.get("outcome") in GONE]
+    status = (
+        f"answered: {closing[-1]['answer']}"
+        if closing
+        else f"{gone[-1]['outcome']}"
+        if gone
+        else "open"
+        if item
+        else "off the board"
+    )
+    print(
+        json.dumps(
+            {**question, "status": status, "answers": answers}, ensure_ascii=False, indent=1
+        )
+    )
+    return 0
+
+
 def default_board(start=None):
     """The board file a verb without --board writes: the crew's `board.file` for `start` (default
     the cwd), else DEFAULT_BOARD; the same file the merge hook reads a freeze beside."""
@@ -1280,15 +1328,25 @@ def _key_owner(crew, owner, component):
     return None
 
 
+NO_STORY_KEY = (
+    "board.py ask: a question without a story (a docs PR, an infra apply) names a lower-case "
+    "slug as --key, e.g. --key docs-merge or --key infra-apply, with --pr for the PR it is about"
+)
+
+
 def _ask_failures(args, crew):
     failures = []
     for field in ASK_FIELDS:
         value = getattr(args, field)
         if value is None or not value.strip():
             failures.append(f"board.py ask: missing --{field.replace('_', '-')}")
+            if field == "key":
+                failures.append(NO_STORY_KEY)
     key = (args.key or "").strip()
     if key and not _is_plan_slug(crew, key):
         failures += _key_failure(crew, key, "ask")
+        if failures and failures[-1].startswith("board.py ask: --key"):
+            failures.append(NO_STORY_KEY)
     if args.cause and args.cause.strip() and args.cause.strip() not in CAUSES:
         failures.append(f"board.py ask: --cause {args.cause!r} is not one of {', '.join(CAUSES)}")
     return failures
@@ -1691,11 +1749,15 @@ def cmd_withdraw(state, args, crew, now):
         raise BoardError(
             f"board.py {verb}: {qid} was asked by {found.get('session')}, not by {caller}; "
             "only its asker or the coordinator takes it back"
+            + _tell_on_refusal(state, verb, qid, found.get("session"))
         )
     if verb == "supersede":
         newer = next((q for q in queue if q.get("id") == args.by), None)
         if newer is None or args.by == qid:
-            raise BoardError(f"board.py supersede: --by {args.by} is no other open question")
+            raise BoardError(
+                f"board.py supersede: --by {args.by} is no other open question"
+                + _tell_on_refusal(state, verb, qid, found.get("session"))
+            )
     adapter = _adapter(args, crew) if found.get("to") else None
 
     def mutate(board):
@@ -1712,6 +1774,8 @@ def cmd_withdraw(state, args, crew, now):
         line = {"id": qid, "ts": _iso(now), "outcome": outcome, "session": caller}
         if verb == "supersede":
             line["by"] = args.by
+        if getattr(args, "for_", None):
+            line["for"] = args.for_.strip()
         if args.reason:
             line["reason"] = args.reason.strip()
         state.append_question(line)
@@ -1725,6 +1789,36 @@ def cmd_withdraw(state, args, crew, now):
             adapter.comment(found["key"], text) + adapter.unlabel(found["key"], found["label"])
         )
     return 0
+
+
+def _absorbing(state, qid):
+    """The sessions that withdrew a question of their own in favour of `qid` (`withdraw --for
+    <qid>`, or `qid` named in the withdraw's reason), oldest first, each once."""
+    rx = re.compile(r"(?<![A-Za-z0-9])" + re.escape(qid) + r"(?![0-9])")
+    names = []
+    for line in state.questions():
+        if not isinstance(line, dict) or line.get("outcome") != "withdrawn":
+            continue
+        named = line.get("for") == qid or rx.search(str(line.get("reason") or ""))
+        who = str(line.get("session") or "").strip()
+        if named and who and who not in names:
+            names.append(who)
+    return names
+
+
+def _tell_on_refusal(state, verb, qid, asker):
+    """A refused supersede leaves every session that withdrew its own question for `qid`
+    without its alternative: the refusal names whom the caller tells, so none decides blind."""
+    if verb != "supersede":
+        return ""
+    names = [n for n in _absorbing(state, qid) if not _same_session(n, _caller())]
+    if not names:
+        return ""
+    return (
+        f"\nnothing was superseded: tell {', '.join(names)} at once (they withdrew their own "
+        f"question for {qid}, so their option is on no board), and {asker or 'its asker'} "
+        f"if the replacement should still go up"
+    )
 
 
 def _same_session(asker, caller):
@@ -2619,10 +2713,27 @@ def rule_epic_approved(m):
 SELECT_ONLY = "use board.py select (the Ready gate, the tier and the lenses decide Selected)"
 
 
+REOPENABLE = ("in_review", "in_test")  # a revert of the merged PR or a failed test reopens
+
+
 def rule_pulled(m):
+    """In Progress is pulled from Selected, or reopened from in_review/in_test with
+    `--reopen "<reason>"` (the revert PR or the failed test)."""
+    reason = (getattr(m.args, "reopen", None) or "").strip()
+    if m.source in REOPENABLE:
+        if not reason:
+            return [
+                f'in_progress from {m.source} needs --reopen "<reason>" '
+                "(the revert PR or the failed test)"
+            ]
+        m.extra["reopen"] = reason
+        return []
     if m.source != "selected":
         was = "no row" if m.source is None else f"its last row is {m.source}"
-        return [f"in_progress needs the key's last row to be selected ({was})"]
+        return [
+            f"in_progress needs the key's last row to be selected ({was}); from "
+            f'{" or ".join(REOPENABLE)} it reopens with --reopen "<reason>"'
+        ]
     return []
 
 
@@ -3268,7 +3379,11 @@ def _add_move_verbs(verbs):
     mv.add_argument("key")
     mv.add_argument("state", choices=(*MOVE_STATES[:2], "selected", *MOVE_STATES[2:]))
     mv.add_argument("--pr", action="append", metavar="REF", help="in_review: a merged PR (repeat)")
-    mv.add_argument("--reopen", metavar="TRIGGER", help="on_hold: what reopens it")
+    mv.add_argument(
+        "--reopen",
+        metavar="TEXT",
+        help="on_hold: what reopens it; in_progress from in_review/in_test: why (revert, failed test)",
+    )
     mv.add_argument("--epic", metavar="EPIC", help="backlog: the approved epic")
     mv.add_argument(
         "--comment-file",
@@ -3318,6 +3433,13 @@ def _add_human_verbs(verbs):
             wd.add_argument(
                 "--by", required=True, metavar="QID", help="the open question that replaces it"
             )
+        else:
+            wd.add_argument(
+                "--for",
+                dest="for_",
+                metavar="QID",
+                help="withdrawn in favour of this question (a refused supersede of it names you)",
+            )
         wd.add_argument("--reason", default="", help="one line why")
         wd.set_defaults(run=cmd_withdraw)
 
@@ -3343,6 +3465,15 @@ def _add_flow_verbs(verbs):
     bl.set_defaults(run=cmd_blocked)
 
 
+def _add_read_verbs(verbs):
+    sh = verbs.add_parser("show", help="one question with its answers and status (read-only)")
+    sh.add_argument("id")
+    sh.set_defaults(run=cmd_show)
+    pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
+    pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")
+    pa.set_defaults(run=cmd_path)
+
+
 def parser():
     p = argparse.ArgumentParser(prog="board.py", description="The board's verbs for a session.")
     p.add_argument(
@@ -3362,9 +3493,7 @@ def parser():
     f.add_argument("--repo", action="append", help="OWNER/REPO whose armed PRs to disarm")
     f.add_argument("--by", help="who freezes (default: the companion or the user)")
     f.set_defaults(run=cmd_freeze)
-    pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
-    pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")
-    pa.set_defaults(run=cmd_path)
+    _add_read_verbs(verbs)
     u = verbs.add_parser("unfreeze", help="lift the freeze; prints the PRs to re-arm by hand")
     u.set_defaults(run=cmd_unfreeze)
 
@@ -3426,11 +3555,11 @@ def parser():
 
 
 # A freeze must work where the crew file is missing or broken: the brake reads no crew.
-CREWLESS_VERBS = ("answer", "freeze", "unfreeze", "path")
+CREWLESS_VERBS = ("answer", "show", "freeze", "unfreeze", "path")
 # The crew guard (`crew_guard`): verbs that only read pass it, and `freeze` does, since a brake
 # must stop merges without a crew and a wrong freeze stops, it never opens. `unfreeze` passes the
 # crewless rule too (who could freeze can lift it), but never a board stamped for another crew.
-READ_VERBS = ("path", "check", "escalation list", "escalation count")
+READ_VERBS = ("path", "show", "check", "escalation list", "escalation count")
 GUARD_FREE_VERBS = ("freeze",)
 
 
