@@ -74,6 +74,31 @@ def test_parallel_writers_keep_every_line(tmp_path):
     assert sorted(rw.evidence_lines(path.read_text())) == sorted(f"- {x}" for x in lines)
 
 
+def test_a_second_writer_between_create_and_write_keeps_its_line(tmp_path, monkeypatch):
+    """Two writers of one key: the second runs while the first has opened its file and not yet
+    written it. Red arm: an O_EXCL create leaves the name empty in that gap, the second appends to
+    it, and the first then writes its body over the appended line."""
+    real_fdopen, ran = rw.os.fdopen, []
+
+    def between(fd, *args, **kwargs):
+        if not ran:
+            ran.append(None)  # the second writer's own open passes straight through
+            ran[0] = rw.write(tmp_path, body("2026-11-13 retro | session b: second"), "2026-11-13")
+        return real_fdopen(fd, *args, **kwargs)
+
+    monkeypatch.setattr(rw.os, "fdopen", between)
+    out = rw.write(tmp_path, body("2026-11-13 retro | session a: first"), "2026-11-13")
+    monkeypatch.undo()
+    path = tmp_path / "2026-11-13-gap--agents-md.md"
+    assert ran == [f"created {path}"]
+    assert out == f"appended 1 evidence line(s) to {path}"
+    assert [p.name for p in tmp_path.iterdir()] == [path.name]
+    assert rw.evidence_lines(path.read_text()) == [
+        "- 2026-11-13 retro | session b: second",
+        "- 2026-11-13 retro | session a: first",
+    ]
+
+
 @pytest.mark.parametrize(
     "text, reason",
     [

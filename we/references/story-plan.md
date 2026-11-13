@@ -38,7 +38,7 @@ parallel_groups: []
 |---|---|
 | `story` | Roster and branch key; the file name is the fallback. |
 | `epic` | An epic run rosters by it; without it the story is invisible there. Omit the line only for a standalone story. |
-| `depends_on` | Keys that must be built before this story is dispatched. |
+| `depends_on` | Keys that must be built before this story is dispatched. Each key's plan `docs/plans/<KEY>-story.md` must be on the default branch before a Ready panel starts (`lens_verdict.py plan ready` refuses otherwise). A key from another repo carries its repo, `repo/KEY`: it is warned, not checked. |
 | `status` | `draft` while an `## Open Fork` stands or the Ready gate fails; `approved` once the DoR scan and the claim check pass: the master sets it in the commit that puts the plan on the default branch (`/we:master` § Refine lane); `/we:plan-story` writes `draft`. The `/flow` pane and the `/board` work tree read it for the Approval lamp; Selected itself comes from `board.py select`. Approval is per epic (L0 §Units), never per story; the one exception is the master card's fence rule. `built`, `done`, `merged`, `shipped` and `in review` count as built. |
 | `comments_read_through` | Id or timestamp of the newest ticket comment the plan answers, or `none`. A newer comment means the plan may be stale. |
 | `parallel_groups` | `[[2, 3]]` lets phases 2 and 3 run concurrently. Only for phases with disjoint `**Files:**` and a fixed contract between them; `[]` (serial) is the normal case. |

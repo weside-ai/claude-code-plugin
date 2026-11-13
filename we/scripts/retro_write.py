@@ -6,8 +6,9 @@ Usage: retro_write.py <dir> <body-file> [--date YYYY-MM-DD]
 <body-file> is a whole entry in the inbox format (references/optimization-store.md § Inbox entry);
 its frontmatter `key:` names the entry. In <dir> (the inbox or its staging):
 
-  created <path>                          exit 0  no file carries the key: <dir>/<date>-<key>.md is
-                                                  created with O_EXCL, so two writers never both create
+  created <path>                          exit 0  no file carries the key: the whole entry is written to
+                                                  a temp file and hard-linked to <dir>/<date>-<key>.md,
+                                                  so the name never exists empty and one writer wins
   appended <n> evidence line(s) to <path> exit 0  a file `*-<key>.md` exists, or appeared between the
                                                   look and the create: the body's `## Evidence` lines
                                                   it lacks go under its `## Evidence`, under a lock
@@ -25,6 +26,7 @@ import fcntl
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 KEY = re.compile(r"^key:\s*([a-z0-9][a-z0-9:-]*)\s*(?:#.*)?$", re.MULTILINE)
@@ -84,6 +86,23 @@ def append(path: Path, lines: list[str]) -> int:
     return len(new)
 
 
+def _link_new(path: Path, text: str) -> bool:
+    """Create ``path`` holding ``text`` in one step: write a temp file beside it, then
+    ``os.link`` it to the name (fails when the name exists). False when another writer won."""
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o644)
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            return False
+        return True
+    finally:
+        os.unlink(tmp)
+
+
 def write(folder: Path, body: str, date: str) -> str:
     key = key_of(body)
     lines = evidence_lines(body)
@@ -96,13 +115,9 @@ def write(folder: Path, body: str, date: str) -> str:
             n = append(existing[0], lines)
             return f"appended {n} evidence line(s) to {existing[0]}"
         path = folder / f"{date}-{key}.md"
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            continue  # another writer created it between the look and the create
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(body if body.endswith("\n") else body + "\n")
-        return f"created {path}"
+        if _link_new(path, body if body.endswith("\n") else body + "\n"):
+            return f"created {path}"
+        # another writer created it between the look and the link: append to theirs
     raise WriteError(f"{folder}: {key} neither created nor found")
 
 

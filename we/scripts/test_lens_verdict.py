@@ -174,6 +174,24 @@ def test_plan_ready_refuses_while_a_depends_on_plan_is_not_on_main(repo):
     assert code == 0, err
 
 
+def test_a_depends_on_key_from_another_repo_is_warned_not_refused(repo):
+    """A dependency on a story in another repo (an infra story) never has its plan on this
+    repo's main. Red arm: the panel is refused for ever, with no way out."""
+    plans = repo / "docs" / "plans"
+    (plans / f"{KEY}-story.md").write_text(
+        "---\nstory: PROJ-1\ndepends_on: [infra/OPS-7]\n---\n# P\n"
+    )
+    code, _, err = run("plan", "ready", KEY)
+    assert code == 0, err
+    assert "depends_on infra/OPS-7 lives in another repo, not checked here" in err
+    assert verdict_file(repo, f"ready-{KEY}").exists()
+    (plans / f"{KEY}-story.md").write_text(
+        "---\nstory: PROJ-1\ndepends_on: [infra/OPS-7, PROJ-0]\n---\n# P\n"
+    )
+    code, _, err = run("plan", "ready", KEY)
+    assert code == 1 and "depends_on PROJ-0 has no plan on origin/main" in err
+
+
 def test_a_verdict_id_that_is_no_subject_is_a_usage_error(repo):
     code, _, err = run("check", "../../etc")
     assert code == 2 and "expected ready-<KEY> or t2-pr<N>" in err
