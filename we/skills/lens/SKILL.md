@@ -83,6 +83,9 @@ refusal line; a second refusal: `LV write <id> <lens> --failed "finding without 
 Run `LV check <id>` and relay its lines verbatim: one per lens, a `stale` line when the plan or head moved,
 and the panel line (forms: the script's docstring, § Carried warnings included). Exit 0 only for green. The board's move to
 Selected reads the Ready panel itself (`board.py select`); no merge reads the T2 panel.
+On a green Ready panel, find the plan's open PR (`gh pr list --search "<KEY> in:title" --state open --json number,isDraft,body`):
+a draft whose only draft reason is this panel goes ready now (`gh pr ready <n>`), nobody else watches for it;
+a draft with another reason stays, and your report names it.
 On a one-way PR then run `LV post t2-pr<PR>`: it posts the `<!-- t2-panel -->` comment on the head
 (`Overall: PASS` or `FAIL`, its docstring owns the form) as the human's input; a stale panel that does
 not carry posts nothing and needs a fresh one.

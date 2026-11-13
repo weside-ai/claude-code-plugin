@@ -7,6 +7,9 @@ Usage:
                                                  docs/plans/KEY-story.md (or PATH, inside the
                                                  repo; the panel stays bound to it); prints one
                                                  dispatch entry per Ready lens as JSON
+                                                 refused (exit 1) by the Ready gate, and while
+                                                 a ``depends_on`` key has no story plan on
+                                                 origin/main (the lenses would only say so)
   lens_verdict.py plan t2 PR                     start a T2 panel on the PR's head (``gh``)
   lens_verdict.py arm [COMMAND]                  exit 0 when COMMAND (else stdin) is a red arm in
                                                  test form (the skill may run it), else 1 with why
@@ -522,6 +525,7 @@ def plan(root: Path, kind: str, subject: str, plan_arg: str | None = None) -> di
     bound = current_binding(root, kind, subject, rel)
     if kind == "ready":
         _ready_gate_first(root, subject, rel, bound["plan_blob"])
+        _depends_on_main(root, subject, rel, bound["plan_blob"])
     path = verdict_dir(root) / f"{vid}.json"
     doc: dict[str, Any] = {
         "version": VERSION,
@@ -583,6 +587,24 @@ def _ready_gate_first(root: Path, subject: str, rel: str | None, blob: str) -> N
         lines = "\n".join(f"  {f}" for f in failures)
         raise RefusedError(
             f"plan {plan.relative_to(root)}: the Ready gate refuses it, no lens runs:\n{lines}"
+        )
+
+
+def _depends_on_main(root: Path, subject: str, rel: str | None, blob: str) -> None:
+    """Each ``depends_on`` key's story plan on ``PLAN_FALLBACK_REF`` before any lens runs: a lens
+    reads the plan it builds on there, and a missing one is a BLOCKING it can only repeat."""
+    source, _ref = plan_source(root, subject, rel, blob)
+    meta = ready_gate.frontmatter(source.read_text(encoding="utf-8"))
+    missing = [
+        key
+        for key in ready_gate.inline_list(meta.get("depends_on"))
+        if key != subject and _origin_blob(root, f"docs/plans/{key}-story.md") is None
+    ]
+    if missing:
+        names = ", ".join(f"docs/plans/{k}-story.md" for k in missing)
+        raise RefusedError(
+            f"plan {plan_path(root, subject, rel).relative_to(root)}: depends_on {', '.join(missing)}"
+            f" has no plan on {PLAN_FALLBACK_REF} ({names}), no lens runs: merge that plan first"
         )
 
 
