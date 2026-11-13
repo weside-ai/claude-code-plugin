@@ -39,6 +39,7 @@ we/                               plugin root
     PreToolUse                    automerge_gate (every merge form: worker refusal, freeze, risk class,
                                   security card PASS, Codex verdict on the head, receipt red), worker_rights_gate
                                   (a process worker's rights and never-list), verification_gate, draft_reason_gate,
+                                  main_red_gate (`gh pr ready` while the default branch is red, opt-in),
                                   teammate_gate
     Stop                          store_conversation_hook, conflict_gate (own DIRTY PRs), reply_language_gate,
                                   question_gate, worker_report_gate (process workers)

@@ -135,6 +135,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/draft_reason_gate.py\"",
             "timeout": 45
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/main_red_gate.py\"",
+            "timeout": 60
           }
         ]
       },

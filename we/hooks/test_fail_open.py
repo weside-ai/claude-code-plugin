@@ -18,6 +18,7 @@ sys.path.insert(0, str(HOOKS.parent / "scripts"))
 # (module, the function whose failure must not stop anything, the stdin payload)
 CASES = [
     ("verification_gate", "_refusal", {"tool_name": "Bash", "tool_input": {"command": "ls"}}),
+    ("main_red_gate", "refusal", {"tool_name": "Bash", "tool_input": {"command": "gh pr ready"}}),
     ("worker_report_gate", "decide", {"session_id": "s"}),
     ("compact_on_start", "render", {"source": "compact"}),
     ("optimization_reminder", "repo_root", {"source": "startup", "cwd": "."}),

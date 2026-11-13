@@ -72,6 +72,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "verification": { "required": true,
                     "pre_merge_receipt": "<command with {KEY}: prints report:/skip:/not-run:, exit 0 green, 1 red>" },
   "review": { "available": ["claude"] },
+  "ci": { "hold_ready_on_red_main": false },
   "agents": { "visible_teammates": false, "worker_launch": "subagent" },
   "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",
                   "rc_tag_glob": "<RC tag glob, e.g. v*-rc.*>" }
@@ -90,6 +91,9 @@ receipt for the acceptance keeper; `lenses.acceptance.sample` stays the lens sam
 (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker launch backend), for a repo without a
 crew; `"subagent"` (shown above) is its default. A repo with a crew gets one in the crew's
 `launch.worker` instead, written in step 4a (L0 §Sessions: build only in workers).
+
+`ci.hold_ready_on_red_main` (`true`, or a list of workflow names; off by default) holds `gh pr ready`
+while the default branch's newest push run is red (hook `main_red_gate.py`).
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
 block (stack, ticketing, goals, test discipline, verification, review gates, missing tools).
