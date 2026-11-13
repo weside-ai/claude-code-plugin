@@ -101,3 +101,72 @@ def test_ready_undo_fails_open_and_plain_ready_passes(tmp_path):
     assert run(tmp_path, "gh pr ready 7 --undo", view_body=None) is None
     assert run(tmp_path, "gh pr ready 7", view_body=PLAIN) is None
     assert run(tmp_path, "echo 'gh pr ready 7 --undo'", view_body=PLAIN) is None
+
+
+def _view(tmp: Path, *states: str) -> str:
+    """A `gh` stub answering `gh pr view` with each mergeable state in turn (the last repeats)."""
+    for n, state in enumerate(states):
+        (tmp / f"m{n}.json").write_text(json.dumps({"mergeable": state, "baseRefName": "main"}))
+    return (
+        "#!/bin/sh\n"
+        f'n=$(cat "{tmp}/n" 2>/dev/null || echo 0)\n'
+        f'echo "$*" >> "{tmp}/calls.log"\n'
+        f'[ "$n" -lt {len(states) - 1} ] && echo $((n + 1)) > "{tmp}/n"\n'
+        f'cat "{tmp}/m$n.json"\n'
+    )
+
+
+def run_ready(tmp: Path, command: str, *states: str) -> str | None:
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    stub = bin_dir / "gh"
+    stub.write_text(_view(tmp, *states))
+    stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(tmp)}
+    res = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        check=False,
+        timeout=30,
+    )
+    assert res.returncode == 0, res.stderr
+    if not res.stdout.strip():
+        return None
+    return json.loads(res.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_ready_on_a_conflicting_pr_is_denied(tmp_path):
+    """A crew readied a conflicting PR: GitHub ran no workflow, the PR stayed green and unarmed."""
+    reason = run_ready(tmp_path, "gh pr ready 7 -R o/r", "CONFLICTING")
+    assert reason.startswith("`gh pr ready 7` refused: the PR conflicts with `main`")
+    assert "Merge `origin/main`" in reason
+    assert (tmp_path / "calls.log").read_text().split() == [
+        "pr",
+        "view",
+        "7",
+        "-R",
+        "o/r",
+        "--json",
+        "mergeable,baseRefName",
+    ]
+
+
+def test_ready_on_a_mergeable_or_unreadable_pr_passes(tmp_path):
+    assert run_ready(tmp_path, "gh pr ready 7", "MERGEABLE") is None
+    (tmp_path / "x").mkdir()
+    assert run_ready(tmp_path / "x", "gh pr ready 7", "garbage") is None
+
+
+def test_ready_reads_unknown_again_until_github_has_computed_it(tmp_path):
+    assert run_ready(tmp_path, "gh pr ready 7", "UNKNOWN", "CONFLICTING") is not None
+    assert len((tmp_path / "calls.log").read_text().splitlines()) == 2
+
+
+def test_ready_inside_a_compound_command_is_checked(tmp_path):
+    cmd = "git push && gh pr ready 7"
+    assert run_ready(tmp_path, cmd, "CONFLICTING") is not None
+    (tmp_path / "y").mkdir()
+    assert run_ready(tmp_path / "y", "echo 'gh pr ready 7'", "CONFLICTING") is None
