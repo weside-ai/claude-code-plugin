@@ -67,7 +67,7 @@ def test_every_role_renders_within_the_budget_with_crew_values():
     full = rp.render_l0(crew)
     assert "Ada: the WHAT" in full and "Otto adds a worker with Bo's card to review" in full
     assert "Specialists woken on demand: Bo (security), Lex (legal)." in full
-    assert "`ASK · <KEY> <title> · <question without context> · Advice: …`" in full
+    assert "`ASK · Q<n> · <KEY> <title> · <question without context> · Advice: …`" in full
     assert "`done-for-now` before parking" in full
     # a session guessed the ask call from the skill text; the L0 names both board calls
     assert "`board.py ask --key K --key-title T --ask Q --recommendation R --cause C`" in full

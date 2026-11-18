@@ -72,7 +72,9 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          without context (`--key` is the crew's `naming.key` or, before the ticket exists, a
          lower-case plan slug like `onboarding-v2`; `proj-12`, a key in lower case, is refused); otherwise the reader's reason goes back as a `note` on the asking
          session's line and in the refusal; the owner's news gets nothing. Every run past the field check leaves one line
-         in board-questions.jsonl, text included. On success it prints exactly one JSON object on
+         in board-questions.jsonl, text included. Before the reader it prints the newest earlier
+         questions on the same key with how each ended (`earlier on <key>: Q<n> (<date>)
+         answered …|withdrawn: …|open: <ask>`) on stderr, never refusing. On success it prints exactly one JSON object on
          stdout, `{"id": "Q<n>", "outcome": "posted"}` (with `carry` for an `ask --to` on jira),
          everything else on stderr. The same question again from the same session within
          REPEAT_WINDOW (text, key, cause, recommendation and `--to`; no `--replace`) while the
@@ -1783,6 +1785,7 @@ def cmd_ask(state, args, crew, now):
     if pr_url is CARRY:
         return _carry_reads("ask", [], [args.key.strip()])
 
+    _print_earlier(state, args.key.strip())
     fields = {f: getattr(args, f).strip() for f in ASK_FIELDS}
     if args.urgent:
         fields["urgent"] = True
@@ -1845,6 +1848,36 @@ def cmd_ask(state, args, crew, now):
     qid = state.write_board(posted, after=log_posted)
     _print_ask(qid, "posted", _remote_ops(args, crew, fields))
     return 0
+
+
+EARLIER_SHOWN = 3
+
+
+def _print_earlier(state, key):
+    """The newest earlier questions on `key` with how each ended, on stderr: an answer the owner
+    already gave is the answer, so the asker reads these before a new question. Never refuses."""
+    posted, ends = {}, {}
+    for line in state.questions():
+        qid = line.get("id")
+        if not qid:
+            continue
+        if line.get("outcome") == "posted" and line.get("key") == key:
+            posted[qid] = line
+        elif line.get("outcome") in ("withdrawn", "superseded", "closed", "replaced"):
+            ends[qid] = f"{line['outcome']}: {line.get('reason') or line.get('by') or ''}".rstrip(
+                ": "
+            )
+    for line in state.answers():
+        if line.get("id") in posted:
+            quote = f' "{line["quote"]}"' if line.get("quote") else ""
+            ends[line["id"]] = f"answered {line.get('answer', '')}{quote}"
+    for qid in sorted(posted, key=lambda q: posted[q].get("ts") or "")[-EARLIER_SHOWN:]:
+        line = posted[qid]
+        print(
+            f"board.py ask: earlier on {key}: {qid} ({str(line.get('ts') or '')[:10]}) "
+            f"{ends.get(qid, 'open')}: {str(line.get('ask') or '').splitlines()[0][:160]}",
+            file=sys.stderr,
+        )
 
 
 def _remote_ops(args, crew, fields):

@@ -3210,6 +3210,62 @@ class TestBlocked:
         assert "blocked" in board.parser()._subparsers._group_actions[0].choices
 
 
+class TestEarlier:
+    def test_ask_names_earlier_questions_on_the_key_and_how_they_ended(self, crewless, capsys):
+        key = ASK["--key"]
+        lines = [
+            {
+                "id": "Q1",
+                "ts": "2026-11-10T09:00:00Z",
+                "key": key,
+                "ask": "Keep the backup?",
+                "outcome": "posted",
+            },
+            {
+                "id": "Q2",
+                "ts": "2026-11-11T09:00:00Z",
+                "key": key,
+                "ask": "PITR booked?",
+                "outcome": "posted",
+            },
+            {
+                "id": "Q2",
+                "ts": "2026-11-11T10:00:00Z",
+                "outcome": "withdrawn",
+                "reason": "answered in chat: no",
+            },
+            {
+                "id": "Q3",
+                "ts": "2026-11-12T09:00:00Z",
+                "key": "OTHER-1",
+                "ask": "Not this key",
+                "outcome": "posted",
+            },
+        ]
+        (crewless / "board-questions.jsonl").write_text(
+            "".join(json.dumps(x) + "\n" for x in lines)
+        )
+        (crewless / "board-answers.jsonl").write_text(
+            json.dumps({"id": "Q1", "answer": "accept", "quote": "yes, keep it"}) + "\n"
+        )
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        err = [
+            x
+            for x in capsys.readouterr().err.splitlines()
+            if x.startswith("board.py ask: earlier")
+        ]
+        assert err == [
+            f'board.py ask: earlier on {key}: Q1 (2026-11-10) answered accept "yes, keep it": Keep the backup?',
+            f"board.py ask: earlier on {key}: Q2 (2026-11-11) withdrawn: answered in chat: no: PITR booked?",
+        ]
+
+    def test_a_key_without_history_prints_nothing_earlier(self, crewless, capsys):
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        assert "earlier on" not in capsys.readouterr().err
+
+
 class TestUrgent:
     def test_ask_urgent_marks_the_item_and_the_log(self, crewless):
         answer_with(crewless, CLEAR)
