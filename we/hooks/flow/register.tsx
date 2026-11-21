@@ -1,5 +1,6 @@
 // /flow: a pane with a traffic light per /we:master step for a story, an epic's stories, or
-// what this session works on. Reads git and gh itself; no agent feeds it.
+// what this session works on; in a master everything it orchestrates (master.ts), so the human
+// sees it there instead of asking. Reads git and gh itself; no agent feeds it.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
@@ -11,11 +12,16 @@ import { defaultBranch, git, loadPrs, planGrep } from '../plans/plans'
 import { crewFlowLines, loadCrewFlow, readCrewFlow } from './crewflow'
 import { PHASE_COLOR as COLOR, PHASE_URGENCY as URGENCY, keysIn, matchesKey, parsePlans, phaseOf, stagesOf } from './phase'
 import type { Plan } from './phase'
+import { masterKeys, masterView, otherWorkersLine, workerLine } from './master'
+import type { MasterOrchestration } from './master'
 
 const PANE = 'we-flow'
 const REFRESH_MS = 120_000
 const MAX_KEYS = 6
 const LAST_KEYS = 'flow.lastKeys'
+// The master record of a view whose source is `master <name>` (FlowView's type lies in types/).
+const MASTER = 'flow.master'
+const isMasterSource = (source?: string) => !!source?.startsWith('master ')
 const view = atom({ plugin: 'we', key: 'flowBoard' } as const, null)
 
 const LABEL: Record<FlowPhase, string> = {
@@ -59,7 +65,7 @@ async function projectKey($: $, top: string): Promise<string | undefined> {
   }
 }
 
-async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
+async function gather($: $, keys: string[], master?: MasterOrchestration): Promise<FlowGroup[]> {
   const top = await repoTop($)
   await git($, top, ['fetch', 'origin', '--quiet'], 60_000)
   const base = await defaultBranch($, top)
@@ -68,6 +74,12 @@ async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
   const groups: { key: string; stem?: string; epicTitle?: string; storyKeys: string[]; paths: string[] }[] = []
   for (const key of keys) {
     const epicHit = lines(await git($, top, ['grep', '-l', '-E', `^ticket: ${key}$`, base, '--', 'docs/plans/*epic*.md']))[0]
+    const ordered = master?.epic === key ? master.stories.map(s => s.key) : []
+    if (!epicHit && ordered.length) {
+      // A master's epic whose plan lies in another repo: an epic group of the stories it orchestrates.
+      groups.push({ key, epicTitle: key, storyKeys: ordered, paths: ordered.map(k => `docs/plans/${k}-story.md`) })
+      continue
+    }
     if (!epicHit) {
       groups.push({ key, storyKeys: [key], paths: [`docs/plans/${key}-story.md`] })
       continue
@@ -86,7 +98,9 @@ async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
     : []
   for (const group of groups) {
     if (group.epicTitle === undefined) continue
-    group.storyKeys = [...new Set(plans.filter(p => p.epic === group.key || p.epic === group.stem).map(p => p.key))]
+    const fromPlans = plans.filter(p => p.epic === group.key || p.epic === group.stem).map(p => p.key)
+    const fromMaster = master?.epic === group.key ? master.stories.map(s => s.key) : []
+    group.storyKeys = [...new Set([...(group.stem === undefined ? group.storyKeys : []), ...fromPlans, ...fromMaster])]
   }
 
   const allKeys = [...new Set(groups.flatMap(g => g.storyKeys))]
@@ -135,8 +149,11 @@ async function gather($: $, keys: string[]): Promise<FlowGroup[]> {
   return out
 }
 
-// /flow with no key: what this session works on, the most specific source first.
-async function detect($: $): Promise<{ keys: string[]; source: string } | undefined> {
+// /flow with no key: in a master what it orchestrates, else what this session works on, the most
+// specific source first.
+async function detect($: $): Promise<{ keys: string[]; source: string; master?: MasterOrchestration } | undefined> {
+  const master = await masterView($)
+  if (master && masterKeys(master).length) return { keys: masterKeys(master), source: `master ${master.name}`, master }
   const top = await repoTop($).catch(() => undefined)
   const prefix = top ? await projectKey($, top) : undefined
   const home = await $.env.get('HOME')
@@ -181,14 +198,25 @@ const summary = (v: FlowView): string => {
 
 const title = (keys: string[]) => `Flow ${keys.join(' ')}`
 
-async function refresh($: $, keys: string[], source?: string) {
+async function refresh($: $, keys: string[], source?: string, fresh?: MasterOrchestration) {
   if (isRefreshing) return
   isRefreshing = true
   try {
     await update($, view, v =>
       v && v.keys.join() === keys.join() ? { ...v, isLoading: true } : { keys, source, groups: [], updatedAt: 0, isLoading: true },
     )
-    const groups = await gather($, keys)
+    // A master view re-reads its workers with the timer; a failed re-read keeps the last record.
+    // A good re-read also renews the keys: a master gains stories, or an epic, after the open.
+    let master: MasterOrchestration | undefined
+    if (isMasterSource(source)) {
+      const reread = fresh ?? (await masterView($))
+      master = reread ?? ((await $.store.get(MASTER)) as MasterOrchestration | undefined)
+      if (reread) {
+        await $.store.set(MASTER, reread)
+        if (masterKeys(reread).length) keys = masterKeys(reread)
+      }
+    }
+    const groups = await gather($, keys, master)
     const next: FlowView = { keys, source, groups, updatedAt: await $.clock.now(), isLoading: false }
     await update($, view, () => next)
     await $.store.set(LAST_KEYS, keys)
@@ -203,8 +231,8 @@ async function refresh($: $, keys: string[], source?: string) {
 }
 
 // The fetch outlives the command or press that asked for it: a timer runs outside that dispatch.
-function later($: $, keys: string[], source?: string) {
-  $.clock.after(0, () => void refresh($, keys, source))
+function later($: $, keys: string[], source?: string, master?: MasterOrchestration) {
+  $.clock.after(0, () => void refresh($, keys, source, master))
 }
 
 // A button's slash command, queued as if the person typed it; it runs once the session is idle.
@@ -228,7 +256,7 @@ const bar = (done: number, total: number, width: number) => {
 export async function startFlow($: $) {
   await $.command.register({
     name: 'flow',
-    description: 'Traffic lights per /we:master step for a story or an epic; no key: what this session works on',
+    description: "Traffic lights per /we:master step for a story or an epic; no key: a master's orchestration, else what this session works on",
     argumentHint: '[KEY …]',
   })
   const current = await read($, view)
@@ -251,7 +279,7 @@ export async function openFlow($: $, args: string): Promise<string> {
     return 'Flow pane opened with Crew flow; no ticket key found in this session for the story lights (/flow PROJ-123).'
   }
   const opened = await $.ui.open({ id: PANE, title: title(found.keys) })
-  later($, found.keys, found.source)
+  later($, found.keys, found.source, 'master' in found ? found.master : undefined)
   const from = found.source ? ` (from ${found.source})` : ''
   if (!opened.isPlaced) return `Flow pane for ${found.keys.join(' ')}${from} waits undrawn: ${opened.reason}`
   return `Flow pane for ${found.keys.join(' ')}${from} opened.`
@@ -277,10 +305,15 @@ export const registerFlow = (on: On, options: PluginOptions) => {
       return (
         <Box flexDirection="column" gap={1}>
           {crewSection}
-          <Text dimColor>/flow shows what this session works on; /flow PROJ-123 a story or an epic.</Text>
+          <Text dimColor>/flow shows what this session works on, in a master all it orchestrates so you see it instead of asking; /flow PROJ-123 a story or an epic.</Text>
         </Box>
       )
     }
+
+    const master = isMasterSource(v.source) ? ((await $.store.get(MASTER)) as MasterOrchestration | undefined) : undefined
+    const workersOf = (key: string) =>
+      (master?.stories.find(s => s.key === key)?.workers ?? []).map(w => <Text dimColor>{clip(workerLine(w), width - 6)}</Text>)
+    const others = master && otherWorkersLine(master)
 
     const rows = allRows(v)
     const merged = rows.filter(r => r.phase === 'merged').length
@@ -335,16 +368,20 @@ export const registerFlow = (on: On, options: PluginOptions) => {
         <Box flexDirection="row" flexWrap="wrap">{lamps(row)}</Box>
         <Box flexDirection="column" marginTop={1}>{details(row)}</Box>
         {row.worktree && <Text dimColor>{'↳ ' + clip(row.worktree, width - 8)}</Text>}
+        {workersOf(row.key)}
         <Box flexDirection="row" gap={1} marginTop={1}>{actionsOf(row)}</Box>
       </Box>
     )
 
     const doneLine = (row: FlowRow) => (
-      <Text>
-        <Text color="success">{'✓ '}</Text>
-        <Text dimColor>{`${row.key}  ${clip(row.title, width - row.key.length - 14)}`}</Text>
-        {row.pr && <Text dimColor>{`  #${row.pr}`}</Text>}
-      </Text>
+      <Box flexDirection="column">
+        <Text>
+          <Text color="success">{'✓ '}</Text>
+          <Text dimColor>{`${row.key}  ${clip(row.title, width - row.key.length - 14)}`}</Text>
+          {row.pr && <Text dimColor>{`  #${row.pr}`}</Text>}
+        </Text>
+        {workersOf(row.key)}
+      </Box>
     )
 
     return (
@@ -356,6 +393,9 @@ export const registerFlow = (on: On, options: PluginOptions) => {
             <Button key="board" label="Board" onPress={() => void openBoard($, options)} />
           </Box>
           {v.source && <Text dimColor>{`detected from ${v.source}`}</Text>}
+          {master && !master.crewRepo && (
+            <Text color="warning">{clip(`${v.source}: no crew repo found — stories from the board line`, width - 2)}</Text>
+          )}
           {rows.length > 0 && (
             <Text>
               <Text color="success">{progress.filled}</Text>
@@ -381,6 +421,7 @@ export const registerFlow = (on: On, options: PluginOptions) => {
                     <Text dimColor>{`  ${clip(group.epicTitle, width - group.key.length - 8)}`}</Text>
                   </Text>
                   <Box flexDirection="row" gap={1}>
+                    {action(`${group.key}-standup`, 'Standup', 'we:standup', group.key)}
                     {action(`${group.key}-epic`, 'Epic status', 'we:epic', group.key)}
                     {open.length > 0 && action(`${group.key}-master`, 'Master', 'we:master', group.key)}
                   </Box>
@@ -396,6 +437,7 @@ export const registerFlow = (on: On, options: PluginOptions) => {
             </Box>
           )
         })}
+        {others && <Text dimColor>{clip(others, width - 2)}</Text>}
 
         <Box flexDirection="row" gap={2}>
           <Button key="refresh" hotkey="r" label={v.isLoading ? 'loading…' : 'Refresh'} onPress={() => later($, v.keys, v.source)} />

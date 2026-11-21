@@ -73,10 +73,11 @@ test('/flow PROJ-10 fills the pane after the command returned', async ($, on) =>
     expect(await ui.find({ type: 'Text', text: /Claude running/ })).toBeDefined()
     await ui.press({ key: 'PROJ-14-ci' })
     await ui.press({ key: 'PROJ-14-standup' })
+    await ui.press({ key: 'PROJ-10-standup' })
     await ui.press({ key: 'board' })
     await ui.unmount()
   }
-  expect(ran).toEqual(['we:ci-review 5090', 'we:standup PROJ-14', 'we:ci-review 5090', 'we:standup PROJ-14'])
+  expect(ran).toEqual(['we:ci-review 5090', 'we:standup PROJ-14', 'we:standup PROJ-10', 'we:ci-review 5090', 'we:standup PROJ-14', 'we:standup PROJ-10'])
   await clock.settle()
   expect(toasts).toEqual([])
   expect(opened).toEqual(['we-flow', 'we-board', 'we-board'])
@@ -159,3 +160,168 @@ test('Flow from the board: Crew flow from the last snapshot, a stale one refresh
 })
 
 const RUN_OK = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+
+// --- /flow without a key in a master: what it orchestrates (standup.py --orchestration) ---------
+
+const ORCH = (masters: unknown[], crewRepo: string | null = '/crew') =>
+  JSON.stringify({ schema_version: 1, view: 'orchestration', scope: { key: null, from: 'session', session: 's1', crew_repo: crewRepo }, sources: {}, gaps: [], orchestration: { masters, '(no starter)': [] } })
+
+const LEAD = {
+  master: 'lead',
+  epic: 'PROJ-10',
+  stories: [
+    { key: 'PROJ-12', stage: 'done', workers: [] },
+    { key: 'PROJ-14', stage: 'in_progress', workers: [{ name: 'PROJ-14-build', state: 'busy' }] },
+  ],
+  other_workers: [{ name: 'PROJ-99-fix', state: 'idle', key: 'PROJ-99' }],
+}
+
+type Script = { exitCode?: number; stdout?: string; reject?: boolean }
+
+async function noKey($: Parameters<Parameters<typeof test>[1]>[0], on: Parameters<Parameters<typeof test>[1]>[1], role: string, script: Script) {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const argv: string[] = []
+  on('process.run', (_$, e) => {
+    const line = e.argv.join(' ')
+    argv.push(line)
+    if (line.includes('standup.py')) {
+      if (script.reject) return { deny: 'timed out after 30000 ms' }
+      return { value: { exitCode: script.exitCode ?? 0, stdout: script.stdout ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (line === 'git branch --show-current') return RUN_OK('feat/PROJ-14-guild\n')
+    const hit = answers.find(([pattern]) => pattern.test(line))
+    return RUN_OK(hit?.[1] ?? '')
+  })
+  on('env.get', (_$, e) => ({ value: (e as { name?: unknown }).name === 'WE_ROLE' ? role : '/home/me' }))
+  const reads: string[] = []
+  on('fs.read', (_$, e) => {
+    reads.push(String((e as { path?: unknown }).path))
+    return { deny: 'ENOENT' }
+  })
+  on('fs.exists', () => ({ value: false }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.messages', () => ({ value: [] }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.status', () => ({ value: undefined }))
+  // only /flow's own lines: the session start also starts the board pane, which logs its own
+  const logged: string[] = []
+  on('ui.log', (_$, e) => {
+    const text = String((e as { text?: unknown }).text)
+    if (text.startsWith('flow:')) logged.push(text)
+    return { value: undefined }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  const ran: string[] = []
+  for (const command of ['we:standup', 'we:epic', 'we:master', 'we:ci-review']) {
+    on('command.run', { command }, (_$, e) => {
+      ran.push(`${e.command} ${e.args}`)
+      return { text: 'ok' }
+    })
+  }
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ value: { command: 'flow' } }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const answer = await $.command.run({ command: 'flow', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const mount = () => $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-flow', props: { bodyColumns: 90 } as never })
+  return { answer, argv, reads, logged, ran, clock, mount }
+}
+
+test('master view: the epic, its stories with their workers, other workers, and the epic Standup', async ($, on) => {
+  const r = await noKey($, on, 'master', { stdout: ORCH([LEAD]) })
+  expect(r.answer.text).toContain('from master lead')
+  expect(r.logged).toEqual([])
+  const ui = await r.mount()
+  for (const re of [/^Epic PROJ-10/, /PROJ-14/, /^✓ /, /⚙ PROJ-14-build · busy/, /detected from master lead/, /other workers: PROJ-99-fix \(PROJ-99\) · idle/]) {
+    expect({ re: String(re), hit: !!(await ui.find({ type: 'Text', text: re })) }).toEqual({ re: String(re), hit: true })
+  }
+  expect(await ui.find({ type: 'Text', text: /no crew repo/ })).toBeUndefined()
+  await ui.press({ key: 'PROJ-10-standup' })
+  await ui.press({ key: 'PROJ-14-standup' })
+  await ui.unmount()
+  expect(r.ran).toEqual(['we:standup PROJ-10', 'we:standup PROJ-14'])
+  expect(r.reads.filter(p => p.includes('we-focus'))).toEqual([])
+  expect(r.argv).not.toContain('git branch --show-current')
+  expect(r.argv.filter(l => l.includes('standup.py'))).toEqual([expect.stringMatching(/standup\.py --orchestration --session s1 --json$/)])
+})
+
+test('master view: a master without epic shows its stories as story groups', async ($, on) => {
+  const free = { master: 'kiska', epic: null, stories: [{ key: 'PROJ-31', workers: [{ name: 'PROJ-31-build', state: 'idle' }] }, { key: 'PROJ-32', workers: [] }], other_workers: [] }
+  const r = await noKey($, on, 'master', { stdout: ORCH([free]) })
+  const ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /◆ PROJ-31 · PROJ-32/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⚙ PROJ-31-build · idle/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Epic / })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /other workers/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('master view: no crew repo found is one visible line, stories from the board line', async ($, on) => {
+  const r = await noKey($, on, 'master', { stdout: ORCH([LEAD], null) })
+  const ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /master lead: no crew repo found — stories from the board line/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a non-master runs no standup.py and detects its branch as before', async ($, on) => {
+  const r = await noKey($, on, 'worker', { stdout: ORCH([LEAD]) })
+  expect(r.answer.text).toContain('PROJ-14 (from branch feat/PROJ-14-guild)')
+  expect(r.argv.filter(l => l.includes('standup.py'))).toEqual([])
+  expect(r.logged).toEqual([])
+})
+
+for (const [arm, script, reason] of [
+  ['exit 1', { exitCode: 1 }, 'standup.py exit 1'],
+  ['no JSON', { stdout: 'Traceback …' }, 'standup.py printed no JSON'],
+  ['orchestration null', { stdout: JSON.stringify({ orchestration: null }) }, 'orchestration: null'],
+  ['no entry', { stdout: ORCH([]) }, 'no entry for this session'],
+  ['timeout', { reject: true }, 'timed out'],
+] as [string, Script, string][]) {
+  test(`master lookup fails (${arm}): the branch as before and one ui.log line`, async ($, on) => {
+    const r = await noKey($, on, 'master', script)
+    expect(r.answer.text).toContain('PROJ-14 (from branch feat/PROJ-14-guild)')
+    expect(r.logged).toHaveLength(1)
+    expect(r.logged[0]).toMatch(new RegExp(`^flow: master view unavailable: .*${reason.replace(/[()]/g, '\\$&')}`))
+  })
+}
+
+test('the 2-minute refresh re-reads the master and keeps the last record when that fails', async ($, on) => {
+  let calls = 0
+  const busy = ORCH([LEAD])
+  const idle = ORCH([{ ...LEAD, stories: [LEAD.stories[0], { ...LEAD.stories[1], workers: [{ name: 'PROJ-14-build', state: 'idle' }] }] }])
+  const script: Script = {}
+  Object.defineProperty(script, 'stdout', { get: () => [busy, idle][calls++] ?? '' })
+  Object.defineProperty(script, 'exitCode', { get: () => (calls > 2 ? 1 : 0) })
+  const r = await noKey($, on, 'master', script)
+  expect(calls).toBe(1) // the open reuses the lookup of detect()
+  await r.clock.advance(120_000)
+  await r.clock.settle()
+  let ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /⚙ PROJ-14-build · idle/ })).toBeDefined()
+  await ui.unmount()
+  await r.clock.advance(120_000)
+  await r.clock.settle()
+  ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /⚙ PROJ-14-build · idle/ })).toBeDefined()
+  await ui.unmount()
+  expect(r.logged.filter(l => l.startsWith('flow: master view unavailable'))).toHaveLength(1)
+})
+
+test('a master without epic sees a story it gains after the open, with its worker, on the refresh', async ($, on) => {
+  let calls = 0
+  const one = { master: 'kiska', epic: null, stories: [{ key: 'PROJ-31', workers: [] }], other_workers: [] }
+  const two = { ...one, stories: [...one.stories, { key: 'PROJ-33', workers: [{ name: 'PROJ-33-build', state: 'busy' }] }] }
+  const script: Script = {}
+  Object.defineProperty(script, 'stdout', { get: () => [ORCH([one]), ORCH([two])][Math.min(calls++, 1)] })
+  const r = await noKey($, on, 'master', script)
+  let ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /PROJ-33/ })).toBeUndefined()
+  await ui.unmount()
+  await r.clock.advance(120_000)
+  await r.clock.settle()
+  ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /◆ PROJ-31 · PROJ-33/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⚙ PROJ-33-build · busy/ })).toBeDefined()
+  await ui.unmount()
+})

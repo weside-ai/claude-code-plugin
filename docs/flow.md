@@ -34,9 +34,20 @@ Epic PROJ-10  Channels everywhere
 |---|---|
 | `/flow PROJ-10` | an epic (its plan has `ticket: PROJ-10`) with every story whose `epic:` names it, or a single story |
 | `/flow PROJ-10 PROJ-21` | several keys, one block each (at most six) |
-| `/flow` | what this session works on, see below |
+| `/flow` | in a master everything it orchestrates, elsewhere what this session works on, see below |
 
-Without a key, `/flow` takes the first source that names one: the statusline focus
+In a master session (`WE_ROLE=master`), `/flow` without a key shows what that master orchestrates,
+so you see it in every master instead of asking: its epic with every story it holds, under each
+story the workers it started on it (`⚙ <worker> · <state>`), and its workers on other keys as one
+`other workers:` line. A master without an epic shows its stories one block each. The map comes
+from `standup.py --orchestration --session <id>` (plans, board, sessions and the fast command
+centre, no GitHub) and is read again with every refresh, which also picks up stories or an epic the
+master gains. A master whose session runs outside its crew's repo finds that repo through its
+board line; when that fails the pane says
+`master <name>: no crew repo found — stories from the board line`. When the lookup fails, `/flow`
+logs `flow: master view unavailable: <reason>` and falls back to the sources below.
+
+Otherwise, without a key `/flow` takes the first source that names one: the statusline focus
 `/we:master` writes when it pushes (`~/.claude/we-focus/<session>.json`), the current branch
 (`feat/PROJ-14-…`), the keys you typed or a skill ran on in this conversation (newest first), and
 last the keys the pane showed before. The pane says which source it used. With
@@ -71,6 +82,7 @@ A button runs its command as if you typed it, once the session is idle:
 | Refine | plan missing or not approved | `/we:master <KEY>` |
 | Build | approved, nothing built | `/we:master <KEY>` |
 | Fix CI | CI, review or merge red | `/we:ci-review <PR>` |
+| Standup | epic header | `/we:standup <EPIC>` |
 | Epic status | epic header | `/we:epic <KEY>` |
 | Master | epic header, while a story is open | `/we:master <KEY>` |
 | Refresh (`r`) | footer | reads git and GitHub again |
