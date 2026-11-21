@@ -39,8 +39,14 @@ as `<source>: not read (<why>)` and as `n/a` in the tables: never fill it by inf
 prints the same document for a reader that needs fields (`orchestration`: master → epic → stories →
 workers).
 
-The section of decisions bundles every open question to the human, ranked by what it holds up, with
-its recommendation, so the human answers them in one pass instead of question by question.
+The epic and story views walk up to the epic's `serves:` metric of the goal file and show it in the
+intent (serves <metric>), so every slice names the number it moves.
+
+The section of decisions bundles the board's open questions to the human and the `## Open Fork` of
+each story plan in scope, ranked by what it holds up, with its recommendation, so the human answers
+them in one pass instead of question by question. Add this conversation's unanswered questions to
+the user, and the due items of the repo's due-items file when its instruction files name one: only
+you know them, the script does not.
 
 ## 3 · Utilization and acceleration
 
@@ -65,7 +71,7 @@ never start: the command stays read-only.
 - [ ] the verdict sentence carries numbers from the utilization table
 - [ ] each proposal cites one fired signal id, its evidence, source, threshold and actor
 
-## 4 · Branch view (`--branch`, a key without an epic, or no scope)
+## 4 · Branch view (`--branch`, a key without an epic)
 
 `/we:master`'s user-merge close embeds this view.
 

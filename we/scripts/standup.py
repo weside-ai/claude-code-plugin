@@ -25,7 +25,7 @@ Sources, one call each (never per story):
 
 | Source | Call | Gives |
 |---|---|---|
-| plans | `epic_state.frontmatter` over `docs/plans/*-epic.md` of `origin/main` (`plan_files`; not `_archive/`), `epic_state.finish_line` | epics, line, intent, story plans |
+| plans | `epic_state.frontmatter` over `docs/plans/*.md` of `origin/main` (`plan_files`, one `git cat-file --batch`; not `_archive/`), `epic_state.finish_line` | epics, line, intent, story plans, their `## Open Fork` |
 | board | `board.StateDir`: `board()`, `last_rows()` (stage per key), `transitions()` (moves in the window), `open_questions` | lines, questions, stages |
 | tickets | `ticket_snapshot.read` | stage of keys without a board move (only when fresh) |
 | flow | `flow_intervals.build` once over both windows | touch hours per key, worker hours, waits per `waiting_on`, story efficiency |
@@ -50,6 +50,10 @@ previous window has no data for it.
 
 Signals (`SIGNALS`), fixed rules over the numbers; the skill judges and proposes, the script only
 measures. Each signal: `{id, kind, evidence, source, threshold, actor}`.
+
+Decisions: the board's open questions to the owner and the `## Open Fork` of every story plan
+in scope, ranked by the sessions and stories each holds up, then by age; the skill adds the
+questions of its own conversation.
 
 Orchestration: per live master its epic (board line `epic`, else `epic_state.epic_number`), every
 story of that epic with its stage, under each story the workers that master started on it
@@ -206,9 +210,9 @@ def _line_keys(value, pattern: str) -> list:
 
 def plan_files(root: Path, runner=subprocess.run) -> tuple:
     """`({file name: text} of `docs/plans/*.md` without `_archive/`, where)`: from the remote's
-    default branch (`origin/HEAD`, else `origin/main`) through `git show`, as `/flow` and
-    `plan_push.py` read plans, since a session's checkout may lag behind `main`; the working tree
-    only where the repo has no such ref (no git, no remote)."""
+    default branch (`origin/HEAD`, else `origin/main`) in one `git cat-file --batch`, as `/flow`
+    and `plan_push.py` read plans, since a session's checkout may lag behind `main`; the working
+    tree only where the repo has no such ref (no git, no remote)."""
 
     def git(*args):
         out = runner(
@@ -220,17 +224,38 @@ def plan_files(root: Path, runner=subprocess.run) -> tuple:
         )
         return out.stdout if out.returncode == 0 else None
 
+    def batch(specs: list) -> dict:
+        """`{spec: text}` of every blob, one process for all plans."""
+        out = runner(
+            ["git", "-C", str(root), "cat-file", "--batch"],
+            input="".join(f"{x}\n" for x in specs).encode(),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        if out.returncode != 0:
+            return {}
+        data, pos, found = out.stdout, 0, {}
+        for spec in specs:
+            end = data.index(b"\n", pos)
+            head = data[pos:end].split()
+            pos = end + 1
+            if len(head) == 3 and head[1] == b"blob":
+                size = int(head[2])
+                found[spec] = data[pos : pos + size].decode("utf-8", "replace")
+                pos += size + 1
+        return found
+
     head = (git("symbolic-ref", "--short", "refs/remotes/origin/HEAD") or "").strip()
     for ref in [r for r in (head, "origin/main") if r]:
         listing = git("ls-tree", "--name-only", f"{ref}:docs/plans")
         if listing is None:
             continue
         names = [n for n in listing.splitlines() if n.endswith(".md")]
-        files = {}
-        for n in names:
-            text = git("show", f"{ref}:docs/plans/{n}")
-            if text is not None:
-                files[n] = text
+        blobs = batch([f"{ref}:docs/plans/{n}" for n in names])
+        files = {
+            n: blobs[f"{ref}:docs/plans/{n}"] for n in names if f"{ref}:docs/plans/{n}" in blobs
+        }
         return files, ref
     plans = root / "docs" / "plans"
     if not plans.is_dir():
@@ -239,13 +264,17 @@ def plan_files(root: Path, runner=subprocess.run) -> tuple:
 
 
 def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
-    """`{epics: {KEY: epic}, stories: {KEY: epic KEY or None}, ref}` from `plan_files`."""
+    """`{epics: {KEY: epic}, stories: {KEY: epic KEY or None}, forks: {KEY: lines}, ref}` from
+    `plan_files`; `forks` holds the `## Open Fork` section of each story plan that has one."""
     files, ref = plan_files(root, runner)
-    epics, stories = {}, {}
+    epics, stories, forks = {}, {}, {}
     for name in sorted(n for n in files if n.endswith("-story.md")):
         meta = epic_state.frontmatter(files[name])
         key = str(meta.get("story") or meta.get("ticket") or name[: -len("-story.md")])
         stories[key] = meta.get("epic") or None
+        fork = [x.strip() for x in _section(files[name], "Open Fork") if x.strip()]
+        if fork:
+            forks[key] = fork
     for name in sorted(n for n in files if n.endswith("-epic.md")):
         text = files[name]
         meta = epic_state.frontmatter(text)
@@ -264,7 +293,7 @@ def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
             "stories": sorted(k for k, e in stories.items() if e == key),
             "text": text,
         }
-    return {"epics": epics, "stories": stories, "ref": ref}
+    return {"epics": epics, "stories": stories, "forks": forks, "ref": ref}
 
 
 # --- the build -------------------------------------------------------------------------------
@@ -395,6 +424,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
     plans = g.read("plans", lambda: read_plans(cwd, pattern))
     epics = (plans or {}).get("epics", {})
     story_epic = (plans or {}).get("stories", {})
+    forks = (plans or {}).get("forks", {})
     view, epic_key = "portfolio", None
     if scoped:
         if scoped in epics:
@@ -490,6 +520,8 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         import worker_launch  # noqa: PLC0415
 
         agents = g.read("sessions", worker_launch.sessions)
+    # a session list that was not read is no empty crew: utilization and orchestration stay null
+    sessions_read = agents is not None or zentrale_doc is not None
 
     def _zentrale():
         if zentrale_doc is not None:
@@ -502,7 +534,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
 
     zd = g.read("zentrale", _zentrale) or {}
     sections = zd.get("sections") or {}
-    sessions = sections.get("working") or []
+    sessions = (sections.get("working") or []) if sessions_read else None
 
     def _workers():
         import worker_launch  # noqa: PLC0415
@@ -533,6 +565,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         "epics": epics,
         "story_epic": story_epic,
         "bd": bd,
+        "forks": forks,
         "lines": lines,
         "stage_of": stage_of,
         "built": built,
@@ -564,8 +597,12 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         doc["story"] = _story_detail(ctx, epics[epic_key], scoped)
     doc["utilization"] = utilization
     doc["signals"] = _signals(ctx)
-    doc["decisions"] = _decisions(ctx)
-    doc["orchestration"] = orchestration(sessions, lines, ctx)
+    if view == "portfolio":
+        in_scope = {k for e in active for k in keys_of[e]}
+    else:
+        in_scope = {scoped} if view == "story" else set(keys_of[epic_key])
+    doc["decisions"] = _decisions(ctx, in_scope)
+    doc["orchestration"] = None if sessions is None else orchestration(sessions, lines, ctx)
     if prs is not None:
         loose = [p for p in prs if not p["key"] and _in(p.get("merged"), w_since, until)]
         if loose:
@@ -624,7 +661,10 @@ def _work_rows(ctx, keys, a, b) -> float | None:
     )
 
 
-def _moves(ctx, keys, a, b, to) -> list:
+def _moves(ctx, keys, a, b, to) -> list | None:
+    """The board moves of `keys` to `to` in `[a, b]`; `None` when the board was not read."""
+    if not ctx["bd"]:
+        return None
     return [
         t
         for t in ctx["bd"].get("transitions") or []
@@ -695,21 +735,23 @@ def _intensity(ctx, keys) -> dict:
         ),
         "prs_per_day": None if cur is None else _r(len(cur) / days, 2),
         "ci_rounds": rounds,
-        "done": counted(
-            len(_moves(ctx, keys, s, u, "done")), len(_moves(ctx, keys, p, s, "done"))
-        ),
+        "done": counted(*(_len(_moves(ctx, keys, a, b, "done")) for a, b in ((s, u), (p, s)))),
     }
+
+
+def _len(items) -> int | None:
+    return None if items is None else len(items)
 
 
 def _masters_holding(ctx) -> set:
     """Keys a live master holds: its board line's `keys` and the keys of the live workers it
     started (`crew_view`'s `group`); an epic on the line alone holds none of its stories."""
-    live = {e["name"] for e in ctx["sessions"] if e.get("role") == "master"}
+    live = {e["name"] for e in ctx["sessions"] or [] if e.get("role") == "master"}
     held = set()
     for line in ctx["lines"]:
         if line.get("name") in live:
             held.update(k for k in line.get("keys") or [] if isinstance(k, str))
-    for e in ctx["sessions"]:
+    for e in ctx["sessions"] or []:
         if e.get("role") == "worker" and e.get("group") in live:
             held.update(k for k in e.get("keys") or [] if isinstance(k, str))
     return held
@@ -746,7 +788,7 @@ def _light(ctx, epic) -> tuple:  # noqa: PLR0911  first rule wins
             if ctx["stage_of"](k)[0] != "done" and not _work_rows(ctx, {k}, recent, ctx["until"]):
                 return "yellow", f"{k}: no work in {STALE_LINE_H} h"
     held = _masters_holding(ctx)
-    for k in sorted(keys):
+    for k in sorted(keys) if ctx["sessions"] is not None else []:
         if ctx["stage_of"](k)[0] == "selected" and k not in held:
             return "yellow", f"{k}: selected, no master"
     for q in ctx["bd"].get("questions") or []:
@@ -801,7 +843,9 @@ def _achieved(ctx, keys) -> dict:
             }
             for p in sorted(merged, key=lambda p: (p["merged"], p["repo"], p["number"]))
         ],
-        "moves": [
+        "moves": None
+        if not ctx["bd"]
+        else [
             {"key": t["key"], "to": t["to"], "ts": t["ts"]}
             for t in sorted(
                 _moves(ctx, keys, s, u, "in_review") + _moves(ctx, keys, s, u, "done"),
@@ -881,7 +925,12 @@ def _story_detail(ctx, epic, key) -> dict:
             if p["key"] == key
         ]
     return {
-        "intent": {"key": epic["key"], "title": epic["title"], "outcome": epic["outcome"]},
+        "intent": {
+            "key": epic["key"],
+            "title": epic["title"],
+            "outcome": epic["outcome"],
+            "serves": epic["serves"],
+        },
         "key": key,
         "stage": st,
         "stage_source": src,
@@ -917,6 +966,8 @@ def _lock(line: str, name: str) -> str | None:
 def _utilization(ctx) -> dict:  # noqa: PLR0915
     g, s, u = ctx["g"], ctx["since"], ctx["until"]
     sessions = ctx["sessions"] if ctx["zentrale"] else None
+    if sessions is None:
+        g.gaps.append("utilization: n/a (sessions not read)")
     out: dict = {}
     wk = ctx["workers"]
     busy = None
@@ -1019,8 +1070,10 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
     return out
 
 
-def _selected_without_master(ctx) -> list:
-    held = _masters_holding(ctx) if ctx["sessions"] else set()
+def _selected_without_master(ctx) -> list | None:
+    if ctx["sessions"] is None:
+        return None
+    held = _masters_holding(ctx)
     out = []
     for e in ctx["active"]:
         for k in ctx["keys_of"][e]:
@@ -1127,22 +1180,46 @@ def _signals(ctx) -> list:  # noqa: PLR0912  one block per rule
     return out
 
 
-def _decisions(ctx) -> dict | None:
-    if not ctx["bd"]:
+def _held_by(ctx, key, session=None) -> list:
+    """The sessions waiting on the human for `key` (or as `session`)."""
+    return sorted(
+        {
+            line.get("name")
+            for line in ctx["lines"]
+            if line.get("waiting_on") == "human"
+            and (key in (line.get("keys") or []) or (session and line.get("name") == session))
+        }
+    )
+
+
+def _fork_item(ctx, key, lines) -> dict:
+    """One `## Open Fork` of a story plan as a decision: its first line, its recommendation."""
+    rec = next(
+        (
+            re.sub(r"^[-*]?\s*\**(recommendation|empfehlung)\**\s*:?\**\s*", "", x, flags=re.I)
+            for x in lines
+            if re.match(r"^[-*]?\s*\**(recommendation|empfehlung)\b", x, re.I)
+        ),
+        None,
+    )
+    return {
+        "id": f"{key} fork",
+        "key": key,
+        "question": lines[0][:240],
+        "recommendation": rec,
+        "unblocks": {"sessions": _held_by(ctx, key), "stories": [key]},
+        "since": None,
+    }
+
+
+def _decisions(ctx, in_scope) -> dict | None:
+    """Board questions to the owner plus the `## Open Fork` of each story plan in scope; `None`
+    only when neither source holds anything because the board was not read."""
+    forks = [_fork_item(ctx, k, v) for k, v in sorted(ctx["forks"].items()) if k in in_scope]
+    if not ctx["bd"] and not forks:
         return None
-    items = []
+    items = forks
     for q in ctx["bd"].get("questions") or []:
-        held = sorted(
-            {
-                line.get("name")
-                for line in ctx["lines"]
-                if line.get("waiting_on") == "human"
-                and (
-                    q.get("key") in (line.get("keys") or [])
-                    or line.get("name") == q.get("session")
-                )
-            }
-        )
         stories = [q["key"]] if q.get("key") else []
         items.append(
             {
@@ -1150,14 +1227,17 @@ def _decisions(ctx) -> dict | None:
                 "key": q.get("key"),
                 "question": str(q.get("ask") or "").split("\n")[0][:240],
                 "recommendation": q.get("recommendation"),
-                "unblocks": {"sessions": held, "stories": stories},
+                "unblocks": {
+                    "sessions": _held_by(ctx, q.get("key"), q.get("session")),
+                    "stories": stories,
+                },
                 "since": q.get("ts") or q.get("since"),
             }
         )
     items.sort(
         key=lambda d: (
             -(len(d["unblocks"]["sessions"]) + len(d["unblocks"]["stories"])),
-            str(d["since"]),
+            str(d["since"] or ""),
             d["id"],
         )
     )
@@ -1438,7 +1518,13 @@ def render_md(doc: dict, lang: str = "en") -> str:  # noqa: PLR0915
         out.append(f"## Standup · {s['key']} · {head}")
         out.append("")
         out.append(
-            f"**{lab['epic']}:** {cell(s['intent']['key'] + ' ' + s['intent']['title'])} — {cell(s['intent']['outcome'])}"
+            f"**{lab['epic']}:** {cell(s['intent']['key'] + ' ' + s['intent']['title'])}"
+            + (
+                f" ({lab['serves']} {cell(s['intent']['serves'])})"
+                if s["intent"]["serves"]
+                else ""
+            )
+            + f" — {cell(s['intent']['outcome'])}"
         )
         out.append(
             f"**{lab['stage']}:** {s['stage']} · **{lab['intensity']}:** {_trend_text(s['intensity']['touch_h'], ' h')}"
@@ -1466,9 +1552,11 @@ def _achieved_md(a: dict, lab: dict) -> list:
         out.append(f"- {p['repo']}#{p['number']} {cell(p['title'])} · {p['merged'][:10]}")
     if len(prs) > ACHIEVED_MAX:
         out.append(f"- +{len(prs) - ACHIEVED_MAX} {lab['more']}")
-    for m in a["moves"]:
+    if a["moves"] is None:
+        out.append("- moves: n/a")
+    for m in a["moves"] or []:
         out.append(f"- {m['key']} → {m['to']} · {m['ts'][:10]}")
-    if a["prs"] == [] and not a["moves"]:
+    if a["prs"] == [] and a["moves"] == []:
         out.append(f"- {lab['none']}")
     out.append("")
     return out
@@ -1532,7 +1620,8 @@ def render_utilization(doc: dict, lang: str = "en") -> str:
     out.append(
         f"- {lab['idle_masters']}: {', '.join(idle['masters']) if idle['masters'] else ('n/a' if idle['masters'] is None else '-')}"
     )
-    out.append(f"- {lab['sel_no_master']}: {', '.join(idle['selected_without_master']) or '-'}")
+    sel = idle["selected_without_master"]
+    out.append(f"- {lab['sel_no_master']}: {'n/a' if sel is None else ', '.join(sel) or '-'}")
     wh = u["waiting_h"]
     wh_text = (
         "n/a"

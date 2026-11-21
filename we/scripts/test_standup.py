@@ -146,7 +146,9 @@ def test_story_and_branch_scope(tree):
     doc = run(tree, "PROJ-9003")
     assert doc["view"] == "story"
     s = doc["story"]
-    assert s["intent"]["key"] == "PROJ-9001" and set(s["intent"]) == {"key", "title", "outcome"}
+    assert s["intent"]["key"] == "PROJ-9001"
+    assert set(s["intent"]) == {"key", "title", "outcome", "serves"}
+    assert "(serves questions per day)" in standup.render_md(doc, "en")
     assert s["stage"] == "in_progress" and [p["number"] for p in s["prs"]] == [13]
     assert s["waiting"][0]["question"] == "Q901"
     assert s["intensity"]["touch_h"]["value"] > 0
@@ -214,6 +216,39 @@ def test_missing_sources_are_gaps(tree):
     assert "| n/a · n/a |" in md and "PRs: n/a" in md
 
 
+def test_unread_sessions_and_board_are_null_not_zero(tree, monkeypatch):
+    """A session list or board that was not read is `null`/`n/a`, never an empty crew or 0."""
+    import worker_launch  # noqa: PLC0415
+    from command_center import zentrale  # noqa: PLC0415
+
+    def no_sessions():
+        raise RuntimeError("claude agents: exit 1")
+
+    zdoc = json.loads((tree / "zentrale.json").read_text())
+    monkeypatch.setattr(worker_launch, "sessions", no_sessions)
+    monkeypatch.setattr(zentrale, "build", lambda **_kw: zdoc)
+
+    def no_board(self):
+        raise OSError("board.json: unreadable")
+
+    monkeypatch.setattr(standup.board_mod.StateDir, "board", no_board)
+    doc = run(tree, agents=None, zentrale_doc=None)
+    gaps = doc["gaps"]
+    assert "sessions: not read (claude agents: exit 1)" in gaps
+    assert "utilization: n/a (sessions not read)" in gaps
+    assert "board: not read (board.json: unreadable)" in gaps
+    u = doc["utilization"]
+    assert u["workers"]["used"] is None and u["workers"]["free"] is None
+    assert u["build_masters"]["used"] is None and u["idle"]["masters"] is None
+    assert u["idle"]["selected_without_master"] is None
+    assert doc["orchestration"] is None
+    assert "free_slots_plan_waiting" not in {s["id"] for s in doc["signals"]}
+    assert doc["portfolio"][0]["intensity"]["done"]["value"] is None
+    assert doc["achieved"]["moves"] is None
+    md = standup.render_md(doc, "en")
+    assert "moves: n/a" in md
+
+
 # --- AC 6 --------------------------------------------------------------------------------------
 
 
@@ -247,6 +282,22 @@ def test_decisions_ranked_and_capped(tree):
         "sessions": ["hQ30", "hQ31", "hQ32"],
         "stories": ["PROJ-803"],
     }
+
+
+def test_open_fork_is_a_decision(tree):
+    """A story plan's `## Open Fork` on the default branch stands among the decisions."""
+    plan = tree / "repo" / "docs" / "plans" / "PROJ-9002-story.md"
+    text = plan.read_text()
+    fork = (
+        "## Open Fork\n\nCache per tenant or per user?\n\n- A: per tenant\n- B: per user\n"
+        "- **Recommendation:** A, one invalidation path.\n\n"
+    )
+    plan.write_text(text.replace("## ", fork + "## ", 1) if "## " in text else text + fork)
+    d = run(tree)["decisions"]
+    item = next(x for x in d["items"] if x["id"] == "PROJ-9002 fork")
+    assert item["question"] == "Cache per tenant or per user?"
+    assert item["recommendation"] == "A, one invalidation path."
+    assert item["unblocks"]["stories"] == ["PROJ-9002"]
 
 
 # --- AC 7, 8 -----------------------------------------------------------------------------------
