@@ -17,9 +17,9 @@ write on a `/secrets`, `/variables` or `/environments` path, the crew's `deny_co
 --delete|-d`, a `:<ref>` refspec); main (a `git push` naming the default branch, `main` or `master`,
 a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout on one of them,
 judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` count, and the session's
-cwd stays in unless every push of the command names its own place (`_push_dirs`);
-`ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag, a `git push` in a text naming
-`GIT_DIR`, `GIT_WORK_TREE` or `GIT_INDEX_FILE` (git may push another repo than the gate reads),
+cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tree <p>]… push`
+(`simple_push`, `_push_dirs`), so an environment prefix (`GIT_DIR=…`), a second segment, `eval` or
+a path `git` keeps it; `ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag,
 `ALLOW_PUSH_WITHOUT_MAIN`, `--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
 other `gh pr merge` than `--disable-auto` unless it is the merge line below, typed as a command of
 its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command, `--disable-auto`
@@ -465,45 +465,59 @@ def _tags_pushed(text: str, cwd: Where) -> str | None:
     return next((w for w in sorted(words) if w in tags), None)
 
 
-# `git` as a word of its own: not the `git` of `--git-dir`, `.git` or `git-thing`
-_GIT_WORD = re.compile(r"(?<![\w./-])git(?![\w./-])")
-# the variables that move the repo git runs in away from any `-C` the text names: an assignment,
-# `export`, `env VAR=…` or a prefix all name the variable, so the name alone counts
-_GIT_REPO_ENV = re.compile(r"(?<!\w)(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE)(?!\w)")
+# a path value whose place the shell decides, not the text: a variable, a glob, a brace
+_SHELL_PLACE = re.compile(r"[$*?\[{]")
 
 
-def _repo_redirect(text: str) -> str | None:
-    """The first of GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE `text` names, else None."""
-    found = _GIT_REPO_ENV.search(text) or _GIT_REPO_ENV.search(normalised(text))
-    return found[1] if found else None
+def simple_push(text: str) -> list[str] | None:
+    """The argv of `text` when the whole text is exactly one `git [-C <p>]… [--git-dir[=]<p>]
+    [--work-tree[=]<p>] push …`: one segment, split by `shlex` (`simple_argv`: no operator,
+    newline, redirect, substitution or backtick), `git` typed as the first word (no path, wrapper,
+    backslash, quote or assignment in front), only those path options before `push`, and no
+    path the shell decides (a variable, a glob). Anything else, a `shlex` error included, is None."""
+    if not re.match(r"git\s", text):
+        return None
+    argv = simple_argv(text)
+    if not argv or argv[0] != "git":
+        return None
+    i = 1
+    while i < len(argv) and argv[i] != "push":
+        flag, eq, value = argv[i].partition("=")
+        if argv[i] in ("-C", *GIT_PATH_FLAGS) and i + 1 < len(argv):
+            value, i = argv[i + 1], i + 2
+        elif flag in GIT_PATH_FLAGS and eq:
+            i += 1
+        else:
+            return None
+        if _SHELL_PLACE.search(value):
+            return None
+    return argv if i < len(argv) else None
 
 
 def _push_dirs(text: str, cwd: str | None) -> list[Where]:
-    """Every place a push in `text` may run: each directory the text names by `cd <dir>`, `pushd
-    <dir>` or `git -C <dir>`, each push's own target (`git_target`), and the hook's cwd. The cwd
-    drops out only when every `git` of the text is a push of its own naming its target and no `cd`
-    or `pushd` stands in it: then no push runs there (a worker started in the main checkout
-    pushes its own worktree with `git -C <tree> push`). A text naming GIT_DIR, GIT_WORK_TREE or
-    GIT_INDEX_FILE (`_repo_redirect`) is never its own: git may push another repo than it names.
-    Anything else keeps it."""
+    """Every place a push in `text` may run. A text that is one simple push (`simple_push`) runs
+    only where its path options point, `-C` joined onto the cwd in order and `--git-dir`,
+    `--work-tree` with them (`git_target`): the cwd drops out, so a worker started in the main
+    checkout pushes its own worktree with `git -C <tree> push`, and a target on the main checkout
+    or its `.git` is judged like the cwd. Any other text keeps the cwd, and adds each directory it
+    names by `cd <dir>`, `pushd <dir>` or `git -C <dir>` and each push's own target: what the form
+    does not match exactly is judged with the cwd, never let through."""
     base = cwd or "."
+    argv = simple_push(text)
+    if argv is not None:
+        target = git_target(argv, base)
+        return [base if target is None else target]
     moved = re.findall(r"\b(?:cd|pushd)\s+(['\"]?)([^\s'\";&|]+)\1", text)
     named = re.findall(r"\bgit\s+-C\s+(['\"]?)([^\s'\";&|]+)\1", text)
     dirs: list[Where] = [os.path.join(base, os.path.expanduser(d)) for _q, d in moved + named]
-    pushes, targets = 0, []
+    targets: list[Where] = []
     for part in segments(text):
         argv = strip_keywords(part)
         if argv and os.path.basename(argv[0]) == "git" and _git_globals(argv)[0][:1] == ["push"]:
-            pushes += 1
             target = git_target(argv, base)
             if target is not None:
                 targets.append(target)
-    own = (
-        pushes
-        and len(targets) == pushes == len(_GIT_WORD.findall(normalised(text)))
-        and not _repo_redirect(text)
-    )
-    return [*([] if own and not moved else [base]), *dirs, *targets]
+    return [base, *dirs, *targets]
 
 
 def normalised(text: str) -> str:
@@ -572,10 +586,6 @@ def never(  # noqa: PLR0911, PLR0912
     if _runs_arm(text) and _role_touched(text):
         return "merge (arm_pr.sh beside a change of WE_ROLE)"
     if re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text)):
-        redirect = _repo_redirect(text)
-        if redirect:
-            # fail closed: which repo the push leaves from is past what the gate can read
-            return f"guard bypass (git push with {redirect} set)"
         places = _push_dirs(text, cwd)
         for where in places:
             branch = current_branch(where)
