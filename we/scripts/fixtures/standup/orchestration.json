@@ -1,0 +1,71 @@
+{
+ "built_at": "2026-11-21T18:00:00Z",
+ "gaps": [],
+ "orchestration": {
+  "(no starter)": [
+   {
+    "key": "PROJ-9021",
+    "name": "w-lost",
+    "state": "busy"
+   }
+  ],
+  "masters": [
+   {
+    "epic": "PROJ-9001",
+    "master": "m-9001",
+    "other_workers": [],
+    "stories": [
+     {
+      "key": "PROJ-9002",
+      "stage": "in_review",
+      "workers": [
+       {
+        "name": "w-PROJ-9002",
+        "state": "busy"
+       }
+      ]
+     },
+     {
+      "key": "PROJ-9003",
+      "stage": "in_progress",
+      "workers": [
+       {
+        "name": "w-PROJ-9003",
+        "state": "busy"
+       }
+      ]
+     },
+     {
+      "key": "PROJ-9004",
+      "stage": "selected",
+      "workers": []
+     },
+     {
+      "key": "PROJ-9006",
+      "stage": "done",
+      "workers": []
+     },
+     {
+      "key": "PROJ-9005",
+      "stage": "in_progress",
+      "workers": []
+     }
+    ]
+   }
+  ]
+ },
+ "schema_version": 1,
+ "scope": {
+  "crew_repo": "<tree>/repo",
+  "from": "session",
+  "key": null,
+  "session": "sid-9001"
+ },
+ "sources": {
+  "board": "read",
+  "plans": "read",
+  "tickets": "read",
+  "zentrale": "read"
+ },
+ "view": "orchestration"
+}

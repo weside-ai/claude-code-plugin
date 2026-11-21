@@ -4,6 +4,7 @@
 Usage:
   standup.py [KEY] [--since 7d] [--until UTC] [--branch] [--json | --md] [--lang de|en]
              [--board FILE] [--tickets FILE] [--gh-cache DIR] [--conversation-keys K1,K2]
+  standup.py --orchestration --session ID [--json]
 
 Read-only: it writes nothing but the `gh_runner` cache directory (`--gh-cache`, default
 `ci_source.CACHE`) and the Zentrale's slow cache, both owned by their modules.
@@ -58,6 +59,18 @@ questions of its own conversation.
 Orchestration: per live master its epic (board line `epic`, else `epic_state.epic_number`), every
 story of that epic with its stage, under each story the workers that master started on it
 (`crew_view`'s `group`); a worker without a live starter stands under `crew_view.NO_STARTER`.
+
+Orchestration view (`--orchestration --session ID`, what `/flow` without a key runs in a master,
+so the human sees in every master what it orchestrates instead of asking): it branches before the
+scope and reads only plans, board, tickets, sessions and `zentrale.build(fast=True)` (about 4 s; no
+GitHub, sampler, workers source or slow Zentrale sources), then runs `orchestration()` with only
+the master whose `crew_view` entry has `session_id == ID`, else the name `claude agents` or
+the board line gives that id (a resumed session has a new id). Document `{schema_version, view:
+"orchestration", built_at, scope: {key, from, session, crew_repo}, sources, gaps,
+orchestration}`; `orchestration.masters` is empty when no live master has that id. A cwd without a
+crew finds its board and crew repo through `crew_of_session`; `crew_repo` is null when that fails,
+and stories then come from the board line. A master whose epic has no epic plan adds the gap
+`orchestration: epic <KEY> has no epic plan in <repo>; stories from the board line`.
 """
 
 from __future__ import annotations
@@ -385,9 +398,12 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
     workers: list | None = None,
     worker_limit: int | None = None,
     gh_cache: Path | None = None,
+    session: str | None = None,
+    boards_dir: Path | None = None,
 ) -> dict:
     """The document (module docstring). Every source can be injected; a test calls no gh,
-    no `claude agents` and no ticket system."""
+    no `claude agents` and no ticket system. `session` selects the orchestration view (module
+    docstring § Orchestration view); `boards_dir` is where it looks for that session's board."""
     until = until or datetime.now(timezone.utc).replace(microsecond=0)
     span = parse_days(since)
     w_since, p_since = until - span, until - 2 * span
@@ -400,7 +416,23 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
             crew_path, crew = crew_mod.find_and_load(cwd)
         except crew_mod.CrewError:
             crew_path, crew = None, None
+        crew_from = "cwd" if crew_path is not None else None
+        if session is not None and crew_path is None and board is None:
+            if agents is None and zentrale_doc is None:
+                import worker_launch  # noqa: PLC0415
+
+                agents = g.read("sessions", worker_launch.sessions)
+            found, repo = crew_of_session(session, boards_dir, _live_names(session, agents))
+            board = str(found) if found is not None else None
+            if repo is not None:
+                cwd, crew_from = repo, "board stamp"
+                try:
+                    crew_path, crew = crew_mod.find_and_load(cwd)
+                except crew_mod.CrewError:
+                    crew_path, crew, crew_from = None, None, None
         crew = crew or crew_mod.DEFAULTS
+    else:
+        crew_from = "argument"
     pattern = (crew.get("naming") or {}).get("key") or crew_mod.DEFAULTS["naming"]["key"]
     board_path, _ = fi.locate_board(SimpleNamespace(board=board), cwd, crew_path, crew)
     flow_dir, tz, flow_cf = flow_log.settings(crew)
@@ -415,11 +447,14 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
             "previous": {"since": iso(p_since), "until": iso(w_since)},
         },
     }
-    if branch:
+    if branch and session is None:
         return _branch_doc(doc, None, "--branch", g)
-    if branch_name is None and not key:
-        branch_name = _branch_name(cwd)
-    scoped, why = scope(key, branch_name, conversation_keys, pattern)
+    if session is not None:  # before the scope: a master on a story branch keeps its view
+        scoped, why = None, "session"
+    else:
+        if branch_name is None and not key:
+            branch_name = _branch_name(cwd)
+        scoped, why = scope(key, branch_name, conversation_keys, pattern)
 
     plans = g.read("plans", lambda: read_plans(cwd, pattern))
     epics = (plans or {}).get("epics", {})
@@ -476,6 +511,36 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
             return ticket_stage[k], "tickets"
         return "backlog", "none"
 
+    def _sessions():
+        nonlocal agents
+        if agents is None and zentrale_doc is None and "sessions" not in g.sources:
+            import worker_launch  # noqa: PLC0415
+
+            agents = g.read("sessions", worker_launch.sessions)
+        return agents is not None or zentrale_doc is not None
+
+    def _zentrale(fast: bool):
+        if zentrale_doc is not None:
+            return zentrale_doc
+        from command_center import zentrale  # noqa: PLC0415
+
+        return zentrale.build(
+            fast=fast, until=until, cwd=cwd, board=board, tickets=tickets, agents=agents or []
+        )
+
+    if session is not None:
+        sessions_read = _sessions()
+        zd = g.read("zentrale", lambda: _zentrale(True)) or {}
+        working = ((zd.get("sections") or {}).get("working") or []) if sessions_read else None
+        ctx = {"epics": epics, "story_epic": story_epic, "stage_of": stage_of, "pattern": pattern}
+        ctx["keys_of"] = {k: _epic_keys(ctx, epics[k]) for k in epics}
+        where = {"session": session, "crew_repo": str(cwd) if crew_from else None}
+        doc.update({"view": "orchestration", "scope": {"key": None, "from": why, **where}})
+        names = _live_names(session, agents) | {
+            x.get("name") for x in lines if x.get("session_id") == session
+        }
+        return _orchestration_view(doc, g, (session, names), working, lines, ctx, cwd.name)
+
     # flow: one build over both windows
     def _flow():
         if log_dir is None:
@@ -516,23 +581,9 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
     prs = g.read("github", _prs)
 
     # sessions, red rows, locks, accounts
-    if agents is None and zentrale_doc is None:
-        import worker_launch  # noqa: PLC0415
-
-        agents = g.read("sessions", worker_launch.sessions)
     # a session list that was not read is no empty crew: utilization and orchestration stay null
-    sessions_read = agents is not None or zentrale_doc is not None
-
-    def _zentrale():
-        if zentrale_doc is not None:
-            return zentrale_doc
-        from command_center import zentrale  # noqa: PLC0415
-
-        return zentrale.build(
-            until=until, cwd=cwd, board=board, tickets=tickets, agents=agents or []
-        )
-
-    zd = g.read("zentrale", _zentrale) or {}
+    sessions_read = _sessions()
+    zd = g.read("zentrale", lambda: _zentrale(False)) or {}
     sections = zd.get("sections") or {}
     sessions = (sections.get("working") or []) if sessions_read else None
 
@@ -610,6 +661,86 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
     doc["sources"] = g.sources
     doc["gaps"] = g.gaps
     return _clean(doc)
+
+
+ORCHESTRATION_FIELDS = (
+    "schema_version",
+    "view",
+    "built_at",
+    "scope",
+    "sources",
+    "gaps",
+    "orchestration",
+)
+
+
+def _live_names(session: str, agents) -> set:
+    """The names `claude agents` gives the session with id `session`."""
+    return {
+        str(r.get("name"))
+        for r in agents or []
+        if isinstance(r, dict) and r.get("sessionId") == session and r.get("name")
+    }
+
+
+def crew_of_session(session: str, boards_dir: Path | None = None, names=()) -> tuple:
+    """`(board, repo)` for a session whose cwd has no crew: the one `*board.json` in the state dir
+    (`crew.state_dir` without a crew) with the session's line (its `session_id`, else one of its
+    live `names`, as `crew_view` matches; a resumed session has a new id), and the repo holding
+    that board's crew file. The line carries no path, so the bridge is the board's stamp
+    (`crew.read_stamp`): the crew files (`crew.find`) of the board's other lines' `cwd` whose
+    `crew.crew_id` is the stamp. `(None, None)` when no board or more than one holds the session;
+    `(board, None)` when no crew file or more than one matches the stamp."""
+    where = Path(boards_dir) if boards_dir else crew_mod.state_dir(None, None)
+    hits = []
+    for path in sorted(where.glob("*board.json")):
+        try:
+            lines = json.loads(path.read_text(encoding="utf-8")).get("sessions") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        lines = [x for x in lines if isinstance(x, dict)]
+        if any(x.get("session_id") == session or x.get("name") in names for x in lines):
+            hits.append((path, lines))
+    if len(hits) != 1:
+        return None, None
+    path, lines = hits[0]
+    stamp = crew_mod.read_stamp(path)
+    if not stamp:
+        return path, None
+    found: dict = {}
+    for cwd in sorted({x["cwd"] for x in lines if isinstance(x.get("cwd"), str)}):
+        if not Path(cwd).is_dir():
+            continue
+        crew_path = crew_mod.find(cwd)
+        if crew_path is not None and crew_path.resolve() not in found:
+            here = crew_path.resolve().parent
+            found[crew_path.resolve()] = here.parent if here.name == ".weside" else Path(cwd)
+    repos = [repo for cp, repo in found.items() if crew_mod.crew_id(cp) == stamp]
+    return path, (repos[0] if len(repos) == 1 else None)
+
+
+def _orchestration_view(doc, g, who, working, lines, ctx, repo) -> dict:
+    """The orchestration view: `orchestration()` over every worker and only the master `who`
+    names (`(session id, names)`: its id, else one of its names)."""
+    session, names = who
+    if working is None:
+        doc["orchestration"] = None
+    else:
+        mine = [
+            e
+            for e in working
+            if e.get("role") != "master" or e.get("session_id") == session or e["name"] in names
+        ]
+        doc["orchestration"] = orchestration(mine, lines, ctx)
+        for m in doc["orchestration"]["masters"]:
+            if m["epic"] and m["epic"] not in ctx["epics"]:
+                g.gaps.append(
+                    f"orchestration: epic {m['epic']} has no epic plan in {repo}; "
+                    "stories from the board line"
+                )
+    doc["sources"] = g.sources
+    doc["gaps"] = g.gaps
+    return _clean({k: doc[k] for k in ORCHESTRATION_FIELDS})
 
 
 def _branch_doc(doc, key, why, g) -> dict:
@@ -1673,7 +1804,12 @@ def main(argv=None) -> int:
     p.add_argument("--tickets")
     p.add_argument("--gh-cache")
     p.add_argument("--conversation-keys", default="")
+    p.add_argument("--orchestration", action="store_true")
+    p.add_argument("--session")
     args = p.parse_args(argv)
+    if args.orchestration and not args.session:
+        print("standup.py: --orchestration needs --session ID", file=sys.stderr)
+        return 2
     try:
         until = parse_until(args.until)
         parse_days(args.since)
@@ -1691,8 +1827,9 @@ def main(argv=None) -> int:
         branch=args.branch,
         conversation_keys=[k for k in args.conversation_keys.split(",") if k],
         gh_cache=Path(args.gh_cache) if args.gh_cache else ci_source.CACHE,
+        session=args.session if args.orchestration else None,
     )
-    if args.md:
+    if args.md and not args.orchestration:
         sys.stdout.write(render_md(doc, args.lang))
     else:
         print(json.dumps(doc, ensure_ascii=False, indent=1, default=str))

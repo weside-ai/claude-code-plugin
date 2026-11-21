@@ -14,6 +14,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import crew as crew_mod  # noqa: E402
 import standup  # noqa: E402
+import worker_launch  # noqa: E402
+import worker_supervisor  # noqa: E402
+from command_center import zentrale  # noqa: E402
 
 FIX = HERE / "fixtures" / "standup"
 UNTIL = "2026-11-21T18:00Z"
@@ -602,3 +605,164 @@ def test_plans_come_from_the_default_branch(tree):
     doc = run(tree, "PROJ-9010")
     assert doc["epic"]["intent"]["line"] == ["PROJ-9011", "PROJ-9012"]
     assert doc["sources"]["plans"] == "read"
+
+
+# --- the orchestration view (`--orchestration --session`) --------------------------------------
+
+
+def _orch(tree, monkeypatch, session="sid-9001", *, zentrale_fn=None, **kw):
+    """The orchestration view with every slow source a raising fake: a call fails the test."""
+
+    def boom(*a, **k):
+        raise AssertionError("slow source read in the orchestration view")
+
+    monkeypatch.setattr(standup.fi, "build", boom)
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", boom)
+    monkeypatch.setattr(worker_supervisor, "status_records", boom)
+    doc = json.loads((tree / "zentrale.json").read_text())
+    for e in doc["sections"]["working"]:
+        e["session_id"] = "sid-" + e["name"].split("-")[-1]
+    calls = []
+
+    def fake_build(**k):
+        calls.append(k)
+        return doc
+
+    monkeypatch.setattr(zentrale, "build", zentrale_fn or fake_build)
+    out = run(tree, session=session, gh_reader=boom, workers=[], zentrale_doc=None, **kw)
+    return out, calls
+
+
+def test_orchestration_view_golden(tree, monkeypatch):
+    doc, calls = _orch(tree, monkeypatch)
+    assert [c["fast"] for c in calls] == [True]
+    assert "sampler" not in doc["sources"] and "github" not in doc["sources"]
+    doc["scope"]["crew_repo"] = doc["scope"]["crew_repo"].replace(str(tree), "<tree>")
+    assert json.dumps(doc, indent=1, sort_keys=True) + "\n" == golden("orchestration.json")
+
+
+def test_orchestration_view_skips_the_scope_on_a_story_branch(tree, monkeypatch):
+    doc, _ = _orch(tree, monkeypatch, branch_name="feat/PROJ-4242-x", key="PROJ-4242")
+    assert doc["view"] == "orchestration" and doc["scope"]["from"] == "session"
+    assert [m["master"] for m in doc["orchestration"]["masters"]] == ["m-9001"]
+
+
+def test_orchestration_view_names_an_epic_without_plan(tree, monkeypatch):
+    edit_json(
+        tree / "board" / "board.json",
+        lambda d: d["sessions"][1].update(epic="PROJ-7777", keys=["PROJ-7778"]),
+    )
+    doc, _ = _orch(tree, monkeypatch, session="sid-9010")
+    (m,) = doc["orchestration"]["masters"]
+    assert m["epic"] == "PROJ-7777" and [s["key"] for s in m["stories"]] == ["PROJ-7778"]
+    assert (
+        "orchestration: epic PROJ-7777 has no epic plan in repo; stories from the board line"
+        in doc["gaps"]
+    )
+
+
+def test_orchestration_view_without_this_session_is_empty(tree, monkeypatch):
+    doc, _ = _orch(tree, monkeypatch, session="sid-unknown")
+    assert doc["orchestration"]["masters"] == []
+
+
+def test_orchestration_view_without_sessions_is_null(tree, monkeypatch):
+    def fail(**k):
+        raise RuntimeError("claude agents: exit 1")
+
+    monkeypatch.setattr(worker_launch, "sessions", fail)
+    doc, _ = _orch(tree, monkeypatch, agents=None)
+    assert doc["orchestration"] is None
+    assert "sessions: not read (claude agents: exit 1)" in doc["gaps"]
+
+
+def _git(repo: Path, *a):
+    subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+
+
+def _bridge(tmp_path, tree, *, stamp="acme/app", crews=1):
+    """A state dir with a stamped board whose master line has no cwd; `crews` repos of crew
+    `acme/app` stand on other lines' cwd."""
+    boards = tmp_path / "we-state"
+    boards.mkdir()
+    lines = [{"name": "m-9001", "session_id": "sid-9001", "epic": "PROJ-9001"}]
+    repos = []
+    for i in range(crews):
+        repo = tree / "repo" if i == 0 else tmp_path / f"repo{i}"
+        repo.mkdir(exist_ok=True)
+        (repo / ".weside").mkdir(exist_ok=True)
+        (repo / ".weside" / "crew.json").write_text(
+            json.dumps({"version": crew_mod.VERSION, "roles": {}, "members": {}})
+        )
+        _git(repo, "init", "-q")
+        _git(repo, "remote", "add", "origin", "git@github.com:acme/app.git")
+        lines.append({"name": f"lead-{i}", "session_id": f"other-{i}", "cwd": str(repo)})
+        repos.append(repo)
+    (boards / "board.json").write_text(json.dumps({"sessions": lines}))
+    (boards / "other-board.json").write_text(json.dumps({"sessions": [{"name": "x"}]}))
+    if stamp:
+        (boards / "crew.id").write_text(stamp + "\n")
+    return boards, repos
+
+
+def test_crew_of_session_bridges_the_stamp_to_the_repo(tmp_path, tree):
+    boards, (repo,) = _bridge(tmp_path, tree)
+    assert standup.crew_of_session("sid-9001", boards) == (boards / "board.json", repo)
+    assert standup.crew_of_session("sid-none", boards) == (None, None)
+
+
+@pytest.mark.parametrize("stamp, crews", [(None, 1), ("acme/other", 1), ("acme/app", 2)])
+def test_crew_of_session_without_one_repo_keeps_the_board(tmp_path, tree, stamp, crews):
+    boards, _ = _bridge(tmp_path, tree, stamp=stamp, crews=crews)
+    assert standup.crew_of_session("sid-9001", boards) == (boards / "board.json", None)
+
+
+def test_orchestration_view_outside_the_crew_repo(tmp_path, tree, monkeypatch):
+    """A master whose cwd has no crew (its plans live in the crew repo) still gets its epic."""
+    boards, (repo,) = _bridge(tmp_path, tree)
+    elsewhere = tmp_path / "plugin"
+    elsewhere.mkdir()
+    _git(elsewhere, "init", "-q")
+    doc, calls = _orch(tree, monkeypatch, cwd=elsewhere, crew=None, board=None, boards_dir=boards)
+    assert doc["scope"]["crew_repo"] == str(repo) and calls[0]["cwd"] == repo
+    (m,) = doc["orchestration"]["masters"]
+    assert m["epic"] == "PROJ-9001" and len(m["stories"]) == 5
+    assert not [x for x in doc["gaps"] if x.startswith("orchestration:")]
+
+
+def test_orchestration_view_without_crew_repo_says_so(tmp_path, tree, monkeypatch):
+    boards, _ = _bridge(tmp_path, tree, stamp=None)
+    elsewhere = tmp_path / "plugin"
+    elsewhere.mkdir()
+    _git(elsewhere, "init", "-q")
+    doc, calls = _orch(tree, monkeypatch, cwd=elsewhere, crew=None, board=None, boards_dir=boards)
+    assert doc["scope"]["crew_repo"] is None
+    assert calls[0]["board"] == str(boards / "board.json")
+    (m,) = doc["orchestration"]["masters"]
+    assert m["epic"] == "PROJ-9001"
+    assert (
+        "orchestration: epic PROJ-9001 has no epic plan in plugin; stories from the board line"
+        in doc["gaps"]
+    )
+
+
+def test_crew_of_session_takes_the_crew_files_repo_and_a_resumed_name(tmp_path, tree):
+    """A repo pointing at the crew (`crew:` in its config) shares the crew id; the bridge names
+    the repo holding the file. A resumed session has a new id: its live name finds the line."""
+    boards, (repo,) = _bridge(tmp_path, tree)
+    pointer = tmp_path / "a-pointer"
+    (pointer / ".weside").mkdir(parents=True)
+    _git(pointer, "init", "-q")
+    rel = Path("..") / repo.relative_to(tmp_path) / ".weside" / "crew.json"
+    (pointer / ".weside" / "config.json").write_text(json.dumps({"crew": str(rel)}))
+    edit_json(
+        boards / "board.json",
+        lambda d: d["sessions"].append({"name": "p", "session_id": "p", "cwd": str(pointer)}),
+    )
+    assert standup.crew_of_session("new-id", boards, {"m-9001"}) == (boards / "board.json", repo)
+
+
+def test_orchestration_view_finds_a_resumed_master_by_name(tree, monkeypatch):
+    edit_json(tree / "board" / "board.json", lambda d: d["sessions"][0].update(session_id="old"))
+    doc, _ = _orch(tree, monkeypatch, session="old")
+    assert [m["master"] for m in doc["orchestration"]["masters"]] == ["m-9001"]
