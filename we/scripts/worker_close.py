@@ -256,7 +256,7 @@ def holders(top: Path, key: str, pattern: str, closed: set) -> list[str]:
             found.append(str(name))
     for doc in ws.queued(ws.state_dir()):
         name = doc["name"]
-        if name in skip or name in found or not ws._waiter_lives(doc.get("waiter_pid")):
+        if name in skip or name in found or not ws.waiter_lives(doc):
             continue
         if _carries(name, key, pattern):
             found.append(f"{name} (queued)")

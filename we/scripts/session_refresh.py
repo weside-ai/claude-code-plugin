@@ -168,7 +168,7 @@ def _starters(rows: list[dict], read_marker: Callable, state: Path) -> dict[str,
 def _queued(state: Path) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for q in worker_supervisor.queued(state):
-        if q.get("starter") and worker_supervisor._waiter_lives(q.get("waiter_pid")):
+        if q.get("starter") and worker_supervisor.waiter_lives(q):
             out.setdefault(str(q["starter"]), []).append(str(q["name"]))
     return out
 

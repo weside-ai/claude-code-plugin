@@ -19,7 +19,9 @@
 //                refuses too. On such a question the coordinator's prompt is one copy line (`copyText`);
 //                on Discuss the asker gets `discuss_asker` (the owner comes to its window) and the
 //                coordinator `discuss_route` (tell the owner whom to talk to), and when the starter took
-//                it, a second `discuss_route` naming the starter (role `route`).
+//                it, a second `discuss_route` naming the starter (role `route`). Without a starter that
+//                `discuss_route` waits for the asker's delivery: an asker not reached leaves only the
+//                routing line, never a window nobody sits in.
 // Every text names where the answer was written (`writerNote`): transparency, no gate.
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
@@ -189,15 +191,19 @@ export const pendingLines = (
       const direct = how?.answerTo === 'asker' && !!asker && asker !== coordinator && line.session !== asker
       // A gone asker's starter takes the answer before the coordinator is asked to route it.
       const starter = direct && how?.starter && how.starter !== coordinator && how.starter !== asker ? how.starter : undefined
-      const own: Delivery[] = recipientsOf(line, coordinator, asker, ownerOf(line.id)).map(r => ({
+      const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
+      // A Discuss without a starter names the asker's window only once the asker took it.
+      const holdCopy = line.answer === 'discuss' && direct && !starter && !refused?.delivered
+      const own: Delivery[] = recipientsOf(line, coordinator, asker, ownerOf(line.id))
+        .filter(r => !(holdCopy && r.role === 'coordinator'))
+        .map(r => ({
         ...r,
         line,
         ...(accept ? { accept } : {}),
         ...(direct && r.role === 'coordinator' ? { copy: true, asker, ...(how?.askerWindow ? { window: how.askerWindow } : {}) } : {}),
         ...(direct && r.role === 'asker' ? { direct: true } : {}),
         ...(starter && r.role === 'asker' ? { hasStarter: true } : {}),
-      }))
-      const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
+        }))
       const overdue: BoardDelivery | undefined =
         asker && line.session !== asker && asker !== coordinator && !refused?.delivered && now - Date.parse(line.ts) >= ROUTE_AFTER_MS
           ? { id: line.id, answer_ts: line.ts, to: asker, role: 'asker', click_ts: line.ts, ts: line.ts, delivered: false, reason: 'not reached within 24 h' }

@@ -50,7 +50,9 @@ never commit yourself.
    the 5h window an account counts as full (no new worker starts while every account in rotation is)? Defaults `8` and `80` (skip keeps them). Process
    workers share one machine and one login; `we-worker` refuses a start over either
    (`${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py` `capacity`). Both are the machine's, for
-   every repo: write them to `<state dir>/pool.json`, see `references/worker-dispatch.md`.
+   every repo: write them to `<state dir>/pool.json`, see `references/worker-dispatch.md`. When
+   that file exists, show its values as the defaults and keep them on a skip: another repo's
+   setup set them for the whole machine.
 7. **Plan landing**, asked only when the default branch has a ruleset
    (`gh api repos/{owner}/{repo}/rules/branches/<default>` returns a rule): do plans reach it by a
    docs PR or by direct push? `pr` (default) · `push` (only when this session's account may bypass the

@@ -836,7 +836,7 @@ def test_capacity_refuses_above_either_limit_and_names_both_values(cap, tmp_path
     assert out.stderr.strip().startswith(
         "we-worker: refused, no worker started: 8 workers busy (limit 8 for the machine,"
         f" {tmp_path / 'state' / 'pool.json'}), active account 5h at 50 % (limit 80 %,"
-        " workers.max_active_5h_percent); try again later"
+        f" max_active_5h_percent of {tmp_path / 'state' / 'pool.json'}); try again later"
     )
     out = cap(2, 81.0)
     assert out.returncode == 3 and "active account 5h at 81 % (limit 80 %" in out.stderr
@@ -871,6 +871,11 @@ def test_capacity_reads_the_limits_from_the_machine_and_a_repo_only_lowers_them(
     assert out.returncode == 3 and "(limit 40 %" in out.stderr
     out = cap(1, 50.0, {"max_active_5h_percent": 90}, pool={"max_active_5h_percent": 40})
     assert out.returncode == 3 and "workers.max_active_5h_percent 90 in " in out.stderr
+    # T2 panel on #308: the refusal names where the 5h limit came from, the repo or the machine
+    assert "(limit 40 %, max_active_5h_percent of " in out.stderr
+    out = cap(1, 50.0, {"max_active_5h_percent": 30}, pool={"max_active_5h_percent": 40})
+    assert out.returncode == 3
+    assert "(limit 30 %, workers.max_active_5h_percent in " in out.stderr
 
 
 def test_capacity_skips_the_window_check_without_cswap_and_says_so(cap, monkeypatch):
@@ -910,7 +915,8 @@ def test_capacity_refuses_when_no_account_in_rotation_has_room(cap, monkeypatch,
         "we-worker: refused, no worker started: 1 workers busy (limit 8 for the machine,"
         f" {tmp_path / 'state' / 'pool.json'}), no account in rotation has room (0 of 4 with 7d"
         " under 95 %"
-        " and 5h at or under 80 %, workers.max_active_5h_percent); try again later"
+        f" and 5h at or under 80 %, max_active_5h_percent of {tmp_path / 'state' / 'pool.json'});"
+        " try again later"
     )
     assert "redacted" not in out.stderr
 
@@ -976,6 +982,19 @@ def test_capacity_starts_the_queue_in_arrival_order_across_repos(cap, tmp_path, 
     # an entry whose waiter is gone holds nobody up
     _queue_entry(state_dir, "INFRA-1-old", 100.0, 0)
     assert cap(1, 10.0).returncode == 0
+
+
+def test_two_starts_queued_in_the_same_second_take_turns_by_name(cap, tmp_path, monkeypatch):
+    """T2 panel on #308: with `<=` on `queued_at` two entries of the same second each saw the
+    other ahead and both waited out their timeout. The name breaks the tie."""
+    state_dir = tmp_path / "state"
+    _queue_entry(state_dir, "AC-1-a", 100.0, os.getpid())
+    _queue_entry(state_dir, "AC-2-b", 100.0, os.getpid())
+    monkeypatch.setenv("WE_WORKER_QUEUE_TURN", "AC-1-a")
+    assert cap(1, 10.0).returncode == 0
+    monkeypatch.setenv("WE_WORKER_QUEUE_TURN", "AC-2-b")
+    out = cap(1, 10.0)
+    assert out.returncode == 3 and "(first AC-1-a," in out.stderr
 
 
 def test_a_queued_start_held_only_by_its_own_repo_limit_holds_nobody_up(

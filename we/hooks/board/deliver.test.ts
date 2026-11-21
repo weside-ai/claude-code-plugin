@@ -989,6 +989,24 @@ test('answer_to asker: a Discuss the gone asker left goes to its starter, and th
   expect(h.submitted.some(t => t.includes('did not reach'))).toBe(false)
 })
 
+test('answer_to asker: a Discuss without a starter names the window only once the asker took it', async ($, on) => {
+  const { clock, h } = await coordinator($, on, { board: discussBoard() })
+  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(9_000)
+  expect(h.sent.map(s => s.to)).toEqual(['asker'])
+  expect(h.submitted.filter(t => t.includes('talk to asker (/work/asker)'))).toHaveLength(1)
+})
+
+test('answer_to asker: a Discuss whose asker is gone and has no starter leaves only the routing line', async ($, on) => {
+  // T2 panel on #312: the coordinator got "talk to asker" for a window nobody sat in, then "did not reach"
+  const gone = { isDelivered: false as const, reason: 'Failed to send to asker: session ended' }
+  const { clock, h } = await coordinator($, on, { board: discussBoard(), send: () => gone })
+  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(9_000)
+  expect(h.submitted.some(t => t.includes('talk to'))).toBe(false)
+  expect(h.submitted.filter(t => t.includes('did not reach asker'))).toHaveLength(1)
+})
+
 test('transcriptVerdict without a seen mark: the stored prompt counts, anything else is lost, never busy', () => {
   const a = { key: 'k', delivery: {} as never, text: 'answer Q4', ledgerPath: '/l', submittedAt: 1_000, tries: 1 } as Awaiting
   const said = (role: 'user' | 'assistant', text: string) => ({ role, text, toolUses: [] })

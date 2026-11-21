@@ -323,6 +323,42 @@ def test_the_crew_loop_outlives_a_failing_check(monkeypatch, capsys):
     assert "we-crewd: crew check failed: OSError" in capsys.readouterr().err
 
 
+def test_serve_starts_the_crew_loop_beside_the_server(monkeypatch, capsys):
+    """T2 panel on #309: `serve()` starts the thread that reads the crew file again; without it a
+    fixed `zentrale.peers` never reaches the running server. Socket and server are faked."""
+    started, seen = threading.Event(), {}
+
+    class Watch:
+        peers, link_hosts = ["10.0.0.0/8"], []
+
+        def __init__(self, _bind):
+            pass
+
+        def check(self):
+            return False
+
+    class FakeServer:
+        def serve_forever(self):
+            assert started.wait(5), "serve() did not start the crew loop"
+
+        def server_close(self):
+            seen["closed"] = True
+
+    def loop(watch, server, state, stop):
+        seen.update(watch=watch, server=server, state=state, stop=stop)
+        seen["daemon"] = threading.current_thread().daemon
+        started.set()
+
+    monkeypatch.setattr(crewd, "check_bind", lambda ip: ip)
+    monkeypatch.setattr(crewd, "CrewWatch", Watch)
+    monkeypatch.setattr(crewd, "make_server", lambda *_a: FakeServer())
+    monkeypatch.setattr(crewd, "refresh_loop", lambda *_a: None)
+    monkeypatch.setattr(crewd, "crew_loop", loop)
+    assert crewd.serve("10.1.2.3", 0) == 0
+    assert isinstance(seen["watch"], Watch) and isinstance(seen["server"], FakeServer)
+    assert seen["daemon"] and seen["closed"] and seen["stop"].is_set()
+
+
 def test_refused_peers_are_named_up_to_the_cap(monkeypatch, capsys):
     monkeypatch.setattr(crewd, "MAX_REFUSED_LOGGED", 2)
     srv = crewd.Server(("127.0.0.1", 0), state_with(), [crewd.ipaddress.ip_network("10.0.0.0/8")])
