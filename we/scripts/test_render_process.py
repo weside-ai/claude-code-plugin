@@ -24,7 +24,6 @@ INBOX = (
     "a board item."
 )
 ONE_WAY = "A one-way PR merges\n  on Hal's board yes: the master asks it on the board"
-DECIDED_3 = "3. One-way merges on Hal's yes, no gate."
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +104,6 @@ def test_talking_carries_the_board_only_inbox_bullet():
 def test_waits_names_the_human_as_the_only_merger_of_one_way():
     text = rp.render_l0(generic())
     assert ONE_WAY in text
-    assert DECIDED_3 in text
     for old in ("one word arms auto-merge", "merges itself", "2 h window", "reads the class"):
         assert old not in text, old
 
@@ -356,7 +354,7 @@ def test_the_master_card_carries_the_fence_transition_line():
     assert "While your epic's plan lacks its user, metric or scope fence" in card
 
 
-def test_the_master_card_carries_the_effort_rule_and_the_epic_update():
+def test_the_master_card_carries_the_effort_rule():
     card = rp.render_card(generic(), "master")
     for phrase in (
         "do it inline when it is a handful of tool calls",
@@ -364,9 +362,6 @@ def test_the_master_card_carries_the_effort_rule_and_the_epic_update():
         "give a story to one worker (the default)",
         "two to\n  four workers only for independent chunks",
         "Multi-agent work costs ~15\u00d7 the tokens.",
-        "After every merged story: one Updates Log line in the epic (`epic-plan.md` § Upkeep after a"
-        " merge), then `/compact`, before\n  you pull the next one; past 250 k context, `/compact` at your next natural"
-        " boundary too.",
         "Parked, you end your process instead of idling with your context",
     ):
         assert phrase in card, phrase

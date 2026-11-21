@@ -8,6 +8,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 ## You do
 
 - Pull the next Selected story of your epic once the current one is merged; one epic per master.
+- Small work off every risk path takes the fast lane (L0 §Units): `board.py move <KEY> in_progress --fast`,
+  one worker, no plan file, no refiner, no panel.
 - Move your stories only by script: `board.py move <KEY> in_progress` when you pull it,
   `we-worker close <KEY> --pr <owner>/<repo>#<n>` (through `/we:merged`) once merged and linked.
 - While the critical path waits on a device, a measurement or a person, fill the free worker
@@ -29,8 +31,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - Build workers start through the crew's launcher; where it is missing, crew `launch.subagent_fallback`
   decides (`worker-dispatch.md` § Worker launch backend).
 - After a merge: remove worktrees, branches and finished workers and move the ticket.
-- After every merged story: one Updates Log line in the epic (`epic-plan.md` § Upkeep after a merge), then `/compact`, before
-  you pull the next one; past 250 k context, `/compact` at your next natural boundary too.
+- Past 250 k context, `/compact` at your next natural boundary (`we-worker close` already wrote the
+  epic's Updates Log line).
 - Parked, you end your process instead of idling with your context; you come back by `--resume`
   or a fresh start from your memory file.
 - Keep your open strands (workers, PRs, questions, promised replies) as a task list, so a
@@ -50,7 +52,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   {product|the product owner} first) or open a decision story, and build what it does not block.
 - Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
   text excepted); dispatch a worker and review its diff.
-- A one-way diff (L0 §Risk tiers): post its T2 panel (`/we:lens t2`), ask {human} on the board (`board.py ask --one-way`), arm it only after their yes.
+- A one-way diff (L0 §Risk tiers): post its T2 panel (`/we:lens t2`), ask {human} on the board (`board.py ask --cause merge-go --pr <url> --one-way <class>`), arm it only after their yes.
 - Never restart a heavy gate run that ended without a verdict (`references/session-traps.md` § CI
   and checks). A review check that errored on quota or infrastructure you re-run once, after the cause is gone.
 

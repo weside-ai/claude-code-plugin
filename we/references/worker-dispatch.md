@@ -142,8 +142,8 @@ The brake is the PreToolUse hook `hooks/worker_rights_gate.py`, which holds unde
 in a repo the crew's `worker_rights.repos` names, a worker on its own keyed branch runs `gh pr ready` (or `pr_ready.sh`),
 `gh pr comment` on its own PR and the crew's `branch_rc` without asking; every worker is denied the
 never-list (secrets, delete, `main`, guard bypasses). Rules and limits: `scripts/worker_rights.py`
-(its docstring). A denial names the Lead; the worker reports it and the Lead acts. A brake against a
-misguided worker, no boundary: a script file passes it.
+(its docstring). A denial names the Lead; the worker reports it and the Lead acts. It catches a slip, it is no
+boundary: a script file passes it.
 
 ### Tree, context and end (`we-worker`)
 
@@ -265,6 +265,8 @@ arms (the worker card).
   repo's commit format and carries `Co-Authored-By: <Model> <noreply@anthropic.com>` for the model
   actually running, unless the repo's instructions or hooks refuse attribution; the Lead never
   re-signs a worker's commit.
+- Tests: only the ones `references/test-economy.md` asks for (which defect does this test catch
+  that no existing test catches?); no test per endpoint, page or review round by default.
 - Local gates: the repo's linter, formatter and type-checker on the changed files, plus only the
   tests the change affects (importers of the touched code, its callers' tests, the contract suites
   when a route or boundary changed). Never the whole suite; CI runs it. A test needing a database or
@@ -337,12 +339,9 @@ other `gh pr merge` and the whole never-list stay denied.
 The session or worker that writes last on the PR branch runs this once over
 `git diff origin/<default-branch>...HEAD`, committing after each step:
 
-1. The deterministic gates over the finished branch, not after an intermediate commit: the full local gate script the
-   repo's instruction files name (it runs the pre-push and manual stages), else `pre-commit run --hook-stage pre-push
-   --from-ref origin/<default-branch> --to-ref HEAD` plus `pre-commit run --hook-stage manual <id> --from-ref
-   origin/<default-branch> --to-ref HEAD` per manual hook marked as a CI mirror (the diff range, because `--all-files`
-   runs every hook past its path filter over the whole tree); and the affected tests by name, except a test whose
-   last green run in this session was on the current HEAD.
+1. The affected tests by name over the finished branch, except a test whose last green run in this
+   session was on the current HEAD. The static gates run once, in the pre-push hook of the push and
+   again in CI: never by hand before it.
 2. Only when the diff touches money, auth, tenant isolation or a migration: the contract's
    `code-review` at `high` through the Skill tool, never as a slash command written into a subagent
    prompt (not proven to run the skill, probe 27.09.2026). No other LLM review.
@@ -402,55 +401,39 @@ input, not a gate (security owner, 18.11.2026). Right after the post the starter
   `yes` when the finding was real (a fix story or a held merge followed), `no` when not; for a
   `BLOCKING` after the human's answer, for a `PASS` at the merge.
 
-The security owner samples one card verdict in five against the PR; a sample finding sharpens the card.
-
 ## Lead checks around a worker
 
 ### Premise check
 
-Before dispatch, the Lead verifies every factual premise of the brief against
-`origin/<default-branch>` (a file still says X, N rules lack Y, a function exists) and keeps the
-command that showed it. A count from a heuristic script goes into the brief as an estimate
-(`~19, heuristic`) for the worker to confirm before acting on it. 2026-10-02: a brief's "~19 rules
-lack nested globs" was 2, and a "still names the old model" was already fixed on main; the worker
-spent its time disproving the brief.
+A count in the brief that comes from a heuristic script is written as an estimate (`~19, heuristic`)
+for the worker to confirm before acting on it.
 
 ### Code graph in the brief
 
-Where `.weside/config.json` → `tools.graphify` is true, the brief decides the code-graph question per
-chunk and names the symbols, because workers act on the brief, not on the repo rule: in a 10-day sweep
-(10/2026) workers whose brief named the graph used it in 33 of 55 runs, the others in 26 of 399.
-
-- The chunk changes a symbol that is called from outside its own file → `graphify affected "<symbol>"
-  --relation calls --depth 2` before the edit; the worker reports the caller count.
-- The brief or question names a behaviour but no file → the repo's graph query (its instruction files
-  name the command) first, `rg` to confirm.
-- A known file or a literal string → `rg`; the brief says `Code graph: not needed (<reason>)`, so a
-  retro can judge the call.
+Where `.weside/config.json` → `tools.graphify` is true and the chunk changes a symbol called from
+outside its own file, the brief names it: `graphify affected "<symbol>" --relation calls --depth 2`
+before the edit. Everything else is `rg`; the brief needs no line for it.
 
 ### Watchdog
 
-Armed at dispatch, one per worker: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-worker.sh <wt> <name>` as
-a background command. It exits on the first event (a commit, a 25-min stall, the worktree gone, a
-25-min lifetime cap); its header lists the lines and exit codes. Re-arm it in a Bash call of its own
-with `run_in_background: true`, never `&` or `disown` in a foreground call: a detached watchdog
-sends no notification and survives the next one (twice on 15.10.2026). When the worker's report
-arrives or the worker is stopped, `TaskStop` its watchdog by task id in the same turn, never by a
-`pkill` pattern: a leftover watchdog later reports a stall that is not real (three on 17.10.2026).
+For a worker expected to run longer than ~30 min: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-worker.sh <wt> <name>`
+as a background command (a Bash call of its own with `run_in_background: true`, never `&` or
+`disown`). It exits on the first event (a commit, a 25-min stall, the worktree gone, a 25-min
+lifetime cap); its header lists the lines and exit codes. When the worker's report arrives or the
+worker is stopped, `TaskStop` its watchdog by task id in the same turn, never by a `pkill` pattern.
+A short worker needs none: the report gates send it back to work.
 
 An `exited:` line naming `auth` restarts the worker at once with the resume command it names (after
 `usage-limit`: at the reset), one line to the coordinator; a worker that died stays a row in
 `claude agents`, so only its living pid counts as alive. `we-worker status` lists window workers too.
-A commit becomes one status line to the human (phase done). A count you pass on (jobs done of N) comes
-from `gh run view <id> --json jobs` as you send it, not from summed worker reports (three wrong in a day). A stall gets evidence (`git log -3`,
-`git status`, the agent's state) before any word about it. Three runs with it had 0 idle nudges
-by the human (#4308, #4326, #4328); without it a worker sat idle 7 h 47 min (#4299).
+A count you pass on (jobs done of N) comes from `gh run view <id> --json jobs` as you send it, not
+from summed worker reports. A stall gets evidence (`git log -3`, `git status`, the agent's state)
+before any word about it.
 
 ### After each lane merge
 
 In the integration tree: the repo's type-checker on the files the merge changed (`git -C <int> diff --name-only HEAD^1 HEAD`) and the tests that import them (`rg -l` over
-the changed module names in the test trees). Red → fix before the next merge. Skipping it cost 14
-red tests at the finisher on #4310.
+the changed module names in the test trees). Red → fix before the next merge.
 
 ## Report
 
@@ -461,8 +444,7 @@ it as one `SendMessage` to its `Lead:` (§ Worker launch backend). Fields:
 branch: <name> · worktree: <path> · commits: <n> · pushed: yes|no
 gates: <command> @ <short HEAD sha> → <its result line> | skipped(<why>) …   (the receipt the Lead reads instead of re-running)
 ACs: <AC id> → <test name or file:line> …   (one line per AC the chunk claims)
-code graph: <symbol> → <n> callers … | not needed (<reason>)   (when the brief has a Code graph line)
-review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>) | none (not critical)
+review: code-review high <found> found · <fixed> fixed · <skipped> skipped (<why>)   (only when the finish sequence ran one)
 finish sequence: done|not ordered · verification: <oracle + receipt location>|not ordered
 retired: <old test> → <new-seam test> …   (refactor chunks; none|<reason> when nothing retired)
 tests: +<N> new functions, +<C> cases, extended: <k>, slowest new: <test (s)>|n/a   (N and C from `scripts/test-delta.py <base>`; k = existing tests that took the assertion; references/test-economy.md)

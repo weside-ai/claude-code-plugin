@@ -19,13 +19,15 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
    with that block: splice it with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pr-body-receipt.py <KEY> <body-in> <body-out>`.
    With `verification.pre_merge_receipt` in `.weside/config.json` it also runs that receipt and writes the
    `receipt green|red|not run on DEV` line under the block; only the script writes it, never by hand.
-   No ticket, no plan or no block: write it yourself, `**Oracle:**` cli | ui | substitute with what you
-   drove and saw, or `not-observed — <reason>` when nothing beyond tests was observed. A hook refusal for
-   a wrong flag or an unreadable file is fixed once; a second refusal is reported verbatim.
    One line `Tests: …` from `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/test-delta.py origin/<base>`, with `--junit <file>`
    when the last local run wrote one (what it counts and marks: its docstring). Each `: say why` mark, and a refactor
    (branch `refactor/…`, a Conventional Commit of type `refactor`, or a plan that says so) that adds more functions than it
    removes, appends `— <reason>`. A signal, it blocks nothing.
+   A fast-lane story (no plan file): the block carries its ACs, each with its oracle class, and the
+   `**Not proven:**` line; acceptance reads them from the PR body.
+   No ticket, no plan or no block: write it yourself, `**Oracle:**` cli | ui | substitute with what you
+   drove and saw, or `not-observed — <reason>` when nothing beyond tests was observed. A hook refusal for
+   a wrong flag or an unreadable file is fixed once; a second refusal is reported verbatim.
 4. `gh pr create --title "<KEY>: <summary>" --body-file <file>`. The user merges whatever is open and not
    a draft (owner, 28.10.2026), so `--draft` only for a PR that must not merge even when green: an open
    product decision, an unmerged dependency, a follow-up that still has to land on the branch, a money
