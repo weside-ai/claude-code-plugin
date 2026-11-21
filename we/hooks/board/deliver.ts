@@ -16,7 +16,10 @@
 //                the asker or the session that wrote the line.
 //   starter      on a question stamped `answer_to: asker`: the asker's starter, `$.session.send`, once the
 //                asker refused or was not reached; the routing prompt follows only when the starter
-//                refuses too. On such a question the coordinator's prompt is one copy line (`copyText`).
+//                refuses too. On such a question the coordinator's prompt is one copy line (`copyText`);
+//                on Discuss the asker gets `discuss_asker` (the owner comes to its window) and the
+//                coordinator `discuss_route` (tell the owner whom to talk to), and when the starter took
+//                it, a second `discuss_route` naming the starter (role `route`).
 // Every text names where the answer was written (`writerNote`): transparency, no gate.
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
@@ -139,11 +142,23 @@ export type AcceptAs = { as: BoardAcceptVariant; pr?: string }
 // variant of its question (`accept`); `copy` marks the coordinator's one-line copy of an answer that
 // went to its asker directly (`answer_to: asker`), `asker` names that asker; `hasStarter` on an asker
 // delivery: a refusal goes to the starter next, not to the routing line.
-export type Delivery = Recipient & { line: AnswerLine; about?: BoardDelivery; accept?: AcceptAs; copy?: boolean; asker?: string; hasStarter?: boolean }
+// `direct` marks an asker or starter delivery of a question answered to its asker; `window` is where
+// the owner finds the session a Discuss names (its board line's `cwd`).
+export type Delivery = Recipient & {
+  line: AnswerLine
+  about?: BoardDelivery
+  accept?: AcceptAs
+  copy?: boolean
+  asker?: string
+  hasStarter?: boolean
+  direct?: boolean
+  window?: string
+}
 
 // How a question's answer travels (`board.py ask` stamps both): `asker` straight to the asker, the
-// coordinator a copy line; the starter when the asker is gone. Absent: through the coordinator.
-export type AnswerRoute = { answerTo?: 'asker'; starter?: string }
+// coordinator a copy line; the starter when the asker is gone. Absent: the coordinator carries it.
+// The windows are the asker's and the starter's board lines (`cwd`), named by a Discuss.
+export type AnswerRoute = { answerTo?: 'asker'; starter?: string; askerWindow?: string; starterWindow?: string }
 
 // board.py PRUNE_AFTER_H: an answer its asker has not taken by then goes to the coordinator as a
 // routing line, so board.py prune never drops an answer nobody received.
@@ -178,7 +193,8 @@ export const pendingLines = (
         ...r,
         line,
         ...(accept ? { accept } : {}),
-        ...(direct && r.role === 'coordinator' ? { copy: true, asker } : {}),
+        ...(direct && r.role === 'coordinator' ? { copy: true, asker, ...(how?.askerWindow ? { window: how.askerWindow } : {}) } : {}),
+        ...(direct && r.role === 'asker' ? { direct: true } : {}),
         ...(starter && r.role === 'asker' ? { hasStarter: true } : {}),
       }))
       const refused = ledger.rows[keyOf(line.id, line.ts, 'asker')]
@@ -188,9 +204,13 @@ export const pendingLines = (
           : undefined
       const missed = refused && isFinal(refused) && !refused.delivered ? refused : overdue
       const byStarter = starter ? ledger.rows[keyOf(line.id, line.ts, 'starter')] : undefined
-      const toStarter: Delivery[] = missed && starter ? [{ role: 'starter', to: starter, line, about: missed, asker, ...(accept ? { accept } : {}) }] : []
-      const about = !missed ? undefined : !starter ? missed : byStarter && isFinal(byStarter) && !byStarter.delivered ? byStarter : undefined
-      const route: Delivery[] = about ? [{ role: 'route', to: coordinator, line, about }] : []
+      const toStarter: Delivery[] =
+        missed && starter ? [{ role: 'starter', to: starter, line, about: missed, asker, direct: true, ...(accept ? { accept } : {}) }] : []
+      // A Discuss the starter took: the coordinator names the starter as the one to talk to.
+      const tookDiscuss = line.answer === 'discuss' && !!byStarter?.delivered
+      const about = !missed ? undefined : !starter ? missed : byStarter && isFinal(byStarter) && (!byStarter.delivered || tookDiscuss) ? byStarter : undefined
+      const window = about?.delivered && how?.starterWindow ? { window: how.starterWindow } : {}
+      const route: Delivery[] = about ? [{ role: 'route', to: coordinator, line, about, ...window }] : []
       return [...own, ...toStarter, ...route]
     })
     .filter(owed)
@@ -233,13 +253,20 @@ const kindOf = (line: AnswerLine, accept?: AcceptAs): BoardPromptKind => (line.a
 export const coordinatorText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
   `${answerPrompt(kindOf(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
 
-// The peer message to the asker: the same answer; for Update, the request to check the question.
-export const askerText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
-  `${answerPrompt(line.answer === 'update' ? 'update_asker' : kindOf(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
+// The peer message to the asker: the same answer; for Update, the request to check the question; for
+// Discuss on a question answered to its asker (`direct`), the owner comes to the asker's window.
+const askerKind = (line: AnswerLine, accept?: AcceptAs, direct?: boolean): BoardPromptKind =>
+  line.answer === 'update' ? 'update_asker' : line.answer === 'discuss' && direct ? 'discuss_asker' : kindOf(line, accept)
+export const askerText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs, direct?: boolean) =>
+  `${answerPrompt(askerKind(line, accept, direct), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to a gone asker's starter: the asker's text, marked as such.
-export const starterText = (line: AnswerLine, asker: string, prompts: Prompts, accept?: AcceptAs) =>
-  `${askerText(line, prompts, accept)}\n(for ${asker}, which did not take it: carry it on or act on it)`
+export const starterText = (line: AnswerLine, asker: string, prompts: Prompts, accept?: AcceptAs, direct?: boolean) =>
+  `${askerText(line, prompts, accept, direct)}\n(for ${asker}, which did not take it: carry it on or act on it)`
+
+// The coordinator's line on a Discuss answered to its asker: tell the owner whom to talk to, and where.
+export const discussRouteText = (line: AnswerLine, who: string, prompts: Prompts, window?: string) =>
+  `${answerPrompt('discuss_route', line.id, prompts, undefined, window ? `${who} (${window})` : who)}${writerNote(line)}`
 
 // The coordinator's one line when the answer went to its asker directly (`answer_to: asker`).
 export const copyText = (line: AnswerLine, asker: string) =>
@@ -258,9 +285,13 @@ export const routeText = (line: AnswerLine, asker: string, reason: string) =>
 // The text a coordinator-side delivery submits: the answer itself, or the routing line.
 export const promptTextOf = (d: Delivery, prompts: Prompts) =>
   d.role === 'route'
-    ? routeText(d.line, d.about?.to ?? '?', d.about?.reason ?? 'not delivered')
+    ? d.about?.delivered
+      ? discussRouteText(d.line, d.about.to, prompts, d.window)
+      : routeText(d.line, d.about?.to ?? '?', d.about?.reason ?? 'not delivered')
     : d.copy && d.asker
-      ? copyText(d.line, d.asker)
+      ? d.line.answer === 'discuss'
+        ? discussRouteText(d.line, d.asker, prompts, d.window)
+        : copyText(d.line, d.asker)
       : coordinatorText(d.line, prompts, d.accept)
 
 export const NOTICE = '[Cross-session delivery notice]'

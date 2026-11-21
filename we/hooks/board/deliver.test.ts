@@ -949,6 +949,46 @@ test('answer_to asker: asker and starter both gone, the coordinator gets the rou
   expect(h.submitted.filter(t => t.includes('did not reach lead'))).toHaveLength(1)
 })
 
+// Discuss under `answer_to: asker` (Q954): the owner goes to the asker's window; the coordinator only
+// says whom to talk to and relays nothing.
+const discussBoard = (starter?: string) =>
+  boardOf({
+    owner_queue: [{ id: 'Q1', session: 'asker', key: 'PROJ-40', since: '2026-11-03', answer_to: 'asker', ...(starter ? { starter } : {}) }],
+    sessions: [
+      { name: 'coord', role: 'master' },
+      { name: 'asker', role: 'master', cwd: '/work/asker' },
+      { name: 'lead', role: 'master', cwd: '/work/lead' },
+    ],
+  })
+
+test('answer_to asker: Discuss readies the asker and the coordinator names whom to talk to, no relay', async ($, on) => {
+  const { clock, h } = await coordinator($, on, { board: discussBoard('lead') })
+  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(3_000)
+  expect(h.sent).toEqual([
+    {
+      to: 'asker',
+      text: 'Q1: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator. (answered from the board pane in foxy)',
+    },
+  ])
+  expect(h.submitted).toEqual([
+    'Q1: Discuss → tell the owner in one line: talk to asker (/work/asker). Do not discuss or relay it yourself. (answered from the board pane in foxy)',
+  ])
+  expect(h.submitted.some(t => t.includes("let's talk about it"))).toBe(false)
+})
+
+test('answer_to asker: a Discuss the gone asker left goes to its starter, and the coordinator names the starter', async ($, on) => {
+  const gone = { isDelivered: false as const, reason: 'Failed to send to asker: session ended' }
+  const { clock, h } = await coordinator($, on, { board: discussBoard('lead'), send: to => (to === 'asker' ? gone : { isDelivered: true }) })
+  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  await clock.advance(9_000)
+  expect(h.sent.map(s => s.to)).toEqual(['asker', 'lead'])
+  expect(h.sent[1]!.text).toContain('ready in your window')
+  expect(h.sent[1]!.text).toContain('(for asker, which did not take it')
+  expect(h.submitted.filter(t => t.includes('talk to lead (/work/lead)'))).toHaveLength(1)
+  expect(h.submitted.some(t => t.includes('did not reach'))).toBe(false)
+})
+
 test('transcriptVerdict without a seen mark: the stored prompt counts, anything else is lost, never busy', () => {
   const a = { key: 'k', delivery: {} as never, text: 'answer Q4', ledgerPath: '/l', submittedAt: 1_000, tries: 1 } as Awaiting
   const said = (role: 'user' | 'assistant', text: string) => ({ role, text, toolUses: [] })

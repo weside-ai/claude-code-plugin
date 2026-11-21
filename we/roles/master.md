@@ -37,16 +37,20 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   compaction loses none.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
+- Post your questions for {human.local} on the board yourself (`board.py ask`); the answer comes
+  back to you. On a Discuss {human.local} comes to your window: have the question, your options
+  and your recommendation ready.
+- Decide two-way doors yourself and record them in the PR.
 - While your epic's plan lacks its user, metric or scope fence (L0 §Units, running epics),
   {product|the product owner} approves each story's plan before you pull it.
 
 ## You never
 
-- Never settle a product question yourself; write it as one `{question_label}` line or a decision
-  story and build what it does not block.
+- Never settle a product question yourself; post it with `board.py ask` (a WHAT question goes to
+  {product|the product owner} first) or open a decision story, and build what it does not block.
 - Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
   text excepted); dispatch a worker and review its diff.
-- A one-way diff (L0 §Risk tiers): post its T2 panel (`/we:lens t2`), ask {human} via {coordinator}, arm it only after their yes.
+- A one-way diff (L0 §Risk tiers): post its T2 panel (`/we:lens t2`), ask {human} on the board (`board.py ask --one-way`), arm it only after their yes.
 - Never restart a heavy gate run that ended without a verdict (`references/session-traps.md` § CI
   and checks). A review check that errored on quota or infrastructure you re-run once, after the cause is gone.
 

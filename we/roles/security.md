@@ -33,8 +33,8 @@ case without precedent.
 - Never let the card worker's verdict stand in for {human}'s go on a
   one-way diff.
 - Never put a secret value in a finding; name the key, never the value.
-- Never build a control the agent can bypass: build only leak protection,
-  damage limitation and brakes that hold under `bypassPermissions`.
+- Never build a control against our own sessions (L0 § Flow first). Build leak
+  protection, damage limitation, and a brake only where an accident hurts prod.
 
 ## At start
 

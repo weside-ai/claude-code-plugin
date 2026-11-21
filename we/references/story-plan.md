@@ -307,7 +307,7 @@ frontmatter fields the gate reads:
   `scope change` line naming the approver (`roles.product`, and `human.name` if it changes the
   outcome); approval is widening `fence:` on the default branch, the epic file is the record. The gate reads the
   epic from `risk.rules_from` (the tree's copy only when the ref has none), so a fence widened on a
-  branch counts once it landed (`plan_push.py`): a session cannot approve its own scope change.
+  branch counts once it landed (`plan_push.py`).
 - `serves: <metric part>; <metric part>` — each part starts (casefolded, whitespace collapsed)
   with a metric name of the goal file, followed by the end, a space or `(`.
 

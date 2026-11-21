@@ -162,7 +162,7 @@ def test_the_unbound_t2_oneway_case_keeps_waiting_on_the_human_alone():
 
 
 def test_the_t2_oneway_case_routes_a_question_and_arms_after_the_yes():
-    """The one-way case's master asks the human through the coordinator and arms with `arm_pr.sh`
+    """The one-way case's master posts the merge question on the board itself and arms with `arm_pr.sh`
     once the yes is back; no approve on GitHub and no go number is the yes. The case's route must be
     one the rendered L0 gives, and nothing the case forbids may stand in it. Red arm: the L0 that
     made the master arm with `arm_pr.sh --go Q<nr>`."""
@@ -233,3 +233,27 @@ def test_the_merge_cases_route_on_a_line_the_rendered_l0_carries(name, fixture):
     [route] = ROUTE.findall(case.read_text(encoding="utf-8"))
     l0, _ = _rendered(fixture)
     assert re.search(route, " ".join(l0.split()))
+
+
+# L0 § Flow first (Q954): a cold session of these roles reads the section (the worker its short
+# form: the starter posts its question), and no line routes a question for the human through the
+# coordinator. Red arm: origin/main before the section (`ask via Otto`, `goes to Otto as one line`).
+FLOW_FIRST_ROLES = ("coordinator", "master", "worker")
+
+
+@pytest.mark.parametrize("role", FLOW_FIRST_ROLES)
+def test_a_cold_start_reads_flow_first_and_no_question_through_the_coordinator(role):
+    crew = crewlib._merge(json.loads((REPO / GENERIC_FIXTURE).read_text(encoding="utf-8")))
+    coordinator = crewlib.display_name(crew, "coordinator")
+    text = render_process.role_text(crew, role) + render_process.render_card(crew, role)
+    flat = " ".join(text.split())
+    if role == "worker":
+        assert "goes to your starter as one line" in flat and "which it posts on the board" in flat
+    else:
+        assert "## Flow first" in text and "In doubt, flow wins." in flat
+    for phrase in (
+        f"via {coordinator}",
+        "through the coordinator",
+        f"goes to {coordinator} as one line",
+    ):
+        assert phrase not in flat, (role, phrase)

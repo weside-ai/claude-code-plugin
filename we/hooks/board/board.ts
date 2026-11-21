@@ -8,7 +8,7 @@ import type { Part } from './work'
 const MIN = 60_000
 const DAY = 86_400_000
 const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw', 'rebuild']
-const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task']
+const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task', 'discuss_asker', 'discuss_route']
 const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
 // An Accept, Deny or Withdraw closes its question: the pane strikes it, and later lines on that id change nothing.
 const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
@@ -265,8 +265,9 @@ export const shownAnswer = (last: BoardAnswer | undefined, updated: string | und
 // The texts the deliverer sends: per kind to the orchestrator and the asker, `update_asker` to the asker
 // on Update, and for the two Accepts with a meaning of their own (`accept_hand`: the go on a one-way PR,
 // `accept_task`: the owner does it) in place of
-// `accept`; the board's `answer_prompts` replaces a default, `{id}` standing for the question's id and
-// `{pr}` for its PR link.
+// `accept`, and on a question answered to its asker the two Discuss texts (`discuss_asker` to the asker,
+// `discuss_route` to the coordinator); the board's `answer_prompts` replaces a default, `{id}` standing
+// for the question's id, `{pr}` for its PR link and `{who}` for the session the owner talks to.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   accept: '{id}: proposal accepted',
   deny: '{id}: proposal denied',
@@ -277,12 +278,21 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
   accept_hand: "{id}: the owner's go on {pr} — the asking session arms that PR with `arm_pr.sh`; the question stays open until the PR is merged",
   accept_task: '{id}: taken — the owner does this task; do not do it yourself',
+  discuss_asker:
+    '{id}: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator.',
+  discuss_route: '{id}: Discuss → tell the owner in one line: talk to {who}. Do not discuss or relay it yourself.',
   rebuild:
     'Rebuild the board: check the session lines, the open questions and the news against the ticketing system, git and the PRs, and correct every stale line (board.py set --for, withdraw, prune)',
 }
 
-export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>, pr?: string) =>
-  (own?.[answer] ?? DEFAULT_PROMPT[answer]).split('{id}').join(id).split('{pr}').join(pr ?? 'its PR')
+export const answerPrompt = (answer: BoardPromptKind, id: string, own?: Partial<Record<BoardPromptKind, string>>, pr?: string, who?: string) =>
+  (own?.[answer] ?? DEFAULT_PROMPT[answer])
+    .split('{id}')
+    .join(id)
+    .split('{pr}')
+    .join(pr ?? 'its PR')
+    .split('{who}')
+    .join(who ?? 'the asking session')
 
 // Which Accept a question's Accept is: Go on a one-way merge-go with its PR (the pane's
 // label), Taken on a task, else the plain Accept (undefined).

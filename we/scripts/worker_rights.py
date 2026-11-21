@@ -2,8 +2,8 @@
 """The worker rights and the never-list of a process worker: one owner of the rules, read by
 `hooks/worker_rights_gate.py` (the brake) and by `worker_launch.py settings` (the record).
 
-No boundary. This is a brake against a misguided worker (a wrong brief, a prompt injection in a PR
-comment), not a barrier against one that goes around it on purpose: a script file it writes and runs,
+No boundary. This catches a worker's mistake before an action that hurts (secrets, deletion, prod),
+not a barrier against one that goes around it on purpose (L0 § Flow first): a script file it writes and runs,
 another `gh` binary, `curl` with the token all pass every text check. The boundaries are server-side
 (branch rules, the merge gate, the app rights of the token).
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """PreToolUse hook on Bash: the worker rights brake (the rules: `scripts/worker_rights.py`).
 
-No boundary: a brake against a misguided process worker (a wrong brief, a prompt injection in a PR
-comment), not a barrier against one that deliberately goes around it. A script file it writes and
+No boundary: it catches a process worker's mistake before an action that hurts (secrets, deletion,
+prod), not a barrier against one that deliberately goes around it (L0 § Flow first). A script file it writes and
 runs, another `gh` binary, `curl` with the token pass every text check here; the boundaries are
 server-side (branch rules, the merge gate, the token's app rights, the secret store).
 
