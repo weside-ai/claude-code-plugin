@@ -456,6 +456,9 @@ NEVER = [
     ("git config core.hookspath /dev/null", "guard bypass (core.hooksPath)"),
     ('echo "`gh secret list`"', "secrets (gh secret)"),
     ("cd ../main-checkout && git push", None),
+    # the never-list through git's own place flags
+    ("git --git-dir=.git push origin main", "main (git push to main)"),
+    ("git --work-tree . push --delete origin feat/x", "delete (git push --delete)"),
     ("git -C ../main-checkout push", None),
     # a merge other than the line arm_pr.sh prints
     ("gh pr merge 7 --admin", "merge (gh pr merge --admin)"),
@@ -593,6 +596,173 @@ def test_a_bare_push_from_main_is_denied(world):
     _git(world["repo"], "checkout", "-q", "main")
     decision, reason = hook(world, "git push")
     assert decision == "deny" and "main (a git push from main)" in reason
+
+
+def _main_checkout_with_tree(world, owner="worker"):
+    """A repo whose session cwd is its main checkout on main and whose worker tree is a worktree on
+    the worker's branch (Kiska 21.11.: a worker started from the shared main checkout)."""
+    main = make_repo(world["tmp"], name="core", branch="main")
+    if owner:
+        _pr_owner(main, owner)
+    tree = world["tmp"] / "core-tree"
+    _git(main, "worktree", "add", "-q", "-b", "feat/ABC-12-tree", str(tree))
+    return main, tree
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git -C {tree} push -u origin feat/ABC-12-tree",
+        "git -C {tree} push",
+        "git --git-dir={gitdir} --work-tree {tree} push origin HEAD",
+    ],
+)
+def test_a_push_is_judged_in_the_tree_git_runs_it_in(world, command):
+    main, tree = _main_checkout_with_tree(world)
+    gitdir = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()  # fmt: skip
+    decision, reason = hook(world, command.format(tree=tree, gitdir=gitdir), cwd=main)
+    assert decision == "allow", reason
+
+
+@pytest.mark.parametrize(
+    ("command", "why"),
+    [
+        # a second push without its own place may run in the cwd, which is on main
+        ("git -C {tree} push; git push", "main (a git push from main)"),
+        ("git -C {tree} push && git -C {main} push", "main (a git push from main)"),
+        ("cd {tree} && git push", "main (a git push from main)"),
+        ("git -C {tree} push origin main", "main (git push to main)"),
+        ("git -C {tree} push origin HEAD:feat/ABC-99-x", "pushes only branches carrying ABC-12"),
+    ],
+)
+def test_a_push_from_a_main_checkout_stays_denied_outside_its_own_tree(world, command, why):
+    main, tree = _main_checkout_with_tree(world)
+    decision, reason = hook(world, command.format(tree=tree, main=main), cwd=main)
+    assert decision == "deny" and why in reason, reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "export GIT_DIR={main}/.git; git -C {tree} push origin HEAD",
+        "GIT_DIR={main}/.git; git -C {tree} push origin HEAD",
+        "env GIT_WORK_TREE={main} git -C {tree} push origin HEAD",
+        "GIT_INDEX_FILE={main}/.git/index git -C {tree} push origin HEAD",
+    ],
+)
+def test_a_push_with_a_redirected_repo_is_judged_in_the_cwd(world, command):
+    """`git -C <tree>` names the tree, but GIT_DIR and its kin decide which repo git pushes: an
+    environment is a prefix or a segment of its own, so no simple push form, so the cwd (on main)
+    stays in the check."""
+    main, tree = _main_checkout_with_tree(world)
+    text = command.format(tree=tree, main=main)
+    decision, reason = hook(world, text, cwd=main)
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert str(main) in wr._push_dirs(text, str(main))
+
+
+def test_a_text_that_only_names_git_dir_is_no_refusal(world):
+    """The gate judges the code, not the text: a commit message naming GIT_DIR is data."""
+    _pr_owner(world["repo"], "worker")
+    text = "git commit -m 'drop GIT_DIR from the env' && git push origin feat/ABC-12-hook"
+    # a held right in a chain only passes this gate: no denial, no allow
+    assert hook(world, text) == (None, "")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # T2 panel round 3: a path `git` behind a valid push was not counted
+        "git -C {tree} push origin feat/ABC-12-tree; eval /usr/bin/git push",
+        "git -C {tree} push origin feat/ABC-12-tree && ./git push",
+        "git -C {tree} push origin feat/ABC-12-tree && echo done",
+        "git -C {tree} push origin feat/ABC-12-tree\ngit status",
+        "bash -c 'git push'",
+        "git -c core.worktree={tree} -C {tree} push origin feat/ABC-12-tree",
+        "command git -C {tree} push origin feat/ABC-12-tree",
+        "\\git -C {tree} push origin feat/ABC-12-tree",
+        "/usr/bin/git -C {tree} push origin feat/ABC-12-tree",
+        "X=1 git -C {tree} push origin feat/ABC-12-tree",
+        "git -C $TREE push origin feat/ABC-12-tree",
+        "git -C '{tree} push origin feat/ABC-12-tree",
+    ],
+)
+@pytest.mark.parametrize("owner", ["master", "worker"])
+def test_only_one_simple_push_leaves_the_cwd_out(world, command, owner):
+    """Vyra's contract: the cwd drops out only for exactly one `git [-C|--git-dir|--work-tree]…
+    push` segment; anything else, a `shlex` error included, is judged with the cwd (main here)."""
+    main, tree = _main_checkout_with_tree(world, owner=owner)
+    decision, reason = hook(world, command.format(tree=tree), cwd=main)
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+
+
+def test_cumulative_c_dirs_are_resolved_against_the_cwd(world):
+    """`git -C a -C b push` runs in `a/b`: the main checkout there is refused."""
+    (world["tmp"] / "a").mkdir()
+    main = make_repo(world["tmp"] / "a", name="b", branch="main")
+    _pr_owner(main, "worker")
+    decision, reason = hook(world, "git -C a -C b push origin HEAD", cwd=world["tmp"])
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+
+
+def test_a_git_dir_onto_the_main_checkout_is_refused_from_a_worktree(world):
+    main, tree = _main_checkout_with_tree(world)
+    decision, reason = hook(world, f"git --git-dir={main}/.git push origin HEAD", cwd=tree)
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+
+
+def test_a_simple_push_through_git_dir_and_work_tree_passes_from_main(world):
+    main, tree = _main_checkout_with_tree(world)
+    text = f"git --git-dir={tree}/.git --work-tree={tree} push origin feat/ABC-12-tree"
+    decision, reason = hook(world, text, cwd=main)
+    assert decision == "allow", reason
+
+
+def test_a_push_spelt_apart_is_judged_where_it_runs(world):
+    main, _tree = _main_checkout_with_tree(world)
+    decision, reason = hook(world, "gi''t push", cwd=main)
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+
+
+def test_a_tag_is_judged_in_every_place_a_push_runs(world):
+    other = make_repo(world["tmp"], name="other", branch="feat/ABC-12-x")
+    _git(other, "tag", "v-only-there")
+    decision, reason = hook(world, f"git -C {other} push origin v-only-there")
+    assert decision == "deny" and "git push of the tag v-only-there" in reason, reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git --git-dir={other}/.git push origin feat/ABC-12-x",
+        "git --work-tree {repo} --git-dir {other}/.git push origin feat/ABC-12-x",
+    ],
+)
+def test_a_push_through_git_dir_reads_the_switch_of_that_repo(world, command):
+    # the switch is read with git's own place options: rooted by --show-toplevel, a --git-dir
+    # alone read the session's repo as top level and its build.pr_owner opened the other repo
+    _pr_owner(world["repo"], "worker")
+    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
+    text = command.format(other=other, repo=world["repo"])
+    decision, reason = hook(world, text)
+    assert decision == "deny" and "another repo than acme/app" in reason, reason
+    _pr_owner(other, "worker")
+    assert hook(world, text)[0] == "allow"
+
+
+@pytest.mark.parametrize("switch", [None, "master"])
+def test_a_push_into_another_repo_needs_that_repos_own_switch(world, switch):
+    _pr_owner(world["repo"], "worker")
+    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
+    if switch:
+        _pr_owner(other, switch)
+    decision, reason = hook(world, f"git -C {other} push origin feat/ABC-12-x")
+    assert decision == "deny" and "another repo than acme/app" in reason, reason
+    _pr_owner(other, "worker")  # the other repo's own default branch opens it
+    assert hook(world, f"git -C {other} push origin feat/ABC-12-x")[0] == "allow"
 
 
 def test_every_denial_is_one_line_in_brakes_jsonl_without_the_command(world):
