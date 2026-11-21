@@ -19,7 +19,10 @@ Bind. Only the pod IP: `serve` refuses a loopback or wildcard address. Loopback 
 purpose, because a userspace tailscaled hands incoming tailnet connections to 127.0.0.1, a path
 past the proxy's tailnet gate. The gate is the network policy in front (only the proxy reaches the
 port); the peer check here is the second line: a connection from an address outside
-`zentrale.peers` (crew file, the proxy's networks) and the server's own address is closed unanswered.
+`zentrale.peers` (crew file, the proxy's networks) and the server's own address is closed unanswered,
+its address named once on stderr. The crew file is the local one every reader on the host uses
+(`crew.find`), read again in the background when it changes (`CrewWatch`), so a pulled checkout
+reaches the peer check without a restart.
 
 Fields. Every row passes a field allowlist (`ROW_FIELDS`, `SESSION_FIELDS`, `ACCOUNT_FIELDS`);
 accounts show only their profile name. Every free text passes `redaction.redact` (marker
@@ -72,6 +75,8 @@ TIMEOUT_S = 5
 MAX_BODY = 4 * 1024 * 1024
 MAX_TEXT = 300
 RELOAD_S = 30
+CREW_CHECK_S = 10
+MAX_REFUSED_LOGGED = 1024  # refused peers named on stderr, once each; past it, silence
 MARKER = "[redacted]"
 
 CSP = (
@@ -130,6 +135,68 @@ def peer_allowed(addr: str, peers: list) -> bool:
     except ValueError:
         return False
     return any(ip in net for net in peers)
+
+
+class CrewWatch:
+    """The crew file in force for the server's cwd (`crew.find`, the file every reader on the host
+    uses), read again when its stat (path, mtime, size, inode) changes; `crew_loop` looks every
+    `CREW_CHECK_S` seconds, never a request. A file that no longer loads keeps the last good peers
+    and link hosts, so a broken edit does not shut the proxy out, and is named once on stderr. A
+    file that is gone reads as no crew: only the server's own address stays a peer (fail closed),
+    since a missing file names no proxy network to keep trusting."""
+
+    def __init__(self, bind: str, cwd: Path | None = None):
+        self.bind, self.cwd = bind, cwd
+        self.key: tuple | None = None
+        self.peers: list = peers_of({}, bind)
+        self.link_hosts: list = []
+
+    def _stat_key(self) -> tuple | None:
+        path = crew_mod.find(self.cwd)
+        if path is None:
+            return None
+        try:
+            st = path.stat()
+        except OSError:
+            return (str(path),)
+        return (str(path), st.st_mtime_ns, st.st_size, st.st_ino)
+
+    def check(self) -> bool:
+        """Read the crew again when its file changed; True when peers or link hosts were set."""
+        key = self._stat_key()
+        if key == self.key:
+            return False
+        self.key = key
+        if key is None:
+            crew: dict = crew_mod.DEFAULTS
+        else:
+            try:
+                crew = crew_mod.load(Path(key[0]))
+            except crew_mod.CrewError as exc:
+                print(f"we-crewd: crew not reloaded, kept the last peers: {exc}", file=sys.stderr)
+                return False
+        self.peers = peers_of(crew, self.bind)
+        self.link_hosts = list((crew.get("zentrale") or {}).get("link_hosts") or [])
+        print(
+            f"we-crewd: crew {key[0] if key else '(none)'}: {len(self.peers) - 1} peer networks",
+            file=sys.stderr,
+        )
+        return True
+
+
+def crew_tick(watch: CrewWatch, server, state) -> None:
+    """One look at the crew file; a change goes to the server's peer check and the pages' links."""
+    if watch.check():
+        server.peers = watch.peers  # one attribute swap: a request reads the old or the new list
+        state.relink(watch.link_hosts)
+
+
+def crew_loop(watch: CrewWatch, server, state, stop: threading.Event) -> None:
+    while not stop.wait(CREW_CHECK_S):
+        try:
+            crew_tick(watch, server, state)
+        except Exception as exc:  # the loop outlives one bad read
+            print(f"we-crewd: crew check failed: {type(exc).__name__}", file=sys.stderr)
 
 
 # --- fields ---------------------------------------------------------------------------------
@@ -525,6 +592,11 @@ class State:
         with self.lock:
             return self.pages.get(path)
 
+    def relink(self, link_hosts) -> None:
+        """New link hosts from a reloaded crew; the next `set` renders with them."""
+        with self.lock:
+            self.link_hosts = list(link_hosts)
+
     def cache_payload(self) -> dict:
         with self.lock:
             return {
@@ -726,11 +798,24 @@ class Server(http.server.HTTPServer):
             self.address_family = socket.AF_INET6
         self.state = state
         self.peers = peers
+        self.refused: set[str] = set()
+        self.refused_lock = threading.Lock()
         self.pool = ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix="crewd")
         super().__init__(addr, Handler)
 
     def verify_request(self, request, client_address):  # noqa: ARG002 - socketserver's signature
-        return peer_allowed(client_address[0], self.peers)
+        addr = str(client_address[0])
+        if peer_allowed(addr, self.peers):
+            return True
+        # the connection stays unanswered; the log names the address once, so a proxy outside
+        # `zentrale.peers` reads as one line instead of a silent 502
+        with self.refused_lock:
+            first = addr not in self.refused and len(self.refused) < MAX_REFUSED_LOGGED
+            if first:
+                self.refused.add(addr)
+        if first:
+            print(f"we-crewd: refused peer {addr[:64]} (not in zentrale.peers)", file=sys.stderr)
+        return False
 
     def process_request(self, request, client_address):
         self.pool.submit(self._work, request, client_address)
@@ -767,13 +852,15 @@ def serve(bind: str, port: int) -> int:
     except ValueError as exc:
         print(f"we-crewd: {exc}", file=sys.stderr)
         return 2
-    crew = _crew()
-    state = State((crew.get("zentrale") or {}).get("link_hosts") or [])
-    server = make_server(bind, port, state, peers_of(crew, bind))
+    watch = CrewWatch(bind)
+    watch.check()
+    state = State(watch.link_hosts)
+    server = make_server(bind, port, state, watch.peers)
     stop = threading.Event()
     threading.Thread(
         target=refresh_loop, args=(state, None, cache_path(), stop), daemon=True
     ).start()
+    threading.Thread(target=crew_loop, args=(watch, server, state, stop), daemon=True).start()
     print(f"we-crewd: serving http://{bind}:{port}/crew/", file=sys.stderr)
     try:
         server.serve_forever()
