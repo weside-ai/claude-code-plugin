@@ -1,0 +1,104 @@
+{
+ "schema_version": 1,
+ "sections": {
+  "owner": [],
+  "waiting": [],
+  "red": [
+   {
+    "kind": "pr",
+    "item": "acme/app#13",
+    "title": "WA-9003: money path \u00b7 required red",
+    "for": "",
+    "red": true
+   }
+  ],
+  "working": [
+   {
+    "name": "m-9001",
+    "role": "master",
+    "state": "busy",
+    "keys": [
+     "WA-9002"
+    ],
+    "group": "m-9001",
+    "starter": null,
+    "waiting_on": null,
+    "age_s": 60
+   },
+   {
+    "name": "w-WA-9002",
+    "role": "worker",
+    "state": "busy",
+    "keys": [
+     "WA-9002"
+    ],
+    "group": "m-9001",
+    "starter": "m-9001",
+    "waiting_on": null,
+    "age_s": 60
+   },
+   {
+    "name": "w-WA-9003",
+    "role": "worker",
+    "state": "busy",
+    "keys": [
+     "WA-9003"
+    ],
+    "group": "m-9001",
+    "starter": "m-9001",
+    "waiting_on": null,
+    "age_s": 60
+   },
+   {
+    "name": "m-9010",
+    "role": "master",
+    "state": "idle",
+    "keys": [],
+    "group": "m-9010",
+    "starter": null,
+    "waiting_on": null,
+    "age_s": 60
+   },
+   {
+    "name": "w-lost",
+    "role": "worker",
+    "state": "busy",
+    "keys": [
+     "WA-9021"
+    ],
+    "group": "(no starter)",
+    "starter": null,
+    "waiting_on": null,
+    "age_s": 60
+   }
+  ],
+  "ci": {
+   "repos": [],
+   "locks": "gate lock free \u00b7 test slot held by w-WA-9003 \u00b7 sample 1 min old"
+  },
+  "accounts": [
+   {
+    "name": "a1",
+    "in_rotation": true,
+    "five_hour": {
+     "pct": 40
+    },
+    "seven_day": {
+     "pct": 50
+    },
+    "threshold": 80
+   },
+   {
+    "name": "a2",
+    "in_rotation": true,
+    "five_hour": {
+     "pct": 90
+    },
+    "seven_day": {
+     "pct": 50
+    },
+    "threshold": 80
+   }
+  ]
+ }
+}

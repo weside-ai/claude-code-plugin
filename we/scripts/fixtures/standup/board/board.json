@@ -1,0 +1,56 @@
+{
+ "updated": "2026-11-21T17:00Z",
+ "sessions": [
+  {
+   "name": "m-9001",
+   "role": "master",
+   "epic": "WA-9001",
+   "keys": [
+    "WA-9002"
+   ],
+   "state": "build"
+  },
+  {
+   "name": "m-9010",
+   "role": "master",
+   "epic": "WA-9010",
+   "keys": [],
+   "state": "active"
+  },
+  {
+   "name": "m-9020",
+   "role": "master",
+   "keys": [
+    "WA-9021"
+   ],
+   "state": "parked"
+  }
+ ],
+ "owner_queue": [
+  {
+   "id": "Q901",
+   "session": "m-9001",
+   "key": "WA-9003",
+   "key_title": "Merge #13",
+   "ask": "Darf #13 gemergt werden? | one-way",
+   "recommendation": "Ja, mergen.",
+   "cause": "merge-go",
+   "one_way": "money",
+   "since": "2026-11-21",
+   "ts": "2026-11-21T09:00:00Z"
+  },
+  {
+   "id": "Q902",
+   "session": "m-9010",
+   "key": "WA-9011",
+   "key_title": "Cut",
+   "ask": "Schneiden wir WA-9011 in zwei?\nDetails im Plan.",
+   "recommendation": "Ja, zwei Stories.",
+   "cause": "plan",
+   "since": "2026-11-20",
+   "ts": "2026-11-20T10:00:00Z"
+  }
+ ],
+ "news": [],
+ "log": []
+}

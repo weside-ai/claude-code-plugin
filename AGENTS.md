@@ -65,6 +65,8 @@ we/                               plugin root
                                   waits on whom: interval rows, the flow page and the efficiency section), context_load.py (what a cold
                                   start loads per role), command_center/ci_source.py (each PR head's CI queue and run, behind
                                   flow_report's gh cache)
+    standup                       standup.py (the standup's one gather: portfolio, epic and story view, utilization,
+                                  signals and the master → epic → stories → workers map, read-only)
     command centre                command_center/zentrale.py (the Zentrale's one document: with the owner, red,
                                   waiting, working, CI, accounts; fast and slow sources), open_ends.py (open ends and
                                   PR classes by arm_pr.sh's rule), ci_state.py (main verdict, workers, running
