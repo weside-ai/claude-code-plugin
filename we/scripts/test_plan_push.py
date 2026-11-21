@@ -324,6 +324,83 @@ def test_server_rejection_exits_with_its_own_code(make, capsys):
     assert plan_push.main([]) == plan_push.REJECTED
     assert "this repo takes no direct push; land by PR" in capsys.readouterr().err
     assert world.remote_head() == "init"
+    for message in (
+        "Branch refs/heads/main can only be modified through pull requests.",  # Bitbucket
+        "TF402455: Pushes to this branch are not permitted; you must use a pull request",  # Azure
+    ):
+        hook.write_text(f"#!/bin/sh\necho '{message}' >&2\nexit 1\n")
+        assert plan_push.main([]) == plan_push.REJECTED, message
+        assert world.remote_head() == "init"
+
+
+def rejected(reason: str, remote_lines: str = "") -> subprocess.CompletedProcess:
+    """What `git push --porcelain` returns when GitHub rejects the ref."""
+    out = f"To github.com:acme/app.git\n!\tHEAD:refs/heads/main\t[remote rejected] ({reason})\nDone\n"
+    return subprocess.CompletedProcess([], 1, out, remote_lines)
+
+
+def test_a_lost_ref_lock_is_a_race_and_lands_on_the_next_try(make, capsys, monkeypatch):
+    world = make()
+    commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n", "docs(ACME-1): plan")
+    real_push, calls = plan_push.push, []
+
+    def locked_once(remote, branch):
+        calls.append(branch)
+        if len(calls) == 1:
+            world.other_push("docs/plans/ACME-2-story.md")
+            return rejected("cannot lock ref 'refs/heads/main': is at 1a2b but expected 3c4d")
+        return real_push(remote, branch)
+
+    monkeypatch.setattr(plan_push, "push", locked_once)
+
+    assert plan_push.main([]) == 0
+    assert len(calls) == 2
+    assert world.remote_head() == "docs(ACME-1): plan"
+
+
+def test_a_named_ruleset_stays_no_direct_push_and_prints_the_ref_line(make, capsys, monkeypatch):
+    world = make()
+    commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n")
+    gh013 = (
+        "remote: error: GH013: Repository rule violations found for refs/heads/main.\n"
+        "remote: - Changes must be made through a pull request.\n"
+    )
+    monkeypatch.setattr(
+        plan_push,
+        "push",
+        lambda *_: rejected("push declined due to repository rule violations", gh013),
+    )
+
+    assert plan_push.main([]) == plan_push.REJECTED
+    err = capsys.readouterr().err
+    assert "this repo takes no direct push; land by PR" in err
+    assert (
+        "server: !\tHEAD:refs/heads/main\t[remote rejected] "
+        "(push declined due to repository rule violations)"
+    ) in err
+    assert world.remote_head() == "init"
+
+
+def test_an_unknown_server_rejection_fails_without_the_pr_way(make, capsys):
+    world = make()
+    hook = world.remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'quota exceeded' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n")
+
+    assert plan_push.main([]) == plan_push.FAILED
+    err = capsys.readouterr().err
+    assert "land by PR" not in err
+    assert "server: !\tHEAD:refs/heads/main\t[remote rejected] (pre-receive hook declined)" in err
+
+
+def test_the_ref_line_is_redacted_and_cut():
+    token = "ghs_" + "A" * 36
+    line = plan_push.ref_line(
+        f"!\tHEAD:refs/heads/main\t[remote rejected] ({token} {'x' * 400})\n"
+    )
+    assert token not in line and "[REDACTED]" in line
+    assert len(line) == len("server: ") + plan_push.REF_LINE_MAX
 
 
 @pytest.fixture()
