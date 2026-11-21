@@ -8,87 +8,62 @@ needs: [ticketing]
 
 # /we:standup
 
-Read-only: read git, plans, tickets, `gh` and this session's agents; write nothing, dispatch nobody,
-move no ticket. The reader lost the thread and needs, in one screen: what are we working on and why,
-where does it stand, what is running, and what must the human do next. Every line names keys and
-things a reader can act on; nothing outside the active scope appears. When the user's instruction
-files define a status form (a sentence cap, a language), that form wins over the layout below.
+Read-only: run one script, render it, judge the utilization; write nothing, dispatch nobody, move
+no ticket. The reader needs, in under 30 s: is it running, what was achieved, what comes, where does
+it stick, and what must the human decide. When the user's instruction files define a status form (a
+sentence cap, a language), that form wins over the layout below.
 
 ## 1 · Scope (first hit wins)
 
-1. A key or slug in the arguments (`/we:standup PROJ-123`). A story key narrows the story table, Running and
-   Your moves to that story; its epic and the metric it serves appear only in Working on. `--branch` → § 4.
+1. A key in the arguments (`/we:standup PROJ-123`): an epic key gives the epic detail, a story key
+   the story with its epic's intent. `--branch` → § 4.
 2. The ticket key of the current branch (`<type>/<KEY>-…`).
 3. Story keys this conversation dispatched or opened PRs for (only from its own context; a fresh
    session or a subagent skips this step).
-4. Active epics (`selected`/`in-progress`): exactly one → it.
-   Several → render no scope: one line each `<slug> · <ticket> · updated <date>`, then
-   `/we:standup <KEY>`, and stop. None → § 4.
+4. Nothing found → the portfolio: every active epic of the repo.
 
-Walk up from a story: its `epic:` → the epic plan → its `serves:` metric of the goal file (omit it
-when `null`). A key
-with no epic above it → § 4. Children of an epic: the ticketing children of its ticket ∪ `docs/plans/*-story.md` whose
-`epic:` names it (one `rg`) ∪ the keys from step 3. In scope: stories that are Active or In Review
-plus those this conversation touched. Backlog, blocked and parked children go into one row of Later / others.
-**current** = the story with an open PR or a running worker; with several, the one touched last.
+A build master or worker that types `status` or "where am I" therefore keeps seeing its own story
+(steps 2–3); only a session without a key of its own gets the portfolio.
 
-## 2 · Gather (bounded: one call per source, not per story)
+## 2 · Gather and render (one call)
 
-- PRs: one `gh pr list --search "<K1> OR <K2> … in:title" --state all --limit 30
-  --json number,title,state,headRefName,mergedAt,mergeCommit,mergeStateStatus`, matched to a story
-  by its key in the title (a PR whose title lacks the key is not found; name that gap); `gh pr checks <n> --required` only for open PRs, read now
-  (a status from before the last push is stale).
-- Live: for PRs merged in the last 24 h, `git tag --contains <mergeCommit.oid>`. A prod tag (the
-  repo's release pattern from its instruction files) means live; a pre-release tag (`-rc`, `-beta`)
-  means staging; another tag family counts only for the story that ships it.
-- Plans: frontmatter and `## Open Fork` only; state comes from PRs and tags, not the plan's `status`.
-- Tickets: status only, one query for all keys (`${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`);
-  no ticketing configured → one gap line, no `gh issue` for a non-numeric key.
-- Running: this session's agents and background tasks (the harness roster, where present); a
-  worker's state is its last message. `git status -sb` when a story in scope is the checked-out branch.
-  With the crew's `flow.log_dir` set, `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sampler_age.py` adds its
-  verdict line here; exit 1 makes it an item for the human too.
-- Owed by the human: this conversation's unanswered asks to the user, each plan's `## Open Fork`, the epic's unanswered open questions that name
-  the user, and due items in the repo's due-items file when its instruction files name one.
-
-A missing source (no `gh`, no plan, no ticketing) is one named gap line, never filled by inference.
-
-## 3 · Output
-
-Markdown, rendered as tables: the product owner found the text-block layout hard to read (24.10.2026).
-Headings and column names follow the user's language; keys, tags and commands stay verbatim.
-
-```markdown
-**Working on:** <Epic KEY title> (serves <metric>) — <what this slice delivers, why now>.
-**Current:** <Story KEY title> — <one-line goal>.
-
-| Story | Where | Next step |
-|---|---|---|
-| <KEY title> | <plan · build · PR #n, CI <state> · merged · staging <tag> · live <tag>> | <one action> |
-
-**Just done (24 h):** <≤ 3 items, comma-separated>.
-**Running:** <workers, CI watches, releases in flight — or: nothing>.
-
-**Your moves**
-
-| # | What | Where | Why |
-|---|---|---|---|
-| 1 | <a go, an upload, a test step, or a decision with the recommended option> | <command, URL, file path, screen> | <what it unblocks; for a decision the reason for the recommendation> |
-
-**Mine next:** <≤ 3, comma-separated; omit in a session that started nothing>.
-
-**Later / others**
-
-| What | Owner |
-|---|---|
-| <parked, waiting on outside> | <owner> |
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/standup.py [KEY] [--conversation-keys K1,K2] --md --lang <de|en>
 ```
 
-- "Working on" comes first even when everything is green: the reader needs the context first.
-- Your moves: at most five, most-blocking first; a decision names the recommended option in What
-  and its reason in Why. More than five: show five and say how many more.
-- Later / others: at most three rows; omit the table when empty.
-- A cell holds one short phrase; detail that does not fit belongs in the plan, not the standup.
+`KEY` from step 1, the keys of step 3 as `--conversation-keys`, the language from the user's
+instruction files (default `en`). The script owns the scope order, every source and every number
+(its docstring: sources, light rules, trend band, signal rules); print its output as it comes.
+A first line `view: branch` → render § 4 instead. A source it could not read stands under its gaps
+as `<source>: not read (<why>)` and as `n/a` in the tables: never fill it by inference. `--json`
+prints the same document for a reader that needs fields (`orchestration`: master → epic → stories →
+workers).
+
+The section of decisions bundles every open question to the human, ranked by what it holds up, with
+its recommendation, so the human answers them in one pass instead of question by question.
+
+## 3 · Utilization and acceleration
+
+Below the script's output, add one section in the user's language (de: „Auslastung und
+Beschleunigung"), drawn only from its utilization table and signals:
+
+1. One verdict sentence: does the work move fast — yes or no, with the numbers behind it (busy and
+   free worker slots, idle masters, waiting hours, CI rounds).
+2. When signals fired: the biggest bottleneck (the signal holding the most keys or hours), then one
+   to three proposals. Each names its effect, its evidence (the signal's numbers, source and
+   threshold) and who carries it out (the signal's actor).
+3. No signal fired → the verdict sentence alone.
+
+| Good proposal | Bad proposal |
+|---|---|
+| "Start a master for PROJ-9004: selected without master (`selected_without_master`, threshold ≥ 1) — coordinator" | "More parallel work would help" — no signal, no number |
+
+Every proposal stands on a fired signal: an idea without a measurement does not appear. Propose,
+never start: the command stays read-only.
+
+- [ ] the script ran once and its output stands unchanged above the section
+- [ ] the verdict sentence carries numbers from the utilization table
+- [ ] each proposal cites one fired signal id, its evidence, source, threshold and actor
 
 ## 4 · Branch view (`--branch`, a key without an epic, or no scope)
 

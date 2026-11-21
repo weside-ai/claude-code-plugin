@@ -80,11 +80,11 @@ def test_portfolio_golden(tree):
     assert doc["schema_version"] == 1 and doc["view"] == "portfolio"
     rows = {r["key"]: r for r in doc["portfolio"]}
     assert sorted(rows) == [
-        "WA-9001",
-        "WA-9010",
-        "WA-9020",
-    ]  # reached WA-9030, archived WA-9040 absent
-    a = rows["WA-9001"]
+        "PROJ-9001",
+        "PROJ-9010",
+        "PROJ-9020",
+    ]  # reached PROJ-9030, archived PROJ-9040 absent
+    a = rows["PROJ-9001"]
     assert a["light"] == "red"
     assert a["line"] == {
         "done": 1,
@@ -93,13 +93,13 @@ def test_portfolio_golden(tree):
     }
     assert a["intensity"]["prs_merged"] == {"value": 2, "previous": 1, "trend": "up"}
     assert a["intensity"]["touch_h"]["trend"] == "up"
-    assert a["next"] == {"key": "WA-9002", "stage": "in_review"}
-    assert rows["WA-9020"]["light"] == "green" and rows["WA-9020"]["risk"] is None
+    assert a["next"] == {"key": "PROJ-9002", "stage": "in_review"}
+    assert rows["PROJ-9020"]["light"] == "green" and rows["PROJ-9020"]["risk"] is None
     assert standup.render_md(doc, "de") == golden("portfolio.de.md")
 
 
 def test_epic_golden(tree):
-    doc = run(tree, "WA-9001")
+    doc = run(tree, "PROJ-9001")
     assert doc["view"] == "epic"
     e = doc["epic"]
     assert set(e) >= {"intent", "achieved", "next", "waiting", "intensity", "risks"}
@@ -111,14 +111,14 @@ def test_epic_golden(tree):
     ]
     assert [p["number"] for p in e["achieved"]["prs"]] == [12, 11]
     assert [(m["key"], m["to"]) for m in e["achieved"]["moves"]] == [
-        ("WA-9006", "done"),
-        ("WA-9002", "in_review"),
+        ("PROJ-9006", "done"),
+        ("PROJ-9002", "in_review"),
     ]
     assert [(n["key"], n["line"], n["plan"]) for n in e["next"]] == [
-        ("WA-9002", True, True),
-        ("WA-9003", True, True),
-        ("WA-9004", True, False),
-        ("WA-9005", False, True),
+        ("PROJ-9002", True, True),
+        ("PROJ-9003", True, True),
+        ("PROJ-9004", True, False),
+        ("PROJ-9005", False, True),
     ]
     assert e["next"][3]["stage"] == "in_progress"  # from the fresh ticket snapshot
     assert {"utilization", "decisions", "signals"} <= set(doc)
@@ -131,9 +131,9 @@ def test_epic_golden(tree):
 @pytest.mark.parametrize(
     "key, branch, conversation, want",
     [
-        ("WA-1", "feat/WA-2-x", ["WA-3"], ("WA-1", "argument")),
-        (None, "feat/WA-2-x", ["WA-3"], ("WA-2", "branch")),
-        (None, "main", ["WA-3"], ("WA-3", "conversation")),
+        ("PROJ-1", "feat/PROJ-2-x", ["PROJ-3"], ("PROJ-1", "argument")),
+        (None, "feat/PROJ-2-x", ["PROJ-3"], ("PROJ-2", "branch")),
+        (None, "main", ["PROJ-3"], ("PROJ-3", "conversation")),
         (None, "main", [], (None, "portfolio")),
     ],
 )
@@ -142,17 +142,17 @@ def test_scope_order(key, branch, conversation, want):
 
 
 def test_story_and_branch_scope(tree):
-    doc = run(tree, "WA-9003")
+    doc = run(tree, "PROJ-9003")
     assert doc["view"] == "story"
     s = doc["story"]
-    assert s["intent"]["key"] == "WA-9001" and set(s["intent"]) == {"key", "title", "outcome"}
+    assert s["intent"]["key"] == "PROJ-9001" and set(s["intent"]) == {"key", "title", "outcome"}
     assert s["stage"] == "in_progress" and [p["number"] for p in s["prs"]] == [13]
     assert s["waiting"][0]["question"] == "Q901"
     assert s["intensity"]["touch_h"]["value"] > 0
     # a worker on its story branch keeps its story, not the portfolio
-    assert run(tree, branch_name="feat/WA-9003-money")["view"] == "story"
-    branch = run(tree, "WA-9999")
-    assert branch["view"] == "branch" and branch["scope"]["key"] == "WA-9999"
+    assert run(tree, branch_name="feat/PROJ-9003-money")["view"] == "story"
+    branch = run(tree, "PROJ-9999")
+    assert branch["view"] == "branch" and branch["scope"]["key"] == "PROJ-9999"
     assert run(tree, branch=True)["view"] == "branch"
 
 
@@ -222,7 +222,7 @@ def test_decisions_ranked_and_capped(tree):
             {
                 "id": f"Q{n}",
                 "session": f"s{n}",
-                "key": f"WA-80{n}",
+                "key": f"PROJ-80{n}",
                 "ask": f"ask {n}",
                 "recommendation": f"rec {n}",
                 "cause": "plan",
@@ -230,7 +230,7 @@ def test_decisions_ranked_and_capped(tree):
             }
             for n in range(1, 8)
         ]
-        held = [("Q6", "WA-806"), ("Q3", "WA-803")]
+        held = [("Q6", "PROJ-806"), ("Q3", "PROJ-803")]
         b["sessions"] = [
             {"name": f"h{q}{i}", "waiting_on": "human", "keys": [k]}
             for q, k in held
@@ -244,15 +244,15 @@ def test_decisions_ranked_and_capped(tree):
     assert d["items"][0]["recommendation"] == "rec 3"
     assert d["items"][0]["unblocks"] == {
         "sessions": ["hQ30", "hQ31", "hQ32"],
-        "stories": ["WA-803"],
+        "stories": ["PROJ-803"],
     }
 
 
 # --- AC 7, 8 -----------------------------------------------------------------------------------
 
 WAITERS = [
-    {"name": "w-WA-9002", "state": "busy", "alive": True, "waits": "test-slot"},
-    {"name": "w-WA-9003", "state": "busy", "alive": True, "waits": None},
+    {"name": "w-PROJ-9002", "state": "busy", "alive": True, "waits": "test-slot"},
+    {"name": "w-PROJ-9003", "state": "busy", "alive": True, "waits": None},
     {"name": "w-lost", "state": "busy", "alive": True, "waits": "test-slot"},
 ]
 
@@ -266,11 +266,11 @@ def test_utilization_numbers(tree):
         "source": "zentrale.working · worker_launch.cap_limits",
     }
     assert u["build_masters"]["used"] == 2 and u["build_masters"]["limit"] is None
-    assert u["test_slot"]["holder"] == "w-WA-9003"
-    assert u["test_slot"]["waiting"] == ["w-WA-9002", "w-lost"]
+    assert u["test_slot"]["holder"] == "w-PROJ-9003"
+    assert u["test_slot"]["waiting"] == ["w-PROJ-9002", "w-lost"]
     assert u["gate_lock"]["holder"] is None
     assert u["accounts"]["with_room"] == 1 and u["accounts"]["total"] == 2
-    assert u["idle"] == {"masters": ["m-9010"], "selected_without_master": ["WA-9004"]}
+    assert u["idle"] == {"masters": ["m-9010"], "selected_without_master": ["PROJ-9004"]}
     assert u["waiting_h"] == {"lock": 4.5}
     assert u["flow_efficiency"] is not None and u["ci_rounds"] == 1
     gaps = run(tree)["gaps"]
@@ -282,7 +282,7 @@ def quiet(root: Path) -> None:
     """The fixture state in which no signal rule fires."""
     (root / "repo" / ".weside" / "config.json").write_text('{"workers": {"max_busy_sessions": 3}}')
     path = root / "board" / "board-transitions.jsonl"
-    lines = [x for x in path.read_text().splitlines() if '"WA-9004"' not in x]
+    lines = [x for x in path.read_text().splitlines() if '"PROJ-9004"' not in x]
     path.write_text("\n".join(lines) + "\n")
     (root / "board" / "board-waits.jsonl").write_text("")
 
@@ -297,7 +297,7 @@ def quiet(root: Path) -> None:
 def _sla(due):
     def fn(b):
         b["sessions"].append(
-            {"name": "m-9010", "waiting_on": "human", "keys": ["WA-9011"], "sla_due": due}
+            {"name": "m-9010", "waiting_on": "human", "keys": ["PROJ-9011"], "sla_due": due}
         )
         b["sessions"] = [
             s for s in b["sessions"] if s.get("role") != "master" or s["name"] != "m-9010"
@@ -334,8 +334,8 @@ def _limit(n):
 def _waits(hours):
     def fn(root):
         row = {
-            "key": "WA-9003",
-            "session": "w-WA-9003",
+            "key": "PROJ-9003",
+            "session": "w-PROJ-9003",
             "waiting_on": "lock",
             "since": "2026-11-21T12:30Z",
             "ended": f"2026-11-21T{12 + hours}:30:00Z",
@@ -355,7 +355,7 @@ def _idle(root):
 
 
 SIGNAL_CASES = [
-    ("selected_without_master", _transition("WA-9004", "selected"), lambda _r: None),
+    ("selected_without_master", _transition("PROJ-9004", "selected"), lambda _r: None),
     ("free_slots_plan_waiting", _limit(4), _limit(3)),
     ("test_slot_bottleneck", _waits(4), _waits(1)),  # 4 h vs 1 h of lock wait against ~29 h touch
     (
@@ -389,9 +389,9 @@ def test_signals_fire_and_stay_quiet(tree, tmp_path, sid, fire, stay):
 
 def test_signals_of_the_fixture(tree):
     sig = {s["id"]: s for s in run(tree, workers=WAITERS)["signals"]}
-    assert sig["selected_without_master"]["evidence"] == {"keys": ["WA-9004"]}
+    assert sig["selected_without_master"]["evidence"] == {"keys": ["PROJ-9004"]}
     assert sig["selected_without_master"]["actor"] == "coordinator"
-    assert sig["test_slot_bottleneck"]["evidence"]["waiters"] == ["w-WA-9002", "w-lost"]
+    assert sig["test_slot_bottleneck"]["evidence"]["waiters"] == ["w-PROJ-9002", "w-lost"]
     assert sig["test_slot_bottleneck"]["actor"] == "machinery"
     assert sig["master_idle_without_worker"]["actor"] == "m-9010"
 
@@ -403,7 +403,7 @@ def _red_row(root):
     edit_json(
         root / "zentrale.json",
         lambda z: z["sections"]["red"].append(
-            {"kind": "pr", "item": "acme/app#14", "title": "WA-9021 red"}
+            {"kind": "pr", "item": "acme/app#14", "title": "PROJ-9021 red"}
         ),
     )
 
@@ -415,7 +415,7 @@ def _queue(cause, one_way=None):
             lambda b: b["owner_queue"].append(
                 {
                     "id": "Q990",
-                    "key": "WA-9021",
+                    "key": "PROJ-9021",
                     "ask": "go?",
                     "cause": cause,
                     "one_way": one_way,
@@ -429,7 +429,7 @@ def _queue(cause, one_way=None):
 
 def _no_recent_work(root):
     for f in (root / "flow").glob("*.jsonl"):
-        f.write_text(f.read_text().replace('"WA-9021"', "null"))
+        f.write_text(f.read_text().replace('"PROJ-9021"', "null"))
 
 
 LIGHT_CASES = [
@@ -443,7 +443,7 @@ LIGHT_CASES = [
                 {
                     "name": "x",
                     "waiting_on": "human",
-                    "keys": ["WA-9021"],
+                    "keys": ["PROJ-9021"],
                     "sla_due": "2026-11-21T10:00Z",
                 }
             ),
@@ -451,7 +451,7 @@ LIGHT_CASES = [
     ),
     ("red", _queue("merge-go", "money")),
     ("yellow", _no_recent_work),
-    ("yellow", _transition("WA-9021", "selected")),
+    ("yellow", _transition("PROJ-9021", "selected")),
     ("yellow", _queue("plan")),
 ]
 
@@ -460,7 +460,7 @@ LIGHT_CASES = [
 def test_light_rules(tree, want, mutate):
     mutate(tree)
     rows = {r["key"]: r for r in run(tree)["portfolio"]}
-    assert rows["WA-9020"]["light"] == want
+    assert rows["PROJ-9020"]["light"] == want
 
 
 # --- AC 9 --------------------------------------------------------------------------------------
@@ -475,7 +475,7 @@ def test_read_only(tree):
 
     before = listing()
     run(tree)
-    run(tree, "WA-9001")
+    run(tree, "PROJ-9001")
     assert listing() == before
 
 
@@ -500,15 +500,15 @@ def test_orchestration_map(tree):
     m = {x["master"]: x for x in o["masters"]}
     assert set(m) == {"m-9001", "m-9010"}
     first = m["m-9001"]
-    assert first["epic"] == "WA-9001"
+    assert first["epic"] == "PROJ-9001"
     stories = {s["key"]: s for s in first["stories"]}
-    assert sorted(stories) == ["WA-9002", "WA-9003", "WA-9004", "WA-9005", "WA-9006"]
-    assert stories["WA-9003"]["workers"] == [{"name": "w-WA-9003", "state": "busy"}]
-    assert stories["WA-9002"]["workers"] == [{"name": "w-WA-9002", "state": "busy"}]
-    assert stories["WA-9005"]["stage"] == "in_progress"
+    assert sorted(stories) == ["PROJ-9002", "PROJ-9003", "PROJ-9004", "PROJ-9005", "PROJ-9006"]
+    assert stories["PROJ-9003"]["workers"] == [{"name": "w-PROJ-9003", "state": "busy"}]
+    assert stories["PROJ-9002"]["workers"] == [{"name": "w-PROJ-9002", "state": "busy"}]
+    assert stories["PROJ-9005"]["stage"] == "in_progress"
     assert m["m-9010"]["stories"][0]["workers"] == []
     assert o[standup.crew_view.NO_STARTER] == [
-        {"name": "w-lost", "state": "busy", "key": "WA-9021"}
+        {"name": "w-lost", "state": "busy", "key": "PROJ-9021"}
     ]
 
 

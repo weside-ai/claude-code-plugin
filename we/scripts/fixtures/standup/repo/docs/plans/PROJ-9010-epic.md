@@ -1,9 +1,9 @@
 ---
 type: epic-plan
-ticket: WA-9010
+ticket: PROJ-9010
 status: approved
 serves: questions per day
-line: [WA-9011]
+line: [PROJ-9011]
 created: 2026-11-01
 ---
 

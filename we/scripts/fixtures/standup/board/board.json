@@ -4,16 +4,16 @@
   {
    "name": "m-9001",
    "role": "master",
-   "epic": "WA-9001",
+   "epic": "PROJ-9001",
    "keys": [
-    "WA-9002"
+    "PROJ-9002"
    ],
    "state": "build"
   },
   {
    "name": "m-9010",
    "role": "master",
-   "epic": "WA-9010",
+   "epic": "PROJ-9010",
    "keys": [],
    "state": "active"
   },
@@ -21,7 +21,7 @@
    "name": "m-9020",
    "role": "master",
    "keys": [
-    "WA-9021"
+    "PROJ-9021"
    ],
    "state": "parked"
   }
@@ -30,7 +30,7 @@
   {
    "id": "Q901",
    "session": "m-9001",
-   "key": "WA-9003",
+   "key": "PROJ-9003",
    "key_title": "Merge #13",
    "ask": "Darf #13 gemergt werden? | one-way",
    "recommendation": "Ja, mergen.",
@@ -42,9 +42,9 @@
   {
    "id": "Q902",
    "session": "m-9010",
-   "key": "WA-9011",
+   "key": "PROJ-9011",
    "key_title": "Cut",
-   "ask": "Schneiden wir WA-9011 in zwei?\nDetails im Plan.",
+   "ask": "Schneiden wir PROJ-9011 in zwei?\nDetails im Plan.",
    "recommendation": "Ja, zwei Stories.",
    "cause": "plan",
    "since": "2026-11-20",

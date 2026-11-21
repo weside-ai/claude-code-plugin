@@ -1,9 +1,9 @@
 ---
 type: epic-plan
-ticket: WA-9020
+ticket: PROJ-9020
 status: approved
 serves: null
-line: [WA-9021]
+line: [PROJ-9021]
 created: 2026-11-01
 ---
 
