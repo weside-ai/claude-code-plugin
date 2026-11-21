@@ -30,8 +30,9 @@ The worktree holds one or more commits on top of the default branch. The script
      session holds; the local checks here only refuse early. The `docs-push/<sha>` branch is
      deleted before the script ends, except past the wait cap: the run may still land, so its
      branch stays and is named;
-   a lost race (a non-fast-forward, or `main moved`) fetches, rebases, checks again and retries,
-   at most three times;
+   a lost race (a non-fast-forward, a `[remote rejected]` naming a ref lock — `cannot lock ref`,
+   `incorrect old value`, `failed to update ref`, `is at … but expected` — or `main moved`)
+   fetches, rebases, checks again and retries, at most three times;
 6. prints the landed commit and one line per file.
 
 The path check reads the tree diff `<remote>/<default>..HEAD` (`git diff --no-renames`), and a range
@@ -44,15 +45,18 @@ Exit codes:
   0  landed
   1  refused (main worktree, dirty tree, nothing to land, a path outside the globs); nothing was
      pushed
-  2  failed (a git error, a rebase conflict, retries used up; on the workflow route also `gh`
+  2  failed (a git error, a rebase conflict, retries used up, a `[remote rejected]` naming no rule; on the workflow route also `gh`
      missing or the dispatch refused, the run not found within 60 s, the wait cap of 10 min
      reached, or a failed step without a mapping: the run URL is printed, never a second dispatch);
      nothing was pushed by this script, except past the wait cap: that run may still land the
      commits, so the caller waits for it (its URL) and never takes the PR way meanwhile
-  3  the server rejected the push: this repo takes no direct push, land by PR
+  3  the server rejected the push naming a rule (`GH013`, `GH006`, `Repository rule violations`,
+     `protected branch`, `through a pull request`, `must use a pull request`, `TF402455`): this
+     repo takes no direct push, land by PR. Any other `[remote rejected]` is exit 2, never the PR way
   4  refused by the secret scan: a finding, or no scanner configured (or it did not run); nothing
      was pushed, and this commit lands by no route, the PR way included. Its own code because a
      caller falls back to a PR on 1, and that fallback would push the finding to the forge
+Every failed direct push prints the server's porcelain ref line (`!`), redacted, cut at 300 chars.
 Pinned by `scripts/test_plan_push.py`.
 """
 
@@ -75,6 +79,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import crew  # noqa: E402
+import redaction  # noqa: E402
 from risk_paths import _expand, _glob_regex  # noqa: E402
 
 DEFAULT_PATHS = ["docs/plans/**"]
@@ -86,6 +91,18 @@ RETRIES = 3
 PLANNED = re.compile(r"^state:\s*planned\s*(#.*)?$", re.M)
 REFUSED, FAILED, REJECTED, SCAN_REFUSED = 1, 2, 3, 4
 NO_PUSH_LINE = "this repo takes no direct push; land by PR"
+# The server names a rule (GitHub rulesets GH013, branch protection GH006, GitLab, Bitbucket,
+# Azure DevOps TF402455): no direct push.
+RULE = re.compile(
+    r"GH013|GH006|repository rule violations|protected branch"
+    r"|through (a )?pull requests?|must use a pull request|TF402455",
+    re.I,
+)
+# A `[remote rejected]` from a concurrent ref update: a lost race, retried like a non-fast-forward.
+LOCK_RACE = re.compile(
+    r"cannot lock ref|incorrect old value|failed to update ref|is at \S+ but expected", re.I
+)
+REF_LINE_MAX = 300
 WORKFLOW = "docs-push.yml"
 WORKFLOW_PATH = f".github/workflows/{WORKFLOW}"
 POLL, FIND_TIMEOUT, WAIT_CAP = 5.0, 60.0, 600.0
@@ -286,6 +303,7 @@ def land(remote: str, branch: str | None) -> list[str]:
     preflight()
     branch = branch or default_branch(remote)
     base = f"{remote}/{branch}"
+    line = ""
     for _attempt in range(RETRIES + 1):
         rebase(base)
         check(base, load_config(base))
@@ -298,11 +316,23 @@ def land(remote: str, branch: str | None) -> list[str]:
         if out.returncode == 0:
             return _landed(before, branch)
         text = out.stdout + out.stderr
-        if "[remote rejected]" in text or "declined" in text:
-            raise PushError(REJECTED, NO_PUSH_LINE)
+        line = ref_line(out.stdout)
+        if RULE.search(text):
+            raise PushError(REJECTED, f"{NO_PUSH_LINE}\n{line}")
+        if "[remote rejected]" in text and not LOCK_RACE.search(text):
+            raise PushError(FAILED, f"push rejected by the server, no rule named\n{line}")
         if not re.search(r"rejected|non-fast-forward|fetch first", text):
-            raise PushError(FAILED, f"push failed: {text.strip()}")
-    raise PushError(FAILED, f"push lost the race {RETRIES + 1} times; run again")
+            raise PushError(FAILED, f"push failed: {redaction.redact(text.strip())}\n{line}")
+    lost = f"push lost the race {RETRIES + 1} times; run again"
+    raise PushError(FAILED, f"{lost}\n{line}" if line else lost)
+
+
+def ref_line(porcelain: str) -> str:
+    """The server's ref line of `git push --porcelain` (the one with `!`), redacted, <= 300 chars."""
+    rows = [row for row in porcelain.splitlines() if row.startswith("!")]
+    row = rows[0] if rows else "(no rejected ref line)"
+    row = redaction.redact(re.sub(r"://[^/\s@]+@", "://", row))
+    return f"server: {row[:REF_LINE_MAX]}"
 
 
 GITHUB_REPO = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$")
