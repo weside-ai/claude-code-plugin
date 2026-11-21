@@ -49,8 +49,8 @@ never commit yourself.
 6. **Worker cap**: how many sessions may work at once on this machine, and above which share of
    the 5h window an account counts as full (no new worker starts while every account in rotation is)? Defaults `8` and `80` (skip keeps them). Process
    workers share one machine and one login; `we-worker` refuses a start over either
-   (`${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py` `capacity`). The first is the machine's, for
-   every repo: write it to `~/.claude/we-state/workers/pool.json` as `{"max_busy_sessions": N}`.
+   (`${CLAUDE_PLUGIN_ROOT}/scripts/worker_launch.py` `capacity`). Both are the machine's, for
+   every repo: write them to `<state dir>/pool.json`, see `references/worker-dispatch.md`.
 7. **Plan landing**, asked only when the default branch has a ruleset
    (`gh api repos/{owner}/{repo}/rules/branches/<default>` returns a rule): do plans reach it by a
    docs PR or by direct push? `pr` (default) · `push` (only when this session's account may bypass the
@@ -84,8 +84,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "agents": { "visible_teammates": false, "worker_launch": "subagent",
               "accounts_command": "<command printing the chosen account as JSON, or null>" },
   "build": { "pr_owner": "master|worker" },
-  "workers": { "max_active_5h_percent": 80,
-               "blocked_notify_minutes": 15, "idle_stop_minutes": 30,
+  "workers": { "blocked_notify_minutes": 15, "idle_stop_minutes": 30,
                "tree": "caller|own",
                "add_worktree": "<command with {path} {branch}, or null>",
                "remove_worktree": "<command with {path}, or null>",

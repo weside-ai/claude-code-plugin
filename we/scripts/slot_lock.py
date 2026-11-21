@@ -58,6 +58,18 @@ def held_by_caller() -> bool:
     return False
 
 
+NOTE_MAX = 200
+
+
+def shown(raw: bytes) -> str:
+    """A note as it may be printed: its first line without control characters, at most
+    `NOTE_MAX` characters. The lock file is world-writable (any process on the host may write
+    the note), and the note reaches a model's context."""
+    first = raw.decode(errors="replace").strip().split("\n", 1)[0]
+    line = "".join(c for c in first if c.isprintable())
+    return line.strip()[:NOTE_MAX] or "unknown"
+
+
 @contextlib.contextmanager
 def hold(label: str, expected_minutes: float | None = None) -> Iterator[None]:
     """Hold the slot for the body. While another process holds it, print whose note on stderr and
@@ -74,7 +86,7 @@ def hold(label: str, expected_minutes: float | None = None) -> Iterator[None]:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            held = os.pread(fd, 400, 0).decode(errors="replace").strip() or "unknown"
+            held = shown(os.pread(fd, 400, 0))
             print(f"waiting for test slot (held by {held})", file=sys.stderr, flush=True)
             start = time.monotonic()
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -102,8 +114,7 @@ def holder(path: Path | None = None) -> str | None:
     try:
         fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
     except BlockingIOError:
-        lines = os.pread(fd, 400, 0).decode(errors="replace").strip().splitlines()
-        return lines[0] if lines else "unknown"
+        return shown(os.pread(fd, 400, 0))
     finally:
         os.close(fd)
     return None

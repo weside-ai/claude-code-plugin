@@ -75,3 +75,32 @@ def test_waiters_ignore_holders_and_other_inodes(tmp_path):
         f"3: -> POSIX  ADVISORY  WRITE 103 {inode} 0 EOF\n"
     )
     assert slot_lock.waiters(lock, locks) == [101]
+
+
+def test_a_note_is_printed_without_control_characters_and_cut_to_its_limit(tmp_path):
+    """T2 panel on #308: the lock file is 0o666 in /tmp; whatever a process writes there reaches a
+    model's context through the waiting line and `holder`."""
+    raw = b"evil\x1b[2J\x07 note\r" + b"x" * 500 + b"\nsecond line"
+    text = slot_lock.shown(raw)
+    assert text.startswith("evil[2J note") and len(text) == slot_lock.NOTE_MAX
+    assert all(c.isprintable() for c in text)
+    assert slot_lock.shown(b"\x00\x01\n") == "unknown"
+    lock = tmp_path / "tests.lock"
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        os.pwrite(fd, raw, 0)
+        code = (
+            "import slot_lock, sys; from pathlib import Path;"
+            f" sys.stdout.write(slot_lock.holder(Path({str(lock)!r})))"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(slot_lock.__file__).parent,
+        ).stdout
+        assert out == text
+    finally:
+        os.close(fd)

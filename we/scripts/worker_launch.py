@@ -41,6 +41,9 @@ Usage:
                                                    them); a living session
                                                    of the same key is named on stderr as the
                                                    SendMessage target of a follow-up
+  worker_launch.py pool-path                        prints the machine's pool file
+                                                   (<state dir>/pool.json; $WE_WORKER_STATE_DIR
+                                                   first), whether it exists or not
   worker_launch.py capacity [--repo <dir>] [--prefix <p>]
                                                    exit 0: a worker may start; 3: refused while
                                                    a queued start of any repo waits ahead of it
@@ -49,10 +52,11 @@ Usage:
                                                    the machine's limit (<state dir>/pool.json
                                                    max_busy_sessions, default 8) or no account in
                                                    rotation (`cswap list --json`) has 7d under 95 %
-                                                   and 5h at or under
-                                                   workers.max_active_5h_percent (80; unreadable
-                                                   list: the active account's 5h decides, from
-                                                   .weside/config.json), both values named;
+                                                   and 5h at or under pool.json
+                                                   max_active_5h_percent (default 80; unreadable
+                                                   list: the active account's 5h decides); a
+                                                   repo's .weside/config.json `workers` may only
+                                                   lower either limit; both values named;
                                                    an unreadable value skips its check (stderr;
                                                    silent without cswap on PATH); `we-worker
                                                    --queue` waits instead of refusing;
@@ -303,16 +307,17 @@ def backend(repo: Path) -> str:
 
 
 AGENTS_TIMEOUT_S = 30
-CAP_DEFAULTS = {"max_active_5h_percent": 80}
 # The worker pool: one limit for every repo on the machine. Busy sessions are counted machine-wide,
 # so the limit is a property of the machine too: it lives in `<state dir>/pool.json`
-# (`{"max_busy_sessions": N}`), the directory the queue and every worker's files already share. A
-# per-repo value let a repo with a high limit start past a repo whose queued start waited. The
-# default comes from the workspace measured on 21.11.: 13 busy workers drove swap to 5.4 of 5.5 GiB
-# and load15 to 24 on 16 CPUs; 7 gave 3.0 GiB swap and a memory stall of 7 s/h (yellow).
+# (`{"max_busy_sessions": N, "max_active_5h_percent": P}`), the directory the queue and every
+# worker's files already share. A repo's `workers` block may only lower either value: a repo above
+# the machine started past a repo whose queued start waited. The busy default comes from the
+# workspace measured on 21.11.: 13 busy workers drove swap to 5.4 of 5.5 GiB and load15 to 24 on
+# 16 CPUs; 7 gave 3.0 GiB swap and a memory stall of 7 s/h (yellow).
 POOL_FILE = "pool.json"
 POOL_KEY = "max_busy_sessions"
-POOL_DEFAULT = 8
+PCT_KEY = "max_active_5h_percent"
+POOL_DEFAULTS = {POOL_KEY: 8, PCT_KEY: 80}
 QUEUE_TURN_ENV = "WE_WORKER_QUEUE_TURN"
 CSWAP_TIMEOUT_S = 20
 
@@ -365,62 +370,68 @@ def pr_owner(repo: Path) -> str:
     return pr_owner_of(config)
 
 
-def cap_limits(repo: Path) -> dict[str, float]:
-    """`workers.max_active_5h_percent` of the repo's `.weside/config.json` (default
-    `CAP_DEFAULTS`) and the machine's `max_busy_sessions` (`pool_limit`); a value that is no
-    number refuses. A repo that still sets `workers.max_busy_sessions` gets one stderr line: the
-    repo value is not read."""
+def _limit(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise LaunchError(f"{label}: needs a positive number, not {value!r}", 2)
+    return value
+
+
+def repo_limits(repo: Path) -> dict[str, float]:
+    """The pool keys the repo's `.weside/config.json` `workers` block sets (`{}` without them); a
+    value that is no positive number refuses (exit 2)."""
     block = workers_block(repo)
+    return {k: _limit(block[k], f"workers.{k}") for k in POOL_DEFAULTS if k in block}
+
+
+def cap_limits(repo: Path, note: bool = True) -> dict[str, float]:
+    """The limits a start from `repo` must pass: per key the machine's (`pool_limits`), lowered
+    by the repo's `workers` value where it is lower; a repo never lifts one. With `note`, a repo
+    value above the machine's gets one stderr line: it is not read."""
+    machine, own = pool_limits(), repo_limits(repo)
     limits = {}
-    for key, default in CAP_DEFAULTS.items():
-        value = block.get(key, default)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise LaunchError(f"workers.{key}: needs a number, not {value!r}", 2)
-        limits[key] = value
-    limits[POOL_KEY], _ = pool_limit()
-    if POOL_KEY in block:
-        print(
-            f"we-worker: note: workers.{POOL_KEY} in {repo}/.weside/config.json is not read; the"
-            f" one limit for the machine is {pool_path()}",
-            file=sys.stderr,
-        )
+    for key, value in machine.items():
+        limits[key] = min(value, own.get(key, value))
+        if note and own.get(key, value) > value:
+            print(
+                f"we-worker: note: workers.{key} {own[key]:g} in {repo}/.weside/config.json is"
+                f" above the machine's {value:g} ({pool_path()}) and not read; a repo can only"
+                f" lower it: remove workers.{key} from that file",
+                file=sys.stderr,
+            )
     return limits
 
 
-def pool_path() -> Path:
-    return _state_dir() / POOL_FILE
+def pool_path(state: Path | None = None) -> Path:
+    return (_state_dir() if state is None else state) / POOL_FILE
 
 
-def pool_limit() -> tuple[float, str]:
-    """The machine's busy-worker limit and where it comes from: `pool.json`'s
-    `max_busy_sessions`, else `POOL_DEFAULT`; an unreadable file or a value that is no positive
-    number refuses (exit 2)."""
-    path = pool_path()
+def pool_limits(state: Path | None = None) -> dict[str, float]:
+    """The machine's limits: `pool.json`'s `max_busy_sessions` and `max_active_5h_percent`, each
+    else its `POOL_DEFAULTS` value; an unreadable file or a value that is no positive number
+    refuses (exit 2)."""
+    path = pool_path(state)
     try:
         doc = json.loads(path.read_text())
     except FileNotFoundError:
-        return POOL_DEFAULT, "default"
+        return dict(POOL_DEFAULTS)
     except (OSError, json.JSONDecodeError) as exc:
         raise LaunchError(f"{path}: unreadable ({exc})", 2) from exc
-    value = doc.get(POOL_KEY, POOL_DEFAULT) if isinstance(doc, dict) else doc
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-        raise LaunchError(f"{path} {POOL_KEY}: needs a positive number, not {value!r}", 2)
-    return value, str(path)
+    if not isinstance(doc, dict):
+        doc = {POOL_KEY: doc}
+    return {k: _limit(doc.get(k, d), f"{path} {k}") for k, d in POOL_DEFAULTS.items()}
 
 
 def queued_ahead(state: Path, me: str | None) -> list[dict]:
-    """The queued starts (`<state>/queue/*.json`) whose waiter lives and that came before `me`
+    """The queued starts (`worker_supervisor.queued`) whose waiter lives and that came before `me`
     (the waiter's own entry, `$WE_WORKER_QUEUE_TURN`); for a start that is not queued, every
     living one. Oldest first."""
-    rows = []
-    for path in sorted((state / "queue").glob("*.json")):
-        try:
-            doc = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        if isinstance(doc, dict) and doc.get("name") and _waiter_alive(doc.get("waiter_pid")):
-            rows.append(doc)
-    rows.sort(key=lambda d: (d.get("queued_at", 0), d["name"]))
+    import worker_supervisor  # noqa: PLC0415 (it imports this module)
+
+    rows = [
+        d
+        for d in worker_supervisor.queued(state)
+        if worker_supervisor._waiter_lives(d.get("waiter_pid"))
+    ]
     if not me:
         return rows
     mine = next((d for d in rows if d["name"] == me), None)
@@ -431,12 +442,17 @@ def queued_ahead(state: Path, me: str | None) -> list[dict]:
     ]
 
 
-def _waiter_alive(pid: object) -> bool:
-    try:
-        num = int(str(pid))
-    except ValueError:
-        return False
-    return num > 0 and _pid_lives(num)
+def queued_limits(doc: dict, machine: dict[str, float]) -> tuple[float, float]:
+    """A queued start's own `(max_busy_sessions, max_active_5h_percent)`: the machine's, lowered
+    by its repo's values recorded at queue time (`repo_limits`); an entry without them has the
+    machine's."""
+    own = doc.get("repo_limits") if isinstance(doc.get("repo_limits"), dict) else {}
+    out = []
+    for key in (POOL_KEY, PCT_KEY):
+        value = own.get(key)
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+        out.append(min(machine[key], value) if ok else machine[key])
+    return out[0], out[1]
 
 
 def five_hour_percent() -> float | None:
@@ -463,11 +479,9 @@ def _pct(window: object) -> float | None:
     return float(pct) if isinstance(pct, (int, float)) and not isinstance(pct, bool) else None
 
 
-def rotation_room(max_pct: float) -> tuple[int, int] | None:
-    """`(with room, in rotation)` over `cswap list --json` `accounts[]`; None when unreadable or
-    without the list. An account is in rotation unless it carries `disabled: true`; it has room
-    when its `usage.sevenDay.pct` is under `SEVEN_DAY_FULL` and its `usage.fiveHour.pct` is at or
-    under `max_pct`. An account without a readable reading has no room. Never reads a name."""
+def rotation_accounts() -> list[dict] | None:
+    """The accounts in rotation of `cswap list --json` (`accounts[]` without `disabled: true`);
+    None when unreadable or without the list."""
     try:
         out = subprocess.run(
             ["cswap", "list", "--json"],
@@ -481,14 +495,20 @@ def rotation_room(max_pct: float) -> tuple[int, int] | None:
         return None
     if not isinstance(rows, list) or not rows:
         return None
-    in_rotation = [r for r in rows if isinstance(r, dict) and r.get("disabled") is not True]
+    return [r for r in rows if isinstance(r, dict) and r.get("disabled") is not True]
+
+
+def room_in(accounts: list[dict], max_pct: float) -> tuple[int, int]:
+    """`(with room, in rotation)`: an account has room when its `usage.sevenDay.pct` is under
+    `SEVEN_DAY_FULL` and its `usage.fiveHour.pct` is at or under `max_pct`. An account without a
+    readable reading has no room. Never reads a name."""
     room = 0
-    for row in in_rotation:
+    for row in accounts:
         usage = row.get("usage") if isinstance(row.get("usage"), dict) else {}
         five, seven = _pct(usage.get("fiveHour")), _pct(usage.get("sevenDay"))
         if five is not None and seven is not None and seven < SEVEN_DAY_FULL and five <= max_pct:
             room += 1
-    return room, len(in_rotation)
+    return room, len(accounts)
 
 
 def capacity(repo: Path, prefix: str) -> None:
@@ -496,15 +516,18 @@ def capacity(repo: Path, prefix: str) -> None:
     waits ahead of it (`queued_ahead`: first come, first served across repos), while the busy
     background sessions on this machine and busy window workers (`claude agents --json`, `status`
     busy; an interactive row counts only when `is_worker` says so: a companion or master is busy
-    whenever it answers its human) reach the machine's limit (`pool_limit`), or while no account in
-    rotation has room (`rotation_room`: 7d under 95 %, 5h at or under
-    `workers.max_active_5h_percent`; one with room is enough, the rotation switches to it). When
+    whenever it answers its human) reach the limit (`cap_limits`: the machine's, lowered by the
+    repo's), or while no account in rotation has room (`room_in`: 7d under 95 %, 5h at or under
+    `max_active_5h_percent`; one with room is enough, the rotation switches to it). A queued
+    start ahead that only its own repo's lower limit holds back holds nobody up while the machine
+    has room (`queued_limits`). When
     `cswap list --json` is unreadable the active account's 5h window decides as the fallback
     (`five_hour_percent`, refused above the limit). The refusal names the measured values, never an
     account. A value that cannot be read skips its check with one stderr warning; without `cswap`
     on PATH (it is optional) the 5h check is skipped silently."""
+    machine = pool_limits()
     limits = cap_limits(repo)
-    max_busy, max_pct = limits[POOL_KEY], limits["max_active_5h_percent"]
+    max_busy, max_pct = limits[POOL_KEY], limits[PCT_KEY]
     ahead = queued_ahead(_state_dir(), os.environ.get(QUEUE_TURN_ENV))
     try:
         busy: int | None = sum(
@@ -519,7 +542,8 @@ def capacity(repo: Path, prefix: str) -> None:
             file=sys.stderr,
         )
     have_cswap = bool(shutil.which("cswap"))
-    room = rotation_room(max_pct) if have_cswap else None
+    accounts = rotation_accounts() if have_cswap else None
+    room = None if accounts is None else room_in(accounts, max_pct)
     pct = five_hour_percent() if have_cswap and room is None else None
     if have_cswap and room is None and pct is None:
         print(
@@ -527,7 +551,19 @@ def capacity(repo: Path, prefix: str) -> None:
             " (cswap list --json and cswap status --json failed); that check is skipped",
             file=sys.stderr,
         )
-    full = (room is not None and room[0] == 0) or (pct is not None and pct > max_pct)
+
+    def held(busy_limit: float, pct_limit: float) -> bool:
+        if busy is not None and busy >= busy_limit:
+            return True
+        if accounts is not None:
+            return room_in(accounts, pct_limit)[0] == 0
+        return pct is not None and pct > pct_limit
+
+    full = held(float("inf"), max_pct)
+    if ahead and not held(machine[POOL_KEY], machine[PCT_KEY]):
+        # the machine has room: a queued start that only its own repo's lower limit holds back
+        # stays first in line and holds nobody else up (`queued_limits`)
+        ahead = [d for d in ahead if not held(*queued_limits(d, machine))]
     if ahead:
         first = ahead[0]
         since = time.strftime("%H:%M", time.gmtime(first.get("queued_at", time.time())))
@@ -1750,6 +1786,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--no-brief", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--prefix", default="worker_launch")
+    sub.add_parser("pool-path")
     p = sub.add_parser("capacity")
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--prefix", default="worker_launch")
@@ -1940,10 +1977,9 @@ def main(argv: list[str] | None = None) -> int:
         return _starter_verbs(args)
     code = 0
     try:
-        if args.cmd == "backend":
-            print(backend(args.repo))
-        elif args.cmd == "pr-owner":
-            print(pr_owner(args.repo))
+        if args.cmd in ("backend", "pr-owner", "pool-path"):
+            read = {"backend": backend, "pr-owner": pr_owner}.get(args.cmd)
+            print(read(args.repo) if read else pool_path())
         elif args.cmd in ("settings", "account", "account-need"):
             _settings_verbs(args)
         elif args.cmd in ("tree", "marker"):

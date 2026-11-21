@@ -109,11 +109,15 @@ After the check `we-worker` refuses a start (exit 3, nothing starts) while a que
 repo waits ahead of it, while the busy workers on the machine (background sessions and window
 workers; interactive companions and masters never count) reach the one worker pool limit, or while
 no account in the rotation (`cswap list --json`) has room: 7d under 95 % and 5h at or under
-`workers.max_active_5h_percent`; one account with room lets the start through, the rotation
+`max_active_5h_percent`; one account with room lets the start through, the rotation
 switches to it. Without the list the active account's 5h decides; without `cswap` the check is
-skipped (`worker_launch.py capacity` owns the rule); there is no override flag. The pool limit is
-the machine's, because the busy count is: `<state dir>/pool.json` `{"max_busy_sessions": N}`
-(default 8), one file for every repo on the host; a repo's `workers.max_busy_sessions` is not read.
+skipped (`worker_launch.py capacity` owns the rule); there is no override flag. Both limits are
+the machine's, because the busy count is: `<state dir>/pool.json`
+`{"max_busy_sessions": N, "max_active_5h_percent": P}` (defaults 8 and 80), one file for every repo
+on the host; `worker_launch.py pool-path` prints where it lies (`$WE_WORKER_STATE_DIR` first). A
+repo's `workers` block may only lower either value; one above the machine's is not read. A queued
+start that only its repo's lower value holds back stays first in line and lets other starts pass
+while the machine has room.
 `we-worker <name> --bg --queue [--queue-timeout 2h]` queues a refused start instead: a detached
 waiter starts it once the check passes, first come first served across every repo, gives it its
 own worktree when it was queued from a main checkout, and tells the starter one line when it

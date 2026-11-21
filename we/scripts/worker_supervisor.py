@@ -695,7 +695,8 @@ def status_lines(
 #
 # `we-worker <name> --bg --queue` registers a start the capacity check refused (`enqueue`) and
 # spawns one detached waiter per entry (`wait_queue`). The queue is the machine's, one directory for
-# every repo. Only the oldest entry whose waiter lives tries to start, by running the same
+# every repo. Only the oldest entry whose waiter lives tries to start (or one behind entries that
+# only their own repo's lower limit may hold back, `_may_try`), by running the same
 # `we-worker` call again without `--queue` and with `$WE_WORKER_QUEUE_TURN` = its name: its exit 3
 # is "still no room", any other exit ends the wait. First come, first served across waiters and
 # repos: a start that is not queued is refused while any living entry waits
@@ -768,8 +769,11 @@ def enqueue(
     starter: str | None,
     timeout_s: float,
     now: float,
+    repo_limits: dict | None = None,
 ) -> dict:
-    """Register a refused start; a name already queued with a living waiter refuses (exit 2)."""
+    """Register a refused start; a name already queued with a living waiter refuses (exit 2).
+    `repo_limits` are the pool limits its repo lowers (`worker_launch.repo_limits`): a start that
+    only they hold back holds no other start up (`worker_launch.queued_limits`)."""
     qdir = queue_dir(state)
     qdir.mkdir(parents=True, exist_ok=True)
     held = _read(qdir / f"{name}.json")
@@ -791,6 +795,7 @@ def enqueue(
         "starter": starter or None,
         "queued_at": now,
         "deadline": now + timeout_s,
+        "repo_limits": repo_limits or {},
     }
     (qdir / f"{name}.json").write_text(json.dumps(doc, indent=2) + "\n")
     return doc
@@ -823,12 +828,23 @@ def unqueue(state: Path, name: str) -> dict | None:
     return doc
 
 
-def _head(state: Path, me: str) -> str | None:
-    """The oldest entry whose waiter lives (this waiter counts as living)."""
+def _may_try(state: Path, me: str) -> bool:
+    """`me` tries its start when it is the head, or when every living entry ahead of it carries a
+    repo limit below the machine's: the capacity check lets it past an entry that only such a limit
+    holds back (`worker_launch.queued_limits`), and decides."""
+    try:
+        machine = wl.pool_limits(state)
+    except wl.LaunchError:
+        machine = None
+    full = None if machine is None else (machine[wl.POOL_KEY], machine[wl.PCT_KEY])
     for doc in queued(state):
-        if doc["name"] == me or _waiter_lives(doc.get("waiter_pid")):
-            return doc["name"]
-    return None
+        if doc["name"] == me:
+            return True
+        if not _waiter_lives(doc.get("waiter_pid")):
+            continue
+        if full is None or wl.queued_limits(doc, machine) == full:
+            return False
+    return False
 
 
 def start_queued(doc: dict) -> tuple[int, str]:
@@ -896,7 +912,7 @@ def wait_queue(
             settled = now - last.stat().st_mtime >= SETTLE_S
         except OSError:
             settled = True
-        if settled and _head(state, name) == name:
+        if settled and _may_try(state, name):
             code, out = start(doc)
             if code != CAPACITY_REFUSED:
                 _drop(state, name)
@@ -1111,8 +1127,9 @@ def _queue_verb(args: argparse.Namespace, state: Path) -> int:
     brief = argv.pop() if args.has_brief and argv else None
     try:
         timeout_s = parse_duration(args.timeout)
+        own = wl.repo_limits(Path(args.tree))
         doc = enqueue(
-            state, args.name, args.tree, argv, brief, args.starter, timeout_s, time.time()
+            state, args.name, args.tree, argv, brief, args.starter, timeout_s, time.time(), own
         )
     except ValueError as exc:
         print(f"we-worker: --queue-timeout: {exc}", file=sys.stderr)

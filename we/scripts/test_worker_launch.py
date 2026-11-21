@@ -814,6 +814,8 @@ def cap(env, monkeypatch, tmp_path):
         state_dir.mkdir(exist_ok=True)
         if pool is not None:
             (state_dir / "pool.json").write_text(json.dumps(pool))
+        else:
+            (state_dir / "pool.json").unlink(missing_ok=True)
         rows = [{"name": f"S{i}", "status": "busy", "pid": 1} for i in range(busy)]
         rows.append({"name": "idle", "status": "idle", "pid": 1})
         env["state"].write_text(json.dumps(rows))
@@ -846,18 +848,29 @@ def test_capacity_below_the_limits_starts(cap):
     assert out.returncode == 0 and out.stderr == ""
 
 
-def test_capacity_reads_the_busy_limit_from_the_machine_never_from_the_repo(cap):
+def test_capacity_reads_the_limits_from_the_machine_and_a_repo_only_lowers_them(cap):
     """Red arm (21.11.): core's `workers.max_busy_sessions` 16 started a worker at 13 busy while
-    infra's queued start (limit 10) waited; the busy count is the machine's, so is its limit."""
+    infra's queued start (limit 10) waited; the busy count is the machine's, so is its limit.
+    T2 panel on #308: a public repo's lower value (3) must hold, not be lifted to the machine's."""
     out = cap(8, 10.0, {"max_busy_sessions": 16})  # a repo value lifts nothing
     assert out.returncode == 3 and "8 workers busy (limit 8 for the machine" in out.stderr
-    assert "workers.max_busy_sessions in " in out.stderr and "is not read" in out.stderr
-    assert cap(2, 10.0, {"max_busy_sessions": 1}).returncode == 0  # nor lowers it
+    assert "workers.max_busy_sessions 16 in " in out.stderr and "not read" in out.stderr
+    out = cap(3, 10.0, {"max_busy_sessions": 3})  # it lowers, silently
+    assert out.returncode == 3 and "3 workers busy (limit 3" in out.stderr
+    assert "note" not in out.stderr
+    assert cap(2, 10.0, {"max_busy_sessions": 3}).returncode == 0
     assert cap(3, 10.0, pool={"max_busy_sessions": 3}).returncode == 3
     out = cap(3, 10.0, {"max_active_5h_percent": 5}, pool={"max_busy_sessions": 4})
     assert out.returncode == 3
     out = cap(3, 10.0, {"max_active_5h_percent": 50}, pool={"max_busy_sessions": 4})
     assert out.returncode == 0
+    out = _run("pool-path")
+    assert out.returncode == 0 and out.stdout.strip().endswith("/state/pool.json"), out.stderr
+    # the 5h limit is the machine's too: pool.json sets it, a repo above it is not read
+    out = cap(1, 50.0, pool={"max_active_5h_percent": 40})
+    assert out.returncode == 3 and "(limit 40 %" in out.stderr
+    out = cap(1, 50.0, {"max_active_5h_percent": 90}, pool={"max_active_5h_percent": 40})
+    assert out.returncode == 3 and "workers.max_active_5h_percent 90 in " in out.stderr
 
 
 def test_capacity_skips_the_window_check_without_cswap_and_says_so(cap, monkeypatch):
@@ -929,12 +942,16 @@ def test_capacity_refuses_a_limit_that_is_no_number(cap):
     assert out.returncode == 2 and "max_busy_sessions: needs a positive number" in out.stderr
     assert cap(1, 1.0, pool={"max_busy_sessions": 0}).returncode == 2
     out = cap(1, 1.0, {"max_active_5h_percent": "x"})
-    assert out.returncode == 2 and "workers.max_active_5h_percent: needs a number" in out.stderr
+    assert out.returncode == 2 and "workers.max_active_5h_percent: needs a positive" in out.stderr
+    assert cap(1, 1.0, {"max_busy_sessions": 0}).returncode == 2
+    assert cap(1, 1.0, pool={"max_active_5h_percent": True}).returncode == 2
 
 
-def _queue_entry(state_dir, name, queued_at, waiter_pid):
+def _queue_entry(state_dir, name, queued_at, waiter_pid, repo_limits=None):
     (state_dir / "queue").mkdir(parents=True, exist_ok=True)
     doc = {"name": name, "queued_at": queued_at, "waiter_pid": waiter_pid}
+    if repo_limits is not None:
+        doc["repo_limits"] = repo_limits
     (state_dir / "queue" / f"{name}.json").write_text(json.dumps(doc))
 
 
@@ -959,6 +976,28 @@ def test_capacity_starts_the_queue_in_arrival_order_across_repos(cap, tmp_path, 
     # an entry whose waiter is gone holds nobody up
     _queue_entry(state_dir, "INFRA-1-old", 100.0, 0)
     assert cap(1, 10.0).returncode == 0
+
+
+def test_a_queued_start_held_only_by_its_own_repo_limit_holds_nobody_up(
+    cap, tmp_path, monkeypatch
+):
+    """T2 panel on #308: a head from a repo with a lower 5h limit held every other repo's start
+    for up to 2 h. While the machine has room, such a head stays first and lets others pass."""
+    state_dir = tmp_path / "state"
+    _queue_entry(state_dir, "PUB-1-strict", 100.0, os.getpid(), {"max_active_5h_percent": 30})
+    assert cap(1, 50.0).returncode == 0  # 50 % is over the head's 30, under the machine's 80
+    assert cap(1, 20.0).returncode == 3  # the head's limit passes: it goes first
+    assert cap(1, 90.0).returncode == 3  # the machine is full: first come, first served
+    _queue_entry(state_dir, "PUB-1-strict", 100.0, os.getpid(), {"max_busy_sessions": 2})
+    assert cap(2, 10.0).returncode == 0  # its busy limit is its own too
+    assert cap(1, 10.0).returncode == 3
+    _queue_entry(state_dir, "PUB-1-strict", 100.0, os.getpid())  # without its own: it holds
+    assert cap(1, 50.0).returncode == 3
+    # the head's own waiter still checks its own limit
+    _queue_entry(state_dir, "PUB-1-strict", 100.0, os.getpid(), {"max_active_5h_percent": 30})
+    monkeypatch.setenv("WE_WORKER_QUEUE_TURN", "PUB-1-strict")
+    assert cap(1, 50.0, {"max_active_5h_percent": 30}).returncode == 3
+    assert cap(1, 20.0, {"max_active_5h_percent": 30}).returncode == 0
 
 
 def test_capacity_without_cswap_on_path_skips_the_window_check_silently(

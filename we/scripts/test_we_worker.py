@@ -1050,6 +1050,7 @@ def test_a_start_over_the_concurrency_cap_is_refused_and_starts_nothing(tmp_path
     )
     assert entry["argv"] == ["AC-12-impl", "--bg"]
     assert entry["deadline"] - entry["queued_at"] == 90 * 60
+    assert entry["repo_limits"] == {}  # the repo lowers no pool limit
     status = run(project, env, "status").stdout
     assert "queued AC-12-impl position=1" in status
     assert run(project, env, "stop", "AC-12-impl").returncode == 0
@@ -1153,6 +1154,12 @@ def test_a_queued_start_from_the_main_checkout_gets_its_own_tree_under_caller(
     assert "workers.tree: caller" not in out
     assert _git(project, "branch", "--show-current") == "main"
     assert call["queue_turn"] is None
+    # T2 panel on #308: a --queue start that passes the check at once gets its own tree too
+    proc = run(project, env, "AC-13-now", "--bg", "--queue", GO)
+    assert proc.returncode == 0 and "queued (position" not in proc.stdout, proc.stderr
+    now = tmp_path / "project-AC-13-now"
+    assert started(tmp_path)[-1]["cwd"] == str(now) and f"works in {now}" in proc.stdout
+    assert _git(project, "branch", "--show-current") == "main"
 
 
 def test_here_a_linked_worktree_and_tree_choose_the_tree_without_creating_one(tmp_path):
