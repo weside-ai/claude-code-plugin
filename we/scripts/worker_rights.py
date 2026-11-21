@@ -15,9 +15,12 @@ data that only names an item (a commit message quoting `git push --delete`) is d
 write on a `/secrets`, `/variables` or `/environments` path, the crew's `deny_commands`); delete
 (`gh <noun> delete…`, `--delete-branch`, `gh pr close -d`, `gh api` with method DELETE, `git push
 --delete|-d`, a `:<ref>` refspec); main (a `git push` naming the default branch, `main` or `master`,
-a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout on one of them;
-`ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag, `ALLOW_PUSH_WITHOUT_MAIN`,
-`--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
+a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout on one of them,
+judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` count, and the session's
+cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tree <p>]… push`
+(`simple_push`, `_push_dirs`), so an environment prefix (`GIT_DIR=…`), a second segment, `eval` or
+a path `git` keeps it; `ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag,
+`ALLOW_PUSH_WITHOUT_MAIN`, `--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
 other `gh pr merge` than `--disable-auto` unless it is the merge line below, typed as a command of
 its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command, `--disable-auto`
 included; `arm_pr.sh` run anywhere in a command that names `WE_ROLE` or clears the environment
@@ -35,7 +38,9 @@ carries that key, may run without asking
   the crew's `branch_rc` command prefix (a branch RC: the repo's pre-push guard holds the receipt).
 PR owner rights (`build.pr_owner: worker` of `.weside/config.json`, read from the default branch of
 origin like the crew; `pr_owner_on_default`): the worker carries its own PR, so under the same key and
-branch conditions it may also run `git push` (`push`: every destination branch carries its key),
+branch conditions it may also run `git push` (`push`: every destination branch carries its key;
+key, branch and repo are read where git runs the push, and a push into another repo than the
+session's needs that repo's own switch on its default branch),
 `gh pr create` (`pr_create`: no argument, `--head` only its branch), `gh pr edit` and `gh pr comment`
 (`pr_edit`, `pr_comment`: its own PR), `arm_pr.sh` (`arm`: its own PR, and only with `WE_ROLE=worker` in
 the environment, the variable `arm_pr.sh` refuses a one-way class by), `gh pr merge` (`merge`: its
@@ -72,7 +77,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 GIT_TIMEOUT_S = 10
@@ -255,11 +260,17 @@ def _nested(argv: list[str], rights: dict, owner: str, depth: int) -> str | None
 
 # ---------------------------------------------------------------- the repo a command runs in
 
+# Where a git command runs: a directory, or a tuple of git's global path options (`-C <dir>`,
+# `--git-dir <dir>`, `--work-tree <dir>`) as `git_target` resolves them.
+Where = Union[str, Path, tuple[str, ...], None]
 
-def _git(cwd: str | Path | None, *args: str, timeout: float = GIT_TIMEOUT_S) -> str | None:
+
+def _git(cwd: Where, *args: str, timeout: float = GIT_TIMEOUT_S) -> str | None:
+    """`git` run in `cwd`: a directory, or the global path options of a command (`git_target`)."""
+    where = list(cwd) if isinstance(cwd, tuple) else ["-C", str(cwd or ".")]
     try:
         out = subprocess.run(
-            ["git", "-C", str(cwd or "."), *args],
+            ["git", *where, *args],
             capture_output=True,
             text=True,
             check=False,
@@ -278,20 +289,20 @@ def slug_of(url: str | None) -> str | None:
     return f"{found.group(1)}/{found.group(2)}".lower() if found else None
 
 
-def origin_slug(cwd: str | Path | None) -> str | None:
+def origin_slug(cwd: Where) -> str | None:
     return slug_of(_git(cwd, "remote", "get-url", "origin"))
 
 
-def default_branch(cwd: str | Path | None) -> str:
+def default_branch(cwd: Where) -> str:
     head = _git(cwd, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     return head.split("/", 1)[1] if head and "/" in head else "main"
 
 
-def protected_branches(cwd: str | Path | None) -> set[str]:
+def protected_branches(cwd: Where) -> set[str]:
     return {default_branch(cwd), *MAIN_NAMES}
 
 
-def current_branch(cwd: str | Path | None) -> str:
+def current_branch(cwd: Where) -> str:
     return _git(cwd, "branch", "--show-current") or ""
 
 
@@ -322,18 +333,57 @@ def _repo_flag(args: list[str]) -> str | None:
     return None
 
 
-def _git_split(argv: list[str]) -> tuple[list[str], str | None, list[str]]:
-    """(args from the subcommand on, the `-C` dir, the `-c` settings) of a `git` command."""
-    cdir, confs, i = None, [], 1
+# git's global options that take their value as the next word
+GIT_PATH_FLAGS = ("--git-dir", "--work-tree")
+GIT_VALUE_FLAGS = ("--namespace", "--exec-path", "--config-env", "--super-prefix", *GIT_PATH_FLAGS)
+
+
+def _git_globals(argv: list[str]) -> tuple[list[str], list[tuple[str, str]], list[str]]:
+    """(args from the subcommand on, the path options in order as (`-C`|`--git-dir`|`--work-tree`,
+    value), the `-c` settings) of a `git` command."""
+    paths: list[tuple[str, str]] = []
+    confs: list[str] = []
+    i = 1
     while i < len(argv) and argv[i].startswith("-"):
+        flag, eq, value = argv[i].partition("=")
         if argv[i] == "-C" and i + 1 < len(argv):
-            cdir, i = argv[i + 1], i + 2
+            paths.append(("-C", argv[i + 1]))
+            i += 2
         elif argv[i] == "-c" and i + 1 < len(argv):
             confs.append(argv[i + 1])
             i += 2
+        elif flag in GIT_PATH_FLAGS and eq:
+            paths.append((flag, value))
+            i += 1
+        elif argv[i] in GIT_VALUE_FLAGS and i + 1 < len(argv):
+            if argv[i] in GIT_PATH_FLAGS:
+                paths.append((argv[i], argv[i + 1]))
+            i += 2
         else:
             i += 1
-    return argv[i:], cdir, confs
+    return argv[i:], paths, confs
+
+
+def _git_split(argv: list[str]) -> tuple[list[str], str | None, list[str]]:
+    """(args from the subcommand on, the last `-C` dir, the `-c` settings) of a `git` command."""
+    args, paths, confs = _git_globals(argv)
+    cdirs = [v for f, v in paths if f == "-C"]
+    return args, (cdirs[-1] if cdirs else None), confs
+
+
+def git_target(argv: list[str], cwd: Where) -> Where:
+    """Where the `git` command `argv` runs when its global options name a place, else None: the
+    `-C` dirs joined onto `cwd` in order (as git joins them), and with `--git-dir` or `--work-tree`
+    the tuple of options `_git` runs with, so the repo and branch read are the ones git uses."""
+    _args, paths, _confs = _git_globals(argv)
+    if not paths:
+        return None
+    base = str(cwd or ".")
+    for flag, value in paths:
+        if flag == "-C":
+            base = os.path.join(base, os.path.expanduser(value))
+    rest = [x for f, v in paths if f != "-C" for x in (f, os.path.expanduser(v))]
+    return ("-C", base, *rest) if rest else base
 
 
 PUSH_VALUE_FLAGS = ("-o", "--push-option", "--receive-pack", "--exec", "--repo")
@@ -356,7 +406,7 @@ def _word_hit(text: str, entry: str) -> bool:
 _SEP = r"""[\s"',\[\]]+"""
 # One simple command's rest of line: a pattern for a flag of `git push` looks only this far.
 _REST = r"[^\n;|&]*"
-_GIT_PUSH = rf"\bgit\b(?:\s+-[Cc]\s+\S+)*{_SEP}push\b"
+_GIT_PUSH = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--(?:git-dir|work-tree)(?:=|\s+)\S+))*{_SEP}push\b"
 _GH_PR_MERGE = rf"\bgh\b(?:\s+(?:-R|--repo)[\s=]\S+)?{_SEP}pr{_SEP}merge\b"
 # (item, pattern): the fixed never-list, searched in the command text as typed. `{main}` is the
 # protected branch names of the repo the command runs in.
@@ -403,7 +453,7 @@ NEVER = (
 )
 
 
-def _tags_pushed(text: str, cwd: str | None) -> str | None:
+def _tags_pushed(text: str, cwd: Where) -> str | None:
     """A word after `git push` that names a tag of the repo (`git push origin v1.2`), else None."""
     words = {
         w.lstrip("+").partition(":")[2] or w.lstrip("+")
@@ -415,12 +465,59 @@ def _tags_pushed(text: str, cwd: str | None) -> str | None:
     return next((w for w in sorted(words) if w in tags), None)
 
 
-def _push_dirs(text: str, cwd: str | None) -> list[str]:
-    """The hook's cwd and every directory the text names by `cd <dir>`, `pushd <dir>` or
-    `git -C <dir>`: a push may run in any of them."""
+# a path value whose place the shell decides, not the text: a variable, a glob, a brace
+_SHELL_PLACE = re.compile(r"[$*?\[{]")
+
+
+def simple_push(text: str) -> list[str] | None:
+    """The argv of `text` when the whole text is exactly one `git [-C <p>]… [--git-dir[=]<p>]
+    [--work-tree[=]<p>] push …`: one segment, split by `shlex` (`simple_argv`: no operator,
+    newline, redirect, substitution or backtick), `git` typed as the first word (no path, wrapper,
+    backslash, quote or assignment in front), only those path options before `push`, and no
+    path the shell decides (a variable, a glob). Anything else, a `shlex` error included, is None."""
+    if not re.match(r"git\s", text):
+        return None
+    argv = simple_argv(text)
+    if not argv or argv[0] != "git":
+        return None
+    i = 1
+    while i < len(argv) and argv[i] != "push":
+        flag, eq, value = argv[i].partition("=")
+        if argv[i] in ("-C", *GIT_PATH_FLAGS) and i + 1 < len(argv):
+            value, i = argv[i + 1], i + 2
+        elif flag in GIT_PATH_FLAGS and eq:
+            i += 1
+        else:
+            return None
+        if _SHELL_PLACE.search(value):
+            return None
+    return argv if i < len(argv) else None
+
+
+def _push_dirs(text: str, cwd: str | None) -> list[Where]:
+    """Every place a push in `text` may run. A text that is one simple push (`simple_push`) runs
+    only where its path options point, `-C` joined onto the cwd in order and `--git-dir`,
+    `--work-tree` with them (`git_target`): the cwd drops out, so a worker started in the main
+    checkout pushes its own worktree with `git -C <tree> push`, and a target on the main checkout
+    or its `.git` is judged like the cwd. Any other text keeps the cwd, and adds each directory it
+    names by `cd <dir>`, `pushd <dir>` or `git -C <dir>` and each push's own target: what the form
+    does not match exactly is judged with the cwd, never let through."""
     base = cwd or "."
-    named = re.findall(r"(?:\b(?:cd|pushd)|\bgit\s+-C)\s+(['\"]?)([^\s'\";&|]+)\1", text)
-    return [base, *(os.path.join(base, os.path.expanduser(d)) for _q, d in named)]
+    argv = simple_push(text)
+    if argv is not None:
+        target = git_target(argv, base)
+        return [base if target is None else target]
+    moved = re.findall(r"\b(?:cd|pushd)\s+(['\"]?)([^\s'\";&|]+)\1", text)
+    named = re.findall(r"\bgit\s+-C\s+(['\"]?)([^\s'\";&|]+)\1", text)
+    dirs: list[Where] = [os.path.join(base, os.path.expanduser(d)) for _q, d in moved + named]
+    targets: list[Where] = []
+    for part in segments(text):
+        argv = strip_keywords(part)
+        if argv and os.path.basename(argv[0]) == "git" and _git_globals(argv)[0][:1] == ["push"]:
+            target = git_target(argv, base)
+            if target is not None:
+                targets.append(target)
+    return [base, *dirs, *targets]
 
 
 def normalised(text: str) -> str:
@@ -488,14 +585,16 @@ def never(  # noqa: PLR0911, PLR0912
             return item.format(*(found.groups() or ("",)))
     if _runs_arm(text) and _role_touched(text):
         return "merge (arm_pr.sh beside a change of WE_ROLE)"
-    if re.search(_GIT_PUSH, text):
-        for where in _push_dirs(text, cwd):
+    if re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text)):
+        places = _push_dirs(text, cwd)
+        for where in places:
             branch = current_branch(where)
             if branch and branch in protected_branches(where):
                 return f"main (a git push from {branch})"
-        tag = _tags_pushed(text, cwd)
-        if tag:
-            return f"guard bypass (git push of the tag {tag})"
+        for where in [cwd, *places]:
+            tag = _tags_pushed(text, where)
+            if tag:
+                return f"guard bypass (git push of the tag {tag})"
     for entry in rights.get("deny_text") or []:
         if entry and entry in text:
             return f"crew deny_text ({entry})"
@@ -519,8 +618,9 @@ def never(  # noqa: PLR0911, PLR0912
 RIGHT_NAMES = ("pr_ready", "pr_comment", "branch_rc")
 
 
-def _on_default(root: str, rel: str) -> dict | None:
-    """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None."""
+def _on_default(root: Where, rel: str) -> dict | None:
+    """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None.
+    `rel` is a path from the repo's top; `root` may be a target tuple (`git_target`)."""
     text = _git(
         root,
         "show",
@@ -704,13 +804,18 @@ MERGE_FLAGS = ("--merge", "--squash", "--rebase", "-m", "-s", "-r", *VALUE_FLAGS
 SHA = re.compile(r"[0-9a-f]{7,40}")
 
 
-def pr_owner_on_default(cwd: str | Path | None) -> str:
+def pr_owner_on_default(cwd: Where) -> str:
     """`build.pr_owner` as the default branch of origin holds it (`worker_launch.pr_owner_of`), never
     the worktree's file: the worker could edit the switch that opens its rights. Unreadable or
     another value: `master`, so no PR owner right opens."""
     import worker_launch  # noqa: PLC0415
 
-    root = _git(cwd, "rev-parse", "--show-toplevel")
+    # a target tuple keeps git's own `--git-dir`/`--work-tree`: rooted anew by `--show-toplevel`,
+    # a `--git-dir` alone would read the cwd's repo as the top level and its switch
+    if isinstance(cwd, tuple):
+        root: Where = cwd if _git(cwd, "rev-parse", "--git-dir") else None
+    else:
+        root = _git(cwd, "rev-parse", "--show-toplevel")
     if not root:
         return "master"
     try:
@@ -741,10 +846,10 @@ def _pr_selector(args: list[str], value_flags: tuple[str, ...]) -> str | None:
     return None
 
 
-def _push_refusal(argv: list[str], key: str, cwd: str | None) -> str | None:
-    """A worker pushes only branches that carry its key: its own branch or its `wip/` checkpoint."""
-    args, cdir, _confs = _git_split(argv)
-    where = os.path.join(cwd or ".", cdir) if cdir else cwd
+def _push_refusal(argv: list[str], key: str, where: Where) -> str | None:
+    """A worker pushes only branches that carry its key: its own branch or its `wip/` checkpoint.
+    `where` is the place the push runs (`git_target`, else the hook's cwd)."""
+    args = _git_globals(argv)[0]
     positional: list[str] = []
     k = 1
     while k < len(args):
@@ -876,7 +981,7 @@ def right_refusal(  # noqa: PLR0911, PLR0912
     right: str,
     rights: dict,
     key: str | None,
-    cwd: str | None,
+    cwd: Where,
     owner: str = "master",
     deadline: float | None = None,
 ) -> str | None:
@@ -885,6 +990,17 @@ def right_refusal(  # noqa: PLR0911, PLR0912
     the merge line gets its own."""
     if deadline is None:
         deadline = time.monotonic() + MERGE_LINE_BUDGET_S
+    target = git_target(argv, cwd) if right == "push" else None
+    if target is not None:
+        # the push is judged where git runs it; another repo there needs its own switch on its own
+        # default branch, the session's repo opens nothing in it
+        here, there = origin_slug(cwd), origin_slug(target)
+        if there != here and pr_owner_on_default(target) != "worker":
+            return (
+                f"git push in {there or 'a directory without an origin'}: another repo than "
+                f"{here}, and its default branch does not set build.pr_owner: worker"
+            )
+        cwd = target
     slug = origin_slug(cwd)
     if not (owner == "worker" and right in PR_OWNER_RIGHTS):
         if not opted_in(rights, slug):
