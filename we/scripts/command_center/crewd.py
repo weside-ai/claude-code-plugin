@@ -141,7 +141,9 @@ class CrewWatch:
     """The crew file in force for the server's cwd (`crew.find`, the file every reader on the host
     uses), read again when its stat (path, mtime, size, inode) changes; `crew_loop` looks every
     `CREW_CHECK_S` seconds, never a request. A file that no longer loads keeps the last good peers
-    and link hosts, so a broken edit does not shut the proxy out, and is named once on stderr."""
+    and link hosts, so a broken edit does not shut the proxy out, and is named once on stderr. A
+    file that is gone reads as no crew: only the server's own address stays a peer (fail closed),
+    since a missing file names no proxy network to keep trusting."""
 
     def __init__(self, bind: str, cwd: Path | None = None):
         self.bind, self.cwd = bind, cwd

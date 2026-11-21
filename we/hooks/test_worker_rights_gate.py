@@ -456,6 +456,9 @@ NEVER = [
     ("git config core.hookspath /dev/null", "guard bypass (core.hooksPath)"),
     ('echo "`gh secret list`"', "secrets (gh secret)"),
     ("cd ../main-checkout && git push", None),
+    # the never-list through git's own place flags
+    ("git --git-dir=.git push origin main", "main (git push to main)"),
+    ("git --work-tree . push --delete origin feat/x", "delete (git push --delete)"),
     ("git -C ../main-checkout push", None),
     # a merge other than the line arm_pr.sh prints
     ("gh pr merge 7 --admin", "merge (gh pr merge --admin)"),
@@ -639,6 +642,57 @@ def test_a_push_from_a_main_checkout_stays_denied_outside_its_own_tree(world, co
     main, tree = _main_checkout_with_tree(world)
     decision, reason = hook(world, command.format(tree=tree, main=main), cwd=main)
     assert decision == "deny" and why in reason, reason
+
+
+@pytest.mark.parametrize(
+    ("command", "name"),
+    [
+        ("export GIT_DIR={main}/.git; git -C {tree} push origin HEAD", "GIT_DIR"),
+        ("GIT_DIR={main}/.git; git -C {tree} push origin HEAD", "GIT_DIR"),
+        ("env GIT_WORK_TREE={main} git -C {tree} push origin HEAD", "GIT_WORK_TREE"),
+        ("GIT_INDEX_FILE={main}/.git/index git -C {tree} push origin HEAD", "GIT_INDEX_FILE"),
+    ],
+)
+def test_a_push_with_a_redirected_repo_is_refused(world, command, name):
+    """`git -C <tree>` names the tree, but GIT_DIR and its kin decide which repo git pushes: the
+    gate cannot know it, so it refuses (fail closed) and keeps the cwd in the check."""
+    main, tree = _main_checkout_with_tree(world)
+    text = command.format(tree=tree, main=main)
+    decision, reason = hook(world, text, cwd=main)
+    assert decision == "deny" and f"git push with {name} set" in reason, reason
+    assert str(main) in wr._push_dirs(text, str(main))
+
+
+def test_a_push_spelt_apart_is_judged_where_it_runs(world):
+    main, _tree = _main_checkout_with_tree(world)
+    decision, reason = hook(world, "gi''t push", cwd=main)
+    assert decision == "deny" and "main (a git push from main)" in reason, reason
+
+
+def test_a_tag_is_judged_in_every_place_a_push_runs(world):
+    other = make_repo(world["tmp"], name="other", branch="feat/ABC-12-x")
+    _git(other, "tag", "v-only-there")
+    decision, reason = hook(world, f"git -C {other} push origin v-only-there")
+    assert decision == "deny" and "git push of the tag v-only-there" in reason, reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git --git-dir={other}/.git push origin feat/ABC-12-x",
+        "git --work-tree {repo} --git-dir {other}/.git push origin feat/ABC-12-x",
+    ],
+)
+def test_a_push_through_git_dir_reads_the_switch_of_that_repo(world, command):
+    # the switch is read with git's own place options: rooted by --show-toplevel, a --git-dir
+    # alone read the session's repo as top level and its build.pr_owner opened the other repo
+    _pr_owner(world["repo"], "worker")
+    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
+    text = command.format(other=other, repo=world["repo"])
+    decision, reason = hook(world, text)
+    assert decision == "deny" and "another repo than acme/app" in reason, reason
+    _pr_owner(other, "worker")
+    assert hook(world, text)[0] == "allow"
 
 
 @pytest.mark.parametrize("switch", [None, "master"])

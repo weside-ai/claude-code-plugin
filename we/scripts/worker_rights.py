@@ -18,8 +18,9 @@ write on a `/secrets`, `/variables` or `/environments` path, the crew's `deny_co
 a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout on one of them,
 judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` count, and the session's
 cwd stays in unless every push of the command names its own place (`_push_dirs`);
-`ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag, `ALLOW_PUSH_WITHOUT_MAIN`,
-`--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
+`ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag, a `git push` in a text naming
+`GIT_DIR`, `GIT_WORK_TREE` or `GIT_INDEX_FILE` (git may push another repo than the gate reads),
+`ALLOW_PUSH_WITHOUT_MAIN`, `--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
 other `gh pr merge` than `--disable-auto` unless it is the merge line below, typed as a command of
 its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command, `--disable-auto`
 included; `arm_pr.sh` run anywhere in a command that names `WE_ROLE` or clears the environment
@@ -466,6 +467,15 @@ def _tags_pushed(text: str, cwd: Where) -> str | None:
 
 # `git` as a word of its own: not the `git` of `--git-dir`, `.git` or `git-thing`
 _GIT_WORD = re.compile(r"(?<![\w./-])git(?![\w./-])")
+# the variables that move the repo git runs in away from any `-C` the text names: an assignment,
+# `export`, `env VAR=…` or a prefix all name the variable, so the name alone counts
+_GIT_REPO_ENV = re.compile(r"(?<!\w)(GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE)(?!\w)")
+
+
+def _repo_redirect(text: str) -> str | None:
+    """The first of GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE `text` names, else None."""
+    found = _GIT_REPO_ENV.search(text) or _GIT_REPO_ENV.search(normalised(text))
+    return found[1] if found else None
 
 
 def _push_dirs(text: str, cwd: str | None) -> list[Where]:
@@ -473,7 +483,9 @@ def _push_dirs(text: str, cwd: str | None) -> list[Where]:
     <dir>` or `git -C <dir>`, each push's own target (`git_target`), and the hook's cwd. The cwd
     drops out only when every `git` of the text is a push of its own naming its target and no `cd`
     or `pushd` stands in it: then no push runs there (a worker started in the main checkout
-    pushes its own worktree with `git -C <tree> push`). Anything else keeps it."""
+    pushes its own worktree with `git -C <tree> push`). A text naming GIT_DIR, GIT_WORK_TREE or
+    GIT_INDEX_FILE (`_repo_redirect`) is never its own: git may push another repo than it names.
+    Anything else keeps it."""
     base = cwd or "."
     moved = re.findall(r"\b(?:cd|pushd)\s+(['\"]?)([^\s'\";&|]+)\1", text)
     named = re.findall(r"\bgit\s+-C\s+(['\"]?)([^\s'\";&|]+)\1", text)
@@ -486,7 +498,11 @@ def _push_dirs(text: str, cwd: str | None) -> list[Where]:
             target = git_target(argv, base)
             if target is not None:
                 targets.append(target)
-    own = pushes and len(targets) == pushes == len(_GIT_WORD.findall(normalised(text)))
+    own = (
+        pushes
+        and len(targets) == pushes == len(_GIT_WORD.findall(normalised(text)))
+        and not _repo_redirect(text)
+    )
     return [*([] if own and not moved else [base]), *dirs, *targets]
 
 
@@ -556,6 +572,10 @@ def never(  # noqa: PLR0911, PLR0912
     if _runs_arm(text) and _role_touched(text):
         return "merge (arm_pr.sh beside a change of WE_ROLE)"
     if re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text)):
+        redirect = _repo_redirect(text)
+        if redirect:
+            # fail closed: which repo the push leaves from is past what the gate can read
+            return f"guard bypass (git push with {redirect} set)"
         places = _push_dirs(text, cwd)
         for where in places:
             branch = current_branch(where)
@@ -588,8 +608,9 @@ def never(  # noqa: PLR0911, PLR0912
 RIGHT_NAMES = ("pr_ready", "pr_comment", "branch_rc")
 
 
-def _on_default(root: str, rel: str) -> dict | None:
-    """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None."""
+def _on_default(root: Where, rel: str) -> dict | None:
+    """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None.
+    `rel` is a path from the repo's top; `root` may be a target tuple (`git_target`)."""
     text = _git(
         root,
         "show",
@@ -779,7 +800,12 @@ def pr_owner_on_default(cwd: Where) -> str:
     another value: `master`, so no PR owner right opens."""
     import worker_launch  # noqa: PLC0415
 
-    root = _git(cwd, "rev-parse", "--show-toplevel")
+    # a target tuple keeps git's own `--git-dir`/`--work-tree`: rooted anew by `--show-toplevel`,
+    # a `--git-dir` alone would read the cwd's repo as the top level and its switch
+    if isinstance(cwd, tuple):
+        root: Where = cwd if _git(cwd, "rev-parse", "--git-dir") else None
+    else:
+        root = _git(cwd, "rev-parse", "--show-toplevel")
     if not root:
         return "master"
     try:

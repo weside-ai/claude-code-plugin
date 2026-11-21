@@ -287,6 +287,9 @@ arms (the worker card).
 of a story's single build worker, or of the finisher in a parallel story's integration tree; a
 parallel chunk never gets it, the master integrates its branch as before. The line is the switch a
 worker reads, and its push: without it, it runs the dev-only contract and never guesses from the config.
+A push into another repo than the session's (`git -C`, `--git-dir`, `--work-tree`) needs that repo's
+own `build.pr_owner: worker` on its default branch: the gate reads the switch where git pushes, and the
+session's repo opens nothing in a second one.
 
 With the line, after § Finish sequence the worker carries its PR itself, because a hand-off to the
 master costs a round trip per head and the master's context:

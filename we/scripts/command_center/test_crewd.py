@@ -275,6 +275,66 @@ def test_the_crew_is_read_again_when_its_file_changes(tmp_path, capsys):
     assert err.count("peer networks") == 2 and "crew not reloaded" in err
 
 
+def test_a_deleted_crew_file_drops_every_peer_but_the_own_address(tmp_path):
+    # fail closed: no crew file names no proxy network, so only the server's own address stays
+    (tmp_path / ".git").mkdir()
+    _write_crew(tmp_path, peers=["10.42.0.0/16"])
+    watch = crewd.CrewWatch("10.43.2.164", cwd=tmp_path)
+    state, server = crewd.State(), type("S", (), {"peers": None})()
+    crewd.crew_tick(watch, server, state)
+    assert crewd.peer_allowed("10.42.9.194", server.peers)
+    (tmp_path / ".weside" / "crew.json").unlink()
+    crewd.crew_tick(watch, server, state)
+    assert not crewd.peer_allowed("10.42.9.194", server.peers)
+    assert crewd.peer_allowed("10.43.2.164", server.peers)
+
+
+def test_a_reloaded_crew_relinks_the_next_render(tmp_path):
+    (tmp_path / ".git").mkdir()
+    _write_crew(tmp_path)
+    watch = crewd.CrewWatch("10.43.2.164", cwd=tmp_path)
+    state, server = crewd.State(), type("S", (), {"peers": None})()
+    crewd.crew_tick(watch, server, state)
+    assert state.link_hosts == []
+    body = {
+        "version": crewd.crew_mod.VERSION,
+        "roles": {},
+        "members": {},
+        "zentrale": {"link_hosts": ["github.com/acme"]},
+    }
+    _write_crew(tmp_path, raw=json.dumps(body))
+    crewd.crew_tick(watch, server, state)
+    assert state.link_hosts == ["github.com/acme"]
+
+
+def test_the_crew_loop_outlives_a_failing_check(monkeypatch, capsys):
+    stop, calls = threading.Event(), []
+
+    def tick(*_args):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("boom")
+        stop.set()
+
+    monkeypatch.setattr(crewd, "CREW_CHECK_S", 0)
+    monkeypatch.setattr(crewd, "crew_tick", tick)
+    crewd.crew_loop(None, None, None, stop)
+    assert len(calls) == 2
+    assert "we-crewd: crew check failed: OSError" in capsys.readouterr().err
+
+
+def test_refused_peers_are_named_up_to_the_cap(monkeypatch, capsys):
+    monkeypatch.setattr(crewd, "MAX_REFUSED_LOGGED", 2)
+    srv = crewd.Server(("127.0.0.1", 0), state_with(), [crewd.ipaddress.ip_network("10.0.0.0/8")])
+    try:
+        for addr in ("192.0.2.1", "192.0.2.2", "192.0.2.3", "192.0.2.1"):
+            assert srv.verify_request(None, (addr, 1)) is False
+    finally:
+        srv.server_close()
+    lines = [x for x in capsys.readouterr().err.splitlines() if "refused peer" in x]
+    assert [x.split()[3] for x in lines] == ["192.0.2.1", "192.0.2.2"]
+
+
 # --- AC4: XSS -------------------------------------------------------------------------------
 
 
