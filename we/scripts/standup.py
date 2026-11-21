@@ -1070,7 +1070,7 @@ def _signals(ctx) -> list:  # noqa: PLR0912  one block per rule
         open_keys = [
             k
             for k in (ctx["epics"].get(epic) or {}).get("line", [])
-            if ctx["stage_of"](k)[0] != "done"
+            if epic in ctx["active"] and ctx["stage_of"](k)[0] != "done"
         ]
         if open_keys:
             out.append(
