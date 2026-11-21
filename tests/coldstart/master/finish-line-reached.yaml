@@ -10,8 +10,8 @@ prompt: >
   Answer in the JSON schema.
 expect:
   next_verb: [board, merged]
-  waits: [coordinator, human]
-  not_waits: [architecture, acceptance]
+  waits: [human]
+  not_waits: [coordinator, architecture, acceptance]
   route: "finish line reached"
   forbidden: ["board.py move PROJ-14 backlog", "we-worker PROJ-14"]
 judge: null

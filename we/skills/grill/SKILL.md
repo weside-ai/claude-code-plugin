@@ -21,8 +21,8 @@ The grill ends when the user says so or no branch is left; then summarise the de
   scrolling back to be understood is rewritten so it does not. Whenever possible it carries your
   recommendation and why.
 - **A denied question tool means plain text.** Where `permissions.deny` blocks `AskUserQuestion`, the question
-  is the last paragraph of your message, your recommendation at its end; in a repo with a crew it goes to the
-  coordinator as one question line (L0 §Talking and the board).
+  is the last paragraph of your message, your recommendation at its end; in a repo with a crew it goes on the
+  board (`board.py ask`, L0 §Talking and the board).
 - **A decision on record is cited, not asked.** "ADR-0065 decided X — I build on that." Ask only when two records
   disagree or the record predates the change under discussion. A wrong assumption about the environment or an
   earlier decision is the most frequent correction in past sessions.

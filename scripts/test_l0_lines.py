@@ -122,7 +122,12 @@ CASES = [
         r"--user-merge|a question to the human is open",
         r"\*\*Who merges what\*\* \(the one table",
     ),
-    ("F23", MASTER, r"AskUserQuestion", r"one question line to the coordinator"),
+    (
+        "F23",
+        MASTER,
+        r"AskUserQuestion|one question line to the coordinator",
+        r"posted with `board.py ask`",
+    ),
     ("F24", EPIC, r"<saga>-saga\.md|saga: null", r"`serves: null`"),
     (
         "F25",

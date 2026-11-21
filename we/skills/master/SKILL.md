@@ -19,8 +19,8 @@ through a build subagent: a subagent reads and reviews, never builds. User-visib
 owner writes or approves it before a worker builds it. Each story is one PR per repo, in its plan's order (L0 §Units): push once per story, open its PR, watch CI with `scripts/watch-pr-checks.sh`. You never merge by hand; arming auto-merge per
 § Close the run (with its `ready` merge) is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); an open question parks only the chunk it blocks. Every other
-status note goes into the same message as your next tool call. A question for the human goes, in a
-repo with a crew, as one question line to the coordinator (L0 §Talking and the board); without a crew
+status note goes into the same message as your next tool call. A question for the human is, in a
+repo with a crew, posted with `board.py ask` (L0 §Talking and the board); without a crew
 as plain text at the end of your message, your recommendation last.
 Phrase it per `${CLAUDE_PLUGIN_ROOT}/skills/grill/SKILL.md` § Discipline. An
 `idle_notification` that repeats a delivered report gets no message; only a new fact does.
@@ -79,7 +79,7 @@ recommendation; a product question mid-run becomes one decision story (L0 §Unit
 
 Questions go to their owner directly (L0 §Talking and the board): signals, forks a worker reported, a
 risk-class call. The WHAT goes to the Product Owner, the HOW to the epic owner (label `owner-<slug>`,
-else the component owner), what only the human decides as one question line to the coordinator. A
+else the component owner), what only the human decides you post with `board.py ask`. A
 question never stops independent work: first dispatch everything that does not depend on an answer,
 then ask early, and park only the chunk an answer blocks. An important question is
 still asked, never skipped silently. Before a known quota end, tell each worker to commit its phase and
@@ -273,13 +273,12 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
     (`<KEY>-card`, through the crew's launcher like any worker, brief per
     `references/worker-dispatch.md` § Card worker); it writes its verdict to a file, you post it
     unchanged. It is input for the people who read the PR, not a condition of the arm.
-  - **One-way:** post the T2 panel and the card verdict, then ask the merge question through the
-    coordinator with the PR link, the class and both verdicts (its board item:
-    `board.py ask --cause merge-go --pr <url> --one-way <class>`). On the yes it passes back with the
+  - **One-way:** post the T2 panel and the card verdict, then post the merge question yourself with
+    the PR link, the class and both verdicts:
+    `board.py ask --cause merge-go --pr <url> --one-way <class>`. On the yes it passes back with the
     question number, arm with `arm_pr.sh <PR>` and watch `--until-merged`. No approve on GitHub is the
     yes; without the yes you do not arm it. A yes holds for the head it was asked on: a later push
-    touching a file of the one-way class asks again. `arm_pr.sh` checks no board line (a session
-    could write one itself): it names the class on its output and in a PR comment, and refuses it
+    touching a file of the one-way class asks again. `arm_pr.sh` checks no board line: it names the class on its output and in a PR comment, and refuses it
     only to a worker, so the yes is yours to wait for.
   - Drafts: `/we:pr` step 4; a draft is no merge brake. Non-destructive migrations auto-merge serially
     (owner 03.10.2026): the second PR arms only after the first landed, merging `origin/<default>`,
@@ -306,12 +305,12 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
   single-owner ports per `worker-dispatch.md` § Finish sequence.
 - In a repo with a crew the Lead is an unnamed build master: product questions to the Product Owner,
   the HOW to the epic owner (else the component owner), each milestone (plan on main, PR opened or merged, a blocker) as one line
-  to the coordinator, a question for the human as one question line through it (L0 §Talking and the board). A Lead bound to a companion also writes back at those milestones per
+  to the coordinator, a question for the human with `board.py ask` (L0 §Talking and the board). A Lead bound to a companion also writes back at those milestones per
   `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
 - An epic run: after every merged story run the epic upkeep (one Updates Log line per `epic-plan.md`
   § Upkeep after a merge, learnings forward, the finish line per `/we:merged` § 6) and commit it before the next story starts.
   Pull only keys on the epic's `line:`; work a worker finds beyond it becomes an `## Extensions` entry,
-  never a story or a phase. When acceptance tells you `finish line reached`, report it to the coordinator in one line; from then on start no worker for this
+  never a story or a phase. When acceptance tells you `finish line reached`, post "good as is?" on the board (`board.py ask`) and tell the coordinator in one line; from then on start no worker for this
   epic until the human's answer comes back. An epic without `line:`: draw it first (a proposal through
   the coordinator, approved like a new epic). After a compact, rebuild state
   from the epic, git, the PRs and the tickets, never from the summary. The epic on the default

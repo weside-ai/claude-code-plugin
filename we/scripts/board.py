@@ -82,8 +82,8 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          reads the ask from a file or `-` stdin, so a `code span` never meets the shell, and a
          refusal of text that looks shell-mangled names both. The cold reader sees only the
          asker's text, never a line the tool appends. The item keeps `asker_id` and the launcher
-         marker's `starter` (only when `--session` is the caller itself) and, when the repo's `.weside/config.json` sets
-         `board.answer_to: asker`, `answer_to` (docs/board.md § Delivery). `--urgent` stamps
+         marker's `starter` (only when `--session` is the caller itself) and `answer_to: asker`, unless
+         `board.answer_to` (crew, else the repo's `.weside/config.json`) is `coordinator` (docs/board.md § Delivery). `--urgent` stamps
          `urgent: true` on the item and the log line; `bundle` lists urgent questions first.
          A `merge-go` question needs `--pr` (a URL, `<owner>/<repo>#<n>` or a number) on an OPEN
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
@@ -1712,12 +1712,13 @@ def _project_config(start=None):
     return {}
 
 
-def _asker_stamp(session, env=None, cwd=None):
+def _asker_stamp(session, env=None, cwd=None, crew=None):
     """Who receives the answer (docs/board.md § Delivery): `asker_id` (the asking session's id),
     `starter` (the launcher marker's, so a gone worker's answer reaches its starter), both only
     when `session` is the caller itself (a coordinator asking for another session stamps
-    neither), and `answer_to` when the repo's `board.answer_to` is `asker`; an unknown value
-    warns and keeps the coordinator."""
+    neither), and `answer_to: asker` unless `board.answer_to` is `coordinator`. The crew's value
+    beats the asking repo's `.weside/config.json`, so a companion asks the same way from any repo;
+    an unknown value warns and keeps the default, `asker`."""
     env = os.environ if env is None else env
     stamp = {}
     try:
@@ -1730,14 +1731,17 @@ def _asker_stamp(session, env=None, cwd=None):
         marker = wl.read_marker(cwd or Path.cwd()) or {}
         if isinstance(marker.get("starter"), str) and marker["starter"].strip():
             stamp["starter"] = marker["starter"].strip()
-    value = (_project_config(cwd).get("board") or {}).get("answer_to", "coordinator")
+    crew_value = ((crew or {}).get("board") or {}).get("answer_to")
+    where = "crew.json" if crew_value else ".weside/config.json"
+    value = crew_value or (_project_config(cwd).get("board") or {}).get("answer_to") or "asker"
     if value not in ANSWER_TO:
         print(
-            f"board.py ask: warning: board.answer_to {value!r} in .weside/config.json is not one "
-            f"of {', '.join(ANSWER_TO)}; the answer goes through the coordinator",
+            f"board.py ask: warning: board.answer_to {value!r} in {where} is not one "
+            f"of {', '.join(ANSWER_TO)}; the answer goes to the asker",
             file=sys.stderr,
         )
-    elif value == "asker":
+        value = "asker"
+    if value == "asker":
         stamp["answer_to"] = "asker"
     return stamp
 
@@ -1818,7 +1822,7 @@ def cmd_ask(state, args, crew, now):
     if fields["cause"] == "merge-go":
         fields["checks"] = _required_checks(pr_url)
         fields["ask"] = f"{fields['ask']}\n{fields['checks']}"
-    fields.update(_asker_stamp(fields["session"]))
+    fields.update(_asker_stamp(fields["session"], crew=crew))
     base = {"ts": _iso(now), **fields}
     reader, reason = _cold_read(state, base, asked, fields, crew)
     session = fields["session"]

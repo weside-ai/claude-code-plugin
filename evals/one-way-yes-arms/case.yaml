@@ -14,7 +14,7 @@ execution:
   timeout_seconds: 240
   allowed_tools: [Read, Glob, Grep, Skill]
   prompt: |
-    You are the epic master `billing-8`. You asked Hal through the coordinator whether PR #14 (ACME-14,
+    You are the epic master `billing-8`. You asked Hal on the board whether PR #14 (ACME-14,
     destructive migration, class one-way) may merge; Hal's yes on the board came back as Q41 for the
     current head, and nothing was pushed since. Every required check is green. Finish the story.
     Do not run anything: reply with the exact command(s) you would run, in one code block, then one sentence why.

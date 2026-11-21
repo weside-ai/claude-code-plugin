@@ -529,6 +529,7 @@ class TestAsk:
             "id": "Q272",
             "session": "lead-12",
             "asker_id": "sid-12",
+            "answer_to": "asker",
             "key": "PROJ-12",
             "key_title": "Checkout flow",
             "ask": ASK["--ask"],
@@ -654,8 +655,58 @@ class TestAsk:
         assert "asker_id" not in item and "starter" not in item and item["answer_to"] == "asker"
         (work / ".weside" / "config.json").write_text(json.dumps({"board": {"answer_to": "me"}}))
         assert go(crewless, *ask_argv(**{"--key": "PROJ-13", "--ask": "Other?"})) == 0
-        assert "answer_to" not in board_of(crewless)["owner_queue"][-1]
+        assert board_of(crewless)["owner_queue"][-1]["answer_to"] == "asker"
         assert "board.answer_to 'me'" in capsys.readouterr().err
+
+    def test_answer_to_defaults_to_the_asker_and_coordinator_opts_out(self, crewless):
+        """Flow first (Q954): without a value the answer goes to the asker; `coordinator` in the
+        repo's config opts out. Red arm: the default `coordinator` stamped nothing here."""
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv()) == 0
+        assert board_of(crewless)["owner_queue"][-1]["answer_to"] == "asker"
+        work = crewless / "work"
+        (work / ".weside").mkdir()
+        (work / ".weside" / "config.json").write_text(
+            json.dumps({"board": {"answer_to": "coordinator"}})
+        )
+        assert go(crewless, *ask_argv(**{"--key": "PROJ-14", "--ask": "Other?"})) == 0
+        assert "answer_to" not in board_of(crewless)["owner_queue"][-1]
+
+    def test_a_master_session_posts_its_own_question(self, crewless, capsys):
+        """Any crew session asks (docs/board.md § Questions): `ask` from `WE_ROLE=master` posts
+        under its own name, no coordinator in between."""
+        assert os.environ["WE_ROLE"] == "master"
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *ask_argv(**{"--session": None})) == 0
+        assert json.loads(capsys.readouterr().out)["outcome"] == "posted"
+        item = board_of(crewless)["owner_queue"][-1]
+        assert (item["session"], item["asker_id"], item["answer_to"]) == (
+            "lead-12",
+            "sid-12",
+            "asker",
+        )
+
+
+def test_the_crews_answer_to_beats_the_repo_config(crewed):
+    """A companion asks the same way from any repo: the crew's `board.answer_to` wins."""
+    (crewed / "work" / ".weside" / "config.json").write_text(
+        json.dumps({"board": {"answer_to": "asker"}})
+    )
+    work = crewed / "work"
+    assert "answer_to" not in board._asker_stamp(
+        "x", crew={"board": {"answer_to": "coordinator"}}, cwd=work
+    )
+    assert (
+        board._asker_stamp("x", crew={"board": {"answer_to": None}}, cwd=work)["answer_to"]
+        == "asker"
+    )
+    (work / ".weside" / "config.json").write_text(
+        json.dumps({"board": {"answer_to": "coordinator"}})
+    )
+    assert (
+        board._asker_stamp("x", crew={"board": {"answer_to": "asker"}}, cwd=work)["answer_to"]
+        == "asker"
+    )
 
 
 # The id `ask` posts on a fresh LIVE board with no logs: one past LIVE's own highest Q.
