@@ -581,6 +581,17 @@ def read_foreign(src: Sources, paths: list) -> list:
 # --- intervals ----------------------------------------------------------------------------------
 
 
+def member_names(crew: dict) -> set:
+    """The crew members' slugs and names, case-folded: a session named so is a companion lane
+    (group `companions`), not a master; `standup.py` splits its master count by the same rule."""
+    out = set()
+    for slug, entry in (crew.get("members") or {}).items():
+        out.add(str(slug).casefold())
+        if isinstance(entry, dict) and entry.get("name"):
+            out.add(str(entry["name"]).casefold())
+    return out
+
+
 def _lane_lookup(names) -> dict:
     return {n.casefold(): n for n in names}
 
@@ -927,11 +938,7 @@ def build(
                 probes[entry["name"]].append({"ts": ts, **entry})
     lanes_cf = _lane_lookup(probes)
     ci_line = _ci_waits(src, ci, transitions, probes, crew, explicit)
-    member_cf = set()
-    for slug, entry in (crew.get("members") or {}).items():
-        member_cf.add(str(slug).casefold())
-        if isinstance(entry, dict) and entry.get("name"):
-            member_cf.add(str(entry["name"]).casefold())
+    member_cf = member_names(crew)
 
     ctx = {
         "crew": crew,
