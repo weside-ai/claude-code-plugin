@@ -1,0 +1,17 @@
+[
+ {
+  "name": "w-PROJ-9002",
+  "state": "busy",
+  "alive": true
+ },
+ {
+  "name": "w-PROJ-9003",
+  "state": "busy",
+  "alive": true
+ },
+ {
+  "name": "w-lost",
+  "state": "busy",
+  "alive": true
+ }
+]
