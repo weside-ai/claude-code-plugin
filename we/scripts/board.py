@@ -312,7 +312,7 @@ GONE = ("withdrawn", "superseded")
 # ... and those that take it off as a side effect (merged PR, `ask --replace`, pruning)
 OFF_BOARD = ("closed", "replaced", "pruned")
 # Every outcome that closes a posted question (`question_status`, flow_intervals.py). `returned`,
-# `duplicate`, `repeat` and `reader-error` close none: they log a refused ask and carry no new id.
+# `duplicate` and `repeat` close none: they log a refused ask and carry no new id.
 QUESTION_CLOSED = GONE + OFF_BOARD
 # A `returned` item is the asker's, who has it as its line's note: it leaves `news` on the next write.
 RETURNED_KIND = "returned"
@@ -1771,8 +1771,10 @@ def _cold_read(state, base, asked, fields, crew):
     try:
         answer = cold_reader.read(question)
     except cold_reader.ReaderError as exc:
-        state.append_question({**base, "outcome": "reader-error", "reason": str(exc)})
-        raise BoardError(f"board.py ask: reader-error: {exc}") from None
+        # A reader that cannot run never holds a question back: it is posted unread, and the
+        # log line says so (`reader: {"error": …}`).
+        print(f"board.py ask: reader-error: {exc}; posted unread", file=sys.stderr)
+        return {"error": str(exc)}, None
     return {k: answer.get(k) for k in ("decides", "on_yes", "form")}, _reader_verdict(answer)
 
 
@@ -3067,7 +3069,11 @@ def rule_lenses(m):
     main (`lens_verdict.py` § Subject); the warnings a
     green panel carries (`ready_panel.warning_ok_after_rounds`) go into the row as `carried`, the
     lens holders' decisions above the round cap (`ready_panel.max_rounds`) as `decided`, a
-    derived round (a verdict file of 8.10.0 or older) as `round` with its origin."""
+    derived round (a verdict file of 8.10.0 or older) as `round` with its origin. A plan whose
+    computed tier is T0 needs no panel (L0 §Risk tiers: lenses judge a risk plan)."""
+    if str(m.extra.get("tier") or "").split()[:1] == ["T0"]:
+        m.extra["panel"] = "none (T0)"
+        return []
     try:
         blob = m.selected.get("plan")
         binding = {"plan_blob": blob} if blob else None
@@ -3214,11 +3220,17 @@ SELECT_ONLY = "use board.py select (the Ready gate, the tier and the lenses deci
 
 
 REOPENABLE = ("in_review", "in_test")  # a revert of the merged PR or a failed test reopens
+FAST_FROM = (
+    None,
+    "backlog",
+)  # the fast lane: no plan file, no Selected; the PR's diff carries the class
 
 
 def rule_pulled(m):
-    """In Progress is pulled from Selected, or reopened from in_review/in_test with
-    `--reopen "<reason>"` (the revert PR or the failed test)."""
+    """In Progress is pulled from Selected, pulled with `--fast` from Backlog or from no row (the
+    fast lane of L0 §Units: the story has no plan file and its PR's diff carries the risk class;
+    row `via: fast`), or reopened from in_review/in_test with `--reopen "<reason>"` (the revert
+    PR or the failed test)."""
     reason = (getattr(m.args, "reopen", None) or "").strip()
     if m.source in REOPENABLE:
         if not reason:
@@ -3230,10 +3242,14 @@ def rule_pulled(m):
         return []
     if m.extra.get("ticket_already"):
         return []
+    if getattr(m.args, "fast", False) and m.source in FAST_FROM:
+        m.extra["via"] = "fast"
+        return []
     if m.source != "selected":
         was = "no row" if m.source is None else f"its last row is {m.source}"
         return [
-            f"in_progress needs the key's last row to be selected ({was}); from "
+            f"in_progress needs the key's last row to be selected ({was}); a small story off "
+            "every risk path is pulled with --fast (L0 §Units, the fast lane); from "
             f'{" or ".join(REOPENABLE)} it reopens with --reopen "<reason>"'
         ]
     return []
@@ -3615,7 +3631,8 @@ def _who(crew, env=None, verb="claim"):
 def _select_comment(m):
     plan = str(m.selected.get("plan") or "")[:12] or "-"
     who = m.selected.get("who") or _who(m.crew, verb=f"select {m.key}")
-    return f"selected by {who}, plan {plan}, panel ready-{m.key}"
+    panel = m.extra.get("panel") or f"ready-{m.key}"
+    return f"selected by {who}, plan {plan}, panel {panel}"
 
 
 CARRY = object()  # `_source_state`: the session has to read the ticket first
@@ -4035,6 +4052,11 @@ def _add_move_verbs(verbs):
         help="on_hold: what reopens it; in_progress from in_review/in_test: why (revert, failed test)",
     )
     mv.add_argument("--epic", metavar="EPIC", help="backlog: the approved epic")
+    mv.add_argument(
+        "--fast",
+        action="store_true",
+        help="in_progress from backlog or no row: the fast lane, a small story without a plan file",
+    )
     mv.add_argument(
         "--comment-file",
         dest="comment_file",

@@ -80,6 +80,11 @@ def committed(state_dir):
 
 
 class TestSelect:
+    @pytest.fixture(autouse=True)
+    def risk_plan(self, moving, monkeypatch):  # noqa: ARG002 (order: after `moving` clears the env)
+        """A risk plan: only that one needs the panel these tests read."""
+        monkeypatch.setenv("FAKE_RISK_LINE", "T2")
+
     def test_a_green_select_comments_who_selected_with_plan_and_panel(self, moving, monkeypatch):
         with_humans(moving)
         committed(moving)

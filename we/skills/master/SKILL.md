@@ -60,6 +60,7 @@ class or a human signal, that is one question line to its owner, never a silent 
 | `shipped` | a PR for the key is merged, or open with CI concluded | — (`/we:ci-review` if red) |
 | `built` | a branch or worktree for the key has commits beyond `origin/<default>` | finish + PR |
 | `refined` | plan on the default branch passes the Ready gate (Selected) | build |
+| `fast` | small work off every risk path, no plan file | § Fast lane |
 | `draft` / `idea` | plan fails the scan, or only a ticket or epic row exists | refine |
 
 Evidence: `git fetch origin`, `git branch -a --list '*<KEY>*'`, `git worktree list`,
@@ -94,6 +95,19 @@ no confirm: the invocation is the go.
   conditions still open in the question; never only after all of them are met.
 - **A decision that flips an earlier one** (an answer, a class, a cut): `rg` its subject over the plan
   and its sibling plans and fix every hit in one commit before the next review round.
+
+## Fast lane
+
+The default for small work (L0 §Units): a fix or change you expect off every risk path
+(`.weside/risk-paths`) and inside one worker's day. No plan file, no refiner, no panel, no Selected.
+
+1. `board.py move <KEY> in_progress --fast`.
+2. One `we:dev-medium` worker, brief: `Fast lane. Run Skill("we:develop") for <KEY>: <the ticket's intent
+   in two lines>`, the branch, `PR owner: worker`, the report line. It writes the ACs with their oracle
+   class and `Not proven:` into the PR body under `## Verification` and builds.
+3. The PR runs § Push, PR, CI like any other. Its diff computes the class: a `T2` line gets its panel
+   on the diff (`/we:lens t2`), a one-way line its board question. A story that turns out bigger than
+   a day or needs a design decision goes back to § Refine lane.
 
 ## Refine lane
 
@@ -144,7 +158,7 @@ blob, before the pull: `board.py select` needs the plan on the default branch (w
 line `plan: waits for <docs PR> and Selected`; once the docs PR merged, run `board.py select`, pull
 the story, then arm (L0 §Units; no gate checks this). Otherwise pull the story first: move its ticket Selected → In Progress per `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`
 (L0 §Lifecycle; `board.py move`), check the brief's premises (`worker-dispatch.md`
-§ Premise check) and decide its code-graph line (§ Code graph in the brief). Choose the effort per
+§ Premise check). Choose the effort per
 `${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Choosing the worker. The plan's
 `parallel_groups` are binding: dispatch each group in one message, or write the reason against it
 into `description`.
@@ -170,7 +184,7 @@ Contract: ${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md § Dev-only worker
 Traps: ${CLAUDE_PLUGIN_ROOT}/references/session-traps.md (stash, HEAD after commit, watcher exit 0, gate lock).
 Tests: <test_discipline from .weside/config.json, spelled out; absent → tests after the code, same change>.
 Gates: <affected suites>; [critical chunk: run <integration suite> against <database>].
-[Code graph: graphify affected "<symbol>" … | graph query "<question>" | not needed (<reason>)]   (only when tools.graphify is true)
+[Code graph: graphify affected "<symbol>" …]   (only when tools.graphify is true and the chunk changes a symbol called from outside its file)
 Repo constraints: <generated artifacts to regenerate and commit; baselines you leave alone>.
 Tools: read and search with the Read, Grep and Glob tools on absolute paths; never `cd <dir> && grep …` or `cat`/`rg` through Bash.
 ## Limits and when to stop
@@ -179,7 +193,7 @@ Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad roo
 Before the report, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question. Stop after the report.
 ```
 
-**While a worker runs:** arm the watchdog at dispatch (`worker-dispatch.md` § Watchdog), never a
+**While a worker runs:** a long one gets its watchdog (`worker-dispatch.md` § Watchdog), never a
 `Monitor` on worker progress: the report arrives as a notification. Refine the next story or draft
 the PR body. The plugin's report gates
 send a worker that stopped before its report back to work; a result still without the Report fields
@@ -220,9 +234,8 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    line naming money, auth or tenant work when the diff has it. Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
 4. Run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
-   with `--until-merged` once auto-merge is armed (`--human-merge` on a one-way PR waiting for the human's go), and next to it one
-   `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh <PR>…` over the run's open PRs. The headers list
-   the exit codes; start both from the main checkout (`references/session-traps.md` § CI and checks). One checks watcher per PR: a worker running `/we:ci-review` on it watches until green
+   with `--until-merged` once auto-merge is armed (`--human-merge` on a one-way PR waiting for the human's go). Its header lists
+   the exit codes; start it from the main checkout (`references/session-traps.md` § CI and checks). One checks watcher per PR: a worker running `/we:ci-review` on it watches until green
    (L0 §Sessions), then you arm it `--until-merged`. Meanwhile refine or prepare the next story.
 5. You stay on an auto-merge PR until it is merged; the user never runs `/we:ci-review` or
    `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit, without asking:
@@ -243,7 +256,7 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    - exit 14 (another watcher holds this PR) → nothing to do; its notification carries the result.
    Bounds, no `/loop` or `/goal`: ci-review's three rounds; the watcher's 6-h lifetime (exit 9 →
    report); at most three re-arms per PR head; a repeat finding (ci-review § 4) stops and reports.
-6. A conflict exit of `watch-pr-conflicts.sh` (or the `conflict_gate.py` Stop hook) goes back to the
+6. A conflict the `conflict_gate.py` Stop hook or the watcher (exit 12) names goes back to the
    PR's worker (merge the default branch, after-merge check, push) without asking; re-arm the watch after the push,
    and auto-merge once green (`conflict_gate.py` names a PR it saw armed that is now green and unarmed).
 
@@ -307,9 +320,8 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
   the HOW to the epic owner (else the component owner), each milestone (plan on main, PR opened or merged, a blocker) as one line
   to the coordinator, a question for the human with `board.py ask` (L0 §Talking and the board). A Lead bound to a companion also writes back at those milestones per
   `${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Writeback.
-- An epic run: after every merged story run the epic upkeep (one Updates Log line per `epic-plan.md`
-  § Upkeep after a merge, learnings forward, the finish line per `/we:merged` § 6) and commit it before the next story starts.
-  Pull only keys on the epic's `line:`; work a worker finds beyond it becomes an `## Extensions` entry,
+- An epic run: `/we:merged` writes the epic's Updates Log line (`we-worker close`); the next story
+  does not wait on any further upkeep. Pull only keys on the epic's `line:`; work a worker finds beyond it becomes an `## Extensions` entry,
   never a story or a phase. When acceptance tells you `finish line reached`, post "good as is?" on the board (`board.py ask`) and tell the coordinator in one line; from then on start no worker for this
   epic until the human's answer comes back. An epic without `line:`: draw it first (a proposal through
   the coordinator, approved like a new epic). After a compact, rebuild state

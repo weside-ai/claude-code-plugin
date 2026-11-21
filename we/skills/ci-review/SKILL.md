@@ -179,7 +179,7 @@ Findings table: `| # | Source | Bot? | Severity | File:Line | Issue | Thread ID 
 ## 4 · Wait and repeat
 
 - After the push, run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh $PR --sha "$(git rev-parse HEAD)"`
-  as a background command, plus `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-conflicts.sh $PR` when none runs for it.
+  as a background command.
   Exit 6 (Codex WARNING/BLOCKING on the head) wakes you before the test job ends: fix and commit, then start the
   watcher again on the same head and push when its final line comes; on exit 6 or a red review check the watcher has already disarmed auto-merge. End the turn and act on the notification. Do not poll in the foreground.
 - Each round runs sections 1 to 3 again in full, including the thread resolve.

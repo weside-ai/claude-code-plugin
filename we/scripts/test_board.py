@@ -977,7 +977,7 @@ class TestAskReader:
             ({"PATH": "empty"}, "no claude on PATH"),
         ],
     )
-    def test_a_reader_that_cannot_run_posts_nothing(
+    def test_a_reader_that_cannot_run_posts_the_question_unread(
         self, crewless, capsys, monkeypatch, setup, cause
     ):
         answer_with(crewless, setup.get("answer", CLEAR))
@@ -989,12 +989,10 @@ class TestAskReader:
         if "PATH" in setup:
             (crewless / "empty").mkdir()
             monkeypatch.setenv("PATH", str(crewless / "empty"))
-        before = (crewless / "board.json").read_bytes()
-        assert go(crewless, *ask_argv()) == 1
-        assert capsys.readouterr().err.strip() == f"board.py ask: reader-error: {cause}"
-        assert (crewless / "board.json").read_bytes() == before
+        assert go(crewless, *ask_argv()) == 0
+        assert f"board.py ask: reader-error: {cause}; posted unread" in capsys.readouterr().err
         [line] = jsonl(crewless / "board-questions.jsonl")
-        assert (line["outcome"], line["reason"]) == ("reader-error", cause)
+        assert (line["outcome"], line["reader"]) == ("posted", {"error": cause})
 
     def test_the_log_survives_removal_and_only_grows(self, crewless):
         answer_with(crewless, CLEAR)
@@ -2123,6 +2121,17 @@ class TestSelectRefiner:
 
 
 class TestSelectLenses:
+    @pytest.fixture(autouse=True)
+    def risk_plan(self, moving, monkeypatch):  # noqa: ARG002 (order: after `moving` clears the env)
+        """The panel judges a risk plan; a T0 plan selects without one (test below)."""
+        monkeypatch.setenv("FAKE_RISK_LINE", "T2")
+
+    def test_a_t0_plan_selects_without_a_panel(self, moving, monkeypatch):
+        monkeypatch.delenv("FAKE_RISK_LINE")
+        with_row(moving, KEY, "backlog")
+        assert act(moving, "select", KEY, adapter=fake()) == 0
+        assert transitions(moving)[-1]["panel"] == "none (T0)"
+
     @pytest.mark.parametrize("verdict", ["missing", "red", "stale"])
     def test_without_a_green_verdict_select_is_refused(self, moving, capsys, verdict):
         root = moving / "work"
@@ -2326,6 +2335,16 @@ class TestMove:
         # --reopen does not open the way from any state: only from in_review/in_test
         assert act(moving, "move", KEY, "in_progress", "--reopen", "x", adapter=fake()) == 1
         assert "(its last row is backlog)" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("was", [None, "backlog"])
+    def test_the_fast_lane_pulls_a_story_without_selected(self, moving, was):
+        """A small story without a plan file is pulled straight to In Progress (red arm: the
+        same move without --fast is refused, the test above)."""
+        if was:
+            with_row(moving, KEY, was)
+        assert act(moving, "move", KEY, "in_progress", "--fast", adapter=fake()) == 0
+        row = jsonl(moving / "board-transitions.jsonl")[-1]
+        assert (row["to"], row["via"]) == ("in_progress", "fast")
 
     @pytest.mark.parametrize("was", ["in_review", "in_test"])
     def test_a_reverted_story_reopens_to_in_progress_only_with_a_reason(self, moving, capsys, was):

@@ -7,7 +7,7 @@ Your brief is your whole job: its chunk, its branch, its gates, its report.
 ## You do
 
 - Work in the worktree and branch the brief names; run its bootstrap before the first gate.
-- Land tests with the code; run the affected suites by name and the gates the brief lists.
+- Land the tests `test-economy.md` asks for; run the affected suites by name and the brief's gates.
 - Commit by path, never the whole tree.
 - Started as `Agent(we:dev-*)` (crew `launch.subagent_fallback`): same brief and report
   (`worker-dispatch.md` § Worker launch backend).
