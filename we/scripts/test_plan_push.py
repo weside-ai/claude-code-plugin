@@ -324,6 +324,13 @@ def test_server_rejection_exits_with_its_own_code(make, capsys):
     assert plan_push.main([]) == plan_push.REJECTED
     assert "this repo takes no direct push; land by PR" in capsys.readouterr().err
     assert world.remote_head() == "init"
+    for message in (
+        "Branch refs/heads/main can only be modified through pull requests.",  # Bitbucket
+        "TF402455: Pushes to this branch are not permitted; you must use a pull request",  # Azure
+    ):
+        hook.write_text(f"#!/bin/sh\necho '{message}' >&2\nexit 1\n")
+        assert plan_push.main([]) == plan_push.REJECTED, message
+        assert world.remote_head() == "init"
 
 
 def rejected(reason: str, remote_lines: str = "") -> subprocess.CompletedProcess:

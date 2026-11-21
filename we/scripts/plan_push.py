@@ -51,12 +51,12 @@ Exit codes:
      nothing was pushed by this script, except past the wait cap: that run may still land the
      commits, so the caller waits for it (its URL) and never takes the PR way meanwhile
   3  the server rejected the push naming a rule (`GH013`, `GH006`, `Repository rule violations`,
-     `protected branch`, `Changes must be made through a pull request`): this repo takes no
-     direct push, land by PR. Any other `[remote rejected]` is exit 2, never the PR way
-Every failed direct push prints the server's porcelain ref line (`!`), redacted, cut at 300 chars.
+     `protected branch`, `through a pull request`, `must use a pull request`, `TF402455`): this
+     repo takes no direct push, land by PR. Any other `[remote rejected]` is exit 2, never the PR way
   4  refused by the secret scan: a finding, or no scanner configured (or it did not run); nothing
      was pushed, and this commit lands by no route, the PR way included. Its own code because a
      caller falls back to a PR on 1, and that fallback would push the finding to the forge
+Every failed direct push prints the server's porcelain ref line (`!`), redacted, cut at 300 chars.
 Pinned by `scripts/test_plan_push.py`.
 """
 
@@ -91,10 +91,11 @@ RETRIES = 3
 PLANNED = re.compile(r"^state:\s*planned\s*(#.*)?$", re.M)
 REFUSED, FAILED, REJECTED, SCAN_REFUSED = 1, 2, 3, 4
 NO_PUSH_LINE = "this repo takes no direct push; land by PR"
-# The server names a rule (GitHub rulesets GH013, branch protection GH006): no direct push.
+# The server names a rule (GitHub rulesets GH013, branch protection GH006, GitLab, Bitbucket,
+# Azure DevOps TF402455): no direct push.
 RULE = re.compile(
     r"GH013|GH006|repository rule violations|protected branch"
-    r"|changes must be made through a pull request",
+    r"|through (a )?pull requests?|must use a pull request|TF402455",
     re.I,
 )
 # A `[remote rejected]` from a concurrent ref update: a lost race, retried like a non-fast-forward.
