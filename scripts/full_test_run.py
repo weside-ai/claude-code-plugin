@@ -2,12 +2,10 @@
 """A full local test run takes the host's test slot, then reports its peak.
 
 Several sessions on one host share its memory, and a full ``pytest we scripts`` forks node and
-shell children per test. A full local run therefore waits for the test slot, one ``flock`` over
-``$WESIDE_TESTS_LOCK`` (default ``/tmp/weside-tests.lock``, the slot a host's other heavy test runs
-take too): a run that has to wait says who holds the slot, then waits as long as it takes. The
-kernel drops the lock when its holder dies. A run nested in one that holds the slot
-(``WESIDE_TESTS_LOCK_HELD`` = the holder's pid, alive) does not wait for itself; CI
-(``GITHUB_ACTIONS=true``) takes no slot.
+shell children per test. A full local run therefore waits for the host's test slot through the
+plugin's one holder, ``we/scripts/slot_lock.py`` ``hold`` (its docstring owns the lock path, the
+holder's note and who takes no slot): a run that has to wait says who holds the slot, then waits as
+long as it takes.
 
 While the command runs, its process tree is sampled every ``SAMPLE_S`` seconds; at the end one
 stderr line names the peak process count and summed RSS (``peak: N processes, M MiB RSS``).
@@ -20,57 +18,18 @@ Usage:
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import os
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-LOCK_ENV = "WESIDE_TESTS_LOCK"
-DEFAULT_LOCK = "/tmp/weside-tests.lock"
-HELD_ENV = f"{LOCK_ENV}_HELD"
+sys.path.insert(0, str(REPO / "we" / "scripts"))
+import slot_lock  # noqa: E402
+
 FULL_RUN = [sys.executable, "-m", "pytest", "-q", "we", "scripts"]
 SAMPLE_S = 0.5
-
-
-def lock_path() -> Path:
-    return Path(os.environ.get(LOCK_ENV) or DEFAULT_LOCK)
-
-
-def _held_by_caller() -> bool:
-    holder = os.environ.get(HELD_ENV, "")
-    if holder.isdigit() and int(holder) > 0:
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.kill(int(holder), 0)
-            return True
-    return False
-
-
-@contextlib.contextmanager
-def slot(label: str):
-    """Hold the test slot for the body; while another run holds it, say whose and wait."""
-    if os.environ.get("GITHUB_ACTIONS") == "true" or _held_by_caller():
-        yield
-        return
-    fd = os.open(lock_path(), os.O_RDWR | os.O_CREAT, 0o666)
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            note = os.pread(fd, 400, 0).decode(errors="replace").strip() or "unknown"
-            print(f"waiting for test slot (held by {note})", file=sys.stderr, flush=True)
-            start = time.monotonic()
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            print(f"got test slot after {time.monotonic() - start:.0f}s", file=sys.stderr)
-        note = f"{label} (pid {os.getpid()}, since {time.strftime('%H:%M:%S')})\n"
-        os.ftruncate(fd, 0)
-        os.pwrite(fd, note.encode(), 0)
-        yield
-    finally:
-        os.close(fd)
 
 
 def _children() -> dict[int, list[int]]:
@@ -134,8 +93,8 @@ def main(argv: list[str]) -> int:
     if not command:
         print(__doc__.strip().splitlines()[-2], file=sys.stderr)
         return 2
-    with slot(f"{REPO.name}: {' '.join(command)[:80]}"):
-        env = {**os.environ, HELD_ENV: str(os.getpid())}
+    with slot_lock.hold(f"{REPO.name}: {' '.join(command)[:80]}"):
+        env = {**os.environ, slot_lock.HELD_ENV: str(os.getpid())}
         child = subprocess.Popen(command, cwd=REPO, env=env)
         with Peak(child.pid) as peak:
             code = child.wait()

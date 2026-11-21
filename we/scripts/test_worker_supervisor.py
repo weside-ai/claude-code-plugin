@@ -525,9 +525,24 @@ def test_a_name_already_queued_refuses_unless_its_waiter_is_gone(queue):
     # an entry without a waiter (none spawned) neither blocks its name nor the younger entries
     ws.enqueue(queue["state"], "AC-2-b", "/tree", [], None, None, 60, queue["clock"]())
     ws.enqueue(queue["state"], "AC-2-b", "/tree", [], None, None, 60, queue["clock"]())
-    assert ws._head(queue["state"], "AC-3-c") == "AC-1-a"
+    queue["put"]("AC-3-c", queue["clock"]())
+    assert not ws._may_try(queue["state"], "AC-3-c")  # AC-1-a waits ahead
     ws._drop(queue["state"], "AC-1-a")
-    assert ws._head(queue["state"], "AC-3-c") is None  # AC-2-b, without a waiter, is skipped
+    assert ws._may_try(queue["state"], "AC-3-c")  # AC-2-b, without a waiter, is skipped
+
+
+def test_a_waiter_tries_past_entries_only_their_own_repo_limit_may_hold(queue):
+    """T2 panel on #308: a head from a repo with a lower 5h limit held every other repo's queued
+    start for up to its 2 h timeout; the capacity check decides whether it may pass."""
+    state, t = queue["state"], queue["clock"]()
+    ws.enqueue(state, "AC-1-a", "/tree", [], None, None, 60, t, {"max_active_5h_percent": 40})
+    ws.set_waiter(state, "AC-1-a", os.getpid())
+    queue["put"]("AC-2-b", t + 1)
+    queue["put"]("AC-3-c", t + 2)
+    assert ws._may_try(state, "AC-2-b")
+    assert not ws._may_try(state, "AC-3-c")  # AC-2-b holds the machine's limits
+    (state / "pool.json").write_text('{"max_active_5h_percent": 40}')
+    assert not ws._may_try(state, "AC-2-b")  # 40 is no lower limit on this machine
 
 
 @pytest.mark.parametrize("name", ["../AC-1", "AC-1/x", ".hidden", "AC..1"])

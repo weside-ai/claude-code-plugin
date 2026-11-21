@@ -105,17 +105,26 @@ sources`, `Grenzen und wann stoppen`/`Limits and when to stop`.
 Every denial of the worker rights brake is one line in `<state dir>/brakes.jsonl`
 (`worker_rights.brake_log`): the count of false alarms.
 `check` names a living session of the same key on stderr: a follow-up goes to it by `SendMessage`.
-After the check `we-worker` refuses a start (exit 3, nothing starts) while the busy workers
-(background sessions and window workers; interactive companions and masters never count) reach
-`workers.max_busy_sessions`, or while no account in the rotation (`cswap list --json`) has room: 7d
-under 95 % and 5h at or under `workers.max_active_5h_percent`; one account with room lets the start
-through, the rotation switches to it. Without the list the active account's 5h decides; without
-`cswap` the check is skipped (`.weside/config.json`, asked by `/we:setup`; `worker_launch.py
-capacity` owns the rule); there is no override flag. `we-worker <name> --bg --queue
-[--queue-timeout 2h]` queues a refused start instead: a detached waiter starts it once the check
-passes, first come first served, and tells the starter one line when it starts, fails or times out;
-`we-worker status` lists queued starts, `we-worker stop <name>` removes one
-(`scripts/worker_supervisor.py`, the comment above `queue_dir`).
+After the check `we-worker` refuses a start (exit 3, nothing starts) while a queued start of any
+repo waits ahead of it, while the busy workers on the machine (background sessions and window
+workers; interactive companions and masters never count) reach the one worker pool limit, or while
+no account in the rotation (`cswap list --json`) has room: 7d under 95 % and 5h at or under
+`max_active_5h_percent`; one account with room lets the start through, the rotation
+switches to it. Without the list the active account's 5h decides; without `cswap` the check is
+skipped (`worker_launch.py capacity` owns the rule); there is no override flag. Both limits are
+the machine's, because the busy count is: `<state dir>/pool.json`
+`{"max_busy_sessions": N, "max_active_5h_percent": P}` (defaults 8 and 80), one file for every repo
+on the host; `worker_launch.py pool-path` prints where it lies (`$WE_WORKER_STATE_DIR` first). A
+repo's `workers` block may only lower either value; one above the machine's is not read. A queued
+start that only its repo's lower value holds back stays first in line and lets other starts pass
+while the machine has room.
+`we-worker <name> --bg --queue [--queue-timeout 2h]` queues a refused start instead: a detached
+waiter starts it once the check passes, first come first served across every repo, gives it its
+own worktree when it was queued from a main checkout, and tells the starter one line when it
+starts, fails or times out; `we-worker status` lists queued starts, `we-worker stop <name>` removes
+one (`scripts/worker_supervisor.py`, the comment above `queue_dir`). A worker blocked on the
+host's test slot (`scripts/slot_lock.py`, the slot's one holder and reader) shows
+`waits: test-slot` in `we-worker status`: it counts as busy, holds its memory and does no work.
 
 ### Worker rights
 
@@ -145,7 +154,7 @@ prints a tip; `own` gives a start from the main checkout its own tree.
 
 | Mode | When | Tree |
 |---|---|---|
-| own tree | a build worker started from the main checkout under `workers.tree: own` | a new worktree beside it: `.weside/config.json` `workers.add_worktree` (a template with the tokens `{path}` and `{branch}`), else `git worktree add <repo>-<name> -b feat/<name> origin/<default>`; `--branch` names the branch |
+| own tree | a build worker started from the main checkout under `workers.tree: own`, and every `--queue` start from the main checkout | a new worktree beside it: `.weside/config.json` `workers.add_worktree` (a template with the tokens `{path}` and `{branch}`), else `git worktree add <repo>-<name> -b feat/<name> origin/<default>`; `--branch` names the branch |
 | `--tree <path>` | an integration worktree, a finisher, a fix round | that existing worktree |
 | `--here` | a worker that only reads: probe, walk, card, pre-sorter | where the caller stands |
 
@@ -190,7 +199,8 @@ worker on the key, no story plan on the default branch). `we-worker gc` removes 
 docstring owns both, and the one end reason `we-worker status` prints). `we-worker stop` prints the
 stopped worker's full session id and its resume command; a follow-up brief resumes it with
 `we-worker <name> --bg --resume <name>`, which finds the session through its kept
-`<name>.resume.json` (7 days) after `claude agents` dropped it.
+`<name>.resume.json` (7 days) after `claude agents` dropped it; `--resume <prefix>` takes a unique
+prefix of the session id (at least four hex digits) and names the candidates when it is ambiguous.
 
 With a template, the Lead:
 

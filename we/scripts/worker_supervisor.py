@@ -60,7 +60,9 @@ Usage:
   worker_supervisor.py wait-queue --name <n>           the waiter, in the foreground
   worker_supervisor.py stopped --name <n> --session <id> [--tree <dir>]
                                                        keeps the resume file, prints the resume line
-  worker_supervisor.py kept --name <n>                 the kept session id; exit 1 without one
+  worker_supervisor.py resolve --key <id|prefix|name>  the session id a --resume resumes
+                                                       (`resolve_session`, `claude agents --json`
+                                                       on stdin); exit 1 none, 4 ambiguous
 State dir: `$WE_WORKER_STATE_DIR`, else `~/.claude/we-state/workers`.
 """
 
@@ -603,10 +605,13 @@ def status_records(
     rows: list[dict], key: str | None, projects: Path, state: Path, now: float
 ) -> list[dict]:
     """The loop of `we-worker status` as objects: one per worker (background, or a window worker)
-    `{name, id, pid, state, alive, last, end, time_limit, window, resume}`; `state` is the row's
-    state, `exited(<state>)` when the process is gone; `end` the `api_mark`; `resume` the resume
-    command of an exited worker with a resumable end, else null."""
+    `{name, id, pid, state, alive, last, end, time_limit, window, resume, waits}`; `state` is the
+    row's state, `exited(<state>)` when the process is gone; `end` the `api_mark`; `resume` the
+    resume command of an exited worker with a resumable end, else null; `waits` is `test-slot`
+    while a process of the worker is blocked on the host's test slot (it counts as busy and does
+    no work), else null."""
     out = []
+    slot_waits = _slot_waiting(rows)
     for row in rows:
         row["id"] = row.get("id") or row.get("sessionId")
         if key and key not in (row.get("name"), row.get("id")):
@@ -641,20 +646,33 @@ def status_records(
                 "time_limit": time_limit(state, row.get("name") or "", now),
                 "window": window,
                 "resume": resume,
+                "waits": "test-slot" if not gone and pid in slot_waits else None,
             }
         )
     return out
 
 
+def _slot_waiting(rows: list[dict]) -> set[str]:
+    """The pids (as text) of the rows with a process below them blocked on the host's test slot
+    (`slot_lock.waiting_roots`, from `/proc/locks`)."""
+    import slot_lock  # noqa: PLC0415
+
+    roots = {int(str(r.get("pid"))) for r in rows if str(r.get("pid", "")).isdigit()}
+    return {str(pid) for pid in slot_lock.waiting_roots(roots)} if roots else set()
+
+
 def status_lines(
     rows: list[dict], key: str | None, projects: Path, state: Path, now: float
 ) -> list[str]:
-    """`we-worker status`: one line per worker of `status_records`, its end mark and the timer's
-    `time_limit`; an exited worker with a resumable mark gets its resume command; then one line
+    """`we-worker status`: one line per worker of `status_records`, its end mark, the timer's
+    `time_limit` and `waits: test-slot`; an exited worker with a resumable mark gets its resume command; then one line
     per queued start (`queued`)."""
     out = []
     for r in status_records(rows, key, projects, state, now):
-        extra = [x for x in ("window" if r["window"] else None, r["end"], r["time_limit"]) if x]
+        waits = f"waits: {r['waits']}" if r["waits"] else None
+        extra = [
+            x for x in ("window" if r["window"] else None, r["end"], r["time_limit"], waits) if x
+        ]
         head = [r["id"], r["name"], f"pid={r['pid']}", r["state"], f"last={r['last']}"]
         out.append(" ".join([*head, *extra]))
         if r["resume"]:
@@ -676,10 +694,15 @@ def status_lines(
 # --- queue -----------------------------------------------------------------------------------
 #
 # `we-worker <name> --bg --queue` registers a start the capacity check refused (`enqueue`) and
-# spawns one detached waiter per entry (`wait_queue`). Only the oldest entry whose waiter lives
-# tries to start, by running the same `we-worker` call again without `--queue`: its exit 3 is
-# "still no room", any other exit ends the wait. First come, first served across waiters; after a
-# start the next one waits `SETTLE_S`, so the new worker counts as busy before the next check.
+# spawns one detached waiter per entry (`wait_queue`). The queue is the machine's, one directory for
+# every repo. Only the oldest entry whose waiter lives tries to start (or one behind entries that
+# only their own repo's lower limit may hold back, `_may_try`), by running the same
+# `we-worker` call again without `--queue` and with `$WE_WORKER_QUEUE_TURN` = its name: its exit 3
+# is "still no room", any other exit ends the wait. First come, first served across waiters and
+# repos: a start that is not queued is refused while any living entry waits
+# (`worker_launch.queued_ahead`). After a start the next one waits `SETTLE_S`, so the new worker
+# counts as busy before the next check. A queued start from a main checkout gets its own worktree
+# (`worker_launch.auto_tree`).
 
 QUEUE_POLL_S = 30
 SETTLE_S = 60
@@ -746,8 +769,11 @@ def enqueue(
     starter: str | None,
     timeout_s: float,
     now: float,
+    repo_limits: dict | None = None,
 ) -> dict:
-    """Register a refused start; a name already queued with a living waiter refuses (exit 2)."""
+    """Register a refused start; a name already queued with a living waiter refuses (exit 2).
+    `repo_limits` are the pool limits its repo lowers (`worker_launch.repo_limits`): a start that
+    only they hold back holds no other start up (`worker_launch.queued_limits`)."""
     qdir = queue_dir(state)
     qdir.mkdir(parents=True, exist_ok=True)
     held = _read(qdir / f"{name}.json")
@@ -769,6 +795,7 @@ def enqueue(
         "starter": starter or None,
         "queued_at": now,
         "deadline": now + timeout_s,
+        "repo_limits": repo_limits or {},
     }
     (qdir / f"{name}.json").write_text(json.dumps(doc, indent=2) + "\n")
     return doc
@@ -801,12 +828,23 @@ def unqueue(state: Path, name: str) -> dict | None:
     return doc
 
 
-def _head(state: Path, me: str) -> str | None:
-    """The oldest entry whose waiter lives (this waiter counts as living)."""
+def _may_try(state: Path, me: str) -> bool:
+    """`me` tries its start when it is the head, or when every living entry ahead of it carries a
+    repo limit below the machine's: the capacity check lets it past an entry that only such a limit
+    holds back (`worker_launch.queued_limits`), and decides."""
+    try:
+        machine = wl.pool_limits(state)
+    except wl.LaunchError:
+        machine = None
+    full = None if machine is None else (machine[wl.POOL_KEY], machine[wl.PCT_KEY])
     for doc in queued(state):
-        if doc["name"] == me or _waiter_lives(doc.get("waiter_pid")):
-            return doc["name"]
-    return None
+        if doc["name"] == me:
+            return True
+        if not _waiter_lives(doc.get("waiter_pid")):
+            continue
+        if full is None or wl.queued_limits(doc, machine) == full:
+            return False
+    return False
 
 
 def start_queued(doc: dict) -> tuple[int, str]:
@@ -815,6 +853,7 @@ def start_queued(doc: dict) -> tuple[int, str]:
     if doc.get("brief_file"):
         argv.append(Path(doc["brief_file"]).read_text())
     env = dict(os.environ)
+    env[wl.QUEUE_TURN_ENV] = str(doc["name"])  # its own entry is no start ahead of it
     if doc.get("starter"):
         env["WE_WORKER_STARTER"] = str(doc["starter"])
     script = Path(__file__).resolve().with_name("we-worker")
@@ -873,7 +912,7 @@ def wait_queue(
             settled = now - last.stat().st_mtime >= SETTLE_S
         except OSError:
             settled = True
-        if settled and _head(state, name) == name:
+        if settled and _may_try(state, name):
             code, out = start(doc)
             if code != CAPACITY_REFUSED:
                 _drop(state, name)
@@ -1088,8 +1127,9 @@ def _queue_verb(args: argparse.Namespace, state: Path) -> int:
     brief = argv.pop() if args.has_brief and argv else None
     try:
         timeout_s = parse_duration(args.timeout)
+        own = wl.repo_limits(Path(args.tree))
         doc = enqueue(
-            state, args.name, args.tree, argv, brief, args.starter, timeout_s, time.time()
+            state, args.name, args.tree, argv, brief, args.starter, timeout_s, time.time(), own
         )
     except ValueError as exc:
         print(f"we-worker: --queue-timeout: {exc}", file=sys.stderr)
@@ -1121,11 +1161,68 @@ def _wait_verb(args: argparse.Namespace, state: Path) -> int:
     return 0
 
 
-def _kept_verb(args: argparse.Namespace, state: Path) -> int:
-    sid = kept_session(state, args.name)
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+PREFIX_RE = re.compile(r"[0-9a-f][0-9a-f-]{3,35}")
+
+
+def resolve_session(
+    rows: list[dict], key: str, state: Path, projects: Path
+) -> tuple[str | None, list[str]]:
+    """The full session id `we-worker --resume <key>` resumes: a full UUID as is; else the
+    sessions of `claude agents` whose id or name is `key`, else the kept session of the stopped
+    worker named `key` (`kept_session`), else, for a key of at least four hex digits, every
+    session id starting with it among `claude agents`, the kept resume files and the transcripts.
+    Returns `(id, [])` for one, `(None, candidates)` for several, `(None, [])` for none."""
+    if UUID_RE.fullmatch(key):
+        return key, []
+    named = sorted(
+        {
+            str(r["sessionId"])
+            for r in rows
+            if key in (r.get("id"), r.get("name")) and r.get("sessionId")
+        }
+    )
+    if len(named) == 1:
+        return named[0], []
+    if named:
+        return None, named
+    kept = kept_session(state, key)
+    if kept:
+        return kept, []
+    if not PREFIX_RE.fullmatch(key):
+        return None, []
+    ids = {str(r.get("sessionId") or "") for r in rows}
+    for path in state.glob(f"*{RESUME_SUFFIX}"):
+        ids.add(kept_session(state, path.name[: -len(RESUME_SUFFIX)]) or "")
+    ids |= {Path(f).stem for f in glob.glob(str(projects / "*" / f"{glob.escape(key)}*.jsonl"))}
+    found = sorted(i for i in ids if UUID_RE.fullmatch(i) and i.startswith(key))
+    return (found[0], []) if len(found) == 1 else (None, found)
+
+
+def _resolve_verb(args: argparse.Namespace, state: Path) -> int:
+    try:  # `claude agents --json` on stdin; unreadable counts as no rows
+        rows = [r for r in json.load(sys.stdin) if isinstance(r, dict)]
+    except ValueError:
+        rows = []
+    sid, several = resolve_session(rows, args.key, state, projects_dir())
     if sid:
         print(sid)
-    return 0 if sid else 1
+        return 0
+    if several:
+        shown = " ".join(several[:5]) + (" …" if len(several) > 5 else "")
+        print(
+            f"we-worker: --resume '{args.key}' is ambiguous ({len(several)} sessions: {shown});"
+            " give a longer prefix or the full UUID",
+            file=sys.stderr,
+        )
+        return 4
+    print(
+        f"we-worker: --resume '{args.key}': no session with that id or name in claude agents, no"
+        f" stopped worker of that name ({args.key}{RESUME_SUFFIX} in the state dir) and no"
+        " session id starting with it; give the full UUID",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def _stopped_verb(args: argparse.Namespace, state: Path) -> int:
@@ -1140,7 +1237,7 @@ VERBS = {
     "queue": _queue_verb,
     "unqueue": _unqueue_verb,
     "wait-queue": _wait_verb,
-    "kept": _kept_verb,
+    "resolve": _resolve_verb,
     "stopped": _stopped_verb,
 }
 
@@ -1166,8 +1263,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--starter")
     p.add_argument("--timeout", default=QUEUE_TIMEOUT)
     p.add_argument("--has-brief", action="store_true")
-    for verb in ("unqueue", "wait-queue", "kept"):
+    for verb in ("unqueue", "wait-queue"):
         sub.add_parser(verb).add_argument("--name", required=True)
+    sub.add_parser("resolve").add_argument("--key", required=True)
     p = sub.add_parser("stopped")
     p.add_argument("--name", required=True)
     p.add_argument("--session", required=True)
