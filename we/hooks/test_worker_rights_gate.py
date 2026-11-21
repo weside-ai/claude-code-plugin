@@ -673,24 +673,36 @@ def test_a_text_that_only_names_git_dir_is_no_refusal(world):
 
 
 @pytest.mark.parametrize(
-    "command",
+    ("command", "owner"),
     [
-        # T2 panel round 3: a path `git` behind a valid push was not counted
-        "git -C {tree} push origin feat/ABC-12-tree; eval /usr/bin/git push",
-        "git -C {tree} push origin feat/ABC-12-tree && ./git push",
-        "git -C {tree} push origin feat/ABC-12-tree && echo done",
-        "git -C {tree} push origin feat/ABC-12-tree\ngit status",
-        "bash -c 'git push'",
-        "git -c core.worktree={tree} -C {tree} push origin feat/ABC-12-tree",
-        "command git -C {tree} push origin feat/ABC-12-tree",
-        "\\git -C {tree} push origin feat/ABC-12-tree",
-        "/usr/bin/git -C {tree} push origin feat/ABC-12-tree",
-        "X=1 git -C {tree} push origin feat/ABC-12-tree",
-        "git -C $TREE push origin feat/ABC-12-tree",
-        "git -C '{tree} push origin feat/ABC-12-tree",
+        # T2 panel round 3: a path `git` behind a valid push was not counted; the one row where
+        # the owner splits the bypass, so it runs under both
+        ("git -C {tree} push origin feat/ABC-12-tree; eval /usr/bin/git push", "master"),
+        ("git -C {tree} push origin feat/ABC-12-tree; eval /usr/bin/git push", "worker"),
+        # a relative `git` behind a valid push
+        ("git -C {tree} push origin feat/ABC-12-tree && ./git push", "worker"),
+        # any second segment, a harmless one too, keeps the cwd in
+        ("git -C {tree} push origin feat/ABC-12-tree && echo done", "worker"),
+        # a second line is a second segment
+        ("git -C {tree} push origin feat/ABC-12-tree\ngit status", "worker"),
+        # a push inside a nested shell
+        ("bash -c 'git push'", "worker"),
+        # a config option that moves the work tree
+        ("git -c core.worktree={tree} -C {tree} push origin feat/ABC-12-tree", "worker"),
+        # the `command` builtin in front of git
+        ("command git -C {tree} push origin feat/ABC-12-tree", "worker"),
+        # a backslash that skips an alias
+        ("\\git -C {tree} push origin feat/ABC-12-tree", "worker"),
+        # an absolute path to git
+        ("/usr/bin/git -C {tree} push origin feat/ABC-12-tree", "worker"),
+        # an environment assignment in front of git (GIT_DIR=…)
+        ("X=1 git -C {tree} push origin feat/ABC-12-tree", "worker"),
+        # a variable the gate cannot expand
+        ("git -C $TREE push origin feat/ABC-12-tree", "worker"),
+        # an open quote: the `shlex` error
+        ("git -C '{tree} push origin feat/ABC-12-tree", "worker"),
     ],
 )
-@pytest.mark.parametrize("owner", ["master", "worker"])
 def test_only_one_simple_push_leaves_the_cwd_out(world, command, owner):
     """Vyra's contract: the cwd drops out only for exactly one `git [-C|--git-dir|--work-tree]…
     push` segment; anything else, a `shlex` error included, is judged with the cwd (main here)."""

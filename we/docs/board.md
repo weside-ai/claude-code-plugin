@@ -377,8 +377,9 @@ your recommendation ready in your window; the owner comes to you. Do not ask it 
 coordinator.`, the starter the same text when the asker is gone) and the coordinator `discuss_route`
 in place of the copy line (`<id>: Discuss → tell the owner in one line: talk to <asker> (<cwd>). Do
 not discuss or relay it yourself.`, the window from the asker's board line `cwd`); when the starter
-took it, a second `discuss_route` names the starter. A question without the stamp keeps the
-coordinator's full text.
+took it, a second `discuss_route` names the starter. Without a starter the `discuss_route` waits
+for the asker's delivery: an asker not reached leaves only the routing line. A question without the
+stamp keeps the coordinator's full text.
 
 The board's optional `answer_prompts` words these texts in the orchestrator's own language, `{id}`
 standing for the question's id, `{pr}` for its PR link and `{who}` for the session a `discuss_route` names: `{"accept": "{id}: Vorschlag angenommen"}`;

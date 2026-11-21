@@ -683,7 +683,7 @@ def status_lines(
             continue
         since = dt.datetime.fromtimestamp(q.get("queued_at", now), dt.timezone.utc)
         until = dt.datetime.fromtimestamp(q.get("deadline", now), dt.timezone.utc)
-        waiter = "" if _waiter_lives(q.get("waiter_pid")) else " waiter-gone"
+        waiter = "" if waiter_lives(q) else " waiter-gone"
         out.append(
             f"queued {q.get('name')} position={pos} since={since:%H:%M} until={until:%H:%M}"
             f" tree={q.get('tree')} starter={q.get('starter') or '-'}{waiter}"
@@ -715,14 +715,36 @@ def queue_dir(state: Path) -> Path:
     return state / "queue"
 
 
-def _waiter_lives(pid: object) -> bool:
+def proc_start(pid: int) -> int | None:
+    """The start time of process `pid` in clock ticks since boot (`/proc/<pid>/stat` field 22),
+    None where it cannot be read (no such process, no /proc)."""
+    try:
+        stat = Path(f"/proc/{int(pid)}/stat").read_text()
+        return int(stat.rsplit(")", 1)[1].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _waiter_lives(pid: object, start: object = None) -> bool:
     """A queue entry's waiter: a missing or non-positive pid is no waiter (unlike `_pid_lives`,
-    which keeps an unreadable session row alive)."""
+    which keeps an unreadable session row alive). With the `start` recorded at `set_waiter`, a
+    process of that pid with another start time is a reused pid, not the waiter; an entry without
+    it (or a host without /proc) keeps the pid check alone."""
     try:
         num = int(str(pid))
     except ValueError:
         return False
-    return num > 0 and wl._pid_lives(num)
+    if num <= 0 or not wl._pid_lives(num):
+        return False
+    if isinstance(start, int) and not isinstance(start, bool):
+        now = proc_start(num)
+        return now is None or now == start
+    return True
+
+
+def waiter_lives(doc: dict) -> bool:
+    """The waiter of queue entry `doc` lives (`_waiter_lives` with its recorded start time)."""
+    return _waiter_lives(doc.get("waiter_pid"), doc.get("waiter_start"))
 
 
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -777,7 +799,7 @@ def enqueue(
     qdir = queue_dir(state)
     qdir.mkdir(parents=True, exist_ok=True)
     held = _read(qdir / f"{name}.json")
-    if held and _waiter_lives(held.get("waiter_pid")):
+    if held and waiter_lives(held):
         raise wl.LaunchError(
             f"{name} is already queued (since {held.get('queued_at', 0):.0f}); "
             f"`we-worker stop {name}` removes it",
@@ -806,6 +828,7 @@ def set_waiter(state: Path, name: str, pid: int) -> None:
     doc = _read(path)
     if doc:
         doc["waiter_pid"] = pid
+        doc["waiter_start"] = proc_start(pid)
         path.write_text(json.dumps(doc, indent=2) + "\n")
 
 
@@ -822,7 +845,7 @@ def unqueue(state: Path, name: str) -> dict | None:
     """`we-worker stop <name>` of a queued start: removes the entry and ends its waiter."""
     doc = _drop(state, name)
     pid = (doc or {}).get("waiter_pid")
-    if pid != os.getpid() and _waiter_lives(pid):
+    if pid != os.getpid() and _waiter_lives(pid, (doc or {}).get("waiter_start")):
         with contextlib.suppress(OSError):
             os.kill(int(pid), 15)
     return doc
@@ -840,7 +863,7 @@ def _may_try(state: Path, me: str) -> bool:
     for doc in queued(state):
         if doc["name"] == me:
             return True
-        if not _waiter_lives(doc.get("waiter_pid")):
+        if not waiter_lives(doc):
             continue
         if full is None or wl.queued_limits(doc, machine) == full:
             return False
@@ -1025,7 +1048,7 @@ def _gc_queue(state: Path, now: float, apply: bool, verb: str) -> list[str]:
     """Queued starts whose waiter died and whose deadline passed: entry and brief go."""
     lines = []
     for doc in queued(state):
-        if _waiter_lives(doc.get("waiter_pid")) or doc.get("deadline", 0) > now:
+        if waiter_lives(doc) or doc.get("deadline", 0) > now:
             continue
         if apply:
             _drop(state, doc["name"])

@@ -545,6 +545,36 @@ def test_a_waiter_tries_past_entries_only_their_own_repo_limit_may_hold(queue):
     assert not ws._may_try(state, "AC-2-b")  # 40 is no lower limit on this machine
 
 
+def test_a_waiter_with_only_the_pid_alive_holds_nobody_up(queue):
+    """T2 panel on #308: a dead waiter whose pid another process took counted as living and held
+    every start until its deadline. The start time recorded at `set_waiter` tells them apart."""
+    state = queue["state"]
+    queue["put"]("AC-1-a", queue["clock"]())
+    queue["put"]("AC-2-b", queue["clock"]() + 1)
+    path = state / "queue" / "AC-1-a.json"
+    doc = json.loads(path.read_text())
+    assert doc["waiter_start"] == ws.proc_start(os.getpid())
+    assert ws.waiter_lives(doc) and not ws._may_try(state, "AC-2-b")
+    path.write_text(json.dumps({**doc, "waiter_start": doc["waiter_start"] + 1}))  # pid reused
+    assert not ws.waiter_lives(ws._read(path)) and ws._may_try(state, "AC-2-b")
+    del doc["waiter_start"]  # an entry from before the start time: the pid alone decides
+    path.write_text(json.dumps(doc))
+    assert ws.waiter_lives(ws._read(path)) and not ws._may_try(state, "AC-2-b")
+
+
+def test_with_an_unreadable_pool_file_only_the_head_tries(queue):
+    """An unreadable `pool.json` leaves no machine limit to compare with: an entry ahead that
+    only its own repo limit holds back is not passed, only the head tries."""
+    state, t = queue["state"], queue["clock"]()
+    ws.enqueue(state, "AC-1-a", "/tree", [], None, None, 60, t, {"max_active_5h_percent": 40})
+    ws.set_waiter(state, "AC-1-a", os.getpid())
+    queue["put"]("AC-2-b", t + 1)
+    assert ws._may_try(state, "AC-2-b")  # readable: the head's lower limit lets it past
+    (state / "pool.json").write_text("{not json")
+    assert ws._may_try(state, "AC-1-a")
+    assert not ws._may_try(state, "AC-2-b")
+
+
 @pytest.mark.parametrize("name", ["../AC-1", "AC-1/x", ".hidden", "AC..1"])
 def test_a_path_is_no_worker_name_for_the_state_dir(tmp_path, monkeypatch, name):
     monkeypatch.setenv("WE_WORKER_STATE_DIR", str(tmp_path))

@@ -383,14 +383,23 @@ def repo_limits(repo: Path) -> dict[str, float]:
     return {k: _limit(block[k], f"workers.{k}") for k in POOL_DEFAULTS if k in block}
 
 
-def cap_limits(repo: Path, note: bool = True) -> dict[str, float]:
+def cap_limits(
+    repo: Path, note: bool = True, sources: dict[str, str] | None = None
+) -> dict[str, float]:
     """The limits a start from `repo` must pass: per key the machine's (`pool_limits`), lowered
     by the repo's `workers` value where it is lower; a repo never lifts one. With `note`, a repo
-    value above the machine's gets one stderr line: it is not read."""
+    value above the machine's gets one stderr line: it is not read. A `sources` dict gets, per
+    key, where the value came from (the repo's config or the machine's `pool.json`)."""
     machine, own = pool_limits(), repo_limits(repo)
     limits = {}
     for key, value in machine.items():
         limits[key] = min(value, own.get(key, value))
+        if sources is not None:
+            sources[key] = (
+                f"workers.{key} in {repo}/.weside/config.json"
+                if own.get(key, value) < value
+                else f"{key} of {pool_path()}"
+            )
         if note and own.get(key, value) > value:
             print(
                 f"we-worker: note: workers.{key} {own[key]:g} in {repo}/.weside/config.json is"
@@ -427,19 +436,16 @@ def queued_ahead(state: Path, me: str | None) -> list[dict]:
     living one. Oldest first."""
     import worker_supervisor  # noqa: PLC0415 (it imports this module)
 
-    rows = [
-        d
-        for d in worker_supervisor.queued(state)
-        if worker_supervisor._waiter_lives(d.get("waiter_pid"))
-    ]
+    rows = [d for d in worker_supervisor.queued(state) if worker_supervisor.waiter_lives(d)]
     if not me:
         return rows
     mine = next((d for d in rows if d["name"] == me), None)
     if mine is None:
         return rows
-    return [
-        d for d in rows if d["name"] != me and d.get("queued_at", 0) <= mine.get("queued_at", 0)
-    ]
+    # the name breaks a tie in `queued_at`: two entries of the same second must not each see the
+    # other ahead of it, or both wait out their timeout
+    turn = (mine.get("queued_at", 0), me)
+    return [d for d in rows if d["name"] != me and (d.get("queued_at", 0), d["name"]) < turn]
 
 
 def queued_limits(doc: dict, machine: dict[str, float]) -> tuple[float, float]:
@@ -526,7 +532,8 @@ def capacity(repo: Path, prefix: str) -> None:
     account. A value that cannot be read skips its check with one stderr warning; without `cswap`
     on PATH (it is optional) the 5h check is skipped silently."""
     machine = pool_limits()
-    limits = cap_limits(repo)
+    sources: dict[str, str] = {}
+    limits = cap_limits(repo, sources=sources)
     max_busy, max_pct = limits[POOL_KEY], limits[PCT_KEY]
     ahead = queued_ahead(_state_dir(), os.environ.get(QUEUE_TURN_ENV))
     try:
@@ -589,7 +596,7 @@ def capacity(repo: Path, prefix: str) -> None:
             quota = f"active account 5h at {shown_pct} % (limit {max_pct:g} %"
         raise LaunchError(
             f"refused, no worker started: {shown_busy} workers busy (limit {max_busy:g} for the"
-            f" machine, {pool_path()}), {quota}, workers.max_active_5h_percent);"
+            f" machine, {pool_path()}), {quota}, {sources[PCT_KEY]});"
             " try again later, or add --queue to the we-worker start: it starts as soon as"
             " the check passes",
             3,

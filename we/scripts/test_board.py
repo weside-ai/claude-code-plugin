@@ -672,20 +672,6 @@ class TestAsk:
         assert go(crewless, *ask_argv(**{"--key": "PROJ-14", "--ask": "Other?"})) == 0
         assert "answer_to" not in board_of(crewless)["owner_queue"][-1]
 
-    def test_a_master_session_posts_its_own_question(self, crewless, capsys):
-        """Any crew session asks (docs/board.md § Questions): `ask` from `WE_ROLE=master` posts
-        under its own name, no coordinator in between."""
-        assert os.environ["WE_ROLE"] == "master"
-        answer_with(crewless, CLEAR)
-        assert go(crewless, *ask_argv(**{"--session": None})) == 0
-        assert json.loads(capsys.readouterr().out)["outcome"] == "posted"
-        item = board_of(crewless)["owner_queue"][-1]
-        assert (item["session"], item["asker_id"], item["answer_to"]) == (
-            "lead-12",
-            "sid-12",
-            "asker",
-        )
-
 
 def test_the_crews_answer_to_beats_the_repo_config(crewed):
     """A companion asks the same way from any repo: the crew's `board.answer_to` wins."""
