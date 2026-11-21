@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -247,6 +247,9 @@ def test_github_rows_from_the_recorded_answers(tmp_path):
     r = rows["PRs per story"]
     assert (r["n"], r["median"]) == (2, 1)
     assert r["value"].endswith("mean with docs PRs 1.50")
+    since = NOW - timedelta(days=10)  # threads change nothing in the PRs, nor their order
+    one, many = (fr.fetch_prs(FakeGh(), "acme/app", since, NOW, pool=n) for n in (1, 4))
+    assert one == many and one
 
 
 def test_board_rows_from_the_logs(tmp_path):
@@ -390,6 +393,8 @@ def test_the_gh_cache_answers_a_second_run(tmp_path, monkeypatch):
         root, run=fr.gh_runner(cache, "w2"), required=no_required
     )  # another window asks again, open PRs too
     assert len(calls.read_text().splitlines()) == 2 * first
+    report(root, run=fr.gh_runner(cache, "w2", ttl=0), required=no_required)  # too old: again
+    assert len(calls.read_text().splitlines()) == 3 * first
 
 
 def test_md_writes_into_the_store_or_says_why_not(tmp_path, capsys):
