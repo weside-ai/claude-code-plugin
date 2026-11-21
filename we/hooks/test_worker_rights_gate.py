@@ -595,6 +595,64 @@ def test_a_bare_push_from_main_is_denied(world):
     assert decision == "deny" and "main (a git push from main)" in reason
 
 
+def _main_checkout_with_tree(world, owner="worker"):
+    """A repo whose session cwd is its main checkout on main and whose worker tree is a worktree on
+    the worker's branch (Kiska 21.11.: a worker started from the shared main checkout)."""
+    main = make_repo(world["tmp"], name="core", branch="main")
+    if owner:
+        _pr_owner(main, owner)
+    tree = world["tmp"] / "core-tree"
+    _git(main, "worktree", "add", "-q", "-b", "feat/ABC-12-tree", str(tree))
+    return main, tree
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git -C {tree} push -u origin feat/ABC-12-tree",
+        "git -C {tree} push",
+        "git --git-dir={gitdir} --work-tree {tree} push origin HEAD",
+    ],
+)
+def test_a_push_is_judged_in_the_tree_git_runs_it_in(world, command):
+    main, tree = _main_checkout_with_tree(world)
+    gitdir = subprocess.run(
+        ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()  # fmt: skip
+    decision, reason = hook(world, command.format(tree=tree, gitdir=gitdir), cwd=main)
+    assert decision == "allow", reason
+
+
+@pytest.mark.parametrize(
+    ("command", "why"),
+    [
+        # a second push without its own place may run in the cwd, which is on main
+        ("git -C {tree} push; git push", "main (a git push from main)"),
+        ("git -C {tree} push && git -C {main} push", "main (a git push from main)"),
+        ("cd {tree} && git push", "main (a git push from main)"),
+        ("git -C {tree} push origin main", "main (git push to main)"),
+        ("git -C {tree} push origin HEAD:feat/ABC-99-x", "pushes only branches carrying ABC-12"),
+    ],
+)
+def test_a_push_from_a_main_checkout_stays_denied_outside_its_own_tree(world, command, why):
+    main, tree = _main_checkout_with_tree(world)
+    decision, reason = hook(world, command.format(tree=tree, main=main), cwd=main)
+    assert decision == "deny" and why in reason, reason
+
+
+@pytest.mark.parametrize("switch", [None, "master"])
+def test_a_push_into_another_repo_needs_that_repos_own_switch(world, switch):
+    _pr_owner(world["repo"], "worker")
+    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
+    if switch:
+        _pr_owner(other, switch)
+    decision, reason = hook(world, f"git -C {other} push origin feat/ABC-12-x")
+    assert decision == "deny" and "another repo than acme/app" in reason, reason
+    _pr_owner(other, "worker")  # the other repo's own default branch opens it
+    assert hook(world, f"git -C {other} push origin feat/ABC-12-x")[0] == "allow"
+
+
 def test_every_denial_is_one_line_in_brakes_jsonl_without_the_command(world):
     state = world["tmp"] / "state"
     decision, _reason = hook(world, "printf s3cr3t-value | wsec put NAME", WE_STATE_DIR=str(state))

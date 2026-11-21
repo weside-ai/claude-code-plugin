@@ -232,11 +232,47 @@ def request(port, method, path, raw=False):
     return r.status, dict(r.getheaders()), body
 
 
-def test_a_peer_outside_the_set_gets_no_answer(serve):
+def test_a_peer_outside_the_set_gets_no_answer(serve, capsys):
     port = serve(state_with(), peers=("10.0.0.0/8",))
-    with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
-        s.sendall(b"GET /crew/ HTTP/1.0\r\n\r\n")
-        assert s.recv(1024) == b""
+    for _ in range(3):
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as s:
+            s.sendall(b"GET /crew/ HTTP/1.0\r\n\r\n")
+            assert s.recv(1024) == b""
+    # 21.11.: a proxy outside the set got a silent 502; the address is named once, never per request
+    lines = [x for x in capsys.readouterr().err.splitlines() if "refused peer" in x]
+    assert lines == ["we-crewd: refused peer 127.0.0.1 (not in zentrale.peers)"]
+
+
+def _write_crew(repo: Path, peers=None, raw=None):
+    path = repo / ".weside" / "crew.json"
+    path.parent.mkdir(exist_ok=True)
+    body = {"version": crewd.crew_mod.VERSION, "roles": {}, "members": {}}
+    if peers is not None:
+        body["zentrale"] = {"peers": peers}
+    old = path.stat().st_mtime_ns if path.exists() else 0
+    path.write_text(raw if raw is not None else json.dumps(body))
+    os.utime(path, ns=(old + 10**9, old + 10**9))  # a new mtime even within one clock tick
+
+
+def test_the_crew_is_read_again_when_its_file_changes(tmp_path, capsys):
+    # 21.11.: a crew file without `zentrale.peers`, read once at the start, kept the proxy out
+    # (502) after the file had been fixed; the server reads it again on a change
+    (tmp_path / ".git").mkdir()
+    _write_crew(tmp_path)
+    watch = crewd.CrewWatch("10.43.2.164", cwd=tmp_path)
+    state, server = crewd.State(), type("S", (), {"peers": None})()
+    crewd.crew_tick(watch, server, state)
+    assert not crewd.peer_allowed("10.42.9.194", server.peers)
+    crewd.crew_tick(watch, server, state)  # unchanged: no reload line
+    _write_crew(tmp_path, peers=["10.42.0.0/16"])
+    crewd.crew_tick(watch, server, state)
+    assert crewd.peer_allowed("10.42.9.194", server.peers)
+    assert crewd.peer_allowed("10.43.2.164", server.peers)  # the own address stays
+    _write_crew(tmp_path, raw="{broken")  # a broken edit keeps the last good peers
+    crewd.crew_tick(watch, server, state)
+    assert crewd.peer_allowed("10.42.9.194", server.peers)
+    err = capsys.readouterr().err
+    assert err.count("peer networks") == 2 and "crew not reloaded" in err
 
 
 # --- AC4: XSS -------------------------------------------------------------------------------
