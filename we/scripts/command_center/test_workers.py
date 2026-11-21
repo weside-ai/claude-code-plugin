@@ -17,6 +17,7 @@ from test_open_ends import UNTIL  # noqa: E402
 SUPERVISOR = HERE.parent / "worker_supervisor.py"
 DEAD_PID = "4194303"  # above every pid_max default: no process holds it
 FIELDS = ["name", "id", "pid", "state", "alive", "last", "end", "time_limit", "window", "resume"]
+FIELDS += ["waits"]
 
 
 def transcript(home: Path, sid: str, entry: dict) -> None:

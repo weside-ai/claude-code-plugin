@@ -81,7 +81,8 @@ we/                               plugin root
                                   pr_ready.sh (draft to ready and back with its `**Draft:**` line)
     statusline                    statusline.js, install_statusline.py
     hook state                    state_prune.py (ages out per-session hook files), claude_home.py (Claude Code's config dir)
-    test support                  node_test_procs.py (the node binary and process reaping for statusline tests)
+    test support                  node_test_procs.py (the node binary and process reaping for statusline tests),
+                                  slot_lock.py (the host's test slot: its one holder, the holder's note, who waits)
 docs/                             user docs (index: docs/README.md)
 tour/index.html                   one-page tour, served at plugin.weside.ai/tour/
 tour/humans/index.html            tour page "Several humans, one crew", served at plugin.weside.ai/tour/humans/
@@ -115,7 +116,7 @@ claude plugin validate we && claude plugin test we   # the /flow and /board hook
 ```
 
 A full local test run goes through `scripts/full_test_run.py`: on a host shared by several sessions it
-waits for the test slot (`$WESIDE_TESTS_LOCK`, default `/tmp/weside-tests.lock`) and ends with its
+waits for the test slot (`we/scripts/slot_lock.py`: `$WESIDE_TESTS_LOCK`, default `/tmp/weside-tests.lock`) and ends with its
 peak process count and RSS; a single suite runs with plain `pytest <file>`. A worker on a shared
 host whose test slot is taken runs only the suites its change touches with plain `pytest` and leaves
 the full run to CI `Plugin Tests` (this repo's exception to the wait in `we/references/session-traps.md`
