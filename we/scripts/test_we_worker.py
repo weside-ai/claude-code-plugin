@@ -26,7 +26,8 @@ with open(os.environ["STUB_LOG"], "a") as fh:
     fh.write(json.dumps({"argv": args, "role": os.environ.get("WE_ROLE"),
                          "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
                          "companion": os.environ.get("WESIDE_COMPANION"),
-                         "key": os.environ.get("WE_STORY_KEY"), "cwd": os.getcwd()}) + "\n")
+                         "key": os.environ.get("WE_STORY_KEY"), "cwd": os.getcwd(),
+                         "queue_turn": os.environ.get("WE_WORKER_QUEUE_TURN")}) + "\n")
 if args[:2] == ["agents", "--json"]:
     print(json.dumps(rows)); sys.exit(0)
 if args[:1] == ["stop"]:
@@ -464,6 +465,54 @@ def test_status_marks_the_usage_limit_apart_from_the_time_limit_and_prints_the_r
     assert out[1] == "  resume after the reset: we-worker AC-12-impl --bg --resume s-1"
 
 
+@pytest.mark.skipif(not Path("/proc/locks").exists(), reason="the waiters come from /proc/locks")
+def test_status_shows_a_worker_that_waits_on_the_test_slot(tmp_path):
+    """Measured 21.11.: a bench held the slot 52 min while 5 workers waited; each counted as busy
+    and did no work, and nothing showed it."""
+    import fcntl  # noqa: PLC0415
+
+    import slot_lock  # noqa: PLC0415
+
+    lock = tmp_path / "tests.lock"
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o666)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    code = f"import fcntl, os; fcntl.flock(os.open({str(lock)!r}, os.O_RDWR), fcntl.LOCK_EX)"
+    worker = subprocess.Popen(["bash", "-c", f'python3 -c "{code}"; true'])
+    other = subprocess.Popen(["sleep", "60"])
+    try:
+        rows = [
+            {
+                "id": "w1",
+                "name": "AC-12-impl",
+                "kind": "background",
+                "pid": worker.pid,
+                "state": "working",
+                "sessionId": "s-1",
+            },
+            {
+                "id": "w2",
+                "name": "AC-13-impl",
+                "kind": "background",
+                "pid": other.pid,
+                "state": "working",
+                "sessionId": "s-2",
+            },
+        ]
+        project, env = setup(tmp_path, rows)
+        env["WESIDE_TESTS_LOCK"] = str(lock)
+        for _ in range(50):
+            if slot_lock.waiters(lock):
+                break
+            time.sleep(0.1)
+        out = run(project, env, "status").stdout.splitlines()
+        assert out[0] == f"w1 AC-12-impl pid={worker.pid} working last=- waits: test-slot"
+        assert out[1] == f"w2 AC-13-impl pid={other.pid} working last=-"
+    finally:
+        worker.kill()
+        other.kill()
+        os.close(fd)
+
+
 def test_logs_prints_the_last_assistant_texts_plain(tmp_path):
     rows = [{"id": "ab12", "name": "w", "kind": "background", "pid": 1, "sessionId": "s-1"}]
     project, env = setup(tmp_path, rows)
@@ -529,6 +578,37 @@ def test_a_stopped_worker_resumes_by_name_after_it_left_the_agent_list(tmp_path)
         assert proc.returncode == 2 and "no stopped worker of that name" in proc.stderr
     finally:
         worker.kill()
+
+
+def test_a_stopped_worker_resumes_by_a_unique_prefix_of_its_session_id(tmp_path):
+    """Red arm (21.11.): `we-worker --resume <short id>` found no stopped worker: only a name or a
+    living row resolved. An ambiguous prefix is named, never guessed."""
+    project, env = setup(tmp_path)
+    state = tmp_path / "home/.claude/we-state/workers"
+    state.mkdir(parents=True)
+    kept = {
+        "AC-12-impl": "4f1e2d3c-aaaa-bbbb-cccc-000000000001",
+        "AC-13-impl": "4f1e9999-aaaa-bbbb-cccc-000000000002",
+    }
+    for name, sid in kept.items():
+        (state / f"{name}.resume.json").write_text(json.dumps({"name": name, "session_id": sid}))
+    proc = run(project, env, "AC-12-impl", "--bg", "--resume", "4f1e2d", GO)
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    assert call["argv"][-3:] == ["--resume", kept["AC-12-impl"], GO]
+    proc = run(project, env, "AC-12-impl", "--bg", "--resume", "4f1e", GO)
+    assert proc.returncode == 2 and "is ambiguous (2 sessions: " in proc.stderr
+    assert kept["AC-12-impl"] in proc.stderr and kept["AC-13-impl"] in proc.stderr
+    # a session whose files were aged out still has its transcript
+    projects = tmp_path / "home/.claude/projects/-some-tree"
+    projects.mkdir(parents=True)
+    (projects / "9a8b7c6d-0000-1111-2222-333344445555.jsonl").write_text("{}\n")
+    proc = run(project, env, "AC-14-impl", "--bg", "--resume", "9a8b7c", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert started(tmp_path)[-1]["argv"][-2] == "9a8b7c6d-0000-1111-2222-333344445555"
+    proc = run(project, env, "AC-15-impl", "--bg", "--resume", "deadbeef", GO)
+    assert proc.returncode == 2 and "no session id starting with it" in proc.stderr
+    assert len(started(tmp_path)) == 2
 
 
 def _detached_sleep(role: str | None) -> int:
@@ -952,11 +1032,13 @@ def test_a_window_worker_whose_tree_path_holds_a_space_is_still_a_worker(tmp_pat
 
 def test_a_start_over_the_concurrency_cap_is_refused_and_starts_nothing(tmp_path):
     """Red arm: 14 usage-limit stops in 11 sessions within 13 minutes."""
-    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(10)]
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
     project, env = setup(tmp_path, rows=busy)
     proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 3
-    assert "we-worker: refused, no worker started: 10 workers busy (limit 10" in proc.stderr
+    assert "we-worker: refused, no worker started: 8 workers busy (limit 8 for the machine" in (
+        proc.stderr
+    )
     assert "active account 5h at 10 % (limit 80 %" in proc.stderr
     assert "add --queue" in proc.stderr
     assert not started(tmp_path)
@@ -973,8 +1055,9 @@ def test_a_start_over_the_concurrency_cap_is_refused_and_starts_nothing(tmp_path
     assert run(project, env, "stop", "AC-12-impl").returncode == 0
     assert "queued" not in run(project, env, "status").stdout
     assert not started(tmp_path)
-    (project / ".weside" / "config.json").write_text(
-        json.dumps({"workers": {"max_busy_sessions": 11}})
+    # the limit is the machine's, in the state dir every repo shares
+    (tmp_path / "home/.claude/we-state/workers/pool.json").write_text(
+        json.dumps({"max_busy_sessions": 9})
     )
     assert run(project, env, "AC-12-impl", "--bg", GO).returncode == 0
 
@@ -1037,6 +1120,39 @@ def test_under_tree_own_a_build_start_in_the_main_checkout_lands_in_a_new_worktr
     left = run(project, env, "AC-12-left", "--bg", GO)
     assert left.returncode == 2 and "no worker started" in left.stderr
     assert len(started(tmp_path)) == 1  # never a start in the main checkout
+
+
+def test_a_queued_start_from_the_main_checkout_gets_its_own_tree_under_caller(
+    tmp_path, monkeypatch
+):
+    """Red arm (21.11.): a queued infra start ran in the shared checkout (`workers.tree: caller`)
+    because the waiter only replays the call. A queued start now gets its own worktree, and its
+    queue turn never reaches the worker's environment."""
+    import worker_supervisor as sup  # noqa: PLC0415
+
+    project, env = git_setup(tmp_path)
+    _tree_mode(project, "caller")
+    Path(env["STUB_STATE"]).write_text(
+        json.dumps(
+            [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+        )
+    )
+    proc = run(project, env, "AC-12-impl", "--bg", "--queue", GO)
+    assert proc.returncode == 0 and "queued (position 1" in proc.stdout, proc.stderr
+    doc = json.loads(
+        (tmp_path / "home/.claude/we-state/workers/queue/AC-12-impl.json").read_text()
+    )
+    Path(env["STUB_STATE"]).write_text("[]")  # room now
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    code, out = sup.start_queued(doc)
+    assert code == 0, out
+    tree = tmp_path / "project-AC-12-impl"
+    (call,) = started(tmp_path)
+    assert call["cwd"] == str(tree), out
+    assert "workers.tree: caller" not in out
+    assert _git(project, "branch", "--show-current") == "main"
+    assert call["queue_turn"] is None
 
 
 def test_here_a_linked_worktree_and_tree_choose_the_tree_without_creating_one(tmp_path):

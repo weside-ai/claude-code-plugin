@@ -43,13 +43,16 @@ Usage:
                                                    SendMessage target of a follow-up
   worker_launch.py capacity [--repo <dir>] [--prefix <p>]
                                                    exit 0: a worker may start; 3: refused while
-                                                   the busy workers (background or window) reach
-                                                   workers.max_busy_sessions (10) or no account in
+                                                   a queued start of any repo waits ahead of it
+                                                   (first come, first served), the busy workers
+                                                   (background or window) on the machine reach
+                                                   the machine's limit (<state dir>/pool.json
+                                                   max_busy_sessions, default 8) or no account in
                                                    rotation (`cswap list --json`) has 7d under 95 %
                                                    and 5h at or under
                                                    workers.max_active_5h_percent (80; unreadable
-                                                   list: the active account's 5h decides), both
-                                                   from .weside/config.json, both values named;
+                                                   list: the active account's 5h decides, from
+                                                   .weside/config.json), both values named;
                                                    an unreadable value skips its check (stderr;
                                                    silent without cswap on PATH); `we-worker
                                                    --queue` waits instead of refusing;
@@ -82,11 +85,12 @@ Usage:
   worker_launch.py account-need < brief            prints `uncritical` when one of the brief's
                                                    first ten lines is `Account: uncritical`,
                                                    else `critical`
-  worker_launch.py tree --repo <dir> --name <n> [--branch <b>] [--auto | --main-checkout]
+  worker_launch.py tree --repo <dir> --name <n> [--branch <b>] [--auto [--queued] | --main-checkout]
                                                    creates the worker's own worktree beside the
                                                    main checkout (`add_tree`) and prints its path;
-                                                   --auto only under `workers.tree: own`
-                                                   (`auto_tree`), exit 3 when it creates none
+                                                   --auto only under `workers.tree: own` or
+                                                   with --queued (`auto_tree`), exit 3 when it
+                                                   creates none
                                                    (any other non-zero: the start stops);
                                                    --main-checkout only prints the main
                                                    checkout's top, exit 1 when <dir> is none
@@ -299,7 +303,17 @@ def backend(repo: Path) -> str:
 
 
 AGENTS_TIMEOUT_S = 30
-CAP_DEFAULTS = {"max_busy_sessions": 10, "max_active_5h_percent": 80}
+CAP_DEFAULTS = {"max_active_5h_percent": 80}
+# The worker pool: one limit for every repo on the machine. Busy sessions are counted machine-wide,
+# so the limit is a property of the machine too: it lives in `<state dir>/pool.json`
+# (`{"max_busy_sessions": N}`), the directory the queue and every worker's files already share. A
+# per-repo value let a repo with a high limit start past a repo whose queued start waited. The
+# default comes from the workspace measured on 21.11.: 13 busy workers drove swap to 5.4 of 5.5 GiB
+# and load15 to 24 on 16 CPUs; 7 gave 3.0 GiB swap and a memory stall of 7 s/h (yellow).
+POOL_FILE = "pool.json"
+POOL_KEY = "max_busy_sessions"
+POOL_DEFAULT = 8
+QUEUE_TURN_ENV = "WE_WORKER_QUEUE_TURN"
 CSWAP_TIMEOUT_S = 20
 
 
@@ -352,8 +366,10 @@ def pr_owner(repo: Path) -> str:
 
 
 def cap_limits(repo: Path) -> dict[str, float]:
-    """`workers.max_busy_sessions` and `workers.max_active_5h_percent` of the repo's
-    `.weside/config.json`, each defaulting to `CAP_DEFAULTS`; a value that is no number refuses."""
+    """`workers.max_active_5h_percent` of the repo's `.weside/config.json` (default
+    `CAP_DEFAULTS`) and the machine's `max_busy_sessions` (`pool_limit`); a value that is no
+    number refuses. A repo that still sets `workers.max_busy_sessions` gets one stderr line: the
+    repo value is not read."""
     block = workers_block(repo)
     limits = {}
     for key, default in CAP_DEFAULTS.items():
@@ -361,7 +377,66 @@ def cap_limits(repo: Path) -> dict[str, float]:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise LaunchError(f"workers.{key}: needs a number, not {value!r}", 2)
         limits[key] = value
+    limits[POOL_KEY], _ = pool_limit()
+    if POOL_KEY in block:
+        print(
+            f"we-worker: note: workers.{POOL_KEY} in {repo}/.weside/config.json is not read; the"
+            f" one limit for the machine is {pool_path()}",
+            file=sys.stderr,
+        )
     return limits
+
+
+def pool_path() -> Path:
+    return _state_dir() / POOL_FILE
+
+
+def pool_limit() -> tuple[float, str]:
+    """The machine's busy-worker limit and where it comes from: `pool.json`'s
+    `max_busy_sessions`, else `POOL_DEFAULT`; an unreadable file or a value that is no positive
+    number refuses (exit 2)."""
+    path = pool_path()
+    try:
+        doc = json.loads(path.read_text())
+    except FileNotFoundError:
+        return POOL_DEFAULT, "default"
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LaunchError(f"{path}: unreadable ({exc})", 2) from exc
+    value = doc.get(POOL_KEY, POOL_DEFAULT) if isinstance(doc, dict) else doc
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        raise LaunchError(f"{path} {POOL_KEY}: needs a positive number, not {value!r}", 2)
+    return value, str(path)
+
+
+def queued_ahead(state: Path, me: str | None) -> list[dict]:
+    """The queued starts (`<state>/queue/*.json`) whose waiter lives and that came before `me`
+    (the waiter's own entry, `$WE_WORKER_QUEUE_TURN`); for a start that is not queued, every
+    living one. Oldest first."""
+    rows = []
+    for path in sorted((state / "queue").glob("*.json")):
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and doc.get("name") and _waiter_alive(doc.get("waiter_pid")):
+            rows.append(doc)
+    rows.sort(key=lambda d: (d.get("queued_at", 0), d["name"]))
+    if not me:
+        return rows
+    mine = next((d for d in rows if d["name"] == me), None)
+    if mine is None:
+        return rows
+    return [
+        d for d in rows if d["name"] != me and d.get("queued_at", 0) <= mine.get("queued_at", 0)
+    ]
+
+
+def _waiter_alive(pid: object) -> bool:
+    try:
+        num = int(str(pid))
+    except ValueError:
+        return False
+    return num > 0 and _pid_lives(num)
 
 
 def five_hour_percent() -> float | None:
@@ -417,18 +492,20 @@ def rotation_room(max_pct: float) -> tuple[int, int] | None:
 
 
 def capacity(repo: Path, prefix: str) -> None:
-    """Refuse a new worker (`LaunchError`, exit 3) while the busy background sessions on this
-    machine and busy window workers (`claude agents --json`, `status` busy; an interactive row
-    counts only when `is_worker` says so: a companion or master is busy whenever it answers its
-    human) reach `workers.max_busy_sessions`, or while no account in rotation has room
-    (`rotation_room`: 7d under 95 %, 5h at or under `workers.max_active_5h_percent`; one with room
-    is enough, the rotation switches to it). When `cswap list --json` is unreadable the active
-    account's 5h window decides as the fallback (`five_hour_percent`, refused above the limit). The
-    refusal names the measured values, never an account. A value that cannot be read skips its
-    check with one stderr warning; without `cswap` on PATH (it is optional) the 5h check is skipped
-    silently."""
+    """Refuse a new worker (`LaunchError`, exit 3) while a queued start of any repo on this machine
+    waits ahead of it (`queued_ahead`: first come, first served across repos), while the busy
+    background sessions on this machine and busy window workers (`claude agents --json`, `status`
+    busy; an interactive row counts only when `is_worker` says so: a companion or master is busy
+    whenever it answers its human) reach the machine's limit (`pool_limit`), or while no account in
+    rotation has room (`rotation_room`: 7d under 95 %, 5h at or under
+    `workers.max_active_5h_percent`; one with room is enough, the rotation switches to it). When
+    `cswap list --json` is unreadable the active account's 5h window decides as the fallback
+    (`five_hour_percent`, refused above the limit). The refusal names the measured values, never an
+    account. A value that cannot be read skips its check with one stderr warning; without `cswap`
+    on PATH (it is optional) the 5h check is skipped silently."""
     limits = cap_limits(repo)
-    max_busy, max_pct = limits["max_busy_sessions"], limits["max_active_5h_percent"]
+    max_busy, max_pct = limits[POOL_KEY], limits["max_active_5h_percent"]
+    ahead = queued_ahead(_state_dir(), os.environ.get(QUEUE_TURN_ENV))
     try:
         busy: int | None = sum(
             1
@@ -451,6 +528,17 @@ def capacity(repo: Path, prefix: str) -> None:
             file=sys.stderr,
         )
     full = (room is not None and room[0] == 0) or (pct is not None and pct > max_pct)
+    if ahead:
+        first = ahead[0]
+        since = time.strftime("%H:%M", time.gmtime(first.get("queued_at", time.time())))
+        shown_busy = "?" if busy is None else str(busy)
+        raise LaunchError(
+            f"refused, no worker started: {len(ahead)} queued start(s) ahead (first"
+            f" {first['name']}, queued {since} UTC; {shown_busy} workers busy, limit"
+            f" {max_busy:g} for the machine); the queue starts in arrival order across repos:"
+            " add --queue to the we-worker start",
+            3,
+        )
     if (busy is not None and busy >= max_busy) or full:
         shown_busy = "?" if busy is None else str(busy)
         if room is not None:
@@ -464,8 +552,8 @@ def capacity(repo: Path, prefix: str) -> None:
             shown_pct = "?" if pct is None else f"{pct:g}"
             quota = f"active account 5h at {shown_pct} % (limit {max_pct:g} %"
         raise LaunchError(
-            f"refused, no worker started: {shown_busy} workers busy (limit {max_busy:g},"
-            f" workers.max_busy_sessions), {quota}, workers.max_active_5h_percent);"
+            f"refused, no worker started: {shown_busy} workers busy (limit {max_busy:g} for the"
+            f" machine, {pool_path()}), {quota}, workers.max_active_5h_percent);"
             " try again later, or add --queue to the we-worker start: it starts as soon as"
             " the check passes",
             3,
@@ -611,14 +699,18 @@ def tree_mode(repo: Path) -> str:
     return mode
 
 
-def auto_tree(repo: Path, name: str, branch: str | None = None) -> Path | None:
-    """The tree a start without `--tree`/`--here` gets: under `workers.tree: own` a start from the
-    main checkout gets a new one (`add_tree`); otherwise None, the start stays where it is. Under
-    `caller` a start from the main checkout prints one warning on stderr."""
+def auto_tree(
+    repo: Path, name: str, branch: str | None = None, queued: bool = False
+) -> Path | None:
+    """The tree a start without `--tree`/`--here` gets: under `workers.tree: own`, and for a
+    queued start (`--queue`) under any mode, a start from the main checkout gets a new one
+    (`add_tree`): a queued start begins when its waiter finds room, with the caller's checkout
+    long moved on. Otherwise None, the start stays where it is; under `caller` a start from the
+    main checkout prints one warning on stderr."""
     main = main_checkout(repo)
     if main is None:
         return None
-    if tree_mode(repo) == "own":
+    if queued or tree_mode(repo) == "own":
         return add_tree(repo, name, branch)
     print(
         f"we-worker: warning: {name} works in the main checkout {main} (workers.tree: caller); "
@@ -1672,6 +1764,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--branch")
     p.add_argument("--main-checkout", action="store_true")
     p.add_argument("--auto", action="store_true")
+    p.add_argument("--queued", action="store_true")
     p = sub.add_parser("marker")
     p.add_argument("--tree", type=Path, required=True)
     p.add_argument("--name", required=True)
@@ -1808,7 +1901,7 @@ def _tree_verbs(args: argparse.Namespace) -> int:
         top = main_checkout(args.repo.resolve())
     elif args.auto:
         # 3, never 1: an exit 1 is also a failed creation, which must stop the start
-        top = auto_tree(args.repo.resolve(), args.name, args.branch)
+        top = auto_tree(args.repo.resolve(), args.name, args.branch, args.queued)
         if top is None:
             return NO_TREE
     else:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
 import subprocess
 import sys
 import time
@@ -76,3 +77,19 @@ def test_ci_and_a_nested_run_take_no_slot(tmp_path, env):
     finally:
         os.close(fd)
     assert proc.returncode == 0 and "waiting" not in err, err
+
+
+def test_the_holder_writes_exactly_the_note_line_the_waiters_parse(tmp_path):
+    """Waiters on the host parse `<label> (pid N, since HH:MM:SS[, until HH:MM])`; a holder that
+    leaves another shape (or the previous holder's dead pid) misleads every one of them."""
+    lock = tmp_path / "tests.lock"
+    lock.write_text("dead-holder (pid 1, since 01:00:00)\n")
+    reader = f"import sys; sys.stderr.write('NOTE=' + open({str(lock)!r}).read())"
+    proc = run(lock, sys.executable, "-c", reader)
+    _, err = proc.communicate(timeout=30)
+    assert proc.returncode == 0, err
+    (line,) = [x for x in err.splitlines() if x.startswith("NOTE=")]
+    label = f"{SCRIPT.parent.parent.name}: " + f"{sys.executable} -c {reader}"[:80]
+    assert re.fullmatch(
+        rf"NOTE={re.escape(label)} \(pid {proc.pid}, since \d\d:\d\d:\d\d\)", line
+    ), line

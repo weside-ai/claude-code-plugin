@@ -809,7 +809,11 @@ def cap(env, monkeypatch, tmp_path):
     stub.write_text(CSWAP)
     stub.chmod(0o755)
 
-    def setup(busy, pct, workers=None):
+    def setup(busy, pct, workers=None, pool=None):
+        state_dir = tmp_path / "state"
+        state_dir.mkdir(exist_ok=True)
+        if pool is not None:
+            (state_dir / "pool.json").write_text(json.dumps(pool))
         rows = [{"name": f"S{i}", "status": "busy", "pid": 1} for i in range(busy)]
         rows.append({"name": "idle", "status": "idle", "pid": 1})
         env["state"].write_text(json.dumps(rows))
@@ -823,13 +827,13 @@ def cap(env, monkeypatch, tmp_path):
     return setup
 
 
-def test_capacity_refuses_above_either_limit_and_names_both_values(cap):
+def test_capacity_refuses_above_either_limit_and_names_both_values(cap, tmp_path):
     """Red arm: 14 usage-limit stops in 11 sessions within 13 minutes."""
-    out = cap(10, 50.0)
+    out = cap(8, 50.0)
     assert out.returncode == 3
     assert out.stderr.strip().startswith(
-        "we-worker: refused, no worker started: 10 workers busy (limit 10,"
-        " workers.max_busy_sessions), active account 5h at 50 % (limit 80 %,"
+        "we-worker: refused, no worker started: 8 workers busy (limit 8 for the machine,"
+        f" {tmp_path / 'state' / 'pool.json'}), active account 5h at 50 % (limit 80 %,"
         " workers.max_active_5h_percent); try again later"
     )
     out = cap(2, 81.0)
@@ -837,14 +841,23 @@ def test_capacity_refuses_above_either_limit_and_names_both_values(cap):
 
 
 def test_capacity_below_the_limits_starts(cap):
-    out = cap(9, 80.0)
+    """The machine's default is 8: 13 busy workers measured 5.4 of 5.5 GiB swap, load15 24."""
+    out = cap(7, 80.0)
     assert out.returncode == 0 and out.stderr == ""
 
 
-def test_capacity_reads_the_limits_from_the_project_config(cap):
-    assert cap(3, 10.0, {"max_busy_sessions": 3}).returncode == 3
-    assert cap(3, 10.0, {"max_busy_sessions": 4, "max_active_5h_percent": 5}).returncode == 3
-    assert cap(3, 10.0, {"max_busy_sessions": 4, "max_active_5h_percent": 50}).returncode == 0
+def test_capacity_reads_the_busy_limit_from_the_machine_never_from_the_repo(cap):
+    """Red arm (21.11.): core's `workers.max_busy_sessions` 16 started a worker at 13 busy while
+    infra's queued start (limit 10) waited; the busy count is the machine's, so is its limit."""
+    out = cap(8, 10.0, {"max_busy_sessions": 16})  # a repo value lifts nothing
+    assert out.returncode == 3 and "8 workers busy (limit 8 for the machine" in out.stderr
+    assert "workers.max_busy_sessions in " in out.stderr and "is not read" in out.stderr
+    assert cap(2, 10.0, {"max_busy_sessions": 1}).returncode == 0  # nor lowers it
+    assert cap(3, 10.0, pool={"max_busy_sessions": 3}).returncode == 3
+    out = cap(3, 10.0, {"max_active_5h_percent": 5}, pool={"max_busy_sessions": 4})
+    assert out.returncode == 3
+    out = cap(3, 10.0, {"max_active_5h_percent": 50}, pool={"max_busy_sessions": 4})
+    assert out.returncode == 0
 
 
 def test_capacity_skips_the_window_check_without_cswap_and_says_so(cap, monkeypatch):
@@ -867,7 +880,7 @@ def test_capacity_starts_while_another_account_in_rotation_has_room(cap, monkeyp
     assert out.returncode == 0 and out.stderr == ""
 
 
-def test_capacity_refuses_when_no_account_in_rotation_has_room(cap, monkeypatch):
+def test_capacity_refuses_when_no_account_in_rotation_has_room(cap, monkeypatch, tmp_path):
     monkeypatch.setenv(
         "STUB_CSWAP_LIST",
         _rotation(
@@ -881,8 +894,9 @@ def test_capacity_refuses_when_no_account_in_rotation_has_room(cap, monkeypatch)
     out = cap(1, 2.0)
     assert out.returncode == 3
     assert out.stderr.strip().startswith(
-        "we-worker: refused, no worker started: 1 workers busy (limit 10,"
-        " workers.max_busy_sessions), no account in rotation has room (0 of 4 with 7d under 95 %"
+        "we-worker: refused, no worker started: 1 workers busy (limit 8 for the machine,"
+        f" {tmp_path / 'state' / 'pool.json'}), no account in rotation has room (0 of 4 with 7d"
+        " under 95 %"
         " and 5h at or under 80 %, workers.max_active_5h_percent); try again later"
     )
     assert "redacted" not in out.stderr
@@ -911,8 +925,40 @@ def test_capacity_falls_back_to_the_active_account_without_a_list(cap, monkeypat
 
 
 def test_capacity_refuses_a_limit_that_is_no_number(cap):
-    out = cap(1, 1.0, {"max_busy_sessions": "ten"})
-    assert out.returncode == 2 and "workers.max_busy_sessions: needs a number" in out.stderr
+    out = cap(1, 1.0, pool={"max_busy_sessions": "ten"})
+    assert out.returncode == 2 and "max_busy_sessions: needs a positive number" in out.stderr
+    assert cap(1, 1.0, pool={"max_busy_sessions": 0}).returncode == 2
+    out = cap(1, 1.0, {"max_active_5h_percent": "x"})
+    assert out.returncode == 2 and "workers.max_active_5h_percent: needs a number" in out.stderr
+
+
+def _queue_entry(state_dir, name, queued_at, waiter_pid):
+    (state_dir / "queue").mkdir(parents=True, exist_ok=True)
+    doc = {"name": name, "queued_at": queued_at, "waiter_pid": waiter_pid}
+    (state_dir / "queue" / f"{name}.json").write_text(json.dumps(doc))
+
+
+def test_capacity_starts_the_queue_in_arrival_order_across_repos(cap, tmp_path, monkeypatch):
+    """Red arm (21.11.): a start in core ran at once while infra's queued start sat at position 1
+    since 01:20. A start that is not queued now waits behind every living queued one."""
+    state_dir = tmp_path / "state"
+    _queue_entry(state_dir, "INFRA-1-old", 100.0, os.getpid())
+    out = cap(1, 10.0)
+    assert out.returncode == 3
+    assert "1 queued start(s) ahead (first INFRA-1-old, queued 00:01 UTC; 1 workers busy" in (
+        out.stderr
+    )
+    # the waiter of that entry starts it (its own entry is no start ahead of it)
+    monkeypatch.setenv("WE_WORKER_QUEUE_TURN", "INFRA-1-old")
+    assert cap(1, 10.0).returncode == 0
+    # a younger entry waits behind the older one, whatever its repo
+    _queue_entry(state_dir, "CORE-2-new", 200.0, os.getpid())
+    assert cap(1, 10.0).returncode == 0
+    monkeypatch.setenv("WE_WORKER_QUEUE_TURN", "CORE-2-new")
+    assert cap(1, 10.0).returncode == 3
+    # an entry whose waiter is gone holds nobody up
+    _queue_entry(state_dir, "INFRA-1-old", 100.0, 0)
+    assert cap(1, 10.0).returncode == 0
 
 
 def test_capacity_without_cswap_on_path_skips_the_window_check_silently(
@@ -921,6 +967,7 @@ def test_capacity_without_cswap_on_path_skips_the_window_check_silently(
     """Claude Review on #229: cswap is optional; its absence is no warning on every start."""
     monkeypatch.setattr(wl.shutil, "which", lambda _name: None)
     monkeypatch.setattr(wl, "sessions", list)
+    monkeypatch.setenv("WE_WORKER_STATE_DIR", str(tmp_path / "state"))  # no live queue
     wl.capacity(tmp_path, "we-worker")
     assert capsys.readouterr().err == ""
 

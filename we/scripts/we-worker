@@ -7,7 +7,9 @@
 #                                  `window`): id, name, pid, state, last=HH:MM (UTC
 #                                  of its last assistant entry), then `usage-limit` or `auth` when that
 #                                  entry is an API error of that kind, then `time-limit=HH:MM` (the
-#                                  deadline of --limit, `reached` once past); an exited worker that hit
+#                                  deadline of --limit, `reached` once past), then `waits: test-slot` while
+#                                  a process of the worker is blocked on the host's test slot (from
+#                                  /proc/locks); an exited worker that hit
 #                                  the usage limit or an auth error gets a second line with its resume
 #                                  command; then one `queued` line per queued start
 #                                  (scripts/worker_supervisor.py status_lines owns the line)
@@ -66,8 +68,11 @@
 #            the worker's settings file, never onto a command line; a critical worker on a non-Claude
 #            account, or --account without the option, refuses (exit 2); without --account nothing is asked
 #   --queue  (with --bg) a start the concurrency cap refuses is queued in the state dir instead: a
-#            detached waiter starts it once the check passes, first come first served, and tells the
-#            starter one line on start, failure or timeout (--queue-timeout, default 2h)
+#            detached waiter starts it once the check passes, first come first served across every
+#            repo on the machine (a start without --queue waits behind a queued one too), and tells
+#            the starter one line on start, failure or timeout (--queue-timeout, default 2h). From
+#            a main checkout a queued start gets its own worktree, whatever `workers.tree` says.
+#            The cap is the machine's: <state dir>/pool.json `max_busy_sessions` (default 8)
 #   Tree: without --tree or --here a start stays where the caller stands; only under `.weside/config.json`
 #   `workers.tree: own` a start from the main checkout gets its own worktree (`worker_launch.py tree`:
 #   the repo's `workers.add_worktree`, else `git worktree add <repo>-<name> -b <branch> origin/<default>`).
@@ -76,8 +81,10 @@
 #   Supervisor: every start also starts `worker_supervisor.py spawn` (detached; its docstring owns what
 #   it does); $WE_WORKER_NO_SUPERVISOR=1 skips it.
 #   --resume/-r <id|name>  a short id or name resolves to the full session id (claude agents, else a
-#                          stopped worker's <state dir>/<name>.resume.json); ambiguous, unknown or still
-#                          running (its pid lives: claude would start a copy) refuses without starting
+#                          stopped worker's <state dir>/<name>.resume.json, else a unique prefix of a
+#                          session id in claude agents, the kept resume files or the transcripts);
+#                          ambiguous (the candidates are named), unknown or still running (its pid
+#                          lives: claude would start a copy) refuses without starting
 # A start under a name a running session of any kind holds, or a tmux window already carries, refuses
 # as well, naming that session's tree and state: steer it, or stop it first.
 # A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
@@ -442,23 +449,12 @@ fi
 # --resume/-r with a short id or a name: resolve to the full session id first, or claude opens the
 # session picker ("No sessions match") and the worker hangs without a word.
 _resume_id() {
-  local out sid live=""
-  if [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then sid=$1; else
-    out=$(_agents | python3 -I -c 'import json,sys
-k=sys.argv[1]; d={a.get("sessionId") for a in json.load(sys.stdin) if k in (a.get("id"),a.get("name")) and a.get("sessionId")}
-print(*sorted(d))' "$1") || out=""
-    case "$(wc -w <<<"$out" | tr -d ' ')" in
-      1) sid=$out ;;
-      0)
-        sid=""
-        local sup
-        sup=$(plugin_script scripts/worker_supervisor.py 2>/dev/null)
-        [[ -n "$sup" && -f "$sup" ]] && sid=$(python3 "$sup" kept --name "$1" 2>/dev/null) || true
-        [[ -n "$sid" ]] || { echo "we-worker: --resume '$1': no session with that id or name in claude agents and no stopped worker of that name ($1.resume.json in the state dir); give the full UUID" >&2; return 1; }
-        ;;
-      *) echo "we-worker: --resume '$1' is ambiguous ($out); give the full UUID" >&2; return 1 ;;
-    esac
-  fi
+  local sid live="" sup
+  sup=$(plugin_script scripts/worker_supervisor.py 2>/dev/null)
+  [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py); --resume needs the full UUID" >&2; return 1; }
+  # a full UUID, a name or job id in claude agents, a stopped worker's name, or a unique prefix of a
+  # session id (worker_supervisor.resolve_session); ambiguous or unknown refuses, never a guess
+  sid=$(_agents | python3 "$sup" resolve --key "$1") || return 1
   while read -r pid aid aname; do
     if [[ -n "${pid:-}" && "$pid" != - ]] && kill -0 "$pid" 2>/dev/null; then
       live="$aid $aname"
@@ -588,7 +584,10 @@ if [[ -n "$tree" ]]; then
   mark=1
 elif [[ $here -eq 0 && $resuming -eq 0 ]]; then
   rc=0
-  created=$(python3 "$wl" tree --auto --repo "$PWD" --name "$name" ${branch:+--branch "$branch"}) || rc=$?
+  # a queued start (--queue, or its waiter's rerun) gets its own tree under any workers.tree
+  qtree=()
+  [[ $queue -eq 1 || -n "${WE_WORKER_QUEUE_TURN:-}" ]] && qtree=(--queued)
+  created=$(python3 "$wl" tree --auto ${qtree[@]+"${qtree[@]}"} --repo "$PWD" --name "$name" ${branch:+--branch "$branch"}) || rc=$?
   case $rc in
     0) tree=$created; mark=1 ;;
     3) ;;
@@ -657,7 +656,7 @@ if [[ "${WE_WORKER_NO_SUPERVISOR:-}" != 1 ]]; then
 fi
 
 for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
-unset WESIDE_COMPANION WE_ROLE_ID
+unset WESIDE_COMPANION WE_ROLE_ID WE_WORKER_QUEUE_TURN
 export WE_ROLE=worker WE_STORY_KEY="$key" WE_STARTER="${starter:-}"
 
 if [[ $bg -eq 1 ]]; then
