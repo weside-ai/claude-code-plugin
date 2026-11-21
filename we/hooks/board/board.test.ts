@@ -235,6 +235,15 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   expect(ownName(live, 'c')).toBe('Orchestrator')
   expect(ownName(live, 'b')).toBeUndefined()
   expect(answerPrompt('discuss', 'Q4')).toBe("Q4: let's talk about it")
+  expect(answerPrompt('discuss_asker', 'Q4')).toBe(
+    'Q4: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator.',
+  )
+  expect(answerPrompt('discuss_route', 'Q4', undefined, undefined, 'lead-3 (/work/lead)')).toBe(
+    'Q4: Discuss → tell the owner in one line: talk to lead-3 (/work/lead). Do not discuss or relay it yourself.',
+  )
+  expect(answerPrompt('discuss_route', 'Q4', parseBoard('{"answer_prompts":{"discuss_route":"{id}: sprich mit {who}"}}').answerPrompts, undefined, 'x')).toBe(
+    'Q4: sprich mit x',
+  )
   expect(answerPrompt('deny', 'Q4')).toBe('Q4: proposal denied')
   expect(answerPrompt('deny', 'Q4', parseBoard('{"answer_prompts":{"deny":"{id}: abgelehnt","read":"x"}}').answerPrompts)).toBe('Q4: abgelehnt')
   const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', info: 7 } })).answerPrompts

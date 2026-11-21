@@ -84,7 +84,8 @@ a JQL clause every signal query starts with, null = signals refused; ``claim_hou
 lives; ``shared_accounts``: ticketing accounts several humans write from (email or account id); a
 comment signed ``<role>@<human>`` speaks for that human only from that human's own account or one
 of these, ``board_humans.py``; ``select_unlabel``: labels ``board.py select`` removes from the ticket
-in its carry, e.g. the owner's release label once the story is Selected), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
+in its carry, e.g. the owner's release label once the story is Selected; ``answer_to``: ``asker``
+(null: the default) or ``coordinator``, who receives a board answer, over the repo's own value), ``sla``, ``limits``, ``naming``, ``launch`` (``worker``: the command template that
 starts a process worker, the one owner of it in a repo with a crew (``worker_launch.backend``);
 ``subagent_fallback``; ``allow_bypass``: true makes ``wclaude``, ``pin.sh`` and ``we-worker`` add
 ``--allow-dangerously-skip-permissions``, so bypass is one Shift+Tab away while the start mode stays
@@ -318,6 +319,7 @@ DEFAULTS: dict[str, Any] = {
         "claim_hours": 4,
         "shared_accounts": [],
         "select_unlabel": [],
+        "answer_to": None,  # ``asker`` (the default when null) or ``coordinator`` (board.py ask)
     },
     "sla": {"hours": 4, "daytime": "08-20", "tz": "UTC", "t2_second_reviewer": None},
     "limits": {

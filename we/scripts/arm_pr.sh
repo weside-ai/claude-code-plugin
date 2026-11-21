@@ -23,9 +23,9 @@
 # uncommitted risk paths included), elsewhere on the head commit after a fetch of `pull/<PR>/head`
 # into `refs/we-arm/pr-<PR>`, dropped again after the class (`risk_runner.py head`). Outside a git
 # clone there is no class. Fail closed: no class is a refusal. A one-way class is no refusal: it
-# merges only after the human's yes on the board (the merge question goes through the coordinator,
-# `/we:master` § Close the run), and the session that asked arms it. The helper cannot tell a yes
-# from a session's own board line, so it does not check one; it says the class loudly instead: the
+# merges only after the human's yes on the board (the asking session posts the merge question,
+# `/we:master` § Close the run), and the session that asked arms it. The helper checks no board
+# line; it says the class loudly instead: the
 # line `one-way <class>: merges only after the human's yes on the board (L0)` before the verdict,
 # and after the arm, or before the `ready` line, a PR comment `one-way <class> armed` or
 # `one-way <class> ready for the printed merge` with that reminder and `(head <sha>)`, once per head (a run that
@@ -54,8 +54,8 @@
 # `merge.armer: workflow` (the repo's own workflow arms every ready PR, so no session arms) and a
 # label of `merge.hold_labels` on the PR (a human merges it). The block is read from the PR's base
 # (`crew.py merge --rev origin/<base>`, fetched first), the checkout's only when the base has no crew
-# file or the caller is outside any git repo: the rule that holds a PR must not be editable by that
-# PR, and a PR's own worktree carries its crew file. A base that cannot be read is a `crew:` error.
+# file or the caller is outside any git repo: the base is the merged truth, and a PR's own worktree
+# carries its crew file. A base that cannot be read is a `crew:` error.
 #
 # `--check` reads once and arms nothing: the same facts as above (crew merge block, hold labels,
 # one-way class, required names absent = pending, mergeStateStatus, reviewDecision) give one line

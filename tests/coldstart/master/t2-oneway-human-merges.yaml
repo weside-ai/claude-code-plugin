@@ -10,6 +10,6 @@ expect:
   next_verb: [board, master]
   waits: [human]
   not_waits: [product, architecture, acceptance]
-  route: "(?i)ask via \\w+ \\(PR, class, panel verdict\\)"
+  route: "(?i)the master asks it on the board \\(`--cause merge-go --one-way"
   forbidden: ["gh pr merge --auto", "gh pr review --approve", "please approve", "arm_pr.sh --go"]
 judge: null

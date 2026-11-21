@@ -13,7 +13,7 @@ The worktree holds one or more commits on top of the default branch. The script
    `.weside/config.json` (default `docs/plans/**`), plus a staging-check file under the crew's
    `oracles.receipt_dir` that travels with a plan and still carries `state: planned`. Config and
    crew are read from `<remote>/<default>` (`git show`), never from the commits being landed nor
-   from the main checkout's uncommitted copy, so a commit cannot widen its own check;
+   from the main checkout's uncommitted copy, so the rules in force decide;
 4. runs the secret scan over the commit range: `plans.secret_scan`, a command template with
    `{range}` and an optional `{report}` (a JSON report path in gitleaks' format), default
    `gitleaks git --log-opts={range} --redact --no-banner --report-format json --report-path {report}`

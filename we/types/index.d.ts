@@ -95,8 +95,8 @@ export type BoardQueueItem = {
   to?: string | null
   to_name?: string | null
   label?: string | null
-  // Who receives the answer (`board.py ask`): `answer_to: asker` (the asker's repo sets
-  // `board.answer_to`) sends it to the asker directly and the coordinator a one-line copy; `starter`
+  // Who receives the answer (`board.py ask`): `answer_to: asker` (the default; `board.answer_to:
+  // coordinator` opts out) sends it to the asker directly and the coordinator a one-line copy; `starter`
   // takes it when the asker is gone; `asker_id` is the asking session's id.
   answer_to?: string | null
   starter?: string | null
@@ -244,9 +244,10 @@ export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
 // for the orchestrator (and the asker), `update_asker`, what Update asks of the asking session, and the
 // two Accepts with a meaning of their own: `accept_hand` (Go on a one-way merge-go with its PR, `{pr}`
 // standing for the PR link: the asking session arms with `arm_pr.sh <PR>`) and `accept_task`
-// (Taken on a task).
+// (Taken on a task). On a question with `answer_to: asker`, Discuss sends `discuss_asker` to the asker
+// (the owner comes to its window) and `discuss_route` to the coordinator (`{who}`: whom the owner talks to).
 export type BoardAcceptVariant = 'accept_hand' | 'accept_task'
-export type BoardPromptKind = BoardDeliveredKind | 'update_asker' | BoardAcceptVariant
+export type BoardPromptKind = BoardDeliveredKind | 'update_asker' | BoardAcceptVariant | 'discuss_asker' | 'discuss_route'
 
 export type BoardAnswer = {
   id: string

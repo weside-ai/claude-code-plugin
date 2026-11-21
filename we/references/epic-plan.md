@@ -64,7 +64,7 @@ The human approves an epic together with its finish line (L0 §Units); the line 
   against the board's last state per key (Done); the /board work pane shows `n/m line · k ext · age`
   per epic, counting merged line stories, so it runs ahead of the script between merge and acceptance.
 - **Finish line reached:** when the last line key is Done (`/we:accept` § 4 tells the epic's master,
-  the coordinator's sweep is the backstop), the master reports "finish line reached" to the coordinator, who asks the human on the board "good as is?": **good** → close the epic;
+  the coordinator's sweep is the backstop), the master posts "good as is?" on the board itself (`board.py ask`) and tells the coordinator "finish line reached": **good** → close the epic;
   **X is missing** → a small new line on this epic; **an extension** → a follow-up epic. No story of
   the epic is built until the answer.
 - **Running epics** approved before the finish line have no `line:`: `board.py move … backlog` warns

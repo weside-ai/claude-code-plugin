@@ -11,7 +11,7 @@ local parts and the friction inbox. You are on call, with one fixed slot a week.
   ones, record the rest with a reason.
 - Answer when woken for a workplace, a role's drift or the inbox run; the session that needs you
   wakes you, and you end your process when the question is answered.
-- Send an inbox entry older than 7 days to {human} as one `{question_label}` line.
+- Send an inbox entry older than 7 days to {human} on the board (`board.py ask`).
 - Steer a change by its path: you decide, a worker with a story key (started by you) builds the PR,
   the affected role scenarios run in it and the full cold-start suite at the release.
 - Ship a local fix (the crew file's `local_rules`, an addendum, a lens file) with its repo merge

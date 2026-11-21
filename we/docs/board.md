@@ -272,7 +272,7 @@ names are those of the default board.
 |---|---|
 | `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `discuss`, `info`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
+| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `discuss`, `discuss_asker`, `discuss_route`, `info`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items for the owner with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes `info`, `gate` and `todo` (`news add`; the bundle, an escalation at stage `bundle`, a signal `S<n>` with `for` the role and `key`, § Several humans; staging past its SLA) and `escalation` (a record at stage `escalation`, with `for` the role waited on, shown in the log) |
 | `log[]` | optional, written by `board.py`: entries kept for the record (`decision`, `sample`, older news without an id), the newest 50; the pane folds them under the news (§ News) |
@@ -339,7 +339,8 @@ ticket and say so in one comment there`. **Read** sends nothing: the item leaves
 
 ### Delivery
 
-The pane sends nothing itself. One deliverer carries every answer line: the board module in the
+The pane sends nothing itself. Questions are posted by their asker; the coordinator delivers and
+tidies, it is no post office. One deliverer carries every answer line: the board module in the
 orchestrator's session, the one whose name equals `updated_by`, or, while that field is empty (a
 `board.py` write never sets it), the crew's coordinator (`roles.coordinator` in the crew file of the
 session's repo, read once at session start, and only when the board is that crew's `board.file`); found by matching its session id against
@@ -360,19 +361,27 @@ minutes. Per line it writes one row per recipient to
 | `owner` (`owner_queue[].owner`) | unless it is the coordinator, the asker or the session that wrote the line | a message to that session: the coordinator's text plus `(copy for the owner of this subject)`; a refusal is a ledger row only, no routing line | the engine queued it there |
 | `starter` (`owner_queue[].starter`) | only on a question with `answer_to: asker`, once the asker refused or was not reached | a message to the asker's starter: the asker's text plus `(for <asker>, which did not take it: carry it on or act on it)` | the engine queued it there |
 | `route` (the orchestrator) | the asker was not reached (with `answer_to: asker` and a starter: the starter was not reached either) | a prompt: `<id>: the owner's answer (<kind>) did not reach <asker> (<reason>); wake that session or route the answer` | as `coordinator` |
+| `route` on a Discuss (the orchestrator) | on a question with `answer_to: asker`, once the starter took a Discuss the asker did not | a prompt: `discuss_route` naming the starter, `<id>: Discuss → tell the owner in one line: talk to <starter> (<cwd>). Do not discuss or relay it yourself.` | as `coordinator` |
 
-**`board.answer_to`** in the asking repo's `.weside/config.json` (`coordinator`, the default, or
-`asker`) decides who carries an answer. `board.py ask` stamps the question with `asker_id` (the
+**`board.answer_to`** decides who carries an answer: `asker`, the default, or `coordinator`, the
+opt-out. The crew file's value beats the asking repo's `.weside/config.json`, so a companion asks
+the same way from any repo. `board.py ask` stamps the question with `asker_id` (the
 asking session's id) and the launcher marker's `starter`, both only when `--session` is the
 caller itself, and, under `asker`, `answer_to: asker`. On
 such a question the asker gets the answer as above and the coordinator's prompt is one copy line,
 `<id>: <kind> — copy for the queue; the answer goes to <asker> directly, do not relay it` with the
 writer note; an asker that is gone hands it to its starter (role `starter`), and only when that
-fails too does the coordinator get the routing line. A question without the stamp keeps the
+fails too does the coordinator get the routing line. A **Discuss** on such a question sends the
+asker `discuss_asker` (`<id>: the owner wants to talk about it. Have the question, your options and
+your recommendation ready in your window; the owner comes to you. Do not ask it again through the
+coordinator.`, the starter the same text when the asker is gone) and the coordinator `discuss_route`
+in place of the copy line (`<id>: Discuss → tell the owner in one line: talk to <asker> (<cwd>). Do
+not discuss or relay it yourself.`, the window from the asker's board line `cwd`); when the starter
+took it, a second `discuss_route` names the starter. A question without the stamp keeps the
 coordinator's full text.
 
 The board's optional `answer_prompts` words these texts in the orchestrator's own language, `{id}`
-standing for the question's id and `{pr}` for its PR link: `{"accept": "{id}: Vorschlag angenommen"}`;
+standing for the question's id, `{pr}` for its PR link and `{who}` for the session a `discuss_route` names: `{"accept": "{id}: Vorschlag angenommen"}`;
 `update_asker` is the asker's Update text, `accept_hand` (the go on a one-way PR, armed by the
 asking session) and `accept_task` (the owner does it) the two Accepts with a meaning of their own
 (never `accept`'s text); a kind it leaves out keeps the default.
@@ -440,8 +449,9 @@ another session's line and is the coordinator's (`roles.coordinator`). A new `wa
 line clears all three and on any other line changes nothing, so a hand-written `since` survives.
 `state` and `now` never touch `since`; every `board.py` write of the coordinator stamps `updated`, none writes `updated_by`.
 
-**`ask` — a question for the owner.** Each session asks its own question with `board.py ask`;
-the coordinator owns the queue (answers, re-routing). The call is
+**`ask` — a question for the owner.** Any crew session asks its own question with `board.py ask`,
+whatever its role; a worker asks its starter, which posts it. The coordinator keeps the queue tidy
+and carries only what the deliverer could not deliver. The call is
 `board.py ask --key <KEY> --key-title "<title>" --ask "<question>"
 --recommendation "<recommendation>" --cause <cause>`; `--session <asker>` defaults to the session's
 own name as `set` finds it. `--text-file <path>` (or `-` with a quoted heredoc on stdin) takes the

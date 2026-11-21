@@ -23,7 +23,7 @@ INBOX = (
     "**The board is Hal's only inbox:** the push line, the bundle and an escalation each point at "
     "a board item."
 )
-ONE_WAY = "A one-way PR merges\n  on Hal's board yes: ask via"
+ONE_WAY = "A one-way PR merges\n  on Hal's board yes: the master asks it on the board"
 DECIDED_3 = "3. One-way merges on Hal's yes, no gate."
 
 
@@ -151,8 +151,8 @@ def test_the_phrase_tests_go_red_on_the_previous_text(tmp_path):
         "",
     )
     old = old.replace(
-        "panel and card are input.",
-        "panel and card are input; one word arms auto-merge;",
+        "then arms with `arm_pr.sh`.",
+        "then arms with `arm_pr.sh`; one word arms auto-merge;",
     )
     (process / "L0.md").write_text(old)
     text = rp.render_l0(generic(), process=process)
@@ -203,7 +203,7 @@ def test_the_watch_phrases_go_red_on_the_previous_text(tmp_path):
 def test_worker_form_is_short_and_carries_the_crew_values():
     text = rp.role_text(generic(), "worker")
     assert len(text) <= 1_500
-    assert "a question for Hal goes to Otto as one line `ASK ·" in text
+    assert "a question for Hal goes to your starter as one line `ASK ·" in text
     assert "(full text: `render_process.py --role master`)" in text
     assert text.count("\n- ") == 5
 
@@ -881,11 +881,11 @@ def test_inbox_lines_name_the_local_human_decider_lines_the_deciding_one(monkeyp
     monkeypatch.setenv("WE_HUMAN", "marisol")
     l0 = rp.render_l0(crew)
     assert "The board is Marisol's only inbox" in l0 and "Hale's only inbox" not in l0
-    assert "carries what goes to Marisol," in l0
+    assert "whose window to go to" in l0 and "Marisol whose window" in " ".join(l0.split())
     assert "| T3 company | Hale," in l0
     assert "Prod ships an accepted RC's commit, only on Hale's word" in l0
     coord = rp.render_card(crew, "coordinator")
-    assert "Questions for Marisol reach you" in coord and "Never answer for Marisol;" in coord
+    assert "Questions for Marisol that reach you" in coord and "Never answer for Marisol;" in coord
     assert "native build needs Hale's word" in coord
     sec = rp.render_card(crew, "security")
     assert "every human's personal data" in sec

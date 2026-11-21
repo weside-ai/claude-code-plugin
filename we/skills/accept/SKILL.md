@@ -60,7 +60,7 @@ its own evidence in the comment.
 For each epic whose story moved to Done in this run and whose plan has `line:`, run
 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/epic_state.py line <epic plan>`. On `finish line reached`, send
 `finish line reached · <EPIC> · <line_goal>` to the epic's master (no master: the coordinator); the
-master reports it to the coordinator, who asks the human "good as is?" on the board
+master posts "good as is?" on the board itself and tells the coordinator
 (`references/epic-plan.md` § Finish line).
 
 ## Done when

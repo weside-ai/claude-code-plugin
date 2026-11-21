@@ -329,8 +329,8 @@ async function deliverOne($: $, ledgerPath: string, coordinator: string, d: Deli
         d.role === 'owner'
           ? ownerText(d.line, prompts, d.accept)
           : d.role === 'starter'
-            ? starterText(d.line, d.asker ?? '?', prompts, d.accept)
-            : askerText(d.line, prompts, d.accept)
+            ? starterText(d.line, d.asker ?? '?', prompts, d.accept, d.direct)
+            : askerText(d.line, prompts, d.accept, d.direct)
       sent = await $.session.send({ to: d.to, text })
     } catch (err) {
       sent = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
@@ -413,9 +413,17 @@ async function deliverTick($: $, file: string) {
     })
     const askerOf = (id: string) => c.board.queue.find(q => q.id === id)?.session ?? undefined
     const ownerOf = (id: string) => c.board.queue.find(q => q.id === id)?.owner ?? undefined
+    const windowOf = (name: string | null | undefined) => (name ? c.board.sessions.find(s => s.name === name)?.cwd ?? undefined : undefined)
     const routeOf = (id: string) => {
       const q = c.board.queue.find(x => x.id === id)
-      return q?.answer_to === 'asker' ? { answerTo: 'asker' as const, ...(q.starter ? { starter: q.starter } : {}) } : undefined
+      if (q?.answer_to !== 'asker') return undefined
+      const [askerWindow, starterWindow] = [windowOf(q.session), windowOf(q.starter)]
+      return {
+        answerTo: 'asker' as const,
+        ...(q.starter ? { starter: q.starter } : {}),
+        ...(askerWindow ? { askerWindow } : {}),
+        ...(starterWindow ? { starterWindow } : {}),
+      }
     }
     const acceptOf = (id: string) => {
       const q = c.board.queue.find(x => x.id === id)
