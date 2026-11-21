@@ -133,7 +133,8 @@ this section, never between. A fork or a `scope change:` line still ends you wit
    no other pass follows. By push, `plan_push.py` exits 0. The PR way: open the docs PR, send its URL to your
    starter in one line (a worker never arms; the starter does), and wait in the background with
    `watch-pr-checks.sh <PR> --until-merged` for `merged`.
-3. **Panel.** Skill tool, skill `we:lens`, args `ready <KEY>`; you run its steps.
+3. **Panel, only for a risk plan.** Try step 5 first: `board.py select` takes a plan whose computed tier is
+   `T0` without a panel. Refused in group `lenses`: Skill tool, skill `we:lens`, args `ready <KEY>`; you run its steps.
 4. **Fix within the cap.** A red round: fix every BLOCKING and WARNING finding of it in one edit, rerun steps
    1–2, then step 3 again. `round cap: the lens holder decides` ends the loop: no further edit, report `capped`.
 5. **Select.** Green: first read the crew switch, `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/crew.py show`; when its

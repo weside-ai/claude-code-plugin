@@ -486,7 +486,7 @@ after a withdraw or an answer posts anew. One that does not comes back, never si
 nothing. The asker's next posted question clears a `returned to` note; a note that does not start
 with `returned to` is never overwritten, and the refusal and the `returned` line in
 `board-questions.jsonl` alone carry the return. A reader that cannot run (no `claude`, 90 s, no parseable
-answer) posts nothing and exits 1 with `reader-error: <cause>`.
+answer) never holds a question back: it is posted unread, stderr says `reader-error: <cause>; posted unread`.
 
 **One open question per key and cause.** An `ask` on a key that already has an open question
 with the same cause, PR and `--to` human is refused as a `duplicate` (a line in
@@ -502,7 +502,7 @@ the asker, in the commit it makes anyway: the board is pruned, the code stays.
 
 Every `ask` past the field check appends one line to `board-questions.jsonl`:
 `{id?, ts, session, key, key_title, ask, recommendation, cause, outcome, reason?, reader?}`, with
-`outcome` `posted` (only then `id`), `returned`, `reader-error`, `duplicate` (with `of`), `replaced` (with `by`), `repeat` (with the first `id`), `closed` (`close-merged`) or `pruned` (§ Pruning), and `reader` the reader's raw
+`outcome` `posted` (only then `id`), `returned`, `duplicate` (with `of`), `replaced` (with `by`), `repeat` (with the first `id`), `closed` (`close-merged`) or `pruned` (§ Pruning), and `reader` the reader's raw
 `decides`, `on_yes`, `form`. A duplicate answer adds a `duplicate-answer` line (§ Answers given in a
 chat). The line keeps the question's text after it leaves `owner_queue` (§ Pruning, `close-merged`), so
 questions per day and answer times come from this log joined with `board-answers.jsonl` by `id`.
@@ -657,11 +657,11 @@ adds. Every rule runs before any write; a refusal writes no row, calls no adapte
 
 | Verb | Rule as the script checks it | Refusal |
 |---|---|---|
-| `select <KEY> [--plan PATH] [--refiner]` | `ENTRY_RULES["selected"]`, in order: the plan on `risk.rules_from` after one fetch (default path `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`); with `--refiner` (a refiner selecting its own story) the story's epic plan on that ref, which must be approved (`status:` starting `approved`, the backlog rule's reading), hold the key on its `line:` and carry no `select: owner`, and the crew must not set `select.refiner: false`, else the product role selects (group `refiner`); the Ready gate's story checks on that blob, the plan-only tier, a green `ready-<KEY>` lens verdict whose subject hash is that blob's (an edit of the excluded parts, such as the updates log or `status:`, keeps it, `lens_verdict.py` § Subject; green with carried warnings counts, § Carried warnings; above the round cap green through a holder's decision, § Round cap); the checkout's copy of the plan is never read, so a stale or missing one selects what main carries | `board.py select <KEY>: refused (plan on main\|refiner\|ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
+| `select <KEY> [--plan PATH] [--refiner]` | `ENTRY_RULES["selected"]`, in order: the plan on `risk.rules_from` after one fetch (default path `docs/plans/<KEY>-story.md` under `git rev-parse --show-toplevel`); with `--refiner` (a refiner selecting its own story) the story's epic plan on that ref, which must be approved (`status:` starting `approved`, the backlog rule's reading), hold the key on its `line:` and carry no `select: owner`, and the crew must not set `select.refiner: false`, else the product role selects (group `refiner`); the Ready gate's story checks on that blob, the plan-only tier, and, unless that tier is `T0` (no panel; the row and comment say `panel none (T0)`), a green `ready-<KEY>` lens verdict whose subject hash is that blob's (an edit of the excluded parts, such as the updates log or `status:`, keeps it, `lens_verdict.py` § Subject; green with carried warnings counts, § Carried warnings; above the round cap green through a holder's decision, § Round cap); the checkout's copy of the plan is never read, so a stale or missing one selects what main carries | `board.py select <KEY>: refused (plan on main\|refiner\|ready gate\|tier\|lenses)`, then the group's lines; a later group does not run |
 | `move <KEY> on_hold --reopen T` | a non-blank reopen trigger, kept in the row as `reopen` | `board.py move <KEY> <state>: refused: <reason>`, one line per failure |
 | `move <KEY> backlog --epic EPIC` | exactly one `*-epic.md` under `docs/plans/` names `EPIC` (`ticket:`, `epic:` or `linked_epics:`), and its `status:` starts `approved` | as above |
 | `move <KEY> selected` | always refused: `use board.py select` | as above |
-| `move <KEY> in_progress` | the key's last row in the transitions log is `selected`; from `in_review` or `in_test` only with `--reopen "<reason>"` (a revert of the merged PR, a failed test), kept as `reopen` | as above |
+| `move <KEY> in_progress [--fast]` | the key's last row in the transitions log is `selected`; with `--fast` from `backlog` or from no row (the fast lane of L0 §Units: no plan file, row `via: fast`); from `in_review` or `in_test` only with `--reopen "<reason>"` (a revert of the merged PR, a failed test), kept as `reopen` | as above |
 | `move <KEY> in_test` | the crew maps an In Test status (`board.states.in_test`, default null: no In Test step) and the key is `in_review`; owned per § Several humans | as above; `the crew maps no in_test status` without the mapping |
 | `move <KEY> in_review --pr REF…` | every `REF` (a URL, `<owner>/<repo>#<n>`, or a bare number) is `MERGED` by `gh pr view` and carries `<KEY>` as a whole token in its head branch or title, or on a body line that starts with `Ticket(s)`, `Refs`, `Closes`, `Fixes`, `Resolves` or `Delivers` followed by a colon or directly by a key (a story delivered by a bundle PR or another story's PR); a bare number is refused as ambiguous when the plan's phases name a `**Repo:**` other than the checkout's `origin` | as above |
 | `move <KEY> done --already-fixed REF [--comment-file FILE]` | from any state but `done`: `REF` (`<owner>/<repo>#<n>` or a URL) is `MERGED` by `gh pr view`, the PR that fixed the story before it was built; the row says `via: already-fixed` and `pr`, the comment names the PR and adds the file's text | as above |
