@@ -40,9 +40,10 @@ In a master session (`WE_ROLE=master`), `/flow` without a key shows what that ma
 so you see it in every master instead of asking: its epic with every story it holds, under each
 story the workers it started on it (`⚙ <worker> · <state>`), and its workers on other keys as one
 `other workers:` line. A master without an epic shows its stories one block each. The map comes
-from `standup.py --orchestration --session <id>` (about 3 s; plans, board, sessions and the fast
-command centre, no GitHub) and is read again with every refresh. A master whose session runs
-outside its crew's repo finds that repo through its board line; when that fails the pane says
+from `standup.py --orchestration --session <id>` (plans, board, sessions and the fast command
+centre, no GitHub) and is read again with every refresh, which also picks up stories or an epic the
+master gains. A master whose session runs outside its crew's repo finds that repo through its
+board line; when that fails the pane says
 `master <name>: no crew repo found — stories from the board line`. When the lookup fails, `/flow`
 logs `flow: master view unavailable: <reason>` and falls back to the sources below.
 

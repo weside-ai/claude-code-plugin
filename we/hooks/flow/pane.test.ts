@@ -307,3 +307,21 @@ test('the 2-minute refresh re-reads the master and keeps the last record when th
   await ui.unmount()
   expect(r.logged.filter(l => l.startsWith('flow: master view unavailable'))).toHaveLength(1)
 })
+
+test('a master without epic sees a story it gains after the open, with its worker, on the refresh', async ($, on) => {
+  let calls = 0
+  const one = { master: 'kiska', epic: null, stories: [{ key: 'PROJ-31', workers: [] }], other_workers: [] }
+  const two = { ...one, stories: [...one.stories, { key: 'PROJ-33', workers: [{ name: 'PROJ-33-build', state: 'busy' }] }] }
+  const script: Script = {}
+  Object.defineProperty(script, 'stdout', { get: () => [ORCH([one]), ORCH([two])][Math.min(calls++, 1)] })
+  const r = await noKey($, on, 'master', script)
+  let ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /PROJ-33/ })).toBeUndefined()
+  await ui.unmount()
+  await r.clock.advance(120_000)
+  await r.clock.settle()
+  ui = await r.mount()
+  expect(await ui.find({ type: 'Text', text: /◆ PROJ-31 · PROJ-33/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /⚙ PROJ-33-build · busy/ })).toBeDefined()
+  await ui.unmount()
+})

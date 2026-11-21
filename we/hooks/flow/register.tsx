@@ -206,10 +206,15 @@ async function refresh($: $, keys: string[], source?: string, fresh?: MasterOrch
       v && v.keys.join() === keys.join() ? { ...v, isLoading: true } : { keys, source, groups: [], updatedAt: 0, isLoading: true },
     )
     // A master view re-reads its workers with the timer; a failed re-read keeps the last record.
+    // A good re-read also renews the keys: a master gains stories, or an epic, after the open.
     let master: MasterOrchestration | undefined
     if (isMasterSource(source)) {
-      master = fresh ?? (await masterView($)) ?? ((await $.store.get(MASTER)) as MasterOrchestration | undefined)
-      if (master) await $.store.set(MASTER, master)
+      const reread = fresh ?? (await masterView($))
+      master = reread ?? ((await $.store.get(MASTER)) as MasterOrchestration | undefined)
+      if (reread) {
+        await $.store.set(MASTER, reread)
+        if (masterKeys(reread).length) keys = masterKeys(reread)
+      }
     }
     const groups = await gather($, keys, master)
     const next: FlowView = { keys, source, groups, updatedAt: await $.clock.now(), isLoading: false }
