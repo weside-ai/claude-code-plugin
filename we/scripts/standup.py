@@ -25,7 +25,7 @@ Sources, one call each (never per story):
 
 | Source | Call | Gives |
 |---|---|---|
-| plans | `epic_state.frontmatter` over `docs/plans/*-epic.md` (not `_archive/`), `epic_state.story_keys`, `epic_state.finish_line` | epics, line, intent, story plans |
+| plans | `epic_state.frontmatter` over `docs/plans/*-epic.md` of `origin/main` (`plan_files`; not `_archive/`), `epic_state.finish_line` | epics, line, intent, story plans |
 | board | `board.StateDir`: `board()`, `last_rows()` (stage per key), `transitions()` (moves in the window), `open_questions` | lines, questions, stages |
 | tickets | `ticket_snapshot.read` | stage of keys without a board move (only when fresh) |
 | flow | `flow_intervals.build` once over both windows | touch hours per key, worker hours, waits per `waiting_on`, story efficiency |
@@ -204,20 +204,52 @@ def _line_keys(value, pattern: str) -> list:
     return re.findall(pattern, str(value or "").split("#", 1)[0])
 
 
-def read_plans(root: Path, pattern: str) -> dict:
-    """`{epics: {KEY: epic}, stories: {KEY: epic KEY or None}}` from `docs/plans` (no `_archive/`)."""
+def plan_files(root: Path, runner=subprocess.run) -> tuple:
+    """`({file name: text} of `docs/plans/*.md` without `_archive/`, where)`: from the remote's
+    default branch (`origin/HEAD`, else `origin/main`) through `git show`, as `/flow` and
+    `plan_push.py` read plans, since a session's checkout may lag behind `main`; the working tree
+    only where the repo has no such ref (no git, no remote)."""
+
+    def git(*args):
+        out = runner(
+            ["git", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        return out.stdout if out.returncode == 0 else None
+
+    head = (git("symbolic-ref", "--short", "refs/remotes/origin/HEAD") or "").strip()
+    for ref in [r for r in (head, "origin/main") if r]:
+        listing = git("ls-tree", "--name-only", f"{ref}:docs/plans")
+        if listing is None:
+            continue
+        names = [n for n in listing.splitlines() if n.endswith(".md")]
+        files = {}
+        for n in names:
+            text = git("show", f"{ref}:docs/plans/{n}")
+            if text is not None:
+                files[n] = text
+        return files, ref
     plans = root / "docs" / "plans"
     if not plans.is_dir():
         raise FileNotFoundError(f"no {plans}")
+    return {p.name: p.read_text(encoding="utf-8") for p in plans.glob("*.md")}, "working tree"
+
+
+def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
+    """`{epics: {KEY: epic}, stories: {KEY: epic KEY or None}, ref}` from `plan_files`."""
+    files, ref = plan_files(root, runner)
     epics, stories = {}, {}
-    for path in sorted(plans.glob("*-story.md")):
-        meta = epic_state.frontmatter(path.read_text(encoding="utf-8"))
-        key = str(meta.get("story") or meta.get("ticket") or path.name[: -len("-story.md")])
+    for name in sorted(n for n in files if n.endswith("-story.md")):
+        meta = epic_state.frontmatter(files[name])
+        key = str(meta.get("story") or meta.get("ticket") or name[: -len("-story.md")])
         stories[key] = meta.get("epic") or None
-    for path in sorted(plans.glob("*-epic.md")):
-        text = path.read_text(encoding="utf-8")
+    for name in sorted(n for n in files if n.endswith("-epic.md")):
+        text = files[name]
         meta = epic_state.frontmatter(text)
-        key = str(meta.get("ticket") or path.name[: -len("-epic.md")])
+        key = str(meta.get("ticket") or name[: -len("-epic.md")])
         body = text.split("\n---", 1)[1] if text.startswith("---") and "\n---" in text else text
         title = next((x[2:].strip() for x in body.splitlines() if x.startswith("# ")), key)
         epics[key] = {
@@ -229,10 +261,10 @@ def read_plans(root: Path, pattern: str) -> dict:
             "line_goal": meta.get("line_goal") or None,
             "outcome": _first_sentence(_section(text, "Outcome")),
             "success_criteria": _items(_section(text, "Success Criteria")),
-            "stories": epic_state.story_keys(root, key),
+            "stories": sorted(k for k, e in stories.items() if e == key),
             "text": text,
         }
-    return {"epics": epics, "stories": stories}
+    return {"epics": epics, "stories": stories, "ref": ref}
 
 
 # --- the build -------------------------------------------------------------------------------
@@ -509,6 +541,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         "zentrale": zd,
         "workers": wk,
         "pattern": pattern,
+        "crew": crew,
         "g": g,
     }
     active = [k for k in sorted(epics) if _is_active(ctx, epics[k])]
@@ -896,12 +929,17 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
         "free": None if busy is None or limit is None else max(0, int(limit) - busy),
         "source": "zentrale.working · worker_launch.cap_limits",
     }
-    masters = None if sessions is None else [e for e in sessions if e.get("role") == "master"]
+    # a crew member's session is a companion, not an epic's master (flow_intervals.member_names)
+    members = fi.member_names(ctx["crew"])
+    heads = None if sessions is None else [e for e in sessions if e.get("role") == "master"]
+    masters = None if heads is None else [e for e in heads if e["name"].casefold() not in members]
     out["build_masters"] = {
         "used": None if masters is None else len(masters),
         "limit": None,
         "free": None,
-        "source": "zentrale.working (no crew key for a limit)",
+        "companions": None if heads is None else len(heads) - len(masters),
+        "source": "zentrale.working without crew members (flow_intervals.member_names);"
+        " no crew key for a limit",
     }
     if masters is not None:
         g.gaps.append("build masters: no limit (no crew key)")
@@ -1221,6 +1259,7 @@ LABELS = {
         "main_red": "main red",
         "workers": "workers",
         "build_masters": "build masters",
+        "companions": "companions",
         "test_slot": "test slot",
         "gate_lock": "gate lock",
         "accounts": "accounts with room",
@@ -1275,6 +1314,7 @@ LABELS = {
         "main_red": "main rot",
         "workers": "Worker",
         "build_masters": "Bau-Master",
+        "companions": "Companions",
         "test_slot": "Test-Slot",
         "gate_lock": "Gate-Lock",
         "accounts": "Konten mit Luft",
@@ -1478,6 +1518,7 @@ def render_utilization(doc: dict, lang: str = "en") -> str:
         f"| {lab['workers']} | {_num(w['used'])} | {_num(w['limit'])} | {_num(w['free'])} |"
     )
     out.append(f"| {lab['build_masters']} | {_num(b['used'])} | n/a | n/a |")
+    out.append(f"| {lab['companions']} | {_num(b['companions'])} | - | - |")
     t = u["test_slot"]
     waiters = "n/a" if t["waiting"] is None else str(len(t["waiting"]))
     out.append(

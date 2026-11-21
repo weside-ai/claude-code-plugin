@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -273,9 +274,25 @@ def test_utilization_numbers(tree):
     assert u["idle"] == {"masters": ["m-9010"], "selected_without_master": ["PROJ-9004"]}
     assert u["waiting_h"] == {"lock": 4.5}
     assert u["flow_efficiency"] is not None and u["ci_rounds"] == 1
+    assert u["build_masters"]["companions"] == 0
     gaps = run(tree)["gaps"]
     assert "build masters: no limit (no crew key)" in gaps
     assert "test-slot waiters: no source (we-worker status has no waits field)" in gaps
+
+
+def test_build_masters_leave_out_companions(tree):
+    """A crew member's session is a companion: counted apart, never as an epic's master."""
+    edit_json(
+        tree / "zentrale.json",
+        lambda z: z["sections"]["working"].append(
+            {"name": "Ada", "role": "master", "state": "idle", "keys": [], "group": "Ada"}
+        ),
+    )
+    crew = json.loads(json.dumps(crew_mod.DEFAULTS))
+    crew["members"] = {"ada": {"name": "Ada"}}
+    u = run(tree, crew=crew)["utilization"]
+    assert (u["build_masters"]["used"], u["build_masters"]["companions"]) == (2, 1)
+    assert u["idle"]["masters"] == ["m-9010"]  # the idle companion is no idle master
 
 
 def quiet(root: Path) -> None:
@@ -514,3 +531,23 @@ def test_orchestration_map(tree):
 
 def test_cell_escapes_foreign_markup():
     assert standup.cell("a | b\nc `d`\x1b[31m") == "a \\| b c 'd'"
+
+
+def test_plans_come_from_the_default_branch(tree):
+    """A checkout behind main still shows main's line: plans are read through `git show`."""
+    repo = tree / "repo"
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+
+    git("init", "-q")
+    git("-c", "user.email=t@example.com", "-c", "user.name=t", "add", "-A")
+    git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "base")
+    epic = repo / "docs" / "plans" / "PROJ-9010-epic.md"
+    epic.write_text(epic.read_text().replace("line: [PROJ-9011]", "line: [PROJ-9011, PROJ-9012]"))
+    git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qam", "main moves")
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    git("reset", "-q", "--hard", "HEAD~1")  # the local checkout lags behind
+    doc = run(tree, "PROJ-9010")
+    assert doc["epic"]["intent"]["line"] == ["PROJ-9011", "PROJ-9012"]
+    assert doc["sources"]["plans"] == "read"

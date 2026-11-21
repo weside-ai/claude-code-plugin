@@ -4,6 +4,7 @@
 |---|---|---|---|
 | Worker | 3 | 4 | 1 |
 | Bau-Master | 2 | n/a | n/a |
+| Companions | 0 | - | - |
 | Test-Slot | w-PROJ-9003 | 1 | Wartende n/a |
 | Gate-Lock | - | 1 | - |
 | Konten mit Luft | 1 | 2 | - |
