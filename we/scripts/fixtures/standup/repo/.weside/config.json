@@ -1,0 +1,5 @@
+{
+ "workers": {
+  "max_busy_sessions": 4
+ }
+}
