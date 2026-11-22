@@ -38,6 +38,9 @@ Usage:
                                             on this machine (``deliverer``), exit 1 when none
   crew.py name ROLE [--from DIR]            the display name of ROLE (a role key or a member slug)
                                             for this session's human (``display_name``)
+  crew.py zone [--from DIR] [--system]      the time zone calendar dates are written in
+                                            (``time_zone``); --system the shell's own, /we:setup's
+                                            default
 
 Lookup (``find``): from DIR (default the cwd) upwards to the repo root (the first directory with
 ``.git``), the first ``.weside/crew.json``; a ``.weside/config.json`` whose ``crew`` names another
@@ -170,6 +173,7 @@ holding several roles is the one ``WE_ROLE_ID`` names (``role_of_session``).
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import ipaddress
 import json
@@ -178,8 +182,10 @@ import re
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 # ``python3 -I`` (the board runs it so) leaves this directory off sys.path (``-I`` implies ``-P``)
 _HERE = str(Path(__file__).resolve().parent)
@@ -443,6 +449,65 @@ def _crew_at(root: Path) -> Path | None | bool:
             target = (root / pointer.strip()).resolve()
             return target if target.is_file() else None
     return False
+
+
+def project_config(start: str | Path | None = None) -> dict[str, Any]:
+    """`.weside/config.json` of the nearest directory above `start` (default the cwd) holding
+    one; {} without one or unreadable."""
+    here = Path(start or Path.cwd()).resolve()
+    for folder in (here, *here.parents):
+        path = folder / ".weside" / "config.json"
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {}
+            return data if isinstance(data, dict) else {}
+    return {}
+
+
+def _zone_or_none(name: object) -> ZoneInfo | None:
+    if not isinstance(name, str) or not name.strip():
+        return None
+    try:
+        return ZoneInfo(name.strip())
+    except (KeyError, ValueError, OSError):  # an unknown name or no tz database
+        return None
+
+
+def system_zone_name(env: Any = None, etc: Path = Path("/etc")) -> str:
+    """The shell's IANA zone: ``$TZ``, ``/etc/timezone``, the ``/etc/localtime`` link; else UTC."""
+    env = os.environ if env is None else env
+    candidates = [str(env.get("TZ") or "").lstrip(":")]
+    with contextlib.suppress(OSError):
+        candidates.append((etc / "timezone").read_text(encoding="utf-8").strip())
+    try:
+        link = os.readlink(etc / "localtime")
+        candidates.append(link.split("zoneinfo/", 1)[1] if "zoneinfo/" in link else "")
+    except OSError:
+        pass
+    return next((c for c in candidates if _zone_or_none(c) is not None), "UTC")
+
+
+def time_zone(start: str | Path | None = None, env: Any = None) -> ZoneInfo:
+    """The zone a human's calendar date is written in: `.weside/config.json` ``time.zone``,
+    else the system's (``system_zone_name``). A name that is no zone warns on stderr and gives
+    UTC. Timestamps (``...Z``) and what logs compare stay UTC."""
+    block = project_config(start).get("time")
+    name = block.get("zone") if isinstance(block, dict) else None
+    if name is None:
+        return ZoneInfo(system_zone_name(env))
+    zone = _zone_or_none(name)
+    if zone is None:
+        print(f"crew: time.zone {name!r} is no time zone; dates use UTC", file=sys.stderr)
+        return ZoneInfo("UTC")
+    return zone
+
+
+def today(start: str | Path | None = None, now: datetime | None = None, env: Any = None) -> str:
+    """Today's date (``YYYY-MM-DD``) in ``time_zone``; ``now`` aware, default the clock."""
+    moment = now or datetime.now(timezone.utc)
+    return moment.astimezone(time_zone(start, env)).strftime("%Y-%m-%d")
 
 
 def session_kind(
@@ -1732,6 +1797,7 @@ VERBS = (
     "human",
     "name",
     "deliverer",
+    "zone",
 )
 
 
@@ -1740,8 +1806,9 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
     cmd = argv[0]
-    if cmd in ("skill-path", "path", "state-dir", "launch", "merge"):
+    if cmd in ("skill-path", "path", "state-dir", "launch", "merge", "zone"):
         return {
+            "zone": _zone_cli,
             "skill-path": _skill_path_cli,
             "path": _path_cli,
             "state-dir": _state_dir_cli,
@@ -1763,6 +1830,11 @@ def main(argv: list[str]) -> int:
     except CrewError as exc:
         print(f"crew: {exc}", file=sys.stderr)
         return 1
+
+
+def _zone_cli(argv: list[str]) -> int:
+    print(system_zone_name() if "--system" in argv else time_zone(_opt(argv, "--from")).key)
+    return 0
 
 
 def _state_dir_cli(argv: list[str]) -> int:

@@ -476,7 +476,7 @@ def test_the_never_list_is_denied_for_a_worker(world, command, item):
     if item is None:  # the push runs in the tree a `cd` or `git -C` names, here on main
         main = make_repo(world["tmp"], name="main-checkout", branch="main")
         command = command.replace("../main-checkout", str(main))
-        item = "main (a git push from main)"
+        item = "main (a git push from main:"
     decision, reason = hook(world, command)
     assert decision == "deny", reason
     assert reason.startswith(f"never for a worker ({item}") and reason.endswith("ask your starter")
@@ -595,7 +595,7 @@ def test_a_feature_push_passes_the_normalised_text(world, command):
 def test_a_bare_push_from_main_is_denied(world):
     _git(world["repo"], "checkout", "-q", "main")
     decision, reason = hook(world, "git push")
-    assert decision == "deny" and "main (a git push from main)" in reason
+    assert decision == "deny" and "main (a git push from main:" in reason
 
 
 def _main_checkout_with_tree(world, owner="worker"):
@@ -631,9 +631,9 @@ def test_a_push_is_judged_in_the_tree_git_runs_it_in(world, command):
     ("command", "why"),
     [
         # a second push without its own place may run in the cwd, which is on main
-        ("git -C {tree} push; git push", "main (a git push from main)"),
-        ("git -C {tree} push && git -C {main} push", "main (a git push from main)"),
-        ("cd {tree} && git push", "main (a git push from main)"),
+        ("git -C {tree} push; git push", "main (a git push from main:"),
+        ("git -C {tree} push && git -C {main} push", "main (a git push from main:"),
+        ("cd {tree} && git push", "main (a git push from main:"),
         ("git -C {tree} push origin main", "main (git push to main)"),
         ("git -C {tree} push origin HEAD:feat/ABC-99-x", "pushes only branches carrying ABC-12"),
     ],
@@ -642,6 +642,8 @@ def test_a_push_from_a_main_checkout_stays_denied_outside_its_own_tree(world, co
     main, tree = _main_checkout_with_tree(world)
     decision, reason = hook(world, command.format(tree=tree, main=main), cwd=main)
     assert decision == "deny" and why in reason, reason
+    if why.startswith("main (a git push from"):  # the refusal names the form that passes
+        assert "one `git -C <own worktree> push …`, without `2>&1`, `&&`" in reason, reason
 
 
 @pytest.mark.parametrize(
@@ -660,7 +662,7 @@ def test_a_push_with_a_redirected_repo_is_judged_in_the_cwd(world, command):
     main, tree = _main_checkout_with_tree(world)
     text = command.format(tree=tree, main=main)
     decision, reason = hook(world, text, cwd=main)
-    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert decision == "deny" and "main (a git push from main:" in reason, reason
     assert str(main) in wr._push_dirs(text, str(main))
 
 
@@ -708,7 +710,7 @@ def test_only_one_simple_push_leaves_the_cwd_out(world, command, owner):
     push` segment; anything else, a `shlex` error included, is judged with the cwd (main here)."""
     main, tree = _main_checkout_with_tree(world, owner=owner)
     decision, reason = hook(world, command.format(tree=tree), cwd=main)
-    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert decision == "deny" and "main (a git push from main:" in reason, reason
 
 
 def test_cumulative_c_dirs_are_resolved_against_the_cwd(world):
@@ -717,13 +719,13 @@ def test_cumulative_c_dirs_are_resolved_against_the_cwd(world):
     main = make_repo(world["tmp"] / "a", name="b", branch="main")
     _pr_owner(main, "worker")
     decision, reason = hook(world, "git -C a -C b push origin HEAD", cwd=world["tmp"])
-    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert decision == "deny" and "main (a git push from main:" in reason, reason
 
 
 def test_a_git_dir_onto_the_main_checkout_is_refused_from_a_worktree(world):
     main, tree = _main_checkout_with_tree(world)
     decision, reason = hook(world, f"git --git-dir={main}/.git push origin HEAD", cwd=tree)
-    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert decision == "deny" and "main (a git push from main:" in reason, reason
 
 
 def test_a_simple_push_through_git_dir_and_work_tree_passes_from_main(world):
@@ -736,7 +738,7 @@ def test_a_simple_push_through_git_dir_and_work_tree_passes_from_main(world):
 def test_a_push_spelt_apart_is_judged_where_it_runs(world):
     main, _tree = _main_checkout_with_tree(world)
     decision, reason = hook(world, "gi''t push", cwd=main)
-    assert decision == "deny" and "main (a git push from main)" in reason, reason
+    assert decision == "deny" and "main (a git push from main:" in reason, reason
 
 
 def test_a_tag_is_judged_in_every_place_a_push_runs(world):

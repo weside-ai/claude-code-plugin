@@ -1652,7 +1652,7 @@ def main(
             file=sys.stderr,
         )
         return 0
-    target = store / "reports" / f"flow-{now.strftime('%Y-%m-%d')}.md"
+    target = store / "reports" / f"flow-{crew_mod.today(top, now)}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     print(f"flow_report: wrote {target}", file=sys.stderr)

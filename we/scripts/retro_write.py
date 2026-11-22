@@ -26,13 +26,15 @@ retro wrote the same keys within a minute and the last writer replaced the other
 from __future__ import annotations
 
 import argparse
-import datetime
 import fcntl
 import os
 import re
 import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import crew
 
 KEY = re.compile(r"^key:\s*([a-z0-9][a-z0-9:-]*)\s*(?:#.*)?$", re.MULTILINE)
 EVIDENCE = "## Evidence"
@@ -155,10 +157,10 @@ def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="retro_write.py", description=__doc__.split("\n")[0])
     p.add_argument("dir")
     p.add_argument("body_file")
-    p.add_argument(
-        "--date", default=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    )
+    p.add_argument("--date")
     args = p.parse_args(argv)
+    if args.date is None:  # a human's calendar day, in the repo's time.zone
+        args.date = crew.today(args.dir)
     try:
         body = Path(args.body_file).read_text(encoding="utf-8")
         print(write(Path(args.dir).expanduser(), body, args.date))
