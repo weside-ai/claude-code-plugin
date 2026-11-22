@@ -47,6 +47,8 @@ report ends you.
   (L0-worker). Good: one message with three numbered questions to the UX owner. Bad: six
   single-question rounds to the same owner while reading on. A later question to the same owner says why
   step 2 could not show it.
+- **No presumed sign-off.** A pending owner question stands in the plan as `open, recommendation <session>`
+  until the owner answers; only an explicit owner message becomes `<owner> <date>` in `## Design Decisions`.
 - **The dispatcher verifies.** You proofread your file (step 4); running the DoR or claiming it passed is the
   dispatcher's job.
 

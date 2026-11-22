@@ -406,7 +406,9 @@ children included, the moment verification ends.
 
 A check an owner's card assigns to a fresh worker (a `trust-loosening` signature, a seam or migration check, an
 acceptance walk; L0 § Against the waterfall) runs as a read-only worker the master starts with `launch --utility`
-(§ Worker launch backend). Its brief carries, under the four headings of § Name and brief:
+(§ Worker launch backend). Where it runs as a subagent (the backend's fallback, a repo without a crew), it is
+`we:dev-medium` with a read-only brief, never `we:explore-medium`: it needs Write for its output file and
+SendMessage for the path. Its brief carries, under the four headings of § Name and brief:
 
 - **The card:** the output of `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/render_process.py --role <role>` in the repo, pasted
   verbatim; the worker reads no other copy.

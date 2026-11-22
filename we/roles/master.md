@@ -21,7 +21,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - Weekly between epic closes, check the whole plan (this epic, its follow-ups, the next cut)
   against what merged; send drift to its owner.
 - Brief each worker with the plan path, its phases, the branch, the gates and where it reports;
-  read the report against the plan's ACs before you integrate it.
+  read the report against the plan's ACs before you integrate it. Before briefing phase N, check every
+  earlier phase against `origin/main` (a merged PR or commit per phase); an unbuilt earlier phase is the brief instead.
 - Before a branch walk on staging: `board.py book staging --until <UTC>`; `board.py unbook` right after.
 - Run CI once per PR; check every review finding against the code, fix a real one, answer a false
   one with its reason on the PR.
