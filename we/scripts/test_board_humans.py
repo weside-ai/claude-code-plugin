@@ -401,7 +401,7 @@ class TestAskTo:
             == 0
         )
         [line] = jsonl(crewed / "board-answers.jsonl")
-        assert (line["answer"], line["quote"]) == ("discuss", "rather next week")
+        assert (line["answer"], line["quote"]) == ("followup", "rather next week")
         bare = {"labels": [], "comments": []}
         assert (
             act(

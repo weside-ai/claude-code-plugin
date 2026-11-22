@@ -96,12 +96,15 @@ its docstring owns the grammar), and a start without a brief (the last argument;
 none), with `--bg` or `--queue`, where nobody hands the task in later; a window worker may
 start empty. The brief's shape is not checked. A brief carries four Markdown
 headings, each with a body: `Ziel`/`Goal`, `Ausgabe`/`Output`, `Werkzeuge und Quellen`/`Tools and
-sources`, `Grenzen und wann stoppen`/`Limits and when to stop`.
+sources`, `Grenzen und wann stoppen`/`Limits and when to stop`. Its last line is
+`Worker: <name> · started-by <starter>`: the worker signs its commits and PR body with the same line
+plus its session id (§ Dev-only worker contract, **Signature**).
 
 - Bad: `we-worker AB-12-fix --bg "fix the login bug"`: the worker guesses the tree, the end and whom to tell.
 - Good: `## Goal` the login refuses an expired token, plan `docs/plans/AB-12-story.md` · `## Output` one
   commit on `feat/ab-12`, report to the Lead by `SendMessage` · `## Tools and sources` this worktree,
-  `pytest tests/auth` · `## Limits and when to stop` no push, no migration; stop after the commit.
+  `pytest tests/auth` · `## Limits and when to stop` no push, no migration; stop after the commit ·
+  `Worker: AB-12-fix · started-by ab-master`.
 
 Every denial of the worker rights brake is one line in `<state dir>/brakes.jsonl`
 (`worker_rights.brake_log`): the count of false alarms.

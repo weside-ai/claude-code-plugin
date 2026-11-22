@@ -252,14 +252,14 @@ test('a press in another pane reaches the coordinator and the asker within one w
 test('a busy coordinator: its row counts when the queued prompt is stored, well within 60 s', async ($, on) => {
   const { clock, h } = await coordinator($, on, { stores: () => false })
   await $.turn.start({ text: 'long work', turnId: 'busy' } as never)
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(42_000)
   // The turn that ran before the submit ends: no resubmit, the prompt is still queued.
   await $.turn.complete({ reason: 'answer', answer: '', durationMs: 43_000, isAborted: false, turnId: 'busy' } as never)
   await clock.advance(1_000)
-  expect(h.submitted).toEqual(["Q1: let's talk about it (answered from the board pane in foxy)"])
+  expect(h.submitted).toEqual(["Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)"])
   await $.turn.start({ text: '', turnId: 'queued' } as never)
-  await h.store("Q1: let's talk about it (answered from the board pane in foxy)")
+  await h.store("Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)")
   await clock.settle()
   const row = h.rows('Q1', 'coordinator')[0]!
   expect(row.delivered).toBe(true)
@@ -311,9 +311,9 @@ for (const shape of ['one text', 'two blocks'] as const) {
     const { clock, h } = await coordinator($, on, { stores: () => false })
     await $.turn.start({ text: 'long work', turnId: 'busy' } as never)
     await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
-    await h.click({ id: 'Q2', answer: 'discuss', ts: iso(T0 + 1_500), session: 'foxy' })
+    await h.click({ id: 'Q2', answer: 'followup', ts: iso(T0 + 1_500), session: 'foxy' })
     await clock.advance(3_000)
-    const prompts = ['Q1: proposal accepted (answered from the board pane in foxy)', "Q2: let's talk about it (answered from the board pane in foxy)"]
+    const prompts = ['Q1: proposal accepted (answered from the board pane in foxy)', "Q2: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)"]
     expect(h.submitted).toEqual(prompts)
     await $.turn.complete({ reason: 'answer', answer: '', durationMs: 4_000, isAborted: false, turnId: 'busy' } as never)
     await $.turn.start({ text: '', turnId: 'queued' } as never)
@@ -391,14 +391,14 @@ test('a held notice for a delivered asker message turns its row held and routes 
 
 test('Q189 to the end: no row after the resubmit either is a refusal row and a toast', async ($, on) => {
   const { clock, h } = await coordinator($, on, { stores: () => false })
-  await h.click({ id: 'Q1', answer: 'info', ts: iso(T0 + 1_000), session: 'foxy' })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
   await turn($, 't1')
   await clock.advance(30_000)
   expect(h.rows('Q1', 'coordinator').map(r => r.reason)).toEqual(['resubmitted'])
   await turn($, 't2')
   await clock.advance(30_000)
-  expect(h.submitted).toEqual(['Q1: I need more information (answered from the board pane in foxy)', 'Q1: I need more information (answered from the board pane in foxy)'])
+  expect(h.submitted).toEqual(['Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)', 'Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)'])
   expect(h.rows('Q1', 'coordinator').map(r => [r.delivered, r.reason])).toEqual([
     [false, 'resubmitted'],
     [false, 'not stored after a resubmit'],
@@ -485,16 +485,16 @@ test('a first start writes the epoch and sends nothing older, legacy lines inclu
   expect([h.submitted, h.sent, h.logs]).toEqual([[], [], []])
   // A line after the epoch goes out; a later line with a free kind does not.
   await h.click({ id: 'Q2', answer: 'skipped', ts: iso(T0 + 10_000), session: 'foxy' })
-  await h.click({ id: 'Q2', answer: 'info', ts: iso(T0 + 11_000), session: 'foxy', via: 'chat in somewhere' })
+  await h.click({ id: 'Q2', answer: 'followup', ts: iso(T0 + 11_000), session: 'foxy', via: 'chat in somewhere' })
   await clock.advance(3_000)
-  expect(h.submitted).toEqual(['Q2: I need more information (answered from the board pane in foxy)'])
+  expect(h.submitted).toEqual(['Q2: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)'])
 })
 
 test('a line the asker wrote itself goes to the coordinator only', async ($, on) => {
   const { clock, h } = await coordinator($, on)
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'asker' })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'asker' })
   await clock.advance(3_000)
-  expect([h.submitted, h.sent]).toEqual([["Q1: let's talk about it (answered from the board pane in asker)"], []])
+  expect([h.submitted, h.sent]).toEqual([["Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in asker)"], []])
   expect(h.rows('Q1').map(r => r.role)).toEqual(['coordinator'])
 })
 
@@ -594,6 +594,15 @@ test('below the floor build: a toast and a log line, no deliverer', async ($, on
   const line = 'board: delivery needs Claude Code ≥ 2.1.312, this is 2.1.302'
   expect([h.toasts, h.logs]).toEqual([[line], [line]])
   expect([h.submitted, h.sent]).toEqual([[], []])
+})
+
+test('a retired Discuss or Info line is carried as Follow-up', () => {
+  const text = [
+    { id: 'Q7', answer: 'discuss', ts: iso(T0), session: 'foxy' },
+    { id: 'Q8', answer: 'info', ts: iso(T0) },
+    { id: 'Q9', answer: 'read', ts: iso(T0) },
+  ].map(l => `${JSON.stringify(l)}\n`).join('')
+  expect(answerLines(text).map(l => [l.id, l.answer])).toEqual([['Q7', 'followup'], ['Q8', 'followup']])
 })
 
 test('two panes marking at once write equal rows; readers fold them to one, a later delivery supersedes', () => {
@@ -949,9 +958,9 @@ test('answer_to asker: asker and starter both gone, the coordinator gets the rou
   expect(h.submitted.filter(t => t.includes('did not reach lead'))).toHaveLength(1)
 })
 
-// Discuss under `answer_to: asker` (Q954): the owner goes to the asker's window; the coordinator only
-// says whom to talk to and relays nothing.
-const discussBoard = (starter?: string) =>
+// Follow-up under `answer_to: asker` (Q954): the asker completes its question and offers to talk; the
+// coordinator only says whom to talk to and relays nothing.
+const followupBoard = (starter?: string) =>
   boardOf({
     owner_queue: [{ id: 'Q1', session: 'asker', key: 'PROJ-40', since: '2026-11-03', answer_to: 'asker', ...(starter ? { starter } : {}) }],
     sessions: [
@@ -961,47 +970,47 @@ const discussBoard = (starter?: string) =>
     ],
   })
 
-test('answer_to asker: Discuss readies the asker and the coordinator names whom to talk to, no relay', async ($, on) => {
-  const { clock, h } = await coordinator($, on, { board: discussBoard('lead') })
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+test('answer_to asker: Follow-up sends the asker the follow-up and the coordinator names whom to talk to, no relay', async ($, on) => {
+  const { clock, h } = await coordinator($, on, { board: followupBoard('lead') })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
   expect(h.sent).toEqual([
     {
       to: 'asker',
-      text: 'Q1: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator. (answered from the board pane in foxy)',
+      text: 'Q1: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over. (answered from the board pane in foxy)',
     },
   ])
   expect(h.submitted).toEqual([
-    'Q1: Discuss → tell the owner in one line: talk to asker (/work/asker). Do not discuss or relay it yourself. (answered from the board pane in foxy)',
+    'Q1: Follow-up → tell the owner in one line: talk to asker (/work/asker). Do not answer or relay it yourself. (answered from the board pane in foxy)',
   ])
-  expect(h.submitted.some(t => t.includes("let's talk about it"))).toBe(false)
+  expect(h.submitted.some(t => t.includes('Complete the question'))).toBe(false)
 })
 
-test('answer_to asker: a Discuss the gone asker left goes to its starter, and the coordinator names the starter', async ($, on) => {
+test('answer_to asker: a Follow-up the gone asker left goes to its starter, and the coordinator names the starter', async ($, on) => {
   const gone = { isDelivered: false as const, reason: 'Failed to send to asker: session ended' }
-  const { clock, h } = await coordinator($, on, { board: discussBoard('lead'), send: to => (to === 'asker' ? gone : { isDelivered: true }) })
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  const { clock, h } = await coordinator($, on, { board: followupBoard('lead'), send: to => (to === 'asker' ? gone : { isDelivered: true }) })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(9_000)
   expect(h.sent.map(s => s.to)).toEqual(['asker', 'lead'])
-  expect(h.sent[1]!.text).toContain('ready in your window')
+  expect(h.sent[1]!.text).toContain('Complete the question')
   expect(h.sent[1]!.text).toContain('(for asker, which did not take it')
   expect(h.submitted.filter(t => t.includes('talk to lead (/work/lead)'))).toHaveLength(1)
   expect(h.submitted.some(t => t.includes('did not reach'))).toBe(false)
 })
 
-test('answer_to asker: a Discuss without a starter names the window only once the asker took it', async ($, on) => {
-  const { clock, h } = await coordinator($, on, { board: discussBoard() })
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+test('answer_to asker: a Follow-up without a starter names the window only once the asker took it', async ($, on) => {
+  const { clock, h } = await coordinator($, on, { board: followupBoard() })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(9_000)
   expect(h.sent.map(s => s.to)).toEqual(['asker'])
   expect(h.submitted.filter(t => t.includes('talk to asker (/work/asker)'))).toHaveLength(1)
 })
 
-test('answer_to asker: a Discuss whose asker is gone and has no starter leaves only the routing line', async ($, on) => {
+test('answer_to asker: a Follow-up whose asker is gone and has no starter leaves only the routing line', async ($, on) => {
   // T2 panel on #312: the coordinator got "talk to asker" for a window nobody sat in, then "did not reach"
   const gone = { isDelivered: false as const, reason: 'Failed to send to asker: session ended' }
-  const { clock, h } = await coordinator($, on, { board: discussBoard(), send: () => gone })
-  await h.click({ id: 'Q1', answer: 'discuss', ts: iso(T0 + 1_000), session: 'foxy' })
+  const { clock, h } = await coordinator($, on, { board: followupBoard(), send: () => gone })
+  await h.click({ id: 'Q1', answer: 'followup', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(9_000)
   expect(h.submitted.some(t => t.includes('talk to'))).toBe(false)
   expect(h.submitted.filter(t => t.includes('did not reach asker'))).toHaveLength(1)

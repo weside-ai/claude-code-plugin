@@ -104,6 +104,13 @@ Answering the fork deletes the section.>
 <Patterns, primitives, the seam; the architecture refs used; how the `**Files:**` lists were
 derived — code graph, or "grep-derived, no code graph".>
 
+A wide or destructive change names its phase of expand → migrate → contract (`/we:epic` § Frame):
+only the contract deletes, so only its PR is one-way.
+
+| Bad | Good |
+|---|---|
+| One Story "rename column `grant` to `tracing_grant`": migration, every caller and the drop in one one-way PR | Three Stories: new column with dual write (auto-merge) → callers read the new one (auto-merge) → drop the old column (one-way, the human's go) |
+
 Three lists here each cost review rounds when missing:
 
 - **Writes into two systems** (a table and an API, a table and a cache, two transactions): every outcome

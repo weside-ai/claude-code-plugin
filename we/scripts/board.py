@@ -2,7 +2,7 @@
 """The board's verbs for a session (docs/board.md § The file, § Answers, § Questions and decisions, § Escalations).
 
 Usage:
-  board.py [--board FILE] answer <id> <accept|deny|discuss|info|update|withdraw> --session NAME --via chat
+  board.py [--board FILE] answer <id> <accept|deny|followup|update|withdraw> --session NAME --via chat
            [--quote "<the owner's words>" | --text-file <path or ->]
   board.py [--board FILE] path [--crew-only]
   board.py [--board FILE] set [--for NAME | --session NAME] <field>=<value> …   fields: waiting_on, state, now, topic, keys, epic
@@ -30,7 +30,7 @@ Usage:
   board.py [--board FILE] signals [--input FILE]
   board.py [--board FILE] claim <KEY> [--release] [--input FILE]
   board.py [--board FILE] inbox [--input FILE]
-  board.py [--board FILE] reply <KEY> <accept|deny|discuss|info|update> [--text T]
+  board.py [--board FILE] reply <KEY> <accept|deny|followup|update> [--text T]
   board.py [--board FILE] show <Q>
   board.py [--board FILE] withdraw <Q> [--for <Q2>] [--reason T]
   board.py [--board FILE] supersede <Q> --by <Q2> [--reason T]
@@ -279,7 +279,7 @@ import ticket_adapter  # noqa: E402
 import worker_launch as wl  # noqa: E402  (the one reader of `claude agents --json`)
 
 DEFAULT_BOARD = str(Path(crew_mod.DEFAULT_STATE_DIR) / crew_mod.BOARD_NAME)
-KINDS = ("accept", "deny", "discuss", "info", "update", "withdraw")
+KINDS = ("accept", "deny", "followup", "update", "withdraw")
 CLOSING = ("accept", "deny", "withdraw")  # withdraw: the asker's human takes back an `ask --to`
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
@@ -4318,8 +4318,10 @@ ANSWER_WORDS = {
     "approve": "accept",
     "no": "deny",
     "reject": "deny",
-    "later": "discuss",
-    "more": "info",
+    "later": "followup",
+    "more": "followup",
+    "discuss": "followup",
+    "info": "followup",
 }
 
 

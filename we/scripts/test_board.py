@@ -71,13 +71,15 @@ class TestAnswer:
 
     def test_the_line_quotes_the_question_and_its_recommendation(self, state_dir):
         assert run(state_dir, "answer", "Q1", "accept", "--session", "c", "--via", "chat") == 0
-        assert run(state_dir, "answer", "N1", "info", "--session", "c", "--via", "chat") == 0
+        assert run(state_dir, "answer", "N1", "followup", "--session", "c", "--via", "chat") == 0
         q1, n1 = lines(state_dir)
         assert (q1["ask"], q1["recommendation"]) == ("Ship it?", "Ship on Monday")
         assert "ask" not in n1 and "recommendation" not in n1
 
     def test_a_news_id_is_known_too(self, state_dir):
-        assert run(state_dir, "answer", "N1", "info", "--session", "coord", "--via", "chat") == 0
+        assert (
+            run(state_dir, "answer", "N1", "followup", "--session", "coord", "--via", "chat") == 0
+        )
         assert [a["id"] for a in lines(state_dir)] == ["N1"]
 
     def test_refuses_an_unknown_id_by_name_and_writes_nothing(self, state_dir, capsys):
@@ -121,7 +123,7 @@ class TestAnswer:
     def test_leaves_board_json_byte_identical(self, state_dir):
         before = (state_dir / "board.json").read_bytes()
         assert (
-            run(state_dir, "answer", "Q2", "discuss", "--session", "coord", "--via", "chat") == 0
+            run(state_dir, "answer", "Q2", "followup", "--session", "coord", "--via", "chat") == 0
         )
         assert (state_dir / "board.json").read_bytes() == before
 
@@ -141,7 +143,7 @@ class TestAnswer:
     def test_keeps_two_concurrent_writers_whole(self, state_dir):
         writer = (
             "import sys; sys.path.insert(0, sys.argv[1]); import board; s = board.StateDir(sys.argv[2])\n"
-            "for i in range(300): s.append_answer('Q2', 'discuss', sys.argv[3], via='chat', quote='x' * 200)"
+            "for i in range(300): s.append_answer('Q2', 'followup', sys.argv[3], via='chat', quote='x' * 200)"
         )
         procs = [
             subprocess.Popen(
@@ -393,6 +395,7 @@ class TestSet:
         [
             (["set", "--now", "phase 3", "--state", "ci"], "set 'now=phase 3' state=ci"),
             (["answer", "Q1", "no", "--session", "a", "--via", "chat"], "answer Q1 deny"),
+            (["answer", "Q1", "discuss", "--session", "a", "--via", "chat"], "answer Q1 followup"),
             (["answer", "Q1", "accept", "--session", "a", "--via", "board"], "--via chat"),
         ],
     )
@@ -1991,7 +1994,7 @@ class TestSelect:
     def test_select_never_asks(self, moving):
         green_lenses(moving)
         answers = moving / "board-answers.jsonl"
-        answers.write_text('{"id": "Q7", "answer": "info"}\n', encoding="utf-8")
+        answers.write_text('{"id": "Q7", "answer": "followup"}\n', encoding="utf-8")
         before = (moving / "board.json").read_bytes(), answers.read_bytes()
         assert act(moving, "select", KEY, adapter=fake()) == 0
         after = (moving / "board.json").read_bytes(), answers.read_bytes()
@@ -3523,9 +3526,9 @@ class TestPrune:
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == (["Q7"] if stays else [])
 
-    def test_an_earlier_discuss_still_owed_to_the_asker_keeps_it(self, crewless):
+    def test_an_earlier_followup_still_owed_to_the_asker_keeps_it(self, crewless):
         epoch_row(crewless)
-        answered(crewless, "Q7", "discuss", "2026-11-03T09:00:00.000Z")
+        answered(crewless, "Q7", "followup", "2026-11-03T09:00:00.000Z")
         answered(crewless, "Q7", "accept", "2026-11-03T09:59:00.000Z")
         delivered_row(
             crewless, "Q7", "2026-11-03T09:59:00.000Z", "2026-11-03T09:59:04.000Z", role="asker"
@@ -3561,8 +3564,8 @@ class TestPrune:
         go(crewless, "prune")
         assert board_of(crewless)["owner_queue"] == []
 
-    def test_discuss_and_update_keep_the_question(self, crewless):
-        answered(crewless, "Q7", "discuss", "2026-11-01T09:00:00.000Z")
+    def test_followup_and_update_keep_the_question(self, crewless):
+        answered(crewless, "Q7", "followup", "2026-11-01T09:00:00.000Z")
         answered(crewless, "Q7", "update", "2026-11-01T10:00:00.000Z")
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]

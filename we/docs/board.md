@@ -30,12 +30,12 @@ Finish what is open → money → marketing.
 │                                                          │
 │ Q2  9 d  marketing  PROJ-41                              │
 │ Storyline S1–S3                                          │
-│ [ Deny ] [ Discuss ] [ More info ] [ Update ]            │
+│ [ Deny ] [ Follow-up ] [ Update ]                        │
 │                                                          │
 │ Q1  today  lead  PROJ-40                                 │
 │ Live test AC 16                                          │
 │ → tonight                                                │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
+│ [ Accept ] [ Deny ] [ Follow-up ] [ Update ]             │
 │ ✓ accepted 18:12 UTC (Orchestrator)                      │
 ╰──────────────────────────────────────────────────────────╯
 
@@ -272,7 +272,7 @@ names are those of the default board.
 |---|---|
 | `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `discuss`, `discuss_asker`, `discuss_route`, `info`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
+| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `followup`, `followup_route`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items for the owner with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes `info`, `gate` and `todo` (`news add`; the bundle, an escalation at stage `bundle`, a signal `S<n>` with `for` the role and `key`, § Several humans; staging past its SLA) and `escalation` (a record at stage `escalation`, with `for` the role waited on, shown in the log) |
 | `log[]` | optional, written by `board.py`: entries kept for the record (`decision`, `sample`, older news without an id), the newest 50; the pane folds them under the news (§ News) |
@@ -305,7 +305,7 @@ Every field but `sessions[].name` may be missing or `null`; the pane leaves it o
 ## Answers
 
 Each question with an `id` carries the buttons **Accept** (only with a `recommendation`; **Go** on a
-one-way merge question), **Deny**, **Discuss**, **More info** and **Update**; a question
+one-way merge question), **Deny**, **Follow-up** and **Update**; a question
 sent to a human on another machine (`to`) carries only **Withdraw**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
 file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never writes `board.json`, so
 an `owner_queue` item keeps no answer: `board.py show <Q>` prints the question with its answer lines
@@ -318,7 +318,7 @@ and its status, the read before any session repeats it or writes the same answer
 | Field | Meaning |
 |---|---|
 | `id` | the question's `owner_queue[].id`, or the item's `news[].id` |
-| `answer` | `accept`, `deny`, `discuss`, `info`, `update` or `withdraw` for a question; `read` for a news item; `rebuild` for Refresh's request (id `rebuild`, § Refresh) |
+| `answer` | `accept`, `deny`, `followup`, `update` or `withdraw` for a question; `read` for a news item; `rebuild` for Refresh's request (id `rebuild`, § Refresh) |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the line was written in, as `claude agents` lists it; `null` when the live column does not know it |
 | `ask`, `recommendation` | the open question's ask and recommendation, verbatim, on a line `board.py` wrote; a pane line takes them from the board item when it is delivered |
@@ -356,12 +356,12 @@ minutes. Per line it writes one row per recipient to
 
 | Recipient (`role`) | When | Carrier | Delivered when |
 |---|---|---|---|
-| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted` (an Accept on a one-way `merge-go` with its PR, **Go**: ``<id>: the owner's go on <pr_url> — the asking session arms that PR with `arm_pr.sh`; the question stays open until the PR is merged``; **Taken** on a task: `<id>: taken — the owner does this task; do not do it yourself`), `<id>: proposal denied`, `<id>: let's talk about it`, `<id>: I need more information` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)`, `(answered in the chat of <session>)` or `(answered on ticket <KEY> (<human>))` after a space: transparency, no check), then on lines of their own the question (`The question: "<ask>"`), its recommendation (`The recommendation accepted: "…"`, `denied` on a Deny) and the owner's words when the line has a `quote` | the session stored the prompt as a user row |
+| `coordinator` (the orchestrator) | always, unless the line came from its own chat (`via: chat`, `session` = the orchestrator) | a prompt as if typed: `<id>: proposal accepted` (an Accept on a one-way `merge-go` with its PR, **Go**: ``<id>: the owner's go on <pr_url> — the asking session arms that PR with `arm_pr.sh`; the question stays open until the PR is merged``; **Taken** on a task: `<id>: taken — the owner does this task; do not do it yourself`), `<id>: proposal denied`, `<id>: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over.` or `<id>: please check whether this question is still current and correctly worded (goal still active? needs an update?)`, then where it was written (`(answered from the board pane in <session>)`, `(answered in the chat of <session>)` or `(answered on ticket <KEY> (<human>))` after a space: transparency, no check), then on lines of their own the question (`The question: "<ask>"`), its recommendation (`The recommendation accepted: "…"`, `denied` on a Deny) and the owner's words when the line has a `quote` | the session stored the prompt as a user row |
 | `asker` (`owner_queue[].session`) | unless the line was written in the asker's own session, or the asker is the coordinator (its `coordinator` prompt carries the answer, and its delivered row lets `prune` drop the question); a question no longer on the board has none | a message to that session: the same text, for **Update** `check whether <id> is still current and well worded; re-ask it with a new id or withdraw it` | the engine queued it there |
 | `owner` (`owner_queue[].owner`) | unless it is the coordinator, the asker or the session that wrote the line | a message to that session: the coordinator's text plus `(copy for the owner of this subject)`; a refusal is a ledger row only, no routing line | the engine queued it there |
 | `starter` (`owner_queue[].starter`) | only on a question with `answer_to: asker`, once the asker refused or was not reached | a message to the asker's starter: the asker's text plus `(for <asker>, which did not take it: carry it on or act on it)` | the engine queued it there |
 | `route` (the orchestrator) | the asker was not reached (with `answer_to: asker` and a starter: the starter was not reached either) | a prompt: `<id>: the owner's answer (<kind>) did not reach <asker> (<reason>); wake that session or route the answer` | as `coordinator` |
-| `route` on a Discuss (the orchestrator) | on a question with `answer_to: asker`, once the starter took a Discuss the asker did not | a prompt: `discuss_route` naming the starter, `<id>: Discuss → tell the owner in one line: talk to <starter> (<cwd>). Do not discuss or relay it yourself.` | as `coordinator` |
+| `route` on a Follow-up (the orchestrator) | on a question with `answer_to: asker`, once the starter took a Follow-up the asker did not | a prompt: `followup_route` naming the starter, `<id>: Follow-up → tell the owner in one line: talk to <starter> (<cwd>). Do not answer or relay it yourself.` | as `coordinator` |
 
 **`board.answer_to`** decides who carries an answer: `asker`, the default, or `coordinator`, the
 opt-out. The crew file's value beats the asking repo's `.weside/config.json`, so a companion asks
@@ -371,21 +371,20 @@ caller itself, and, under `asker`, `answer_to: asker`. On
 such a question the asker gets the answer as above and the coordinator's prompt is one copy line,
 `<id>: <kind> — copy for the queue; the answer goes to <asker> directly, do not relay it` with the
 writer note; an asker that is gone hands it to its starter (role `starter`), and only when that
-fails too does the coordinator get the routing line. A **Discuss** on such a question sends the
-asker `discuss_asker` (`<id>: the owner wants to talk about it. Have the question, your options and
-your recommendation ready in your window; the owner comes to you. Do not ask it again through the
-coordinator.`, the starter the same text when the asker is gone) and the coordinator `discuss_route`
-in place of the copy line (`<id>: Discuss → tell the owner in one line: talk to <asker> (<cwd>). Do
-not discuss or relay it yourself.`, the window from the asker's board line `cwd`); when the starter
-took it, a second `discuss_route` names the starter. Without a starter the `discuss_route` waits
+fails too does the coordinator get the routing line. A **Follow-up** on such a question sends the
+asker the `followup` text (complete the question with what it lacks and offer to talk it over, the
+starter the same text when the asker is gone) and the coordinator `followup_route` in place of the
+copy line (`<id>: Follow-up → tell the owner in one line: talk to <asker> (<cwd>). Do not answer or
+relay it yourself.`, the window from the asker's board line `cwd`); when the starter took it, a
+second `followup_route` names the starter. Without a starter the `followup_route` waits
 for the asker's delivery: an asker not reached leaves only the routing line. A question without the
 stamp keeps the coordinator's full text.
 
 The board's optional `answer_prompts` words these texts in the orchestrator's own language, `{id}`
-standing for the question's id, `{pr}` for its PR link and `{who}` for the session a `discuss_route` names: `{"accept": "{id}: Vorschlag angenommen"}`;
+standing for the question's id, `{pr}` for its PR link and `{who}` for the session a `followup_route` names: `{"accept": "{id}: Vorschlag angenommen"}`;
 `update_asker` is the asker's Update text, `accept_hand` (the go on a one-way PR, armed by the
 asking session) and `accept_task` (the owner does it) the two Accepts with a meaning of their own
-(never `accept`'s text); a kind it leaves out keeps the default.
+(never `accept`'s text); a kind it leaves out keeps the default. A key that names no kind here (an older `discuss` or `info`) is ignored, and the deliverer skips an answers line of such a kind.
 
 Outcomes, each a row (readers fold the rows of one `id`, `answer_ts` and `role` to the newest `ts`):
 
@@ -418,7 +417,7 @@ python3 <plugin>/scripts/board.py answer Q1 accept --session lead --via chat --q
 span in them never meets the shell.
 
 It refuses, writing nothing, an id in neither `owner_queue` nor `news` and a kind outside `accept`,
-`deny`, `discuss`, `info`, `update`, `withdraw` (the human's take-back of an `ask --to` question,
+`deny`, `followup`, `update`, `withdraw` (the human's take-back of an `ask --to` question,
 which closes it like Accept or Deny); it opens `board.json` read-only and prints the line it wrote. A
 second answer on an id an Accept or Deny already closed (the owner answered twice) is a duplicate:
 no answer line, so nothing is carried again, one `duplicate-answer` line in `board-questions.jsonl`,
@@ -536,7 +535,7 @@ the board lock (`prune` in `board.py`), and `board.py prune` runs it alone and p
 | a bundle `B-<date>` | 24 h after its `ts` (`PRUNE_AFTER_H`) |
 | an escalation item `E<n>`, `E<n>a` | never: `escalation settle` drops it |
 
-Discuss, More info and Update keep a question. Each drop appends one line
+Follow-up and Update keep a question. Each drop appends one line
 `{id, ts, outcome: "pruned", field, reason, answer?}` to `board-questions.jsonl`
 (`reason` `answered`, `withdrawn`, `read`, `returned` or `expired`), so a dropped id is never handed out again. Leftovers from before the pass go on the
 first write after the update.
@@ -857,7 +856,7 @@ transition (`ticket already <state>: no transition`), and no owner is asked: the
 | `signals [--input FILE]` | refused while `board.jql_scope` is unset (a query without it reads every project); for each `board.signals` entry `{state, role, jql_window}` whose role this human runs: the search `[<jql_scope> AND ]status changed to "<status>" after -<jql_window>`; each hit is one `todo` news item `S<n>` with `for` the role and `key`, once per key, state and `changed` (`board-signals.jsonl`); then the replies to this board's open `ask --to` questions (below) | — |
 | `claim <KEY> [--release] [--input FILE]` | the comment `claim <role>@<human> <session>` (or `release …`) on the ticket and a line in `board-claims.jsonl`; a claim lives `board.claim_hours` (default 4) from its comment, until the same role, human and session releases it; only a claim on a comment's first line counts, from the account of the human it names or one of `board.shared_accounts` | `board.py claim <KEY>: refused: claimed by <role>@<human> (<session>) at <ts>, live for <n> h`, when another claimant (role, human or session) holds a live claim on the ticket or in the local claims |
 | `inbox [--input FILE]` | the search `[<jql_scope> AND ]labels = "<question label>-<me>"`: every ticket that holds an open question to this session's human | — |
-| `reply <KEY> <accept\|deny\|discuss\|info\|update> [--text T]` | the answer of this session's human on the ticket: the comment `<role>@<human> <kind> · <T>`, then this human's question label off (`{"op": "unlabel", "key", "remove"}`); another human's question stays theirs | an unknown human |
+| `reply <KEY> <accept\|deny\|followup\|update> [--text T]` | the answer of this session's human on the ticket: the comment `<role>@<human> <kind> · <T>`, then this human's question label off (`{"op": "unlabel", "key", "remove"}`); another human's question stays theirs | an unknown human |
 | `withdraw <Q> [--for <Q2>] [--reason T]`, `supersede <Q> --by <Q2> [--reason T]` | the asker (its session name, matched in any case; a nameless `unknown` never matches) or the coordinator takes its own open question off the board: a `withdrawn` or `superseded` line (with `by`, or `for` when it gave way to `<Q2>`) in `board-questions.jsonl`; a question asked with `--to` also gets the comment `<Q> withdrawn` (or `superseded by <Q2>`) and loses its label | another session's question, an id the board and its logs never had (an id already off the queue is no refusal: `<Q>: nothing to withdraw, it is off the queue (<status>, …)`, exit 0; the status is `question_status`, the one definition of open that `show` and the pane share), `--by` naming no other open question; a refused `supersede` of `<Q>` also names each session that withdrew its own question for `<Q>` (`--for`, or `<Q>` in its reason): the caller tells them, since their option is on no board |
 | `ask … [--input FILE]` | a `merge-go` in a crew with `humans` reads the ticket's status first | `board.py ask: refused: <KEY> is <status> on the ticket` when it is On Hold; refused too for a status no `board.states` entry maps |
 | `ask … --to <human>` | as § Questions and decisions (the cold reader included), for a human on another machine: the item keeps `to` and `label`, the carry is the comment `<question_label> <labels.to> <Name> · <ask> · <labels.recommendation>: <recommendation>` and the label `<question_label lowercased>-<human>`; `--to` naming this session's own human is a plain `ask` | `--to` naming no human of the crew, or a `--key` that is a plan slug |
@@ -868,7 +867,7 @@ created after the question whose `author` is one of that human's accounts (`huma
 `<role>@<human>` from that human's account or one of `board.shared_accounts` (accounts several humans
 write from), is a reply; another human with the same role never answers for them, and the question
 comment itself is never one. Its first word, in any case,
-when it is one of `accept`, `deny`, `discuss`, `info`, `update`, is the answer kind, else `discuss`; the reply's text is the `quote`. It lands as an answer
+when it is one of `accept`, `deny`, `followup`, `update`, is the answer kind, else `followup`; the reply's text is the `quote`. It lands as an answer
 line with `via: ticket`, and the deliverer carries it to the asker like a press (§ Delivery); each
 reply once. The label taken off without a reply is the answer `update` (is the question still
 current?). `board.py reply` writes the answer and takes the label off in one carry. An Accept, Deny

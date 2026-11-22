@@ -16,6 +16,13 @@ The grill ends when the user says so or no branch is left; then summarise the de
 ## Discipline
 
 - **Wait for the answer** before the next question. One question with a recommendation beats four options.
+- **"Yes" takes the recommendation.** Word every question, on the board too, so that a plain yes means
+  "do what you recommend"; a yes that could mean either way costs a second round.
+
+  | Bad | Good |
+  |---|---|
+  | "Shall we hold the migration back?" (yes means *don't* merge) | "Merge the migration now? Recommendation: yes, users lose their drafts on every restart until it lands." |
+
 - **Ask in the user's words.** The question names the thing and its consequence in plain language, never
   only a slug, phase or acronym ("S1 without F3?"); a label may follow in brackets. A question that needs
   scrolling back to be understood is rewritten so it does not. Whenever possible it carries your
@@ -32,8 +39,8 @@ The grill ends when the user says so or no branch is left; then summarise the de
 
 ## Glossary
 
-The glossary is the file the repo's instruction file names (for example `GLOSSARY.md`); only when none exists,
-`CONTEXT.md` at the repo root, created with the first resolved term. Format for a new file:
+The glossary is the file the repo's instruction file names, else an existing `CONTEXT.md` at the repo root;
+only when neither exists, `GLOSSARY.md` there, created with the first resolved term. Format for a new file:
 `${CLAUDE_PLUGIN_ROOT}/skills/grill/references/context-format.md`; an existing glossary keeps its own format.
 
 - A term that conflicts with the glossary is called out at once: "The glossary defines X as A; you mean B?"

@@ -234,20 +234,20 @@ export type BoardView = {
   error?: string
 }
 
-// One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Discuss, More info, Update or
+// One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Follow-up, Update or
 // Withdraw (a question sent to another human) on a question, of Read on a news item, or Refresh's
 // request to the coordinator to rebuild the board (`rebuild`, id `rebuild`).
-export type BoardAnswerKind = 'accept' | 'deny' | 'discuss' | 'info' | 'update' | 'withdraw' | 'read' | 'rebuild'
+export type BoardAnswerKind = 'accept' | 'deny' | 'followup' | 'update' | 'withdraw' | 'read' | 'rebuild'
 // The answers the deliverer carries; Read only appends its line.
 export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
 // The texts a delivery sends, each overridable by the board's `answer_prompts`: one per delivered kind
 // for the orchestrator (and the asker), `update_asker`, what Update asks of the asking session, and the
 // two Accepts with a meaning of their own: `accept_hand` (Go on a one-way merge-go with its PR, `{pr}`
 // standing for the PR link: the asking session arms with `arm_pr.sh <PR>`) and `accept_task`
-// (Taken on a task). On a question with `answer_to: asker`, Discuss sends `discuss_asker` to the asker
-// (the owner comes to its window) and `discuss_route` to the coordinator (`{who}`: whom the owner talks to).
+// (Taken on a task). On a question with `answer_to: asker`, Follow-up sends `followup` to the asker (complete
+// the question, offer to talk) and `followup_route` to the coordinator (`{who}`: whom the owner talks to).
 export type BoardAcceptVariant = 'accept_hand' | 'accept_task'
-export type BoardPromptKind = BoardDeliveredKind | 'update_asker' | BoardAcceptVariant | 'discuss_asker' | 'discuss_route'
+export type BoardPromptKind = BoardDeliveredKind | 'update_asker' | BoardAcceptVariant | 'followup_route'
 
 export type BoardAnswer = {
   id: string
