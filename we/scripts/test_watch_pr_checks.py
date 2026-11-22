@@ -314,6 +314,37 @@ def test_a_run_waiting_for_approval_does_not_hold_the_watcher(tmp_path):
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
 
 
+def _run_lists(tmp_path):
+    return [c for c in (tmp_path / "calls.log").read_text().splitlines() if "| run list" in c]
+
+
+def test_running_and_green_ticks_read_no_runs_until_the_one_green_confirmation(tmp_path):
+    # `gh run list` is REST, the quota the 22.11. outage drained: a running tick reads only the
+    # GraphQL rollup, and the green verdict confirms with one run read.
+    running = _pending(_green())
+    code, out = run(tmp_path, [running, running, running, _green()])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    assert int((tmp_path / "views" / "count").read_text()) >= 5
+    assert len(_run_lists(tmp_path)) == 1
+
+
+def test_a_red_tick_reads_the_runs_once(tmp_path):
+    code, out = run(
+        tmp_path, [_pending(_green()), _pending(_green()), _pending(_green()), REAL], "--fail-fast"
+    )
+    assert code == 1, out
+    assert len(_run_lists(tmp_path)) == 1
+
+
+def test_a_green_rollup_with_an_open_run_stays_pending(tmp_path):
+    # A run queued before its first check registered is in no rollup: the confirmation read sees it.
+    queued = [{"databaseId": 7, "attempt": 1, "status": "queued"}]
+    done = [{"databaseId": 7, "attempt": 1, "status": "completed"}]
+    code, out = run(tmp_path, [_green()], runs=[queued, queued, done])
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+    assert len(_run_lists(tmp_path)) == 3
+
+
 def _codex(verdict, sha=SHA):
     body = (
         "<!-- codex-review -->\n## Codex Review\n\n"

@@ -38,9 +38,10 @@ cards point here instead of repeating them.
 
 ## CI and checks
 
-- **A watcher's exit 0 is not green.** `gh run watch` ends on an expired token, and a chained
+- **A watcher's exit 0 is not green.** A watch loop ends on an expired token, and a chained
   `; echo` exits 0 anyway: act only on `gh run view <id> --json status,conclusion` or on
-  `watch-pr-checks.sh`'s verdict line.
+  `watch-pr-checks.sh`'s verdict line. `gh run watch` is no watcher here: it polls REST every 3 s
+  and drains the quota every session shares.
 - **Start a PR watcher from the main checkout.** The watcher survives the removal of the
   worktree it started in, but the background shell around it does not: after `final …: merged` its
   own `pwd` fails (`getcwd: cannot access parent directories`) and the command exits 1. Start it as
