@@ -11,6 +11,8 @@ Continues the work this session was doing when a stop cut it off. The built-in `
 earlier conversation; `/we:resume` runs inside the conversation and restarts its work. One word from
 the user is the whole instruction: ask nothing the open-items list already decides.
 
+Invocation: `/we:resume` (this session) · `--broadcast` (every running session of the crew, § Broadcast).
+
 1. **Open items.** Read the open-items list ("Offen", "what's left", "next") of the last report in
    this session. After a compaction, read the transcript tail for it. No list → name the last task
    in one line and continue it.
@@ -25,3 +27,14 @@ the user is the whole instruction: ask nothing the open-items list already decid
    deploy waits.
 4. **Go.** Say in one line what resumes, then work the open items in their order. A merge outside a
    run's standing auto-merge (`master` § Close the run) or a release still needs the user's word.
+
+## Broadcast
+
+After a stop that hit the whole crew, one call resumes every session. Recipients, the caller's own
+part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.md`.
+
+1. **Brief.** Each recipient gets: "Run `/we:resume` on your own session. Reply to <caller's name>
+   with one line `RESUME · <your name> · <what resumes>` or `RESUME · <your name> · nothing open`."
+2. **Own resume.** Run steps 1–4 above on your own session; your `RESUME · …` line is a row like
+   the others.
+3. **Close.** One line per row, silent sessions as `no answer`.

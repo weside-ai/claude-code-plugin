@@ -42,6 +42,7 @@ existing owners first:
 | companion launch, pin, binding, writeback | `references/companion-session.md` |
 | several humans: crew schema and identity · the ticket verbs between machines | `scripts/crew.py` § Humans · `docs/board.md` § Several humans |
 | optimization inbox and ledger | `references/optimization-store.md` |
+| who a `--broadcast` reaches, the caller's own part | `references/broadcast.md` |
 | privacy before anything leaves the repo | `references/privacy-guard.md` |
 | instruction limits and wording | `references/instruction-authoring.md` |
 | what a comment, docstring or doc carries | `references/code-notes.md` |
@@ -66,8 +67,7 @@ misleads every project that follows it.
   exactly the same semantics.
 - Role names are the crew's role keys (`product`, `architecture`, `acceptance`, `machinery`,
   `coordinator`, `escalation`, `hr`, `security`) or their tokens in the L0, never a person's name.
-- **Leading words.** The design vocabulary — `seam`, `tracer bullet`, `tight` (loop),
-  `deep`/`shallow` (module), `deletion test`.
+- **Leading words.** The design vocabulary — `seam`, `tracer bullet`, `deletion test`.
   Use exactly these words wherever the concept appears; never substitute synonyms
   ("boundary", "vertical slice", "fast feedback"). A leading word recruits priors the model
   already holds — one word does the work of a sentence, but only if every file uses the same one.

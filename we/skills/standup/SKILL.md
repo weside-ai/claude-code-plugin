@@ -25,6 +25,7 @@ sentence cap, a language), that form wins over the layout below.
 A build master or worker that types `status` or "where am I" therefore keeps seeing its own story
 (steps 2–3); only a session without a key of its own gets the portfolio. `/we:standup all` skips the
 steps and shows the portfolio anyway, so the human gets the overview of every epic from any session.
+`/we:standup --broadcast` asks every running session for its own state instead (§ 5).
 
 ## 2 · Gather and render (one call)
 
@@ -89,3 +90,21 @@ current branch: `git status -sb`, the plan and ticket, the PR and its required c
 `git log --oneline origin/<default>..HEAD` (at most 10, current branch only). The session title should carry the ticket
 key; if it does not, print `/rename <KEY>` once, unless the session is a bound companion session
 (`${CLAUDE_PLUGIN_ROOT}/references/companion-session.md` § Name and binding).
+
+## 5 · Broadcast (`--broadcast`)
+
+The full picture for a coordinator: every running session reports its own state, the caller sums
+up. Still read-only: the briefs and replies are messages, nobody writes or starts anything.
+Recipients, the caller's own part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.md`.
+
+1. **Brief.** Each recipient gets: "Reply to <caller's name> within 10 minutes with one line
+   `STAND · <your name> · <KEY or epic> · running: <what> · waiting on: <whom or what> · next:
+   <step>`. Read only your own state; finish no step for it."
+2. **Own line.** Write your own `STAND · …` line from this conversation and § 1's scope.
+3. **Summary.** Once every row replied, or 10 minutes after the briefs (a background `sleep 600`
+   wakes you), print one table (session, key, running, waiting on, next; silent sessions as
+   `no answer`), then three lines: what waits on the human, which session waits on which, and the
+   biggest blocker.
+
+- [ ] every recipient and the caller hold a row, silent ones as `no answer`
+- [ ] the summary names what waits on the human, or says nothing does
