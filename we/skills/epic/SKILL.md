@@ -32,6 +32,9 @@ Tickets: `${CLAUDE_PLUGIN_ROOT}/references/ticketing.md`.
 - **Sequencing by risk.** What de-risks first, what gets cut if the slice runs long, the first Story.
 - **Rough Stories.** Names with acceptance shape, each a tracer bullet (end to end through every layer,
   never one layer per Story); an enabling refactor that makes several Stories easy goes first.
+  A change that breaks many callers at once or destroys data is cut expand → migrate → contract:
+  expand puts the new form beside the old, migrate moves the callers in batches, contract deletes
+  the old form. Only the contract Story is one-way; expand and migrate merge on auto-merge.
 - **Success criteria.** What shipped, what a user can newly do, what telemetry confirms it.
 
 | Boundary signal | Soft warning |

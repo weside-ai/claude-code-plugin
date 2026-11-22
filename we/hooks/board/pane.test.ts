@@ -291,9 +291,9 @@ test('Accept in the orchestrator session appends one line, sends nothing itself 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
-  // Q2 has no recommendation: no Accept, but Discuss and More info.
+  // Q2 has no recommendation: no Accept, but Follow-up.
   expect(await ui.find({ key: 'accept-Q2' })).toBeUndefined()
-  expect(await ui.find({ key: 'discuss-Q2' })).toBeDefined()
+  expect(await ui.find({ key: 'followup-Q2' })).toBeDefined()
   await ui.press({ key: 'accept-Q1' })
   await clock.settle()
   expect(home.appended).toHaveLength(1)
@@ -302,10 +302,10 @@ test('Accept in the orchestrator session appends one line, sends nothing itself 
   expect(home.submitted).toEqual([])
   expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(Orchestrator\)/ })).toBeDefined()
 
-  await ui.press({ key: 'info-Q2' })
+  await ui.press({ key: 'followup-Q2' })
   await clock.settle()
   expect(home.submitted).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /✓ more info asked/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ follow-up asked/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -346,7 +346,7 @@ test('a question to a human on another machine waits on that human: only Withdra
   await clock.settle()
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ type: 'Text', text: /waiting on Bob/ })).toBeDefined()
-  for (const kind of ['accept', 'deny', 'discuss', 'info', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
+  for (const kind of ['accept', 'deny', 'followup', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
   // the other questions keep their buttons
   expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
   await ui.press({ key: 'withdraw-Q1' })
@@ -372,7 +372,7 @@ test('Update appends its line and keeps the question on the board', async ($, on
   expect(await ui.find({ type: 'Text', text: /✓ update asked/ })).toBeDefined()
   // The question stays: its buttons are still there until the orchestrator rewords or removes it.
   expect(await ui.find({ key: 'update-Q2' })).toBeDefined()
-  expect(await ui.find({ key: 'discuss-Q2' })).toBeDefined()
+  expect(await ui.find({ key: 'followup-Q2' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -384,11 +384,11 @@ test('a press in any other session only appends the line, named after that sessi
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
-  await ui.press({ key: 'discuss-Q1' })
+  await ui.press({ key: 'followup-Q1' })
   await clock.settle()
-  expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q1', 'discuss', 'lead']])
+  expect(home.appended.map(a => [a[1], a[2], a[4]])).toEqual([['Q1', 'followup', 'lead']])
   expect(home.submitted).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /✓ discuss \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ follow-up asked \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -420,7 +420,7 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
   expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props.strikethrough).toBeFalsy()
   await ui.press({ key: 'accept-Q1' })
   await clock.settle()
-  for (const kind of ['accept', 'deny', 'discuss', 'info', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
+  for (const kind of ['accept', 'deny', 'followup', 'update']) expect(await ui.find({ key: `${kind}-Q1` })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props).toMatchObject({ strikethrough: true, dimColor: true })
   expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(lead\)/ })).toBeDefined()

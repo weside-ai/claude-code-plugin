@@ -7,19 +7,33 @@ import type { Part } from './work'
 
 const MIN = 60_000
 const DAY = 86_400_000
-const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'discuss', 'info', 'update', 'withdraw', 'rebuild']
-const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task', 'discuss_asker', 'discuss_route']
+const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild']
+const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task', 'followup_route']
 const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
 // An Accept, Deny or Withdraw closes its question: the pane strikes it, and later lines on that id change nothing.
 const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
+// The retired answer words Discuss and Info are Follow-up: an answers line pressed before the rename and
+// not yet delivered, and an `answer_prompts` key under the old name, read as their `followup` kind.
+const RETIRED: Readonly<Record<string, BoardDeliveredKind>> = { discuss: 'followup', info: 'followup' }
+export const answerKindOf = (raw: unknown): unknown => (typeof raw === 'string' && RETIRED[raw]) || raw
+const RETIRED_PROMPTS: Partial<Record<BoardPromptKind, readonly string[]>> = {
+  followup: ['discuss', 'info'],
+  followup_route: ['discuss_route'],
+}
+
 const promptsOf = (raw: unknown): Partial<Record<BoardPromptKind, string>> | undefined => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   const out: Partial<Record<BoardPromptKind, string>> = {}
   for (const kind of PROMPT_KINDS) {
-    const text = (raw as Record<string, unknown>)[kind]
-    if (typeof text === 'string' && text.trim()) out[kind] = text
+    for (const key of [kind, ...(RETIRED_PROMPTS[kind] ?? [])]) {
+      const text = (raw as Record<string, unknown>)[key]
+      if (typeof text === 'string' && text.trim()) {
+        out[kind] = text
+        break
+      }
+    }
   }
   return out
 }
@@ -243,6 +257,7 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
     if (!line.trim()) continue
     try {
       const a = JSON.parse(line) as Partial<BoardAnswer>
+      a.answer = answerKindOf(a.answer) as BoardAnswerKind
       if (typeof a.id === 'string' && isClosed(out[a.id])) continue
       if (typeof a.id === 'string' && KINDS.includes(a.answer as BoardAnswerKind) && typeof a.ts === 'string') {
         out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null, ...(a.via ? { via: a.via } : {}) }
@@ -265,22 +280,18 @@ export const shownAnswer = (last: BoardAnswer | undefined, updated: string | und
 // The texts the deliverer sends: per kind to the orchestrator and the asker, `update_asker` to the asker
 // on Update, and for the two Accepts with a meaning of their own (`accept_hand`: the go on a one-way PR,
 // `accept_task`: the owner does it) in place of
-// `accept`, and on a question answered to its asker the two Discuss texts (`discuss_asker` to the asker,
-// `discuss_route` to the coordinator); the board's `answer_prompts` replaces a default, `{id}` standing
+// `accept`, and on a question answered to its asker the coordinator's Follow-up line (`followup_route`); the board's `answer_prompts` replaces a default, `{id}` standing
 // for the question's id, `{pr}` for its PR link and `{who}` for the session the owner talks to.
 const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   accept: '{id}: proposal accepted',
   deny: '{id}: proposal denied',
-  discuss: "{id}: let's talk about it",
-  info: '{id}: I need more information',
+  followup: '{id}: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over.',
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
   withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
   accept_hand: "{id}: the owner's go on {pr} — the asking session arms that PR with `arm_pr.sh`; the question stays open until the PR is merged",
   accept_task: '{id}: taken — the owner does this task; do not do it yourself',
-  discuss_asker:
-    '{id}: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator.',
-  discuss_route: '{id}: Discuss → tell the owner in one line: talk to {who}. Do not discuss or relay it yourself.',
+  followup_route: '{id}: Follow-up → tell the owner in one line: talk to {who}. Do not answer or relay it yourself.',
   rebuild:
     'Rebuild the board: check the session lines, the open questions and the news against the ticketing system, git and the PRs, and correct every stale line (board.py set --for, withdraw, prune)',
 }

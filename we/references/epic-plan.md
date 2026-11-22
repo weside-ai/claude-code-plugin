@@ -106,8 +106,7 @@ it; the next commit to the epic deletes it.
 
 1. Interview in the session with the `/we:grill` discipline: one question per turn with your
    recommendation, a decision on record cited instead of asked, the epic's frame questions in
-   order. Read first: the plan, the goal file, the instruction files, ADRs, `docs/plans/out-of-scope/`
-   when present, and the glossary the instruction files name.
+   order. Read first: the plan, the goal file, the instruction files, ADRs and the glossary the instruction files name.
 2. Worktree and commit path: `${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` (repo fact first, else a detached scratch
    worktree off the default branch, landed by push or docs PR per `plans.land`).
 3. Dispatch `Agent(subagent_type: "we:dev-high", description: "draft epic <slug>", prompt: <brief>)`.

@@ -56,7 +56,7 @@ const PROBE = JSON.stringify({
 const ANSWERS = [
   { id: 'Q12', answer: 'accept', ts: '2026-10-30T21:02:00.000Z', session: 'Orchestrator' },
   { id: 'N1', answer: 'read', ts: '2026-10-30T21:03:00.000Z', session: 'Orchestrator' },
-  { id: 'Q17', answer: 'discuss', ts: '2026-10-30T21:05:00.000Z', session: 'Orchestrator' },
+  { id: 'Q17', answer: 'followup', ts: '2026-10-30T21:05:00.000Z', session: 'Orchestrator' },
 ].map(a => `${JSON.stringify(a)}\n`).join('')
 
 // The ledger: Q12 reached its asker, Q17's asker was not reachable and stays with the orchestrator.
@@ -94,7 +94,7 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │                                                                                                  │
 │ Q9  9 d  lead  PROJ-40                                                                           │
 │ Storyline S1–S3                                                                                  │
-│ [ Deny ] [ Discuss ] [ More info ] [ Update ]                                                    │
+│ [ Deny ] [ Follow-up ] [ Update ]                                                                │
 │                                                                                                  │
 │ Q12  2 d  billing  PROJ-59                                                                       │
 │ Merge PR #562? (money path, CI green)                                                            │
@@ -105,12 +105,12 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ UK: register with the tax office (quarterly returns, running cost) or keep the web checkout      │
 │ closed for the UK? The UK then buys in the app                                                   │
 │ → keep it closed until demand is measurable                                                      │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ]                                         │
+│ [ Accept ] [ Deny ] [ Follow-up ] [ Update ]                                                     │
 │                                                                                                  │
 │ Q17  today  apps  PROJ-65..68                                                                    │
 │ Release 4 app images (artwork/v2/)                                                               │
 │ → release                                                                                        │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] ✓ discuss 21:05 UTC (Orchestrator)      │
+│ [ Accept ] [ Deny ] [ Follow-up ] [ Update ] ✓ follow-up asked 21:05 UTC (Orchestrator)          │
 │ not delivered, with Orchestrator (not reachable)                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
@@ -168,7 +168,7 @@ its own.
 │                                                          │
 │ Q9  9 d  lead  PROJ-40                                   │
 │ Storyline S1–S3                                          │
-│ [ Deny ] [ Discuss ] [ More info ] [ Update ]            │
+│ [ Deny ] [ Follow-up ] [ Update ]                        │
 │                                                          │
 │ Q12  2 d  billing  PROJ-59                               │
 │ Merge PR #562? (money path, CI green)                    │
@@ -180,13 +180,13 @@ its own.
 │ running cost) or keep the web checkout closed for the    │
 │ UK? The UK then buys in the app                          │
 │ → keep it closed until demand is measurable              │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
+│ [ Accept ] [ Deny ] [ Follow-up ] [ Update ]             │
 │                                                          │
 │ Q17  today  apps  PROJ-65..68                            │
 │ Release 4 app images (artwork/v2/)                       │
 │ → release                                                │
-│ [ Accept ] [ Deny ] [ Discuss ] [ More info ] [ Update ] │
-│ ✓ discuss 21:05 UTC (Orchestrator)                       │
+│ [ Accept ] [ Deny ] [ Follow-up ] [ Update ]             │
+│ ✓ follow-up asked 21:05 UTC (Orchestrator)               │
 │ not delivered, with Orchestrator (not reachable)         │
 ╰──────────────────────────────────────────────────────────╯
 

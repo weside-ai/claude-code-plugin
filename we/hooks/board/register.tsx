@@ -1,6 +1,6 @@
 // /board: a pane with the workspace board an orchestrator session keeps (~/.claude/we-state/board.json;
 // the crew's resolved board, else option boardFile), the live state of each session and a start-mode lamp. Never writes the board file; a
-// question's Accept, Deny, Discuss, More info or Update, and a news item's Read, append one line to the answers file beside it (<stem>-answers.jsonl).
+// question's Accept, Deny, Follow-up or Update, and a news item's Read, append one line to the answers file beside it (<stem>-answers.jsonl).
 // In the orchestrator's own session the module is also the deliverer of those lines (deliver.ts), pane open or not.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register, RenderChildren } from 'claude-code'
@@ -69,8 +69,7 @@ const LIVE: Record<Liveness, { label: string; color: string }> = {
 const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
   accept: { label: 'accepted', color: 'success' },
   deny: { label: 'denied', color: 'error' },
-  discuss: { label: 'discuss', color: 'warning' },
-  info: { label: 'more info asked', color: 'suggestion' },
+  followup: { label: 'follow-up asked', color: 'warning' },
   update: { label: 'update asked', color: 'suggestion' },
   withdraw: { label: 'withdrawn', color: 'inactive' },
   read: { label: 'read', color: 'inactive' },
@@ -186,7 +185,7 @@ async function selfName($: $): Promise<string | undefined> {
   return ownName((await read($, live))?.sessions ?? [], id)
 }
 
-// A press of Accept, Deny, Discuss, More info, Update, Withdraw or Read: one appended line. The pane sends nothing:
+// A press of Accept, Deny, Follow-up, Update, Withdraw or Read: one appended line. The pane sends nothing:
 // the deliverer in the orchestrator's session carries the line, at once when that is this session.
 async function answerQuestion($: $, file: string, id: string, answer: BoardAnswerKind) {
   try {
@@ -329,8 +328,8 @@ async function deliverOne($: $, ledgerPath: string, coordinator: string, d: Deli
         d.role === 'owner'
           ? ownerText(d.line, prompts, d.accept)
           : d.role === 'starter'
-            ? starterText(d.line, d.asker ?? '?', prompts, d.accept, d.direct)
-            : askerText(d.line, prompts, d.accept, d.direct)
+            ? starterText(d.line, d.asker ?? '?', prompts, d.accept)
+            : askerText(d.line, prompts, d.accept)
       sent = await $.session.send({ to: d.to, text })
     } catch (err) {
       sent = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
@@ -831,8 +830,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           : [
               ...(q.recommendation ? [{ key: `accept-${q.id}`, label: acceptLabel, on: press('accept') }] : []),
               { key: `deny-${q.id}`, label: 'Deny', on: press('deny') },
-              { key: `discuss-${q.id}`, label: 'Discuss', on: press('discuss') },
-              { key: `info-${q.id}`, label: 'More info', on: press('info') },
+              { key: `followup-${q.id}`, label: 'Follow-up', on: press('followup') },
               { key: `update-${q.id}`, label: 'Update', on: press('update') },
             ]
         : []

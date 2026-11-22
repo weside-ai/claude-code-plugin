@@ -191,6 +191,7 @@ Tools: read and search with the Read, Grep and Glob tools on absolute paths; nev
 Push: no — the Lead pushes once (`Push: yes` only when the Lead cannot push from the worker's tree; no Push line under `PR owner: worker`).
 Scratch: temp files only under <scratchpad>/<name>/, never in the scratchpad root.
 Before the report, message the Lead only for a terminal fact: pushed SHA, green, cap, blocked, a question. Stop after the report.
+Worker: <name> · started-by <master's name>
 ```
 
 **While a worker runs:** a long one gets its watchdog (`worker-dispatch.md` § Watchdog), never a

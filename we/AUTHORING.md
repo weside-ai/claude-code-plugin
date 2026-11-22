@@ -29,6 +29,14 @@ one-way change) and that a tool can carry; any other check costs every run and r
 |---|---|
 | "Every module must have a header docstring", enforced by a validator | "A header pays where a reader would otherwise open neighbours to learn what calls the module" (`references/code-notes.md`) |
 
+Before building a hook, watcher, poller, supervisor or scheduled job, answer two questions in its
+description: what keeps two runs from doing the same work, and where the human steps back in. Both
+were answered after an incident more than once; a guideline, no gate.
+
+| Bad | Good |
+|---|---|
+| "A poller wakes the companion on news", and two pollers of one companion send twice | "Two runs: a claim file per send, the second poller ends · Human: reads the board" |
+
 ## Shape of a skill
 
 - Frontmatter `description` states what the verb does and its triggers; with `when_to_use` at most

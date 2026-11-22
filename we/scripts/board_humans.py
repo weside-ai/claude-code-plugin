@@ -20,7 +20,7 @@ verbs in `board.py` own every write. Grammar (docs/board.md § Several humans):
   one of `board.shared_accounts`; another human with the same role never answers for them, and the
   question comment itself is never a reply;
   its first word, read in any case, when it is an answer kind
-  (`accept`, `deny`, `discuss`, `info`, `update`), is the answer, else `discuss`. The label taken
+  (`accept`, `deny`, `followup`, `update`), is the answer, else `followup`. The label taken
   off without a reply is the answer `update` (ask whether the question still stands).
 """
 
@@ -30,7 +30,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-KINDS = ("accept", "deny", "discuss", "info", "update")
+KINDS = ("accept", "deny", "followup", "update")
 CLAIM = re.compile(r"(claim|release) ([a-z0-9_-]+)@([a-z0-9_-]+)(?: (\S+))?")
 SIGNED = re.compile(r"^([a-z0-9_-]+)@([a-z0-9_-]+)\b")
 QUOTE_CHARS = 500
@@ -189,7 +189,7 @@ def replies(
         body = " ".join(str(c.get("body") or "").split())
         body = SIGNED.sub("", body, count=1).lstrip(" :·-")
         first = body.split(" ", 1)[0].strip(".:,;·").lower() if body else ""
-        kind = first if first in KINDS else "discuss"
+        kind = first if first in KINDS else "followup"
         out.append({"kind": kind, "quote": body[:QUOTE_CHARS], "at": c.get("created"), "by": by})
     return sorted(out, key=lambda r: parse_ts(r["at"]))
 
