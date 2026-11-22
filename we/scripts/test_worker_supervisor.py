@@ -514,7 +514,7 @@ def test_a_queued_start_holds_at_the_resource_rule_before_it_tries(queue, tmp_pa
     (host / "proc" / "self" / "cgroup").write_text("0::/\n")
     (group / "memory.max").write_text(f"{100 * MIB}\n")
     (group / "memory.current").write_text(f"{90 * MIB}\n")
-    (group / "memory.stat").write_text(f"file {5 * MIB}\nshmem 0\n")  # 85 % >= 78 %
+    (group / "memory.stat").write_text(f"file {5 * MIB}\nshmem 0\n")  # 85 % >= 84 %
     monkeypatch.setenv("WE_WORKER_HOST_ROOT", str(host))
     assert not ws.machine_room(queue["state"])
     calls = []

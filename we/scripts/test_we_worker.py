@@ -437,7 +437,7 @@ def test_a_start_without_room_waits_in_its_lane_without_queue(tmp_path):
     proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 0, proc.stderr
     assert "build lane waits for room on the machine: working set 86%" in proc.stderr
-    assert "(needs < 78%)" in proc.stderr
+    assert "(needs < 84%)" in proc.stderr
     assert "queued (position 1 of the build lane" in proc.stdout
     status = run(project, env, "status").stdout.splitlines()
     assert status[-1].startswith("room for both lanes: starts wait: working set 86%")

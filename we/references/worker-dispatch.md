@@ -142,7 +142,7 @@ line). The master starts a utility worker with `worker_launch.py launch --utilit
 it waits (Kiska, 22.11.: the host's memory guard killed workers six times at 94 % working set, four
 of them at 10 workers, each set off by one tsc or pytest peak of 2 to 2.5 GiB): the own cgroup's
 working set (`memory.current − memory.stat file + memory.stat shmem`) below
-`max_working_set_ratio` (0.78) of `memory.max`, or of MemTotal in `/proc/meminfo` when the limit
+`max_working_set_ratio` (0.84) of `memory.max`, or of MemTotal in `/proc/meminfo` when the limit
 reads `max`; `memory.pressure` `full avg60` below `max_pressure_full_avg60` (1); load5 below
 `max_load5` (20); each a `pool.json` key of the machine. A missed condition is no refusal: the
 start exits 4 and a `--bg` start waits in its lane's queue, `--queue` or not, naming the missed

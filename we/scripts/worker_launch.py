@@ -337,7 +337,7 @@ POOL_DEFAULTS = {
     POOL_KEY: 8,
     PCT_KEY: 80,
     UTILITY_KEY: 5,
-    RATIO_KEY: 0.78,
+    RATIO_KEY: 0.84,
     PRESSURE_KEY: 1,
     LOAD_KEY: 20,
 }
@@ -700,7 +700,7 @@ def resources(
 
 
 def resource_text(rows: list[dict]) -> str:
-    """`working set 81% (20.3 of 25.0 GiB) (needs < 78%); load5 n/a (needs < 20)` for `rows`."""
+    """`working set 81% (20.3 of 25.0 GiB) (needs < 84%); load5 n/a (needs < 20)` for `rows`."""
     return "; ".join(f"{r['what']} {r['value'] or 'n/a'} (needs {r['want']})" for r in rows)
 
 

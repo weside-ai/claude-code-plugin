@@ -1179,7 +1179,7 @@ def test_the_working_set_drops_page_cache_and_keeps_shmem(tmp_path):
 
 
 def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(lanes, tmp_path):
-    """Kiska's rule (22.11.): working set < 78 % of memory.max, pressure full avg60 < 1,
+    """Kiska's rule (22.11.): working set < 84 % of memory.max, pressure full avg60 < 1,
     load5 < 20, for both lanes; an unreadable source counts as met and reads `n/a`."""
     run, group = lanes["run"], lanes["cgroup"]
     loadavg = tmp_path / "loadavg"
@@ -1187,12 +1187,12 @@ def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(la
     _cgroup(group, used_pct=77, file_mib=3000, shmem_mib=100)  # page cache is no load
     assert run(0, 0, "utility") == (0, "")
     assert run(0, 0, "build") == (0, "")
-    _cgroup(group, used_pct=80)
+    _cgroup(group, used_pct=86)
     for lane in wl.LANES:
         code, err = run(0, 0, lane)
         assert code == wl.RESOURCE_HALT, err
         assert f"{lane} lane waits for room" in err and "refused" not in err
-        assert "working set 80% (6.4 of 8.0 GiB) (needs < 78%)" in err
+        assert "working set 86% (6.9 of 8.0 GiB) (needs < 84%)" in err
         assert "load5" not in err  # only the missed condition
     assert run(0, 0, "build", pool={"max_working_set_ratio": 0.9}) == (0, "")
     _cgroup(group, full_avg60=1.0)
@@ -1207,7 +1207,7 @@ def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(la
     loadavg.unlink()
     rows = wl.resources(wl.pool_limits(lanes["state"]), tmp_path / "none", loadavg, loadavg)
     assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, None, None]
-    assert wl.resource_text(rows[:1]) == "working set n/a (needs < 78%)"
+    assert wl.resource_text(rows[:1]) == "working set n/a (needs < 84%)"
     assert run(0, 0, "build", cgroup=tmp_path / "none") == (0, "")
 
 
