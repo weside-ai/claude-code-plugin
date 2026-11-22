@@ -12,7 +12,8 @@
 #                                  /proc/locks); an exited worker that hit
 #                                  the usage limit or an auth error gets a second line with its resume
 #                                  command; then one `queued` line per queued start
-#                                  (scripts/worker_supervisor.py status_lines owns the line)
+#                                  (scripts/worker_supervisor.py status_lines owns the line); last,
+#                                  the machine's room for both lanes (`resource_line`)
 #   we-worker stop <name|id>       removes a queued start of that name (its waiter ends), else
 #                                  stops a worker (a background session with `claude stop`, a window
 #                                  worker with SIGTERM to its pid) and waits until it is gone (30 s);
@@ -76,11 +77,14 @@
 #   --utility  the utility lane: a fix round on an open PR's branch, a card, lens or review worker.
 #            It counts against pool.json `max_utility_sessions` (default 5), not against the build
 #            cap, waits in its own queue (never behind build starts), and starts only with room on
-#            the machine: own cgroup free memory (memory.max - memory.current + inactive_file) at
-#            least `utility_min_free_mib` (2048), memory.pressure `full avg60` below
-#            `utility_max_pressure_full_avg60` (1), load5 below `utility_max_load5` (20); an
-#            unreadable one counts as met (`n/a`). The 5h check holds for both lanes. The lane is
-#            the worker's WE_WORKER_LANE (settings file), marker and launched.jsonl line
+#            the machine. The 5h check and the room rule hold for both lanes. The lane is the
+#            worker's WE_WORKER_LANE (settings file), marker and launched.jsonl line
+#   Room:    a start of either lane needs room on the machine (pool.json): the own cgroup's working
+#            set (memory.current - memory.stat file + memory.stat shmem) below `max_working_set_ratio`
+#            (0.78) of memory.max (MemTotal without a limit), memory.pressure `full avg60` below
+#            `max_pressure_full_avg60` (1), load5 below `max_load5` (20); an unreadable one counts
+#            as met (`n/a`). Without room a --bg start waits in its lane's queue, --queue or not, and
+#            names the missed condition; a window start exits 4
 #   Tree: without --tree or --here a start stays where the caller stands; only under `.weside/config.json`
 #   `workers.tree: own` a start from the main checkout gets its own worktree (`worker_launch.py tree`:
 #   the repo's `workers.add_worktree`, else `git worktree add <repo>-<name> -b <branch> origin/<default>`).
@@ -532,9 +536,18 @@ if [[ -n "$brief" ]]; then
 fi
 # The concurrency cap: busy sessions and room in the account rotation (.weside/config.json
 # `workers`); a refusal names both values and exits 3, nothing starts; with --queue the start waits.
+# Exit 4 is no refusal: the machine lacks room (the resource rule), a --bg start of either lane waits
+# in its lane's queue without --queue; a waiter's rerun hands the 4 back as "still no room".
 rc=0
 python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" || rc=$?
-if [[ $rc -eq 3 && $queue -eq 1 ]]; then
+if [[ $rc -eq 4 && -n "${WE_WORKER_QUEUE_TURN:-}" ]]; then
+  exit 4
+fi
+if [[ $rc -eq 4 && $bg -eq 0 ]]; then
+  echo "we-worker: a window start cannot wait in the queue; start it with --bg, or again once there is room; no worker started" >&2
+  exit 4
+fi
+if [[ ($rc -eq 3 && $queue -eq 1) || $rc -eq 4 ]]; then
   sup=$(plugin_script scripts/worker_supervisor.py 2>/dev/null)
   [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py); nothing queued" >&2; exit 3; }
   starter=$(_starter)

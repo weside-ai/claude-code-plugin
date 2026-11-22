@@ -133,15 +133,23 @@ moving: a fix round on an open PR's branch, a card, lens or review worker. Build
 the flag. A utility start counts the utility lane's busy workers against `pool.json`
 `max_utility_sessions` (default 5; a repo may lower it), never against `max_busy_sessions`, and with
 `--queue` it waits in its own queue: a fix round never waits behind new build work (measured
-22.11.: one waited over an hour). The 5h check holds for both lanes. It also needs room on the
-machine, all three or it waits: free memory of the own cgroup (`memory.max − memory.current +
-inactive_file`) at least `utility_min_free_mib` (2048), `memory.pressure` `full avg60` below
-`utility_max_pressure_full_avg60` (1), load5 below `utility_max_load5` (20), each a `pool.json` key
-of the machine. A file it cannot read (no cgroup v2, no memory limit) counts as met and shows
-`n/a`; the refusal names the missed condition with its value and threshold, `we-worker status` ends
-with the lane's room. A worker belongs to the lane it started in (`WE_WORKER_LANE` in its settings
-file, `lane` in its marker and `launched.jsonl` line). The master starts a utility worker with
-`worker_launch.py launch --utility` (the template's `{lane}`); a story's build worker never.
+22.11.: one waited over an hour). The 5h check holds for both lanes. A worker belongs to the lane
+it started in (`WE_WORKER_LANE` in its settings file, `lane` in its marker and `launched.jsonl`
+line). The master starts a utility worker with `worker_launch.py launch --utility` (the template's
+`{lane}`); a story's build worker never.
+
+**Room on the machine.** A start of either lane that passes its cap also needs room, all three or
+it waits (Kiska, 22.11.: the host's memory guard killed workers six times at 94 % working set, four
+of them at 10 workers, each set off by one tsc or pytest peak of 2 to 2.5 GiB): the own cgroup's
+working set (`memory.current − memory.stat file + memory.stat shmem`) below
+`max_working_set_ratio` (0.78) of `memory.max`, or of MemTotal in `/proc/meminfo` when the limit
+reads `max`; `memory.pressure` `full avg60` below `max_pressure_full_avg60` (1); load5 below
+`max_load5` (20); each a `pool.json` key of the machine. A missed condition is no refusal: the
+start exits 4 and a `--bg` start waits in its lane's queue, `--queue` or not, naming the missed
+condition with its value and threshold; the queue's waiter checks the same rule before it tries
+(`worker_launch.resources`, `worker_supervisor.machine_room`). A window start cannot wait and exits
+4. A file it cannot read (no cgroup v2) counts as met and shows `n/a`; `we-worker status` ends with
+the room for both lanes.
 
 ### Worker rights
 

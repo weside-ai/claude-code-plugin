@@ -14,6 +14,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 import worker_supervisor as ws
 
+MIB = 1024 * 1024
+
 DEAD_PID = 2**22 + 7  # above pid_max on a default kernel: no process holds it
 NAME = "AC-12-impl"
 
@@ -457,9 +459,9 @@ def queue(tmp_path):
         ws.enqueue(tmp_path, name, "/tree", [name, "--bg"], "## Goal\n", "Lead", timeout_s, at)
         ws.set_waiter(tmp_path, name, os.getpid())
 
-    def wait(name, results, on_sleep=None):
+    def wait(name, results, on_sleep=None, room=lambda _state: True):
         """Run the waiter of `name`; `results` are the fake start's exit codes in turn (3: the
-        capacity check refuses)."""
+        capacity check refuses, 4: the machine has no room)."""
         codes = list(results)
 
         def start(doc):
@@ -475,6 +477,7 @@ def queue(tmp_path):
             tmp_path,
             name,
             start=start,
+            room=room,
             clock=clock,
             sleep=sleep,
             send=lambda t: sent.append(t) is None,
@@ -499,6 +502,32 @@ def test_a_queued_start_waits_for_room_and_tells_its_starter(queue):
     assert not ws.queued(queue["state"])
     brief = queue["state"] / "queue" / "AC-1-a.brief.md"
     assert not brief.exists()
+
+
+def test_a_queued_start_holds_at_the_resource_rule_before_it_tries(queue, tmp_path, monkeypatch):
+    """Kiska (22.11.): the waiter checks the room rule the start checks; a start's exit 4 (no room)
+    keeps it waiting like the cap's 3."""
+    host = tmp_path / "host"
+    group = host / "sys" / "fs" / "cgroup"
+    group.mkdir(parents=True)
+    (host / "proc" / "self").mkdir(parents=True)
+    (host / "proc" / "self" / "cgroup").write_text("0::/\n")
+    (group / "memory.max").write_text(f"{100 * MIB}\n")
+    (group / "memory.current").write_text(f"{90 * MIB}\n")
+    (group / "memory.stat").write_text(f"file {5 * MIB}\nshmem 0\n")  # 85 % >= 78 %
+    monkeypatch.setenv("WE_WORKER_HOST_ROOT", str(host))
+    assert not ws.machine_room(queue["state"])
+    calls = []
+
+    def room(state):
+        calls.append(state)
+        if len(calls) == 3:  # the peak is over: 40 %
+            (group / "memory.current").write_text(f"{45 * MIB}\n")
+        return ws.machine_room(state)
+
+    queue["put"]("AC-1-a", queue["clock"]())
+    assert queue["wait"]("AC-1-a", [4, 0], room=room) == "started"
+    assert len(calls) == 4 and queue["tried"] == ["AC-1-a"] * 2  # held twice, then 4, then 0
 
 
 def test_queued_starts_go_first_come_first_served(queue):
