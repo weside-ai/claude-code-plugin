@@ -43,7 +43,6 @@ The disk rows are what would load; the ``measured start`` line is what did (the 
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
 import re
@@ -597,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         home = Path(args.home) if args.home else Path.home()
         repo = crew_path.parent.parent.resolve()
-        today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+        today = crewlib.today(repo)
         store = store_of(repo)
         results = measure(crew_path, crew, args.role or list(render_process.all_roles()), home)
         text = render(results, previous(store, today), repo, home, args.md)
