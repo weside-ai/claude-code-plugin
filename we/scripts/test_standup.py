@@ -6,6 +6,8 @@ import json
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -347,6 +349,160 @@ def test_build_masters_leave_out_companions(tree):
     u = run(tree, crew=crew)["utilization"]
     assert (u["build_masters"]["used"], u["build_masters"]["companions"]) == (2, 1)
     assert u["idle"]["masters"] == ["m-9010"]  # the idle companion is no idle master
+
+
+def test_build_masters_count_only_masters_of_an_epic(tree):
+    """A master without an epic (no board line `epic`, no name after `naming.master`) is no
+    build master; a master whose board line names an epic is one, whatever its name."""
+    edit_json(
+        tree / "zentrale.json",
+        lambda z: z["sections"]["working"].extend(
+            {"name": n, "role": "master", "state": "busy", "keys": [], "group": n}
+            for n in ("CI", "rust")
+        ),
+    )
+    edit_json(
+        tree / "board" / "board.json",
+        lambda b: b["sessions"].append({"name": "rust", "epic": "PROJ-9020", "keys": []}),
+    )
+    b = run(tree)["utilization"]["build_masters"]
+    assert (b["used"], b["other_masters"], b["companions"]) == (3, 1, 0)
+
+
+def test_waiting_hours_count_overlapping_waits_once(tree):
+    """Two sessions waiting on the lock at once are one wall-clock hour, not two; the signal keeps
+    the session hours. The open owner questions come with the age of the oldest."""
+    with (tree / "board" / "board-waits.jsonl").open("a") as f:
+        f.write(
+            json.dumps(
+                {
+                    "key": "PROJ-9002",
+                    "session": "w-PROJ-9002",
+                    "waiting_on": "lock",
+                    "since": "2026-11-21T12:30Z",
+                    "ended": "2026-11-21T15:00:00Z",
+                    "duration_s": 9000,
+                }
+            )
+            + "\n"
+        )
+    u = run(tree)["utilization"]
+    assert u["waiting_h"] == {"lock": 4.5}  # 12:30-17:00 holds 12:30-15:00
+    assert u["waiting_session_h"] == {"lock": 7.0}
+    assert u["window_h"] == 168.0
+    assert u["open_questions"] == {"count": 2, "oldest_h": 42.0}
+
+
+def test_portfolio_switch_ignores_branch_and_conversation(tree, monkeypatch):
+    """`--portfolio` (or the argument `all`) shows every epic even on a story branch."""
+    doc = run(
+        tree,
+        branch_name="feat/PROJ-9002-cache",
+        conversation_keys=["PROJ-9003"],
+        portfolio=True,
+    )
+    assert (doc["view"], doc["scope"]) == ("portfolio", {"key": None, "from": "--portfolio"})
+    assert run(tree, branch_name="feat/PROJ-9002-cache")["view"] == "story"
+    seen = {}
+    monkeypatch.setattr(standup, "build", lambda **k: seen.update(k) or {"view": "branch"})
+    standup.main(["all", "--json"])
+    assert (seen["key"], seen["portfolio"]) == (None, True)
+
+
+def test_a_source_past_its_budget_is_a_gap_not_a_number(tree):
+    """A slow GitHub becomes the gap line `github: not read (timeout)`; the build does not wait."""
+    release = threading.Event()
+
+    def slow(repo, since, until):
+        release.wait(5)
+        return []
+
+    t0 = time.monotonic()
+    doc = run(tree, gh_reader=slow, budgets={"github": 0.2})
+    release.set()
+    assert time.monotonic() - t0 < 3
+    assert "github: not read (timeout)" in doc["gaps"]
+    assert doc["sources"]["github"] == "not read"
+    assert doc["utilization"]["ci_rounds"] is None
+
+
+def test_default_gh_reads_past_days_and_today_apart(monkeypatch, tmp_path):
+    """Whole past UTC days and today go through two caches; the merged PRs outside the window
+    (the day before `since`) are dropped, the open ones kept, each PR once."""
+    calls = []
+    t = standup.fi.parse_ts
+
+    def fake(run, repo, since, until, open_prs=True, pool=1):
+        calls.append((standup.iso(since), standup.iso(until), open_prs))
+        if open_prs:
+            return [
+                {"number": 3, "merged": t("2026-11-21T10:00:00Z")},
+                {"number": 4, "merged": None},
+            ]
+        return [
+            {"number": 1, "merged": t("2026-11-07T05:00:00Z")},  # before since
+            {"number": 2, "merged": t("2026-11-10T05:00:00Z")},
+        ]
+
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", fake)
+    reader = standup._default_gh(tmp_path)
+    prs = reader("acme/app", t("2026-11-07T18:00:00Z"), t("2026-11-21T18:00:00Z"))
+    assert [p["number"] for p in prs] == [2, 3, 4]
+    assert calls == [
+        ("2026-11-07T00:00:00Z", "2026-11-21T00:00:00Z", False),
+        ("2026-11-21T00:00:00Z", "2026-11-21T18:00:00Z", True),
+    ]
+
+
+def test_default_gh_live_query_holds_still_within_its_step(monkeypatch, tmp_path):
+    """Two standups in the same `GH_LIVE_TTL_S` step send the same live query, so the second is
+    a cache hit; the window filter still uses the real `until`."""
+    calls = []
+    t = standup.fi.parse_ts
+
+    def fake(run, repo, since, until, open_prs=True, pool=1):
+        calls.append((standup.iso(since), standup.iso(until), open_prs))
+        return [{"number": 5, "merged": t("2026-11-21T18:03:00Z")}] if open_prs else []
+
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", fake)
+    reader = standup._default_gh(tmp_path)
+    since = t("2026-11-14T18:01:07Z")
+    first = reader("acme/app", since, t("2026-11-21T18:01:07Z"))
+    reader("acme/app", since, t("2026-11-21T18:04:59Z"))
+    live = [c for c in calls if c[2]]
+    assert live[0] == live[1] == ("2026-11-21T00:00:00Z", "2026-11-21T18:05:00Z", True)
+    assert first == []  # merged 18:03, after the first run's until
+
+
+def test_default_gh_caps_gh_calls_across_repos(monkeypatch, tmp_path):
+    """The pool is shared: several repos read side by side never run more gh calls at once."""
+    lock, now, peak = threading.Lock(), [0], [0]
+
+    def runner(cache, window="", ttl=None):
+        def run(body):
+            with lock:
+                now[0] += 1
+                peak[0] = max(peak[0], now[0])
+            time.sleep(0.02)
+            with lock:
+                now[0] -= 1
+            return {}
+
+        return run
+
+    def fake(run, repo, since, until, open_prs=True, pool=1):
+        standup.flow_report.pmap(run, [{}] * 6, pool)
+        return []
+
+    monkeypatch.setattr(standup.flow_report, "gh_runner", runner)
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", fake)
+    reader = standup._default_gh(tmp_path, pool=3)
+    t = standup.fi.parse_ts
+    repos = ["a/1", "a/2", "a/3", "a/4"]
+    standup.flow_report.pmap(
+        lambda r: reader(r, t("2026-11-14T00:00:00Z"), t("2026-11-21T12:00:00Z")), repos, 4
+    )
+    assert peak[0] == 3
 
 
 def quiet(root: Path) -> None:

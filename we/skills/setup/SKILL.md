@@ -1,7 +1,7 @@
 ---
 name: setup
 description: >
-  Project setup: detects stack, ticketing and tools, asks up to seven skippable questions,
+  Project setup: detects stack, ticketing and tools, asks up to eight skippable questions,
   writes .weside/config.json, optionally rosters and crew. Triggers: "/we:setup", "configure
   project", "initialize repo", "first time".
 ---
@@ -59,6 +59,10 @@ never commit yourself.
    ruleset). `push` lands plan commits through `plan_push.py`
    (`${CLAUDE_PLUGIN_ROOT}/references/plan-commit.md` step 5), and only once `.weside/config.json`
    is committed on the default branch: both read that copy.
+8. **Time zone**: the human's IANA zone, default what
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/crew.py zone --system` prints (skip keeps it) →
+   `time.zone`; a date the human reads (a plan's log line, a question's day, a report's file name)
+   is that day where the human lives, not in UTC.
 
 Review gates are detected, not asked: a Claude or Codex review workflow in `.github/workflows/`, a
 CodeRabbit or Greptile app. The ids go to `review.available`; `/we:ci-review` collects threads from
@@ -93,6 +97,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
                "context": { "auto_memory": "off", "disable_plugins": [], "deny_mcp_servers": [],
                             "auto_compact_window": null } },
   "plans": { "land": "pr", "push_paths": ["docs/plans/**"], "secret_scan": null },
+  "time": { "zone": "<IANA zone, e.g. Europe/Berlin>" },
   "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",
                   "rc_tag_glob": "<RC tag glob, e.g. v*-rc.*>" }
 }
@@ -147,7 +152,7 @@ start (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker rights). 
 user names such a command; absent, workers start on the login they always did.
 
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
-block (stack, ticketing, goals, test discipline, verification, review gates, worker cap, plan landing, missing tools).
+block (stack, ticketing, goals, test discipline, verification, review gates, worker cap, plan landing, time zone, missing tools).
 
 ## 4. Council (optional, ask once)
 

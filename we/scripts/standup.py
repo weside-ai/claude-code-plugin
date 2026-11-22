@@ -2,14 +2,16 @@
 """The standup's one gather: intent, achieved, next, intensity, utilization, in one document.
 
 Usage:
-  standup.py [KEY] [--since 7d] [--until UTC] [--branch] [--json | --md] [--lang de|en]
-             [--board FILE] [--tickets FILE] [--gh-cache DIR] [--conversation-keys K1,K2]
+  standup.py [KEY | all] [--portfolio] [--since 7d] [--until UTC] [--branch] [--json | --md]
+             [--lang de|en] [--board FILE] [--tickets FILE] [--gh-cache DIR]
+             [--conversation-keys K1,K2] [--timings]
   standup.py --orchestration --session ID [--json]
 
 Read-only: it writes nothing but the `gh_runner` cache directory (`--gh-cache`, default
 `ci_source.CACHE`) and the Zentrale's slow cache, both owned by their modules.
 
-Scope (first hit wins; `/we:standup` § 1 owns the reading order): the KEY argument, else the
+Scope (first hit wins; `/we:standup` § 1 owns the reading order): `--portfolio` (or the argument
+`all`) is always the portfolio, whatever the branch or the conversation; else the KEY argument, else the
 ticket key of the current branch (`naming.key` of the crew), else the first of
 `--conversation-keys` (the stories the calling conversation started), else the portfolio.
 `--branch` is the branch view. A key resolves to: an epic plan (`<KEY>-epic.md` or `ticket: KEY`)
@@ -22,7 +24,9 @@ orchestration}`. The window is `--since` (default 7 days) before `--until`; `pre
 length before it. Every number of a source that was not read is `null` (`n/a` in `--md`, never
 `0`) and the source is one `gaps` line `<source>: not read (<why>)`.
 
-Sources, one call each (never per story):
+Sources, one call each (never per story). Sampler, GitHub, sessions and the Zentrale run side by
+side, each within its `SOURCE_BUDGET_S`; one past its budget is the gap `<source>: not read
+(timeout)` and its numbers `null`. `--timings` prints each source's seconds to stderr.
 
 | Source | Call | Gives |
 |---|---|---|
@@ -30,7 +34,7 @@ Sources, one call each (never per story):
 | board | `board.StateDir`: `board()`, `last_rows()` (stage per key), `transitions()` (moves in the window), `open_questions` | lines, questions, stages |
 | tickets | `ticket_snapshot.read` | stage of keys without a board move (only when fresh) |
 | flow | `flow_intervals.build` once over both windows | touch hours per key, worker hours, waits per `waiting_on`, story efficiency |
-| github | `flow_report.fetch_prs` per repo of `gh_source.repos_of` through `flow_report.gh_runner` | merged PRs, heads (CI rounds) |
+| github | `flow_report.fetch_prs` per repo of `gh_source.repos_of` (repos side by side, `GH_POOL` gh calls at once over all of them) through `flow_report.gh_runner`, past UTC days cached `GH_PAST_TTL_S`, today and open PRs `GH_LIVE_TTL_S` | merged PRs, heads (CI rounds) |
 | zentrale | `zentrale.build` once | sessions (`crew_view`), red rows, locks line, accounts |
 | workers | `worker_launch.cap_limits`, `worker_supervisor.status_records` | worker limit, busy, test-slot waiters (`waits`, optional) |
 
@@ -45,6 +49,14 @@ Light (first rule that fires): `red` when a red Zentrale row names one of its ke
 waiting on one of its keys is past `sla_due`, or a one-way merge-go of it lies with the owner;
 `yellow` when an open line key had no `working` interval in the last 48 h, a Selected key has no
 master, or an open question to the owner names one of its keys; else `green`.
+
+Utilization: `build_masters.used` counts the live masters that lead an epic (a board line with
+`epic`, or a name after the crew's `naming.master`), `other_masters` the other masters,
+`companions` the sessions of crew members. `waiting_h` per target: the hours of the window in which
+at least one session waited on it (overlapping waits count once, so never above `window_h`);
+`waiting_session_h` sums each session's own wait hours (the test-slot signal compares it with the
+touch hours, which sum per session too); `open_questions` is the owner's open board questions now,
+`{count, oldest_h}`.
 
 Trend: `up` above 1.1 x the previous value, `down` below 0.9 x, `flat` otherwise, `n/a` when the
 previous window has no data for it.
@@ -81,6 +93,8 @@ import re
 import statistics
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -144,6 +158,11 @@ SIGNALS = {
     ),
 }
 ISO = "%Y-%m-%dT%H:%M:%SZ"
+# seconds a source may take before it becomes a gap line; the sources run side by side
+SOURCE_BUDGET_S = {"sampler": 30.0, "github": 50.0, "sessions": 20.0, "zentrale": 30.0}
+GH_POOL = 8  # gh calls at once over every repo (GitHub limits concurrent requests)
+GH_LIVE_TTL_S = 300  # today's merges and the open PRs
+GH_PAST_TTL_S = 86400  # whole past days: their merged PRs no longer change
 
 
 def iso(ts: datetime | None) -> str | None:
@@ -312,31 +331,103 @@ def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
 # --- the build -------------------------------------------------------------------------------
 
 
+class SourceTimeoutError(Exception):
+    """A source past its budget (`SOURCE_BUDGET_S`): its gap line reads `not read (timeout)`."""
+
+
+class Later:
+    """`fn()` on a daemon thread from now on; `get()` waits until `deadline` (monotonic) at most.
+    A source past its deadline keeps running unheard and never holds the process at exit."""
+
+    def __init__(self, fn, budget: float | None = None):
+        self.deadline = None if budget is None else time.monotonic() + budget
+        self.seconds: float | None = None
+        self._done = threading.Event()
+        self._value, self._exc = None, None
+        threading.Thread(target=self._run, args=(fn,), daemon=True).start()
+
+    def _run(self, fn):
+        t0 = time.perf_counter()
+        try:
+            self._value = fn()
+        except Exception as exc:  # raised in get()
+            self._exc = exc
+        self.seconds = time.perf_counter() - t0
+        self._done.set()
+
+    def get(self):
+        wait = None if self.deadline is None else max(0.0, self.deadline - time.monotonic())
+        if not self._done.wait(wait):
+            raise SourceTimeoutError("timeout")
+        if self._exc is not None:
+            raise self._exc
+        return self._value
+
+
 class Gather:
-    """Each source read once; a failure is one gap line and `None`."""
+    """Each source read once; a failure is one gap line and `None`. `seconds` holds how long
+    each source took (a `Later`'s own run time, `None` when it timed out)."""
 
     def __init__(self):
         self.gaps: list = []
         self.sources: dict = {}
+        self.seconds: dict = {}
 
-    def read(self, name: str, fn):
+    def read(self, name: str, fn, later: Later | None = None):
+        t0 = time.perf_counter()
         try:
-            value = fn()
+            value = (later.get if later is not None else fn)()
         except Exception as exc:
+            self.seconds[name] = None if later is not None else time.perf_counter() - t0
             why = (
                 str(exc).strip().splitlines()[0][:160] if str(exc).strip() else type(exc).__name__
             )
             self.gaps.append(f"{name}: not read ({why})")
             self.sources[name] = "not read"
             return None
+        self.seconds[name] = later.seconds if later is not None else time.perf_counter() - t0
         self.sources[name] = "read"
         return value
 
 
-def _default_gh(cache: Path | None):
+def _default_gh(cache: Path | None, pool: int = GH_POOL):
+    """PRs merged in the window and the open ones, as one `flow_report.fetch_prs`, but cached in
+    two tiers: whole past UTC days (stable query text) for `GH_PAST_TTL_S`, today and the open
+    PRs for `GH_LIVE_TTL_S`. Today's search ends at the next `GH_LIVE_TTL_S` step, not at the
+    second, so its query text holds still and a second standup within that step asks GitHub
+    nothing. `pool` caps the gh calls at once across every repo the reader is called for."""
+    gate = threading.BoundedSemaphore(pool)
+
+    def gated(run):
+        def call(body: dict) -> dict:
+            with gate:
+                return run(body)
+
+        return call
+
+    past_run = gated(flow_report.gh_runner(cache, "standup-past", GH_PAST_TTL_S))
+    live_run = gated(flow_report.gh_runner(cache, "standup-live", GH_LIVE_TTL_S))
+
+    def step(ts: datetime, up: bool) -> datetime:
+        n = int(ts.timestamp()) // GH_LIVE_TTL_S + (up and ts.timestamp() % GH_LIVE_TTL_S > 0)
+        return datetime.fromtimestamp(n * GH_LIVE_TTL_S, timezone.utc)
+
     def reader(repo: str, since: datetime, until: datetime) -> list:
-        window = f"{iso(since)}..{iso(until)}"
-        return flow_report.fetch_prs(flow_report.gh_runner(cache, window), repo, since, until)
+        today = until.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = since.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        past = (
+            flow_report.fetch_prs(past_run, repo, start, today, open_prs=False, pool=pool)
+            if start < today
+            else []
+        )
+        live_since = max(today, step(since, up=False))
+        live = flow_report.fetch_prs(live_run, repo, live_since, step(until, up=True), pool=pool)
+        by = {p["number"]: p for p in past + live}
+        return [
+            by[n]
+            for n in sorted(by)
+            if by[n]["merged"] is None or since <= by[n]["merged"] <= until
+        ]
 
     return reader
 
@@ -400,15 +491,23 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
     gh_cache: Path | None = None,
     session: str | None = None,
     boards_dir: Path | None = None,
+    portfolio: bool = False,
+    budgets: dict | None = None,
+    timings: dict | None = None,
 ) -> dict:
     """The document (module docstring). Every source can be injected; a test calls no gh,
     no `claude agents` and no ticket system. `session` selects the orchestration view (module
-    docstring § Orchestration view); `boards_dir` is where it looks for that session's board."""
+    docstring § Orchestration view); `boards_dir` is where it looks for that session's board.
+    `portfolio` skips the scope: the overview of every epic, wherever the call stands. `budgets`
+    overrides `SOURCE_BUDGET_S` per source; `timings`, when given, receives each source's
+    seconds (`Gather.seconds`)."""
     until = until or datetime.now(timezone.utc).replace(microsecond=0)
     span = parse_days(since)
     w_since, p_since = until - span, until - 2 * span
     cwd = Path(cwd or Path.cwd())
     g = Gather()
+    if timings is not None:
+        g.seconds = timings
 
     crew_path = None
     if crew is None:
@@ -451,6 +550,8 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         return _branch_doc(doc, None, "--branch", g)
     if session is not None:  # before the scope: a master on a story branch keeps its view
         scoped, why = None, "session"
+    elif portfolio:
+        scoped, why = None, "--portfolio"
     else:
         if branch_name is None and not key:
             branch_name = _branch_name(cwd)
@@ -541,7 +642,8 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
         }
         return _orchestration_view(doc, g, (session, names), working, lines, ctx, cwd.name)
 
-    # flow: one build over both windows
+    # flow, github, sessions and the zentrale run side by side, each within its budget
+    # (SOURCE_BUDGET_S); their gap lines still come in this order
     def _flow():
         if log_dir is None:
             raise ValueError("flow.log_dir unset")
@@ -562,9 +664,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
             raise ValueError("no sample line in either window")
         return built
 
-    built = g.read("sampler", _flow)
-
-    # github: one fetch per repo over both windows
+    # github: one fetch per repo over both windows, the repos side by side
     def _prs():
         reader = gh_reader or _default_gh(gh_cache)
         names = repos
@@ -573,17 +673,48 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
 
             names = gh_source.repos_of(crew_path, crew)
         out = []
-        for repo in names:
-            for pr in reader(repo, p_since, until):
+        for repo, found in zip(
+            names, flow_report.pmap(lambda r: reader(r, p_since, until), names, len(names))
+        ):
+            for pr in found:
                 out.append({**pr, "repo": repo, "key": flow_report.story_key(pr, pattern)})
         return out
 
-    prs = g.read("github", _prs)
+    budget = {**SOURCE_BUDGET_S, **(budgets or {})}
+    flow_later = Later(_flow, budget["sampler"])
+    gh_later = Later(_prs, budget["github"])
+    sessions_later = None
+    if agents is None and zentrale_doc is None:
+        import worker_launch  # noqa: PLC0415
+
+        sessions_later = Later(worker_launch.sessions, budget["sessions"])
+
+    def _zentrale_slow():
+        if zentrale_doc is not None:
+            return zentrale_doc
+        live = agents
+        if sessions_later is not None:
+            try:
+                live = sessions_later.get()
+            except Exception:  # the sessions gap says it
+                live = None
+        from command_center import zentrale  # noqa: PLC0415
+
+        return zentrale.build(
+            fast=False, until=until, cwd=cwd, board=board, tickets=tickets, agents=live or []
+        )
+
+    zentrale_later = Later(_zentrale_slow, budget["zentrale"])
+
+    built = g.read("sampler", _flow, flow_later)
+    prs = g.read("github", _prs, gh_later)
 
     # sessions, red rows, locks, accounts
     # a session list that was not read is no empty crew: utilization and orchestration stay null
-    sessions_read = _sessions()
-    zd = g.read("zentrale", lambda: _zentrale(False)) or {}
+    if sessions_later is not None:
+        agents = g.read("sessions", worker_launch.sessions, sessions_later)
+    sessions_read = agents is not None or zentrale_doc is not None
+    zd = g.read("zentrale", _zentrale_slow, zentrale_later) or {}
     sections = zd.get("sections") or {}
     sessions = (sections.get("working") or []) if sessions_read else None
 
@@ -1111,17 +1242,22 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
         "free": None if busy is None or limit is None else max(0, int(limit) - busy),
         "source": "zentrale.working · worker_launch.cap_limits",
     }
-    # a crew member's session is a companion, not an epic's master (flow_intervals.member_names)
+    # a crew member's session is a companion, not an epic's master (flow_intervals.member_names);
+    # a master counts as a build master only when it leads an epic (the question is how many epics
+    # are being built), every other master stands apart as `other_masters`
     members = fi.member_names(ctx["crew"])
     heads = None if sessions is None else [e for e in sessions if e.get("role") == "master"]
-    masters = None if heads is None else [e for e in heads if e["name"].casefold() not in members]
+    rest = None if heads is None else [e for e in heads if e["name"].casefold() not in members]
+    masters = None if rest is None else [e for e in rest if _leads_epic(ctx, e["name"])]
     out["build_masters"] = {
         "used": None if masters is None else len(masters),
         "limit": None,
         "free": None,
-        "companions": None if heads is None else len(heads) - len(masters),
-        "source": "zentrale.working without crew members (flow_intervals.member_names);"
-        " no crew key for a limit",
+        "other_masters": None if rest is None else len(rest) - len(masters),
+        "companions": None if heads is None else len(heads) - len(rest),
+        "source": "zentrale.working: masters with a board line `epic` or a name after"
+        " naming.master, without crew members (flow_intervals.member_names); no crew key for a"
+        " limit",
     }
     if masters is not None:
         g.gaps.append("build masters: no limit (no crew key)")
@@ -1162,9 +1298,9 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
         "selected_without_master": _selected_without_master(ctx),
     }
     built = ctx["built"]
-    waits, touch = None, None
+    waits, session_waits, touch = None, None, None
     if built is not None:
-        waits = {}
+        spans: dict = {}
         for r in built["intervals"]:
             if r["kind"].startswith("waiting:"):
                 on = (
@@ -1172,11 +1308,16 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
                     if r["kind"] in ("waiting:ci", "waiting:lock")
                     else (r.get("waiting_on") or r["kind"][len("waiting:") :])
                 )
-                h = fi._clip_h(r, s, u)
-                if h > 0:
-                    waits[on] = round(waits.get(on, 0.0) + h, 1)
+                a, b = max(fi.parse_ts(r["start"]), s), min(fi.parse_ts(r["end"]), u)
+                if b > a:
+                    spans.setdefault(on, {}).setdefault(r.get("who"), []).append((a, b))
+        waits = {on: _r(_union_h([x for v in by.values() for x in v])) for on, by in spans.items()}
+        session_waits = {on: _r(sum(map(_union_h, by.values()))) for on, by in spans.items()}
         touch = _r(sum(fi._clip_h(r, s, u) for r in built["intervals"] if r["kind"] == "working"))
     out["waiting_h"] = waits
+    out["waiting_session_h"] = session_waits
+    out["window_h"] = _r(fi.hours(s, u))
+    out["open_questions"] = _open_questions(ctx)
     out["touch_h"] = touch
     eff = None
     if built is not None:
@@ -1199,6 +1340,46 @@ def _utilization(ctx) -> dict:  # noqa: PLR0915
         rounds = statistics.median(heads) if heads else None
     out["ci_rounds"] = rounds
     return out
+
+
+def _union_h(spans: list) -> float:
+    """Hours covered by at least one of `spans` (`(start, end)`): overlaps count once."""
+    total, cur = 0.0, None
+    for a, b in sorted(spans):
+        if cur and a <= cur[1]:
+            cur[1] = max(cur[1], b)
+            continue
+        if cur:
+            total += fi.hours(cur[0], cur[1])
+        cur = [a, b]
+    return total + (fi.hours(cur[0], cur[1]) if cur else 0.0)
+
+
+def _open_questions(ctx) -> dict | None:
+    """The owner's open board questions now: how many, and the age of the oldest (`since`)."""
+    if not ctx["bd"]:
+        return None
+    ages = [
+        fi.hours(t, ctx["until"])
+        for t in (fi.parse_ts(q.get("since") or q.get("ts")) for q in ctx["bd"]["questions"])
+        if t
+    ]
+    return {"count": len(ctx["bd"]["questions"]), "oldest_h": _r(max(ages)) if ages else None}
+
+
+def _master_name_re(crew: dict) -> re.Pattern:
+    """The crew's `naming.master` template (`<word>-<number>`) as a regex."""
+    naming = {**crew_mod.DEFAULTS["naming"], **(crew.get("naming") or {})}
+    parts = re.split(r"(<word>|<number>|<key>)", str(naming["master"]))
+    fill = {"<word>": r"[A-Za-z][A-Za-z0-9-]*?", "<number>": r"\d+", "<key>": naming["key"]}
+    return re.compile("".join(fill.get(x, re.escape(x)) for x in parts), re.IGNORECASE)
+
+
+def _leads_epic(ctx, name: str) -> bool:
+    """A master leads an epic: its board line names one, or its name follows `naming.master`."""
+    if any(x.get("name") == name and x.get("epic") for x in ctx["lines"]):
+        return True
+    return bool(_master_name_re(ctx["crew"]).fullmatch(name or ""))
 
 
 def _selected_without_master(ctx) -> list | None:
@@ -1259,7 +1440,7 @@ def _signals(ctx) -> list:  # noqa: PLR0912  one block per rule
                 )
             )
     slot = u["test_slot"]
-    lock_h = (u["waiting_h"] or {}).get("lock")
+    lock_h = (u["waiting_session_h"] or {}).get("lock")
     touch = u["touch_h"]
     if (slot["waiting"] and len(slot["waiting"]) >= 1) or (
         lock_h is not None and touch and lock_h > LOCK_SHARE * touch
@@ -1273,7 +1454,7 @@ def _signals(ctx) -> list:  # noqa: PLR0912  one block per rule
                     "lock_h": lock_h,
                     "touch_h": touch,
                 },
-                "standup.utilization.test_slot · utilization.waiting_h.lock",
+                "standup.utilization.test_slot · utilization.waiting_session_h.lock",
             )
         )
     late = []
@@ -1471,12 +1652,15 @@ LABELS = {
         "workers": "workers",
         "build_masters": "build masters",
         "companions": "companions",
+        "other_masters": "other masters",
         "test_slot": "test slot",
         "gate_lock": "gate lock",
         "accounts": "accounts with room",
         "idle_masters": "masters idle without worker",
         "sel_no_master": "selected without master",
-        "waiting_h": "waiting hours",
+        "waiting_h": "hours someone waited (of {h} h)",
+        "open_questions": "open questions to you",
+        "oldest": "oldest",
         "efficiency": "flow efficiency",
         "ci_rounds": "CI rounds per code PR",
         "evidence": "evidence",
@@ -1526,12 +1710,15 @@ LABELS = {
         "workers": "Worker",
         "build_masters": "Bau-Master",
         "companions": "Companions",
+        "other_masters": "weitere Master",
         "test_slot": "Test-Slot",
         "gate_lock": "Gate-Lock",
         "accounts": "Konten mit Luft",
         "idle_masters": "Master idle ohne Worker",
         "sel_no_master": "Selected ohne Master",
-        "waiting_h": "Wartestunden",
+        "waiting_h": "Stunden, in denen jemand wartete (von {h} h)",
+        "open_questions": "offene Fragen an dich",
+        "oldest": "älteste",
         "efficiency": "Flow-Effizienz",
         "ci_rounds": "CI-Runden je Code-PR",
         "evidence": "Beleg",
@@ -1737,6 +1924,7 @@ def render_utilization(doc: dict, lang: str = "en") -> str:
         f"| {lab['workers']} | {_num(w['used'])} | {_num(w['limit'])} | {_num(w['free'])} |"
     )
     out.append(f"| {lab['build_masters']} | {_num(b['used'])} | n/a | n/a |")
+    out.append(f"| {lab['other_masters']} | {_num(b['other_masters'])} | - | - |")
     out.append(f"| {lab['companions']} | {_num(b['companions'])} | - | - |")
     t = u["test_slot"]
     waiters = "n/a" if t["waiting"] is None else str(len(t["waiting"]))
@@ -1759,7 +1947,15 @@ def render_utilization(doc: dict, lang: str = "en") -> str:
         if wh is None
         else (", ".join(f"{k} {v:.1f} h" for k, v in sorted(wh.items())) or "-")
     )
-    out.append(f"- {lab['waiting_h']}: {wh_text}")
+    out.append(f"- {lab['waiting_h'].format(h=_num(u['window_h']))}: {wh_text}")
+    oq = u["open_questions"]
+    oq_text = (
+        "n/a"
+        if oq is None
+        else f"{oq['count']}"
+        + (f" · {lab['oldest']} {oq['oldest_h']:.1f} h" if oq["oldest_h"] is not None else "")
+    )
+    out.append(f"- {lab['open_questions']}: {oq_text}")
     out.append(
         f"- {lab['efficiency']}: {'n/a' if u['flow_efficiency'] is None else format(u['flow_efficiency'], '.2f')} · {lab['ci_rounds']}: {_num(u['ci_rounds'])}"
     )
@@ -1806,7 +2002,11 @@ def main(argv=None) -> int:
     p.add_argument("--conversation-keys", default="")
     p.add_argument("--orchestration", action="store_true")
     p.add_argument("--session")
+    p.add_argument("--portfolio", action="store_true")
+    p.add_argument("--timings", action="store_true")
     args = p.parse_args(argv)
+    if args.key and args.key.casefold() == "all":
+        args.key, args.portfolio = None, True
     if args.orchestration and not args.session:
         print("standup.py: --orchestration needs --session ID", file=sys.stderr)
         return 2
@@ -1818,6 +2018,7 @@ def main(argv=None) -> int:
         return 2
     import ci_source  # noqa: PLC0415
 
+    timings: dict = {}
     doc = build(
         key=args.key,
         since=args.since,
@@ -1828,7 +2029,12 @@ def main(argv=None) -> int:
         conversation_keys=[k for k in args.conversation_keys.split(",") if k],
         gh_cache=Path(args.gh_cache) if args.gh_cache else ci_source.CACHE,
         session=args.session if args.orchestration else None,
+        portfolio=args.portfolio,
+        timings=timings,
     )
+    if args.timings:
+        for name, sec in timings.items():
+            print(f"{name}: {'timeout' if sec is None else f'{sec:.1f} s'}", file=sys.stderr)
     if args.md and not args.orchestration:
         sys.stdout.write(render_md(doc, args.lang))
     else:

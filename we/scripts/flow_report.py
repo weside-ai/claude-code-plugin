@@ -71,6 +71,7 @@ import re
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -181,15 +182,26 @@ def na(name: str, why: str) -> dict:
 
 
 Runner = Callable[[dict], dict]
+PART_MAX_AGE_S = 600  # a write older than this has no thread left to finish it
 
 
-def gh_runner(cache: Path | None, window: str = "") -> Runner:
+def gh_runner(cache: Path | None, window: str = "", ttl: float | None = None) -> Runner:
     """`body -> response` through `gh api graphql --input -`; with `cache`, answers are kept there
     by a hash of the body and the `window` (`<since>..<until>`) and read back instead of asked
     again: the open-PR search and the suites carry no window of their own, so another window
-    asks GitHub afresh. `run.fetched` collects each answer's fetch time (the cached file's mtime on
-    a hit), read by `command_center/ci_source.py` as its `fetched_at`."""
+    asks GitHub afresh. With `ttl` (seconds), a kept answer older than that is asked again.
+    `run.fetched` collects each answer's fetch time (the cached file's mtime on a hit), read by
+    `command_center/ci_source.py` as its `fetched_at`. Safe to call from several threads.
+    A caller that gave up on a slow call leaves its `*.part` behind; the next runner on the cache
+    removes those older than `PART_MAX_AGE_S`."""
     fetched: list = []
+    if cache is not None and cache.is_dir():
+        for part in cache.glob("*.part"):
+            try:
+                if time.time() - part.stat().st_mtime > PART_MAX_AGE_S:
+                    part.unlink()
+            except OSError:  # another runner removed it first
+                pass
 
     def run(body: dict) -> dict:
         text = json.dumps(body, sort_keys=True)
@@ -197,7 +209,7 @@ def gh_runner(cache: Path | None, window: str = "") -> Runner:
         if cache is not None:
             digest = hashlib.sha256((window + "\n" + text).encode()).hexdigest()[:20]
             hit = cache / (digest + ".json")
-            if hit.is_file():
+            if hit.is_file() and (ttl is None or time.time() - hit.stat().st_mtime <= ttl):
                 fetched.append(hit.stat().st_mtime)
                 return json.loads(hit.read_text(encoding="utf-8"))
         try:
@@ -221,7 +233,9 @@ def gh_runner(cache: Path | None, window: str = "") -> Runner:
             raise SourceMissingError(f"gh: {data['errors'][0].get('message', 'error')}")
         if hit is not None:
             hit.parent.mkdir(parents=True, exist_ok=True)
-            hit.write_text(out.stdout, encoding="utf-8")
+            part = hit.with_name(f"{hit.name}.{threading.get_ident()}.part")
+            part.write_text(out.stdout, encoding="utf-8")
+            part.replace(hit)  # a reader in another thread never sees half a file
         fetched.append(time.time())
         return data
 
@@ -252,18 +266,62 @@ def _search(run: Runner, q: str) -> list:
         after = found["pageInfo"]["endCursor"]
 
 
+def pmap(fn: Callable, items: list, pool: int = 1) -> list:
+    """`[fn(x) for x in items]` on up to `pool` daemon threads, results in order; the first
+    failure by position is raised once all ran. Daemon threads: a caller that gives up waiting
+    does not hold the process open at exit."""
+    if pool <= 1 or len(items) <= 1:
+        return [fn(x) for x in items]
+    results: list = [None] * len(items)
+    errors: list = [None] * len(items)
+    lock = threading.Lock()
+    todo = iter(range(len(items)))
+
+    def work():
+        while True:
+            with lock:
+                i = next(todo, None)
+            if i is None:
+                return
+            try:
+                results[i] = fn(items[i])
+            except Exception as exc:  # re-raised below in order
+                errors[i] = exc
+
+    threads = [threading.Thread(target=work, daemon=True) for _ in range(min(pool, len(items)))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for exc in errors:
+        if exc is not None:
+            raise exc
+    return results
+
+
 def fetch_prs(
-    run: Runner, repo: str, since: datetime, until: datetime, checks: bool = False
+    run: Runner,
+    repo: str,
+    since: datetime,
+    until: datetime,
+    checks: bool = False,
+    open_prs: bool = True,
+    pool: int = 1,
 ) -> list:
-    """Every PR merged in the window (searched one day at a time: search stops at 1,000) and
-    every open PR, each with `heads` and `suites` from its commits' Actions suites; with
-    `checks`, each head also carries `checks` (`head_checks`)."""
+    """Every PR merged in the window (searched one day at a time: search stops at 1,000) and,
+    with `open_prs`, every open PR, each with `heads` and `suites` from its commits' Actions
+    suites; with `checks`, each head also carries `checks` (`head_checks`). `pool` > 1 asks the
+    day searches and suite batches on that many threads; the result is the same."""
+    queries = [
+        f"repo:{repo} is:pr is:merged merged:{_iso(a)}..{_iso(b)}"
+        for a, b in _day_chunks(since, until)
+    ]
+    if open_prs:
+        queries.append(f"repo:{repo} is:pr is:open")
     by_number: dict = {}
-    for a, b in _day_chunks(since, until):
-        for pr in _search(run, f"repo:{repo} is:pr is:merged merged:{_iso(a)}..{_iso(b)}"):
+    for found in pmap(lambda q: _search(run, q), queries, pool):
+        for pr in found:
             by_number[pr["number"]] = pr
-    for pr in _search(run, f"repo:{repo} is:pr is:open"):
-        by_number[pr["number"]] = pr
     prs = [by_number[k] for k in sorted(by_number)]
     ids, node_id = [], {}
     for pr in prs:
@@ -274,8 +332,10 @@ def fetch_prs(
                     node_id[item[field]["oid"]] = item[field]["id"]
     suites: dict = {}
     unique = list(dict.fromkeys(ids))
-    for i in range(0, len(unique), COMMIT_BATCH):
-        data = run({"query": SUITE_QUERY, "variables": {"ids": unique[i : i + COMMIT_BATCH]}})
+    batches = [unique[i : i + COMMIT_BATCH] for i in range(0, len(unique), COMMIT_BATCH)]
+    for data in pmap(
+        lambda ids: run({"query": SUITE_QUERY, "variables": {"ids": ids}}), batches, pool
+    ):
         for node in data["data"]["nodes"]:
             if node and node.get("oid"):
                 suites[node["oid"]] = node["checkSuites"]["nodes"]
@@ -1652,7 +1712,7 @@ def main(
             file=sys.stderr,
         )
         return 0
-    target = store / "reports" / f"flow-{now.strftime('%Y-%m-%d')}.md"
+    target = store / "reports" / f"flow-{crew_mod.today(top, now)}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     print(f"flow_report: wrote {target}", file=sys.stderr)

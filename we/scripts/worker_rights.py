@@ -590,7 +590,10 @@ def never(  # noqa: PLR0911, PLR0912
         for where in places:
             branch = current_branch(where)
             if branch and branch in protected_branches(where):
-                return f"main (a git push from {branch})"
+                return (
+                    f"main (a git push from {branch}: from a {branch} checkout a push runs only as "
+                    "one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment)"
+                )
         for where in [cwd, *places]:
             tag = _tags_pushed(text, where)
             if tag:

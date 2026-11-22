@@ -24,7 +24,6 @@ counted.
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
 import os
 import re
@@ -34,6 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import claude_home
+import crew
 from worker_launch import SUBAGENT, LaunchError, backend
 
 HEADER = "## Updates Log"
@@ -155,7 +155,7 @@ def append_line(text: str, line: str) -> str:
 
 def run(plan: Path, step: str, env: dict[str, str], today: str | None = None) -> str:
     """Appends the line to `plan` and returns it."""
-    date = today or datetime.datetime.now().astimezone().date().isoformat()
+    date = today or crew.today(plan.parent)
     line = f"- {date} {step} tokens: {token_text(plan, env)}"
     plan.write_text(append_line(plan.read_text(encoding="utf-8"), line), encoding="utf-8")
     return line

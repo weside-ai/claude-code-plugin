@@ -1697,19 +1697,7 @@ def _repeat_of(state, fields, now):
     return None
 
 
-def _project_config(start=None):
-    """`.weside/config.json` of the nearest directory above `start` (default the cwd) holding
-    one; {} without one or unreadable."""
-    here = Path(start or Path.cwd()).resolve()
-    for folder in (here, *here.parents):
-        path = folder / ".weside" / "config.json"
-        if path.is_file():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                return {}
-            return data if isinstance(data, dict) else {}
-    return {}
+_project_config = crew_mod.project_config
 
 
 def _asker_stamp(session, env=None, cwd=None, crew=None):
@@ -1861,7 +1849,7 @@ def cmd_ask(state, args, crew, now):
                 del line["note"]
         replaced.extend(_take_off(board, args.replace, args.key))
         qid = state.next_id("Q", board)
-        item = {"id": qid, **fields, "since": now.strftime("%Y-%m-%d"), "ts": base["ts"]}
+        item = {"id": qid, **fields, "since": crew_mod.today(now=now), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)
         return qid
 
@@ -2407,7 +2395,7 @@ def cmd_bundle(state, args, crew, now):
         raise BoardError("board.py bundle: only the coordinator bundles")
     _route(state, crew, now)
     close_merged(state, now)
-    date = now.strftime("%Y-%m-%d")
+    date = crew_mod.today(now=now)
 
     def mutate(board):
         lines = state.decisions()
