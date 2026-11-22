@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """The scheduled ticket snapshot: the ticket system's REST search → `ticket_snapshot.write`.
 
+Jira Cloud only, scheduling is external: a timer (cron, a systemd timer, the crew's loop) runs it.
+
 Usage:
   ticket_fetch.py [--jql JQL] [--board FILE] [--timeout S]
 

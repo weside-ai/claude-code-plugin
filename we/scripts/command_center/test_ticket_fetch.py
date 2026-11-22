@@ -122,6 +122,9 @@ def test_no_jql_anywhere(tmp_path, capsys, monkeypatch):
     fake = Fake()
     assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 2
     assert fake.requests == [] and "flow.tickets_jql" in capsys.readouterr().err
+    # no crew and no --board: no board to write for, nothing fetched
+    assert tf.main(["--jql", JQL], env=ENV, opener=fake) == 2
+    assert fake.requests == [] and "config: no board" in capsys.readouterr().err
 
 
 ECHO = json.dumps(
@@ -132,13 +135,13 @@ ECHO = json.dumps(
 @pytest.mark.parametrize(
     ("answer", "code"),
     [
-        (http_error(401, ECHO), 3),
-        (http_error(403, ECHO), 3),
-        (urllib.error.URLError(f"connect refused {TOKEN}"), 4),
-        (TimeoutError("timed out"), 4),
-        (http_error(503, f"<html>down {TOKEN}</html>".encode()), 5),
-        (http_error(400, ECHO), 6),
-        ({"no": "issues"}, 6),
+        (http_error(401, ECHO), 3),  # auth: credentials refused, the answer echoes them
+        (http_error(403, ECHO), 3),  # auth: the token lacks the project's permission
+        (urllib.error.URLError(f"connect refused {TOKEN}"), 4),  # network: no connection
+        (TimeoutError("timed out"), 4),  # network: no answer within --timeout
+        (http_error(503, f"<html>down {TOKEN}</html>".encode()), 5),  # server: a 5xx page
+        (http_error(400, ECHO), 6),  # refused: another status (here an invalid JQL)
+        ({"no": "issues"}, 6),  # refused: a 200 that is no search result
     ],
 )
 def test_each_failure_class_has_its_code_writes_nothing_and_leaks_no_secret(
