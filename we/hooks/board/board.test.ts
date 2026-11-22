@@ -99,7 +99,7 @@ test('news keeps items with an id and a title; an unknown kind is kept raw; an i
   expect(parseBoard('{"news":"one string"}').news).toEqual([])
   const answers = lastAnswers([
     '{"id":"N1","answer":"read","ts":"2026-10-30T18:00:00Z","session":"lead"}',
-    '{"id":"N2","answer":"discuss","ts":"2026-10-30T18:00:00Z"}',
+    '{"id":"N2","answer":"followup","ts":"2026-10-30T18:00:00Z"}',
   ].join('\n'))
   expect(unreadNews(board.news, answers).map(n => n.id)).toEqual(['N2'])
 })
@@ -214,7 +214,7 @@ test('a name running twice counts as its liveliest copy; the mode majority is co
 
 test('lastAnswers keeps the newest line per id and skips torn ones', () => {
   const text = [
-    '{"id":"Q1","answer":"discuss","ts":"2026-10-30T18:00:00Z","session":"lead"}',
+    '{"id":"Q1","answer":"followup","ts":"2026-10-30T18:00:00Z","session":"lead"}',
     '{"id":"Q1","answer":"accept","ts":"2026-10-30T18:05:00Z"}',
     '{"id":"Q2","answer":"yes","ts":"x"}',
     '{"id":"Q5","answer":"deny","ts":"2026-10-30T18:06:00Z","session":"lead"}',
@@ -234,21 +234,18 @@ test('the answers file sits beside the board file; ownName matches on the sessio
   const live = [{ name: 'lead', sessionId: 'a' }, { name: null, sessionId: 'b' }, { name: 'Orchestrator', sessionId: 'c' }]
   expect(ownName(live, 'c')).toBe('Orchestrator')
   expect(ownName(live, 'b')).toBeUndefined()
-  expect(answerPrompt('discuss', 'Q4')).toBe("Q4: let's talk about it")
-  expect(answerPrompt('discuss_asker', 'Q4')).toBe(
-    'Q4: the owner wants to talk about it. Have the question, your options and your recommendation ready in your window; the owner comes to you. Do not ask it again through the coordinator.',
+  expect(answerPrompt('followup', 'Q4')).toBe('Q4: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over.')
+  expect(answerPrompt('followup_route', 'Q4', undefined, undefined, 'lead-3 (/work/lead)')).toBe(
+    'Q4: Follow-up → tell the owner in one line: talk to lead-3 (/work/lead). Do not answer or relay it yourself.',
   )
-  expect(answerPrompt('discuss_route', 'Q4', undefined, undefined, 'lead-3 (/work/lead)')).toBe(
-    'Q4: Discuss → tell the owner in one line: talk to lead-3 (/work/lead). Do not discuss or relay it yourself.',
-  )
-  expect(answerPrompt('discuss_route', 'Q4', parseBoard('{"answer_prompts":{"discuss_route":"{id}: sprich mit {who}"}}').answerPrompts, undefined, 'x')).toBe(
+  expect(answerPrompt('followup_route', 'Q4', parseBoard('{"answer_prompts":{"followup_route":"{id}: sprich mit {who}"}}').answerPrompts, undefined, 'x')).toBe(
     'Q4: sprich mit x',
   )
   expect(answerPrompt('deny', 'Q4')).toBe('Q4: proposal denied')
   expect(answerPrompt('deny', 'Q4', parseBoard('{"answer_prompts":{"deny":"{id}: abgelehnt","read":"x"}}').answerPrompts)).toBe('Q4: abgelehnt')
-  const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', info: 7 } })).answerPrompts
+  const own = parseBoard(JSON.stringify({ answer_prompts: { accept: '{id}: Vorschlag angenommen', followup: 7 } })).answerPrompts
   expect(answerPrompt('accept', 'Q4', own)).toBe('Q4: Vorschlag angenommen')
-  expect(answerPrompt('info', 'Q4', own)).toBe('Q4: I need more information')
+  expect(answerPrompt('followup', 'Q4', own)).toBe('Q4: follow-up. Complete the question with what it lacks (options, consequences, recommendation) and offer to talk it over.')
   expect(answerPrompt('update', 'Q4', parseBoard('{"answer_prompts":{"update":"{id}: noch aktuell?"}}').answerPrompts)).toBe('Q4: noch aktuell?')
   expect(lastAnswers('{"id":"Q6","answer":"update","ts":"t"}').Q6?.answer).toBe('update')
 })
@@ -273,8 +270,8 @@ test('acceptVariantOf: a one-way merge-go with its PR is the go, a task is taken
 test('an Accept or Deny closes the id: later lines on it change nothing; legacy lines read without error', () => {
   const text = [
     '{"id":"Q1","answer":"accept","ts":"2026-11-03T10:00:00Z","session":"lead"}',
-    '{"id":"Q1","answer":"discuss","ts":"2026-11-03T10:05:00Z"}',
-    '{"id":"Q2","answer":"discuss","ts":"2026-11-03T10:00:00Z","via":"chat in lead"}',
+    '{"id":"Q1","answer":"followup","ts":"2026-11-03T10:05:00Z"}',
+    '{"id":"Q2","answer":"followup","ts":"2026-11-03T10:00:00Z","via":"chat in lead"}',
     '{"id":"Q2","answer":"deny","ts":"2026-11-03T10:01:00Z","via":"chat"}',
     '{"id":"Q2","answer":"accept","ts":"2026-11-03T10:02:00Z"}',
     '{"id":"Q3","answer":"decided","ts":"2026-11-03T10:00:00Z","via":"chat"}',

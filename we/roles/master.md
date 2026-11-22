@@ -40,8 +40,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
 - Post your questions for {human.local} on the board yourself (`board.py ask`); the answer comes
-  back to you. On a Discuss {human.local} comes to your window: have the question, your options
-  and your recommendation ready.
+  back to you. On a Follow-up complete the question with what it lacked (options, consequences,
+  recommendation) and offer {human.local} to talk it over in your window.
 - Decide two-way doors yourself and record them in the PR.
 - While your epic's plan lacks its user, metric or scope fence (L0 §Units, running epics),
   {product|the product owner} approves each story's plan before you pull it.
