@@ -159,11 +159,12 @@ def main(argv: list[str]) -> int:
     p.add_argument("body_file")
     p.add_argument("--date")
     args = p.parse_args(argv)
+    folder = Path(args.dir).expanduser()
     if args.date is None:  # a human's calendar day, in the repo's time.zone
-        args.date = crew.today(args.dir)
+        args.date = crew.today(folder)
     try:
         body = Path(args.body_file).read_text(encoding="utf-8")
-        print(write(Path(args.dir).expanduser(), body, args.date))
+        print(write(folder, body, args.date))
     except (OSError, WriteError) as exc:
         print(f"retro_write.py: {exc}", file=sys.stderr)
         return 2

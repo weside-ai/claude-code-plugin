@@ -1485,10 +1485,17 @@ def test_time_zone_reads_time_zone_from_the_project_config(tmp_path):
     assert crew.time_zone(root / "sub" / "dir", env={"TZ": "Asia/Tokyo"}).key == "Europe/Berlin"
 
 
-def test_time_zone_that_is_no_zone_warns_and_gives_utc(tmp_path, capsys):
+def test_time_zone_that_is_no_zone_warns_and_gives_utc(tmp_path, capsys, monkeypatch):
     root = _config(tmp_path, {"time": {"zone": "Mars/Olympus"}})
     assert crew.time_zone(root).key == "UTC"
     assert "time.zone 'Mars/Olympus' is no time zone" in capsys.readouterr().err
+    monkeypatch.setattr(crew, "ZoneInfo", _no_tz_database)  # a host without a tz database
+    assert crew.time_zone(root) is timezone.utc
+    assert crew.time_zone(tmp_path / "elsewhere", env={"TZ": "UTC"}) is timezone.utc
+
+
+def _no_tz_database(name):
+    raise OSError(f"no tz database for {name}")
 
 
 def test_time_zone_without_the_key_is_the_systems_else_utc(tmp_path):

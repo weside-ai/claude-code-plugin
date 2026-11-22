@@ -182,7 +182,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -489,18 +489,19 @@ def system_zone_name(env: Any = None, etc: Path = Path("/etc")) -> str:
     return next((c for c in candidates if _zone_or_none(c) is not None), "UTC")
 
 
-def time_zone(start: str | Path | None = None, env: Any = None) -> ZoneInfo:
+def time_zone(start: str | Path | None = None, env: Any = None) -> tzinfo:
     """The zone a human's calendar date is written in: `.weside/config.json` ``time.zone``,
     else the system's (``system_zone_name``). A name that is no zone warns on stderr and gives
-    UTC. Timestamps (``...Z``) and what logs compare stay UTC."""
+    UTC; a host without a tz database gets ``timezone.utc``. Timestamps (``...Z``) and what logs
+    compare stay UTC."""
     block = project_config(start).get("time")
     name = block.get("zone") if isinstance(block, dict) else None
     if name is None:
-        return ZoneInfo(system_zone_name(env))
+        return _zone_or_none(system_zone_name(env)) or timezone.utc
     zone = _zone_or_none(name)
     if zone is None:
         print(f"crew: time.zone {name!r} is no time zone; dates use UTC", file=sys.stderr)
-        return ZoneInfo("UTC")
+        return _zone_or_none("UTC") or timezone.utc
     return zone
 
 
@@ -1833,7 +1834,11 @@ def main(argv: list[str]) -> int:
 
 
 def _zone_cli(argv: list[str]) -> int:
-    print(system_zone_name() if "--system" in argv else time_zone(_opt(argv, "--from")).key)
+    print(
+        system_zone_name()
+        if "--system" in argv
+        else getattr(time_zone(_opt(argv, "--from")), "key", "UTC")
+    )
     return 0
 
 
