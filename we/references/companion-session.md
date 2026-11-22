@@ -32,6 +32,9 @@ one Shift+Tab away.
 `/we:pin` shows which account bills and switches sides by restarting with `--resume`; a live session
 cannot switch, because the profile's credential belongs to the switcher (a link to the global login
 lets the switcher write through it, so the profile stays a plain file).
+An Artifact belongs to the account that was active when it was published: the file on disk is the
+source, and the account goes next to the link; a link dead after a rotation is published anew, never
+passed again as `url`.
 
 `wclaude --start [--fresh] [--role <key>]` starts the crew's main companion (`roles.coordinator`) from a shell: in its
 `workplace`, pinned when its member sets `"pin": true`, with `--resume` of its newest transcript

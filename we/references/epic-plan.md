@@ -131,6 +131,11 @@ it; the next commit to the epic deletes it.
   and the brief is reported, never resolved silently.
 - Name a size signal you notice (more than one outcome, more stories than the epic limit) in the
   report instead of re-cutting the epic.
+- A cut that defers an approved architectural precondition is a fork: report `blocked` naming what the
+  remaining stories build instead, for the drafting session to ask that decision's owner; "still applies
+  later" is not consent to build the opposite now.
+- Every decision row attributed to a person quotes their words (question number or file); a row without
+  them stands as `open, recommendation <session>`.
 - Final message, one of:
 
   ```text

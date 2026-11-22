@@ -237,6 +237,29 @@ class TestRefusals:
         assert len(world.transitions()[0]["pr"]) == 2
         assert "merged (PRs #7, acme/lib#3)" in capsys.readouterr().out
 
+    @pytest.mark.parametrize("url", ["https://github.com/acme/lib", "../lib.git"])
+    def test_a_submodule_landed_by_fast_forward_counts_as_landed(self, world, capsys, url):
+        sub = "1" * 40
+        world.write(f"docs/plans/{KEY}-story.md", STORY + "\n### Phase 2: lib\n- **Repo:** lib\n")
+        world.write(".gitmodules", f'[submodule "lib"]\n\tpath = lib\n\turl = {url}\n')
+        world.commit("plan")
+        git(world.top, "push", "-q", "origin", "HEAD:main")
+        world.worker()
+        git(world.top, "update-index", "--add", "--cacheinfo", f"160000,{sub},lib")
+        git(world.top, "commit", "-q", "-m", "feat: pin lib")
+        merge = git(world.top, "rev-parse", "HEAD")
+        git(world.top, "push", "-q", "origin", "HEAD:main")
+        world.gh["prs"]["acme/app"][0]["mergeCommit"] = {"oid": merge}
+        world.save()
+        assert close(KEY) == 1
+        assert "refused: in_review: no merged PR in acme/lib" in capsys.readouterr().out
+        world.gh["on_default"] = {"acme/lib": [sub]}
+        world.save()
+        assert close(KEY) == 0
+        out = capsys.readouterr().out
+        assert "in_review: acme/lib landed by fast-forward at 1111111 (gitlink)" in out
+        assert len(world.transitions()) == 1
+
     def test_gh_unreadable_holds_in_review_and_guesses_nothing(self, world, capsys):
         world.write(f"docs/plans/{KEY}-story.md", STORY + "\n### Phase 2: lib\n- **Repo:** lib\n")
         world.commit("plan")

@@ -8,6 +8,9 @@ argv to $FAKE_GH_LOG.
   pr list -R R --state all [--search K | --limit N] --json F   the PRs of R; R in `fail` exits 1
   pr list --head B --state S --json F                          the own repo's PRs on B in state S
   pr view REF [-R R] --json F                                  a PR by number or URL
+  api repos/R                                                  {"default_branch": "main"}
+  api repos/R/compare/main...SHA                               status "behind" when SHA is in
+                                                               world["on_default"][R], else "diverged"
 """
 
 import json
@@ -25,6 +28,19 @@ def opt(name):
     return args[args.index(name) + 1] if name in args else None
 
 
+if args[:1] == ["api"]:
+    parts = args[1].split("/")
+    repo = "/".join(parts[1:3])
+    if repo in world.get("fail", []):
+        print("HTTP 502: gh broke", file=sys.stderr)
+        sys.exit(1)
+    if len(parts) == 3:
+        print(json.dumps({"default_branch": "main"}))
+        sys.exit(0)
+    sha = parts[4].split("...", 1)[1]
+    on = sha in world.get("on_default", {}).get(repo, [])
+    print(json.dumps({"status": "behind" if on else "diverged"}))
+    sys.exit(0)
 repo = opt("-R") or world["own"]
 if repo in world.get("fail", []):
     print("HTTP 502: gh broke", file=sys.stderr)

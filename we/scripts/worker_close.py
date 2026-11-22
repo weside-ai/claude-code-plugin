@@ -13,8 +13,11 @@ One writer for "this story's build is over". In the order it runs:
 2. **In Review.** Only when no open PR carries the key and every repo of the plan has a merged
    one: `board.py move <KEY> in_review --pr <url>…` in process, its row `by: we-worker close`
    with the session as `caller`; its `carry:` line is this script's last stdout line (the session
-   carries it, `references/ticketing.md`). Otherwise it names the open PRs and the repos without a
-   merged PR, and moves nothing. A key already In Review or later moves nothing again; its
+   carries it, `references/ticketing.md`). A repo without a merged PR still counts as landed when it
+   is a submodule of the checkout (`.gitmodules` on `origin/<default>`) and a merged PR of the
+   story moved its gitlink to a commit on that repo's default branch: a two-repo cadence lands the
+   submodule by fast-forward, without a PR of its own. Otherwise it names the open PRs and the
+   repos without a merged PR, and moves nothing. A key already In Review or later moves nothing again; its
    merged PRs after that row print as follow-ups. Without a crew file there is no transitions
    log: it says so, and the session moves the ticket with its ticketing tool.
    Two holds on top, each moving nothing and recording nothing while the teardown still runs:
@@ -83,7 +86,7 @@ import worker_supervisor as ws  # noqa: E402
 WRITER = "we-worker close"
 GH_TIMEOUT_S = 60
 RECENT = 100
-PR_FIELDS = "number,state,title,headRefName,headRefOid,url,mergedAt"
+PR_FIELDS = "number,state,title,headRefName,headRefOid,url,mergedAt,mergeCommit"
 LATER = ("in_review", "in_test", "done")
 REPORT = "WORKER-REPORT.md"
 MIRROR = re.compile(r"\n?<!-- mirror:start.*?<!-- mirror:end -->\n?", re.DOTALL)
@@ -164,6 +167,7 @@ def _shape(pr: dict, repo: str) -> dict:
         "oid": pr.get("headRefOid"),
         "url": pr.get("url") or f"https://github.com/{repo}/pull/{pr.get('number')}",
         "merged": pr.get("mergedAt"),
+        "merge": (pr.get("mergeCommit") or {}).get("oid"),
     }
 
 
@@ -195,6 +199,60 @@ def view_pr(ref: str, own: str, top: Path) -> tuple[dict | None, str | None]:
         return None, f"PR {ref}: gh pr view failed: {why or 'no object'}"
     repo = flow_report.norm_slug(data.get("url")) or own
     return _shape(data, repo), None
+
+
+def submodule_paths(top: Path, base: str, own: str) -> dict:
+    """{owner/repo: path} of every submodule `.gitmodules` on `origin/<base>` names; a relative
+    URL (`../lib.git`) resolves against `own`'s owner."""
+    text = _git(
+        top, "config", "--blob", f"origin/{base}:.gitmodules", "--get-regexp", r"^submodule\."
+    )
+    fields: dict = {}
+    for line in (text or "").splitlines():
+        name, _, value = line.partition(" ")
+        sub, _, field = name[len("submodule.") :].rpartition(".")
+        fields.setdefault(sub, {})[field] = value.strip()
+    return {
+        slug: f["path"]
+        for f in fields.values()
+        if f.get("path") and (slug := flow_report.norm_slug(_absolute(f.get("url"), own)))
+    }
+
+
+def _absolute(url: object, own: str) -> object:
+    text = str(url or "")
+    if text.startswith("../"):
+        return own.split("/", maxsplit=1)[0] + "/" + text[3:]
+    return url
+
+
+def _gitlink(top: Path, commit: str, path: str) -> str | None:
+    line = _git(top, "ls-tree", commit, "--", path) or ""
+    parts = line.split()
+    return parts[2] if len(parts) >= 3 and parts[1] == "commit" else None
+
+
+def landed_by_gitlink(ctx: dict, repo: str, merged: list) -> str | None:
+    """The commit of submodule `repo` a merged PR of the checkout moved its gitlink to, when that
+    commit lies on `repo`'s default branch; else None (gh unreadable guesses nothing)."""
+    top, own = ctx["top"], ctx["own"]
+    path = submodule_paths(top, ctx["base"], own).get(repo)
+    if not path:
+        return None
+    info, why = _gh(["api", f"repos/{repo}"], top)
+    default = info.get("default_branch") if isinstance(info, dict) and not why else None
+    if not default:
+        return None
+    for pr in merged:
+        if pr["repo"] != own or not pr.get("merge"):
+            continue
+        new = _gitlink(top, pr["merge"], path)
+        if not new or new == _gitlink(top, pr["merge"] + "^", path):
+            continue
+        cmp, why = _gh(["api", f"repos/{repo}/compare/{default}...{new}"], top)
+        if not why and isinstance(cmp, dict) and cmp.get("status") in ("behind", "identical"):
+            return new
+    return None
 
 
 def label(pr: dict, own: str) -> str:
@@ -684,6 +742,11 @@ def _in_review(
     last = state.last_rows() if state else {}
     was = (last.get(key) or {}).get("to")
     res = {"out": [], "refused": [], "carry": [], "closed": False, "last": last, "held": None}
+    for repo in list(missing):
+        oid = landed_by_gitlink(ctx, repo, merged)
+        if oid:
+            missing.remove(repo)
+            res["out"].append(f"in_review: {repo} landed by fast-forward at {oid[:7]} (gitlink)")
     if unreadable:
         res["refused"].append(
             f"in_review: gh unreadable for {', '.join(unreadable)}; nothing guessed"
