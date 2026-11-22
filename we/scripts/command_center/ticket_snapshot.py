@@ -9,7 +9,8 @@ script calls no ticket system. `write` takes that answer on stdin and writes
 `<board stem>-tickets.json` beside the board (`--board`, else the crew's board) in one atomic step:
 a temp file in the same folder, then `os.replace`, so a reader sees the old file or the new one,
 never half of one. The file is `{"schema_version": 1, "@taken": <UTC now>, <KEY>: <status name>…}`.
-There is no other write path.
+There is no other write path: `ticket_fetch.py` (the scheduled fetch from the ticket system's REST
+search) calls `write` as a function.
 
 Input shapes (`stories`): an object `{KEY: status name}`; a list of issues `[{key, fields: {status:
 {name}}}]` or `[{key, status}]`; or `{"issues": [...]}` as a search answer carries it. Anything
@@ -106,6 +107,16 @@ def read(path: Path | None, until: datetime, stale_min: float) -> tuple:
     return mapping, f"tickets: taken {taken.strftime(ISO)} ({minutes} min old)", True
 
 
+def locate(board_arg: str | None) -> tuple:
+    """`(board file or None, crew or None)` from `--board`, else the crew found from the cwd."""
+    try:
+        crew_path, crew = crew_mod.find_and_load(Path.cwd())
+    except crew_mod.CrewError:
+        crew_path, crew = None, None
+    board, _ = fi.locate_board(SimpleNamespace(board=board_arg), Path.cwd(), crew_path, crew)
+    return board, crew
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="ticket_snapshot.py", description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -117,11 +128,7 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"ticket_snapshot: refused, nothing written ({exc})", file=sys.stderr)
         return 2
-    try:
-        crew_path, crew = crew_mod.find_and_load(Path.cwd())
-    except crew_mod.CrewError:
-        crew_path, crew = None, None
-    board, _ = fi.locate_board(SimpleNamespace(board=args.board), Path.cwd(), crew_path, crew)
+    board, _ = locate(args.board)
     if board is None:
         print("ticket_snapshot: no board (no crew, no --board), nothing written", file=sys.stderr)
         return 2
