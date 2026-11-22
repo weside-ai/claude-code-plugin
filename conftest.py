@@ -28,6 +28,7 @@ os.environ["WE_STATE_LEAKS"] = str(_LEAKS)
 # the launcher's resource rule reads the host's cgroup, meminfo and loadavg: on a busy host every
 # start in a test would wait in the queue; an empty stand-in for `/` reads `n/a` (counts as room)
 os.environ["WE_WORKER_HOST_ROOT"] = tempfile.mkdtemp(prefix="we-host-root-")
+os.environ["WE_TEST_RUN"] = "1"  # the launcher warns on a host root set outside a test run
 
 
 @pytest.fixture

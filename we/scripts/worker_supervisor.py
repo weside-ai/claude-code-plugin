@@ -659,7 +659,7 @@ def status_records(
                 "window": window,
                 "resume": resume,
                 "waits": "test-slot" if not gone and pid in slot_waits else None,
-                "lane": wl.lane_of(state, row.get("name")),
+                "lane": wl.lane_of(state, row.get("name"), row.get("cwd")),
             }
         )
     return out
@@ -694,18 +694,35 @@ def status_lines(
         if r["resume"]:
             when = "the reset" if r["end"] == "usage-limit" else "the login is back"
             out.append(f"  resume after {when}: {r['resume']}")
-    for pos, q in enumerate(queued(state), 1):
+    positions = dict.fromkeys(wl.LANES, 0)  # each lane is its own queue
+    for q in queued(state):
+        lane = wl.entry_lane(q)
+        positions[lane] += 1
         if key and key != q.get("name"):
             continue
         since = dt.datetime.fromtimestamp(q.get("queued_at", now), dt.timezone.utc)
         until = dt.datetime.fromtimestamp(q.get("deadline", now), dt.timezone.utc)
-        waiter = "" if waiter_lives(q) else " waiter-gone"
+        waiter = "" if waiter_lives(q) else " dead waiter"
         out.append(
-            f"queued {q.get('name')} position={pos} since={since:%H:%M} until={until:%H:%M}"
-            f" tree={q.get('tree')} starter={q.get('starter') or '-'}"
-            f" lane={wl.entry_lane(q)}{waiter}"
+            f"queued {q.get('name')} position={positions[lane]} since={since:%H:%M}"
+            f" until={until:%H:%M} tree={q.get('tree')} starter={q.get('starter') or '-'}"
+            f" lane={lane}{waiter}"
+        )
+    if any(not waiter_lives(q) for q in queued(state)):
+        out.append(
+            "  a dead waiter starts nothing: `we-worker status --restart-waiters` restarts it"
         )
     return out
+
+
+def restart_waiters(state: Path, spawn: Callable[[str], int] | None = None) -> list[str]:
+    """Start a new waiter for every queued start whose waiter is dead (a crash, a pod restart);
+    the entry keeps its place (`queued_at`) and deadline. Returns the names."""
+    spawn = spawn_waiter if spawn is None else spawn
+    names = [str(q["name"]) for q in queued(state) if not waiter_lives(q)]
+    for name in names:
+        spawn(name)
+    return names
 
 
 ROOM_PREFIX = "room for both lanes: "
@@ -1196,6 +1213,9 @@ def _status_verb(args: argparse.Namespace, state: Path) -> int:
     except ValueError:
         print("we-worker status: claude agents --json printed no JSON", file=sys.stderr)
         return 1
+    if args.restart_waiters:
+        for name in restart_waiters(state):
+            print(f"we-worker: the waiter of the queued start {name} restarted")
     if args.json:
         records = status_records(rows, args.key, projects_dir(), state, time.time())
         print(json.dumps({"schema_version": STATUS_SCHEMA_VERSION, "workers": records}))
@@ -1350,6 +1370,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("status")
     p.add_argument("--key")
     p.add_argument("--json", action="store_true", help="the workers as objects (schema_version)")
+    p.add_argument("--restart-waiters", action="store_true", help="a new waiter per dead one")
     p = sub.add_parser("queue")
     p.add_argument("--name", required=True)
     p.add_argument("--tree", required=True)

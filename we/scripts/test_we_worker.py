@@ -441,6 +441,17 @@ def test_a_start_without_room_waits_in_its_lane_without_queue(tmp_path):
     assert "queued (position 1 of the build lane" in proc.stdout
     status = run(project, env, "status").stdout.splitlines()
     assert status[-1].startswith("room for both lanes: starts wait: working set 86%")
+    # the waiter's rerun without room hands the 4 back and queues no second entry
+    queue = tmp_path / "home/.claude/we-state/workers/queue"
+    entry = (queue / "AC-12-impl.json").read_text()
+    rerun = run(project, {**env, "WE_WORKER_QUEUE_TURN": "AC-12-impl"}, "AC-12-impl", "--bg", GO)
+    assert rerun.returncode == 4 and "queued (position" not in rerun.stdout, rerun.stderr
+    assert sorted(p.name for p in queue.glob("*.json")) == ["AC-12-impl.json"]
+    assert (queue / "AC-12-impl.json").read_text() == entry
+    # no waiter runs (WE_WORKER_NO_SUPERVISOR): status names it, --restart-waiters starts one
+    assert any(x.endswith(" dead waiter") for x in status)
+    restarted = run(project, env, "status", "--restart-waiters").stdout
+    assert "the waiter of the queued start AC-12-impl restarted" in restarted
     window = run(project, env, "AC-13-win", GO)  # a window cannot wait in the queue
     assert window.returncode == 4 and "start it with --bg" in window.stderr
     assert run(project, env, "stop", "AC-12-impl").returncode == 0

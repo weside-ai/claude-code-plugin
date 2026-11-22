@@ -571,6 +571,16 @@ def test_a_name_already_queued_refuses_unless_its_waiter_is_gone(queue):
     assert ws._may_try(queue["state"], "AC-4-u")  # a build entry never holds the utility lane
     ws._drop(queue["state"], "AC-1-a")
     assert ws._may_try(queue["state"], "AC-3-c")  # AC-2-b, without a waiter, is skipped
+    # status: the position counts within its lane; a dead waiter is named, and restarted
+    lines = ws.status_lines([], None, queue["state"], queue["state"], queue["clock"]())
+    queued = {x.split()[1]: x for x in lines if x.startswith("queued ")}
+    assert "position=1" in queued["AC-2-b"] and "position=2" in queued["AC-3-c"]
+    assert "position=1" in queued["AC-4-u"] and "lane=utility" in queued["AC-4-u"]
+    assert queued["AC-2-b"].endswith(" dead waiter") and "dead" not in queued["AC-3-c"]
+    assert "--restart-waiters" in lines[-1]
+    spawned = []
+    assert ws.restart_waiters(queue["state"], spawned.append) == ["AC-2-b", "AC-4-u"]
+    assert spawned == ["AC-2-b", "AC-4-u"]
 
 
 def test_a_waiter_tries_past_entries_only_their_own_repo_limit_may_hold(queue):
