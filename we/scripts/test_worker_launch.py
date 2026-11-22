@@ -234,13 +234,18 @@ def test_a_claude_bg_template_states_the_worker_env_as_settings(env, monkeypatch
 
 
 def test_a_launcher_template_brings_its_own_settings(env, tmp_path):
-    """`we-worker` writes the worker's settings itself; the launch adds none."""
+    """`we-worker` writes the worker's settings itself; the launch adds none. `{lane}` hands a
+    utility start on as `--utility` (Claude Review on #320: the master's fix rounds started in
+    the build lane) and vanishes for a build start."""
     stub = tmp_path / "bin" / "we-worker"
     stub.write_text((tmp_path / "bin" / "claude").read_text())
     stub.chmod(0o755)
-    env["configure"]("we-worker --bg -n {name} {brief}")
+    env["configure"]("we-worker --bg -n {name} {lane} {brief}")
     wl.launch(env["wt"], "KEY-1-w1", env["brief"])
-    assert "--settings" not in _launch_call(env)["argv"]
+    assert not {"--settings", "--utility", ""} & set(_launch_call(env)["argv"])
+    wl.launch(env["wt"], "KEY-1-w2", env["brief"], utility=True)
+    argv = [c["argv"] for c in _calls(env) if "--bg" in c["argv"]][-1]
+    assert argv[argv.index("KEY-1-w2") + 1] == "--utility"
 
 
 def test_a_pinned_lead_reads_and_starts_on_the_global_supervisor(env, monkeypatch):
@@ -522,8 +527,9 @@ def test_a_refused_stop_names_the_pid(env, monkeypatch):
 
 def test_an_agent_the_template_cannot_carry_is_named(env, capsys):
     env["configure"]("claude --bg -n {name} {brief}")
-    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-high")
-    assert "--agent we:dev-high is dropped" in capsys.readouterr().err
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-high", utility=True)
+    err = capsys.readouterr().err
+    assert "--agent we:dev-high is dropped" in err and "--utility is dropped" in err
 
 
 def test_checkpoint_pushes_the_tracked_changes_to_a_wip_branch(env, tmp_path, monkeypatch):

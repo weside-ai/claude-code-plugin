@@ -11,7 +11,8 @@ check and `/we:accept` read it through `worker_launch.py backend`.
 Contract and Lead steps: `references/worker-dispatch.md` § Worker launch backend.
 
 Template grammar: split like a shell line (`shlex`), then a token that is exactly `{name}`,
-`{agent}` or `{brief}` becomes that value as one argv element. Any other `{…}` refuses, so is a
+`{agent}` or `{brief}` becomes that value as one argv element, `{lane}` becomes `--utility` for a
+utility start (`launch --utility`) and vanishes for a build start. Any other `{…}` refuses, so is a
 placeholder inside a token (`--x={name}`). `{name}` and `{brief}` are required. `{brief}` is the
 one-line prompt `Read <git-dir>/we-brief.md and follow it.`: the brief never passes through a
 shell. The command runs without a shell, cwd = the worker's worktree.
@@ -121,7 +122,7 @@ Usage:
                                                    name kept) or `unrecoverable`; writes nothing
                                                    without --apply, which appends one line per
                                                    recovered worker with `backfill: <source>`
-  worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
+  worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>] [--utility]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
                                                    with --worktree it removes marker and brief;
                                                    several sessions of that name all stop (ids
@@ -148,7 +149,7 @@ import sys
 import time
 from pathlib import Path
 
-PLACEHOLDERS = ("name", "agent", "brief")
+PLACEHOLDERS = ("name", "agent", "brief", "lane")
 REQUIRED = ("name", "brief")
 SUBAGENT = "subagent"
 MARKER = "we-worker.json"
@@ -250,12 +251,14 @@ def validate(
     return tokens
 
 
-def render(tokens: list[str], values: dict[str, str]) -> list[str]:
+def render(tokens: list[str], values: dict[str, str | None]) -> list[str]:
+    """`tokens` with each placeholder replaced by its value; a value None drops the token."""
     argv = []
     for token in tokens:
         key = token[1:-1] if token.startswith("{") and token.endswith("}") else None
         if key in values:
-            argv.append(values[key])
+            if values[key] is not None:
+                argv.append(values[key])
         else:
             argv.append(token)
     return argv
@@ -670,7 +673,10 @@ def resource_text(rows: list[dict]) -> str:
 def busy_by_lane(rows: list[dict], state: Path) -> dict[str, int]:
     """The busy workers per lane: `status` busy (an interactive row only when `is_worker` says so:
     a companion or master is busy whenever it answers its human), never a row whose `state` is
-    `done`: its report is in and it works no more, even before the idle stop ends it."""
+    `done`: its report is in and it works no more, even before the idle stop ends it. The build
+    lane takes no memory check for the room such a worker still holds: the supervisor stops it
+    after `workers.idle_stop_minutes` (`worker_supervisor.py`), which bounds the resident ones,
+    and a load or memory brake on build starts would stall new work on a busy shared host."""
     counts = dict.fromkeys(LANES, 0)
     for r in rows:
         if r.get("status") != "busy" or r.get("state") == "done":
@@ -1718,7 +1724,30 @@ def brief_hook(path: Path) -> str:
     return "printf '%s\\n' " + shlex.quote(json.dumps(payload, ensure_ascii=False))
 
 
-def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None) -> Path:
+def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> None:
+    """Refuse a template with `{agent}` but no agent; warn when it drops `--agent` or `--utility`."""
+    if "{agent}" in tokens and not agent:
+        raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
+    if agent and "{agent}" not in tokens:
+        print(
+            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
+            "the worker starts without its effort and model; add `--agent {agent}` to the template",
+            file=sys.stderr,
+        )
+    if utility and "{lane}" not in tokens:
+        print(
+            "worker_launch: warning: --utility is dropped: the template has no {lane}, so its "
+            "launcher counts the worker in the build lane; add `{lane}` to the template",
+            file=sys.stderr,
+        )
+
+
+def launch(
+    worktree: Path, name: str, brief_file: Path, agent: str | None = None, utility: bool = False
+) -> Path:
+    """Start one worker through the template; `utility` starts it in the utility lane: `{lane}`
+    becomes `--utility` (a `we-worker` template counts it there), and a `claude --bg` worker's
+    settings carry the lane."""
     try:
         brief = brief_file.read_text()
     except OSError as exc:
@@ -1731,14 +1760,8 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
             'agents.worker_launch is `subagent`: dispatch with Agent(isolation="worktree")', 2
         )
     tokens = validate(template)
-    if "{agent}" in tokens and not agent:
-        raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
-    if agent and "{agent}" not in tokens:
-        print(
-            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
-            "the worker starts without its effort and model; add `--agent {agent}` to the template",
-            file=sys.stderr,
-        )
+    _template_carries(tokens, agent, utility)
+    lane = UTILITY if utility else BUILD
     gd = git_dir(worktree)
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
@@ -1748,11 +1771,23 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         f"Lead: {lead} — send your report as one SendMessage to it; "
         f"your plain text never reaches it.\n\n{brief.rstrip()}\n"
     )
-    marker = {"name": name, "key": key, "lead": lead, "agent": agent, "launched_at": time.time()}
+    marker = {
+        "name": name,
+        "key": key,
+        "lead": lead,
+        "agent": agent,
+        "lane": lane,
+        "launched_at": time.time(),
+    }
     marker_path.write_text(json.dumps(marker, indent=2) + "\n")
     argv = render(
         tokens,
-        {"name": name, "agent": agent or "", "brief": f"Read {brief_path} and follow it."},
+        {
+            "name": name,
+            "agent": agent or "",
+            "brief": f"Read {brief_path} and follow it.",
+            "lane": "--utility" if utility else None,
+        },
     )
     if Path(argv[0]).name == "claude" and "--bg" in argv and "--settings" not in argv:
         # a `claude --bg` session takes the daemon's environment, not this one: the worker's
@@ -1762,7 +1797,7 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         settings_path = gd / SETTINGS
         off = ticketing_unneeded(brief, worktree)  # read on the worker's login, as `claude_env`
         doc = turn_off(
-            {"env": worker_rights.worker_env(key, starter=lead, name=name)},
+            {"env": worker_rights.worker_env(key, starter=lead, name=name, lane=lane)},
             off,
             installed_plugin_ids(claude_env()),
         )
@@ -2013,6 +2048,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--name", required=True)
     p.add_argument("--brief-file", type=Path, required=True)
     p.add_argument("--agent")
+    p.add_argument("--utility", action="store_true")
     p = sub.add_parser("stop")
     p.add_argument("--name", required=True)
     p.add_argument("--worktree", type=Path)
@@ -2197,7 +2233,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd in ("tree", "marker"):
             code = _tree_verbs(args)
         elif args.cmd == "launch":
-            marker = launch(args.worktree.resolve(), args.name, args.brief_file, args.agent)
+            marker = launch(
+                args.worktree.resolve(), args.name, args.brief_file, args.agent, args.utility
+            )
             print(f"launched: {args.name} · marker {marker}")
         elif args.cmd == "stop":
             ids = stop(args.name, args.worktree.resolve() if args.worktree else None)

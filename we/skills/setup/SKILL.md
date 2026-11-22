@@ -182,8 +182,8 @@ the crew process L0 (`${CLAUDE_PLUGIN_ROOT}/process/L0.md`) and `${CLAUDE_PLUGIN
    (one `human`, or `humans` with their board signals, labels and `in_test`, and how each human
    starts): follow `references/humans.md` beside this skill. Check it with
    `crew.py validate --strict` (it names every key it refuses, an unknown one too). Propose
-   `launch.worker` with `{agent}`, so the worker's effort applies: `we-worker {name} --bg --agent {agent}
-   {brief}` (§ 5 installs `we-worker` next to `wclaude`; a user who declines it there gets this line
+   `launch.worker` with `{agent}`, so the worker's effort applies, and `{lane}`, so a fix round
+   starts in the utility lane: `we-worker {name} --bg {lane} --agent {agent} {brief}` (§ 5 installs `we-worker` next to `wclaude`; a user who declines it there gets this line
    rewritten to `claude --bg -n {name} --agent {agent} {brief}`); the user corrects it (§ Worker launch backend of
    `references/worker-dispatch.md` lists the placeholders). Ask once: "Should every start offer
    bypass mode (Shift+Tab), while the start mode stays your `permissions.defaultMode`?" yes →

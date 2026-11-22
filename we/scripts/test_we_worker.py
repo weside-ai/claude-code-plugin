@@ -377,12 +377,9 @@ def test_the_worker_env_names_its_starter_as_answer_address(tmp_path):
 
 def test_a_worker_knows_its_name_and_lane_for_its_signature_and_pool(tmp_path):
     """A worker signs its commits and PRs with `WE_WORKER_NAME` (the owner, 22.11.: "von wem ein
-    PR ist"), and `--utility` puts it in the utility lane: counted against its own cap even when
-    the build lane is full."""
-    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
-    project, env = setup(tmp_path, rows=busy)
+    PR ist"), and `--utility` reaches its settings file and window as `WE_WORKER_LANE`."""
+    project, env = setup(tmp_path)
     env["WE_WORKER_STARTER"] = "EPIC-1-master"
-    assert run(project, env, "AC-12-impl", "--bg", GO).returncode == 3
     proc = run(project, env, "AC-12-fix", "--bg", "--utility", GO)
     assert proc.returncode == 0, proc.stderr
     (call,) = started(tmp_path)
@@ -396,6 +393,30 @@ def test_a_worker_knows_its_name_and_lane_for_its_signature_and_pool(tmp_path):
     run(project, env, "AC-12-win", "--utility", GO)
     (window,) = [c["tmux"] for c in calls(tmp_path) if c.get("tmux", [""])[0] == "new-window"]
     assert "WE_WORKER_NAME=AC-12-win WE_WORKER_LANE=utility" in window[-1]
+
+
+def test_a_queued_utility_start_waits_in_its_own_lane_of_the_queue(tmp_path):
+    """`we-worker --utility --queue` hands its lane to the queue: the entry carries `lane: utility`
+    and its position counts only the utility lane, so a queued build start ahead holds it not."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    busy.append({"id": "u0", "name": "U-1-fix", "status": "busy", "pid": 1})
+    project, env = setup(tmp_path, rows=busy)
+    workers = tmp_path / "home/.claude/we-state/workers"
+    workers.mkdir(parents=True, exist_ok=True)
+    (workers / "pool.json").write_text(json.dumps({"max_utility_sessions": 1}))
+    (workers / "U-1-fix.settings.json").write_text(
+        json.dumps({"env": {"WE_WORKER_LANE": "utility"}})
+    )
+    proc = run(project, env, "AC-12-impl", "--bg", "--queue", GO)
+    assert "queued (position 1 of the build lane" in proc.stdout, proc.stderr
+    proc = run(project, env, "AC-12-fix", "--bg", "--utility", "--queue", GO)
+    assert "queued (position 1 of the utility lane" in proc.stdout, proc.stderr
+    entry = json.loads((workers / "queue" / "AC-12-fix.json").read_text())
+    assert entry["lane"] == "utility"
+    assert "lane=utility" in run(project, env, "status").stdout
+    for name in ("AC-12-impl", "AC-12-fix"):
+        assert run(project, env, "stop", name).returncode == 0
+    assert not started(tmp_path)
 
 
 def test_a_develop_brief_starts_without_the_ticketing_plugin(tmp_path):

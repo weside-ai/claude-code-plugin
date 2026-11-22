@@ -536,6 +536,10 @@ def test_a_name_already_queued_refuses_unless_its_waiter_is_gone(queue):
     ws.enqueue(queue["state"], "AC-2-b", "/tree", [], None, None, 60, queue["clock"]())
     queue["put"]("AC-3-c", queue["clock"]())
     assert not ws._may_try(queue["state"], "AC-3-c")  # AC-1-a waits ahead
+    ws.enqueue(
+        queue["state"], "AC-4-u", "/tree", [], None, None, 60, queue["clock"](), lane="utility"
+    )
+    assert ws._may_try(queue["state"], "AC-4-u")  # a build entry never holds the utility lane
     ws._drop(queue["state"], "AC-1-a")
     assert ws._may_try(queue["state"], "AC-3-c")  # AC-2-b, without a waiter, is skipped
 

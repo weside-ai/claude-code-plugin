@@ -283,7 +283,8 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
   - A code PR with a `plan: waits for <docs PR> and Selected` line (§ Build) is armed only once that
     docs PR merged and the story is Selected and pulled; no check holds it until then.
   - **Card hit** (and every one-way PR): start a security card worker on the head
-    (`<KEY>-card`, through the crew's launcher like any worker, brief per
+    (`<KEY>-card`, `worker_launch.py launch --utility`, `references/worker-dispatch.md`
+    § Worker launch backend; brief per
     `references/worker-dispatch.md` § Card worker); it writes its verdict to a file, you post it
     unchanged. It is input for the people who read the PR, not a condition of the arm.
   - **One-way:** post the T2 panel and the card verdict, then post the merge question yourself with
@@ -296,7 +297,8 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
   - Drafts: `/we:pr` step 4; a draft is no merge brake. Non-destructive migrations auto-merge serially
     (owner 03.10.2026): the second PR arms only after the first landed, merging `origin/<default>`,
     checking for one migration head, and pushing first. A fix round on an armed PR starts with
-    `gh pr merge <PR> --disable-auto`.
+    `gh pr merge <PR> --disable-auto` and its worker with `launch --utility`
+    (`references/worker-dispatch.md` § Worker launch backend).
 - **Auto retro** only when you can name a concrete, new friction of the run that an instruction change
   would prevent (a wrong assumption the files should have held, a script that misled, a repeated user
   correction); round counts alone are no reason (owner 28.10.2026). Then dispatch it per

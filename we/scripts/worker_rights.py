@@ -1375,7 +1375,7 @@ def worker_env(
     after the worker ended still lands; "" when the launcher knows no name. `WE_HUMAN` passes on
     when the launcher has it. `WE_WORKER_NAME` is the worker's own name and `WE_WORKER_LANE` the
     lane it started in (`build` or `utility`, `worker_launch.capacity`): the name signs the worker's
-    commits and PRs (`references/worker-dispatch.md` § Signature), the lane counts it in its pool.
+    commits and PRs (`references/worker-dispatch.md` § Dev-only worker contract), the lane counts it in its pool.
     Never a credential: this block is written to a file."""
     env = os.environ if environ is None else environ
     doc = {

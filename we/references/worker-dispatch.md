@@ -78,7 +78,8 @@ template in force; the master's boot check and `/we:accept` read it there.
 - A command template: each worker is a session of its own, billed to the login the command starts
   it on. Placeholders, each a token of its own: `{name}` (required), `{brief}` (required; becomes
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
-  {agent}`, so its effort and model apply). Example: `"claude --bg -n {name} --agent {agent}
+  {agent}`, so its effort and model apply), `{lane}` (`--utility` for `launch --utility`, nothing
+  for a build start; a `we-worker` template only). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
   the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
   a `--bg` worker in bypass (`default`: no `--permission-mode`), a window worker keeps its default
@@ -108,7 +109,7 @@ Every denial of the worker rights brake is one line in `<state dir>/brakes.jsonl
 After the check `we-worker` refuses a start (exit 3, nothing starts) while a queued start of any
 repo waits ahead of it, while the busy workers on the machine (background sessions and window
 workers; interactive companions and masters never count, nor a worker whose state is `done`: its
-report is in and it works no more) reach the one worker pool limit, or while
+report is in and it works no more) reach the lane's pool limit (§ Utility lane below), or while
 no account in the rotation (`cswap list --json`) has room: 7d under 95 % and 5h at or under
 `max_active_5h_percent`; one account with room lets the start through, the rotation
 switches to it. Without the list the active account's 5h decides; without `cswap` the check is
@@ -139,8 +140,8 @@ inactive_file`) at least `utility_min_free_mib` (2048), `memory.pressure` `full 
 of the machine. A file it cannot read (no cgroup v2, no memory limit) counts as met and shows
 `n/a`; the refusal names the missed condition with its value and threshold, `we-worker status` ends
 with the lane's room. A worker belongs to the lane it started in (`WE_WORKER_LANE` in its settings
-file, `lane` in its marker and `launched.jsonl` line). Brief a utility worker the master starts with
-`--utility`; a story's build worker never.
+file, `lane` in its marker and `launched.jsonl` line). The master starts a utility worker with
+`worker_launch.py launch --utility` (the template's `{lane}`); a story's build worker never.
 
 ### Worker rights
 
@@ -225,7 +226,8 @@ With a template, the Lead:
    or ci-review worker launches in the existing tree. `claude --bg` refuses an untrusted directory;
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
-   --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`). It puts `Lead: <this session's name>` as the brief's first line
+   --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`;
+   `--utility` for a fix round, card, lens or review worker, § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
@@ -389,7 +391,7 @@ children included, the moment verification ends.
 ## Card worker
 
 A check an owner's card assigns to a fresh worker (a `trust-loosening` signature, a seam or migration check, an
-acceptance walk; L0 § Against the waterfall) runs as a read-only worker the master starts like any other
+acceptance walk; L0 § Against the waterfall) runs as a read-only worker the master starts with `launch --utility`
 (§ Worker launch backend). Its brief carries, under the four headings of § Name and brief:
 
 - **The card:** the output of `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/render_process.py --role <role>` in the repo, pasted
