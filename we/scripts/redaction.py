@@ -24,6 +24,8 @@ PATTERNS = (
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
     # a token-shaped rest (RFC 6750 token68), so prose like "Bearer authentication" stays
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*"),
+    # HTTP Basic credentials (base64 of user:token, at least one digit, + or /), so "Basic setup" stays
+    re.compile(r"(?i)\bBasic\s+(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{16,}=*"),
     re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[\"']?[^\s\"']{12,}"),
     re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
 )

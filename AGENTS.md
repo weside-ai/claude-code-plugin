@@ -73,6 +73,7 @@ we/                               plugin root
                                   checks, locks), accounts.py (cswap --store-only through an allowlist),
                                   gh_source.py (open PRs per repo through flow_report's gh cache),
                                   ticket_snapshot.py (the ticket snapshot's one atomic writer and its reader)
+                                  ticket_fetch.py (the scheduled snapshot: the ticket system's REST search into that writer)
                                   command_center/crewd.py (we-crewd: the Zentrale as a read-only web page, bound
                                   to the host's own address, its port and the pane's probe), redaction.py (the one
                                   list of secret patterns: conversation hook and web view)

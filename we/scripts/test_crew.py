@@ -653,6 +653,7 @@ def test_the_flow_block_defaults_merges_and_is_typed(tmp_path):
         "urgent_commands": [],
         "main_state_command": None,
         "tickets_stale_min": 45,
+        "tickets_jql": None,
         "repos": [],
     }
     bound = with_(flow__log_dir="~/flow", flow__urgent_commands=["gh secret", r"eas build"])
@@ -662,6 +663,7 @@ def test_the_flow_block_defaults_merges_and_is_typed(tmp_path):
     assert shown["flow"]["urgent_commands"] == ["gh secret", "eas build"]
     for changes, message in [
         ({"flow__stale_min": "15"}, "flow.stale_min must be a number"),
+        ({"flow__tickets_jql": 3}, "flow.tickets_jql must be a string or null"),
         ({"flow__urgent_commands": "gh secret"}, "flow.urgent_commands must be a list"),
         (
             {"flow__urgent_commands": ["ok", "(open"]},

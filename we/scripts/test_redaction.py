@@ -27,6 +27,7 @@ SAMPLES = [
     "AIza" + "g" * 35,
     "eyJ" + "g" * 20 + "." + "h" * 20 + "." + "i" * 20,
     "Bearer " + "t" * 30,
+    "Basic Ym90QGV4YW1wbGUuY29tOnRvay0x",
     "password=hunter2hunter2xyz",
     "someone@example.org",
 ]
