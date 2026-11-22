@@ -204,6 +204,15 @@ def test_a_worker_blocked_15_min_is_named_to_its_starter_once_per_block(box):
     ), lines[0]
 
 
+def test_a_worker_first_listed_without_a_pid_stays_supervised_and_is_stopped_when_done(box):
+    """Red arm (22.11.): a `claude --bg` row lists `pid: null` while it starts. The supervisor
+    bound that `null`, found no row on its next poll and ended after 35 s ("ended" in its log)
+    with the worker still running: a `done` card worker held a pool slot for over an hour."""
+    starting = [_row(None, state="working")]
+    box["run"](starting, *_minutes(31, state="done"), GONE, limits=ON)
+    assert box["stops"] == ["bg1"]
+
+
 def test_a_block_shorter_than_the_limit_or_a_notice_turned_off_says_nothing(box):
     box["run"](LIVE, *_minutes(14, state="blocked"), GONE, limits=ON)
     box["run"](
@@ -527,6 +536,10 @@ def test_a_name_already_queued_refuses_unless_its_waiter_is_gone(queue):
     ws.enqueue(queue["state"], "AC-2-b", "/tree", [], None, None, 60, queue["clock"]())
     queue["put"]("AC-3-c", queue["clock"]())
     assert not ws._may_try(queue["state"], "AC-3-c")  # AC-1-a waits ahead
+    ws.enqueue(
+        queue["state"], "AC-4-u", "/tree", [], None, None, 60, queue["clock"](), lane="utility"
+    )
+    assert ws._may_try(queue["state"], "AC-4-u")  # a build entry never holds the utility lane
     ws._drop(queue["state"], "AC-1-a")
     assert ws._may_try(queue["state"], "AC-3-c")  # AC-2-b, without a waiter, is skipped
 

@@ -11,7 +11,8 @@ check and `/we:accept` read it through `worker_launch.py backend`.
 Contract and Lead steps: `references/worker-dispatch.md` § Worker launch backend.
 
 Template grammar: split like a shell line (`shlex`), then a token that is exactly `{name}`,
-`{agent}` or `{brief}` becomes that value as one argv element. Any other `{…}` refuses, so is a
+`{agent}` or `{brief}` becomes that value as one argv element, `{lane}` becomes `--utility` for a
+utility start (`launch --utility`) and vanishes for a build start. Any other `{…}` refuses, so is a
 placeholder inside a token (`--x={name}`). `{name}` and `{brief}` are required. `{brief}` is the
 one-line prompt `Read <git-dir>/we-brief.md and follow it.`: the brief never passes through a
 shell. The command runs without a shell, cwd = the worker's worktree.
@@ -44,7 +45,7 @@ Usage:
   worker_launch.py pool-path                        prints the machine's pool file
                                                    (<state dir>/pool.json; $WE_WORKER_STATE_DIR
                                                    first), whether it exists or not
-  worker_launch.py capacity [--repo <dir>] [--prefix <p>]
+  worker_launch.py capacity [--repo <dir>] [--prefix <p>] [--lane build|utility]
                                                    exit 0: a worker may start; 3: refused while
                                                    a queued start of any repo waits ahead of it
                                                    (first come, first served), the busy workers
@@ -60,7 +61,11 @@ Usage:
                                                    an unreadable value skips its check (stderr;
                                                    silent without cswap on PATH); `we-worker
                                                    --queue` waits instead of refusing;
-                                                   2: a limit that is no number
+                                                   --lane utility counts the utility lane against
+                                                   max_utility_sessions (default 5) behind its own
+                                                   queue and needs room on the machine
+                                                   (`utility_resources`); 2: a limit that is no
+                                                   number
   worker_launch.py needs [--repo <dir>] [--prefix <p>] < brief
                                                    exit 2 when the brief's `Needs:` line, or the
                                                    frontmatter `needs:` of a /we:<skill> the
@@ -99,10 +104,10 @@ Usage:
                                                    --main-checkout only prints the main
                                                    checkout's top, exit 1 when <dir> is none
   worker_launch.py marker --tree <wt> --name <n> [--key K] [--role R] [--starter S] [--mode M]
-                          [--starter-session <id>]
+                          [--starter-session <id>] [--lane build|utility]
                                                    writes the launcher's marker (`write_marker`)
                                                    and its line in launched.jsonl
-  worker_launch.py launched --name <n> [--key K] [--starter S] [--starter-session <id>]
+  worker_launch.py launched --name <n> [--key K] [--starter S] [--starter-session <id>] [--lane L]
                                                    only the line in launched.jsonl (a start
                                                    without a marker; `record_launch`)
   worker_launch.py starters [--json]               the newest launched.jsonl line per worker;
@@ -117,7 +122,7 @@ Usage:
                                                    name kept) or `unrecoverable`; writes nothing
                                                    without --apply, which appends one line per
                                                    recovered worker with `backfill: <source>`
-  worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>]
+  worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>] [--utility]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
                                                    with --worktree it removes marker and brief;
                                                    several sessions of that name all stop (ids
@@ -144,7 +149,7 @@ import sys
 import time
 from pathlib import Path
 
-PLACEHOLDERS = ("name", "agent", "brief")
+PLACEHOLDERS = ("name", "agent", "brief", "lane")
 REQUIRED = ("name", "brief")
 SUBAGENT = "subagent"
 MARKER = "we-worker.json"
@@ -246,12 +251,14 @@ def validate(
     return tokens
 
 
-def render(tokens: list[str], values: dict[str, str]) -> list[str]:
+def render(tokens: list[str], values: dict[str, str | None]) -> list[str]:
+    """`tokens` with each placeholder replaced by its value; a value None drops the token."""
     argv = []
     for token in tokens:
         key = token[1:-1] if token.startswith("{") and token.endswith("}") else None
         if key in values:
-            argv.append(values[key])
+            if values[key] is not None:
+                argv.append(values[key])
         else:
             argv.append(token)
     return argv
@@ -317,7 +324,28 @@ AGENTS_TIMEOUT_S = 30
 POOL_FILE = "pool.json"
 POOL_KEY = "max_busy_sessions"
 PCT_KEY = "max_active_5h_percent"
-POOL_DEFAULTS = {POOL_KEY: 8, PCT_KEY: 80}
+# The utility lane (`we-worker --utility`): a fix round on an open PR's branch, a card, lens or
+# review worker starts against its own cap and its own queue, never behind new build work (measured
+# 22.11.: a fix round for two review warnings waited over an hour behind build starts). Its three
+# resource thresholds are the machine's measure of room (Kiska, 22.11.); the cap of 5 stays the lid.
+UTILITY_KEY = "max_utility_sessions"
+FREE_KEY = "utility_min_free_mib"
+PRESSURE_KEY = "utility_max_pressure_full_avg60"
+LOAD_KEY = "utility_max_load5"
+POOL_DEFAULTS = {
+    POOL_KEY: 8,
+    PCT_KEY: 80,
+    UTILITY_KEY: 5,
+    FREE_KEY: 2048,
+    PRESSURE_KEY: 1,
+    LOAD_KEY: 20,
+}
+# a repo may lower these; the resource thresholds measure the machine and stay in pool.json
+REPO_KEYS = (POOL_KEY, PCT_KEY, UTILITY_KEY)
+BUILD, UTILITY = "build", "utility"
+LANES = (BUILD, UTILITY)
+LANE_ENV = "WE_WORKER_LANE"
+NAME_ENV = "WE_WORKER_NAME"
 QUEUE_TURN_ENV = "WE_WORKER_QUEUE_TURN"
 CSWAP_TIMEOUT_S = 20
 
@@ -380,7 +408,7 @@ def repo_limits(repo: Path) -> dict[str, float]:
     """The pool keys the repo's `.weside/config.json` `workers` block sets (`{}` without them); a
     value that is no positive number refuses (exit 2)."""
     block = workers_block(repo)
-    return {k: _limit(block[k], f"workers.{k}") for k in POOL_DEFAULTS if k in block}
+    return {k: _limit(block[k], f"workers.{k}") for k in REPO_KEYS if k in block}
 
 
 def cap_limits(
@@ -430,13 +458,35 @@ def pool_limits(state: Path | None = None) -> dict[str, float]:
     return {k: _limit(doc.get(k, d), f"{path} {k}") for k, d in POOL_DEFAULTS.items()}
 
 
-def queued_ahead(state: Path, me: str | None) -> list[dict]:
-    """The queued starts (`worker_supervisor.queued`) whose waiter lives and that came before `me`
-    (the waiter's own entry, `$WE_WORKER_QUEUE_TURN`); for a start that is not queued, every
-    living one. Oldest first."""
+def entry_lane(doc: dict) -> str:
+    """The lane a queue entry was queued in; an entry without one is a build start."""
+    return UTILITY if doc.get("lane") == UTILITY else BUILD
+
+
+def lane_of(state: Path, name: object) -> str:
+    """The lane a worker was started in: `$WE_WORKER_LANE` of its settings file
+    (`<state>/<name>.settings.json`, `worker_rights.worker_env`); without one, `build`."""
+    if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
+        return BUILD
+    try:
+        env = json.loads((state / f"{name}.settings.json").read_text()).get("env") or {}
+        return UTILITY if env.get(LANE_ENV) == UTILITY else BUILD
+    except (OSError, ValueError, AttributeError):
+        return BUILD
+
+
+def queued_ahead(state: Path, me: str | None, lane: str = BUILD) -> list[dict]:
+    """The queued starts of `lane` (`worker_supervisor.queued`) whose waiter lives and that came
+    before `me` (the waiter's own entry, `$WE_WORKER_QUEUE_TURN`); for a start that is not queued,
+    every living one of the lane. Oldest first. Each lane has its own queue: a utility start never
+    waits behind a build start, nor a build start behind a utility one."""
     import worker_supervisor  # noqa: PLC0415 (it imports this module)
 
-    rows = [d for d in worker_supervisor.queued(state) if worker_supervisor.waiter_lives(d)]
+    rows = [
+        d
+        for d in worker_supervisor.queued(state)
+        if worker_supervisor.waiter_lives(d) and entry_lane(d) == lane
+    ]
     if not me:
         return rows
     mine = next((d for d in rows if d["name"] == me), None)
@@ -448,13 +498,18 @@ def queued_ahead(state: Path, me: str | None) -> list[dict]:
     return [d for d in rows if d["name"] != me and (d.get("queued_at", 0), d["name"]) < turn]
 
 
+def lane_key(lane: str) -> str:
+    """The pool key that caps the lane's sessions."""
+    return UTILITY_KEY if lane == UTILITY else POOL_KEY
+
+
 def queued_limits(doc: dict, machine: dict[str, float]) -> tuple[float, float]:
-    """A queued start's own `(max_busy_sessions, max_active_5h_percent)`: the machine's, lowered
-    by its repo's values recorded at queue time (`repo_limits`); an entry without them has the
-    machine's."""
+    """A queued start's own `(lane cap, max_active_5h_percent)`: the machine's, lowered by its
+    repo's values recorded at queue time (`repo_limits`); an entry without them has the
+    machine's. The cap is `max_busy_sessions`, for a utility entry `max_utility_sessions`."""
     own = doc.get("repo_limits") if isinstance(doc.get("repo_limits"), dict) else {}
     out = []
-    for key in (POOL_KEY, PCT_KEY):
+    for key in (lane_key(entry_lane(doc)), PCT_KEY):
         value = own.get(key)
         ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
         out.append(min(machine[key], value) if ok else machine[key])
@@ -517,7 +572,128 @@ def room_in(accounts: list[dict], max_pct: float) -> tuple[int, int]:
     return room, len(accounts)
 
 
-def capacity(repo: Path, prefix: str) -> None:
+# Kiska's resource rule for the utility lane (measured 22.11.): all three hold, or the start waits.
+# Each reads one file; a file that is missing or unreadable (no cgroup v2, no memory limit) counts
+# as passed and is shown as `n/a`. Paths are parameters, so a test hands fixture files.
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+PROC_CGROUP = Path("/proc/self/cgroup")
+LOADAVG = Path("/proc/loadavg")
+MIB = 1024 * 1024
+
+
+def own_cgroup(proc_cgroup: Path = PROC_CGROUP, root: Path = CGROUP_ROOT) -> Path | None:
+    """This process's cgroup v2 directory (the `0::<path>` line), None without one."""
+    try:
+        lines = proc_cgroup.read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        if line.startswith("0::"):
+            return root / line[3:].lstrip("/")
+    return None
+
+
+def _free_mib(cgroup: Path | None) -> float | None:
+    """`memory.max - memory.current + inactive_file` (`memory.stat`) in MiB; None without a limit
+    (`max`) or a readable file: page cache the kernel reclaims counts as free."""
+    if cgroup is None:
+        return None
+    try:
+        top = (cgroup / "memory.max").read_text().strip()
+        if top == "max":
+            return None
+        current = int((cgroup / "memory.current").read_text().strip())
+        stat = dict(
+            line.split(None, 1)
+            for line in (cgroup / "memory.stat").read_text().splitlines()
+            if line
+        )
+        return (int(top) - current + int(stat["inactive_file"])) / MIB
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _pressure_full_avg60(cgroup: Path | None) -> float | None:
+    """`memory.pressure`, line `full`, field `avg60`; None when unreadable."""
+    if cgroup is None:
+        return None
+    try:
+        for line in (cgroup / "memory.pressure").read_text().splitlines():
+            if line.startswith("full "):
+                fields = dict(f.split("=", 1) for f in line.split()[1:] if "=" in f)
+                return float(fields["avg60"])
+    except (OSError, ValueError, KeyError):
+        return None
+    return None
+
+
+def _load5(loadavg: Path) -> float | None:
+    try:
+        return float(loadavg.read_text().split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def utility_resources(
+    limits: dict[str, float], cgroup: Path | None = None, loadavg: Path = LOADAVG
+) -> list[dict]:
+    """The three conditions of the utility lane, each `{what, value, want, ok}`: free memory of
+    the own cgroup at or above `utility_min_free_mib`, memory pressure `full avg60` below
+    `utility_max_pressure_full_avg60`, load5 below `utility_max_load5`. `value` None: unreadable,
+    `ok`. `cgroup` None reads this process's own (`own_cgroup`)."""
+    group = own_cgroup() if cgroup is None else cgroup
+    free, pressure, load = _free_mib(group), _pressure_full_avg60(group), _load5(loadavg)
+    return [
+        {
+            "what": "free memory",
+            "value": None if free is None else f"{free:.0f} MiB",
+            "want": f">= {limits[FREE_KEY]:g} MiB",
+            "ok": free is None or free >= limits[FREE_KEY],
+        },
+        {
+            "what": "memory pressure full avg60",
+            "value": None if pressure is None else f"{pressure:g}",
+            "want": f"< {limits[PRESSURE_KEY]:g}",
+            "ok": pressure is None or pressure < limits[PRESSURE_KEY],
+        },
+        {
+            "what": "load5",
+            "value": None if load is None else f"{load:g}",
+            "want": f"< {limits[LOAD_KEY]:g}",
+            "ok": load is None or load < limits[LOAD_KEY],
+        },
+    ]
+
+
+def resource_text(rows: list[dict]) -> str:
+    """`free memory 1500 MiB (needs >= 2048 MiB); load5 n/a (needs < 20)` for `rows`."""
+    return "; ".join(f"{r['what']} {r['value'] or 'n/a'} (needs {r['want']})" for r in rows)
+
+
+def busy_by_lane(rows: list[dict], state: Path) -> dict[str, int]:
+    """The busy workers per lane: `status` busy (an interactive row only when `is_worker` says so:
+    a companion or master is busy whenever it answers its human), never a row whose `state` is
+    `done`: its report is in and it works no more, even before the idle stop ends it. The build
+    lane takes no memory check for the room such a worker still holds: the supervisor stops it
+    after `workers.idle_stop_minutes` (`worker_supervisor.py`), which bounds the resident ones,
+    and a load or memory brake on build starts would stall new work on a busy shared host."""
+    counts = dict.fromkeys(LANES, 0)
+    for r in rows:
+        if r.get("status") != "busy" or r.get("state") == "done":
+            continue
+        if r.get("kind") == "interactive" and not is_worker(r):
+            continue
+        counts[lane_of(state, r.get("name"))] += 1
+    return counts
+
+
+def capacity(
+    repo: Path,
+    prefix: str,
+    lane: str = BUILD,
+    cgroup: Path | None = None,
+    loadavg: Path = LOADAVG,
+) -> None:
     """Refuse a new worker (`LaunchError`, exit 3) while a queued start of any repo on this machine
     waits ahead of it (`queued_ahead`: first come, first served across repos), while the busy
     background sessions on this machine and busy window workers (`claude agents --json`, `status`
@@ -530,18 +706,24 @@ def capacity(repo: Path, prefix: str) -> None:
     `cswap list --json` is unreadable the active account's 5h window decides as the fallback
     (`five_hour_percent`, refused above the limit). The refusal names the measured values, never an
     account. A value that cannot be read skips its check with one stderr warning; without `cswap`
-    on PATH (it is optional) the 5h check is skipped silently."""
+    on PATH (it is optional) the 5h check is skipped silently.
+
+    Two lanes (`lane`): a build start counts the build lane's busy workers against
+    `max_busy_sessions`, a utility start the utility lane's against `max_utility_sessions`
+    (`busy_by_lane`), each behind its own queue; the 5h check holds for both. A utility start also
+    needs room on the machine (`utility_resources`), else it is refused with the missed condition,
+    its value and its threshold."""
     machine = pool_limits()
     sources: dict[str, str] = {}
     limits = cap_limits(repo, sources=sources)
-    max_busy, max_pct = limits[POOL_KEY], limits[PCT_KEY]
-    ahead = queued_ahead(_state_dir(), os.environ.get(QUEUE_TURN_ENV))
+    cap_key = lane_key(lane)
+    max_busy, max_pct = limits[cap_key], limits[PCT_KEY]
+    state = _state_dir()
+    ahead = queued_ahead(state, os.environ.get(QUEUE_TURN_ENV), lane)
+    counts: dict[str, int] | None = None
     try:
-        busy: int | None = sum(
-            1
-            for r in sessions()
-            if r.get("status") == "busy" and (r.get("kind") != "interactive" or is_worker(r))
-        )
+        counts = busy_by_lane(sessions(), state)
+        busy: int | None = counts[lane]
     except LaunchError as exc:
         busy = None
         print(
@@ -567,23 +749,28 @@ def capacity(repo: Path, prefix: str) -> None:
         return pct is not None and pct > pct_limit
 
     full = held(float("inf"), max_pct)
-    if ahead and not held(machine[POOL_KEY], machine[PCT_KEY]):
+    if ahead and not held(machine[cap_key], machine[PCT_KEY]):
         # the machine has room: a queued start that only its own repo's lower limit holds back
         # stays first in line and holds nobody else up (`queued_limits`)
         ahead = [d for d in ahead if not held(*queued_limits(d, machine))]
+    shown_busy = "?" if busy is None else str(busy)
+    other = UTILITY if lane == BUILD else BUILD
+    beside = (
+        ""
+        if counts is None
+        else f"; {other} lane {counts[other]} busy, limit {limits[lane_key(other)]:g}"
+    )
     if ahead:
         first = ahead[0]
         since = time.strftime("%H:%M", time.gmtime(first.get("queued_at", time.time())))
-        shown_busy = "?" if busy is None else str(busy)
         raise LaunchError(
-            f"refused, no worker started: {len(ahead)} queued start(s) ahead (first"
+            f"refused, no worker started: {lane} lane: {len(ahead)} queued start(s) ahead (first"
             f" {first['name']}, queued {since} UTC; {shown_busy} workers busy, limit"
-            f" {max_busy:g} for the machine); the queue starts in arrival order across repos:"
-            " add --queue to the we-worker start",
+            f" {max_busy:g} for the machine{beside}); the queue starts in arrival order across"
+            " repos: add --queue to the we-worker start",
             3,
         )
     if (busy is not None and busy >= max_busy) or full:
-        shown_busy = "?" if busy is None else str(busy)
         if room is not None:
             quota = (
                 f"no account in rotation has room (0 of {room[1]} with 7d under"
@@ -595,12 +782,21 @@ def capacity(repo: Path, prefix: str) -> None:
             shown_pct = "?" if pct is None else f"{pct:g}"
             quota = f"active account 5h at {shown_pct} % (limit {max_pct:g} %"
         raise LaunchError(
-            f"refused, no worker started: {shown_busy} workers busy (limit {max_busy:g} for the"
-            f" machine, {pool_path()}), {quota}, {sources[PCT_KEY]});"
-            " try again later, or add --queue to the we-worker start: it starts as soon as"
-            " the check passes",
+            f"refused, no worker started: {lane} lane: {shown_busy} workers busy (limit"
+            f" {max_busy:g} for the machine, {cap_key} of {pool_path()}{beside}), {quota},"
+            f" {sources[PCT_KEY]}); try again later, or add --queue to the we-worker start: it"
+            " starts as soon as the check passes",
             3,
         )
+    if lane == UTILITY:
+        missed = [r for r in utility_resources(limits, cgroup, loadavg) if not r["ok"]]
+        if missed:
+            raise LaunchError(
+                f"refused, no worker started: utility lane waits for room on the machine:"
+                f" {resource_text(missed)} ({pool_path()}); add --queue to the we-worker start:"
+                " it starts as soon as the check passes",
+                3,
+            )
 
 
 def claude_env() -> dict:
@@ -814,7 +1010,7 @@ def remove_command(repo: Path, path: str) -> str:
 
 
 def write_marker(tree: Path, starter_session: str | None = None, **fields: object) -> Path:
-    """The launcher's marker in the tree's own git dir: name, key, role, starter, tree, mode,
+    """The launcher's marker in the tree's own git dir: name, key, role, starter, tree, mode, lane,
     launched_at. It carries no `session_id`, so the marker-bound worker gates stay as they were.
     The start also goes into `launched.jsonl` (`record_launch`), which outlives the marker."""
     gd = git_dir(tree)
@@ -829,6 +1025,7 @@ def write_marker(tree: Path, starter_session: str | None = None, **fields: objec
         fields.get("key"),  # type: ignore[arg-type]
         fields.get("starter"),  # type: ignore[arg-type]
         starter_session,
+        **({"lane": fields["lane"]} if fields.get("lane") else {}),
     )
     return gd / MARKER
 
@@ -1023,7 +1220,8 @@ def _starter_verbs(args: argparse.Namespace) -> int:
     """`launched`, `starters` and `backfill-starters`."""
     state = _state_dir()
     if args.cmd == "launched":
-        record_launch(args.name, args.key, args.starter, args.starter_session, state)
+        extra = {"lane": args.lane} if args.lane else {}
+        record_launch(args.name, args.key, args.starter, args.starter_session, state, **extra)
         return 0
     if args.cmd == "starters":
         doc = starters_doc(state)
@@ -1474,6 +1672,7 @@ def write_settings(
     account: dict | None = None,
     brief: str | None = None,
     starter: str | None = None,
+    lane: str | None = None,
 ) -> dict:
     """The worker's `--settings` file (`worker_rights.settings`), with the timer's hook, the
     lean context of `workers.context` (`apply_context`), the chosen account (`apply_account`)
@@ -1481,7 +1680,9 @@ def write_settings(
     (`ticketing_unneeded`)."""
     import worker_rights  # noqa: PLC0415
 
-    doc = apply_context(worker_rights.settings(repo, key, starter), repo, name, out.parent)
+    doc = apply_context(
+        worker_rights.settings(repo, key, starter, name, lane), repo, name, out.parent
+    )
     if account:
         apply_account(doc, account)
     if brief:
@@ -1523,7 +1724,30 @@ def brief_hook(path: Path) -> str:
     return "printf '%s\\n' " + shlex.quote(json.dumps(payload, ensure_ascii=False))
 
 
-def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None) -> Path:
+def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> None:
+    """Refuse a template with `{agent}` but no agent; warn when it drops `--agent` or `--utility`."""
+    if "{agent}" in tokens and not agent:
+        raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
+    if agent and "{agent}" not in tokens:
+        print(
+            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
+            "the worker starts without its effort and model; add `--agent {agent}` to the template",
+            file=sys.stderr,
+        )
+    if utility and "{lane}" not in tokens:
+        print(
+            "worker_launch: warning: --utility is dropped: the template has no {lane}, so its "
+            "launcher counts the worker in the build lane; add `{lane}` to the template",
+            file=sys.stderr,
+        )
+
+
+def launch(
+    worktree: Path, name: str, brief_file: Path, agent: str | None = None, utility: bool = False
+) -> Path:
+    """Start one worker through the template; `utility` starts it in the utility lane: `{lane}`
+    becomes `--utility` (a `we-worker` template counts it there), and a `claude --bg` worker's
+    settings carry the lane."""
     try:
         brief = brief_file.read_text()
     except OSError as exc:
@@ -1536,14 +1760,8 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
             'agents.worker_launch is `subagent`: dispatch with Agent(isolation="worktree")', 2
         )
     tokens = validate(template)
-    if "{agent}" in tokens and not agent:
-        raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
-    if agent and "{agent}" not in tokens:
-        print(
-            f"worker_launch: warning: --agent {agent} is dropped: the template has no {{agent}}, so "
-            "the worker starts without its effort and model; add `--agent {agent}` to the template",
-            file=sys.stderr,
-        )
+    _template_carries(tokens, agent, utility)
+    lane = UTILITY if utility else BUILD
     gd = git_dir(worktree)
     if gd is None:
         raise LaunchError(f"{worktree} is no git worktree")
@@ -1553,11 +1771,23 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         f"Lead: {lead} — send your report as one SendMessage to it; "
         f"your plain text never reaches it.\n\n{brief.rstrip()}\n"
     )
-    marker = {"name": name, "key": key, "lead": lead, "agent": agent, "launched_at": time.time()}
+    marker = {
+        "name": name,
+        "key": key,
+        "lead": lead,
+        "agent": agent,
+        "lane": lane,
+        "launched_at": time.time(),
+    }
     marker_path.write_text(json.dumps(marker, indent=2) + "\n")
     argv = render(
         tokens,
-        {"name": name, "agent": agent or "", "brief": f"Read {brief_path} and follow it."},
+        {
+            "name": name,
+            "agent": agent or "",
+            "brief": f"Read {brief_path} and follow it.",
+            "lane": "--utility" if utility else None,
+        },
     )
     if Path(argv[0]).name == "claude" and "--bg" in argv and "--settings" not in argv:
         # a `claude --bg` session takes the daemon's environment, not this one: the worker's
@@ -1567,7 +1797,7 @@ def launch(worktree: Path, name: str, brief_file: Path, agent: str | None = None
         settings_path = gd / SETTINGS
         off = ticketing_unneeded(brief, worktree)  # read on the worker's login, as `claude_env`
         doc = turn_off(
-            {"env": worker_rights.worker_env(key, starter=lead)},
+            {"env": worker_rights.worker_env(key, starter=lead, name=name, lane=lane)},
             off,
             installed_plugin_ids(claude_env()),
         )
@@ -1794,13 +2024,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--prefix", default="worker_launch")
     sub.add_parser("pool-path")
-    p = sub.add_parser("capacity")
-    p.add_argument("--repo", type=Path, default=Path.cwd())
-    p.add_argument("--prefix", default="worker_launch")
-    p = sub.add_parser("needs")
-    p.add_argument("--repo", type=Path, default=Path.cwd())
-    p.add_argument("--all", action="store_true")
-    p.add_argument("--prefix", default="worker_launch")
+    _gate_parsers(sub)
     _settings_parsers(sub)
     p = sub.add_parser("tree")
     p.add_argument("--repo", type=Path, default=Path.cwd())
@@ -1817,12 +2041,14 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--starter")
     p.add_argument("--mode")
     p.add_argument("--starter-session")
+    p.add_argument("--lane", choices=LANES)
     _starter_parsers(sub)
     p = sub.add_parser("launch")
     p.add_argument("--worktree", type=Path, required=True)
     p.add_argument("--name", required=True)
     p.add_argument("--brief-file", type=Path, required=True)
     p.add_argument("--agent")
+    p.add_argument("--utility", action="store_true")
     p = sub.add_parser("stop")
     p.add_argument("--name", required=True)
     p.add_argument("--worktree", type=Path)
@@ -1833,12 +2059,24 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _gate_parsers(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser("capacity")
+    p.add_argument("--repo", type=Path, default=Path.cwd())
+    p.add_argument("--prefix", default="worker_launch")
+    p.add_argument("--lane", choices=LANES, default=BUILD)
+    p = sub.add_parser("needs")
+    p.add_argument("--repo", type=Path, default=Path.cwd())
+    p.add_argument("--all", action="store_true")
+    p.add_argument("--prefix", default="worker_launch")
+
+
 def _starter_parsers(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("launched")
     p.add_argument("--name", required=True)
     p.add_argument("--key")
     p.add_argument("--starter")
     p.add_argument("--starter-session")
+    p.add_argument("--lane", choices=LANES)
     p = sub.add_parser("starters")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("backfill-starters")
@@ -1856,6 +2094,7 @@ def _settings_parsers(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--account-file", type=Path)
     p.add_argument("--brief-stdin", action="store_true")
     p.add_argument("--starter")
+    p.add_argument("--lane", choices=LANES, default=BUILD)
     p = sub.add_parser("account")
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--account", required=True)
@@ -1890,6 +2129,7 @@ def _settings_verbs(args: argparse.Namespace) -> None:
             chosen,
             brief,
             args.starter,
+            args.lane,
         )
         print(args.out)
 
@@ -1939,6 +2179,7 @@ def _tree_verbs(args: argparse.Namespace) -> int:
             starter=args.starter,
             mode=args.mode,
             starter_session=args.starter_session,
+            lane=args.lane,
         )
         return 0
     if args.main_checkout:
@@ -1967,7 +2208,7 @@ def _gate_verb(args: argparse.Namespace) -> int:
         if args.cmd == "needs":
             check_needs(sys.stdin.read(), args.repo)
         else:
-            capacity(args.repo, args.prefix)
+            capacity(args.repo, args.prefix, args.lane)
     except LaunchError as exc:
         print(f"{args.prefix}: {exc}", file=sys.stderr)
         return exc.code
@@ -1992,7 +2233,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd in ("tree", "marker"):
             code = _tree_verbs(args)
         elif args.cmd == "launch":
-            marker = launch(args.worktree.resolve(), args.name, args.brief_file, args.agent)
+            marker = launch(
+                args.worktree.resolve(), args.name, args.brief_file, args.agent, args.utility
+            )
             print(f"launched: {args.name} · marker {marker}")
         elif args.cmd == "stop":
             ids = stop(args.name, args.worktree.resolve() if args.worktree else None)

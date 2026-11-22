@@ -2,7 +2,8 @@
 """The launcher's supervisor of one process worker, its queue, its status and its garbage collection.
 
 `we-worker` starts one supervisor per worker (`spawn`, detached, no model). It waits until
-`claude agents --json` lists a living session of the worker's name, then polls it every 30 s:
+`claude agents --json` lists a living session of the worker's name, then polls it every 30 s,
+holding the row by its session id (a starting background row lists no pid yet):
 
 - a permission prompt (`waitingFor: "permission prompt"`, what `we-worker waiting` reads) that
   stays on the same tool call for 15 minutes becomes one board news item for the human
@@ -53,6 +54,7 @@ Usage:
   worker_supervisor.py gc [--repo <dir>] [--apply | --dry-run]
   worker_supervisor.py status [--key <name|id>] [--json]  `we-worker status`, `claude agents --json` on stdin
   worker_supervisor.py queue --name <n> --tree <dir> [--starter S] [--timeout 2h] [--has-brief]
+                            [--lane build|utility]
                                                        registers a refused start (its we-worker
                                                        call NUL-separated on stdin, the brief
                                                        last) and spawns its waiter
@@ -521,10 +523,20 @@ def supervise(
     reported: set[str] = set()
     idle = Idle(name, tree, sid, limits, projects, state, send, board, stop, log, jobs)
     while True:
+        # A starting `claude --bg` row lists no pid and gets it a moment later (measured 22.11.:
+        # `pid: null`, then a number). Bound to that first `null`, the next poll found no row and
+        # the supervisor ended after 35 s with its worker still running: no idle stop, no blocked
+        # notice. The session id holds the row; a pid it gets later is taken over.
         try:
-            mine = [r for r in _named(sessions(), name) if r.get("pid") == pid]
+            mine = [
+                r
+                for r in _named(sessions(), name)
+                if r.get("pid") == pid or (sid and r.get("sessionId") == sid)
+            ]
         except wl.LaunchError:
             mine = [row]
+        if mine and mine[-1].get("pid") not in (None, "", "-"):
+            pid = mine[-1].get("pid")
         if not mine or not wl._pid_lives(pid):
             break
         row = mine[-1]
@@ -605,7 +617,7 @@ def status_records(
     rows: list[dict], key: str | None, projects: Path, state: Path, now: float
 ) -> list[dict]:
     """The loop of `we-worker status` as objects: one per worker (background, or a window worker)
-    `{name, id, pid, state, alive, last, end, time_limit, window, resume, waits}`; `state` is the
+    `{name, id, pid, state, alive, last, end, time_limit, window, resume, waits, lane}`; `state` is the
     row's state, `exited(<state>)` when the process is gone; `end` the `api_mark`; `resume` the
     resume command of an exited worker with a resumable end, else null; `waits` is `test-slot`
     while a process of the worker is blocked on the host's test slot (it counts as busy and does
@@ -647,6 +659,7 @@ def status_records(
                 "window": window,
                 "resume": resume,
                 "waits": "test-slot" if not gone and pid in slot_waits else None,
+                "lane": wl.lane_of(state, row.get("name")),
             }
         )
     return out
@@ -670,8 +683,11 @@ def status_lines(
     out = []
     for r in status_records(rows, key, projects, state, now):
         waits = f"waits: {r['waits']}" if r["waits"] else None
+        lane = "lane=utility" if r["lane"] == wl.UTILITY else None
         extra = [
-            x for x in ("window" if r["window"] else None, r["end"], r["time_limit"], waits) if x
+            x
+            for x in ("window" if r["window"] else None, lane, r["end"], r["time_limit"], waits)
+            if x
         ]
         head = [r["id"], r["name"], f"pid={r['pid']}", r["state"], f"last={r['last']}"]
         out.append(" ".join([*head, *extra]))
@@ -686,9 +702,22 @@ def status_lines(
         waiter = "" if waiter_lives(q) else " waiter-gone"
         out.append(
             f"queued {q.get('name')} position={pos} since={since:%H:%M} until={until:%H:%M}"
-            f" tree={q.get('tree')} starter={q.get('starter') or '-'}{waiter}"
+            f" tree={q.get('tree')} starter={q.get('starter') or '-'}"
+            f" lane={wl.entry_lane(q)}{waiter}"
         )
     return out
+
+
+def resource_line(state: Path, cgroup: Path | None = None, loadavg: Path = wl.LOADAVG) -> str:
+    """`we-worker status`'s last line: the utility lane's room on the machine
+    (`worker_launch.utility_resources`), `n/a` for a value it cannot read."""
+    try:
+        limits = wl.pool_limits(state)
+    except wl.LaunchError as exc:
+        return f"utility lane room: unknown ({exc})"
+    rows = wl.utility_resources(limits, cgroup, loadavg)
+    verdict = "ok" if all(r["ok"] for r in rows) else "waits"
+    return f"utility lane room: {verdict}: {wl.resource_text(rows)}"
 
 
 # --- queue -----------------------------------------------------------------------------------
@@ -700,7 +729,8 @@ def status_lines(
 # `we-worker` call again without `--queue` and with `$WE_WORKER_QUEUE_TURN` = its name: its exit 3
 # is "still no room", any other exit ends the wait. First come, first served across waiters and
 # repos: a start that is not queued is refused while any living entry waits
-# (`worker_launch.queued_ahead`). After a start the next one waits `SETTLE_S`, so the new worker
+# (`worker_launch.queued_ahead`). Each lane (`build`, `utility`: the entry's `lane`) is its own
+# queue: a utility start never waits behind a build start. After a start the next one waits `SETTLE_S`, so the new worker
 # counts as busy before the next check. A queued start from a main checkout gets its own worktree
 # (`worker_launch.auto_tree`).
 
@@ -792,6 +822,7 @@ def enqueue(
     timeout_s: float,
     now: float,
     repo_limits: dict | None = None,
+    lane: str = wl.BUILD,
 ) -> dict:
     """Register a refused start; a name already queued with a living waiter refuses (exit 2).
     `repo_limits` are the pool limits its repo lowers (`worker_launch.repo_limits`): a start that
@@ -818,6 +849,7 @@ def enqueue(
         "queued_at": now,
         "deadline": now + timeout_s,
         "repo_limits": repo_limits or {},
+        "lane": lane,
     }
     (qdir / f"{name}.json").write_text(json.dumps(doc, indent=2) + "\n")
     return doc
@@ -852,18 +884,23 @@ def unqueue(state: Path, name: str) -> dict | None:
 
 
 def _may_try(state: Path, me: str) -> bool:
-    """`me` tries its start when it is the head, or when every living entry ahead of it carries a
-    repo limit below the machine's: the capacity check lets it past an entry that only such a limit
-    holds back (`worker_launch.queued_limits`), and decides."""
+    """`me` tries its start when it is the head of its lane's queue, or when every living entry
+    of that lane ahead of it carries a repo limit below the machine's: the capacity check lets it
+    past an entry that only such a limit holds back (`worker_launch.queued_limits`), and decides.
+    An entry of the other lane never holds it."""
     try:
         machine = wl.pool_limits(state)
     except wl.LaunchError:
         machine = None
-    full = None if machine is None else (machine[wl.POOL_KEY], machine[wl.PCT_KEY])
-    for doc in queued(state):
+    rows = queued(state)
+    mine = next((d for d in rows if d["name"] == me), None)
+    lane = wl.entry_lane(mine or {})
+    cap = wl.lane_key(lane)
+    full = None if machine is None else (machine[cap], machine[wl.PCT_KEY])
+    for doc in rows:
         if doc["name"] == me:
             return True
-        if not waiter_lives(doc):
+        if not waiter_lives(doc) or wl.entry_lane(doc) != lane:
             continue
         if full is None or wl.queued_limits(doc, machine) == full:
             return False
@@ -1141,7 +1178,8 @@ def _status_verb(args: argparse.Namespace, state: Path) -> int:
         records = status_records(rows, args.key, projects_dir(), state, time.time())
         print(json.dumps({"schema_version": STATUS_SCHEMA_VERSION, "workers": records}))
         return 0
-    print("\n".join(status_lines(rows, args.key, projects_dir(), state, time.time())))
+    lines = status_lines(rows, args.key, projects_dir(), state, time.time())
+    print("\n".join([*lines, resource_line(state)] if not args.key else lines))
     return 0
 
 
@@ -1152,7 +1190,16 @@ def _queue_verb(args: argparse.Namespace, state: Path) -> int:
         timeout_s = parse_duration(args.timeout)
         own = wl.repo_limits(Path(args.tree))
         doc = enqueue(
-            state, args.name, args.tree, argv, brief, args.starter, timeout_s, time.time(), own
+            state,
+            args.name,
+            args.tree,
+            argv,
+            brief,
+            args.starter,
+            timeout_s,
+            time.time(),
+            own,
+            args.lane,
         )
     except ValueError as exc:
         print(f"we-worker: --queue-timeout: {exc}", file=sys.stderr)
@@ -1161,10 +1208,11 @@ def _queue_verb(args: argparse.Namespace, state: Path) -> int:
         print(f"we-worker: {exc}", file=sys.stderr)
         return exc.code
     spawn_waiter(args.name)
-    pos = [d["name"] for d in queued(state)].index(args.name) + 1
+    pos = [d["name"] for d in queued(state) if wl.entry_lane(d) == args.lane].index(args.name) + 1
     until = dt.datetime.fromtimestamp(doc["deadline"], dt.timezone.utc)
     print(
-        f"we-worker: {args.name} queued (position {pos}, until {until:%H:%M} UTC); it starts"
+        f"we-worker: {args.name} queued (position {pos} of the {args.lane} lane, until"
+        f" {until:%H:%M} UTC); it starts"
         " when the check passes and tells its starter; `we-worker status` lists it,"
         f" `we-worker stop {args.name}` removes it"
     )
@@ -1286,6 +1334,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--starter")
     p.add_argument("--timeout", default=QUEUE_TIMEOUT)
     p.add_argument("--has-brief", action="store_true")
+    p.add_argument("--lane", choices=wl.LANES, default=wl.BUILD)
     for verb in ("unqueue", "wait-queue"):
         sub.add_parser(verb).add_argument("--name", required=True)
     sub.add_parser("resolve").add_argument("--key", required=True)

@@ -17,7 +17,7 @@ from test_open_ends import UNTIL  # noqa: E402
 SUPERVISOR = HERE.parent / "worker_supervisor.py"
 DEAD_PID = "4194303"  # above every pid_max default: no process holds it
 FIELDS = ["name", "id", "pid", "state", "alive", "last", "end", "time_limit", "window", "resume"]
-FIELDS += ["waits"]
+FIELDS += ["waits", "lane"]
 
 
 def transcript(home: Path, sid: str, entry: dict) -> None:
@@ -65,9 +65,12 @@ def test_dead_and_limited_workers(tmp_path):
     ]
     assert "we-worker w-limit --bg --resume s2" in red[1]["title"]
     assert red[0]["title"] == "exited"
-    # the text of `we-worker status` stays what it printed, line for line
-    assert run(tmp_path, rows).stdout == text_before
+    # the text of `we-worker status` stays what it printed, line for line; its last line reads
+    # the machine's live memory and load, so it is compared by its prefix only
+    again = run(tmp_path, rows).stdout.splitlines()
+    assert again[:-1] == text_before.splitlines()[:-1]
+    assert again[-1].startswith("utility lane room: ")
     lines = text_before.splitlines()
     assert lines[0] == f"s1 w-exit pid={DEAD_PID} exited(idle) last=11:40"
     assert lines[2] == "  resume after the reset: we-worker w-limit --bg --resume s2"
-    assert lines[-1] == f"s4 w-live pid={os.getpid()} idle last=-"
+    assert lines[-2] == f"s4 w-live pid={os.getpid()} idle last=-"
