@@ -596,6 +596,15 @@ test('below the floor build: a toast and a log line, no deliverer', async ($, on
   expect([h.submitted, h.sent]).toEqual([[], []])
 })
 
+test('a retired Discuss or Info line is carried as Follow-up', () => {
+  const text = [
+    { id: 'Q7', answer: 'discuss', ts: iso(T0), session: 'foxy' },
+    { id: 'Q8', answer: 'info', ts: iso(T0) },
+    { id: 'Q9', answer: 'read', ts: iso(T0) },
+  ].map(l => `${JSON.stringify(l)}\n`).join('')
+  expect(answerLines(text).map(l => [l.id, l.answer])).toEqual([['Q7', 'followup'], ['Q8', 'followup']])
+})
+
 test('two panes marking at once write equal rows; readers fold them to one, a later delivery supersedes', () => {
   const lines = answerLines(`${JSON.stringify({ id: 'Q1', answer: 'accept', ts: iso(T0), session: 'foxy' })}\n`)
   const ledger = ledgerState(EPOCH)

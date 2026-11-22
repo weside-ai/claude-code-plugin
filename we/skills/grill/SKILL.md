@@ -21,7 +21,7 @@ The grill ends when the user says so or no branch is left; then summarise the de
 
   | Bad | Good |
   |---|---|
-  | "Shall we hold the migration back?" (yes means *don't* merge) | "Merge the migration now? Recommendation: yes, the T2 panel is green." |
+  | "Shall we hold the migration back?" (yes means *don't* merge) | "Merge the migration now? Recommendation: yes, users lose their drafts on every restart until it lands." |
 
 - **Ask in the user's words.** The question names the thing and its consequence in plain language, never
   only a slug, phase or acronym ("S1 without F3?"); a label may follow in brackets. A question that needs
@@ -39,8 +39,8 @@ The grill ends when the user says so or no branch is left; then summarise the de
 
 ## Glossary
 
-The glossary is the file the repo's instruction file names; only when none exists, `GLOSSARY.md` at the repo
-root, created with the first resolved term. Format for a new file:
+The glossary is the file the repo's instruction file names, else an existing `CONTEXT.md` at the repo root;
+only when neither exists, `GLOSSARY.md` there, created with the first resolved term. Format for a new file:
 `${CLAUDE_PLUGIN_ROOT}/skills/grill/references/context-format.md`; an existing glossary keeps its own format.
 
 - A term that conflicts with the glossary is called out at once: "The glossary defines X as A; you mean B?"

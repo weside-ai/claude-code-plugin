@@ -14,12 +14,26 @@ const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
 const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
+// The retired answer words Discuss and Info are Follow-up: an answers line pressed before the rename and
+// not yet delivered, and an `answer_prompts` key under the old name, read as their `followup` kind.
+const RETIRED: Readonly<Record<string, BoardDeliveredKind>> = { discuss: 'followup', info: 'followup' }
+export const answerKindOf = (raw: unknown): unknown => (typeof raw === 'string' && RETIRED[raw]) || raw
+const RETIRED_PROMPTS: Partial<Record<BoardPromptKind, readonly string[]>> = {
+  followup: ['discuss', 'info'],
+  followup_route: ['discuss_route'],
+}
+
 const promptsOf = (raw: unknown): Partial<Record<BoardPromptKind, string>> | undefined => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   const out: Partial<Record<BoardPromptKind, string>> = {}
   for (const kind of PROMPT_KINDS) {
-    const text = (raw as Record<string, unknown>)[kind]
-    if (typeof text === 'string' && text.trim()) out[kind] = text
+    for (const key of [kind, ...(RETIRED_PROMPTS[kind] ?? [])]) {
+      const text = (raw as Record<string, unknown>)[key]
+      if (typeof text === 'string' && text.trim()) {
+        out[kind] = text
+        break
+      }
+    }
   }
   return out
 }
@@ -243,6 +257,7 @@ export const lastAnswers = (text: string): Record<string, BoardAnswer> => {
     if (!line.trim()) continue
     try {
       const a = JSON.parse(line) as Partial<BoardAnswer>
+      a.answer = answerKindOf(a.answer) as BoardAnswerKind
       if (typeof a.id === 'string' && isClosed(out[a.id])) continue
       if (typeof a.id === 'string' && KINDS.includes(a.answer as BoardAnswerKind) && typeof a.ts === 'string') {
         out[a.id] = { id: a.id, answer: a.answer as BoardAnswerKind, ts: a.ts, session: a.session ?? null, ...(a.via ? { via: a.via } : {}) }

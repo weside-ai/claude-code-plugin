@@ -227,6 +227,23 @@ test('lastAnswers keeps the newest line per id and skips torn ones', () => {
   })
 })
 
+test('a retired Discuss or Info line and answer_prompts key read as Follow-up', () => {
+  const text = [
+    '{"id":"Q7","answer":"discuss","ts":"2026-10-30T18:00:00Z","session":"lead"}',
+    '{"id":"Q8","answer":"info","ts":"2026-10-30T18:01:00Z"}',
+  ].join('\n')
+  expect(lastAnswers(text)).toEqual({
+    Q7: { id: 'Q7', answer: 'followup', ts: '2026-10-30T18:00:00Z', session: 'lead' },
+    Q8: { id: 'Q8', answer: 'followup', ts: '2026-10-30T18:01:00Z', session: null },
+  })
+  const old = parseBoard('{"answer_prompts":{"discuss":"{id}: reden","discuss_route":"{id}: zu {who}"}}').answerPrompts
+  expect(answerPrompt('followup', 'Q7', old)).toBe('Q7: reden')
+  expect(answerPrompt('followup_route', 'Q7', old, undefined, 'x')).toBe('Q7: zu x')
+  expect(answerPrompt('followup', 'Q7', parseBoard('{"answer_prompts":{"info":"{id}: mehr"}}').answerPrompts)).toBe('Q7: mehr')
+  const both = parseBoard('{"answer_prompts":{"discuss":"alt","followup":"{id}: neu"}}').answerPrompts
+  expect(answerPrompt('followup', 'Q7', both)).toBe('Q7: neu')
+})
+
 test('the answers file sits beside the board file; ownName matches on the session id', () => {
   expect(answersPathOf('/home/me/.claude/we-state/board.json')).toBe('/home/me/.claude/we-state/board-answers.jsonl')
   expect(answersPathOf('/home/me/boards/team.json')).toBe('/home/me/boards/team-answers.jsonl')

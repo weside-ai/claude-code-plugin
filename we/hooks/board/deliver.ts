@@ -26,7 +26,7 @@
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
 import type { BoardAcceptVariant, BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
-import { answerPrompt } from './board'
+import { answerKindOf, answerPrompt } from './board'
 
 const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild']
 const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
@@ -55,8 +55,8 @@ export type AnswerLine = {
 
 const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
 
-// The lines a deliverer may carry, in file order. A line whose kind is no delivered kind (Read, a
-// legacy free kind) is skipped, as is every line on an id after its first Accept or Deny: that id is
+// The lines a deliverer may carry, in file order; a retired Discuss or Info line reads as Follow-up
+// (`answerKindOf`). A line whose kind is no delivered kind (Read, a legacy free kind) is skipped, as is every line on an id after its first Accept or Deny: that id is
 // closed, and a later line on it changes nothing.
 export const answerLines = (text: string): AnswerLine[] => {
   const out: AnswerLine[] = []
@@ -70,6 +70,7 @@ export const answerLines = (text: string): AnswerLine[] => {
       continue
     }
     if (!a || typeof a !== 'object' || typeof a.id !== 'string' || typeof a.ts !== 'string') continue
+    a.answer = answerKindOf(a.answer)
     if (closed.has(a.id)) continue
     if (CLOSING.includes(a.answer as BoardAnswerKind)) closed.add(a.id)
     if (!DELIVERED.includes(a.answer as BoardDeliveredKind)) continue
