@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -395,6 +396,18 @@ def test_the_gh_cache_answers_a_second_run(tmp_path, monkeypatch):
     assert len(calls.read_text().splitlines()) == 2 * first
     report(root, run=fr.gh_runner(cache, "w2", ttl=0), required=no_required)  # too old: again
     assert len(calls.read_text().splitlines()) == 3 * first
+
+
+def test_gh_runner_clears_stale_part_files(tmp_path):
+    """A `*.part` left by a timed-out call goes once it is older than `PART_MAX_AGE_S`; a fresh
+    one may still belong to a running write and stays."""
+    stale, fresh = tmp_path / "a.json.1.part", tmp_path / "b.json.2.part"
+    for f in (stale, fresh):
+        f.write_text("{", encoding="utf-8")
+    old = time.time() - fr.PART_MAX_AGE_S - 60
+    os.utime(stale, (old, old))
+    fr.gh_runner(tmp_path, "w")
+    assert (stale.exists(), fresh.exists()) == (False, True)
 
 
 def test_md_writes_into_the_store_or_says_why_not(tmp_path, capsys):

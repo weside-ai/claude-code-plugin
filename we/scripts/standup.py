@@ -34,7 +34,7 @@ side, each within its `SOURCE_BUDGET_S`; one past its budget is the gap `<source
 | board | `board.StateDir`: `board()`, `last_rows()` (stage per key), `transitions()` (moves in the window), `open_questions` | lines, questions, stages |
 | tickets | `ticket_snapshot.read` | stage of keys without a board move (only when fresh) |
 | flow | `flow_intervals.build` once over both windows | touch hours per key, worker hours, waits per `waiting_on`, story efficiency |
-| github | `flow_report.fetch_prs` per repo of `gh_source.repos_of` (repos and calls side by side) through `flow_report.gh_runner`, past UTC days cached `GH_PAST_TTL_S`, today and open PRs `GH_LIVE_TTL_S` | merged PRs, heads (CI rounds) |
+| github | `flow_report.fetch_prs` per repo of `gh_source.repos_of` (repos side by side, `GH_POOL` gh calls at once over all of them) through `flow_report.gh_runner`, past UTC days cached `GH_PAST_TTL_S`, today and open PRs `GH_LIVE_TTL_S` | merged PRs, heads (CI rounds) |
 | zentrale | `zentrale.build` once | sessions (`crew_view`), red rows, locks line, accounts |
 | workers | `worker_launch.cap_limits`, `worker_supervisor.status_records` | worker limit, busy, test-slot waiters (`waits`, optional) |
 
@@ -160,7 +160,7 @@ SIGNALS = {
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 # seconds a source may take before it becomes a gap line; the sources run side by side
 SOURCE_BUDGET_S = {"sampler": 30.0, "github": 50.0, "sessions": 20.0, "zentrale": 30.0}
-GH_POOL = 8  # gh calls at once per repo
+GH_POOL = 8  # gh calls at once over every repo (GitHub limits concurrent requests)
 GH_LIVE_TTL_S = 300  # today's merges and the open PRs
 GH_PAST_TTL_S = 86400  # whole past days: their merged PRs no longer change
 
@@ -393,9 +393,24 @@ class Gather:
 def _default_gh(cache: Path | None, pool: int = GH_POOL):
     """PRs merged in the window and the open ones, as one `flow_report.fetch_prs`, but cached in
     two tiers: whole past UTC days (stable query text) for `GH_PAST_TTL_S`, today and the open
-    PRs for `GH_LIVE_TTL_S`; a warm standup then asks GitHub nothing."""
-    past_run = flow_report.gh_runner(cache, "standup-past", GH_PAST_TTL_S)
-    live_run = flow_report.gh_runner(cache, "standup-live", GH_LIVE_TTL_S)
+    PRs for `GH_LIVE_TTL_S`. Today's search ends at the next `GH_LIVE_TTL_S` step, not at the
+    second, so its query text holds still and a second standup within that step asks GitHub
+    nothing. `pool` caps the gh calls at once across every repo the reader is called for."""
+    gate = threading.BoundedSemaphore(pool)
+
+    def gated(run):
+        def call(body: dict) -> dict:
+            with gate:
+                return run(body)
+
+        return call
+
+    past_run = gated(flow_report.gh_runner(cache, "standup-past", GH_PAST_TTL_S))
+    live_run = gated(flow_report.gh_runner(cache, "standup-live", GH_LIVE_TTL_S))
+
+    def step(ts: datetime, up: bool) -> datetime:
+        n = int(ts.timestamp()) // GH_LIVE_TTL_S + (up and ts.timestamp() % GH_LIVE_TTL_S > 0)
+        return datetime.fromtimestamp(n * GH_LIVE_TTL_S, timezone.utc)
 
     def reader(repo: str, since: datetime, until: datetime) -> list:
         today = until.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -405,7 +420,8 @@ def _default_gh(cache: Path | None, pool: int = GH_POOL):
             if start < today
             else []
         )
-        live = flow_report.fetch_prs(live_run, repo, max(today, since), until, pool=pool)
+        live_since = max(today, step(since, up=False))
+        live = flow_report.fetch_prs(live_run, repo, live_since, step(until, up=True), pool=pool)
         by = {p["number"]: p for p in past + live}
         return [
             by[n]

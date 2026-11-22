@@ -29,10 +29,11 @@ steps and shows the portfolio anyway, so the human gets the overview of every ep
 ## 2 · Gather and render (one call)
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/standup.py [KEY] [--conversation-keys K1,K2] --md --lang <de|en>
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/standup.py [KEY | all] [--conversation-keys K1,K2] --md --lang <de|en>
 ```
 
-`KEY` from step 1, the keys of step 3 as `--conversation-keys`, the language from the user's
+`KEY` from step 1, or `all` passed on unchanged: the script skips the branch and conversation keys
+only when it sees it. The keys of step 3 as `--conversation-keys`, the language from the user's
 instruction files (default `en`). The script owns the scope order, every source and every number
 (its docstring: sources, light rules, trend band, signal rules); print its output as it comes.
 A first line `view: branch` → render § 4 instead. A source it could not read stands under its gaps

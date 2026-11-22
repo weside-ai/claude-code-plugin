@@ -182,6 +182,7 @@ def na(name: str, why: str) -> dict:
 
 
 Runner = Callable[[dict], dict]
+PART_MAX_AGE_S = 600  # a write older than this has no thread left to finish it
 
 
 def gh_runner(cache: Path | None, window: str = "", ttl: float | None = None) -> Runner:
@@ -190,8 +191,17 @@ def gh_runner(cache: Path | None, window: str = "", ttl: float | None = None) ->
     again: the open-PR search and the suites carry no window of their own, so another window
     asks GitHub afresh. With `ttl` (seconds), a kept answer older than that is asked again.
     `run.fetched` collects each answer's fetch time (the cached file's mtime on a hit), read by
-    `command_center/ci_source.py` as its `fetched_at`. Safe to call from several threads."""
+    `command_center/ci_source.py` as its `fetched_at`. Safe to call from several threads.
+    A caller that gave up on a slow call leaves its `*.part` behind; the next runner on the cache
+    removes those older than `PART_MAX_AGE_S`."""
     fetched: list = []
+    if cache is not None and cache.is_dir():
+        for part in cache.glob("*.part"):
+            try:
+                if time.time() - part.stat().st_mtime > PART_MAX_AGE_S:
+                    part.unlink()
+            except OSError:  # another runner removed it first
+                pass
 
     def run(body: dict) -> dict:
         text = json.dumps(body, sort_keys=True)

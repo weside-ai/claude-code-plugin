@@ -454,6 +454,57 @@ def test_default_gh_reads_past_days_and_today_apart(monkeypatch, tmp_path):
     ]
 
 
+def test_default_gh_live_query_holds_still_within_its_step(monkeypatch, tmp_path):
+    """Two standups in the same `GH_LIVE_TTL_S` step send the same live query, so the second is
+    a cache hit; the window filter still uses the real `until`."""
+    calls = []
+    t = standup.fi.parse_ts
+
+    def fake(run, repo, since, until, open_prs=True, pool=1):
+        calls.append((standup.iso(since), standup.iso(until), open_prs))
+        return [{"number": 5, "merged": t("2026-11-21T18:03:00Z")}] if open_prs else []
+
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", fake)
+    reader = standup._default_gh(tmp_path)
+    since = t("2026-11-14T18:01:07Z")
+    first = reader("acme/app", since, t("2026-11-21T18:01:07Z"))
+    reader("acme/app", since, t("2026-11-21T18:04:59Z"))
+    live = [c for c in calls if c[2]]
+    assert live[0] == live[1] == ("2026-11-21T00:00:00Z", "2026-11-21T18:05:00Z", True)
+    assert first == []  # merged 18:03, after the first run's until
+
+
+def test_default_gh_caps_gh_calls_across_repos(monkeypatch, tmp_path):
+    """The pool is shared: several repos read side by side never run more gh calls at once."""
+    lock, now, peak = threading.Lock(), [0], [0]
+
+    def runner(cache, window="", ttl=None):
+        def run(body):
+            with lock:
+                now[0] += 1
+                peak[0] = max(peak[0], now[0])
+            time.sleep(0.02)
+            with lock:
+                now[0] -= 1
+            return {}
+
+        return run
+
+    def fake(run, repo, since, until, open_prs=True, pool=1):
+        standup.flow_report.pmap(run, [{}] * 6, pool)
+        return []
+
+    monkeypatch.setattr(standup.flow_report, "gh_runner", runner)
+    monkeypatch.setattr(standup.flow_report, "fetch_prs", fake)
+    reader = standup._default_gh(tmp_path, pool=3)
+    t = standup.fi.parse_ts
+    repos = ["a/1", "a/2", "a/3", "a/4"]
+    standup.flow_report.pmap(
+        lambda r: reader(r, t("2026-11-14T00:00:00Z"), t("2026-11-21T12:00:00Z")), repos, 4
+    )
+    assert peak[0] == 3
+
+
 def quiet(root: Path) -> None:
     """The fixture state in which no signal rule fires."""
     (root / "repo" / ".weside" / "config.json").write_text('{"workers": {"max_busy_sessions": 3}}')
