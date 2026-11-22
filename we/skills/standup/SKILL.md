@@ -102,8 +102,7 @@ Recipients, the caller's own part and tracking: `${CLAUDE_PLUGIN_ROOT}/reference
    <step>`. Read only your own state; finish no step for it."
 2. **Own line.** Write your own `STAND · …` line from this conversation and § 1's scope.
 3. **Summary.** Once every row replied, or 10 minutes after the briefs (a background `sleep 600`
-   wakes you), print one table (session, key, running, waiting on, next; silent sessions as
-   `no answer`), then three lines: what waits on the human, which session waits on which, and the
+   wakes you), print one table (session, key, running, waiting on, next), then three lines: what waits on the human, which session waits on which, and the
    biggest blocker.
 
 - [ ] every recipient and the caller hold a row, silent ones as `no answer`

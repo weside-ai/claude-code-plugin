@@ -395,6 +395,7 @@ class TestSet:
         [
             (["set", "--now", "phase 3", "--state", "ci"], "set 'now=phase 3' state=ci"),
             (["answer", "Q1", "no", "--session", "a", "--via", "chat"], "answer Q1 deny"),
+            (["answer", "Q1", "discuss", "--session", "a", "--via", "chat"], "answer Q1 followup"),
             (["answer", "Q1", "accept", "--session", "a", "--via", "board"], "--via chat"),
         ],
     )

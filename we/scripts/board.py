@@ -4320,6 +4320,8 @@ ANSWER_WORDS = {
     "reject": "deny",
     "later": "followup",
     "more": "followup",
+    "discuss": "followup",
+    "info": "followup",
 }
 
 

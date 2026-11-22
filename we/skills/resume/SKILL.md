@@ -37,4 +37,4 @@ part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.md`.
    with one line `RESUME · <your name> · <what resumes>` or `RESUME · <your name> · nothing open`."
 2. **Own resume.** Run steps 1–4 above on your own session; your `RESUME · …` line is a row like
    the others.
-3. **Close.** One line per row, silent sessions as `no answer`.
+3. **Close.** One line per row.

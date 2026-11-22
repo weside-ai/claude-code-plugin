@@ -384,7 +384,7 @@ The board's optional `answer_prompts` words these texts in the orchestrator's ow
 standing for the question's id, `{pr}` for its PR link and `{who}` for the session a `followup_route` names: `{"accept": "{id}: Vorschlag angenommen"}`;
 `update_asker` is the asker's Update text, `accept_hand` (the go on a one-way PR, armed by the
 asking session) and `accept_task` (the owner does it) the two Accepts with a meaning of their own
-(never `accept`'s text); a kind it leaves out keeps the default.
+(never `accept`'s text); a kind it leaves out keeps the default. A key that names no kind here (an older `discuss` or `info`) is ignored, and the deliverer skips an answers line of such a kind.
 
 Outcomes, each a row (readers fold the rows of one `id`, `answer_ts` and `role` to the newest `ts`):
 

@@ -55,7 +55,7 @@ the caller's own part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.
    practice that beats the documented one and would be lost on a restart; no complaints, no
    one-off incidents, nothing a rule already says.
 2. **Own retro.** Run `--collect` on your own session with the same focus; your `RETRO · …` line is
-   a row like the others. Silent sessions are named in the close line.
+   a row like the others.
 3. **Decide.** In one worktree off fresh `origin/<default>`: move the staging dir's entries into
    `inbox/` (the move empties staging), run `/we:optimize` there, commit one PR. Right before the
    commit, read staging again: a receiver that appended an evidence line after the move found
