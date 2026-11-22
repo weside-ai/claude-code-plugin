@@ -140,10 +140,14 @@ def test_duplicates_quote_repo_files_and_never_the_memory_index(tmp_path, monkey
     assert FROM_MEMORY[:30] not in out
 
 
-def test_md_writes_the_report_and_the_next_run_shows_the_delta(tmp_path, monkeypatch, capsys):
+def test_md_writes_the_report_and_the_next_run_shows_the_delta(
+    tmp_path, monkeypatch, capsys, late_utc_clock
+):
     repo, home = world(tmp_path, monkeypatch)
+    (repo / ".weside" / "config.json").write_text(json.dumps({"time": {"zone": "Europe/Berlin"}}))
     run(repo, home, capsys, "--md")
     [report] = (repo / ".weside" / "optimization" / "reports").glob("context-*.md")
+    assert report.name == "context-2026-11-22.md"  # the day in time.zone, not UTC's 21st
     report.rename(report.with_name("context-2000-01-01.md"))
     with (repo / "AGENTS.md").open("a") as fh:
         fh.write("x" * 10)

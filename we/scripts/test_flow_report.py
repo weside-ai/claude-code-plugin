@@ -420,6 +420,10 @@ def test_md_writes_into_the_store_or_says_why_not(tmp_path, capsys):
     assert fr.main(["--md"], now=NOW, cwd=root, run=FakeGh(), required=recorded_required) == 0
     target = root / ".weside" / "optimization" / "reports" / "flow-2026-11-10.md"
     text = target.read_text(encoding="utf-8")
+    # the file's day is the one in time.zone: 12:00 UTC is already the 11th in Kiritimati (+14)
+    (root / ".weside" / "config.json").write_text('{"time": {"zone": "Pacific/Kiritimati"}}')
+    assert fr.main(["--md"], now=NOW, cwd=root, run=FakeGh(), required=recorded_required) == 0
+    assert (target.parent / "flow-2026-11-11.md").is_file()
     assert "| Heads per code PR | 3 | 2 | 2 | one head 33 % |" in text
     assert "## Writers per transition" in text
     assert "## Flow efficiency" in text

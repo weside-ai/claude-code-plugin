@@ -115,7 +115,8 @@ yet: the part-1b detector will; ``main_state_command`` (null or a command line w
 first line are the default branch's verdict: exit 0 green, else red; the command centre's
 ``command_center/ci_state.py`` runs it); ``tickets_stale_min`` (minutes after which the ticket snapshot
 ``command_center/ticket_snapshot.py`` writes counts as stale); ``tickets_jql`` (null or the JQL
-``command_center/ticket_fetch.py`` takes that snapshot with); ``repos`` (``owner/name`` GitHub slugs the
+``command_center/ticket_fetch.py`` takes that snapshot's stories with); ``epics_jql`` (null or the JQL
+of the open epics it adds with their status; null fetches no epics); ``repos`` (``owner/name`` GitHub slugs the
 command centre reads beside the crew repo's ``origin``, without loading them into a session like
 ``extra_repos``; ``command_center/gh_source.py`` ``repos_of`` reads it); ``flow_log.py`` owns the line format), ``worker_rights`` (what a
 process worker may do without asking and what it never does, all off by default: ``repos`` the
@@ -380,6 +381,7 @@ DEFAULTS: dict[str, Any] = {
         "main_state_command": None,
         "tickets_stale_min": 45,
         "tickets_jql": None,
+        "epics_jql": None,
         "repos": [],
     },
     "worker_rights": {

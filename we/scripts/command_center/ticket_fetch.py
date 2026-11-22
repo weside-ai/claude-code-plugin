@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """The scheduled ticket snapshot: the ticket system's REST search → `ticket_snapshot.write`.
 
+Jira Cloud only, scheduling is external: a timer (cron, a systemd timer, the crew's loop) runs it.
+
 Usage:
-  ticket_fetch.py [--jql JQL] [--board FILE] [--timeout S]
+  ticket_fetch.py [--jql JQL] [--epics-jql JQL] [--board FILE] [--timeout S]
 
 Reads `JIRA_BASE_URL` (https only), `JIRA_EMAIL` and `JIRA_SNAPSHOT_TOKEN` from the environment; the
 token reaches the process only through the environment (a secret runner such as `wsec run --only`),
-never as an argument or in a URL. The JQL is `--jql`, else the crew's `flow.tickets_jql`
-(`crew.py`); without one nothing is fetched. It pages through Jira Cloud's `POST
-/rest/api/3/search/jql` (`fields: ["status"]`, `nextPageToken` until the answer carries none or
-`isLast`), maps each issue to its status name (`ticket_snapshot.stories`) and calls
-`ticket_snapshot.write` for the board (`--board`, else the crew's), the snapshot's one writer.
+never as an argument or in a URL. The stories' JQL is `--jql`, else the crew's `flow.tickets_jql`
+(`crew.py`); without one nothing is fetched. The open epics' JQL is `--epics-jql`, else
+`flow.epics_jql`; without one no epics are fetched. Each query pages through Jira Cloud's `POST
+/rest/api/3/search/jql` (`fields`: `FIELDS`, `nextPageToken` until the answer carries none or
+`isLast`); the issues map to their records (`ticket_snapshot.records`): every issue of the epics
+query is an epic, one of the stories query only with the `Epic` issuetype; they go to `ticket_snapshot.write` for the board (`--board`, else the crew's), the
+snapshot's one writer.
 
 Exit codes, one per failure class; nothing is written on any of them:
   2  config: a variable, the JQL or the board is missing, or the base URL is not https
@@ -52,6 +56,16 @@ CLASS = {
 }
 ENV = ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_SNAPSHOT_TOKEN")
 SEARCH = "/rest/api/3/search/jql"
+FIELDS = [
+    "status",
+    "summary",
+    "parent",
+    "components",
+    "labels",
+    "priority",
+    "updated",
+    "issuetype",
+]
 PAGE_SIZE = 100
 MAX_PAGES = 100  # 10 000 stories; a token that never ends is refused, not followed forever
 LINE_CHARS = 160
@@ -136,14 +150,14 @@ def fetch(
     opener=urllib.request.urlopen,
     timeout: float = 30,
 ) -> list:
-    """Every issue of `jql` with its `status` field, page by page."""
+    """Every issue of `jql` with its `FIELDS`, page by page."""
     auth = auth_header(email, token)
     secrets = (token, auth, auth.split(" ", 1)[1], email)
     url = base.rstrip("/") + SEARCH
     issues: list = []
     page_token = None
     for _ in range(MAX_PAGES):
-        body = {"jql": jql, "fields": ["status"], "maxResults": PAGE_SIZE}
+        body = {"jql": jql, "fields": FIELDS, "maxResults": PAGE_SIZE}
         if page_token:
             body["nextPageToken"] = page_token
         doc = _post(url, body, auth, opener, timeout, secrets)
@@ -154,46 +168,55 @@ def fetch(
     raise FetchError(EXIT_REFUSED, f"more than {MAX_PAGES} pages")
 
 
-def config(env, jql_arg: str | None, crew: dict | None) -> tuple:
-    """`(base, email, token, jql)` or `FetchError(EXIT_CONFIG)` naming what is missing."""
+def config(env, jql_arg: str | None, crew: dict | None, epics_arg: str | None = None) -> tuple:
+    """`(base, email, token, jql, epics jql or None)` or `FetchError(EXIT_CONFIG)` naming what is
+    missing."""
     missing = [name for name in ENV if not (env.get(name) or "").strip()]
     if missing:
         raise FetchError(EXIT_CONFIG, "not set: " + ", ".join(missing))
     base = env["JIRA_BASE_URL"].strip()
     if not base.startswith("https://"):
         raise FetchError(EXIT_CONFIG, "JIRA_BASE_URL must start with https://")
-    jql = jql_arg or ((crew or {}).get("flow") or {}).get("tickets_jql")
+    flow = (crew or {}).get("flow") or {}
+    jql = jql_arg or flow.get("tickets_jql")
     if not jql:
         raise FetchError(EXIT_CONFIG, "no JQL: set flow.tickets_jql in the crew or pass --jql")
-    return base, env["JIRA_EMAIL"].strip(), env["JIRA_SNAPSHOT_TOKEN"].strip(), jql
+    epics = epics_arg or flow.get("epics_jql") or None
+    return base, env["JIRA_EMAIL"].strip(), env["JIRA_SNAPSHOT_TOKEN"].strip(), jql, epics
 
 
 def run(args, env, opener=urllib.request.urlopen) -> tuple:
-    """`(snapshot file, story count)`."""
+    """`(snapshot file, story count, epic count)`."""
     board, crew = ts.locate(args.board)
-    base, email, token, jql = config(env, args.jql, crew)
+    base, email, token, jql, epics_jql = config(env, args.jql, crew, args.epics_jql)
     if board is None:
         raise FetchError(EXIT_CONFIG, "no board (no crew, no --board)")
     issues = fetch(base, email, token, jql, opener, args.timeout)
+    epic_issues = fetch(base, email, token, epics_jql, opener, args.timeout) if epics_jql else []
     try:
-        mapping = ts.stories({"issues": issues})
+        stories, epics = ts.records({"issues": issues})
+        # what the epics query returns is an epic, whatever the project names its type
+        found, more = ts.records({"issues": epic_issues})
+        epics.update({**found, **more})
     except ValueError as exc:
         raise FetchError(EXIT_REFUSED, f"answer refused ({exc})") from None
-    return ts.write(board, mapping, datetime.now(timezone.utc)), len(mapping)
+    target = ts.write(board, stories, datetime.now(timezone.utc), epics)
+    return target, len(stories), len(epics)
 
 
 def main(argv=None, env=None, opener=urllib.request.urlopen) -> int:
     p = argparse.ArgumentParser(prog="ticket_fetch.py", description=__doc__.split("\n")[0])
     p.add_argument("--jql")
+    p.add_argument("--epics-jql")
     p.add_argument("--board")
     p.add_argument("--timeout", type=float, default=30)
     args = p.parse_args(argv)
     try:
-        target, count = run(args, os.environ if env is None else env, opener)
+        target, count, epics = run(args, os.environ if env is None else env, opener)
     except FetchError as exc:
         print(f"ticket_fetch: {CLASS[exc.code]}: {exc.line}; nothing written", file=sys.stderr)
         return exc.code
-    print(f"{target} ({count} stories)")
+    print(f"{target} ({count} stories, {epics} epics)")
     return 0
 
 

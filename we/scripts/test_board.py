@@ -1286,6 +1286,15 @@ class TestBundle:
         item = board_of(crewed)["news"][-1]
         assert item["id"] == "B-2026-11-03-2"
         assert item["body"] == "product: cut PROJ-40 later one"
+        # the bundle's day is the one in the crew's time.zone: 23:30 UTC is Berlin's next day
+        (crewed / "work" / ".weside" / "config.json").write_text(
+            json.dumps({"time": {"zone": "Europe/Berlin"}}), encoding="utf-8"
+        )
+        pin(monkeypatch, "ada")
+        decide(crewed, kind="cut", text="at night")
+        pin(monkeypatch, "otto")
+        go(crewed, "bundle", now=datetime(2026, 11, 21, 23, 30, tzinfo=timezone.utc))
+        assert board_of(crewed)["news"][-1]["id"] == "B-2026-11-22"
 
     def test_a_closed_question_is_not_open(self, crewed, monkeypatch, capsys):
         (crewed / "board-answers.jsonl").write_text('{"id": "Q7", "answer": "deny"}\n')

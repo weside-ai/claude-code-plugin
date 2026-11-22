@@ -26,8 +26,24 @@ MINIMAL = {
 }
 SEARCH = {
     "issues": [
-        {"key": "ABC-15", "fields": {"status": {"name": "In Progress"}, "summary": "x"}},
+        {
+            "key": "ABC-15",
+            "fields": {
+                "status": {"name": "In Progress"},
+                "summary": "x",
+                "parent": {"key": "ABC-1"},
+                "components": [{"name": "Platform"}],
+                "labels": ["backend", "owner-ada"],
+                "priority": {"name": "High"},
+                "updated": "2026-11-21T10:00:00.000+0100",  # Jira's offset form
+                "issuetype": {"name": "Story"},
+            },
+        },
         {"key": "ABC-16", "fields": {"status": {"name": "Selected for Development"}}},
+        {
+            "key": "ABC-1",
+            "fields": {"status": {"name": "In Progress"}, "issuetype": {"name": "Epic"}},
+        },
     ]
 }
 
@@ -49,8 +65,29 @@ def test_write_is_atomic_with_its_fields(tmp_path, monkeypatch):
     target = tmp_path / "board-tickets.json"
     assert out.stdout.strip() == str(target)
     doc = json.loads(target.read_text())
-    assert list(doc) == ["schema_version", "@taken", "ABC-15", "ABC-16"]  # the field snapshot
-    assert doc["schema_version"] == 1 and doc["ABC-15"] == "In Progress"
+    assert list(doc) == ["schema_version", "@taken", "stories", "epics"]  # the field snapshot
+    assert doc["schema_version"] == 2
+    assert doc["stories"] == {
+        "ABC-15": {
+            "status": "In Progress",
+            "summary": "x",
+            "epic": "ABC-1",
+            "components": ["Platform"],
+            "owners": ["owner-ada"],
+            "priority": "High",
+            "updated": "2026-11-21T09:00:00Z",
+        },
+        "ABC-16": {"status": "Selected for Development"},
+    }
+    assert doc["epics"] == {"ABC-1": {"status": "In Progress"}}  # an epic is no story
+    # the readers: records for the new fields, key → status of the stories for the old ones
+    taken = ts.fi.parse_ts(doc["@taken"])
+    stories, epics, _line, fresh = ts.read_records(target, taken, 45)
+    assert (stories, epics, fresh) == (doc["stories"], doc["epics"], True)
+    assert ts.read(target, taken, 45)[0] == {
+        "ABC-15": "In Progress",
+        "ABC-16": "Selected for Development",
+    }
     assert [p.name for p in tmp_path.iterdir()] == ["board-tickets.json"]  # no temp left
     # the write goes through os.replace from a temp file in the same folder
     seen = []
@@ -58,13 +95,13 @@ def test_write_is_atomic_with_its_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(
         ts.os, "replace", lambda a, b: seen.append((Path(a).parent, b)) or real(a, b)
     )
-    ts.write(board, {"ABC-1": "Done"}, UNTIL)
+    ts.write(board, {"ABC-1": {"status": "Done"}}, UNTIL)
     assert seen == [(tmp_path, target)]
     # a failing replace leaves the old file whole and no temp behind
     monkeypatch.setattr(ts.os, "replace", lambda *_a: (_ for _ in ()).throw(OSError("disk")))
     with pytest.raises(OSError):
-        ts.write(board, {"ABC-2": "Done"}, UNTIL)
-    assert json.loads(target.read_text())["ABC-1"] == "Done"
+        ts.write(board, {"ABC-2": {"status": "Done"}}, UNTIL)
+    assert json.loads(target.read_text())["stories"]["ABC-1"] == {"status": "Done"}
     assert [p.name for p in tmp_path.iterdir()] == ["board-tickets.json"]
 
 
@@ -105,17 +142,20 @@ def test_stale_and_missing(tmp_path):
     jsonl(tmp_path / "board-transitions.jsonl", [])
     target = ts.path_for(board)
     assert "tickets: not read (no snapshot)" in build(board)["gaps"]
-    ts.write(board, {"ABC-15": "In Progress"}, UNTIL - timedelta(minutes=44))
+    ts.write(board, {"ABC-15": {"status": "In Progress"}}, UNTIL - timedelta(minutes=44))
     fresh = build(board)
     assert "ABC-15" in {r["item"] for r in fresh["rows"]}
     assert not [g for g in fresh["gaps"] if g.startswith("tickets")]
-    ts.write(board, {"ABC-15": "In Progress"}, UNTIL - timedelta(minutes=46))
+    ts.write(board, {"ABC-15": {"status": "In Progress"}}, UNTIL - timedelta(minutes=46))
     stale = build(board)
     assert f"tickets: stale since {at(46)}" in stale["gaps"]
     assert "ABC-15" not in {r["item"] for r in stale["rows"]}
     assert CREW["flow"]["tickets_stale_min"] == 45
-    target.write_text(json.dumps({"ABC-15": "In Progress"}))  # no @taken: stale, never current
-    assert "tickets: stale since unknown (no @taken)" in build(board)["gaps"]
+    doc = json.loads(target.read_text())
+    target.write_text(json.dumps({k: v for k, v in doc.items() if k != "@taken"}))
+    assert "tickets: stale since unknown (no @taken)" in build(board)["gaps"]  # never current
+    target.write_text(json.dumps({"schema_version": 1, "@taken": at(1), "ABC-15": "In Progress"}))
+    assert "tickets: not read (schema_version 1)" in build(board)["gaps"]
 
 
 @pytest.mark.parametrize(

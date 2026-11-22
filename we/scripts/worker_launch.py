@@ -248,6 +248,12 @@ def validate(
     for name in required:
         if f"{{{name}}}" not in tokens:
             raise LaunchError(f"{source}: placeholder {{{name}}} is required", 2)
+    if Path(tokens[0]).name == "claude" and "{lane}" in tokens:
+        raise LaunchError(
+            f"{source}: {{lane}} becomes --utility, a flag claude does not know; a claude --bg"
+            " worker carries its lane in its settings file: drop {lane} from the template",
+            2,
+        )
     return tokens
 
 
@@ -341,6 +347,8 @@ POOL_DEFAULTS = {
     PRESSURE_KEY: 1,
     LOAD_KEY: 20,
 }
+# the names the utility-only thresholds had before they held both lanes
+RENAMED_KEYS = {"utility_max_load5": LOAD_KEY, "utility_max_pressure_full_avg60": PRESSURE_KEY}
 # a repo may lower these; the resource thresholds measure the machine and stay in pool.json
 REPO_KEYS = (POOL_KEY, PCT_KEY, UTILITY_KEY)
 BUILD, UTILITY = "build", "utility"
@@ -456,7 +464,18 @@ def pool_limits(state: Path | None = None) -> dict[str, float]:
         raise LaunchError(f"{path}: unreadable ({exc})", 2) from exc
     if not isinstance(doc, dict):
         doc = {POOL_KEY: doc}
-    return {k: _limit(doc.get(k, d), f"{path} {k}") for k, d in POOL_DEFAULTS.items()}
+    for old, new in RENAMED_KEYS.items():
+        if old in doc:
+            print(
+                f"we-worker: warning: {path}: {old} is renamed to {new} and not read; rename it",
+                file=sys.stderr,
+            )
+    limits = {k: _limit(doc.get(k, d), f"{path} {k}") for k, d in POOL_DEFAULTS.items()}
+    if limits[RATIO_KEY] > 1:
+        raise LaunchError(
+            f"{path} {RATIO_KEY}: a share of the ceiling, 0 < r <= 1, not {limits[RATIO_KEY]!r}", 2
+        )
+    return limits
 
 
 def entry_lane(doc: dict) -> str:
@@ -464,16 +483,27 @@ def entry_lane(doc: dict) -> str:
     return UTILITY if doc.get("lane") == UTILITY else BUILD
 
 
-def lane_of(state: Path, name: object) -> str:
+def _settings_env(path: Path) -> dict | None:
+    try:
+        env = json.loads(path.read_text()).get("env")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return env if isinstance(env, dict) else None
+
+
+def lane_of(state: Path, name: object, cwd: object = None) -> str:
     """The lane a worker was started in: `$WE_WORKER_LANE` of its settings file
-    (`<state>/<name>.settings.json`, `worker_rights.worker_env`); without one, `build`."""
+    (`worker_rights.worker_env`): `<state>/<name>.settings.json` (`we-worker` writes it), else the
+    one `launch` writes for a `claude --bg` worker in its tree's git dir (`SETTINGS`), when that
+    file names this worker; without one, `build`."""
     if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
         return BUILD
-    try:
-        env = json.loads((state / f"{name}.settings.json").read_text()).get("env") or {}
-        return UTILITY if env.get(LANE_ENV) == UTILITY else BUILD
-    except (OSError, ValueError, AttributeError):
-        return BUILD
+    env = _settings_env(state / f"{name}.settings.json")
+    if env is None and isinstance(cwd, str) and cwd:
+        gd = git_dir(cwd)
+        env = _settings_env(gd / SETTINGS) if gd is not None else None
+        env = env if env is not None and env.get(NAME_ENV) == name else None
+    return UTILITY if (env or {}).get(LANE_ENV) == UTILITY else BUILD
 
 
 def queued_ahead(state: Path, me: str | None, lane: str = BUILD) -> list[dict]:
@@ -587,8 +617,19 @@ MIB = 1024 * 1024
 RESOURCE_HALT = 4
 
 
+TEST_RUN_ENV = "WE_TEST_RUN"  # the repo's conftest.py sets it with HOST_ROOT_ENV
+_host_root_told: list[str] = []
+
+
 def _host(path: str) -> Path:
     root = os.environ.get(HOST_ROOT_ENV, "").strip()
+    if root and not os.environ.get(TEST_RUN_ENV) and root not in _host_root_told:
+        _host_root_told.append(root)  # once per process
+        print(
+            f"we-worker: warning: {HOST_ROOT_ENV}={root} outside a test run: the room check reads"
+            " the files under it, not this machine's; unset it",
+            file=sys.stderr,
+        )
     return Path(root) / path.lstrip("/") if root else Path(path)
 
 
@@ -717,7 +758,7 @@ def busy_by_lane(rows: list[dict], state: Path) -> dict[str, int]:
             continue
         if r.get("kind") == "interactive" and not is_worker(r):
             continue
-        counts[lane_of(state, r.get("name"))] += 1
+        counts[lane_of(state, r.get("name"), r.get("cwd"))] += 1
     return counts
 
 
@@ -1759,7 +1800,8 @@ def brief_hook(path: Path) -> str:
 
 
 def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> None:
-    """Refuse a template with `{agent}` but no agent; warn when it drops `--agent` or `--utility`."""
+    """Refuse a template with `{agent}` but no agent; warn when it drops `--agent`, or when a
+    `we-worker` template drops `--utility` (a `claude --bg` worker carries its lane in its settings)."""
     if "{agent}" in tokens and not agent:
         raise LaunchError("the template has {agent}: pass --agent <we:dev-…>", 2)
     if agent and "{agent}" not in tokens:
@@ -1768,7 +1810,7 @@ def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> No
             "the worker starts without its effort and model; add `--agent {agent}` to the template",
             file=sys.stderr,
         )
-    if utility and "{lane}" not in tokens:
+    if utility and Path(tokens[0]).name == "we-worker" and "{lane}" not in tokens:
         print(
             "worker_launch: warning: --utility is dropped: the template has no {lane}, so its "
             "launcher counts the worker in the build lane; add `{lane}` to the template",
@@ -1857,7 +1899,7 @@ def launch(
             file=sys.stderr,
         )
     _timing("WorkerLaunch", name=name, agent_type=agent, cwd=str(worktree))
-    record_launch(name, key, lead, os.environ.get("CLAUDE_CODE_SESSION_ID"))
+    record_launch(name, key, lead, os.environ.get("CLAUDE_CODE_SESSION_ID"), lane=lane)
     if out.stdout.strip():
         print(out.stdout.strip())
     return marker_path

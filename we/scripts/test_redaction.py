@@ -82,6 +82,8 @@ def test_bearer_prose_stays_and_a_bearer_token_goes():
         "The API uses Bearer authentication for every call.",
         "Send a bearer token in the header.",
         "Authorization: Bearer <token>",
+        # 16+ letters with no digit, + or /: the Basic pattern's lookahead keeps prose
+        "Basic AuthenticationSchemes are described below.",
     ):
         assert redaction.redact(prose) == prose, prose
     token = "Bearer eyJhbGciOi.abcDEF123456789_-xyz=="

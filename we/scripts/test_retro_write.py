@@ -128,10 +128,16 @@ def test_a_body_without_key_or_evidence_is_refused(tmp_path, text, reason):
         rw.write(tmp_path / "inbox", text, "2026-11-13")
 
 
-def test_the_cli_prints_the_result(tmp_path, capsys):
+def test_the_cli_prints_the_result(tmp_path, capsys, late_utc_clock):
     f = tmp_path / "body.md"
     f.write_text(body("x"))
     assert rw.main([str(tmp_path / "inbox"), str(f), "--date", "2026-11-13"]) == 0
     assert capsys.readouterr().out.strip() == (
         f"created {Path(tmp_path / 'inbox' / '2026-11-13-gap--agents-md.md')}"
     )
+    # without --date: the day in the repo's time.zone, not UTC's
+    (tmp_path / ".weside").mkdir()
+    (tmp_path / ".weside" / "config.json").write_text('{"time": {"zone": "Europe/Berlin"}}')
+    f.write_text(body("y"))
+    assert rw.main([str(tmp_path / "inbox2"), str(f)]) == 0
+    assert "2026-11-22-gap--agents-md.md" in capsys.readouterr().out

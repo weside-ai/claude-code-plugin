@@ -74,19 +74,19 @@ def test_pages_until_the_last_and_writes_through_the_one_writer(tmp_path, capsys
     assert run(tmp_path, fake) == 0
     bodies = [json.loads(r.data) for r in fake.requests]
     assert [b.get("nextPageToken") for b in bodies] == [None, "p2", "p3"]
-    assert {b["jql"] for b in bodies} == {JQL} and bodies[0]["fields"] == ["status"]
+    assert {b["jql"] for b in bodies} == {JQL} and bodies[0]["fields"] == tf.FIELDS
     req = fake.requests[0]
     assert req.full_url == "https://acme.example.net/rest/api/3/search/jql"
     assert req.get_method() == "POST" and TOKEN not in req.full_url
     assert fake.timeouts == [30, 30, 30]  # every page has a timeout
     doc = json.loads((tmp_path / "board-tickets.json").read_text())
-    assert {k: v for k, v in doc.items() if k.startswith("ABC")} == {
-        "ABC-3": "In Progress",
-        "ABC-2": "Selected for Development",
-        "ABC-1": "Backlog",
+    assert doc["stories"] == {
+        "ABC-3": {"status": "In Progress"},
+        "ABC-2": {"status": "Selected for Development"},
+        "ABC-1": {"status": "Backlog"},
     }
-    assert doc["schema_version"] == 1 and "@taken" in doc
-    assert "(3 stories)" in capsys.readouterr().out
+    assert doc["schema_version"] == 2 and "@taken" in doc and doc["epics"] == {}
+    assert "(3 stories, 0 epics)" in capsys.readouterr().out
 
 
 def test_jql_from_the_crew(tmp_path, monkeypatch):
@@ -102,6 +102,26 @@ def test_jql_from_the_crew(tmp_path, monkeypatch):
     fake = Fake({"issues": []})
     assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 0
     assert json.loads(fake.requests[0].data)["jql"] == "project = XYZ"
+    assert len(fake.requests) == 1  # no flow.epics_jql: no epic query
+    # flow.epics_jql: a second query, its epics land beside the stories, not among them
+    crew["flow"]["epics_jql"] = "project = XYZ AND issuetype = Epic"
+    (tmp_path / ".weside" / "crew.json").write_text(json.dumps(crew))
+    # the epic level's type name varies (renamed, localized): the query decides, not the name
+    epic = {
+        "key": "XYZ-1",
+        "fields": {"status": {"name": "In Progress"}, "issuetype": {"name": "Epic"}},
+    }
+    fake = Fake({"issues": [issue("XYZ-2", "Backlog")]}, {"issues": [epic]})
+    assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 0
+    assert [json.loads(r.data)["jql"] for r in fake.requests] == [
+        "project = XYZ",
+        "project = XYZ AND issuetype = Epic",
+    ]
+    doc = json.loads((tmp_path / "b-tickets.json").read_text())
+    assert (list(doc["stories"]), doc["epics"]) == (
+        ["XYZ-2"],
+        {"XYZ-1": {"status": "In Progress"}},
+    )
 
 
 @pytest.mark.parametrize(
@@ -122,6 +142,9 @@ def test_no_jql_anywhere(tmp_path, capsys, monkeypatch):
     fake = Fake()
     assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 2
     assert fake.requests == [] and "flow.tickets_jql" in capsys.readouterr().err
+    # no crew and no --board: no board to write for, nothing fetched
+    assert tf.main(["--jql", JQL], env=ENV, opener=fake) == 2
+    assert fake.requests == [] and "config: no board" in capsys.readouterr().err
 
 
 ECHO = json.dumps(
@@ -132,13 +155,13 @@ ECHO = json.dumps(
 @pytest.mark.parametrize(
     ("answer", "code"),
     [
-        (http_error(401, ECHO), 3),
-        (http_error(403, ECHO), 3),
-        (urllib.error.URLError(f"connect refused {TOKEN}"), 4),
-        (TimeoutError("timed out"), 4),
-        (http_error(503, f"<html>down {TOKEN}</html>".encode()), 5),
-        (http_error(400, ECHO), 6),
-        ({"no": "issues"}, 6),
+        (http_error(401, ECHO), 3),  # auth: credentials refused, the answer echoes them
+        (http_error(403, ECHO), 3),  # auth: the token lacks the project's permission
+        (urllib.error.URLError(f"connect refused {TOKEN}"), 4),  # network: no connection
+        (TimeoutError("timed out"), 4),  # network: no answer within --timeout
+        (http_error(503, f"<html>down {TOKEN}</html>".encode()), 5),  # server: a 5xx page
+        (http_error(400, ECHO), 6),  # refused: another status (here an invalid JQL)
+        ({"no": "issues"}, 6),  # refused: a 200 that is no search result
     ],
 )
 def test_each_failure_class_has_its_code_writes_nothing_and_leaks_no_secret(

@@ -2,7 +2,8 @@
 # we-worker — start and steer a process worker on the global login (references/worker-dispatch.md).
 #   we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--utility] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...]
 #                                  start a worker session named <name>
-#   we-worker status [<name|id>]   one line per worker, background or window (a session started with
+#   we-worker status [<name|id>] [--restart-waiters]
+#                                  one line per worker, background or window (a session started with
 #                                  WE_ROLE=worker or named by its tree's launcher marker, marked
 #                                  `window`): id, name, pid, state, last=HH:MM (UTC
 #                                  of its last assistant entry), then `usage-limit` or `auth` when that
@@ -11,8 +12,10 @@
 #                                  a process of the worker is blocked on the host's test slot (from
 #                                  /proc/locks); an exited worker that hit
 #                                  the usage limit or an auth error gets a second line with its resume
-#                                  command; then one `queued` line per queued start
-#                                  (scripts/worker_supervisor.py status_lines owns the line); last,
+#                                  command; then one `queued` line per queued start, its position
+#                                  in its lane, `dead waiter` when its waiter is gone (it starts
+#                                  nothing until --restart-waiters starts a new one; the entry keeps
+#                                  its place) (scripts/worker_supervisor.py status_lines owns the line); last,
 #                                  the machine's room for both lanes (`resource_line`)
 #   we-worker stop <name|id>       removes a queued start of that name (its waiter ends), else
 #                                  stops a worker (a background session with `claude stop`, a window
@@ -255,7 +258,12 @@ case "$name" in
   status)
     sup=$(plugin_script scripts/worker_supervisor.py)
     [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py)" >&2; exit 2; }
-    _agents | python3 "$sup" status ${2:+--key "$2"}
+    shift
+    sargs=()
+    for a in "$@"; do
+      case $a in --restart-waiters) sargs+=(--restart-waiters) ;; *) sargs+=(--key "$a") ;; esac
+    done
+    _agents | python3 "$sup" status ${sargs[@]+"${sargs[@]}"}
     exit
     ;;
   waiting)

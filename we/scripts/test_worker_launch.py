@@ -147,6 +147,8 @@ def test_backend_defaults_to_subagent(env, tmp_path):
         ("x {name}", "placeholder {brief} is required"),
         ("x --n={name} {brief}", "must be a token of its own"),
         ("x 'unterminated {name} {brief}", "cannot split"),
+        # claude knows no --utility: a claude --bg worker carries its lane in its settings
+        ("claude --bg -n {name} {lane} {brief}", "{lane} becomes --utility"),
     ],
 )
 def test_invalid_template_refuses_and_launches_nothing(env, template, message):
@@ -229,8 +231,18 @@ def test_a_claude_bg_template_states_the_worker_env_as_settings(env, monkeypatch
         }
     }
     assert not any(k.startswith("ANTHROPIC") for k in doc["env"])  # never a credential on disk
+    state = Path(os.environ["WE_WORKER_STATE_DIR"])
+    assert wl.read_launched(state)[0][-1]["lane"] == "build"  # the start log keeps the lane
+    assert wl.lane_of(state, "KEY-1-w1", str(env["wt"])) == "build"
     wl.clear_marker(env["wt"])
     assert not (wl.git_dir(env["wt"]) / wl.SETTINGS).exists()
+    # a utility worker counts in the utility lane through its tree's settings file, and only
+    # under its own name (the file in the git dir belongs to the tree's newest worker)
+    wl.launch(env["wt"], "KEY-1-w2", env["brief"], utility=True)
+    assert wl.lane_of(state, "KEY-1-w2", str(env["wt"])) == "utility"
+    assert wl.lane_of(state, "KEY-1-w2") == "build"  # no tree: nothing to read
+    assert wl.lane_of(state, "KEY-1-other", str(env["wt"])) == "build"
+    assert wl.read_launched(state)[0][-1]["lane"] == "utility"
 
 
 def test_a_launcher_template_brings_its_own_settings(env, tmp_path):
@@ -525,11 +537,18 @@ def test_a_refused_stop_names_the_pid(env, monkeypatch):
         wl.stop("w9")
 
 
-def test_an_agent_the_template_cannot_carry_is_named(env, capsys):
+def test_an_agent_the_template_cannot_carry_is_named(env, capsys, tmp_path):
     env["configure"]("claude --bg -n {name} {brief}")
     wl.launch(env["wt"], "KEY-1-w1", env["brief"], "we:dev-high", utility=True)
     err = capsys.readouterr().err
-    assert "--agent we:dev-high is dropped" in err and "--utility is dropped" in err
+    assert "--agent we:dev-high is dropped" in err
+    assert "--utility is dropped" not in err  # a claude --bg worker's settings carry the lane
+    stub = tmp_path / "bin" / "we-worker"
+    stub.write_text((tmp_path / "bin" / "claude").read_text())
+    stub.chmod(0o755)
+    env["configure"]("we-worker --bg -n {name} {brief}")
+    wl.launch(env["wt"], "KEY-1-w2", env["brief"], utility=True)
+    assert "--utility is dropped" in capsys.readouterr().err  # we-worker counts it in build
 
 
 def test_checkpoint_pushes_the_tracked_changes_to_a_wip_branch(env, tmp_path, monkeypatch):
@@ -965,6 +984,44 @@ def test_capacity_refuses_a_limit_that_is_no_number(cap):
     assert cap(1, 1.0, pool={"max_active_5h_percent": True}).returncode == 2
 
 
+def test_pool_json_with_an_old_key_names_its_new_name(tmp_path, capsys):
+    (tmp_path / "pool.json").write_text(
+        json.dumps({"utility_max_load5": 30, "utility_max_pressure_full_avg60": 2})
+    )
+    limits = wl.pool_limits(tmp_path)
+    assert (limits["max_load5"], limits["max_pressure_full_avg60"]) == (20, 1)  # not read
+    err = capsys.readouterr().err
+    assert "utility_max_load5 is renamed to max_load5" in err
+    assert "utility_max_pressure_full_avg60 is renamed to max_pressure_full_avg60" in err
+
+
+def test_a_host_root_outside_a_test_run_warns_once(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(wl, "_host_root_told", [])
+    monkeypatch.setenv(wl.HOST_ROOT_ENV, str(tmp_path))
+    assert wl._host("/proc/meminfo") == tmp_path / "proc" / "meminfo"
+    assert capsys.readouterr().err == ""  # the test run (conftest.py) sets WE_TEST_RUN
+    monkeypatch.delenv(wl.TEST_RUN_ENV)
+    wl._host("/proc/meminfo")
+    wl._host("/proc/loadavg")
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and f"WE_WORKER_HOST_ROOT={tmp_path} outside a test run" in err
+
+
+def test_queued_limits_take_the_lane_cap_and_only_the_repo_keys(tmp_path):
+    machine = wl.POOL_DEFAULTS
+    own = {"max_busy_sessions": 3, "max_utility_sessions": 2, "max_active_5h_percent": 50}
+    assert wl.queued_limits({"repo_limits": own}, machine) == (3, 50)
+    assert wl.queued_limits({"repo_limits": own, "lane": "utility"}, machine) == (2, 50)
+    assert wl.queued_limits({"repo_limits": {"max_busy_sessions": 99}}, machine) == (8, 80)
+    assert wl.queued_limits({"repo_limits": {"max_busy_sessions": True}}, machine) == (8, 80)
+    # a repo lowers the caps and the 5h limit; the resource thresholds stay the machine's
+    (tmp_path / ".weside").mkdir()
+    (tmp_path / ".weside" / "config.json").write_text(
+        json.dumps({"workers": {**own, "max_load5": 5, "max_working_set_ratio": 0.5}})
+    )
+    assert wl.repo_limits(tmp_path) == own
+
+
 def _queue_entry(state_dir, name, queued_at, waiter_pid, repo_limits=None):
     (state_dir / "queue").mkdir(parents=True, exist_ok=True)
     doc = {"name": name, "queued_at": queued_at, "waiter_pid": waiter_pid}
@@ -1195,6 +1252,10 @@ def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(la
         assert "working set 86% (6.9 of 8.0 GiB) (needs < 84%)" in err
         assert "load5" not in err  # only the missed condition
     assert run(0, 0, "build", pool={"max_working_set_ratio": 0.9}) == (0, "")
+    assert run(0, 0, "build", pool={"max_working_set_ratio": 1}) == (0, "")  # the ceiling itself
+    code, err = run(0, 0, "build", pool={"max_working_set_ratio": 84})  # a percent, not a share
+    assert code == 2 and "0 < r <= 1, not 84" in err
+    (lanes["state"] / "pool.json").unlink()
     _cgroup(group, full_avg60=1.0)
     assert "memory pressure full avg60 1 (needs < 1)" in run(0, 0, "build")[1]
     _cgroup(group)
