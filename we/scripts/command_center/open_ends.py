@@ -47,7 +47,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -97,22 +97,22 @@ def iso(ts: datetime | None) -> str | None:
     return ts.astimezone(timezone.utc).strftime(ISO) if ts else None
 
 
-def _since(value) -> tuple:
-    """(datetime or None, note) of a stamp: an ISO time, or a `YYYY-MM-DD` day."""
+def _since(value, zone: tzinfo = timezone.utc) -> tuple:
+    """(datetime or None, note) of a stamp: an ISO time, or a `YYYY-MM-DD` day, which starts at
+    midnight in `zone` (the crew's ``time.zone``, the zone `board.py` dates its days in)."""
+    if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):  # before parse_ts,
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=zone), "day"  # which reads UTC
     ts = fi.parse_ts(value)
-    if ts is not None:
-        return ts, ""
-    if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc), "day"
-    return None, ""
+    return (ts, "") if ts is not None else (None, "")
 
 
 class Crew:
     """Holder and master lookups over the board lines and the crew."""
 
-    def __init__(self, lines: list, crew: dict, attribution=None):
+    def __init__(self, lines: list, crew: dict, attribution=None, zone: tzinfo = timezone.utc):
         self.lines = lines
         self.crew = crew
+        self.zone = zone
         self.by_name = {str(x.get("name")).casefold(): x for x in lines if x.get("name")}
         self.attribution = attribution
 
@@ -182,9 +182,9 @@ def question_rows(state, board: dict, who: Crew, until) -> tuple:
     open_items, obsolete = boardlib.open_questions(state, board)
     out, merge_go = [], set()
     for q in open_items:
-        since, note = _since(q.get("ts"))
+        since, note = _since(q.get("ts"), who.zone)
         if since is None:
-            since, note = _since(q.get("since"))
+            since, note = _since(q.get("since"), who.zone)
         asker = q.get("session") or ""
         holder = q.get("to_name") if q.get("to") else OWNER
         if q.get("cause") == "merge-go" and q.get("pr_url"):
@@ -219,7 +219,7 @@ def wait_rows(who: Crew, until) -> list:
         waiting = x.get("waiting_on")
         if not waiting or not x.get("name"):
             continue
-        since, note = _since(x.get("since"))
+        since, note = _since(x.get("since"), who.zone)
         holder = who.role_holder(str(waiting))
         out.append(
             row(
@@ -243,7 +243,7 @@ def escalation_rows(state, who: Crew, until) -> list:
     for eid, rec in boardlib.fold_escalations(state.escalations()).items():
         if not rec.get("open"):
             continue
-        since, note = _since(rec.get("since"))
+        since, note = _since(rec.get("since"), who.zone)
         holder = who.role_holder(str(rec.get("waiting_on") or "")) if rec.get("waiting_on") else ""
         out.append(
             row(
@@ -268,7 +268,7 @@ def story_rows(state, crew: dict, who: Crew, snapshot: dict, until) -> list:
         if last.get("to") != "in_progress":
             continue
         seen.add(key)
-        since, note = _since(last.get("ts"))
+        since, note = _since(last.get("ts"), who.zone)
         holder = who.leader(key)
         out.append(
             row(
@@ -423,6 +423,7 @@ def build(
     *,
     ticket_file: Path | None = None,
     repos: list | None = None,
+    zone: tzinfo | None = None,
 ) -> dict:
     """The open-ends document. `repos`: `[{repo, prs, required, default} or {repo, gap}]`, read
     by the caller (`gh_source.read_all`), so the board part never waits on GitHub."""
@@ -441,7 +442,8 @@ def build(
             gaps.append(f"board: not read ({exc})")
     lines = [x for x in doc_board.get("sessions") or [] if isinstance(x, dict)]
     attribution = attribution_for(board, state, crew, lines)
-    who = Crew(lines, crew, attribution)
+    zone = zone or crew_mod.time_zone(crew_path.parent.parent if crew_path else None)
+    who = Crew(lines, crew, attribution, zone)
     merge_go: set = set()
     if doc_board:
         q_rows, obsolete, merge_go = question_rows(state, doc_board, who, until)

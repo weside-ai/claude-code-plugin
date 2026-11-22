@@ -152,7 +152,7 @@ def test_invalid_worker_launch_is_absent_and_exits_zero(repo, tmp_path, monkeypa
     assert line.count(")") == 1  # the reader cuts the reason at the first `)`
 
 
-def test_section_appended_at_end_then_second_line_after_first(repo, tmp_path):
+def test_section_appended_at_end_then_second_line_after_first(repo, tmp_path, late_utc_clock):
     _config(repo, TEMPLATE)
     plan = _plan(repo)
     env = _env(tmp_path / "cfg", None)
@@ -161,6 +161,9 @@ def test_section_appended_at_end_then_second_line_after_first(repo, tmp_path):
     text = plan.read_text()
     assert text.endswith(f"## Updates Log\n\n{first}\n{second}\n")
     assert text.index("## Documentation Impact") < text.index("## Updates Log")
+    # without a date: the day in the repo's time.zone, not UTC's
+    (repo / ".weside" / "config.json").write_text(json.dumps({"time": {"zone": "Europe/Berlin"}}))
+    assert st.run(plan, "refine", env).startswith("- 2026-11-22 refine tokens:")
 
 
 def test_existing_section_in_the_middle_keeps_the_next_header(repo, tmp_path):

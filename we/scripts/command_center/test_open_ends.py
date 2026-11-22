@@ -6,6 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -209,6 +210,11 @@ def test_foxy_section(tmp_path):
     assert p24["classes"] == ["user merge"]
     assert "obsolete questions: 1" in doc["header"]
     assert not [r for r in doc["rows"] if r["item"] in ("Q5", "Q6", "acme/app#23")]
+    # a question dated by day only: the day starts at midnight in the crew's time.zone
+    day_only = make_board(tmp_path, owner_queue=[question("Q7", 0, ts=None, since="2026-04-01")])
+    berlin = open_ends.build(day_only, None, CREW, UNTIL, zone=ZoneInfo("Europe/Berlin"))
+    q7 = next(r for r in berlin["rows"] if r["item"] == "Q7")
+    assert (q7["since"], q7["since_note"]) == ("2026-03-31T22:00:00Z", "day")
 
 
 # --- AC 2 ------------------------------------------------------------------------------------

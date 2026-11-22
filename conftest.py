@@ -10,6 +10,8 @@ a crew's `state_dir`).
 
 from __future__ import annotations
 
+import datetime as dt
+import importlib
 import os
 import tempfile
 from pathlib import Path
@@ -34,6 +36,20 @@ def own_state_dir(tmp_path, monkeypatch):
     path = tmp_path / ".we-state"
     monkeypatch.setenv("WE_STATE_DIR", str(path))
     return path
+
+
+@pytest.fixture
+def late_utc_clock(monkeypatch):
+    """`crew.today`'s clock frozen at 2026-11-21 23:30 UTC, already 2026-11-22 in Berlin: a caller
+    that dates a day in UTC instead of the crew's ``time.zone`` writes the 21st."""
+    crew = importlib.import_module("crew")  # we/scripts is on the path only once pytest set it
+
+    class Late(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return dt.datetime(2026, 11, 21, 23, 30, tzinfo=dt.timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(crew, "datetime", Late)
 
 
 def pytest_sessionfinish(session, exitstatus):
