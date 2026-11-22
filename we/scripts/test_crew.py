@@ -654,6 +654,7 @@ def test_the_flow_block_defaults_merges_and_is_typed(tmp_path):
         "main_state_command": None,
         "tickets_stale_min": 45,
         "tickets_jql": None,
+        "epics_jql": None,
         "repos": [],
     }
     bound = with_(flow__log_dir="~/flow", flow__urgent_commands=["gh secret", r"eas build"])

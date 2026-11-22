@@ -74,19 +74,19 @@ def test_pages_until_the_last_and_writes_through_the_one_writer(tmp_path, capsys
     assert run(tmp_path, fake) == 0
     bodies = [json.loads(r.data) for r in fake.requests]
     assert [b.get("nextPageToken") for b in bodies] == [None, "p2", "p3"]
-    assert {b["jql"] for b in bodies} == {JQL} and bodies[0]["fields"] == ["status"]
+    assert {b["jql"] for b in bodies} == {JQL} and bodies[0]["fields"] == tf.FIELDS
     req = fake.requests[0]
     assert req.full_url == "https://acme.example.net/rest/api/3/search/jql"
     assert req.get_method() == "POST" and TOKEN not in req.full_url
     assert fake.timeouts == [30, 30, 30]  # every page has a timeout
     doc = json.loads((tmp_path / "board-tickets.json").read_text())
-    assert {k: v for k, v in doc.items() if k.startswith("ABC")} == {
-        "ABC-3": "In Progress",
-        "ABC-2": "Selected for Development",
-        "ABC-1": "Backlog",
+    assert doc["stories"] == {
+        "ABC-3": {"status": "In Progress"},
+        "ABC-2": {"status": "Selected for Development"},
+        "ABC-1": {"status": "Backlog"},
     }
-    assert doc["schema_version"] == 1 and "@taken" in doc
-    assert "(3 stories)" in capsys.readouterr().out
+    assert doc["schema_version"] == 2 and "@taken" in doc and doc["epics"] == {}
+    assert "(3 stories, 0 epics)" in capsys.readouterr().out
 
 
 def test_jql_from_the_crew(tmp_path, monkeypatch):
@@ -102,6 +102,25 @@ def test_jql_from_the_crew(tmp_path, monkeypatch):
     fake = Fake({"issues": []})
     assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 0
     assert json.loads(fake.requests[0].data)["jql"] == "project = XYZ"
+    assert len(fake.requests) == 1  # no flow.epics_jql: no epic query
+    # flow.epics_jql: a second query, its epics land beside the stories, not among them
+    crew["flow"]["epics_jql"] = "project = XYZ AND issuetype = Epic"
+    (tmp_path / ".weside" / "crew.json").write_text(json.dumps(crew))
+    epic = {
+        "key": "XYZ-1",
+        "fields": {"status": {"name": "In Progress"}, "issuetype": {"name": "Epic"}},
+    }
+    fake = Fake({"issues": [issue("XYZ-2", "Backlog")]}, {"issues": [epic]})
+    assert tf.main(["--board", str(tmp_path / "b.json")], env=ENV, opener=fake) == 0
+    assert [json.loads(r.data)["jql"] for r in fake.requests] == [
+        "project = XYZ",
+        "project = XYZ AND issuetype = Epic",
+    ]
+    doc = json.loads((tmp_path / "b-tickets.json").read_text())
+    assert (list(doc["stories"]), doc["epics"]) == (
+        ["XYZ-2"],
+        {"XYZ-1": {"status": "In Progress"}},
+    )
 
 
 @pytest.mark.parametrize(

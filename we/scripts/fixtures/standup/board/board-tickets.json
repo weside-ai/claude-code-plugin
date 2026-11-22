@@ -1,6 +1,9 @@
 {
- "schema_version": 1,
+ "schema_version": 2,
  "@taken": "2026-11-21T17:50:00Z",
- "PROJ-9005": "In Progress",
- "PROJ-9004": "Backlog"
+ "stories": {
+  "PROJ-9005": {"status": "In Progress"},
+  "PROJ-9004": {"status": "Backlog"}
+ },
+ "epics": {}
 }

@@ -68,6 +68,12 @@ def question(qid, minutes, **extra):
     }
 
 
+def snapshot(taken, statuses):
+    """A ticket snapshot as `ticket_snapshot.write` lays it out."""
+    stories = {k: {"status": v} for k, v in statuses.items()}
+    return {"schema_version": 2, "@taken": taken, "stories": stories, "epics": {}}
+
+
 def build(board, **kw):
     return open_ends.build(board, None, CREW, UNTIL, **kw)
 
@@ -274,7 +280,7 @@ def test_waits_stories_tickets(tmp_path):
     )
     snap = tmp_path / "board-tickets.json"
     snap.write_text(
-        json.dumps({"@taken": at(10), "ABC-12": "In Progress", "ABC-15": "In Progress"})
+        json.dumps(snapshot(at(10), {"ABC-12": "In Progress", "ABC-15": "In Progress"}))
     )
     doc = build(board)
     rows = {r["item"]: r for r in doc["rows"]}
@@ -287,7 +293,7 @@ def test_waits_stories_tickets(tmp_path):
     assert "ABC-13" not in rows
     assert doc["rows"][0]["item"] == "ABC-15"  # unknown since first
     assert not [g for g in doc["gaps"] if g.startswith("tickets")]  # control: 10 min, not stale
-    snap.write_text(json.dumps({"@taken": at(46), "ABC-15": "In Progress"}))
+    snap.write_text(json.dumps(snapshot(at(46), {"ABC-15": "In Progress"})))
     stale = build(board)
     assert f"tickets: stale since {at(46)}" in stale["gaps"]
     assert "ABC-15" not in {r["item"] for r in stale["rows"]}  # no story of a stale snapshot
