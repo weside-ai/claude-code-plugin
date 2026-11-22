@@ -237,12 +237,11 @@ class TestRefusals:
         assert len(world.transitions()[0]["pr"]) == 2
         assert "merged (PRs #7, acme/lib#3)" in capsys.readouterr().out
 
-    def test_a_submodule_landed_by_fast_forward_counts_as_landed(self, world, capsys):
+    @pytest.mark.parametrize("url", ["https://github.com/acme/lib", "../lib.git"])
+    def test_a_submodule_landed_by_fast_forward_counts_as_landed(self, world, capsys, url):
         sub = "1" * 40
         world.write(f"docs/plans/{KEY}-story.md", STORY + "\n### Phase 2: lib\n- **Repo:** lib\n")
-        world.write(
-            ".gitmodules", '[submodule "lib"]\n\tpath = lib\n\turl = https://github.com/acme/lib\n'
-        )
+        world.write(".gitmodules", f'[submodule "lib"]\n\tpath = lib\n\turl = {url}\n')
         world.commit("plan")
         git(world.top, "push", "-q", "origin", "HEAD:main")
         world.worker()

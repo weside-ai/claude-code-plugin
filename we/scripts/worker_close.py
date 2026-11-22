@@ -201,8 +201,9 @@ def view_pr(ref: str, own: str, top: Path) -> tuple[dict | None, str | None]:
     return _shape(data, repo), None
 
 
-def submodule_paths(top: Path, base: str) -> dict:
-    """{owner/repo: path} of every submodule `.gitmodules` on `origin/<base>` names."""
+def submodule_paths(top: Path, base: str, own: str) -> dict:
+    """{owner/repo: path} of every submodule `.gitmodules` on `origin/<base>` names; a relative
+    URL (`../lib.git`) resolves against `own`'s owner."""
     text = _git(
         top, "config", "--blob", f"origin/{base}:.gitmodules", "--get-regexp", r"^submodule\."
     )
@@ -214,8 +215,15 @@ def submodule_paths(top: Path, base: str) -> dict:
     return {
         slug: f["path"]
         for f in fields.values()
-        if f.get("path") and (slug := flow_report.norm_slug(f.get("url")))
+        if f.get("path") and (slug := flow_report.norm_slug(_absolute(f.get("url"), own)))
     }
+
+
+def _absolute(url: object, own: str) -> object:
+    text = str(url or "")
+    if text.startswith("../"):
+        return own.split("/", maxsplit=1)[0] + "/" + text[3:]
+    return url
 
 
 def _gitlink(top: Path, commit: str, path: str) -> str | None:
@@ -228,7 +236,7 @@ def landed_by_gitlink(ctx: dict, repo: str, merged: list) -> str | None:
     """The commit of submodule `repo` a merged PR of the checkout moved its gitlink to, when that
     commit lies on `repo`'s default branch; else None (gh unreadable guesses nothing)."""
     top, own = ctx["top"], ctx["own"]
-    path = submodule_paths(top, ctx["base"]).get(repo)
+    path = submodule_paths(top, ctx["base"], own).get(repo)
     if not path:
         return None
     info, why = _gh(["api", f"repos/{repo}"], top)
