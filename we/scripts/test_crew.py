@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import crew
@@ -1471,3 +1472,48 @@ def test_a_crew_security_lens_dispatches_the_shipped_security_agent():
     assert merged["lenses"]["security"]["agent"] == "we:lens-security"
     agent = Path(crew.__file__).resolve().parent.parent / "agents" / "lens-security.md"
     assert "name: lens-security" in agent.read_text(encoding="utf-8")
+
+
+def _config(root: Path, data: object) -> Path:
+    (root / ".weside").mkdir(parents=True, exist_ok=True)
+    (root / ".weside" / "config.json").write_text(json.dumps(data), encoding="utf-8")
+    return root
+
+
+def test_time_zone_reads_time_zone_from_the_project_config(tmp_path):
+    root = _config(tmp_path, {"time": {"zone": "Europe/Berlin"}})
+    assert crew.time_zone(root / "sub" / "dir", env={"TZ": "Asia/Tokyo"}).key == "Europe/Berlin"
+
+
+def test_time_zone_that_is_no_zone_warns_and_gives_utc(tmp_path, capsys, monkeypatch):
+    root = _config(tmp_path, {"time": {"zone": "Mars/Olympus"}})
+    assert crew.time_zone(root).key == "UTC"
+    assert "time.zone 'Mars/Olympus' is no time zone" in capsys.readouterr().err
+    monkeypatch.setattr(crew, "ZoneInfo", _no_tz_database)  # a host without a tz database
+    assert crew.time_zone(root) is timezone.utc
+    assert crew.time_zone(tmp_path / "elsewhere", env={"TZ": "UTC"}) is timezone.utc
+
+
+def _no_tz_database(name):
+    raise OSError(f"no tz database for {name}")
+
+
+def test_time_zone_without_the_key_is_the_systems_else_utc(tmp_path):
+    root = _config(tmp_path, {"stack": ["python"]})
+    assert crew.time_zone(root, env={"TZ": ":Asia/Tokyo"}).key == "Asia/Tokyo"
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    assert crew.system_zone_name({"TZ": "nowhere"}, etc) == "UTC"
+    (etc / "timezone").write_text("America/New_York\n", encoding="utf-8")
+    assert crew.system_zone_name({}, etc) == "America/New_York"
+
+
+def test_today_is_the_calendar_day_in_the_configured_zone(tmp_path):
+    late = datetime(2026, 11, 21, 23, 30, tzinfo=timezone.utc)
+    assert crew.today(_config(tmp_path, {"time": {"zone": "Europe/Berlin"}}), late) == "2026-11-22"
+
+
+def test_zone_cli_prints_the_zone_in_force(tmp_path, capsys):
+    root = _config(tmp_path, {"time": {"zone": "Europe/Berlin"}})
+    assert crew.main(["zone", "--from", str(root)]) == 0
+    assert capsys.readouterr().out.strip() == "Europe/Berlin"

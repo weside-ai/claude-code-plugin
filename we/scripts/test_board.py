@@ -3736,6 +3736,17 @@ def test_ask_stamps_kind_source_and_owner_by_component(crewed, capsys):
     assert item["kind"] == "task" and item["source"] == "gh run view 41" and item["owner"] == "Vic"
 
 
+def test_ask_dates_its_question_in_the_humans_time_zone(crewed, capsys):
+    """23:30 UTC is already the next day in Berlin: the day Foxy reads is Berlin's."""
+    (crewed / "work" / ".weside" / "config.json").write_text(
+        json.dumps({"time": {"zone": "Europe/Berlin"}}), encoding="utf-8"
+    )
+    answer_with(crewed, CLEAR)
+    late = datetime(2026, 11, 21, 23, 30, tzinfo=timezone.utc)
+    assert go(crewed, *ask_argv(), now=late) == 0
+    assert board_of(crewed)["owner_queue"][-1]["since"] == "2026-11-22"
+
+
 def test_ask_owner_by_name_and_an_unknown_owner_is_refused(crewed, capsys):
     answer_with(crewed, CLEAR)
     assert go(crewed, *ask_argv(), "--owner", "ada") == 0

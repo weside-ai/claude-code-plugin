@@ -332,7 +332,7 @@ carrying the key, `gh pr create`, `gh pr edit` and `gh pr comment` on the own PR
 `gh pr merge` only as `--disable-auto` or as the `--match-head-commit <checkout HEAD>` line while
 `arm_pr.sh --check` answers `ready` on that HEAD, and
 `gh api graphql` with `resolveReviewThread` alone (`scripts/worker_rights.py`, its docstring); any
-other `gh pr merge` and the whole never-list stay denied.
+other `gh pr merge` and the whole never-list stay denied. A worker started in the main checkout pushes only as one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment, because only that form names the tree the gate checks.
 
 ## Finish sequence (the last writer, before the first push)
 
