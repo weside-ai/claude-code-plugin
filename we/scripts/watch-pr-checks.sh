@@ -101,6 +101,8 @@
 # hour of quota sleep): the holder ends with exit 3 on its next read. A holder started with
 # --until-merged follows new heads and never ends there (its line says `follows new heads`), so the
 # second exits 14 at once. Without `flock` there is no lock.
+# REST only on red: each tick reads the GraphQL rollup; `gh run list` (REST, the scarcer quota) runs
+# only on a red or cancelled check, no check at all or a merged PR, plus once per green state to confirm no run is open.
 # Quota: before each read (once per interval) it reads `gh api rate_limit`; when core or graphql
 # has fewer than WATCH_QUOTA_FLOOR calls left it prints `quota: <n> left, sleeping until <reset>`
 # and sleeps until that reset instead of polling. The interval never drops under 60 s.
@@ -496,8 +498,18 @@ watch_head() {  # (re)start the per-head state: on start and, with --until-merge
   OFF_SAID=""
 }
 watch_head
+runs_read() {  # the head's workflow runs into RUNROWS: REST, so only when the rollup needs them
+  gh_try RUNROWS run list -R "$REPO" --commit "$SHA" --limit 100 --json databaseId,attempt,status,conclusion,workflowName,event,createdAt --jq "$RUNS"
+}
+needs_runs() {  # a red or cancelled check, no check at all, or a merged PR (merge time vs run time)
+  local rows
+  rows=$(tail -n +3 <<<"$OUT")
+  [ -z "$rows" ] || [ "$(field 3)" = MERGED ] || cut -f1 <<<"$rows" | grep -qxE 'fail|cancelled'
+}
+CONFIRMED=""
 while :; do
-  if view && gh_try RUNROWS run list -R "$REPO" --commit "$SHA" --limit 100 --json databaseId,attempt,status,conclusion,workflowName,event --jq "$RUNS"; then
+  RUNROWS=""
+  if view && { ! needs_runs || runs_read; }; then
     # A run created after the merge (a `pull_request: closed` workflow) is no CI of this head.
     LATE=""
     if [ "$(field 3)" = MERGED ] && [ -n "$(field 9)" ]; then
@@ -585,6 +597,20 @@ while :; do
     fi
     SNAP="$(sort <<<"$STATE")"$'\n--\n'"$(sort <<<"$RUNROWS")"
     if [ "$SNAP" != "$LAST" ]; then LAST=$SNAP; STABLE_SINCE=$NOW; READS=1; else READS=$((READS + 1)); fi
+    if [ -n "$LIVE" ] && [ -z "$PENDING" ] && [ "$READS" -ge 2 ] && [ $((NOW - STABLE_SINCE)) -ge "$QUIET" ] \
+      && [ -z "$FAILED" ] && [ "$CONFIRMED" != "$LAST" ] && [ -z "$RUNROWS" ]; then
+      # A green rollup is confirmed by one run read per state: a run queued before its first check
+      # registered is in no rollup yet. An open run keeps it pending and is read again next tick.
+      if runs_read; then
+        if awk -F'\t' '$3 ~ /^(queued|in_progress|requested|pending)$/ { f = 1 } END { exit !f }' <<<"$RUNROWS"; then
+          PENDING=1
+        else
+          CONFIRMED=$LAST
+        fi
+      else
+        PENDING=1
+      fi
+    fi
     if [ -n "$LIVE" ] && [ -z "$PENDING" ] && [ "$READS" -ge 2 ] && [ $((NOW - STABLE_SINCE)) -ge "$QUIET" ]; then
       if [ -n "$FAILED" ]; then
         # A red non-required check (an auto-merge workflow) does not stop a PR GitHub still merges.
