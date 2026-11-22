@@ -261,10 +261,11 @@ def test_status_lists_a_window_worker_and_leaves_a_master_out(tmp_path):
     finally:
         for pid in (worker, master, started_as):
             subprocess.run(["kill", str(pid)], capture_output=True, check=False)
-    assert out == [
+    assert out[:-1] == [
         f"s-w PROJ-12-impl pid={worker} idle last=- window",
         f"s-x PROJ-13-impl pid={started_as} busy last=- window",
     ]
+    assert out[-1].startswith("utility lane room: ")  # the machine's room, last
 
 
 def test_a_name_held_by_a_dead_session_starts(tmp_path):
@@ -372,6 +373,29 @@ def test_the_worker_env_names_its_starter_as_answer_address(tmp_path):
     run(project, env, "AC-12-win", GO)
     (window,) = [c["tmux"] for c in calls(tmp_path) if c.get("tmux", [""])[0] == "new-window"]
     assert "WE_STARTER=EPIC-1-master" in window[-1]
+
+
+def test_a_worker_knows_its_name_and_lane_for_its_signature_and_pool(tmp_path):
+    """A worker signs its commits and PRs with `WE_WORKER_NAME` (the owner, 22.11.: "von wem ein
+    PR ist"), and `--utility` puts it in the utility lane: counted against its own cap even when
+    the build lane is full."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    project, env = setup(tmp_path, rows=busy)
+    env["WE_WORKER_STARTER"] = "EPIC-1-master"
+    assert run(project, env, "AC-12-impl", "--bg", GO).returncode == 3
+    proc = run(project, env, "AC-12-fix", "--bg", "--utility", GO)
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    assert "--utility" not in call["argv"]
+    doc = json.loads(Path(call["argv"][call["argv"].index("--settings") + 1]).read_text())
+    assert {k: doc["env"][k] for k in ("WE_WORKER_NAME", "WE_WORKER_LANE", "WE_STARTER")} == {
+        "WE_WORKER_NAME": "AC-12-fix",
+        "WE_WORKER_LANE": "utility",
+        "WE_STARTER": "EPIC-1-master",
+    }
+    run(project, env, "AC-12-win", "--utility", GO)
+    (window,) = [c["tmux"] for c in calls(tmp_path) if c.get("tmux", [""])[0] == "new-window"]
+    assert "WE_WORKER_NAME=AC-12-win WE_WORKER_LANE=utility" in window[-1]
 
 
 def test_a_develop_brief_starts_without_the_ticketing_plugin(tmp_path):
@@ -1036,8 +1060,9 @@ def test_a_start_over_the_concurrency_cap_is_refused_and_starts_nothing(tmp_path
     project, env = setup(tmp_path, rows=busy)
     proc = run(project, env, "AC-12-impl", "--bg", GO)
     assert proc.returncode == 3
-    assert "we-worker: refused, no worker started: 8 workers busy (limit 8 for the machine" in (
-        proc.stderr
+    assert (
+        "we-worker: refused, no worker started: build lane: 8 workers busy (limit 8 for the"
+        in (proc.stderr)
     )
     assert "active account 5h at 10 % (limit 80 %" in proc.stderr
     assert "add --queue" in proc.stderr

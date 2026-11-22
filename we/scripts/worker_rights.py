@@ -1319,7 +1319,13 @@ PR_OWNER_ALLOW = (
 )
 
 
-def settings(repo: str | Path, key: str, starter: str | None = None) -> dict:
+def settings(
+    repo: str | Path,
+    key: str,
+    starter: str | None = None,
+    name: str | None = None,
+    lane: str | None = None,
+) -> dict:
     """The `--settings` document of a worker with `key` in `repo`: allow = the granted rights
     (with `build.pr_owner: worker` also `PR_OWNER_ALLOW`), deny = the never-list (and the crew's `deny_commands`, `deny_text`; a `deny_text` path also as a
     Read rule)."""
@@ -1343,10 +1349,19 @@ def settings(repo: str | Path, key: str, starter: str | None = None) -> dict:
             deny.append(f"Bash(*{text}*)")
             if text.startswith("/"):
                 deny.append(f"Read(/{text}**)")
-    return {"permissions": {"allow": allow, "deny": deny}, "env": worker_env(key, starter=starter)}
+    return {
+        "permissions": {"allow": allow, "deny": deny},
+        "env": worker_env(key, starter=starter, name=name, lane=lane),
+    }
 
 
-def worker_env(key: str, environ: Any = None, starter: str | None = None) -> dict:
+def worker_env(
+    key: str,
+    environ: Any = None,
+    starter: str | None = None,
+    name: str | None = None,
+    lane: str | None = None,
+) -> dict:
     """The `env` block of a worker's `--settings`: what `we-worker` sets and clears at its start.
 
     A `claude --bg` session runs in the daemon's environment, not the launcher's (the daemon may
@@ -1358,7 +1373,10 @@ def worker_env(key: str, environ: Any = None, starter: str | None = None) -> dic
     theirs. `WE_STARTER` is the starter's session name, the address a worker's question names for
     its answer (`process/L0-worker.md`): the starter outlives the worker, so an answer that arrives
     after the worker ended still lands; "" when the launcher knows no name. `WE_HUMAN` passes on
-    when the launcher has it. Never a credential: this block is written to a file."""
+    when the launcher has it. `WE_WORKER_NAME` is the worker's own name and `WE_WORKER_LANE` the
+    lane it started in (`build` or `utility`, `worker_launch.capacity`): the name signs the worker's
+    commits and PRs (`references/worker-dispatch.md` § Signature), the lane counts it in its pool.
+    Never a credential: this block is written to a file."""
     env = os.environ if environ is None else environ
     doc = {
         "WE_ROLE": "worker",
@@ -1368,6 +1386,8 @@ def worker_env(key: str, environ: Any = None, starter: str | None = None) -> dic
         "WE_START": "",
         "WE_WORKER_STARTER": "",
         "WE_STARTER": starter or "",
+        "WE_WORKER_NAME": name or "",
+        "WE_WORKER_LANE": "utility" if lane == "utility" else "build",
     }
     if env.get("WE_HUMAN"):
         doc["WE_HUMAN"] = env["WE_HUMAN"]

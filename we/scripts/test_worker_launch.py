@@ -223,6 +223,8 @@ def test_a_claude_bg_template_states_the_worker_env_as_settings(env, monkeypatch
             "WE_START": "",
             "WE_WORKER_STARTER": "",
             "WE_STARTER": "LEAD-1",
+            "WE_WORKER_NAME": "KEY-1-w1",
+            "WE_WORKER_LANE": "build",
             "WE_HUMAN": "ana",
         }
     }
@@ -695,6 +697,8 @@ class TestSettings:
             "WE_START": "",
             "WE_WORKER_STARTER": "",
             "WE_STARTER": "",
+            "WE_WORKER_NAME": "",
+            "WE_WORKER_LANE": "build",
         }
         assert doc["hooks"]["SessionStart"][0]["hooks"][0]["command"] == "timer arm x"
         assert not {"enabledPlugins", "autoMemoryDirectory", "autoCompactWindow"} & set(doc)
@@ -834,8 +838,9 @@ def test_capacity_refuses_above_either_limit_and_names_both_values(cap, tmp_path
     out = cap(8, 50.0)
     assert out.returncode == 3
     assert out.stderr.strip().startswith(
-        "we-worker: refused, no worker started: 8 workers busy (limit 8 for the machine,"
-        f" {tmp_path / 'state' / 'pool.json'}), active account 5h at 50 % (limit 80 %,"
+        "we-worker: refused, no worker started: build lane: 8 workers busy (limit 8 for the"
+        f" machine, max_busy_sessions of {tmp_path / 'state' / 'pool.json'}; utility lane 0 busy,"
+        " limit 5), active account 5h at 50 % (limit 80 %,"
         f" max_active_5h_percent of {tmp_path / 'state' / 'pool.json'}); try again later"
     )
     out = cap(2, 81.0)
@@ -912,8 +917,9 @@ def test_capacity_refuses_when_no_account_in_rotation_has_room(cap, monkeypatch,
     out = cap(1, 2.0)
     assert out.returncode == 3
     assert out.stderr.strip().startswith(
-        "we-worker: refused, no worker started: 1 workers busy (limit 8 for the machine,"
-        f" {tmp_path / 'state' / 'pool.json'}), no account in rotation has room (0 of 4 with 7d"
+        "we-worker: refused, no worker started: build lane: 1 workers busy (limit 8 for the"
+        f" machine, max_busy_sessions of {tmp_path / 'state' / 'pool.json'}; utility lane 0 busy,"
+        " limit 5), no account in rotation has room (0 of 4 with 7d"
         " under 95 %"
         f" and 5h at or under 80 %, max_active_5h_percent of {tmp_path / 'state' / 'pool.json'});"
         " try again later"
@@ -1061,6 +1067,110 @@ def test_capacity_counts_busy_background_sessions_only(cap, env):
     env["state"].write_text(json.dumps([*rows, *rows[5:9], win]))  # 5 companions, 9 + 1 workers
     out = _run("capacity", "--repo", str(env["wt"]), "--prefix", "we-worker")
     assert out.returncode == 3 and "10 workers busy" in out.stderr, out.stderr
+
+
+# --- the utility lane ------------------------------------------------------------------------
+
+
+@pytest.fixture
+def lanes(tmp_path, monkeypatch):
+    """In-process `capacity` with `build` and `utility` busy workers, no cswap, room on the
+    machine; returns `(code, stderr)` of a start in `lane`."""
+    state = tmp_path / "lanes"
+    state.mkdir()
+    monkeypatch.setenv("WE_WORKER_STATE_DIR", str(state))
+    monkeypatch.setattr(wl.shutil, "which", lambda _name: None)
+    group = tmp_path / "cg"
+    group.mkdir()
+
+    def run(build, utility, lane, done=0, pool=None, cgroup=group):
+        rows = []
+        for i in range(utility):
+            name = f"U-{i}-fix"
+            (state / f"{name}.settings.json").write_text(
+                json.dumps({"env": {wl.LANE_ENV: wl.UTILITY}})
+            )
+            rows.append({"name": name, "status": "busy", "state": "working", "pid": 1})
+        rows += [{"name": f"B-{i}-build", "status": "busy", "pid": 1} for i in range(build)]
+        rows += [
+            {"name": f"D-{i}-card", "status": "busy", "state": "done", "pid": 1}
+            for i in range(done)
+        ]
+        monkeypatch.setattr(wl, "sessions", lambda: rows)
+        if pool is not None:
+            (state / "pool.json").write_text(json.dumps(pool))
+        try:
+            wl.capacity(tmp_path, "we-worker", lane, cgroup, tmp_path / "loadavg")
+        except wl.LaunchError as exc:
+            return exc.code, str(exc)
+        return 0, ""
+
+    return {"run": run, "state": state, "cgroup": group}
+
+
+def test_a_utility_start_passes_a_full_build_lane_and_has_its_own_cap_and_queue(lanes):
+    """Red arm (22.11.): a fix round for two review warnings waited over an hour behind build
+    starts in the one pool. Default 5 without pool.json; a `done` worker counts in no lane."""
+    run = lanes["run"]
+    assert run(8, 0, "build")[0] == 3
+    assert run(8, 4, "utility") == (0, "")
+    code, err = run(8, 5, "utility")
+    assert code == 3 and "utility lane: 5 workers busy (limit 5 for the machine" in err
+    assert "max_utility_sessions" in err and "build lane 8 busy, limit 8" in err
+    assert run(8, 4, "utility", done=3) == (0, "")  # a reported worker works no more
+    assert run(7, 0, "build", done=3) == (0, "")
+    assert run(2, 2, "utility", pool={"max_utility_sessions": 2})[0] == 3
+    # each lane waits only behind its own queue
+    _queue_entry(lanes["state"], "B-9-queued", 100.0, os.getpid())
+    assert run(1, 0, "utility") == (0, "")
+    assert run(1, 0, "build")[0] == 3
+    _queue_entry(lanes["state"], "U-9-queued", 100.0, os.getpid())
+    doc = json.loads((lanes["state"] / "queue" / "U-9-queued.json").read_text())
+    (lanes["state"] / "queue" / "U-9-queued.json").write_text(
+        json.dumps({**doc, "lane": "utility"})
+    )
+    code, err = run(1, 0, "utility")
+    assert code == 3 and "utility lane: 1 queued start(s) ahead (first U-9-queued" in err
+
+
+def _cgroup(group, free_mib=4096, inactive_mib=0, full_avg60=0.0):
+    limit = 8 * 1024 * wl.MIB
+    (group / "memory.max").write_text(f"{limit}\n")
+    current = limit - (free_mib - inactive_mib) * wl.MIB
+    (group / "memory.current").write_text(f"{current}\n")
+    (group / "memory.stat").write_text(f"anon 1\ninactive_file {inactive_mib * wl.MIB}\n")
+    (group / "memory.pressure").write_text(
+        "some avg10=0.00 avg60=0.00 avg300=0.00 total=1\n"
+        f"full avg10=0.00 avg60={full_avg60:.2f} avg300=0.00 total=1\n"
+    )
+
+
+def test_a_utility_start_waits_for_room_and_names_the_missed_condition(lanes, tmp_path):
+    """Kiska's rule (22.11.): free >= 2 GiB with reclaimable page cache, pressure full avg60 < 1,
+    load5 < 20; an unreadable source counts as met and reads `n/a`."""
+    run, group = lanes["run"], lanes["cgroup"]
+    loadavg = tmp_path / "loadavg"
+    loadavg.write_text("3.00 19.99 12.00 1/2 3\n")
+    _cgroup(group, free_mib=2048, inactive_mib=1500)  # page cache counts as free
+    assert run(0, 0, "utility") == (0, "")
+    _cgroup(group, free_mib=1500)
+    code, err = run(0, 0, "utility")
+    assert code == 3 and "free memory 1500 MiB (needs >= 2048 MiB)" in err
+    assert "load5" not in err  # only the missed condition
+    assert run(0, 0, "build") == (0, "")  # the build lane has no resource rule
+    _cgroup(group, full_avg60=1.0)
+    assert "memory pressure full avg60 1 (needs < 1)" in run(0, 0, "utility")[1]
+    _cgroup(group)
+    loadavg.write_text("3.00 20.00 12.00 1/2 3\n")
+    assert "load5 20 (needs < 20)" in run(0, 0, "utility", pool={"utility_max_load5": 20})[1]
+    assert run(0, 0, "utility", pool={"utility_max_load5": 30}) == (0, "")
+    # no cgroup v2, a memory limit of `max`, no loadavg: met, shown as n/a
+    loadavg.unlink()
+    (group / "memory.max").write_text("max\n")
+    rows = wl.utility_resources(wl.pool_limits(lanes["state"]), group, loadavg)
+    assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, "0", None]
+    assert wl.resource_text(rows[:1]) == "free memory n/a (needs >= 2048 MiB)"
+    assert run(0, 0, "utility", cgroup=tmp_path / "none") == (0, "")
 
 
 # --- needs: a skill's frontmatter `needs:` against workers.context ------------------------------

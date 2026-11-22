@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # we-worker — start and steer a process worker on the global login (references/worker-dispatch.md).
-#   we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...]
+#   we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--utility] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...]
 #                                  start a worker session named <name>
 #   we-worker status [<name|id>]   one line per worker, background or window (a session started with
 #                                  WE_ROLE=worker or named by its tree's launcher marker, marked
@@ -73,6 +73,14 @@
 #            the starter one line on start, failure or timeout (--queue-timeout, default 2h). From
 #            a main checkout a queued start gets its own worktree, whatever `workers.tree` says.
 #            The cap is the machine's: <state dir>/pool.json `max_busy_sessions` (default 8)
+#   --utility  the utility lane: a fix round on an open PR's branch, a card, lens or review worker.
+#            It counts against pool.json `max_utility_sessions` (default 5), not against the build
+#            cap, waits in its own queue (never behind build starts), and starts only with room on
+#            the machine: own cgroup free memory (memory.max - memory.current + inactive_file) at
+#            least `utility_min_free_mib` (2048), memory.pressure `full avg60` below
+#            `utility_max_pressure_full_avg60` (1), load5 below `utility_max_load5` (20); an
+#            unreadable one counts as met (`n/a`). The 5h check holds for both lanes. The lane is
+#            the worker's WE_WORKER_LANE (settings file), marker and launched.jsonl line
 #   Tree: without --tree or --here a start stays where the caller stands; only under `.weside/config.json`
 #   `workers.tree: own` a start from the main checkout gets its own worktree (`worker_launch.py tree`:
 #   the repo's `workers.add_worktree`, else `git worktree add <repo>-<name> -b <branch> origin/<default>`).
@@ -99,7 +107,8 @@
 # (`worker_launch.py marker` or `launched`). A brief line `Needs: <plugin or MCP server>, …` naming one that
 # `workers.context` turns off refuses (exit 2; `worker_launch.py needs`). Without the plugin's worker_launch.py no worker
 # starts. Every worker starts with `--settings <state dir>/<name>.settings.json` (`worker_launch.py
-# settings`: its rights in this repo, the never-list, WE_ROLE, WE_STORY_KEY and WE_STARTER) and WE_STORY_KEY=<key>.
+# settings`: its rights in this repo, the never-list, WE_ROLE, WE_STORY_KEY, WE_STARTER, WE_WORKER_NAME (its
+# own name, for the signature of its commits and PRs) and WE_WORKER_LANE) and WE_STORY_KEY=<key>.
 # The crew (`.weside/crew.json`, scripts/crew.py) adds, when set:
 #   launch.allow_bypass true   --allow-dangerously-skip-permissions: the start mode stays
 #                              permissions.defaultMode, bypass is one Shift+Tab away; without a crew
@@ -113,7 +122,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...] | gc [--apply] | close <KEY> [--pr <ref>] | close --sweep [--apply] | status [<name|id>] | stop <name|id> | checkpoint <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
+  echo "usage: we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--utility] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...] | gc [--apply] | close <KEY> [--pr <ref>] | close --sweep [--apply] | status [<name|id>] | stop <name|id> | checkpoint <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
   exit 2
 }
 
@@ -405,9 +414,11 @@ tree=""
 here=0
 branch=""
 account=""
+lane=build
 while [[ $# -gt 0 ]]; do
   case $1 in
     --bg) bg=1; shift ;;
+    --utility) lane=utility; shift ;;
     --here) here=1; shift ;;
     --tree) [[ $# -ge 2 && -n "$2" ]] || { echo "we-worker: --tree needs a worktree path" >&2; exit 2; }; tree=$2; shift 2 ;;
     --tree=*) tree=${1#--tree=}; shift ;;
@@ -479,7 +490,7 @@ if [[ -n "$known_flags" && $# -gt 0 ]]; then
     [[ "$arg" == --* ]] || continue
     flag=${arg%%=*}
     if ! grep -qxF -- "$flag" <<<"$known_flags"; then
-      echo "we-worker: $flag is neither a we-worker flag (--bg, --queue, --queue-timeout, --limit, --tree, --here, --branch, --account) nor one claude knows; to start in another tree: we-worker $name --tree <tree> …" >&2
+      echo "we-worker: $flag is neither a we-worker flag (--bg, --queue, --queue-timeout, --utility, --limit, --tree, --here, --branch, --account) nor one claude knows; to start in another tree: we-worker $name --tree <tree> …" >&2
       exit 2
     fi
   done
@@ -522,7 +533,7 @@ fi
 # The concurrency cap: busy sessions and room in the account rotation (.weside/config.json
 # `workers`); a refusal names both values and exits 3, nothing starts; with --queue the start waits.
 rc=0
-python3 "$wl" capacity --repo "$PWD" --prefix we-worker || rc=$?
+python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" || rc=$?
 if [[ $rc -eq 3 && $queue -eq 1 ]]; then
   sup=$(plugin_script scripts/worker_supervisor.py 2>/dev/null)
   [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py); nothing queued" >&2; exit 3; }
@@ -537,7 +548,7 @@ if [[ $rc -eq 3 && $queue -eq 1 ]]; then
   qflags=()
   [[ -n "$brief" ]] && qflags+=(--has-brief)
   printf '%s\0' "${qargs[@]}" | python3 "$sup" queue --name "$name" --tree "$PWD" ${starter:+--starter "$starter"} \
-    ${queue_timeout:+--timeout "$queue_timeout"} ${qflags[@]+"${qflags[@]}"}
+    ${queue_timeout:+--timeout "$queue_timeout"} --lane "$lane" ${qflags[@]+"${qflags[@]}"}
   exit
 fi
 [[ $rc -eq 0 ]] || exit $rc
@@ -602,12 +613,12 @@ starter=$(_starter)
 mode="tmux"
 [[ $bg -eq 1 ]] && mode="bg"
 if [[ $mark -eq 1 ]]; then
-  python3 "$wl" marker --tree "$PWD" --name "$name" --key "$key" --role worker ${starter:+--starter "$starter"} --mode "$mode" \
+  python3 "$wl" marker --tree "$PWD" --name "$name" --key "$key" --role worker ${starter:+--starter "$starter"} --mode "$mode" --lane "$lane" \
     ${CLAUDE_CODE_SESSION_ID:+--starter-session "$CLAUDE_CODE_SESSION_ID"} ||
     { echo "we-worker: the marker of $name could not be written in $PWD; no worker started" >&2; exit 2; }
 else
   # no marker in a tree that is not the worker's own; the starter log still records the start
-  python3 "$wl" launched --name "$name" --key "$key" ${starter:+--starter "$starter"} \
+  python3 "$wl" launched --name "$name" --key "$key" ${starter:+--starter "$starter"} --lane "$lane" \
     ${CLAUDE_CODE_SESSION_ID:+--starter-session "$CLAUDE_CODE_SESSION_ID"} || true
 fi
 
@@ -640,7 +651,7 @@ fi
 # whether the ticketing plugin loads (`worker_launch.py ticketing_unneeded`), read from the worker's
 # own config dir (the global login, without CLAUDE_CONFIG_DIR).
 settings_file="${WE_WORKER_STATE_DIR:-$HOME/.claude/we-state/workers}/$name.settings.json"
-printf '%s' "$brief" | env -u CLAUDE_CONFIG_DIR python3 "$wl" settings --repo "$PWD" --key "$key" --name "$name" --out "$settings_file" --brief-stdin ${hook:+--session-start "$hook"} ${starter:+--starter "$starter"} \
+printf '%s' "$brief" | env -u CLAUDE_CONFIG_DIR python3 "$wl" settings --repo "$PWD" --key "$key" --name "$name" --out "$settings_file" --brief-stdin ${hook:+--session-start "$hook"} ${starter:+--starter "$starter"} --lane "$lane" \
   ${account_file:+--account-file "$account_file"} >/dev/null ||
   { echo "we-worker: the settings of $name could not be written; no worker started" >&2; rm -f ${account_file:+"$account_file"}; exit 2; }
 [[ -z "$account_file" ]] || rm -f "$account_file"
@@ -657,7 +668,7 @@ fi
 
 for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
 unset WESIDE_COMPANION WE_ROLE_ID WE_WORKER_QUEUE_TURN
-export WE_ROLE=worker WE_STORY_KEY="$key" WE_STARTER="${starter:-}"
+export WE_ROLE=worker WE_STORY_KEY="$key" WE_STARTER="${starter:-}" WE_WORKER_NAME="$name" WE_WORKER_LANE="$lane"
 
 if [[ $bg -eq 1 ]]; then
   exec claude --bg -n "$name" ${extra[@]+"${extra[@]}"} "$@"
@@ -677,5 +688,5 @@ fi
 args=$(printf ' %q' -n "$name" ${extra[@]+"${extra[@]}"} "$@")
 # tmux starts the window with the server's environment, not this shell's: clear it there.
 human=${WE_HUMAN:+ WE_HUMAN=$(printf '%q' "$WE_HUMAN")}
-tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION -u WE_ROLE_ID$human WE_ROLE=worker WE_STORY_KEY=$(printf '%q' "$key") WE_STARTER=$(printf '%q' "${starter:-}") claude$args"
+tmux new-window -d ${target:+-t "$target"} -n "$name" "env -u CLAUDE_CONFIG_DIR -u WESIDE_COMPANION -u WE_ROLE_ID$human WE_ROLE=worker WE_STORY_KEY=$(printf '%q' "$key") WE_STARTER=$(printf '%q' "${starter:-}") WE_WORKER_NAME=$(printf '%q' "$name") WE_WORKER_LANE=$lane claude$args"
 echo "we-worker: $name starts in tmux window $name${target:+ of ${target%:}} (global login${timer:+; time limit $limit})"
