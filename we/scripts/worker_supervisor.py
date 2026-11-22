@@ -708,16 +708,24 @@ def status_lines(
     return out
 
 
-def resource_line(state: Path, cgroup: Path | None = None, loadavg: Path = wl.LOADAVG) -> str:
-    """`we-worker status`'s last line: the utility lane's room on the machine
-    (`worker_launch.utility_resources`), `n/a` for a value it cannot read."""
+ROOM_PREFIX = "room for both lanes: "
+
+
+def resource_line(
+    state: Path,
+    cgroup: Path | None = None,
+    loadavg: Path | None = None,
+    meminfo: Path | None = None,
+) -> str:
+    """`we-worker status`'s last line: the machine's room for a start of either lane
+    (`worker_launch.resources`), `n/a` for a value it cannot read."""
     try:
         limits = wl.pool_limits(state)
     except wl.LaunchError as exc:
-        return f"utility lane room: unknown ({exc})"
-    rows = wl.utility_resources(limits, cgroup, loadavg)
-    verdict = "ok" if all(r["ok"] for r in rows) else "waits"
-    return f"utility lane room: {verdict}: {wl.resource_text(rows)}"
+        return f"{ROOM_PREFIX}unknown ({exc})"
+    rows = wl.resources(limits, cgroup, loadavg, meminfo)
+    verdict = "ok" if all(r["ok"] for r in rows) else "starts wait"
+    return f"{ROOM_PREFIX}{verdict}: {wl.resource_text(rows)}"
 
 
 # --- queue -----------------------------------------------------------------------------------
@@ -726,8 +734,10 @@ def resource_line(state: Path, cgroup: Path | None = None, loadavg: Path = wl.LO
 # spawns one detached waiter per entry (`wait_queue`). The queue is the machine's, one directory for
 # every repo. Only the oldest entry whose waiter lives tries to start (or one behind entries that
 # only their own repo's lower limit may hold back, `_may_try`), by running the same
-# `we-worker` call again without `--queue` and with `$WE_WORKER_QUEUE_TURN` = its name: its exit 3
-# is "still no room", any other exit ends the wait. First come, first served across waiters and
+# `we-worker` call again without `--queue` and with `$WE_WORKER_QUEUE_TURN` = its name, once the
+# machine has room (`worker_launch.resources`, the rule the start checks too): its exit 3 (the cap)
+# or 4 (the room) is "still no room", any other exit ends the wait. A start the room rule halts is
+# queued without `--queue`. First come, first served across waiters and
 # repos: a start that is not queued is refused while any living entry waits
 # (`worker_launch.queued_ahead`). Each lane (`build`, `utility`: the entry's `lane`) is its own
 # queue: a utility start never waits behind a build start. After a start the next one waits `SETTLE_S`, so the new worker
@@ -737,6 +747,7 @@ def resource_line(state: Path, cgroup: Path | None = None, loadavg: Path = wl.LO
 QUEUE_POLL_S = 30
 SETTLE_S = 60
 CAPACITY_REFUSED = 3
+STILL_WAITING = (CAPACITY_REFUSED, wl.RESOURCE_HALT)
 QUEUE_TIMEOUT = "2h"
 START_TIMEOUT_S = 300
 
@@ -937,11 +948,22 @@ def _tell(doc: dict, text: str, send, board, tag: str) -> None:
         board(doc["tree"], f"W-{doc['name']}-queue-{tag}", text.removeprefix("we-worker: "))
 
 
+def machine_room(state: Path) -> bool:
+    """Every condition of the resource rule holds (`worker_launch.resources`); an unreadable
+    `pool.json` leaves the decision to the start's own check."""
+    try:
+        limits = wl.pool_limits(state)
+    except wl.LaunchError:
+        return True
+    return all(r["ok"] for r in wl.resources(limits))
+
+
 def wait_queue(
     state: Path,
     name: str,
     *,
     start: Callable[[dict], tuple[int, str]] = start_queued,
+    room: Callable[[Path], bool] = machine_room,
     clock: Callable[[], float] = time.time,
     sleep: Callable[[float], None] = time.sleep,
     send: Callable[[str], bool] = to_starter,
@@ -972,9 +994,9 @@ def wait_queue(
             settled = now - last.stat().st_mtime >= SETTLE_S
         except OSError:
             settled = True
-        if settled and _may_try(state, name):
+        if settled and _may_try(state, name) and room(state):
             code, out = start(doc)
-            if code != CAPACITY_REFUSED:
+            if code not in STILL_WAITING:
                 _drop(state, name)
                 tail = out.splitlines()[-1] if out else ""
                 if code == 0:

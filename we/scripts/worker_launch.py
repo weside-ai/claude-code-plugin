@@ -63,9 +63,9 @@ Usage:
                                                    --queue` waits instead of refusing;
                                                    --lane utility counts the utility lane against
                                                    max_utility_sessions (default 5) behind its own
-                                                   queue and needs room on the machine
-                                                   (`utility_resources`); 2: a limit that is no
-                                                   number
+                                                   queue; 4: no room on the machine for either
+                                                   lane (`resources`), the start waits in its
+                                                   lane's queue; 2: a limit that is no number
   worker_launch.py needs [--repo <dir>] [--prefix <p>] < brief
                                                    exit 2 when the brief's `Needs:` line, or the
                                                    frontmatter `needs:` of a /we:<skill> the
@@ -326,17 +326,18 @@ POOL_KEY = "max_busy_sessions"
 PCT_KEY = "max_active_5h_percent"
 # The utility lane (`we-worker --utility`): a fix round on an open PR's branch, a card, lens or
 # review worker starts against its own cap and its own queue, never behind new build work (measured
-# 22.11.: a fix round for two review warnings waited over an hour behind build starts). Its three
-# resource thresholds are the machine's measure of room (Kiska, 22.11.); the cap of 5 stays the lid.
+# 22.11.: a fix round for two review warnings waited over an hour behind build starts). The three
+# resource thresholds are the machine's measure of room for both lanes (Kiska, 22.11., `resources`);
+# the caps stay the lid.
 UTILITY_KEY = "max_utility_sessions"
-FREE_KEY = "utility_min_free_mib"
-PRESSURE_KEY = "utility_max_pressure_full_avg60"
-LOAD_KEY = "utility_max_load5"
+RATIO_KEY = "max_working_set_ratio"
+PRESSURE_KEY = "max_pressure_full_avg60"
+LOAD_KEY = "max_load5"
 POOL_DEFAULTS = {
     POOL_KEY: 8,
     PCT_KEY: 80,
     UTILITY_KEY: 5,
-    FREE_KEY: 2048,
+    RATIO_KEY: 0.84,
     PRESSURE_KEY: 1,
     LOAD_KEY: 20,
 }
@@ -572,17 +573,30 @@ def room_in(accounts: list[dict], max_pct: float) -> tuple[int, int]:
     return room, len(accounts)
 
 
-# Kiska's resource rule for the utility lane (measured 22.11.): all three hold, or the start waits.
-# Each reads one file; a file that is missing or unreadable (no cgroup v2, no memory limit) counts
-# as passed and is shown as `n/a`. Paths are parameters, so a test hands fixture files.
-CGROUP_ROOT = Path("/sys/fs/cgroup")
-PROC_CGROUP = Path("/proc/self/cgroup")
-LOADAVG = Path("/proc/loadavg")
+# Kiska's resource rule (22.11.): all three hold, or a start of either lane waits in its lane's queue.
+# Measured: six kills by the host's memory guard at 94 % working set, four of them at 10 workers, each
+# set off by a peak (one tsc or pytest run takes 2 to 2.5 GiB at once). The working set is what the
+# guard counts: `memory.current - memory.stat file + memory.stat shmem` (page cache the kernel
+# reclaims is no load, shmem is), against `memory.max`, or MemTotal of /proc/meminfo without a
+# limit; `current - inactive_file` read 10 GiB high on 01.11. through active_file. Each source is one
+# file; a file that is missing or unreadable (no cgroup v2) counts as passed and reads `n/a`. Paths
+# are parameters, so a test hands fixture files; `$WE_WORKER_HOST_ROOT` stands in for `/` (the test
+# run sets it, so a busy host does not hold the launcher tests).
+HOST_ROOT_ENV = "WE_WORKER_HOST_ROOT"
 MIB = 1024 * 1024
+RESOURCE_HALT = 4
 
 
-def own_cgroup(proc_cgroup: Path = PROC_CGROUP, root: Path = CGROUP_ROOT) -> Path | None:
-    """This process's cgroup v2 directory (the `0::<path>` line), None without one."""
+def _host(path: str) -> Path:
+    root = os.environ.get(HOST_ROOT_ENV, "").strip()
+    return Path(root) / path.lstrip("/") if root else Path(path)
+
+
+def own_cgroup(proc_cgroup: Path | None = None, root: Path | None = None) -> Path | None:
+    """This process's cgroup v2 directory (the `0::<path>` line; a pod's `/sys/fs/cgroup`), None
+    without one."""
+    proc_cgroup = _host("/proc/self/cgroup") if proc_cgroup is None else proc_cgroup
+    root = _host("/sys/fs/cgroup") if root is None else root
     try:
         lines = proc_cgroup.read_text().splitlines()
     except OSError:
@@ -593,24 +607,36 @@ def own_cgroup(proc_cgroup: Path = PROC_CGROUP, root: Path = CGROUP_ROOT) -> Pat
     return None
 
 
-def _free_mib(cgroup: Path | None) -> float | None:
-    """`memory.max - memory.current + inactive_file` (`memory.stat`) in MiB; None without a limit
-    (`max`) or a readable file: page cache the kernel reclaims counts as free."""
+def _mem_total(meminfo: Path) -> int | None:
+    """MemTotal of /proc/meminfo in bytes, None when unreadable."""
+    try:
+        for line in meminfo.read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def working_set(cgroup: Path | None, meminfo: Path) -> tuple[int, int] | None:
+    """`(working set, its ceiling)` in bytes: `memory.current - memory.stat file + memory.stat
+    shmem` against `memory.max` (MemTotal of `meminfo` when it reads `max`); None when a source is
+    unreadable."""
     if cgroup is None:
         return None
     try:
         top = (cgroup / "memory.max").read_text().strip()
-        if top == "max":
-            return None
         current = int((cgroup / "memory.current").read_text().strip())
         stat = dict(
             line.split(None, 1)
             for line in (cgroup / "memory.stat").read_text().splitlines()
             if line
         )
-        return (int(top) - current + int(stat["inactive_file"])) / MIB
+        used = current - int(stat["file"]) + int(stat["shmem"])
     except (OSError, ValueError, KeyError):
         return None
+    ceiling = _mem_total(meminfo) if top == "max" else int(top) if top.isdigit() else None
+    return None if not ceiling else (used, ceiling)
 
 
 def _pressure_full_avg60(cgroup: Path | None) -> float | None:
@@ -634,21 +660,29 @@ def _load5(loadavg: Path) -> float | None:
         return None
 
 
-def utility_resources(
-    limits: dict[str, float], cgroup: Path | None = None, loadavg: Path = LOADAVG
+def resources(
+    limits: dict[str, float],
+    cgroup: Path | None = None,
+    loadavg: Path | None = None,
+    meminfo: Path | None = None,
 ) -> list[dict]:
-    """The three conditions of the utility lane, each `{what, value, want, ok}`: free memory of
-    the own cgroup at or above `utility_min_free_mib`, memory pressure `full avg60` below
-    `utility_max_pressure_full_avg60`, load5 below `utility_max_load5`. `value` None: unreadable,
-    `ok`. `cgroup` None reads this process's own (`own_cgroup`)."""
+    """The three conditions of a start in either lane, each `{what, value, want, ok}`: the own
+    cgroup's working set (`working_set`) below `max_working_set_ratio` of its ceiling, memory
+    pressure `full avg60` below `max_pressure_full_avg60`, load5 below `max_load5`. `value` None:
+    unreadable, `ok`. `cgroup` None reads this process's own (`own_cgroup`)."""
     group = own_cgroup() if cgroup is None else cgroup
-    free, pressure, load = _free_mib(group), _pressure_full_avg60(group), _load5(loadavg)
+    ws = working_set(group, _host("/proc/meminfo") if meminfo is None else meminfo)
+    pressure = _pressure_full_avg60(group)
+    load = _load5(_host("/proc/loadavg") if loadavg is None else loadavg)
+    ratio = None if ws is None else ws[0] / ws[1]
     return [
         {
-            "what": "free memory",
-            "value": None if free is None else f"{free:.0f} MiB",
-            "want": f">= {limits[FREE_KEY]:g} MiB",
-            "ok": free is None or free >= limits[FREE_KEY],
+            "what": "working set",
+            "value": None
+            if ws is None
+            else f"{ratio:.0%} ({ws[0] / MIB / 1024:.1f} of {ws[1] / MIB / 1024:.1f} GiB)",
+            "want": f"< {limits[RATIO_KEY]:.0%}",
+            "ok": ratio is None or ratio < limits[RATIO_KEY],
         },
         {
             "what": "memory pressure full avg60",
@@ -666,17 +700,17 @@ def utility_resources(
 
 
 def resource_text(rows: list[dict]) -> str:
-    """`free memory 1500 MiB (needs >= 2048 MiB); load5 n/a (needs < 20)` for `rows`."""
+    """`working set 81% (20.3 of 25.0 GiB) (needs < 84%); load5 n/a (needs < 20)` for `rows`."""
     return "; ".join(f"{r['what']} {r['value'] or 'n/a'} (needs {r['want']})" for r in rows)
 
 
 def busy_by_lane(rows: list[dict], state: Path) -> dict[str, int]:
     """The busy workers per lane: `status` busy (an interactive row only when `is_worker` says so:
     a companion or master is busy whenever it answers its human), never a row whose `state` is
-    `done`: its report is in and it works no more, even before the idle stop ends it. The build
-    lane takes no memory check for the room such a worker still holds: the supervisor stops it
-    after `workers.idle_stop_minutes` (`worker_supervisor.py`), which bounds the resident ones,
-    and a load or memory brake on build starts would stall new work on a busy shared host."""
+    `done`: its report is in and it works no more, even before the idle stop ends it. The count
+    alone does not guard the machine's memory: the host's memory guard killed workers six times
+    at 94 % working set, four of them at 10 workers, each set off by one build's peak (22.11.), so
+    the resource rule (`resources`) holds a start of the build lane too, not only a utility one."""
     counts = dict.fromkeys(LANES, 0)
     for r in rows:
         if r.get("status") != "busy" or r.get("state") == "done":
@@ -692,7 +726,8 @@ def capacity(
     prefix: str,
     lane: str = BUILD,
     cgroup: Path | None = None,
-    loadavg: Path = LOADAVG,
+    loadavg: Path | None = None,
+    meminfo: Path | None = None,
 ) -> None:
     """Refuse a new worker (`LaunchError`, exit 3) while a queued start of any repo on this machine
     waits ahead of it (`queued_ahead`: first come, first served across repos), while the busy
@@ -710,9 +745,10 @@ def capacity(
 
     Two lanes (`lane`): a build start counts the build lane's busy workers against
     `max_busy_sessions`, a utility start the utility lane's against `max_utility_sessions`
-    (`busy_by_lane`), each behind its own queue; the 5h check holds for both. A utility start also
-    needs room on the machine (`utility_resources`), else it is refused with the missed condition,
-    its value and its threshold."""
+    (`busy_by_lane`), each behind its own queue; the 5h check holds for both. A start of either lane
+    that passes them also needs room on the machine (`resources`), else it halts with exit 4
+    (`RESOURCE_HALT`): no refusal, `we-worker` queues it in its lane's queue, and the line names the
+    missed condition, its value and its threshold."""
     machine = pool_limits()
     sources: dict[str, str] = {}
     limits = cap_limits(repo, sources=sources)
@@ -788,15 +824,13 @@ def capacity(
             " starts as soon as the check passes",
             3,
         )
-    if lane == UTILITY:
-        missed = [r for r in utility_resources(limits, cgroup, loadavg) if not r["ok"]]
-        if missed:
-            raise LaunchError(
-                f"refused, no worker started: utility lane waits for room on the machine:"
-                f" {resource_text(missed)} ({pool_path()}); add --queue to the we-worker start:"
-                " it starts as soon as the check passes",
-                3,
-            )
+    missed = [r for r in resources(limits, cgroup, loadavg, meminfo) if not r["ok"]]
+    if missed:
+        raise LaunchError(
+            f"{lane} lane waits for room on the machine: {resource_text(missed)} ({pool_path()});"
+            " the start waits in its lane's queue and starts as soon as the check passes",
+            RESOURCE_HALT,
+        )
 
 
 def claude_env() -> dict:

@@ -1106,7 +1106,9 @@ def lanes(tmp_path, monkeypatch):
         if pool is not None:
             (state / "pool.json").write_text(json.dumps(pool))
         try:
-            wl.capacity(tmp_path, "we-worker", lane, cgroup, tmp_path / "loadavg")
+            wl.capacity(
+                tmp_path, "we-worker", lane, cgroup, tmp_path / "loadavg", tmp_path / "meminfo"
+            )
         except wl.LaunchError as exc:
             return exc.code, str(exc)
         return 0, ""
@@ -1139,44 +1141,74 @@ def test_a_utility_start_passes_a_full_build_lane_and_has_its_own_cap_and_queue(
     assert code == 3 and "utility lane: 1 queued start(s) ahead (first U-9-queued" in err
 
 
-def _cgroup(group, free_mib=4096, inactive_mib=0, full_avg60=0.0):
-    limit = 8 * 1024 * wl.MIB
-    (group / "memory.max").write_text(f"{limit}\n")
-    current = limit - (free_mib - inactive_mib) * wl.MIB
+def _cgroup(group, used_pct=50, file_mib=0, shmem_mib=0, full_avg60=0.0, limit_mib=8192):
+    """A cgroup whose working set is `used_pct` % of `limit_mib`; `file_mib` page cache and
+    `shmem_mib` shared memory come on top of `memory.current` as the kernel counts them."""
+    (group / "memory.max").write_text(f"{limit_mib * wl.MIB}\n")
+    current = (limit_mib * used_pct // 100 + file_mib - shmem_mib) * wl.MIB
     (group / "memory.current").write_text(f"{current}\n")
-    (group / "memory.stat").write_text(f"anon 1\ninactive_file {inactive_mib * wl.MIB}\n")
+    (group / "memory.stat").write_text(
+        f"anon 1\nfile {file_mib * wl.MIB}\nshmem {shmem_mib * wl.MIB}\n"
+        f"inactive_file {file_mib // 2 * wl.MIB}\n"
+    )
     (group / "memory.pressure").write_text(
         "some avg10=0.00 avg60=0.00 avg300=0.00 total=1\n"
         f"full avg10=0.00 avg60={full_avg60:.2f} avg300=0.00 total=1\n"
     )
 
 
-def test_a_utility_start_waits_for_room_and_names_the_missed_condition(lanes, tmp_path):
-    """Kiska's rule (22.11.): free >= 2 GiB with reclaimable page cache, pressure full avg60 < 1,
-    load5 < 20; an unreadable source counts as met and reads `n/a`."""
+def test_the_working_set_drops_page_cache_and_keeps_shmem(tmp_path):
+    """Kiska (22.11.): `current - file + shmem`; `current - inactive_file` read 10 GiB high
+    through active_file."""
+    group = tmp_path / "cg"
+    group.mkdir()
+    (group / "memory.max").write_text(f"{1000 * wl.MIB}\n")
+    (group / "memory.current").write_text(f"{900 * wl.MIB}\n")
+    (group / "memory.stat").write_text(
+        f"file {300 * wl.MIB}\nshmem {50 * wl.MIB}\ninactive_file {100 * wl.MIB}\n"
+    )
+    assert wl.working_set(group, tmp_path / "meminfo") == (650 * wl.MIB, 1000 * wl.MIB)
+    # no limit: MemTotal of /proc/meminfo is the ceiling
+    (group / "memory.max").write_text("max\n")
+    (tmp_path / "meminfo").write_text("MemTotal:        2048000 kB\nMemFree:  1 kB\n")
+    assert wl.working_set(group, tmp_path / "meminfo") == (650 * wl.MIB, 2048000 * 1024)
+    rows = wl.resources(wl.POOL_DEFAULTS, group, tmp_path / "loadavg", tmp_path / "meminfo")
+    assert rows[0]["value"] == "32% (0.6 of 2.0 GiB)" and rows[0]["ok"]
+    (tmp_path / "meminfo").unlink()  # neither a limit nor meminfo: n/a, met
+    assert wl.working_set(group, tmp_path / "meminfo") is None
+
+
+def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(lanes, tmp_path):
+    """Kiska's rule (22.11.): working set < 84 % of memory.max, pressure full avg60 < 1,
+    load5 < 20, for both lanes; an unreadable source counts as met and reads `n/a`."""
     run, group = lanes["run"], lanes["cgroup"]
     loadavg = tmp_path / "loadavg"
     loadavg.write_text("3.00 19.99 12.00 1/2 3\n")
-    _cgroup(group, free_mib=2048, inactive_mib=1500)  # page cache counts as free
+    _cgroup(group, used_pct=77, file_mib=3000, shmem_mib=100)  # page cache is no load
     assert run(0, 0, "utility") == (0, "")
-    _cgroup(group, free_mib=1500)
-    code, err = run(0, 0, "utility")
-    assert code == 3 and "free memory 1500 MiB (needs >= 2048 MiB)" in err
-    assert "load5" not in err  # only the missed condition
-    assert run(0, 0, "build") == (0, "")  # the build lane has no resource rule
+    assert run(0, 0, "build") == (0, "")
+    _cgroup(group, used_pct=86)
+    for lane in wl.LANES:
+        code, err = run(0, 0, lane)
+        assert code == wl.RESOURCE_HALT, err
+        assert f"{lane} lane waits for room" in err and "refused" not in err
+        assert "working set 86% (6.9 of 8.0 GiB) (needs < 84%)" in err
+        assert "load5" not in err  # only the missed condition
+    assert run(0, 0, "build", pool={"max_working_set_ratio": 0.9}) == (0, "")
     _cgroup(group, full_avg60=1.0)
-    assert "memory pressure full avg60 1 (needs < 1)" in run(0, 0, "utility")[1]
+    assert "memory pressure full avg60 1 (needs < 1)" in run(0, 0, "build")[1]
     _cgroup(group)
     loadavg.write_text("3.00 20.00 12.00 1/2 3\n")
-    assert "load5 20 (needs < 20)" in run(0, 0, "utility", pool={"utility_max_load5": 20})[1]
-    assert run(0, 0, "utility", pool={"utility_max_load5": 30}) == (0, "")
-    # no cgroup v2, a memory limit of `max`, no loadavg: met, shown as n/a
+    assert "load5 20 (needs < 20)" in run(0, 0, "utility")[1]
+    assert run(0, 0, "utility", pool={"max_load5": 30}) == (0, "")
+    # the cap is checked first and still refuses with 3
+    assert run(8, 0, "build", pool={"max_load5": 20})[0] == 3
+    # no cgroup v2, no meminfo, no loadavg: met, shown as n/a
     loadavg.unlink()
-    (group / "memory.max").write_text("max\n")
-    rows = wl.utility_resources(wl.pool_limits(lanes["state"]), group, loadavg)
-    assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, "0", None]
-    assert wl.resource_text(rows[:1]) == "free memory n/a (needs >= 2048 MiB)"
-    assert run(0, 0, "utility", cgroup=tmp_path / "none") == (0, "")
+    rows = wl.resources(wl.pool_limits(lanes["state"]), tmp_path / "none", loadavg, loadavg)
+    assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, None, None]
+    assert wl.resource_text(rows[:1]) == "working set n/a (needs < 84%)"
+    assert run(0, 0, "build", cgroup=tmp_path / "none") == (0, "")
 
 
 # --- needs: a skill's frontmatter `needs:` against workers.context ------------------------------

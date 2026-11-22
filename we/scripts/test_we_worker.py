@@ -265,7 +265,7 @@ def test_status_lists_a_window_worker_and_leaves_a_master_out(tmp_path):
         f"s-w PROJ-12-impl pid={worker} idle last=- window",
         f"s-x PROJ-13-impl pid={started_as} busy last=- window",
     ]
-    assert out[-1].startswith("utility lane room: ")  # the machine's room, last
+    assert out[-1].startswith("room for both lanes: ")  # the machine's room, last
 
 
 def test_a_name_held_by_a_dead_session_starts(tmp_path):
@@ -416,6 +416,34 @@ def test_a_queued_utility_start_waits_in_its_own_lane_of_the_queue(tmp_path):
     assert "lane=utility" in run(project, env, "status").stdout
     for name in ("AC-12-impl", "AC-12-fix"):
         assert run(project, env, "stop", name).returncode == 0
+    assert not started(tmp_path)
+
+
+def test_a_start_without_room_waits_in_its_lane_without_queue(tmp_path):
+    """Kiska (22.11.): six kills by the host's memory guard at 94 % working set; a build start
+    the room rule halts is no refusal: it waits in the build queue without --queue."""
+    project, env = setup(tmp_path)
+    host = tmp_path / "host"
+    group = host / "sys" / "fs" / "cgroup"
+    group.mkdir(parents=True)
+    (host / "proc" / "self").mkdir(parents=True)
+    (host / "proc" / "self" / "cgroup").write_text("0::/\n")
+    mib = 1024 * 1024
+    (group / "memory.max").write_text("max\n")  # no limit: MemTotal is the ceiling
+    (host / "proc" / "meminfo").write_text("MemTotal: 102400 kB\n")
+    (group / "memory.current").write_text(f"{95 * mib}\n")
+    (group / "memory.stat").write_text(f"file {10 * mib}\nshmem {1 * mib}\n")  # 86 %
+    env["WE_WORKER_HOST_ROOT"] = str(host)
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert "build lane waits for room on the machine: working set 86%" in proc.stderr
+    assert "(needs < 84%)" in proc.stderr
+    assert "queued (position 1 of the build lane" in proc.stdout
+    status = run(project, env, "status").stdout.splitlines()
+    assert status[-1].startswith("room for both lanes: starts wait: working set 86%")
+    window = run(project, env, "AC-13-win", GO)  # a window cannot wait in the queue
+    assert window.returncode == 4 and "start it with --bg" in window.stderr
+    assert run(project, env, "stop", "AC-12-impl").returncode == 0
     assert not started(tmp_path)
 
 

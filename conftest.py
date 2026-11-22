@@ -1,5 +1,5 @@
 """Every test run keeps off the live state directory (tests wrote ~9 % of the live
-`brakes.jsonl`).
+`brakes.jsonl`) and off the host's memory and load readings (`WE_WORKER_HOST_ROOT`).
 
 A write a test sends to a live state directory is refused by `worker_rights.brake_log`
 (`WE_STATE_FORBIDDEN`), its line lands in `WE_STATE_LEAKS`, and the run fails naming it. A test
@@ -23,6 +23,9 @@ _LEAKS = Path(tempfile.mkdtemp(prefix="we-state-leaks-")) / "leaks.jsonl"
 # set at import, before any test: subprocesses inherit it even from an environment copied early
 os.environ["WE_STATE_FORBIDDEN"] = os.pathsep.join(_LIVE)
 os.environ["WE_STATE_LEAKS"] = str(_LEAKS)
+# the launcher's resource rule reads the host's cgroup, meminfo and loadavg: on a busy host every
+# start in a test would wait in the queue; an empty stand-in for `/` reads `n/a` (counts as room)
+os.environ["WE_WORKER_HOST_ROOT"] = tempfile.mkdtemp(prefix="we-host-root-")
 
 
 @pytest.fixture

@@ -69,7 +69,7 @@ def test_dead_and_limited_workers(tmp_path):
     # the machine's live memory and load, so it is compared by its prefix only
     again = run(tmp_path, rows).stdout.splitlines()
     assert again[:-1] == text_before.splitlines()[:-1]
-    assert again[-1].startswith("utility lane room: ")
+    assert again[-1].startswith("room for both lanes: ")
     lines = text_before.splitlines()
     assert lines[0] == f"s1 w-exit pid={DEAD_PID} exited(idle) last=11:40"
     assert lines[2] == "  resume after the reset: we-worker w-limit --bg --resume s2"
