@@ -695,6 +695,7 @@ def status_lines(
             when = "the reset" if r["end"] == "usage-limit" else "the login is back"
             out.append(f"  resume after {when}: {r['resume']}")
     positions = dict.fromkeys(wl.LANES, 0)  # each lane is its own queue
+    dead = False
     for q in queued(state):
         lane = wl.entry_lane(q)
         positions[lane] += 1
@@ -703,12 +704,13 @@ def status_lines(
         since = dt.datetime.fromtimestamp(q.get("queued_at", now), dt.timezone.utc)
         until = dt.datetime.fromtimestamp(q.get("deadline", now), dt.timezone.utc)
         waiter = "" if waiter_lives(q) else " dead waiter"
+        dead = dead or bool(waiter)
         out.append(
             f"queued {q.get('name')} position={positions[lane]} since={since:%H:%M}"
             f" until={until:%H:%M} tree={q.get('tree')} starter={q.get('starter') or '-'}"
             f" lane={lane}{waiter}"
         )
-    if any(not waiter_lives(q) for q in queued(state)):
+    if dead:
         out.append(
             "  a dead waiter starts nothing: `we-worker status --restart-waiters` restarts it"
         )

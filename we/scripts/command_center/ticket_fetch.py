@@ -12,8 +12,8 @@ never as an argument or in a URL. The stories' JQL is `--jql`, else the crew's `
 (`crew.py`); without one nothing is fetched. The open epics' JQL is `--epics-jql`, else
 `flow.epics_jql`; without one no epics are fetched. Each query pages through Jira Cloud's `POST
 /rest/api/3/search/jql` (`fields`: `FIELDS`, `nextPageToken` until the answer carries none or
-`isLast`); the issues map to their records (`ticket_snapshot.records`: an `Epic` issuetype to the
-epics) and go to `ticket_snapshot.write` for the board (`--board`, else the crew's), the
+`isLast`); the issues map to their records (`ticket_snapshot.records`): every issue of the epics
+query is an epic, one of the stories query only with the `Epic` issuetype; they go to `ticket_snapshot.write` for the board (`--board`, else the crew's), the
 snapshot's one writer.
 
 Exit codes, one per failure class; nothing is written on any of them:
@@ -192,10 +192,12 @@ def run(args, env, opener=urllib.request.urlopen) -> tuple:
     if board is None:
         raise FetchError(EXIT_CONFIG, "no board (no crew, no --board)")
     issues = fetch(base, email, token, jql, opener, args.timeout)
-    if epics_jql:
-        issues += fetch(base, email, token, epics_jql, opener, args.timeout)
+    epic_issues = fetch(base, email, token, epics_jql, opener, args.timeout) if epics_jql else []
     try:
         stories, epics = ts.records({"issues": issues})
+        # what the epics query returns is an epic, whatever the project names its type
+        found, more = ts.records({"issues": epic_issues})
+        epics.update({**found, **more})
     except ValueError as exc:
         raise FetchError(EXIT_REFUSED, f"answer refused ({exc})") from None
     target = ts.write(board, stories, datetime.now(timezone.utc), epics)

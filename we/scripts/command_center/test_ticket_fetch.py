@@ -106,6 +106,7 @@ def test_jql_from_the_crew(tmp_path, monkeypatch):
     # flow.epics_jql: a second query, its epics land beside the stories, not among them
     crew["flow"]["epics_jql"] = "project = XYZ AND issuetype = Epic"
     (tmp_path / ".weside" / "crew.json").write_text(json.dumps(crew))
+    # the epic level's type name varies (renamed, localized): the query decides, not the name
     epic = {
         "key": "XYZ-1",
         "fields": {"status": {"name": "In Progress"}, "issuetype": {"name": "Epic"}},

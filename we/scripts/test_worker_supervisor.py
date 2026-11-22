@@ -578,6 +578,8 @@ def test_a_name_already_queued_refuses_unless_its_waiter_is_gone(queue):
     assert "position=1" in queued["AC-4-u"] and "lane=utility" in queued["AC-4-u"]
     assert queued["AC-2-b"].endswith(" dead waiter") and "dead" not in queued["AC-3-c"]
     assert "--restart-waiters" in lines[-1]
+    only = ws.status_lines([], "AC-3-c", queue["state"], queue["state"], queue["clock"]())
+    assert not [x for x in only if "--restart-waiters" in x]  # its waiter lives
     spawned = []
     assert ws.restart_waiters(queue["state"], spawned.append) == ["AC-2-b", "AC-4-u"]
     assert spawned == ["AC-2-b", "AC-4-u"]
