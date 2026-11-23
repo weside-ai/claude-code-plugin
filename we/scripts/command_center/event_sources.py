@@ -55,6 +55,17 @@ wait_min}``)
     Each command runs with a 120 s timeout; each stdout line is one event: of the kind its first
     word names, lower-cased, when that word is ``disk``, else ``local_check``. The command is the
     host's own: its line is the one text not built from ids (its owner writes it).
+``permission_prompt`` (``sessions``: ``{interval_s, waiting}``)
+    Every ``interval_s`` (default 60) one ``claude agents --json`` (``worker_launch.sessions``,
+    read only: the source never writes to a session, its socket or its CLI). A session whose
+    ``waitingFor`` is one of ``waiting`` (default ``permission prompt``, ``sandbox request``,
+    ``dialog open``) opens an episode keyed ``<sessionId>:<tool_use id>`` (``transcript.py``: its
+    last tool call; unreadable → ``<sessionId>:<waitingFor>:<first sample>``). A key seen in two
+    consecutive samples is one event, once (seen 14 days): ``source_at`` the first sample, fields
+    the session's name (else the first 8 characters of its id), its tmux window's name when it runs
+    in one (``tmux list-panes``, read only), the tool's name and the waiting state, each a plain
+    token or left out; a tool's input never. A sample without the wait closes the episode silently:
+    an answered prompt, a prompt seen once (shorter than one interval) give no event.
 ``poll_error``
     A ``gh``, ``git`` or ``kubectl`` failure, at most one per hour (the poller routes it to
     ``machinery`` unless ``routes`` says otherwise).
@@ -74,10 +85,14 @@ import json
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from transcript import last_tool_use
 
 KINDS = (
     "main_red",
@@ -95,6 +110,7 @@ KINDS = (
     "local_check",
     "poll_error",
     "config_error",
+    "permission_prompt",
 )
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
@@ -113,6 +129,11 @@ _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _REPO = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 PROD_TAG = r"^v\d+\.\d+\.\d+$"
+WAITING = ("permission prompt", "sandbox request", "dialog open")
+SESSIONS_INTERVAL_S = 60
+_SESSION_ID = re.compile(r"^[A-Za-z0-9-]{8,80}$")
+_SESSION_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_TOOL = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
 def name_of(value: Any, limit: int = 100) -> str:
@@ -125,6 +146,33 @@ def token_of(value: Any) -> str:
     """A branch or login: kept when it is one plain token, else ``?``."""
     text = str(value or "")
     return text if _SAFE_TOKEN.match(text) else "?"
+
+
+def session_label(name: Any, session_id: Any) -> str:
+    """A session for a line: its name when it is one plain token, else its id's first 8 chars."""
+    text = str(name or "")
+    if _SESSION_NAME.match(text):
+        return text
+    sid = str(session_id or "")
+    return sid[:8] if _SESSION_ID.match(sid) else "?"
+
+
+def tool_label(name: Any) -> str:
+    text = str(name or "")
+    return text if _TOOL.match(text) else "unknown"
+
+
+def window_label(name: Any) -> str | None:
+    text = str(name or "")
+    return text if _SESSION_NAME.match(text) else None
+
+
+def list_sessions() -> list[dict]:
+    """``claude agents --json`` through the one reader of the CLI (``worker_launch.sessions``)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import worker_launch  # noqa: PLC0415  (only a crew with a sessions source pays the import)
+
+    return worker_launch.sessions()
 
 
 def run_url(repo: str, run_id: Any) -> str:
@@ -193,8 +241,12 @@ class Round:
         root: str | None = None,
         env: dict[str, str] | None = None,
         run: Runner = subprocess.run,
+        due: set[str] | None = None,
+        sessions: Callable[[], list[dict]] = list_sessions,
     ):
         self.src = sources or {}
+        self.due = due  # the source groups this round runs (``main``, ``sessions``); None: all
+        self.list_sessions = sessions
         self.st = state
         self.now = now
         self.local_checks = list(local_checks or [])
@@ -300,13 +352,19 @@ class Round:
             ("rollout", self.rollout),
             ("rate_limit", self.rate_limit),
         ]
-        for key, step in steps:
+        main = self.due is None or "main" in self.due
+        if self.src.get("sessions") and (self.due is None or "sessions" in self.due):
+            try:
+                self.session_waiting()
+            except Exception as exc:
+                self.errors.append(f"source sessions: {type(exc).__name__}")
+        for key, step in steps if main else []:
             if self.src.get(key) or (key == "queued" and self.src.get("dispatch")):
                 try:
                     step()
                 except Exception as exc:
                     self.errors.append(f"source {key}: {type(exc).__name__}")
-        if self.local_checks:
+        if self.local_checks and main:
             try:
                 self.local()
             except Exception as exc:
@@ -804,6 +862,102 @@ class Round:
                 iso(self.now),
                 remaining=left,
             )
+
+    def session_waiting(self) -> None:
+        """One sample of the sessions: an episode per waiting session, one event per prompt."""
+        cfg = self.src.get("sessions")
+        cfg = cfg if isinstance(cfg, dict) else {}
+        waiting = set(cfg.get("waiting") or WAITING)
+        try:
+            rows = self.list_sessions()
+        except Exception as exc:  # the class only: the CLI's error text is not ours to repeat
+            self.errors.append(f"claude agents: {type(exc).__name__}")
+            return
+        episodes = self.st.setdefault("prompts", {})
+        present = set()
+        projects = Path(self.env.get("HOME") or Path.home()) / ".claude" / "projects"
+        windows: dict[int, str] | None = None
+        for row in rows:
+            sid = str(row.get("sessionId") or "")
+            if not _SESSION_ID.match(sid):
+                continue
+            present.add(sid)
+            what = row.get("waitingFor")
+            if what not in waiting:
+                episodes.pop(sid, None)  # answered, or never waiting: closed without a line
+                continue
+            hit = last_tool_use(projects, sid)
+            if hit and not _SAFE_TOKEN.match(hit[0]):
+                hit = None
+            open_ep = episodes.get(sid)
+            key = self.prompt_key(sid, what, hit, open_ep)
+            if not open_ep or open_ep.get("key") != key:
+                episodes[sid] = {
+                    "key": key,
+                    "first": self.now,
+                    "waiting": what,
+                    "fallback": not hit,
+                }
+                continue
+            seen_key = f"prompt:{key}"
+            if seen_key in self.seen:
+                continue
+            self.new(seen_key)
+            if windows is None:
+                windows = self.tmux_windows()
+            fields = {
+                "session": session_label(row.get("name"), sid),
+                "sid": sid,
+                "tool": tool_label(hit[1] if hit else ""),
+                "waiting": what,
+            }
+            window = window_label(self.window_of(row.get("pid"), windows))
+            if window:
+                fields["window"] = window
+            self.emit(
+                "permission_prompt", seen_key, f"session:{sid}", iso(open_ep["first"]), **fields
+            )
+        for sid in [s for s in episodes if s not in present]:
+            del episodes[sid]
+
+    def prompt_key(self, sid: str, what: str, hit: tuple | None, open_ep: dict | None) -> str:
+        """``<sessionId>:<tool_use id>``; without a readable transcript the open episode's
+        fallback key, else a new one from this sample."""
+        if hit:
+            return f"{sid}:{hit[0]}"
+        if open_ep and open_ep.get("fallback") and open_ep.get("waiting") == what:
+            return str(open_ep["key"])
+        return f"{sid}:{what}:{int(self.now)}"
+
+    def tmux_windows(self) -> dict[int, str]:
+        """Pane pid → window name of the host's tmux server; empty without one (no error)."""
+        out = self._exec(["tmux", "list-panes", "-a", "-F", "#{pane_pid}\t#{window_name}"], 10)
+        if out is None:
+            self.errors.pop()  # no tmux on this host is no failure
+            return {}
+        found = {}
+        for line in out.stdout.splitlines() if out.returncode == 0 else []:
+            pid, _, name = line.partition("\t")
+            if pid.isdigit():
+                found[int(pid)] = name
+        return found
+
+    @staticmethod
+    def window_of(pid: Any, windows: dict[int, str]) -> str | None:
+        """The window whose pane process is ``pid`` or one of its ancestors (``/proc``)."""
+        if not isinstance(pid, int) or isinstance(pid, bool) or not windows:
+            return None
+        for _ in range(32):
+            if pid in windows:
+                return windows[pid]
+            try:
+                stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+                pid = int(stat.rsplit(")", 1)[1].split()[1])
+            except (OSError, ValueError, IndexError):
+                return None
+            if pid <= 1:
+                return None
+        return None
 
     def local(self) -> None:
         for command in self.local_checks:

@@ -10,8 +10,10 @@ Two kinds of context line, nothing else, no subprocess and no network:
 - ``blocked: <worker> (<key>) waits on <waiting_on> (<kind>) since <HH:MM>; pending command, quoted
   data: "<command>"`` for every board line carrying ``blocked`` (``board.py blocked``,
   docs/board.md § Blocked workers), to the worker's starter (``blocked.starter_session_id`` is this
-  session) and to the coordinator, once per wait (``blocked.since``). The command is another
-  session's text: it comes JSON-quoted and labelled as data, never as an instruction.
+  session), once per wait (``blocked.since``). The command is another session's text: it comes
+  JSON-quoted and labelled as data, never as an instruction. The coordinator hears of an open
+  prompt from the event poller alone (``scripts/command_center/event_sources.py``, kind
+  ``permission_prompt``), not from this hook.
 
 Silent without the crew's ``flow.log_dir``: then it reads neither the flow log nor the board. The
 board is the crew's ``board.file``. Once markers are empty files under
@@ -89,7 +91,7 @@ def blocked_line(line: dict, tz: str) -> str:
     return f"{text}; pending command, quoted data: {json.dumps(command, ensure_ascii=False)}"
 
 
-def blocked_lines(crew: dict, session: str, coordinator: bool, tz: str, markers: Markers):
+def blocked_lines(crew: dict, session: str, tz: str, markers: Markers):
     path = Path(str(crew["board"]["file"])).expanduser()
     try:
         with open(path, encoding="utf-8") as fh:
@@ -102,7 +104,7 @@ def blocked_lines(crew: dict, session: str, coordinator: bool, tz: str, markers:
         blocked = line.get("blocked") if isinstance(line, dict) else None
         if not isinstance(blocked, dict):
             continue
-        if not (coordinator or blocked.get("starter_session_id") == session):
+        if blocked.get("starter_session_id") != session:
             continue
         try:
             text = blocked_line(line, tz)
@@ -126,7 +128,7 @@ def output(hook_input: dict, environ: dict | None = None) -> dict | None:
         code, text, episode = sampler_age.verdict(log_dir, tz, flow["stale_min"])
         if code and markers.first_time(f"{session}-stale-{episode}"):
             lines.append(text)
-    lines += blocked_lines(crew, session, "coordinator" in held, tz, markers)
+    lines += blocked_lines(crew, session, tz, markers)
     if not lines:
         return None
     return {

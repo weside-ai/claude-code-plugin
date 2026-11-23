@@ -1,5 +1,5 @@
 """UserPromptSubmit sampler_on_prompt.py: a stale sampler for coordinator and machinery, a blocked
-worker for its starter and the coordinator, each once per episode; silent everywhere else.
+worker for its starter only, each once per episode; silent everywhere else.
 
 Run with: python3 -m pytest -q we/hooks/test_sampler_on_prompt.py
 The hook runs as a subprocess, as Claude Code runs it.
@@ -141,9 +141,10 @@ class TestMarkers:
         (notified / yesterday / "sid-lead-blocked-proj-12-build-2026-11-05T09_05_00Z").touch()
         (notified / "2020-01-01").mkdir()
         board(ws, BLOCKED)
-        heartbeat(ws, 1)
+        ts = heartbeat(ws, 20)
         assert hook(ws, session="sid-lead") == []
-        assert hook(ws, "otto") == [BLOCKED_LINE]  # first marker today prunes
+        # the first marker today prunes
+        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})"]
         assert sorted(p.name for p in notified.iterdir()) == sorted(
             {yesterday, datetime.now(timezone.utc).strftime("%Y-%m-%d")}
         )
@@ -196,10 +197,11 @@ class TestBlocked:
         board(ws, again)  # a new wait
         assert len(hook(ws, session="sid-lead")) == 1
 
-    def test_the_coordinator_hears_it_too_and_others_do_not(self, ws):
+    def test_only_the_starter_hears_it_not_the_coordinator(self, ws):
+        """The coordinator's one source for an open prompt is the event poller."""
         board(ws, BLOCKED)
         heartbeat(ws, 1)
-        assert hook(ws, "otto") == [BLOCKED_LINE]
+        assert hook(ws, "otto") == []
         assert hook(ws, "ada", session="sid-ada") == []
         assert hook(ws, session="sid-stranger") == []
 
@@ -222,7 +224,10 @@ class TestBlocked:
     def test_stale_and_blocked_come_in_one_context(self, ws):
         board(ws, BLOCKED)
         ts = heartbeat(ws, 20)
-        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})", BLOCKED_LINE]
+        assert hook(ws, "otto", session="sid-lead") == [
+            f"sampler: stale since 20 min (last line {ts})",
+            BLOCKED_LINE,
+        ]
 
 
 class TestSilence:

@@ -161,3 +161,40 @@ def test_once_writes_state_and_heartbeat(tmp_path):
         check=False,
     )
     assert path.stdout.strip() == str(folder / "delta.jsonl")
+
+
+def test_sessions_source_runs_on_its_own_interval(tmp_path):
+    """The loop ticks at the sessions interval (60 s); GitHub and the local checks keep theirs
+    (300 s): over five minutes six samples of the sessions, two main rounds."""
+    root = ter.project(tmp_path, {})
+    config = root / ".weside" / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "events": {
+                    "sources": {"sessions": {"interval_s": 60}},
+                    "local_checks": ["true"],
+                    "routes": {},
+                }
+            }
+        )
+    )
+    now = [ter.NOW]
+    samples: list[float] = []
+    calls = ter.Calls()
+
+    def sessions():
+        samples.append(now[0])
+        return []
+
+    p = ep.Poller(
+        root, tmp_path / "events", clock=lambda: now[0], run=calls, env={}, sessions=sessions
+    )
+    beats = []
+    for _ in range(6):
+        beats.append(p.round())
+        now[0] += 60
+    assert len(samples) == 6
+    assert len([a for a in calls.argv if a[:2] == ["sh", "-c"]]) == 2
+    assert {b["interval_s"] for b in beats} == {60}
+    assert beats[0]["poll_interval_s"] == 300 and beats[0]["sessions_interval_s"] == 60

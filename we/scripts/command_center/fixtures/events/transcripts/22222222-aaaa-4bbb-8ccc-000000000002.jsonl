@@ -1,0 +1,1 @@
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "working"}, {"type": "tool_use", "id": "toolu_smoke_0001", "name": "Bash", "input": {"command": "release --prod"}}]}}

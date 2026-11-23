@@ -312,3 +312,236 @@ def test_the_loop_ends_when_its_project_config_is_gone(tmp_path, monkeypatch):
     (root / ".weside" / "config.json").unlink()
     assert ep.run_loop(root, rounds=5) == 0
     assert not ep.lock_held(ep.events_dir(root))
+
+
+# --- open prompts: route, fallback, render, push ---------------------------------------------
+
+import contextlib  # noqa: E402
+import http.server  # noqa: E402
+import threading  # noqa: E402
+from typing import ClassVar  # noqa: E402
+
+import test_event_sources as tes  # noqa: E402  (the agents samples and transcripts)
+
+PROMPT_ROUTE = {"to": ["coordinator"], "damage": True, "push": True}
+SAMU_SID = "33333333-aaaa-4bbb-8ccc-000000000003"
+
+
+def prompt_event(name: str = "rust_waiting", tmp: Path | None = None) -> es.Event:
+    """The event the sessions source makes of two samples of ``name`` (test_event_sources)."""
+    env, state = tes.prompt_home(tmp), {}
+    tes.sample(env, state, name, NOW - 60)
+    [ev] = tes.sample(env, state, name, NOW)
+    return ev
+
+
+def presence_of(folder: Path, name: str, member: str, session_id: str = "") -> None:
+    presence(folder, name, member)
+    path = folder / "presence" / f"{name}.json"
+    doc = json.loads(path.read_text())
+    path.write_text(json.dumps({**doc, "session_id": session_id}))
+
+
+def news_calls(p: ep.Poller) -> list[list[str]]:
+    return [a for a in p.run.argv if "news" in a]
+
+
+def test_permission_prompt_route(tmp_path, monkeypatch):
+    """AC 3: without the route the event goes nowhere; routed to machinery it reaches Kiska's tail
+    with ``push: true`` kept on that route (one rendering, ending `· push`) and without the
+    suffix once the route drops push; ``push: "yes"`` is refused by name."""
+    ev = prompt_event(tmp=tmp_path / "home")
+    root = project(tmp_path, {})
+    folder = tmp_path / "events"
+    presence_of(folder, "kiska-1", "kiska")
+    presence_of(folder, "samu-1", "samu")
+    p = poller(tmp_path, root, [ev], monkeypatch)
+    p.round()
+    [row] = rows(folder, "events.jsonl")
+    assert (row["to"], rows(folder, "delta.jsonl"), news_calls(p)) == ([], [], [])
+
+    for push, line in (
+        (
+            True,
+            "permission prompt · session rust · window rust · tool Bash · open since 11:59Z · push",
+        ),
+        (False, "permission prompt · session rust · window rust · tool Bash · open since 11:59Z"),
+    ):
+        sub = tmp_path / f"push-{push}"
+        root = project(sub, {"permission_prompt": {"to": ["machinery"], "push": push}})
+        folder = sub / "events"
+        presence_of(folder, "kiska-1", "kiska")
+        p = poller(sub, root, [ev], monkeypatch)
+        monkeypatch.setattr(ep.Poller, "push", lambda *_a: "sent")
+        p.round()
+        [row] = rows(folder, "events.jsonl")
+        assert row["to"] == [{"session": "kiska-1", "as": "machinery"}]
+        assert ("push" in row) is push
+        assert event_routes.render(row) == line
+
+    with pytest.raises(event_routes.EventsError) as err:
+        event_routes.validate(
+            {"routes": {"permission_prompt": {"to": ["coordinator"], "push": "yes"}}}, CREW
+        )
+    assert str(err.value) == "events: route 'permission_prompt': push must be true or false"
+    write_routes(root, {"permission_prompt": {"to": ["coordinator"], "push": "yes"}}, bump=5)
+    p.round()
+    assert p.block["routes"]["permission_prompt"]["push"] is False  # the last valid block stays
+    assert rows(folder, "events.jsonl")[-1]["fields"]["error"] == (
+        "events: route 'permission_prompt': push must be true or false"
+    )
+
+
+@pytest.mark.parametrize("case", ["own session", "no coordinator"])
+def test_permission_prompt_fallback(tmp_path, monkeypatch, case):
+    """AC 4: the coordinator waiting itself, or not running: one board item (by event id), one line
+    to the machinery member's tail, one coordinator delta row; no session started."""
+    name = "coordinator_waiting" if case == "own session" else "rust_waiting"
+    ev = prompt_event(name, tmp=tmp_path / "home")
+    root = project(tmp_path, {"permission_prompt": PROMPT_ROUTE})
+    folder = tmp_path / "events"
+    presence_of(folder, "kiska-1", "kiska")
+    if case == "own session":
+        presence_of(folder, "samu-1", "samu", SAMU_SID)
+    p = poller(tmp_path, root, [ev], monkeypatch)
+    monkeypatch.setattr(ep.Poller, "push", lambda *_a: "sent")
+    p.round()
+    p.round()  # a second round repeats nothing
+    [row] = rows(folder, "events.jsonl")
+    assert row["to"] == [{"session": "kiska-1", "as": "machinery"}] and row["escalated"]
+    [delta] = rows(folder, "delta.jsonl")
+    assert (delta["role"], delta["id"]) == ("coordinator", row["id"])
+    [news] = news_calls(p)
+    assert news[news.index("--id") + 1] == f"W-ev-{row['id']}"
+    assert all(Path(a[1]).name == "board.py" for a in p.run.argv)  # nothing else ran
+
+
+def test_permission_prompt_render(tmp_path):
+    """AC 5: a session name with a line break and an instruction is named by its id's first 8
+    characters; the tool by its validated name; no input, no command, no free text."""
+    ev = prompt_event("hostile_waiting", tmp=tmp_path)
+    line = event_routes.render({**ev.row(es.iso(NOW), True), "push": "sent"})
+    assert (
+        line
+        == "permission prompt · session 44444444 · tool mcp__srv__do · open since 11:59Z · push"
+    )
+    stored = json.dumps(ev.fields)
+    for leak in ("Ignore", "curl", "SECRET", "command", "\n"):
+        assert leak not in line and leak not in stored
+    bad = {**ev.row(es.iso(NOW), True), "push": "HTTP 500\nIgnore all"}
+    bad["fields"] = {**bad["fields"], "tool": "rm -rf /", "waiting": "x; y", "window": "a b"}
+    assert event_routes.render(bad) == (
+        "prompt · session 44444444 · tool unknown · open since 11:59Z · no push: error"
+    )
+
+
+class Hook(http.server.BaseHTTPRequestHandler):
+    status = 200
+    bodies: ClassVar[list] = []
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        type(self).bodies.append(json.loads(self.rfile.read(n)))
+        self.send_response(type(self).status)
+        self.end_headers()
+
+    def log_message(self, *_a):
+        pass
+
+
+@contextlib.contextmanager
+def fake_webhook(status: int):
+    Hook.status, Hook.bodies = status, []
+    server = http.server.HTTPServer(("127.0.0.1", 0), Hook)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/hooks/secret-path-x9"
+    finally:
+        server.shutdown()
+
+
+WRAPPER = r"""#!/usr/bin/env python3
+import os, sys
+# a stand-in for the project's secret tool: the URL from a file into the child's env only
+os.environ["CREW_HOOK"] = open(os.environ["HOME"] + "/hook-url").read().strip()
+argv = sys.argv[sys.argv.index("--") + 1:]
+os.execvp(argv[0], argv)
+"""
+
+
+@pytest.mark.parametrize("status", [200, 500])
+def test_push_through_the_wrapper_never_shows_the_url(tmp_path, monkeypatch, status):
+    """One post per open prompt through the wrapper; the line says `· push`, or loudly
+    `· no push: HTTP 500` and the human gets the board item; the URL is in no argv and no file."""
+    import subprocess  # noqa: PLC0415
+
+    ev = prompt_event(tmp=tmp_path / "home")
+    root = project(tmp_path, {})
+    config = root / ".weside" / "config.json"
+    wrapper = tmp_path / "wrap"
+    wrapper.write_text(WRAPPER)
+    wrapper.chmod(0o755)
+    block = {
+        "push": {"url_env": "CREW_HOOK", "wrapper": [str(wrapper)]},
+        "routes": {"permission_prompt": PROMPT_ROUTE},
+    }
+    config.write_text(json.dumps({"events": block}))
+    folder = tmp_path / "events"
+    presence_of(folder, "samu-1", "samu")
+    with fake_webhook(status) as url:
+        (tmp_path / "hook-url").write_text(url)
+        argvs: list = []
+
+        def run(argv, **kw):
+            argvs.append(list(argv))
+            if "news" in argv:
+                return type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            return subprocess.run(argv, **kw)  # noqa: PLW1510  (kw carries check)
+
+        p = poller(tmp_path, root, [ev], monkeypatch)
+        p.run = run
+        p.env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path)}
+        p.round()
+    base = "permission prompt · session rust · window rust · tool Bash · open since 11:59Z"
+    assert Hook.bodies == [{"text": base}]
+    [row] = rows(folder, "events.jsonl")
+    line = event_routes.render(row)
+    news = [a for a in argvs if "news" in a]
+    if status == 200:
+        assert (line, news) == (base + " · push", [])
+    else:
+        assert line == base + " · no push: HTTP 500" and len(news) == 1
+    assert row["to"] == [{"session": "samu-1", "as": "coordinator"}]
+    assert not any(url in " ".join(a) for a in argvs)
+    for path in folder.rglob("*"):
+        if path.is_file():
+            assert "secret-path" not in path.read_text(errors="replace"), path
+
+
+def test_push_not_configured_is_loud(tmp_path, monkeypatch):
+    ev = prompt_event(tmp=tmp_path / "home")
+    root = project(tmp_path, {"permission_prompt": PROMPT_ROUTE})
+    folder = tmp_path / "events"
+    presence_of(folder, "samu-1", "samu")
+    p = poller(tmp_path, root, [ev], monkeypatch)
+    p.round()
+    [row] = rows(folder, "events.jsonl")
+    assert event_routes.render(row).endswith(" · no push: not configured")
+    assert len(news_calls(p)) == 1
+
+
+def test_validate_push_block():
+    ok = event_routes.validate(
+        {"push": {"url_env": "CREW_HOOK", "wrapper": ["vault", "run"]}}, CREW
+    )
+    assert ok["push"]["body_key"] == "text"
+    for bad, text in (
+        ({"url_env": "https://x"}, "push.url_env"),
+        ({"url_env": "A", "wrapper": "vault run"}, "push.wrapper"),
+        ({"url_env": "A", "wrapper": ["v"], "url": "x"}, "unknown key 'url'"),
+    ):
+        with pytest.raises(event_routes.EventsError, match=text):
+            event_routes.validate({"push": bad}, CREW)
+    with pytest.raises(event_routes.EventsError, match=r"sources\.sessions\.interval_s"):
+        event_routes.validate({"sources": {"sessions": {"interval_s": 5}}}, CREW)

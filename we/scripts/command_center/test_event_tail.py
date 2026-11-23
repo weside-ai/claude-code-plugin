@@ -210,7 +210,7 @@ def test_fold_filter_and_text(short_tmp, monkeypatch):
             if path.is_file():
                 assert TOKEN not in path.read_text(encoding="utf-8", errors="replace"), path
         doc = json.loads(tails["smoke"].presence_path().read_text())
-        assert set(doc) == {"name", "member", "roles", "parked", "heartbeat"}
+        assert set(doc) == {"name", "member", "session_id", "roles", "parked", "heartbeat"}
     finally:
         for inbox in inboxes.values():
             inbox.close()
@@ -296,3 +296,44 @@ def test_parked_falls_back_to_the_member_name_without_a_session_id(short_tmp, mo
     finally:
         for inbox in inboxes.values():
             inbox.close()
+
+
+def test_permission_prompt_line(short_tmp, monkeypatch):
+    """AC 1, delivery half: two samples 60 s apart in the poller, the coordinator's tail on its next
+    cycle: exactly one line, one ledger row, and `delivered_at - source_at` inside the one bound
+    (`event_poller.LATENCY_BOUND_S`: 60 s interval + one sample of grace + one 15 s cycle)."""
+    root = ter.project(short_tmp, {"permission_prompt": ter.PROMPT_ROUTE})
+    folder = short_tmp / "events"
+    clock = Clock()
+    inbox = FakeInbox(short_tmp / "samu.sock")
+    tail = et.Tail(root, folder, inbox.path, TOKEN, "samu", ["coordinator"], clock=clock)
+    try:
+        tail.write_presence()
+        env = tes.prompt_home(short_tmp / "home")
+        config = root / ".weside" / "config.json"
+        block = json.loads(config.read_text())
+        block["events"]["sources"] = {"sessions": {"interval_s": 60}}
+        config.write_text(json.dumps(block))
+        calls = ter.Calls()
+        p = ep.Poller(
+            root,
+            folder,
+            clock=clock,
+            run=calls,
+            env=env,
+            sessions=lambda: tes.SAMPLES["rust_waiting"],
+        )
+        monkeypatch.setattr(ep.Poller, "push", lambda *_a: "sent")
+        for _ in range(3):  # first sample, the second makes the event, a third repeats nothing
+            p.round()
+            clock.t += et.CYCLE_S
+            tail.cycle()
+            clock.t += 60 - et.CYCLE_S
+        assert user_lines(inbox) == [  # the recording runner answers no tmux: no window
+            "permission prompt · session rust · tool Bash · open since 12:00Z · push"
+        ]
+        [ledger] = ep.read_rows(folder / "ledger.jsonl")
+        took = es.epoch(ledger["delivered_at"]) - es.epoch(ledger["source_at"])
+        assert ledger["delivered"] and took == 75 and took < ep.LATENCY_BOUND_S
+    finally:
+        inbox.close()

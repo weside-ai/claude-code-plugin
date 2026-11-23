@@ -543,3 +543,173 @@ def test_a_fork_run_shows_its_workflow_id_never_its_name_or_branch(tmp_path):
     srcs = {"queued": sources(tmp_path)["queued"]}
     hung = [e for e in run_round(tmp_path, data, seeded(), srcs=srcs) if e.object == "run:301"]
     assert [(e.fields["workflow"], e.fields["branch"]) for e in hung] == [("workflow 7", "?")]
+
+
+# --- open prompts: the sessions source (claude agents --json samples, transcripts) ----------
+
+SAMPLES = json.loads((HERE / "fixtures" / "events" / "agents-samples.json").read_text())
+TRANSCRIPTS = HERE / "fixtures" / "events" / "transcripts"
+RUST = "11111111-aaaa-4bbb-8ccc-000000000001"
+SMOKE = "22222222-aaaa-4bbb-8ccc-000000000002"
+HOSTILE = "44444444-aaaa-4bbb-8ccc-000000000004"
+T0 = 1_795_176_000.0
+FAKE_TMUX = r"""#!/usr/bin/env python3
+import os, sys
+with open(os.environ["FAKE_CALLS"], "a") as fh:
+    fh.write("tmux " + " ".join(sys.argv[1:]) + "\n")
+print("4101\trust")
+print("4102\tSmoketest")
+"""
+FAKE_CLAUDE = r"""#!/usr/bin/env python3
+import os, sys
+with open(os.environ["FAKE_CALLS"], "a") as fh:
+    fh.write("claude " + " ".join(sys.argv[1:]) + "\n")
+sys.stdout.write(open(os.environ["FAKE_AGENTS"]).read())
+"""
+
+
+def prompt_home(tmp: Path) -> dict:
+    """HOME with the fixture transcripts under .claude/projects and a fake tmux on PATH."""
+    import shutil  # noqa: PLC0415
+
+    projects = tmp / ".claude" / "projects" / "-home-user-acme"
+    projects.mkdir(parents=True, exist_ok=True)
+    for f in TRANSCRIPTS.glob("*.jsonl"):
+        shutil.copy(f, projects / f.name)
+    bin_dir = tmp / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name, text in (("tmux", FAKE_TMUX), ("claude", FAKE_CLAUDE)):
+        (bin_dir / name).write_text(text)
+        (bin_dir / name).chmod(0o755)
+    return {
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "HOME": str(tmp),
+        "FAKE_CALLS": str(tmp / "calls.log"),
+        "FAKE_AGENTS": str(tmp / "agents.json"),
+    }
+
+
+def sample(env: dict, state: dict, name: str, now: float, srcs: dict | None = None):
+    rnd = es.Round(
+        {"sessions": True} if srcs is None else srcs,
+        state,
+        now,
+        env=env,
+        sessions=lambda: json.loads(json.dumps(SAMPLES[name])),
+    )
+    return rnd.run_all()
+
+
+def add_tool_call(env: dict, sid: str, tool_id: str, name: str = "Bash") -> None:
+    path = Path(env["HOME"]) / ".claude" / "projects" / "-home-user-acme" / f"{sid}.jsonl"
+    entry = {
+        "type": "assistant",
+        "message": {"content": [{"type": "tool_use", "id": tool_id, "name": name, "input": {}}]},
+    }
+    with path.open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def test_session_waiting(tmp_path):
+    """AC 1, source half: a prompt in two samples 60 s apart is one event, its source_at the first
+    sample; session, window and tool by name; the line as the coordinator reads it."""
+    env, state = prompt_home(tmp_path), {}
+    assert sample(env, state, "rust_waiting", T0) == []
+    [ev] = sample(env, state, "rust_waiting", T0 + 60)
+    assert (ev.kind, ev.object, ev.source_at) == (
+        "permission_prompt",
+        f"session:{RUST}",
+        es.iso(T0),
+    )
+    assert ev.fields == {
+        "session": "rust",
+        "sid": RUST,
+        "tool": "Bash",
+        "waiting": "permission prompt",
+        "window": "rust",
+    }
+    row = {**ev.row(es.iso(T0 + 60), True), "push": "sent"}
+    assert event_routes.render(row) == (
+        "permission prompt · session rust · window rust · tool Bash · open since 12:00Z · push"
+    )
+
+
+def test_session_waiting_once(tmp_path):
+    """AC 2: answered and re-seen prompts give nothing more, a new tool call gives exactly one, a
+    prompt seen in one sample only gives none, a state outside the list gives none; never a repeat
+    per minute."""
+    env, state = prompt_home(tmp_path), {}
+    t = T0
+    found = []
+    for name in ("rust_waiting", "rust_waiting", "rust_waiting", "rust_waiting"):
+        found += sample(env, state, name, t)
+        t += 60
+    assert len(found) == 1
+    found = []
+    for name in ("all_idle", "rust_waiting", "rust_waiting"):  # answered, then the same call back
+        found += sample(env, state, name, t)
+        t += 60
+    assert found == []
+    add_tool_call(env, RUST, "toolu_rust_0002")
+    for name in ("rust_waiting", "rust_waiting", "rust_waiting"):
+        found += sample(env, state, name, t)
+        t += 60
+    assert [e.fields["sid"] for e in found] == [RUST]
+    found = []
+    for name in ("smoke_waiting", "all_idle", "rust_input_needed", "rust_input_needed"):
+        found += sample(env, state, name, t)
+        t += 60
+    assert found == []
+
+
+def test_session_waiting_without_transcript_keeps_its_episode(tmp_path):
+    """An unreadable transcript gives the fallback key, kept across samples: still one event."""
+    env, state = {"PATH": os.environ["PATH"], "HOME": str(tmp_path)}, {}
+    found = []
+    for i in range(4):
+        found += sample(env, state, "rust_waiting", T0 + 60 * i)
+    assert [e.fields["tool"] for e in found] == ["unknown"]
+
+
+def test_session_source_never_writes_to_the_waiting_session(tmp_path, monkeypatch):
+    """The source only reads: through the real CLI reader it calls `claude agents --json` and
+    `tmux list-panes`, nothing else; the transcripts stay byte for byte."""
+    env = prompt_home(tmp_path)
+    (tmp_path / "agents.json").write_text(json.dumps(SAMPLES["rust_waiting"]))
+    for key in ("PATH", "FAKE_CALLS", "FAKE_AGENTS"):
+        monkeypatch.setenv(key, env[key])
+    projects = tmp_path / ".claude" / "projects" / "-home-user-acme"
+    before = {p.name: p.read_bytes() for p in projects.iterdir()}
+    calls: list[list[str]] = []
+
+    def run(argv, **kw):
+        calls.append(list(argv))
+        assert kw.get("stdin") is not None or "input" not in kw
+        import subprocess  # noqa: PLC0415
+
+        return subprocess.run(argv, **kw)  # noqa: PLW1510  (kw carries check)
+
+    state: dict = {}
+    for i in range(2):
+        events = es.Round({"sessions": True}, state, T0 + 60 * i, env=env, run=run).run_all()
+    assert [e.kind for e in events] == ["permission_prompt"]
+    logged = (tmp_path / "calls.log").read_text().splitlines()
+    assert set(logged) == {
+        "claude agents --json",
+        "tmux list-panes -a -F #{pane_pid}\t#{window_name}",
+    }
+    assert all(argv[0] == "tmux" for argv in calls)  # the CLI goes through worker_launch only
+    assert {p.name: p.read_bytes() for p in projects.iterdir()} == before
+
+
+def test_a_failing_cli_is_one_poll_error_and_keeps_the_episode(tmp_path):
+    env, state = prompt_home(tmp_path), {}
+    sample(env, state, "rust_waiting", T0)
+
+    def broken():
+        raise RuntimeError("claude agents --json exited 1: secret text")
+
+    rnd = es.Round({"sessions": True}, state, T0 + 60, env=env, sessions=broken)
+    [err] = rnd.run_all()
+    assert err.kind == "poll_error" and err.fields["first"] == ["claude agents: RuntimeError"]
+    assert RUST in state["prompts"]
