@@ -364,6 +364,30 @@ def test_a_clean_crew_validates_strict_and_carries_no_unknown_keys(tmp_path):
     assert json.loads(run(core, "show").stdout)["unknown_keys"] == []
 
 
+@pytest.mark.parametrize(
+    "routes, refusal",
+    [
+        (
+            {"release_pr_blocke": {"to": ["acceptance"]}},
+            "events: unknown event 'release_pr_blocke'",
+        ),
+        ({"release_pr_blocked": {"to": ["testr"]}}, "events: unknown role 'testr'"),
+    ],
+)
+def test_validate_strict_refuses_a_wrong_events_entry_by_name(tmp_path, routes, refusal):
+    """The project's `events:` routes name event kinds and crew roles; a typo is refused by name."""
+    core, _ = workspace(tmp_path)
+    config = core / ".weside" / "config.json"
+    config.write_text(
+        json.dumps({"events": {"routes": {"release_pr_blocked": {"to": ["acceptance"]}}}})
+    )
+    assert run(core, "validate", "--strict").returncode == 0
+    config.write_text(json.dumps({"events": {"routes": routes}}))
+    out = run(core, "validate", "--strict")
+    assert (out.returncode, out.stderr.strip()) == (1, f"crew: {refusal}")
+    assert run(core, "validate").returncode == 0  # only --strict reads the block
+
+
 def test_validate_warns_when_the_crew_has_no_risk_rules(tmp_path):
     """A crew repo without rules gets no risk class; validate says so."""
     core, _ = workspace(tmp_path)

@@ -34,7 +34,8 @@ we/                               plugin root
     flow/, board/, plans/         the /flow pane (phase.ts; crewflow.tsx: its section Crew flow), the /board pane and its Zentrale pane (zentrale-pane.tsx, zentrale.ts; board.ts, work.ts, deliver.ts, probe.py,
                                   answer.py, deliveries.py), plan files and PRs both panes read
     SessionStart                  materialize_on_start, process_on_start (L0), role_on_start (role card),
-                                  optimization_reminder, compact_on_start (matcher compact)
+                                  optimization_reminder, compact_on_start (matcher compact),
+                                  events_on_start (the crew's event poller and this session's tail)
     UserPromptSubmit              news_on_prompt (wake counter), sampler_on_prompt (dead sampler, blocked worker)
     PreToolUse                    worker_rights_gate (a process worker's rights and never-list), verification_gate (hint: PR body without a receipt),
                                   draft_reason_gate (hint: draft reason, ready on a conflict), teammate_gate
@@ -74,6 +75,10 @@ we/                               plugin root
                                   gh_source.py (open PRs per repo through flow_report's gh cache),
                                   ticket_snapshot.py (the ticket snapshot's one atomic writer and its reader)
                                   ticket_fetch.py (the scheduled snapshot: the ticket system's REST search into that writer)
+                                  command_center/event_poller.py (the crew's one poller: GitHub, cluster and
+                                  local checks into events, routed by the `events:` block), event_sources.py
+                                  (each event kind and its source), event_routes.py (the `events:` schema, the
+                                  line text), event_tail.py (a session's delivery of its routed lines)
                                   command_center/crewd.py (we-crewd: the Zentrale as a read-only web page, bound
                                   to the host's own address, its port and the pane's probe), redaction.py (the one
                                   list of secret patterns: conversation hook and web view)

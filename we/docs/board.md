@@ -86,12 +86,14 @@ prod live, an epic done), what blocks (`gate`) and what the owner must do (`todo
 writes one with `board.py news add --title "<one line>" [--body "<detail>"] [--kind info|gate|todo]`
 (at the top, id `N<n>`), the machinery writes `todo` items itself (bundle, staging past its SLA,
 signals, and the launcher's supervisor with `board.py news worker --id W-… --title T`: a worker's
-stop its starter could not be told, a permission prompt older than 15 minutes; once per id).
-`board.py news merged --pr <ref>` (any session; the watcher `watch-pr-checks.sh` on a merge and
-`we-worker close` per merged PR of the story call it) adds one `info` item `R-<repo>-<n>` for a
-merged PR that changes `.claude/`, `.weside/` or `.github/workflows/`: the title in fixed words
-(`rules changed: <repo>#<n> merged (<count> rule file(s))`), the body the PR's first summary line,
-the rule paths and its link. Once per PR, also after the item was read and pruned:
+stop its starter could not be told, a permission prompt older than 15 minutes; once per id). The
+event poller writes a `gate` item the same way (`--kind gate`) for a damage event no running session
+received (§ Event lines). `board.py news merged --pr <ref>` (any session; the watcher
+`watch-pr-checks.sh` on a merge and `we-worker close` per merged PR of the story call it) adds one
+`info` item `R-<repo>-<n>` for a merged PR that changes `.claude/`, `.weside/` or
+`.github/workflows/`: the title in fixed words (`rules changed: <repo>#<n> merged (<count> rule
+file(s))`), the body the PR's first summary line, the rule paths and its link. Once per PR, also
+after the item was read and pruned:
 
 ```json
 "news": [
@@ -789,6 +791,23 @@ crew's `acceptance` block, default 5) adds one `log` entry `{id: S<n>, kind: sam
 `via: comment` rows never count; `done_sample: null` writes none. The count is the log's, so it
 survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_verdict.py`,
 `samples.jsonl`): neither key moves the other's counter.
+
+## Event lines
+
+A crew whose `.weside/config.json` has an `events:` block runs one event poller per project
+(`scripts/command_center/event_poller.py`, started by the SessionStart hook `events_on_start.py`,
+by hand with `event_poller.py ensure`):
+it reads GitHub and the cluster for the release path and CI (an RC verdict, a stuck rollout, a
+blocked release PR, main red, a long queue, new issues) and routes each event kind to crew roles
+(`event_routes.py` owns the block's schema). Each member's session runs a tail
+(`event_tail.py`, whose docstring owns folding, digests and the line text) that writes the lines
+routed to its roles into its own inbox; a line never carries a title.
+
+What finds no running session waits in the coordinator's delta, `delta.jsonl` in the folder
+`event_poller.py path` prints (its row: the `event_poller.py` docstring); a parked session gets only damage kinds. A damage kind (a blocked production
+release) without a receiver goes at once to the coordinator's running session and as one `gate`
+news item. `event_poller.py status` names the poller, its last round, the loaded routes and the
+running tails.
 
 ## Staging
 
