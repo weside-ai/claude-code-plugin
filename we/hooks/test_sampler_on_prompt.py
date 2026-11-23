@@ -1,5 +1,6 @@
 """UserPromptSubmit sampler_on_prompt.py: a stale sampler for coordinator and machinery, a blocked
-worker for its starter only, each once per episode; silent everywhere else.
+worker for its starter (a chat wait also for the coordinator), each once per episode; silent
+everywhere else.
 
 Run with: python3 -m pytest -q we/hooks/test_sampler_on_prompt.py
 The hook runs as a subprocess, as Claude Code runs it.
@@ -202,6 +203,9 @@ class TestBlocked:
         board(ws, BLOCKED)
         heartbeat(ws, 1)
         assert hook(ws, "otto") == []
+        chat = {**BLOCKED, "blocked": {**BLOCKED["blocked"], "kind": "chat"}}
+        board(ws, chat)
+        assert len(hook(ws, "otto")) == 1  # a chat wait still reaches the coordinator
         assert hook(ws, "ada", session="sid-ada") == []
         assert hook(ws, session="sid-stranger") == []
 

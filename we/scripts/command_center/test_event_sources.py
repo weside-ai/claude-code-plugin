@@ -618,7 +618,7 @@ def test_session_waiting(tmp_path):
     [ev] = sample(env, state, "rust_waiting", T0 + 60)
     assert (ev.kind, ev.object, ev.source_at) == (
         "permission_prompt",
-        f"session:{RUST}",
+        f"prompt:{es.event_id(f'prompt:{RUST}:toolu_rust_0001')}",
         es.iso(T0),
     )
     assert ev.fields == {
@@ -655,6 +655,7 @@ def test_session_waiting_once(tmp_path):
         found += sample(env, state, name, t)
         t += 60
     assert [e.fields["sid"] for e in found] == [RUST]
+    assert found[0].object != f"prompt:{es.event_id(f'prompt:{RUST}:toolu_rust_0001')}"  # no fold
     found = []
     for name in ("smoke_waiting", "all_idle", "rust_input_needed", "rust_input_needed"):
         found += sample(env, state, name, t)
@@ -713,3 +714,47 @@ def test_a_failing_cli_is_one_poll_error_and_keeps_the_episode(tmp_path):
     [err] = rnd.run_all()
     assert err.kind == "poll_error" and err.fields["first"] == ["claude agents: RuntimeError"]
     assert RUST in state["prompts"]
+
+
+def _call(entry_type: str, msg_id: str, part: dict) -> dict:
+    return {"type": entry_type, "message": {"id": msg_id, "content": [part]}}
+
+
+def test_parallel_calls_and_a_subagent_prompt_each_once(tmp_path):
+    """Three parallel calls prompt one after another: each its own event; while the session waits
+    on a subagent, the subagent's pending call names the prompt."""
+    env, state = prompt_home(tmp_path), {}
+    path = Path(env["HOME"]) / ".claude" / "projects" / "-home-user-acme" / f"{RUST}.jsonl"
+    calls = [{"type": "tool_use", "id": f"toolu_p{i}", "name": "Bash", "input": {}} for i in "ABC"]
+    path.write_text("".join(json.dumps(_call("assistant", "msg_1", c)) + "\n" for c in calls))
+    t, found = T0, []
+    for answered in ("", "A", "B"):
+        if answered:
+            result = {"type": "tool_result", "tool_use_id": f"toolu_p{answered}", "content": "ok"}
+            with path.open("a") as fh:
+                fh.write(json.dumps(_call("user", "", result)) + "\n")
+            found += sample(env, state, "all_idle", t)
+            t += 60
+        for _ in range(2):
+            found += sample(env, state, "rust_waiting", t)
+            t += 60
+    assert [e.key for e in found] == [f"prompt:{RUST}:toolu_p{i}" for i in "ABC"]
+
+    agent = {"type": "tool_use", "id": "toolu_agent", "name": "Agent", "input": {}}
+    with path.open("a") as fh:
+        fh.write(json.dumps(_call("assistant", "msg_2", agent)) + "\n")
+    sub = path.with_suffix("") / "subagents"
+    sub.mkdir(parents=True)
+    inner = {"type": "tool_use", "id": "toolu_inner", "name": "Edit", "input": {}}
+    (sub / "agent-1.jsonl").write_text(json.dumps(_call("assistant", "m", inner)) + "\n")
+    found = [*sample(env, state, "all_idle", t), *sample(env, state, "rust_waiting", t + 60)]
+    found += sample(env, state, "rust_waiting", t + 120)
+    assert [(e.key, e.fields["tool"]) for e in found] == [(f"prompt:{RUST}:toolu_inner", "Edit")]
+
+
+def test_an_empty_sessions_block_is_on_with_its_defaults(tmp_path):
+    env, state = prompt_home(tmp_path), {}
+    found = [*sample(env, state, "rust_waiting", T0, {"sessions": {}})]
+    found += sample(env, state, "rust_waiting", T0 + 60, {"sessions": {}})
+    assert len(found) == 1
+    assert event_routes.sessions_interval({"sources": {"sessions": {}}}) == 60

@@ -392,13 +392,14 @@ def test_permission_prompt_route(tmp_path, monkeypatch):
     )
 
 
+@pytest.mark.parametrize("damage", [True, False])
 @pytest.mark.parametrize("case", ["own session", "no coordinator"])
-def test_permission_prompt_fallback(tmp_path, monkeypatch, case):
+def test_permission_prompt_fallback(tmp_path, monkeypatch, case, damage):
     """AC 4: the coordinator waiting itself, or not running: one board item (by event id), one line
     to the machinery member's tail, one coordinator delta row; no session started."""
     name = "coordinator_waiting" if case == "own session" else "rust_waiting"
     ev = prompt_event(name, tmp=tmp_path / "home")
-    root = project(tmp_path, {"permission_prompt": PROMPT_ROUTE})
+    root = project(tmp_path, {"permission_prompt": {**PROMPT_ROUTE, "damage": damage}})
     folder = tmp_path / "events"
     presence_of(folder, "kiska-1", "kiska")
     if case == "own session":
@@ -545,3 +546,29 @@ def test_validate_push_block():
             event_routes.validate({"push": bad}, CREW)
     with pytest.raises(event_routes.EventsError, match=r"sources\.sessions\.interval_s"):
         event_routes.validate({"sources": {"sessions": {"interval_s": 5}}}, CREW)
+
+
+def test_push_on_another_kind_posts_that_kinds_line_and_never_twice(tmp_path, monkeypatch):
+    """`push: true` on any route posts that event's own line; a sent event id is never posted
+    again, even when the round failed before its state was written."""
+    root = project(tmp_path, {})
+    (root / ".weside" / "config.json").write_text(
+        json.dumps(
+            {
+                "events": {
+                    "push": {"url_env": "CREW_HOOK", "wrapper": ["vault"]},
+                    "routes": {"release_pr_blocked": {"to": ["tester"], "push": True}},
+                }
+            }
+        )
+    )
+    folder = tmp_path / "events"
+    presence(folder, "smoke-1", "smoke")
+    p = poller(tmp_path, root, [release_pr(7)], monkeypatch)
+    posts: list[str] = []
+    monkeypatch.setattr(ep.Poller, "_post", lambda _s, text, _c: posts.append(text) or "sent")
+    p.round()
+    [row] = rows(folder, "events.jsonl")
+    assert posts == [event_routes.line(row)] and posts[0].startswith("release PR #7")
+    assert event_routes.render(row) == posts[0] + " · push"
+    assert p.push(row["id"], "again", p.block, NOW + 60) == "sent" and len(posts) == 1

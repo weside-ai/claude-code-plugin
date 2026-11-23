@@ -59,8 +59,8 @@ wait_min}``)
     Every ``interval_s`` (default 60) one ``claude agents --json`` (``worker_launch.sessions``,
     read only: the source never writes to a session, its socket or its CLI). A session whose
     ``waitingFor`` is one of ``waiting`` (default ``permission prompt``, ``sandbox request``,
-    ``dialog open``) opens an episode keyed ``<sessionId>:<tool_use id>`` (``transcript.py``: its
-    last tool call; unreadable → ``<sessionId>:<waitingFor>:<first sample>``). A key seen in two
+    ``dialog open``) opens an episode keyed ``<sessionId>:<tool_use id>`` (``transcript.py``: the
+    call it waits on; unreadable → ``<sessionId>:<waitingFor>:<first sample>``). A key seen in two
     consecutive samples is one event, once (seen 14 days): ``source_at`` the first sample, fields
     the session's name (else the first 8 characters of its id), its tmux window's name when it runs
     in one (``tmux list-panes``, read only), the tool's name and the waiting state, each a plain
@@ -92,7 +92,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from transcript import last_tool_use
+from transcript import pending_tool_use
 
 KINDS = (
     "main_red",
@@ -169,7 +169,9 @@ def window_label(name: Any) -> str | None:
 
 def list_sessions() -> list[dict]:
     """``claude agents --json`` through the one reader of the CLI (``worker_launch.sessions``)."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    scripts = str(Path(__file__).resolve().parent.parent)
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
     import worker_launch  # noqa: PLC0415  (only a crew with a sessions source pays the import)
 
     return worker_launch.sessions()
@@ -353,7 +355,8 @@ class Round:
             ("rate_limit", self.rate_limit),
         ]
         main = self.due is None or "main" in self.due
-        if self.src.get("sessions") and (self.due is None or "sessions" in self.due):
+        on = self.src.get("sessions") not in (None, False)  # {} is on with its defaults
+        if on and (self.due is None or "sessions" in self.due):
             try:
                 self.session_waiting()
             except Exception as exc:
@@ -886,7 +889,7 @@ class Round:
             if what not in waiting:
                 episodes.pop(sid, None)  # answered, or never waiting: closed without a line
                 continue
-            hit = last_tool_use(projects, sid)
+            hit = pending_tool_use(projects, sid)
             if hit and not _SAFE_TOKEN.match(hit[0]):
                 hit = None
             open_ep = episodes.get(sid)
@@ -914,8 +917,13 @@ class Round:
             window = window_label(self.window_of(row.get("pid"), windows))
             if window:
                 fields["window"] = window
+            # the fold object is the prompt: a new prompt of the same session is a new line
             self.emit(
-                "permission_prompt", seen_key, f"session:{sid}", iso(open_ep["first"]), **fields
+                "permission_prompt",
+                seen_key,
+                f"prompt:{event_id(seen_key)}",
+                iso(open_ep["first"]),
+                **fields,
             )
         for sid in [s for s in episodes if s not in present]:
             del episodes[sid]

@@ -29,8 +29,8 @@ interval is due, so GitHub is still read every ``poll_interval_s``)
 
 An open prompt (``permission_prompt``, ``event_sources.Round.session_waiting``)
     A receiver whose own session is the waiting one is skipped for that event (it cannot read a
-    line while it waits); without any other receiver the event escalates as a damage event, to the
-    coordinator and the ``machinery`` member's running tails and as one board item. A route with
+    line while it waits); without any other receiver the event escalates (``damage`` or not) to
+    the coordinator's and the ``machinery`` member's running tails and as one board item. A route with
     ``push: true`` posts the line once through ``events.push`` (``push_notify.py`` under the
     project's wrapper, no model step) before the row is written; the row's ``push`` is ``sent`` or
     the reason there was none, and a missing push also makes the board item. Nothing here answers,
@@ -233,7 +233,8 @@ def route(
         else:
             missing.append(target)
     escalate = False
-    if dmg and not to:
+    routed_prompt = kind in SELF_SKIP_KINDS and bool(routes_mod.targets(block, kind))
+    if (dmg or routed_prompt) and not to:  # an unrouted kind stays silent
         roles = ("coordinator", "machinery") if kind in SELF_SKIP_KINDS else ("coordinator",)
         for role in roles:
             slug = routes_mod.member_of(crew, role)
@@ -309,12 +310,27 @@ class Poller:
                 last[group] = now
         return out
 
-    def push(self, text: str, block: dict) -> str:
+    def push(self, eid: str, text: str, block: dict, now: float) -> str:
         """One post of ``text`` through the project's wrapper; ``sent`` or the reason why not.
-        The URL never passes here: only the wrapper's child sees it."""
+        The URL never passes here: only the wrapper's child sees it. A sent event id is written
+        to ``pushed.json`` at once: a round that fails after the post never posts it again."""
         cfg = block.get("push")
         if not cfg:
             return "not configured"
+        pushed_file = self.dir / "pushed.json"
+        pushed = read_json(pushed_file, {})
+        pushed = pushed if isinstance(pushed, dict) else {}
+        if eid in pushed:
+            return "sent"
+        status = self._post(text, cfg)
+        if status == "sent":
+            pushed = {k: v for k, v in pushed.items() if now - float(v or 0) < 14 * 86400}
+            pushed[eid] = now
+            with contextlib.suppress(OSError):
+                write_json(pushed_file, pushed)
+        return status
+
+    def _post(self, text: str, cfg: dict) -> str:
         argv = [
             *cfg["wrapper"],
             "--",
@@ -389,7 +405,7 @@ class Poller:
             to, missing, escalate = route(row, block, self.crew, live)
             row["to"] = to
             if routes_mod.push(block, ev.kind):
-                row["push"] = self.push(routes_mod.prompt_line(row), block)
+                row["push"] = self.push(row["id"], routes_mod.line(row), block, now)
                 if row["push"] != "sent":
                     escalate = True  # no push: the human learns of it on the board
             line = routes_mod.render(row)

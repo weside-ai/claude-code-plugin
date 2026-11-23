@@ -594,9 +594,9 @@ A line that is missing is appended with `name` and `session_id`; no other field 
 `--key` outside the crew's `naming.key` is refused. The same call again prints
 `board.py blocked: <name> unchanged` and writes nothing. A session that sets its own wait with
 `set waiting_on=…` ends the old wait and drops its `blocked` mark. The prompt hook
-`sampler_on_prompt.py` names a blocked line once per wait to its starter, the command
-JSON-quoted and labelled as data; the coordinator hears of an open prompt from the event poller
-alone (§ Event lines).
+`sampler_on_prompt.py` names a blocked line once per wait to its starter (a `chat` wait also to
+the coordinator), the command JSON-quoted and labelled as data; the coordinator hears of an open
+permission prompt from the event poller alone (§ Event lines).
 
 `--clear` prints `{cleared, kind, key, since, duration_s, obsolete}`. It marks every open
 `owner_queue` question of that session that the wait raised, posted during the wait (cause

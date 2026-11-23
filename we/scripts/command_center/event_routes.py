@@ -218,7 +218,7 @@ def _validate_push(cfg: Any) -> dict[str, Any] | None:
 def sessions_interval(block: dict[str, Any]) -> int | None:
     """The sessions source's interval, None when the block has no such source."""
     cfg = (block.get("sources") or {}).get("sessions")
-    if not cfg:
+    if cfg is None or cfg is False:
         return None
     return (
         int(cfg.get("interval_s", SESSIONS_INTERVAL_S))
@@ -269,8 +269,14 @@ def _repo(value: Any) -> str:
     return value if repo_ok(value) else "?"
 
 
-def render(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
-    """The one line of an event row (``events.jsonl``)."""
+def render(row: dict[str, Any]) -> str:
+    """The one line of an event row (``events.jsonl``): its text and, for a route with ``push``,
+    the push's outcome."""
+    return line(row) + push_suffix(row)
+
+
+def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
+    """The line's text without the push suffix: also the text a push posts."""
     k, f = row.get("kind"), row.get("fields") or {}
     repo = _repo(f.get("repo"))
     run = run_url(repo, _int(f.get("run_id"))) if "run_id" in f else ""
@@ -324,7 +330,7 @@ def render(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
     if k in ("disk", "local_check"):
         return str(f.get("text") or "")
     if k == "permission_prompt":
-        return prompt_line(row) + push_suffix(row)
+        return prompt_line(row)
     return f"event {k}"
 
 

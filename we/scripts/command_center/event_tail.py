@@ -172,7 +172,7 @@ class Tail:
         if row.get("damage"):
             allowed.add("coordinator")
         if row.get("escalated") and row.get("kind") in ep.SELF_SKIP_KINDS:
-            allowed.add("machinery")  # an open prompt nobody else receives (event_poller.route)
+            allowed |= {"coordinator", "machinery"}  # an open prompt nobody else receives
         mine = set(self.roles) | {self.member}
         return bool(allowed & mine & set(as_roles))
 
