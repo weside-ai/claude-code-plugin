@@ -30,4 +30,7 @@ path we/scripts/required_checks.sh
 path we/process/**
 # The command centre's web server: a read surface with session data behind the tailnet gate.
 path we/scripts/command_center/crewd.py
+# The event lines land in other sessions as user turns: their text is a trust boundary.
+path we/scripts/command_center/event_tail.py
+path we/scripts/command_center/event_routes.py
 path we/scripts/redaction.py
