@@ -98,6 +98,7 @@ KINDS = (
 )
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
+TRUSTED_EVENTS = frozenset({"push", "schedule", "workflow_dispatch"})
 KEEP_S = 14 * 86400
 RED = ("failure", "timed_out", "cancelled")
 VERDICT = {"success": "green", "failure": "red", "error": "infra"}
@@ -406,7 +407,11 @@ class Round:
                         f"run:{run['id']}",
                         run.get("created_at"),
                         repo=repo,
-                        workflow=name_of(run.get("name")),
+                        # A fork's pull_request run names its own workflow: only runs the
+                        # repo itself started may show a name, the rest show the workflow id.
+                        workflow=name_of(run.get("name"))
+                        if run.get("event") in TRUSTED_EVENTS
+                        else f"workflow {int(run.get('workflow_id') or 0)}",
                         mins=mins,
                         event=token_of(run.get("event")),
                         branch=token_of(run.get("head_branch")),

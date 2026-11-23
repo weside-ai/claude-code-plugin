@@ -774,13 +774,11 @@ by hand with `event_poller.py ensure`):
 it reads GitHub and the cluster for the release path and CI (an RC verdict, a stuck rollout, a
 blocked release PR, main red, a long queue, new issues) and routes each event kind to crew roles
 (`event_routes.py` owns the block's schema). Each member's session runs a tail
-(`event_tail.py`) that writes the lines routed to its roles into its own inbox, one line per event,
-the same kind and object folded within `fold_s`, a `digest` route once an hour. A line carries
-fixed words, numbers, tags, check names and links built from ids, never a title.
+(`event_tail.py`, whose docstring owns folding, digests and the line text) that writes the lines
+routed to its roles into its own inbox; a line never carries a title.
 
 What finds no running session waits in the coordinator's delta, `delta.jsonl` in the folder
-`event_poller.py path` prints (one row per event and role: `{id, kind, object, role, line, at,
-damage, reason}`); a parked session gets only damage kinds. A damage kind (a blocked production
+`event_poller.py path` prints (its row: the `event_poller.py` docstring); a parked session gets only damage kinds. A damage kind (a blocked production
 release) without a receiver goes at once to the coordinator's running session and as one `gate`
 news item. `event_poller.py status` names the poller, its last round, the loaded routes and the
 running tails.

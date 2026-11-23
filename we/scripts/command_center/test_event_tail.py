@@ -228,7 +228,6 @@ def test_digest_routes_wait_for_one_hourly_line(short_tmp, monkeypatch):
     _, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch)
     try:
         k = tails["kiska"].key
-        tails["kiska"].state["last_digest"] = clock.t
         address(
             folder,
             [

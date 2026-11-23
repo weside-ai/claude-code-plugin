@@ -205,6 +205,8 @@ class Tail:
             cursor = seq
             self.state["cursor"] = cursor
             self.save()
+        if kept and not self.state.get("last_digest"):
+            self.state["last_digest"] = now  # the hour starts with the first kept line
         if kept and now - float(self.state.get("last_digest") or 0) >= DIGEST_S:
             self._send(routes_mod.digest(kept))
             self.state["digest"], self.state["last_digest"] = [], now
