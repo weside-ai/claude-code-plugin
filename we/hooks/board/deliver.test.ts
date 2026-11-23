@@ -822,7 +822,7 @@ test('a one-way Go tells coordinator and asker the asking session arms on the go
   const { clock, h } = await coordinator($, on, { board })
   await h.click({ id: 'Q1', answer: 'accept', ts: iso(T0 + 1_000), session: 'foxy' })
   await clock.advance(3_000)
-  const text = `Q1: the owner's go on ${pr} — the asking session arms that PR with \`arm_pr.sh\`; the question stays open until the PR is merged (answered from the board pane in foxy)\nThe question: "Merge it?"\nThe recommendation accepted: "yes"`
+  const text = `Q1: the owner's go on ${pr} — the asking session arms that PR with \`arm_pr.sh\`; \`board.py show Q1\` keeps the go (answered from the board pane in foxy)\nThe question: "Merge it?"\nThe recommendation accepted: "yes"`
   expect(h.submitted).toEqual([text])
   expect(h.sent).toEqual([{ to: 'asker', text }])
   expect([...h.submitted, ...h.sent.map(s => s.text)].some(t => t.includes('proposal accepted'))).toBe(false)

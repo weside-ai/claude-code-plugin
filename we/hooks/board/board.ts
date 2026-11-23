@@ -289,7 +289,7 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
   withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
-  accept_hand: "{id}: the owner's go on {pr} — the asking session arms that PR with `arm_pr.sh`; the question stays open until the PR is merged",
+  accept_hand: "{id}: the owner's go on {pr} — the asking session arms that PR with `arm_pr.sh`; `board.py show {id}` keeps the go",
   accept_task: '{id}: taken — the owner does this task; do not do it yourself',
   followup_route: '{id}: Follow-up → tell the owner in one line: talk to {who}. Do not answer or relay it yourself.',
   rebuild:
@@ -336,6 +336,28 @@ export const ageDays = (since: string | undefined, now: number): number | undefi
 
 export const sortQueue = (queue: readonly BoardQueueItem[]): BoardQueueItem[] =>
   [...queue].sort((a, b) => (a.since ?? '9999').localeCompare(b.since ?? '9999'))
+
+// How long a card an Accept, Deny or Withdraw closed stays struck in the queue: the press's feedback.
+export const STRUCK_SHOWN_MS = 10 * MIN
+
+// What the queue frame shows: the open questions, oldest first, which alone count as waiting, then the
+// cards closed within STRUCK_SHOWN_MS. board.py drops a closed question on a later write once its asker
+// has the answer; until then the file still lists it, and the pane never sets it above an open one.
+export const waitingQueue = (
+  queue: readonly BoardQueueItem[],
+  given: Record<string, BoardAnswer>,
+  updated: string | undefined,
+  now: number,
+): { open: BoardQueueItem[]; struck: BoardQueueItem[] } => {
+  const open: BoardQueueItem[] = []
+  const struck: BoardQueueItem[] = []
+  for (const q of queue) {
+    const last = q.id ? shownAnswer(given[q.id], updated) : undefined
+    if (!last || !isClosed(last)) open.push(q)
+    else if (now - Date.parse(last.ts) < STRUCK_SHOWN_MS) struck.push(q)
+  }
+  return { open: sortQueue(open), struck: sortQueue(struck) }
+}
 
 const byPriority = (a: BoardSession, b: BoardSession) => {
   const pa = typeof a.priority === 'number' ? a.priority : Infinity

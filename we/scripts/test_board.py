@@ -3504,36 +3504,32 @@ class TestPrune:
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
 
-    def test_an_accepted_one_way_merge_go_stays_until_close_merged(self, crewless):
-        """Red arm: Go on a one-way merge-go still waits for the asking session's arm; the
-        reminder stays on the board until close-merged sees the PR merged."""
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"cause": "merge-go", "one_way": "money", "pr_url": PR_URL},
+            {"cause": "window-go"},
+        ],
+        ids=["one-way-merge-go", "window-go"],
+    )
+    @pytest.mark.parametrize("answer", ["accept", "deny"])
+    def test_an_answered_go_leaves_the_queue_once_its_asker_has_it(self, crewless, fields, answer):
+        """Red arm: an accepted one-way merge-go or window-go stayed in `owner_queue` after its
+        asker had the answer (four answered questions hung there on one day); the asker keeps
+        the go in its prompt and `board.py show`, the owner's queue keeps only what waits."""
         path = crewless / "board.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
-        q7.update({"cause": "merge-go", "one_way": "money", "pr_url": PR_URL})
-        path.write_text(json.dumps(data), encoding="utf-8")
-        epoch_row(crewless)
-        ts = "2026-11-03T09:59:00.000Z"
-        answered(crewless, "Q7", "accept", ts)
-        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
-        go(crewless, "prune")
-        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
-
-    @pytest.mark.parametrize("answer, stays", [("accept", True), ("deny", False)])
-    def test_an_accepted_window_go_stays_until_its_asker_withdraws(self, crewless, answer, stays):
-        """Red arm: a go the human must type in the asker's window is not done by the click;
-        before `window-go` the accepted question was pruned at once."""
-        path = crewless / "board.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
-        q7["cause"] = "window-go"
+        q7.update(fields)
         path.write_text(json.dumps(data), encoding="utf-8")
         epoch_row(crewless)
         ts = "2026-11-03T09:59:00.000Z"
         answered(crewless, "Q7", answer, ts)
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]  # not carried yet
         delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
         go(crewless, "prune")
-        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == (["Q7"] if stays else [])
+        assert board_of(crewless)["owner_queue"] == []
 
     def test_an_earlier_followup_still_owed_to_the_asker_keeps_it(self, crewless):
         epoch_row(crewless)

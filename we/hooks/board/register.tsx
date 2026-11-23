@@ -13,7 +13,7 @@ import type {
 } from '../../types'
 import {
   acceptVariantOf, ageDays, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterOf, isResting, lampOf, lastAnswers,
-  liveByName, majorityMode, ownName, pack, parseBoard, sessionAge, shelveNews, shownAnswer, sortQueue, stagingLines, startModeOf, wrapTitle,
+  liveByName, majorityMode, ownName, pack, parseBoard, sessionAge, shelveNews, shownAnswer, stagingLines, startModeOf, waitingQueue, wrapTitle,
 } from './board'
 import type { Lamp, Liveness, SessionGroup, StartMode } from './board'
 import {
@@ -800,7 +800,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     )
 
     // An Accept or Deny strikes the card at once: dim, the question struck through, no buttons, the
-    // stamp and the delivery line kept, whatever the board file still lists.
+    // stamp and the delivery line kept, below the open ones for STRUCK_SHOWN_MS (waitingQueue).
     const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined
@@ -1039,6 +1039,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const restStale = resting.flatMap(g => [...(g.head ? [g.head] : []), ...g.workers]).filter(s => ageOf(s)?.level === 'stale').length
 
     const { news, log } = board ? shelveNews(board, given) : { news: [], log: [] }
+    const queue = waitingQueue(board?.queue ?? [], given, board?.updated, now)
+    const cards = [...queue.open, ...queue.struck]
     const counts = countBoard(sessions)
     const barWidth = Math.min(20, counts.masters * 4, width - 2)
     const cells = (n: number) => (counts.masters ? Math.round((n / counts.masters) * barWidth) : 0)
@@ -1051,7 +1053,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         { text: '░'.repeat(barWidth - runCells - waitCells), color: 'inactive' },
         { text: `  ${counts.runs + counts.waits}/${counts.masters} masters active`, bold: true },
       ],
-      board?.queue.length ? [{ text: `${board.queue.length} waiting for you`, color: 'warning', bold: true }] : [],
+      queue.open.length ? [{ text: `${queue.open.length} waiting for you`, color: 'warning', bold: true }] : [],
       counts.ci ? [{ text: `${counts.ci} in CI` }] : [],
     ]
 
@@ -1114,11 +1116,11 @@ export const registerBoard = (on: On, options: PluginOptions) => {
           </Text>
         )}
 
-        {board && board.queue.length > 0 && (
+        {cards.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             {frame('queue', 'warning', [
-              <Text key="t" color="warning" bold>{`Waiting for you (${board.queue.length})`}</Text>,
-              <Box key="cards" flexDirection="column" marginTop={1}>{sortQueue(board.queue).map(queueCard)}</Box>,
+              <Text key="t" color="warning" bold>{`Waiting for you (${queue.open.length})`}</Text>,
+              <Box key="cards" flexDirection="column" marginTop={1}>{cards.map(queueCard)}</Box>,
             ])}
           </Box>
         )}

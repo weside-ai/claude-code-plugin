@@ -424,8 +424,8 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
   expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props).toMatchObject({ strikethrough: true, dimColor: true })
   expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
-  // The board file still lists Q1 and Q2; Q2 keeps its buttons.
-  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  // The board file still lists Q1 and Q2: Q1 shows struck, only Q2 counts and keeps its buttons.
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(1\)/ })).toBeDefined()
   expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
   // A Deny line on the struck id (a chat write-back, another pane) changes nothing.
   home.push({ id: 'Q1', answer: 'deny', ts: '2026-10-30T19:00:00.000Z', session: 'lead', via: 'chat' })
@@ -433,6 +433,37 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
   expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /✓ denied/ })).toBeUndefined()
   expect(home.appended.map(a => a[2])).toEqual(['accept'])
+  await ui.unmount()
+})
+
+// The board file still lists questions answered hours ago (the 03:20 UTC case): the pane shows and counts
+// only the open ones, so an answered card never stands above them.
+test('answered questions the file still lists stay off the queue; the open ones show and count', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-30T21:11:00Z') })
+  mock.store(on)
+  const board = JSON.stringify({
+    updated: '2026-10-30T18:10:00+01:00',
+    updated_by: 'Orchestrator',
+    owner_queue: [
+      { id: 'Q1', session: 'lead', key: 'PROJ-40', ask: 'Old go, answered', since: '2026-10-20', recommendation: 'yes', cause: 'window-go' },
+      { id: 'Q2', session: 'lead', key: 'PROJ-41', ask: 'Merge #5?', since: '2026-10-21', recommendation: 'yes', cause: 'merge-go', one_way: 'money', pr_url: URL5 },
+      { id: 'Q3', session: 'lead', key: 'PROJ-42', ask: 'Open one', since: '2026-10-30', recommendation: 'yes' },
+      { id: 'Q4', session: 'lead', key: 'PROJ-43', ask: 'Open two', since: '2026-10-30', recommendation: 'yes' },
+    ],
+    sessions: [],
+  })
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' }, board)
+  home.push({ id: 'Q1', answer: 'accept', ts: '2026-10-20T09:00:00.000Z', session: 'Orchestrator' })
+  home.push({ id: 'Q2', answer: 'accept', ts: '2026-10-21T09:00:00.000Z', session: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Open one' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Open two' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Old go, answered' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Merge #5?' })).toBeUndefined()
   await ui.unmount()
 })
 

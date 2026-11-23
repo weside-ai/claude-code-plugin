@@ -117,9 +117,8 @@ prune    drops what is handled from board.json (docs/board.md § Pruning) and pr
          the ledger's epoch, written in the asker's own session, or the asker's row in
          board-deliveries.jsonl is `delivered: true` (the coordinator's row when the coordinator
          asked it itself; refused, or not taken within PRUNE_AFTER_H:
-         the starter's or the route row is), except a one-way merge-go accepted, which `close-merged` takes, and a
-         `window-go` accepted, which stays until its asker runs `withdraw` once the go is typed; an
-         unanswered `withdrawn` or `superseded` one; a news item the
+         the starter's or the route row is), a Go on a one-way merge-go and an accepted
+         `window-go` included; an unanswered `withdrawn` or `superseded` one; a news item the
          owner marked read; a `returned` item at once; a bundle (`B-…`) PRUNE_AFTER_H after its `ts`. Escalation
          items (`E<n>`, `E<n>a`) stay for `escalation settle`. Each drop appends one `pruned` line
          to board-questions.jsonl. Every write of board.json runs the same pass, so leftovers go
@@ -645,12 +644,9 @@ def prune(board, state, now):
     def answered(item, qid, close):
         """A closed question goes once its asker is owed nothing: delivered to the asker, or
         routed to the coordinator (deliver.ts routes an answer the asker has not taken within
-        PRUNE_AFTER_H). A one-way merge-go accepted stays until `close-merged` takes it: the
-        asking session still has to arm it."""
-        if item.get("one_way") and item.get("cause") == "merge-go" and close["answer"] == "accept":
-            return None
-        if item.get("cause") == "window-go" and close["answer"] == "accept":
-            return None  # the go is typed in the asker's window; the asker withdraws it when done
+        PRUNE_AFTER_H). A Go on a one-way merge-go and an accepted window-go go the same way:
+        the asker holds the go in its prompt and in `show`, the owner's queue keeps only what
+        still waits for the owner."""
         if all(asker_carried(item, line) for line in carried.get(qid, [])):
             return {"reason": "answered", "answer": close["answer"]}
         return None
