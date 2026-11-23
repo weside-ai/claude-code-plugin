@@ -112,7 +112,8 @@
 # WATCH_CODEX_CHECK (default `Codex Review`), WATCH_CODEX_READS (comment reads per head after that
 # check completed, default 10), WATCH_MAX_LIFETIME (s, overrides --max-hours), WATCH_REVIEW_RX
 # (extended regex, case-insensitive, of the check names that count as a review, default `review`),
-# WATCH_QUOTA_FLOOR (default 500), WATCH_MIN_INTERVAL (the floor, default 60; tests only).
+# WATCH_QUOTA_FLOOR (default 500), WATCH_MIN_INTERVAL (the floor, default 60; tests only),
+# WATCH_RULES_NEWS (default 1; 0 skips the board news line a merged rule change gets).
 set -uo pipefail
 
 USAGE="usage: watch-pr-checks.sh <PR> [--fail-fast] [--sha <expected>] [--until-merged | --human-merge] [--max-hours <h>] [-R <owner/repo>]"
@@ -267,9 +268,15 @@ view() {
 }
 field() { sed -n 2p <<<"$OUT" | cut -f"$1"; }
 merge_commit() { local c; c=$(field 7); [ -n "$c" ] && echo " · merge commit ${c:0:12}"; return 0; }
+rules_news() {  # a merged PR that changes .claude, .weside or workflows: one board news line (board.py news merged)
+  [ "${WATCH_RULES_NEWS:-1}" = 1 ] || return 0
+  local ref=$PR
+  case "$PR" in *[!0-9]*) ;; *) [ -n "$REPO" ] && ref="$REPO#$PR" ;; esac
+  python3 "$(dirname "${BASH_SOURCE[0]}")/board.py" news merged --pr "$ref" >/dev/null 2>&1 || true
+}
 closed_exit() {  # a merged or closed PR ends the watch with its own line, never "red"
   case "$(field 3)" in
-    MERGED) echo "final $1: merged$(merge_commit)${WAITING:+ (red: $WAITING)}"; [ -n "$WAITING" ] && exit 7; exit 0 ;;
+    MERGED) rules_news; echo "final $1: merged$(merge_commit)${WAITING:+ (red: $WAITING)}"; [ -n "$WAITING" ] && exit 7; exit 0 ;;
     CLOSED) echo "final $1: closed"; exit 8 ;;
   esac
 }
@@ -405,6 +412,7 @@ late_out() {  # drops the rollup rows whose run was created after the merge (std
     !($3 in skip)'
 }
 merged_red() {  # merged_red <what>: the one end of a watch whose PR merged before its CI ended
+  rules_news
   echo "final $SHA: merged-red$(merge_commit) · $1 — the base branch carries it: fix it first"; exit 15
 }
 red_exit() {  # red_exit <failed names>: the red final line; a failed review check disarms first
@@ -623,7 +631,7 @@ while :; do
       # Auto-merge off is said once and watched past: the caller arms it (or the human merges) and
       # still gets the `merged` exit; DIRTY, BEHIND and a long BLOCKED need the session, so they end.
       if [ -n "$MERGED_EARLY" ]; then
-        echo "final $SHA: merged-green$(merge_commit)"; exit 0
+        rules_news; echo "final $SHA: merged-green$(merge_commit)"; exit 0
       elif [ -n "$UNTIL_MERGED" ] && [ -z "$HUMAN_MERGE" ] && [ "$(field 4)" = off ] \
         && [ "$(field 1)" != DIRTY ] && [ "$(field 1)" != BEHIND ] \
         && ! { [ "$(field 1)" = BLOCKED ] && [ $(($(date +%s) - STABLE_SINCE)) -ge "$BLOCKED_GRACE" ]; }; then

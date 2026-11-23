@@ -293,7 +293,10 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
     `board.py ask --cause merge-go --pr <url> --one-way <class>`. On the yes it passes back with the
     question number, arm with `arm_pr.sh <PR>` and watch `--until-merged`. No approve on GitHub is the
     yes; without the yes you do not arm it. A yes holds for the head it was asked on: a later push
-    touching a file of the one-way class asks again. `arm_pr.sh` checks no board line: it names the class on its output and in a PR comment, and refuses it
+    touching a file of the one-way class asks again with `--supersede`, which replaces the open
+    question, so the PR keeps one. A Codex finding you skip rides on the same question
+    (`--codex-finding <link> --codex-reason <why>`): the yes posts the skip on the PR
+    (`docs/board.md` § Answers given in a chat). `arm_pr.sh` checks no board line: it names the class on its output and in a PR comment, and refuses it
     only to a worker, so the yes is yours to wait for.
   - Drafts: `/we:pr` step 4; a draft is no merge brake. Non-destructive migrations auto-merge serially
     (owner 03.10.2026): the second PR arms only after the first landed, merging `origin/<default>`,

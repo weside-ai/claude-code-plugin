@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import {
   acceptVariantOf, ageDays, answerPrompt, answersPathOf, clip, countBoard, deliveriesPathOf, freshness, groupSessions, isClosed, isMasterProfile, isResting, lastAnswers,
   liveByName,
-  majorityMode, newsShelf, ownName, pack, parseBoard, sessionAge, shelveNews, shownAnswer, sortQueue, startModeOf, unreadNews, wrapTitle,
+  majorityMode, newsShelf, ownName, pack, parseBoard, sessionAge, shelveNews, shownAnswer, sortQueue, waitingQueue, startModeOf, unreadNews, wrapTitle,
 } from './board'
 import type { BoardSession, LiveSession } from '../../types'
 
@@ -324,4 +324,30 @@ test('the board file carries its own session age thresholds; a bad pair is left 
   expect(parseBoard('{"session_age_hours":{"grey":2,"stale":12}}').sessionAgeHours).toEqual({ grey: 2, stale: 12 })
   expect(parseBoard('{"session_age_hours":{"grey":12,"stale":2}}').sessionAgeHours).toBeUndefined()
   expect(parseBoard('{}').sessionAgeHours).toBeUndefined()
+})
+
+// The queue at 03:20 UTC on the day the pane showed the owner no question: three answered hours
+// earlier, two open. Open first and counted; an answer older than the strike window leaves the view.
+test('waitingQueue: open questions first and counted, an old answer off the view, a fresh one struck', () => {
+  const queue = [
+    { id: 'Q1000', since: '2026-11-22' },
+    { id: 'Q1021', since: '2026-11-22' },
+    { id: 'Q1025', since: '2026-11-23' },
+    { id: 'Q1029', since: '2026-11-23' },
+    { id: 'Q1030', since: '2026-11-23' },
+    { id: 'Q1031', since: '2026-11-23' },
+  ]
+  const given = lastAnswers([
+    { id: 'Q1000', answer: 'accept', ts: '2026-11-22T15:02:00.530Z', session: 'Samu' },
+    { id: 'Q1021', answer: 'accept', ts: '2026-11-22T23:40:40.581Z', session: 'Samu' },
+    { id: 'Q1025', answer: 'deny', ts: '2026-11-23T00:17:51.833Z', session: 'Samu' },
+    { id: 'Q1031', answer: 'accept', ts: '2026-11-23T03:18:00.000Z', session: 'Samu' },
+  ].map(l => JSON.stringify(l)).join('\n'))
+  const now = Date.parse('2026-11-23T03:20:00Z')
+  const shown = waitingQueue(queue, given, undefined, now)
+  expect(shown.open.map(q => q.id)).toEqual(['Q1029', 'Q1030'])
+  expect(shown.struck.map(q => q.id)).toEqual(['Q1031'])
+  expect(waitingQueue(queue, given, undefined, now + 30 * 60_000).struck).toEqual([])
+  // An answer still undelivered keeps its struck card, so its delivery line stays on the pane.
+  expect(waitingQueue(queue, given, undefined, now + 30 * 60_000, new Set(['Q1031'])).struck.map(q => q.id)).toEqual(['Q1031'])
 })

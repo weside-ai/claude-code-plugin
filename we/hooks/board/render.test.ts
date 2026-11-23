@@ -74,7 +74,7 @@ const RUN = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isS
 // gone; the older notes string folds to one line.
 const AT_100 = `
 ◆ Board  as of 12 min ago (Orchestrator)
-████████████░░░░  3/4 masters active · 4 waiting for you · 1 in CI
+████████████░░░░  3/4 masters active · 3 waiting for you · 1 in CI
 Finish what is open → money → marketing. The kernel runs on its own.
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -90,16 +90,11 @@ Finish what is open → money → marketing. The kernel runs on its own.
 [ ▸ Notes ]  v2.4.1 is tagged, prod still reports v2.4.0: the rollout hung on a GitHub 502 and was …
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Waiting for you (4)                                                                              │
+│ Waiting for you (3)                                                                              │
 │                                                                                                  │
 │ Q9  9 d  lead  PROJ-40                                                                           │
 │ Storyline S1–S3                                                                                  │
 │ [ Deny ] [ Follow-up ] [ Update ]                                                                │
-│                                                                                                  │
-│ Q12  2 d  billing  PROJ-59                                                                       │
-│ Merge PR #562? (money path, CI green)                                                            │
-│ ✓ accepted 21:02 UTC (Orchestrator)                                                              │
-│ → delivered to billing 21:02 UTC                                                                 │
 │                                                                                                  │
 │ Q19  today  legal  PROJ-69                                                                       │
 │ UK: register with the tax office (quarterly returns, running cost) or keep the web checkout      │
@@ -112,6 +107,11 @@ Finish what is open → money → marketing. The kernel runs on its own.
 │ → release                                                                                        │
 │ [ Accept ] [ Deny ] [ Follow-up ] [ Update ] ✓ follow-up asked 21:05 UTC (Orchestrator)          │
 │ not delivered, with Orchestrator (not reachable)                                                 │
+│                                                                                                  │
+│ Q12  2 d  billing  PROJ-59                                                                       │
+│ Merge PR #562? (money path, CI green)                                                            │
+│ ✓ accepted 21:02 UTC (Orchestrator)                                                              │
+│ → delivered to billing 21:02 UTC                                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -145,7 +145,7 @@ Finish what is open → money → marketing. The kernel runs on its own.
 
 const AT_60 = `
 ◆ Board  as of 12 min ago (Orchestrator)
-████████████░░░░  3/4 masters active · 4 waiting for you
+████████████░░░░  3/4 masters active · 3 waiting for you
 1 in CI
 Finish what is open → money → marketing. The kernel runs on
 its own.
@@ -164,16 +164,11 @@ its own.
 [ ▸ Notes ]  v2.4.1 is tagged, prod still reports v2.4.0: t…
 
 ╭──────────────────────────────────────────────────────────╮
-│ Waiting for you (4)                                      │
+│ Waiting for you (3)                                      │
 │                                                          │
 │ Q9  9 d  lead  PROJ-40                                   │
 │ Storyline S1–S3                                          │
 │ [ Deny ] [ Follow-up ] [ Update ]                        │
-│                                                          │
-│ Q12  2 d  billing  PROJ-59                               │
-│ Merge PR #562? (money path, CI green)                    │
-│ ✓ accepted 21:02 UTC (Orchestrator)                      │
-│ → delivered to billing 21:02 UTC                         │
 │                                                          │
 │ Q19  today  legal  PROJ-69                               │
 │ UK: register with the tax office (quarterly returns,     │
@@ -188,6 +183,11 @@ its own.
 │ [ Accept ] [ Deny ] [ Follow-up ] [ Update ]             │
 │ ✓ follow-up asked 21:05 UTC (Orchestrator)               │
 │ not delivered, with Orchestrator (not reachable)         │
+│                                                          │
+│ Q12  2 d  billing  PROJ-59                               │
+│ Merge PR #562? (money path, CI green)                    │
+│ ✓ accepted 21:02 UTC (Orchestrator)                      │
+│ → delivered to billing 21:02 UTC                         │
 ╰──────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────────────────────╮
@@ -280,7 +280,7 @@ test('/board at 100 and 60 columns: frames, cards and folded rest, no line past 
   }
   // The narrow pane breaks between segments, never inside a frame's border.
   expect(narrow.folded.filter(line => line.startsWith('│')).every(line => line.length === 60 && line.endsWith('│'))).toBe(true)
-  expect(narrow.folded).toContain('████████████░░░░  3/4 masters active · 4 waiting for you')
+  expect(narrow.folded).toContain('████████████░░░░  3/4 masters active · 3 waiting for you')
   expect(narrow.folded).toContain('│ └ ● img  PROJ-65  #563  busy  ●  renders the second art… │')
   // Opened, the rest shows the resting master in its frame; the sessions on no board stand outside the fold.
   expect(narrow.open).toContain('[ − 1 idle/other ]')

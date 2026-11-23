@@ -350,7 +350,7 @@ master costs a round trip per head and the master's context:
    on its final line as that table says (`ready` → the printed `gh pr merge … --match-head-commit`).
    One-way, a hold label or a draft reason → no arm: `held`. Under `merge.armer: workflow` the
    repo's workflow arms the ready PR and `arm_pr.sh` refuses: the end is `armed` without an arm.
-3. Red checks or review findings → `/we:ci-review`: one push per head, at most two rounds, a repeat
+3. Red checks or review findings → `/we:ci-review`: one push per head, at most three rounds, a repeat
    finding stops (`held`).
 4. The § Report, its last line exactly one of:
 

@@ -246,7 +246,7 @@ test('before /board only the deliverer reads the board, once; the pane re-reads 
 })
 
 // A fake home: board.json, and board-answers.jsonl once answer.py appended to it.
-function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }, board = BOARD) {
+function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }, board = BOARD, answerExit = 0) {
   const answersPath = '/home/me/.claude/we-state/board-answers.jsonl'
   let lines = ''
   let mtimeMs = 1
@@ -263,6 +263,7 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
       const [, id, answer, ts, session] = e.argv.slice(3)
       lines += `${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`
       mtimeMs += 1
+      if (answerExit) return { value: { exitCode: answerExit, stdout: '', stderr: `answer.py: ${id}: the answer is saved, but the go comment on the PR failed: gh not found`, isStdoutTruncated: false, isStderrTruncated: false } }
       return RUN('')
     }
     return RUN(JSON.stringify({ sessions: [{ name: self.name, sessionId: self.sessionId, pid: 9, status: 'busy', envRead: false }] }))
@@ -272,15 +273,18 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
     return { text: String((e as { text?: unknown }).text) }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
+  const toasts: string[] = []
   on('ui.toast', (_$, e) => {
-    throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
+    if (!answerExit) throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
+    toasts.push(String((e as { text?: unknown }).text))
+    return { value: undefined }
   })
   // A line another writer appended (a chat write-back, another session's pane).
   const push = (line: Record<string, unknown>) => {
     lines += `${JSON.stringify(line)}\n`
     mtimeMs += 1
   }
-  return { answersPath, appended, submitted, push }
+  return { answersPath, appended, submitted, push, toasts }
 }
 
 test('Accept in the orchestrator session appends one line, sends nothing itself and shows the answer', async ($, on) => {
@@ -424,8 +428,8 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
   expect((await ui.find({ type: 'Text', text: 'Live test AC 16' }))?.props).toMatchObject({ strikethrough: true, dimColor: true })
   expect(await ui.find({ type: 'Text', text: /→ tonight/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /✓ accepted \d\d:\d\d UTC \(lead\)/ })).toBeDefined()
-  // The board file still lists Q1 and Q2; Q2 keeps its buttons.
-  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  // The board file still lists Q1 and Q2: Q1 shows struck, only Q2 counts and keeps its buttons.
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(1\)/ })).toBeDefined()
   expect(await ui.find({ key: 'deny-Q2' })).toBeDefined()
   // A Deny line on the struck id (a chat write-back, another pane) changes nothing.
   home.push({ id: 'Q1', answer: 'deny', ts: '2026-10-30T19:00:00.000Z', session: 'lead', via: 'chat' })
@@ -433,6 +437,53 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
   expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /✓ denied/ })).toBeUndefined()
   expect(home.appended.map(a => a[2])).toEqual(['accept'])
+  await ui.unmount()
+})
+
+// The board file still lists questions answered hours ago (the 03:20 UTC case): the pane shows and counts
+// only the open ones, so an answered card never stands above them.
+test('answered questions the file still lists never count; an undelivered one stays struck, the open ones show and count', async ($, on) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-30T21:11:00Z') })
+  mock.store(on)
+  const board = JSON.stringify({
+    updated: '2026-10-30T18:10:00+01:00',
+    updated_by: 'Orchestrator',
+    owner_queue: [
+      { id: 'Q1', session: 'lead', key: 'PROJ-40', ask: 'Old go, answered', since: '2026-10-20', recommendation: 'yes', cause: 'window-go' },
+      { id: 'Q2', session: 'lead', key: 'PROJ-41', ask: 'Merge #5?', since: '2026-10-21', recommendation: 'yes', cause: 'merge-go', one_way: 'money', pr_url: URL5 },
+      { id: 'Q3', session: 'lead', key: 'PROJ-42', ask: 'Open one', since: '2026-10-30', recommendation: 'yes' },
+      { id: 'Q4', session: 'lead', key: 'PROJ-43', ask: 'Open two', since: '2026-10-30', recommendation: 'yes' },
+    ],
+    sessions: [],
+  })
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' }, board)
+  home.push({ id: 'Q1', answer: 'accept', ts: '2026-10-20T09:00:00.000Z', session: 'Orchestrator' })
+  home.push({ id: 'Q2', answer: 'accept', ts: '2026-10-21T09:00:00.000Z', session: 'Orchestrator' })
+
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Open one' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Open two' })).toBeDefined()
+  // Neither answer reached its asker (no delivery row): both stay in view struck and uncounted, under
+  // the open ones, so their delivery lines show.
+  expect((await ui.find({ type: 'Text', text: 'Old go, answered' }))?.props).toMatchObject({ strikethrough: true })
+  expect((await ui.find({ type: 'Text', text: 'Merge #5?' }))?.props).toMatchObject({ strikethrough: true })
+  await ui.unmount()
+})
+
+test('a yes whose go comment failed is saved and says so in a toast, never silent', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' }, BOARD, 3)
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  expect(home.toasts).toEqual(['board: answer.py: Q1: the answer is saved, but the go comment on the PR failed: gh not found'])
+  expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
   await ui.unmount()
 })
 

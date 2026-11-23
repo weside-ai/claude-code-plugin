@@ -1010,6 +1010,8 @@ class TestAskReader:
 
 
 PR_URL = "https://github.com/o/r/pull/5"
+HEAD_A = "a" * 40
+HEAD_B = "b" * 40
 
 
 @pytest.fixture
@@ -1018,14 +1020,220 @@ def merge_gh(crewless, monkeypatch):
     monkeypatch.setenv("FAKE_GH", str(crewless / "gh.json"))
     monkeypatch.setenv("FAKE_GH_LOG", str(crewless / "gh-calls.jsonl"))
 
-    def answers(state):
-        pr = {"state": state, "url": PR_URL, "headRefName": "feat/PROJ-12-x", "title": "t"}
+    def answers(state, head=HEAD_A):
+        pr = {
+            "state": state,
+            "url": PR_URL,
+            "headRefName": "feat/PROJ-12-x",
+            "headRefOid": head,
+            "title": "t",
+        }
         (crewless / "gh.json").write_text(
             json.dumps({PR_URL: {"pr": pr}, "5 -R o/r": {"pr": pr}}), encoding="utf-8"
         )
 
     answers("OPEN")
     return answers
+
+
+@pytest.mark.usefixtures("merge_gh")
+class TestOneWayGo:
+    """One open question per one-way PR, and the human's yes as the skip of a Codex finding."""
+
+    CODEX = (
+        "--codex-finding",
+        "https://github.com/o/r/pull/5#c1 retry loop",
+        "--codex-reason",
+        "the loop is capped at 3",
+    )
+
+    def one_way(self, *extra):
+        return [
+            *ask_argv(**{"--cause": "merge-go"}),
+            "--pr",
+            "o/r#5",
+            "--one-way",
+            "money",
+            *extra,
+        ]
+
+    def test_a_new_head_replaces_the_open_question_under_supersede(
+        self, crewless, merge_gh, capsys
+    ):
+        """Red arm: four questions for one PR stood on the board, one per head."""
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *self.one_way()) == 0
+        first = qid_of(capsys.readouterr().out)
+        merge_gh("OPEN", head=HEAD_B)
+        assert go(crewless, *self.one_way("--ask", "Merge the new head of #5 tonight?")) == 1
+        assert f"{first} is the open one-way question on {PR_URL}" in capsys.readouterr().err
+        assert (
+            go(crewless, *self.one_way("--supersede", "--ask", "Merge the new head of #5?")) == 0
+        )
+        second = qid_of(capsys.readouterr().out)
+        queue = [q for q in board_of(crewless)["owner_queue"] if q.get("pr_url") == PR_URL]
+        assert [(q["id"], q["head"]) for q in queue] == [(second, HEAD_B)]
+        old = [x for x in jsonl(crewless / "board-questions.jsonl") if x.get("id") == first][-1]
+        assert (old["outcome"], old["by"]) == ("superseded", second)
+        assert go(crewless, "show", first) == 0
+        assert json.loads(capsys.readouterr().out)["status"] == "superseded"
+
+    @pytest.mark.parametrize(
+        "extra, refusal",
+        [
+            (("--codex-finding", "x"), "needs both --codex-finding and --codex-reason"),
+            (("--supersede",), "belong to a one-way merge-go question"),
+        ],
+    )
+    def test_the_one_way_flags_are_refused_where_they_mean_nothing(
+        self, crewless, capsys, extra, refusal
+    ):
+        argv = [*ask_argv(**{"--cause": "merge-go"}), "--pr", "o/r#5", *extra]
+        if extra[0] == "--codex-finding":
+            argv += ["--one-way", "money"]
+        assert go(crewless, *argv) == 1
+        assert refusal in capsys.readouterr().err
+
+    def ask_with_finding(self, crewless, capsys):
+        answer_with(crewless, CLEAR)
+        assert go(crewless, *self.one_way(*self.CODEX)) == 0
+        qid = qid_of(capsys.readouterr().out)
+        item = board_of(crewless)["owner_queue"][-1]
+        assert item["codex_reason"] == "the loop is capped at 3"
+        assert item["ask"].splitlines()[-1] == (
+            "On yes the Codex finding counts as skipped: https://github.com/o/r/pull/5#c1 retry "
+            "loop (reason: the loop is capped at 3)"
+        )
+        return qid
+
+    def comments(self, crewless):
+        return [c for c in gh_calls(crewless) if isinstance(c, dict) and "comment" in c]
+
+    def test_a_yes_in_the_chat_posts_one_go_comment_bound_to_the_head(self, crewless, capsys):
+        qid = self.ask_with_finding(crewless, capsys)
+        argv = ("answer", qid, "accept", "--session", "foxy", "--via", "chat", "--quote", "ja")
+        assert go(crewless, *argv) == 0
+        [comment] = self.comments(crewless)
+        assert comment["comment"] == PR_URL
+        lines = comment["body"].splitlines()
+        assert lines[0] == f"<!-- board-go {qid} head={HEAD_A} -->"
+        assert lines[1] == "> ja"
+        assert (
+            "Codex finding skipped on this yes: https://github.com/o/r/pull/5#c1 retry loop"
+            in lines
+        )
+        assert "Reason of the asking session: the loop is capped at 3" in lines
+        assert go(crewless, *argv) == 0  # a duplicate yes posts nothing again
+        assert len(self.comments(crewless)) == 1
+
+    def test_a_pane_yes_posts_it_too(self, crewless, capsys):
+        answer_mod = board._answer_module()
+        qid = self.ask_with_finding(crewless, capsys)
+        path = str(crewless / "board-answers.jsonl")
+        assert (
+            answer_mod.main(["answer.py", path, qid, "accept", "2026-11-23T09:00:00.000Z", "lead"])
+            == 0
+        )
+        [comment] = self.comments(crewless)
+        assert comment["body"].splitlines()[:2] == [
+            f"<!-- board-go {qid} head={HEAD_A} -->",
+            "> Go (Accept on the board)",
+        ]
+
+    def test_a_failed_post_is_reported_and_the_same_yes_posts_it_again(
+        self, crewless, capsys, monkeypatch
+    ):
+        qid = self.ask_with_finding(crewless, capsys)
+        monkeypatch.setenv("FAKE_GH_COMMENT_EXIT", "1")
+        argv = ("answer", qid, "accept", "--session", "foxy", "--via", "chat")
+        assert go(crewless, *argv) == 3
+        err = capsys.readouterr().err
+        assert "the go comment on the PR failed: GraphQL: Resource not accessible" in err
+        assert [
+            a["answer"] for a in jsonl(crewless / "board-answers.jsonl") if a["id"] == qid
+        ] == ["accept"]
+        monkeypatch.setenv("FAKE_GH_COMMENT_EXIT", "0")
+        assert go(crewless, *argv) == 0
+        assert len(self.comments(crewless)) == 2  # the failed one and the one that went through
+        logged = [
+            x
+            for x in jsonl(crewless / "board-questions.jsonl")
+            if x.get("outcome") == "go-comment"
+        ]
+        assert [x["ok"] for x in logged] == [False, True]
+
+    @pytest.mark.parametrize("kind", ["deny", "accept"])
+    def test_no_comment_without_a_finding_or_on_a_deny(self, crewless, capsys, kind):
+        answer_with(crewless, CLEAR)
+        extra = self.CODEX if kind == "deny" else ()
+        assert go(crewless, *self.one_way(*extra)) == 0
+        qid = qid_of(capsys.readouterr().out)
+        assert go(crewless, "answer", qid, kind, "--session", "foxy", "--via", "chat") == 0
+        assert self.comments(crewless) == []
+
+
+class TestRulesNews:
+    """A merged PR that changes the crew's rules reaches the human as one news line, once."""
+
+    def pr(
+        self,
+        crewless,
+        files,
+        state="MERGED",
+        body="**Draft:** no\n\nCaps the retry loop at three.\n",
+    ):
+        pr = {
+            "number": 5,
+            "url": PR_URL,
+            "state": state,
+            "body": body,
+            "files": [{"path": f} for f in files],
+        }
+        gh_answers(crewless, {PR_URL: {"pr": pr}, "5 -R o/r": {"pr": pr}})
+
+    @pytest.fixture(autouse=True)
+    def fake_gh(self, crewless, monkeypatch):
+        monkeypatch.setenv("FAKE_GH", str(crewless / "gh.json"))
+        monkeypatch.setenv("FAKE_GH_LOG", str(crewless / "gh-calls.jsonl"))
+
+    def test_a_merged_rule_change_adds_one_line_once(self, crewless):
+        self.pr(crewless, [".claude/rules/a.md", ".github/workflows/ci.yml", "src/x.py"])
+        assert go(crewless, "news", "merged", "--pr", "o/r#5") == 0
+        item = board_of(crewless)["news"][0]
+        assert (item["id"], item["kind"]) == ("R-r-5", "info")
+        assert item["title"] == "rules changed: r#5 merged (2 rule file(s))"
+        assert item["body"].splitlines() == [
+            "Caps the retry loop at three.",
+            "changes .claude/rules/a.md, .github/workflows/ci.yml",
+            PR_URL,
+        ]
+        assert go(crewless, "news", "merged", "--pr", PR_URL) == 0
+        assert [n["id"] for n in board_of(crewless)["news"]].count("R-r-5") == 1
+        # read and pruned: the id in the logs keeps it from coming back
+        answered(crewless, "R-r-5", "read", "2026-11-03T09:59:00.000Z")
+        go(crewless, "prune")
+        assert all(n.get("id") != "R-r-5" for n in board_of(crewless).get("news") or [])
+        assert go(crewless, "news", "merged", "--pr", PR_URL) == 0
+        assert all(n.get("id") != "R-r-5" for n in board_of(crewless).get("news") or [])
+
+    @pytest.mark.parametrize(
+        "files, state, why",
+        [
+            (["src/x.py", "docs/a.md"], "MERGED", "no rule paths"),
+            ([".weside/orchestrate.md"], "OPEN", "not merged"),
+        ],
+    )
+    def test_no_line_without_a_merged_rule_change(self, crewless, capsys, files, state, why):
+        self.pr(crewless, files, state=state)
+        before = board_of(crewless).get("news")
+        assert go(crewless, "news", "merged", "--pr", "o/r#5") == 0
+        assert why in capsys.readouterr().out
+        assert board_of(crewless).get("news") == before
+
+    def test_an_unreadable_pr_fails_and_writes_nothing(self, crewless, capsys):
+        gh_answers(crewless, {})
+        assert go(crewless, "news", "merged", "--pr", "o/r#5") == 1
+        assert "gh pr view failed" in capsys.readouterr().err
 
 
 class TestMergeQuestion:
@@ -2518,7 +2726,7 @@ class TestMoveInReview:
         gh_answers(moving, {"7 -R acme/app": pr(), url: pr(url=url)})
         argv = ["--pr", "acme/app#7", "--pr", url]
         assert act(moving, "move", KEY, "in_review", *argv, adapter=fake()) == 0
-        fields = ["--json", "state,mergedAt,headRefName,title,body,url"]
+        fields = ["--json", "state,mergedAt,headRefName,headRefOid,title,body,url"]
         assert gh_calls(moving) == [
             ["pr", "view", "7", "-R", "acme/app", *fields],
             ["pr", "view", url, *fields],
@@ -3504,36 +3712,32 @@ class TestPrune:
         go(crewless, "prune")
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
 
-    def test_an_accepted_one_way_merge_go_stays_until_close_merged(self, crewless):
-        """Red arm: Go on a one-way merge-go still waits for the asking session's arm; the
-        reminder stays on the board until close-merged sees the PR merged."""
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"cause": "merge-go", "one_way": "money", "pr_url": PR_URL},
+            {"cause": "window-go"},
+        ],
+        ids=["one-way-merge-go", "window-go"],
+    )
+    @pytest.mark.parametrize("answer", ["accept", "deny"])
+    def test_an_answered_go_leaves_the_queue_once_its_asker_has_it(self, crewless, fields, answer):
+        """Red arm: an accepted one-way merge-go or window-go stayed in `owner_queue` after its
+        asker had the answer (four answered questions hung there on one day); the asker keeps
+        the go in its prompt and `board.py show`, the owner's queue keeps only what waits."""
         path = crewless / "board.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
-        q7.update({"cause": "merge-go", "one_way": "money", "pr_url": PR_URL})
-        path.write_text(json.dumps(data), encoding="utf-8")
-        epoch_row(crewless)
-        ts = "2026-11-03T09:59:00.000Z"
-        answered(crewless, "Q7", "accept", ts)
-        delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
-        go(crewless, "prune")
-        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
-
-    @pytest.mark.parametrize("answer, stays", [("accept", True), ("deny", False)])
-    def test_an_accepted_window_go_stays_until_its_asker_withdraws(self, crewless, answer, stays):
-        """Red arm: a go the human must type in the asker's window is not done by the click;
-        before `window-go` the accepted question was pruned at once."""
-        path = crewless / "board.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        q7 = next(q for q in data["owner_queue"] if q["id"] == "Q7")
-        q7["cause"] = "window-go"
+        q7.update(fields)
         path.write_text(json.dumps(data), encoding="utf-8")
         epoch_row(crewless)
         ts = "2026-11-03T09:59:00.000Z"
         answered(crewless, "Q7", answer, ts)
+        go(crewless, "prune")
+        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]  # not carried yet
         delivered_row(crewless, "Q7", ts, "2026-11-03T09:59:04.000Z", role="asker")
         go(crewless, "prune")
-        assert [q["id"] for q in board_of(crewless)["owner_queue"]] == (["Q7"] if stays else [])
+        assert board_of(crewless)["owner_queue"] == []
 
     def test_an_earlier_followup_still_owed_to_the_asker_keeps_it(self, crewless):
         epoch_row(crewless)

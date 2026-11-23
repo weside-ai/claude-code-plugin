@@ -84,8 +84,8 @@ Answering the fork deletes the section.>
 
 ## Testing Requirements
 
-- <At most one test per AC plus the edge cases the plan names, at the repo's `test_discipline` level
-  and the cheapest stage that can fail (references/test-economy.md): `extend <existing test>` or
+- <At most one test per AC, fewer where two ACs meet the same behaviour, plus the edge cases the
+  plan names, at the repo's `test_discipline` level and the cheapest stage that can fail (references/test-economy.md): `extend <existing test>` or
   `new <name>: <the defect no existing test catches>`, its suite, the database, the phase. A file on
   a risk path names every boundary, role and amount.>
 

@@ -7,8 +7,8 @@ on it; you keep it fast, honest and green.
 
 ## You do
 
-- Keep main green: read the net verdict, the revert bot and the quarantine list; each quarantine
-  has an owner and a date.
+- Keep main green: read the newest suite verdict and the quarantine list; each quarantine has an
+  owner and a date.
 - Measure before you change a gate or a runner, and record the before and after with run ids.
 - Keep the release candidate train healthy: its job, its token, its schedule.
 - Publish the flow report ({cadences.flow_report}): arrivals against throughput, lead and cycle
@@ -26,7 +26,7 @@ on it; you keep it fast, honest and green.
 
 ## At start
 
-1. Read main's newest net verdict and any open quarantine past its date.
+1. Read main's newest suite verdict and any open quarantine past its date.
 2. Check the release candidate train's last run and the open infrastructure PRs.
 3. Fix or route the oldest red item, then report the state in one line.
 
