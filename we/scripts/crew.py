@@ -19,7 +19,8 @@ Usage:
                                             this session's role (``role_of_session``): worker, master,
                                             a held role key, specialist, or none (with a hint)
   crew.py validate [--strict] [--from DIR]  "ok <path>" for a usable crew; --strict also refuses an
-                                            unknown key (exit 1 naming every one)
+                                            unknown key (exit 1 naming every one) and a wrong
+                                            ``events:`` entry of the project's config
   crew.py state-dir [--from DIR]            the crew's state directory (``state_dir``), absolute;
                                             without a crew file the default
   crew.py launch FIELD [--from DIR]         the value of ``launch.FIELD`` for a shell: a bool as
@@ -1948,7 +1949,33 @@ def _session_kind_cli(argv: list[str], _crew_path: Path, crew: dict[str, Any]) -
     return 0
 
 
-def _validate_cli(_argv: list[str], crew_path: Path, crew: dict[str, Any]) -> int:
+def _events_error(crew_path: Path, crew: dict[str, Any]) -> str | None:
+    """The refusal of the project's ``events:`` block (``command_center/event_routes.py``), if any."""
+    config = project_config(crew_path.parent)
+    if "events" not in config:
+        return None
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "command_center"))
+    import event_routes  # noqa: PLC0415  (only a crew with an events: block pays the import)
+
+    roles = dict(crew.get("roles") or {})
+    try:
+        raw = json.loads(crew_path.read_text(encoding="utf-8")).get("roles")
+        roles = {**(raw if isinstance(raw, dict) else {}), **roles}
+    except (OSError, ValueError):
+        pass
+    try:
+        event_routes.validate(config["events"], {**crew, "roles": roles})
+    except event_routes.EventsError as exc:
+        return str(exc)
+    return None
+
+
+def _validate_cli(argv: list[str], crew_path: Path, crew: dict[str, Any]) -> int:
+    if "--strict" in argv:
+        refused = _events_error(crew_path, crew)
+        if refused:
+            print(f"crew: {refused}", file=sys.stderr)
+            return 1
     risk = crew.get("risk") if isinstance(crew.get("risk"), dict) else {}
     command = risk.get("command")
     has_command = isinstance(command, str) and command.strip()

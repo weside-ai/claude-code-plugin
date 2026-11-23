@@ -30,6 +30,7 @@ we/                               plugin root
   templates/                      agents-skill/ (rule bridge for non-Claude agents), companion-skill/ (role-skill stub
                                   and pointer), orchestrate.md and risk-paths (copied by /we:setup), cold-reader.md
   hooks/
+    events_on_start.py            the crew's event poller and this session's tail (not yet registered)
     hooks.json, register.ts       the hook table and the one function-hooks module (both panes)
     flow/, board/, plans/         the /flow pane (phase.ts; crewflow.tsx: its section Crew flow), the /board pane and its Zentrale pane (zentrale-pane.tsx, zentrale.ts; board.ts, work.ts, deliver.ts, probe.py,
                                   answer.py, deliveries.py), plan files and PRs both panes read
@@ -74,6 +75,10 @@ we/                               plugin root
                                   gh_source.py (open PRs per repo through flow_report's gh cache),
                                   ticket_snapshot.py (the ticket snapshot's one atomic writer and its reader)
                                   ticket_fetch.py (the scheduled snapshot: the ticket system's REST search into that writer)
+                                  command_center/event_poller.py (the crew's one poller: GitHub, cluster and
+                                  local checks into events, routed by the `events:` block), event_sources.py
+                                  (each event kind and its source), event_routes.py (the `events:` schema, the
+                                  line text), event_tail.py (a session's delivery of its routed lines)
                                   command_center/crewd.py (we-crewd: the Zentrale as a read-only web page, bound
                                   to the host's own address, its port and the pane's probe), redaction.py (the one
                                   list of secret patterns: conversation hook and web view)

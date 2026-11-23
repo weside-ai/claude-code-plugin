@@ -330,8 +330,11 @@ def test_no_reader_has_a_writing_verb():
         '"switch"',
         "--token-status",
     )
+    # the event poller and tail are writers by design: their own files under the crew's events
+    # folder, the board only through `board.py news worker` (test_event_routes covers it)
+    writers = ("event_poller.py", "event_tail.py")
     for path in HERE.glob("*.py"):
-        if path.name.startswith("test_"):
+        if path.name.startswith("test_") or path.name in writers:
             continue
         text = path.read_text()
         for word in banned:

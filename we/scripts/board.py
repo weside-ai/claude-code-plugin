@@ -19,7 +19,7 @@ Usage:
   board.py [--board FILE] decision <area> <cut|fence|process> --key KEY --text T
   board.py [--board FILE] bundle
   board.py [--board FILE] news add --title T [--body B] [--kind <info|gate|todo>]
-  board.py [--board FILE] news worker --id ID --title T [--body B]
+  board.py [--board FILE] news worker --id ID --title T [--body B] [--kind <info|gate|todo>]
   board.py [--board FILE] escalation open --key KEY --parties ROLE,ROLE --question Q --a T --a-cost C
            --b T --b-cost C --reversible <yes|no> [--touches <vision|money|law|priority>]
   board.py [--board FILE] escalation <route|count>
@@ -2363,7 +2363,9 @@ def cmd_news(state, args, crew, now):
 def cmd_news_worker(state, args, _crew, now):
     """`news worker`: the launcher's supervisor (`scripts/worker_supervisor.py`) puts one `todo`
     item for the human: a worker's stop it could not tell its starter, a permission prompt that
-    waits. The id is the supervisor's (`W-…`); an item of that id already in `news` stays as it is."""
+    waits; the event poller (`command_center/event_poller.py`) puts one `gate` item for a damage
+    event no running session received. The id is the caller's (`W-…`); an item of that id
+    already in `news` stays as it is, so a retry never doubles it."""
     title = (args.title or "").strip()
     if not title or "\n" in title or not str(args.id).startswith("W-"):
         raise BoardError("board.py news worker: --id W-… and a one-line --title")
@@ -2372,7 +2374,7 @@ def cmd_news_worker(state, args, _crew, now):
         news = board.get("news") if isinstance(board.get("news"), list) else []
         if any(isinstance(i, dict) and i.get("id") == args.id for i in news):
             return UNCHANGED
-        item = {"id": args.id, "kind": "todo", "title": title, "ts": _iso(now)}
+        item = {"id": args.id, "kind": args.kind, "title": title, "ts": _iso(now)}
         if (args.body or "").strip():
             item["body"] = args.body.strip()
         board["news"] = [item, *news]
@@ -4002,6 +4004,7 @@ def _add_news_verbs(verbs):
     wk.add_argument("--id", required=True)
     wk.add_argument("--title", required=True)
     wk.add_argument("--body")
+    wk.add_argument("--kind", choices=NEWS_KINDS, default="todo")
     wk.set_defaults(run=cmd_news_worker)
 
 
