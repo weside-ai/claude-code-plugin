@@ -802,7 +802,7 @@ A crew whose `.weside/config.json` has an `events:` block runs one event poller 
 (`scripts/command_center/event_poller.py`, started by the SessionStart hook `events_on_start.py`,
 by hand with `event_poller.py ensure`):
 it reads GitHub and the cluster for the release path and CI (an RC verdict, a stuck rollout, a
-blocked release PR, main red, a long queue, new issues) and routes each event kind to crew roles
+blocked release PR or production tag run, main red, a long queue, new issues) and routes each event kind to crew roles
 (`event_routes.py` owns the block's schema). Each member's session runs a tail
 (`event_tail.py`, whose docstring owns folding, digests and the line text) that writes the lines
 routed to its roles into its own inbox; a line never carries a title.

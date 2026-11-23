@@ -34,8 +34,10 @@ Validation (``validate``, called by the poller on every reload and by ``crew.py 
 'x'``), a target that is neither a key of the crew's ``roles`` nor a member slug (``events:
 unknown role 'x'``), a ``mode`` other than ``line``/``digest``, a non-boolean ``damage``, an
 unknown key of the block or of a route, a non-boolean ``push`` (``events: route 'x': push must be
-true or false``), a ``push`` block without ``url_env`` and ``wrapper``, and a source repo that is
-no ``owner/name``.
+true or false``), a ``push`` block without ``url_env`` and ``wrapper``, a source repo that is
+no ``owner/name``, and a ``sources.prod_release`` with an unknown key, no workflow file name, a
+``tag_pattern`` that does not compile or takes an RC tag (``v1.2.3-rc.1``), a ``wait_min`` below 1
+or an empty ``gate_job``.
 
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
 ``config_error`` go to ``machinery`` when no route names them. ``damage`` is true for a kind of
@@ -60,6 +62,7 @@ from event_sources import (
     DAMAGE_KINDS,
     GH,
     KINDS,
+    PROD_TAG,
     SESSIONS_INTERVAL_S,
     repo_ok,
     run_url,
@@ -72,6 +75,8 @@ _ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
 _BODY_KEY = re.compile(r"^[A-Za-z_]{1,32}$")
 _WAITING = re.compile(r"^[a-z]+( [a-z]+){0,3}$")
 _PUSH_REASON = re.compile(r"^[A-Za-z0-9 ]{1,40}$")
+_WORKFLOW = re.compile(r"^[A-Za-z0-9._-]{1,100}\.ya?ml$")
+PROD_RELEASE_KEYS = ("repo", "workflow", "tag_pattern", "wait_min", "gate_job")
 
 BLOCK_KEYS = (
     "poll_interval_s",
@@ -146,6 +151,7 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
     if not isinstance(contexts, list) or not all(isinstance(c, str) and c for c in contexts):
         raise EventsError("events: sources.rc.status_contexts must be a list of status contexts")
     _validate_sessions(sources.get("sessions"))
+    _validate_prod_release(sources.get("prod_release"))
     out["push"] = _validate_push(out.get("push"))
     routes = out.get("routes") or {}
     if not isinstance(routes, dict):
@@ -191,6 +197,33 @@ def _validate_sessions(cfg: Any) -> None:
         isinstance(w, str) and _WAITING.match(w) for w in waiting
     ):
         raise EventsError("events: sources.sessions.waiting must be a list of waiting states")
+
+
+def _validate_prod_release(cfg: Any) -> None:
+    if cfg is None:
+        return
+    where = "events: sources.prod_release"
+    if not isinstance(cfg, dict):
+        raise EventsError(f"{where} must be an object")
+    for key in cfg:
+        if key not in PROD_RELEASE_KEYS:
+            raise EventsError(f"{where} has unknown key '{key}'")
+    if not isinstance(cfg.get("workflow"), str) or not _WORKFLOW.match(cfg["workflow"]):
+        raise EventsError(f"{where}.workflow must be the workflow's file name")
+    pattern = cfg.get("tag_pattern", PROD_TAG)
+    try:
+        tag_re = re.compile(pattern) if isinstance(pattern, str) and pattern else None
+    except re.error:
+        tag_re = None
+    if tag_re is None:
+        raise EventsError(f"{where}.tag_pattern must be a regular expression")
+    if tag_re.fullmatch("v1.2.3-rc.1"):
+        raise EventsError(f"{where}.tag_pattern takes the RC tag 'v1.2.3-rc.1'")
+    wait = cfg.get("wait_min", 30)
+    if not isinstance(wait, int) or isinstance(wait, bool) or wait < 1:
+        raise EventsError(f"{where}.wait_min must be a whole number >= 1")
+    if "gate_job" in cfg and not (isinstance(cfg["gate_job"], str) and cfg["gate_job"].strip()):
+        raise EventsError(f"{where}.gate_job must be a job name")
 
 
 def _validate_push(cfg: Any) -> dict[str, Any] | None:
@@ -289,6 +322,16 @@ def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
             cause = ", ".join(str(j) for j in f.get("jobs") or []) or "unknown"
         unread = " · plan log unreadable" if f.get("unread") else ""
         return f"RC {f.get('tag')} {f.get('verdict')} · run {run} · cause: {cause}{unread}"
+    if k == "prod_gate_blocked" and "run_id" in f:
+        what = (
+            f"waiting {_int(f.get('mins'))} min ({f.get('status')})"
+            if "mins" in f
+            else f"{f.get('conclusion')}"
+            + (f" · gate refused: {f.get('gate')}" if f.get("gate") else "")
+            + " · cause: "
+            + (", ".join(str(j) for j in f.get("jobs") or []) or "unknown")
+        )
+        return f"prod gate blocked · release {f.get('tag')} {what} · run {run}"
     if k in ("release_pr_blocked", "prod_gate_blocked"):
         head = "prod gate blocked · " if k == "prod_gate_blocked" else ""
         n = _int(f.get("number"))
