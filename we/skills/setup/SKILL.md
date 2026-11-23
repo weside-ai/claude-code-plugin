@@ -151,6 +151,10 @@ crew; `"subagent"` (shown above) is its default. A repo with a crew gets one in 
 start (`${CLAUDE_PLUGIN_ROOT}/references/worker-dispatch.md` § Worker rights). Write it only when the
 user names such a command; absent, workers start on the login they always did.
 
+`events` (optional) turns on the crew's event poller; write it only when the user asks, from the
+schema in `${CLAUDE_PLUGIN_ROOT}/scripts/command_center/event_routes.py`, with its optional `push`
+block (a chat webhook) and `sessions` source (open prompts) (`${CLAUDE_PLUGIN_ROOT}/docs/board.md` § Event lines).
+
 A re-run re-detects `tools` and overwrites only that block. Print what was configured in a short
 block (stack, ticketing, goals, test discipline, verification, review gates, worker cap, plan landing, time zone, missing tools).
 

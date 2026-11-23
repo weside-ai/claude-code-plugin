@@ -40,7 +40,8 @@ no ``owner/name``, and a ``sources.prod_release`` with an unknown key, no workfl
 below 1, an empty ``gate_job`` or no ``repo``.
 
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
-``config_error`` go to ``machinery`` when no route names them. ``damage`` is true for a kind of
+``config_error`` go to ``machinery`` when no route names them; ``pr_run_queued_long`` without a
+route of its own takes the targets of ``run_queued_long``'s route as a digest (``PARENT``). ``damage`` is true for a kind of
 ``event_sources.DAMAGE_KINDS`` or a route that says so: a damage event reaches a parked session
 too and, without any running receiver, the coordinator at once (``event_poller.py``).
 
@@ -93,6 +94,9 @@ PUSH_KEYS = ("url_env", "wrapper", "body_key")
 MODES = ("line", "digest")
 DEFAULTS = {"poll_interval_s": 300, "deliver_timeout_s": 180, "fold_s": 600}
 FALLBACK = {"poll_error": ["machinery"], "config_error": ["machinery"]}
+PARENT = {
+    "pr_run_queued_long": "run_queued_long"
+}  # without a route: the parent's targets, as digest
 
 
 class EventsError(ValueError):
@@ -269,14 +273,18 @@ def push(block: dict[str, Any], kind: str) -> bool:
 
 
 def targets(block: dict[str, Any], kind: str) -> list[str]:
-    route = (block.get("routes") or {}).get(kind)
+    routes = block.get("routes") or {}
+    route = routes.get(kind) or routes.get(PARENT.get(kind, ""))
     if route:
         return list(route.get("to") or [])
     return list(FALLBACK.get(kind, []))
 
 
 def mode(block: dict[str, Any], kind: str) -> str:
-    return ((block.get("routes") or {}).get(kind) or {}).get("mode", "line")
+    route = (block.get("routes") or {}).get(kind)
+    if not route and kind in PARENT:
+        return "digest"
+    return (route or {}).get("mode", "line")
 
 
 def damage(block: dict[str, Any], kind: str) -> bool:
@@ -353,7 +361,7 @@ def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
         return f"rollout stuck · deployment {f.get('name')} past its progress deadline since {f.get('since')}"
     if k == "main_red":
         return f"main red {repo} · {f.get('workflow')} ({f.get('event')}, {f.get('sha')}, {f.get('why')}) · run {run}"
-    if k == "run_queued_long":
+    if k in ("run_queued_long", "pr_run_queued_long"):
         return (
             f"run queued {_int(f.get('mins'))} min · {repo} {f.get('workflow')} "
             f"({f.get('event')}, {f.get('branch')}) · run {run}"

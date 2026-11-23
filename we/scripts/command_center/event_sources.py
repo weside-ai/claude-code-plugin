@@ -13,10 +13,14 @@ Kinds and their config keys (``events.sources.<key>``):
     ``main``), younger than 24 h, never a workflow of ``never_red``; it counts when the workflow
     name matches ``relevant`` (a regex, default none), else when one of its red jobs is a required
     check of the branch (``required_checks.sh``, cached 1 h). An older red run of the same workflow
-    is marked seen silently.
-``run_queued_long`` (``queued``: ``{repo, limit_min, limits}``)
+    is marked seen silently. The first round per repo and branch records the red runs silently.
+``run_queued_long`` (``queued``: ``{repo, limit_min, limits, recheck_max}``)
     A run queued longer than ``limit_min`` (default 60) or ``limits[<workflow name>]``; a superseded
-    dispatch (below) is not one.
+    dispatch (below) is not one. The queued list also returns finished runs: each candidate past
+    its limit is read once by its id and counts only while that read says ``queued``; at most
+    ``recheck_max`` (default 5) such reads a round, the rest wait for the next round. A pull
+    request's run is ``pr_run_queued_long`` instead, a digest unless a route of its own says else
+    (``event_routes.py``). A fork's run shows its workflow id and branch ``?``, never its names.
 ``dispatch_superseded`` (``dispatch``: ``{repo, workflow, stale_h}``)
     A queued ``workflow_dispatch`` run of the workflow file when a newer dispatch of the same ref
     is queued, or when it waited longer than ``stale_h`` (default 6) hours. Read from the same
@@ -108,6 +112,7 @@ from transcript import pending_tool_use
 KINDS = (
     "main_red",
     "run_queued_long",
+    "pr_run_queued_long",
     "dispatch_superseded",
     "issue_new",
     "rc_verdict_red",
@@ -125,7 +130,9 @@ KINDS = (
 )
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
+DAY = 24 * HOUR
 TRUSTED_EVENTS = frozenset({"push", "schedule", "workflow_dispatch"})
+PR_EVENTS = frozenset({"pull_request", "pull_request_target"})
 KEEP_S = 14 * 86400
 RED = ("failure", "timed_out", "cancelled")
 VERDICT = {"success": "green", "failure": "red", "error": "infra"}
@@ -395,8 +402,10 @@ class Round:
             relevant = re.compile(entry["relevant"]) if entry.get("relevant") else None
             never = set(entry.get("never_red") or [])
             data = self.gh(f"repos/{repo}/actions/runs?branch={branch}&status=failure&per_page=5")
+            if data is None or self._first_red(repo, branch, data):
+                continue  # a gh failure: the next round reads again, the first round stays unseeded
             done: set[str] = set()  # the list comes newest first: per workflow only the newest
-            for run in (data or {}).get("workflow_runs", []):
+            for run in data.get("workflow_runs", []):
                 key = f"red:{repo}:{run['id']}"
                 if run.get("event") not in ("push", "schedule") or run.get("name") in never:
                     continue
@@ -445,6 +454,21 @@ class Round:
                     run_id=int(run["id"]),
                 )
 
+    def _first_red(self, repo: str, branch: str, data: dict) -> bool:
+        """The first round per repo and branch records its red runs silently: a fresh poller would
+        otherwise report every red run of the last day, also one a later green run already fixed."""
+        seed = f"red:{repo}@{branch}"
+        if self.seeded.get(seed):
+            return False
+        for run in data.get("workflow_runs", []):
+            self.seen.setdefault(f"red:{repo}:{run['id']}", self.now)
+        self.seeded[seed] = True
+        return True
+
+    def _ghost(self, repo: str, run_id: Any) -> bool:
+        jobs = self.gh(f"repos/{repo}/actions/runs/{int(run_id)}/jobs?per_page=1")
+        return isinstance(jobs, dict) and jobs.get("total_count") == 0
+
     def queued(self) -> None:
         cfg = self.src.get("queued") or {}
         dis = self.src.get("dispatch") or {}
@@ -467,31 +491,35 @@ class Round:
         }
         if cfg:
             limits = cfg.get("limits") or {}
-            for run in runs:
+            checks = int(cfg.get("recheck_max", 5))
+            # The repo's own runs spend the re-read budget first: a full queue of pull request runs
+            # (a digest) never delays a stuck push or schedule run (a line of its own).
+            for run in sorted(runs, key=lambda r: r.get("event") not in TRUSTED_EVENTS):
                 if run["id"] in superseded:
                     continue  # reported as dispatch_superseded, not as a hang
                 mins = int(self.age_s(run.get("created_at")) // 60)
                 limit = limits.get(run.get("name"), cfg.get("limit_min", 60))
                 key = f"hang:{repo}:{run['id']}"
-                if mins > limit and self.new(key):
-                    self.emit(
-                        "run_queued_long",
-                        key,
-                        f"run:{run['id']}",
-                        run.get("created_at"),
-                        repo=repo,
-                        # A fork's pull_request run names its own workflow: only runs the
-                        # repo itself started may show a name, the rest show the workflow id.
-                        workflow=name_of(run.get("name"))
-                        if run.get("event") in TRUSTED_EVENTS
-                        else f"workflow {int(run.get('workflow_id') or 0)}",
-                        mins=mins,
-                        event=token_of(run.get("event")),
-                        branch=token_of(run.get("head_branch"))
-                        if run.get("event") in TRUSTED_EVENTS
-                        else "?",
-                        run_id=int(run["id"]),
-                    )
+                if mins <= limit or key in self.seen:
+                    continue
+                # The queued list carries runs that already finished: one read of the run itself
+                # decides, for at most ``recheck_max`` candidates a round (the rest wait a round).
+                if checks <= 0:
+                    continue
+                checks -= 1
+                one = self.gh(f"repos/{repo}/actions/runs/{run['id']}")
+                if one is None:
+                    continue  # unreadable: the next round reads again
+                if one.get("status") != "queued":
+                    self.seen[key] = self.now  # a stale list entry, never a hang
+                    continue
+                if self.age_s(run.get("created_at")) > DAY and self._ghost(repo, run["id"]):
+                    # Queued for a day with no job: a run the forge can neither start nor cancel.
+                    self.seen[key] = self.now
+                    print(f"events: ghost run {repo} {int(run['id'])} skipped", file=sys.stderr)
+                    continue
+                if self.new(key):
+                    self._hang(repo, run, key, mins)
         if dis:
             stale = float(dis.get("stale_h", 6)) * HOUR
             for run in loops:
@@ -510,6 +538,29 @@ class Round:
                         hours=int(float(dis.get("stale_h", 6))),
                         run_id=int(run["id"]),
                     )
+
+    def _hang(self, repo: str, run: dict, key: str, mins: int) -> None:
+        """One queued run past its limit: ``run_queued_long`` for a run of the repo's own events,
+        ``pr_run_queued_long`` (a digest by default) for a pull request's run."""
+        event = run.get("event")
+        head = (run.get("head_repository") or {}).get("full_name")
+        # A fork's pull_request run names its own workflow and branch: only a run the repo itself
+        # started, or a pull request from one of its own branches, shows them; a fork shows the id.
+        own = event in TRUSTED_EVENTS or (event in PR_EVENTS and head == repo)
+        self.emit(
+            "pr_run_queued_long" if event in PR_EVENTS else "run_queued_long",
+            key,
+            f"run:{run['id']}",
+            run.get("created_at"),
+            repo=repo,
+            workflow=name_of(run.get("name"))
+            if own
+            else f"workflow {int(run.get('workflow_id') or 0)}",
+            mins=mins,
+            event=token_of(event),
+            branch=token_of(run.get("head_branch")) if own else "?",
+            run_id=int(run["id"]),
+        )
 
     def issues(self) -> None:
         cfg = self.src.get("issues") or {}

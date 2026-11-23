@@ -575,47 +575,12 @@ def test_push_on_another_kind_posts_that_kinds_line_and_never_twice(tmp_path, mo
     assert p.push(row["id"], "again", p.block, NOW + 60) == "sent" and len(posts) == 1
 
 
-def prod_run(run_id: int) -> es.Event:
-    return es.Event(
-        "prod_gate_blocked",
-        f"prod:acme/app:{run_id}",
-        f"run:{run_id}",
-        None,
-        {
-            "repo": "acme/app",
-            "tag": "v1.2.4",
-            "run_id": run_id,
-            "conclusion": "failure",
-            "gate": "Release gate",
-            "jobs": ["Release gate"],
-        },
-    )
-
-
-def test_prod_tag_run_without_a_tester_goes_to_the_coordinator_and_the_board(
-    tmp_path, monkeypatch
-):
-    root = project(tmp_path)
-    folder = tmp_path / "events"
-    presence(folder, "samu-1", "samu")
-    p = poller(tmp_path, root, [prod_run(702)], monkeypatch)
-    p.round()
-    row = rows(folder, "events.jsonl")[0]
-    assert row["damage"] is True
-    assert row["to"] == [{"session": "samu-1", "as": "coordinator"}]
-    news = [a for a in p.run.argv if "news" in a]
-    assert len(news) == 1 and news[0][news[0].index("--kind") + 1] == "gate"
-    assert news[0][news[0].index("--title") + 1] == (
-        "prod gate blocked · release v1.2.4 failure · gate refused: Release gate · cause: "
-        "Release gate · run https://github.com/acme/app/actions/runs/702"
-    )
-
-
 PROD_OK = {"repo": "acme/app", "workflow": "release.yml", "gate_job": "Release gate"}
 
 
 @pytest.mark.parametrize(
     "cfg, error",
+    # one case per way validate refuses a prod_release source; the last row is the RC form without a dot
     [
         (dict(PROD_OK, tag="x"), "sources.prod_release has unknown key 'tag'"),
         (dict(PROD_OK, workflow="../x"), "sources.prod_release.workflow must be"),

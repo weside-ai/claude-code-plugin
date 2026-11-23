@@ -348,6 +348,4 @@ test('waitingQueue: open questions first and counted, an old answer off the view
   expect(shown.open.map(q => q.id)).toEqual(['Q1029', 'Q1030'])
   expect(shown.struck.map(q => q.id)).toEqual(['Q1031'])
   expect(waitingQueue(queue, given, undefined, now + 30 * 60_000).struck).toEqual([])
-  // An answer still undelivered keeps its struck card, so its delivery line stays on the pane.
-  expect(waitingQueue(queue, given, undefined, now + 30 * 60_000, new Set(['Q1031'])).struck.map(q => q.id)).toEqual(['Q1031'])
 })

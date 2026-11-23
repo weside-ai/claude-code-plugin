@@ -805,7 +805,8 @@ it reads GitHub and the cluster for the release path and CI (an RC verdict, a st
 blocked release PR or production tag run, main red, a long queue, new issues) and routes each event kind to crew roles
 (`event_routes.py` owns the block's schema). Each member's session runs a tail
 (`event_tail.py`, whose docstring owns folding, digests and the line text) that writes the lines
-routed to its roles into its own inbox; a line never carries a title.
+routed to its roles into its own inbox; a line never carries a title. A running session starts its
+tail without a restart: `hooks/events_on_start.py`, run in the project with `{"session_id": "<its id>"}` on stdin.
 
 What finds no running session waits in the coordinator's delta, `delta.jsonl` in the folder
 `event_poller.py path` prints (its row: the `event_poller.py` docstring); a parked session gets only damage kinds. A damage kind (a blocked production

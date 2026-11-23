@@ -20,6 +20,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 import event_routes  # noqa: E402
 import event_sources as es  # noqa: E402
+import transcript  # noqa: E402
 
 FIXTURE = HERE / "fixtures" / "events" / "home_round.json"
 TAG_RE = r"^v\d+\.\d+\.\d+-rc\.\d+$"
@@ -102,7 +103,18 @@ def sources(tmp: Path) -> dict:
 def seeded(*extra: str) -> dict:
     return {
         "seen": {},
-        "seeded": dict.fromkeys(("acme/app", "acme/infra", "acme/lib1", "rc", *extra), True),
+        "seeded": dict.fromkeys(
+            (
+                "acme/app",
+                "acme/infra",
+                "acme/lib1",
+                "rc",
+                "red:acme/app@main",
+                "red:acme/infra@main",
+                *extra,
+            ),
+            True,
+        ),
     }
 
 
@@ -518,6 +530,91 @@ def test_a_failed_required_checks_read_leaves_the_run_for_the_next_round(tmp_pat
     assert [e.object for e in later if e.kind == "main_red"] == ["run:103"]
 
 
+def test_the_first_red_round_records_silently_and_one_red_run_is_one_event(tmp_path):
+    """A fresh poller saw three red runs of three workflows from hours before its start and
+    reported all three, one already fixed by a later green run; the first round now records."""
+    data = home()
+    srcs = {"red": [{"repo": "acme/infra", "relevant": ".*"}]}
+    runs = data["gh"]["repos/acme/infra/actions/runs?branch=main&status=failure&per_page=5"]
+    runs["workflow_runs"] = [
+        {
+            "id": 601 + i,
+            "name": name,
+            "event": event,
+            "head_sha": "f" * 40,
+            "created_at": es.iso(data["now"] - hours * 3600),
+        }
+        for i, (name, event, hours) in enumerate(
+            (("CI", "push", 6), ("Build image", "push", 7), ("drift", "schedule", 16))
+        )
+    ]
+    state = {"seen": {}, "seeded": {}}
+    assert run_round(tmp_path, data, state, srcs=srcs) == []
+    assert state["seeded"]["red:acme/infra@main"] is True
+    again = run_round(tmp_path, data, state, now=data["now"] + 300, srcs=srcs)
+    assert again == []  # the same three runs stay quiet
+    runs["workflow_runs"].insert(
+        0, dict(runs["workflow_runs"][0], id=610, created_at=es.iso(data["now"] + 400))
+    )
+    later = [
+        e.object
+        for rnd in (600, 900)
+        for e in run_round(tmp_path, data, state, now=data["now"] + rnd, srcs=srcs)
+    ]
+    assert later == ["run:610"]  # a new red run after the start: one event, once
+
+
+def test_a_failed_first_red_read_leaves_the_repo_unseeded(tmp_path):
+    data = home()
+    data["gh"].pop("repos/acme/infra/actions/runs?branch=main&status=failure&per_page=5")
+    state = {"seen": {}, "seeded": {}}
+    run_round(tmp_path, data, state, srcs={"red": [{"repo": "acme/infra", "relevant": ".*"}]})
+    assert "red:acme/infra@main" not in state["seeded"]
+
+
+def test_a_queued_list_entry_that_finished_is_no_hang(tmp_path):
+    """The queued list returned a run as queued for days while it had finished: the read of the
+    run itself drops it, and it is not read again."""
+    data = home()
+    data["gh"]["repos/acme/app/actions/runs/301"]["status"] = "completed"
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    state = seeded()
+    hung = [e.object for e in run_round(tmp_path, data, state, srcs=srcs)]
+    assert hung == ["run:303", "run:313"]
+    calls = Path(tmp_path / "inputs.json.calls")
+    calls.unlink()
+    assert run_round(tmp_path, data, state, now=data["now"] + 300, srcs=srcs) == []
+    assert "actions/runs/301" not in calls.read_text()
+
+
+def test_the_queued_recheck_reads_at_most_its_budget_a_round(tmp_path):
+    data = home()
+    srcs = {"queued": dict(sources(tmp_path)["queued"], recheck_max=1)}
+    state = seeded()
+    first = [e.object for e in run_round(tmp_path, data, state, srcs=srcs)]
+    second = [e.object for e in run_round(tmp_path, data, state, now=data["now"] + 60, srcs=srcs)]
+    third = [e.object for e in run_round(tmp_path, data, state, now=data["now"] + 120, srcs=srcs)]
+    assert (first, second, third) == (["run:301"], ["run:303"], ["run:313"])
+    rechecks = [
+        c
+        for c in (tmp_path / "inputs.json.calls").read_text().splitlines()
+        if re.search(r"actions/runs/\d+$", c)
+    ]
+    assert len(rechecks) == 3
+
+
+def test_an_unreadable_queued_recheck_waits_for_the_next_round(tmp_path):
+    data = home()
+    one = data["gh"].pop("repos/acme/app/actions/runs/301")
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    state = seeded()
+    first = run_round(tmp_path, data, state, srcs=srcs)
+    assert [e.object for e in first if e.kind == "run_queued_long"] == ["run:303", "run:313"]
+    data["gh"]["repos/acme/app/actions/runs/301"] = one
+    later = run_round(tmp_path, data, state, now=data["now"] + 60, srcs=srcs)
+    assert [e.object for e in later] == ["run:301"]
+
+
 def test_two_local_checks_fold_apart(tmp_path):
     checks = []
     for name in ("backup", "cert"):
@@ -543,6 +640,42 @@ def test_a_fork_run_shows_its_workflow_id_never_its_name_or_branch(tmp_path):
     srcs = {"queued": sources(tmp_path)["queued"]}
     hung = [e for e in run_round(tmp_path, data, seeded(), srcs=srcs) if e.object == "run:301"]
     assert [(e.fields["workflow"], e.fields["branch"]) for e in hung] == [("workflow 7", "?")]
+
+
+@pytest.mark.parametrize(
+    "head, workflow, branch",
+    [
+        ("acme/app", "CI: PR", "feat-x"),
+        ("someone/app", "workflow 7", "?"),
+    ],
+)
+def test_a_pull_request_run_is_its_own_kind_named_only_from_the_repos_own_branch(
+    tmp_path, head, workflow, branch
+):
+    """A pull request's queued run is ``pr_run_queued_long`` (a digest by default); from a branch
+    of the repo itself it shows its workflow and branch, from a fork (or no head repo) the id."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    runs[0] = dict(
+        runs[0],
+        event="pull_request",
+        name="CI: PR",
+        head_branch="feat-x",
+        workflow_id=7,
+        head_repository={"full_name": head} if head else None,
+    )
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    found = sorted(
+        (e.kind, e.fields["workflow"], e.fields["branch"])
+        for e in run_round(tmp_path, data, seeded(), srcs=srcs)
+    )
+    assert found == sorted(
+        [
+            ("pr_run_queued_long", workflow, branch),
+            ("run_queued_long", "CI: Main Loop", "main"),
+            ("run_queued_long", "CI: Main Loop", "release"),
+        ]
+    )
 
 
 # --- open prompts: the sessions source (claude agents --json samples, transcripts) ----------
@@ -661,6 +794,24 @@ def test_session_waiting_once(tmp_path):
         found += sample(env, state, name, t)
         t += 60
     assert found == []
+
+
+def test_a_call_further_back_than_one_chunk_is_still_found(tmp_path):
+    """The reader starts with the last 256 KiB and widens until it finds a call: a call followed
+    by more than one chunk of plain text lines is the pending one."""
+    call = {
+        "type": "assistant",
+        "message": {
+            "id": "msg_1",
+            "content": [{"type": "tool_use", "id": "toolu_far", "name": "Bash", "input": {}}],
+        },
+    }
+    filler = json.dumps({"type": "user", "message": {"content": "x" * 1000}})
+    lines = [json.dumps(call)] + [filler] * (2 * transcript.CHUNK // len(filler))
+    path = tmp_path / "s.jsonl"
+    path.write_text("\n".join(lines) + "\n")
+    assert path.stat().st_size > transcript.CHUNK
+    assert transcript._read_pending(str(path)) == ("toolu_far", "Bash")
 
 
 def test_session_waiting_without_transcript_keeps_its_episode(tmp_path):
@@ -818,6 +969,16 @@ def test_prod_tag_run_unfinished_past_its_wait(tmp_path, minutes, found):
         assert prod_round(tmp_path, data, state, now=data["now"] + 300) == []
 
 
+@pytest.mark.parametrize("conclusion", ["startup_failure", "timed_out"])
+def test_prod_tag_run_that_never_started_or_timed_out_is_blocked(tmp_path, conclusion):
+    data = prod_data()
+    data["gh"][PROD_RUNS]["workflow_runs"][0]["conclusion"] = conclusion
+    events = prod_round(tmp_path, data, seeded("prod_release:acme/app:release.yml"))
+    assert [(e.kind, e.object, e.fields["conclusion"]) for e in events] == [
+        ("prod_gate_blocked", "run:702", conclusion)
+    ]
+
+
 def test_prod_rc_tag_run_red_is_never_a_prod_event(tmp_path):
     data = prod_data()
     runs = data["gh"][PROD_RUNS]["workflow_runs"]
@@ -885,3 +1046,33 @@ def test_prod_run_unfinished_for_more_than_a_day_is_still_news(tmp_path):
     run["status"], run["conclusion"] = "waiting", None
     run["created_at"] = run["run_started_at"] = es.iso(data["now"] - 30 * es.HOUR)
     assert [e.fields["mins"] for e in prod_round(tmp_path, data, {})] == [30 * 60]
+
+
+def test_the_repos_own_runs_spend_the_recheck_budget_first(tmp_path):
+    """A queue full of pull request runs never delays a stuck push run's line."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    first, *rest = runs
+    pr = dict(first, event="pull_request", head_repository={"full_name": "acme/app"})
+    data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"] = [
+        pr,
+        *rest,
+    ]
+    srcs = {"queued": dict(sources(tmp_path)["queued"], recheck_max=1)}
+    got = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
+    assert got and got[0] != f"run:{pr['id']}"
+
+
+@pytest.mark.parametrize("jobs, reported", [(0, False), (1, True)])
+def test_a_day_old_queued_run_without_a_job_is_a_ghost(tmp_path, jobs, reported):
+    """The forge keeps a run queued that it can neither start nor cancel: no job after a day."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    runs[0] = dict(runs[0], created_at=es.iso(data["now"] - 2 * 86400))
+    data["gh"]["repos/acme/app/actions/runs/301"] = dict(
+        data["gh"]["repos/acme/app/actions/runs/301"], status="queued"
+    )
+    data["gh"]["repos/acme/app/actions/runs/301/jobs?per_page=1"] = {"total_count": jobs}
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    hung = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
+    assert ("run:301" in hung) is reported
