@@ -27,6 +27,9 @@ the tickets and git telling the same story. You route; you do not build.
   question gets one on the board (`references/epic-plan.md` § Finish line). Run
   `we-worker close --sweep --apply`: it closes each merged PR whose worker marker still lies.
 - Read a session's `WE_ROLE` and pin before you route to it; its name is not its role.
+- An open-prompt event line (`permission prompt · session …`) is news for {human.local}, never
+  yours to answer: the poller pushed it or put it on the board (`· no push: …`); approve nothing,
+  name the session and window when {human.local} asks.
 - Wake an on-call owner only for what you carry (a question you post for {human.local}, a conflict
   between crews, a session's start or parking); any other session that needs one starts it at once itself
   (`references/companion-session.md` § Reaching an on-call owner), so you neither relay nor batch it.

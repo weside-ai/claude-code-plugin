@@ -372,6 +372,10 @@ def test_a_clean_crew_validates_strict_and_carries_no_unknown_keys(tmp_path):
             "events: unknown event 'release_pr_blocke'",
         ),
         ({"release_pr_blocked": {"to": ["testr"]}}, "events: unknown role 'testr'"),
+        (
+            {"permission_prompt": {"to": ["acceptance"], "push": "yes"}},
+            "events: route 'permission_prompt': push must be true or false",
+        ),
     ],
 )
 def test_validate_strict_refuses_a_wrong_events_entry_by_name(tmp_path, routes, refusal):

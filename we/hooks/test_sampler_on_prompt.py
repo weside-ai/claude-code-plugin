@@ -1,5 +1,6 @@
 """UserPromptSubmit sampler_on_prompt.py: a stale sampler for coordinator and machinery, a blocked
-worker for its starter and the coordinator, each once per episode; silent everywhere else.
+worker for its starter (a chat wait also for the coordinator), each once per episode; silent
+everywhere else.
 
 Run with: python3 -m pytest -q we/hooks/test_sampler_on_prompt.py
 The hook runs as a subprocess, as Claude Code runs it.
@@ -141,9 +142,10 @@ class TestMarkers:
         (notified / yesterday / "sid-lead-blocked-proj-12-build-2026-11-05T09_05_00Z").touch()
         (notified / "2020-01-01").mkdir()
         board(ws, BLOCKED)
-        heartbeat(ws, 1)
+        ts = heartbeat(ws, 20)
         assert hook(ws, session="sid-lead") == []
-        assert hook(ws, "otto") == [BLOCKED_LINE]  # first marker today prunes
+        # the first marker today prunes
+        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})", BLOCKED_LINE]
         assert sorted(p.name for p in notified.iterdir()) == sorted(
             {yesterday, datetime.now(timezone.utc).strftime("%Y-%m-%d")}
         )
@@ -196,10 +198,30 @@ class TestBlocked:
         board(ws, again)  # a new wait
         assert len(hook(ws, session="sid-lead")) == 1
 
-    def test_the_coordinator_hears_it_too_and_others_do_not(self, ws):
+    def test_the_coordinator_hears_a_permission_wait_until_the_poller_routes_it(self, ws):
         board(ws, BLOCKED)
         heartbeat(ws, 1)
-        assert hook(ws, "otto") == [BLOCKED_LINE]
+        assert len(hook(ws, "otto")) == 1  # no events block: this hook still tells it
+
+    def test_only_the_starter_hears_it_not_the_coordinator(self, ws):
+        """Where the event poller routes open prompts, it is the coordinator's one source."""
+        (ws / "repo" / ".weside" / "config.json").write_text(
+            json.dumps(
+                {
+                    "events": {
+                        "sources": {"sessions": {}},
+                        "routes": {"permission_prompt": {"to": ["coordinator"]}},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        board(ws, BLOCKED)
+        heartbeat(ws, 1)
+        assert hook(ws, "otto") == []
+        chat = {**BLOCKED, "blocked": {**BLOCKED["blocked"], "kind": "chat"}}
+        board(ws, chat)
+        assert len(hook(ws, "otto")) == 1  # a chat wait still reaches the coordinator
         assert hook(ws, "ada", session="sid-ada") == []
         assert hook(ws, session="sid-stranger") == []
 
@@ -222,7 +244,10 @@ class TestBlocked:
     def test_stale_and_blocked_come_in_one_context(self, ws):
         board(ws, BLOCKED)
         ts = heartbeat(ws, 20)
-        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})", BLOCKED_LINE]
+        assert hook(ws, "otto", session="sid-lead") == [
+            f"sampler: stale since 20 min (last line {ts})",
+            BLOCKED_LINE,
+        ]
 
 
 class TestSilence:

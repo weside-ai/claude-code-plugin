@@ -9,18 +9,33 @@ Schema (this docstring owns it)::
                                    lands in the coordinator's delta (the tail died)
       "fold_s": 600,               a tail folds the same kind and object within this window
       "local_checks": ["..."],     host commands, one event per stdout line (event_sources.py)
-      "sources": {...},            per source its repos, names and patterns (event_sources.py)
+      "sources": {...},            per source its repos, names and patterns (event_sources.py);
+                                   "sessions": {"interval_s": 60, "waiting": [...]} runs on its
+                                   own interval (int >= 30), the waiting states plain words
+      "push": {                    the poller's push to the human (push_notify.py)
+        "url_env": "NAME",         the environment variable holding the webhook URL
+        "wrapper": ["cmd", ...],   the command that sets it: the poller runs
+                                   <wrapper...> -- python3 push_notify.py --env NAME
+        "body_key": "text"         the JSON key of the message (default text)
+      },
       "routes": {
         "<kind>": {"to": ["<role key or member slug>", ...], "mode": "line" | "digest",
-                   "damage": true | false}
+                   "damage": true | false, "push": true | false}
       }
     }
+
+``push: true`` on a route: the poller posts the event's line once to the webhook when it routes
+the event, and the line ends ``· push`` when the post went out, else ``· no push: <reason>``
+(not configured, ``HTTP <code>``, timeout, unreachable, ``wrapper exit <n>``), loud, and the
+event also becomes a board news item: the human learns of it on the board instead.
 
 Validation (``validate``, called by the poller on every reload and by ``crew.py validate
 --strict``) refuses by name: a kind outside ``event_sources.KINDS`` (``events: unknown event
 'x'``), a target that is neither a key of the crew's ``roles`` nor a member slug (``events:
 unknown role 'x'``), a ``mode`` other than ``line``/``digest``, a non-boolean ``damage``, an
-unknown key of the block or of a route, and a source repo that is no ``owner/name``.
+unknown key of the block or of a route, a non-boolean ``push`` (``events: route 'x': push must be
+true or false``), a ``push`` block without ``url_env`` and ``wrapper``, and a source repo that is
+no ``owner/name``.
 
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
 ``config_error`` go to ``machinery`` when no route names them. ``damage`` is true for a kind of
@@ -35,12 +50,28 @@ by a host command its owner configured.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from event_sources import DAMAGE_KINDS, GH, KINDS, repo_ok, run_url
+from event_sources import (
+    DAMAGE_KINDS,
+    GH,
+    KINDS,
+    SESSIONS_INTERVAL_S,
+    repo_ok,
+    run_url,
+    session_label,
+    tool_label,
+    window_label,
+)
+
+_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
+_BODY_KEY = re.compile(r"^[A-Za-z_]{1,32}$")
+_WAITING = re.compile(r"^[a-z]+( [a-z]+){0,3}$")
+_PUSH_REASON = re.compile(r"^[A-Za-z0-9 ]{1,40}$")
 
 BLOCK_KEYS = (
     "poll_interval_s",
@@ -48,9 +79,11 @@ BLOCK_KEYS = (
     "fold_s",
     "local_checks",
     "sources",
+    "push",
     "routes",
 )
-ROUTE_KEYS = ("to", "mode", "damage")
+ROUTE_KEYS = ("to", "mode", "damage", "push")
+PUSH_KEYS = ("url_env", "wrapper", "body_key")
 MODES = ("line", "digest")
 DEFAULTS = {"poll_interval_s": 300, "deliver_timeout_s": 180, "fold_s": 600}
 FALLBACK = {"poll_error": ["machinery"], "config_error": ["machinery"]}
@@ -112,6 +145,8 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
     )
     if not isinstance(contexts, list) or not all(isinstance(c, str) and c for c in contexts):
         raise EventsError("events: sources.rc.status_contexts must be a list of status contexts")
+    _validate_sessions(sources.get("sessions"))
+    out["push"] = _validate_push(out.get("push"))
     routes = out.get("routes") or {}
     if not isinstance(routes, dict):
         raise EventsError("events: routes must be an object")
@@ -134,8 +169,66 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
             raise EventsError(f"events: route '{kind}' mode must be line or digest")
         if not isinstance(route.get("damage", False), bool):
             raise EventsError(f"events: route '{kind}' damage must be true or false")
+        if not isinstance(route.get("push", False), bool):
+            raise EventsError(f"events: route '{kind}': push must be true or false")
     out["sources"], out["routes"], out["local_checks"] = sources, routes, checks
     return out
+
+
+def _validate_sessions(cfg: Any) -> None:
+    if cfg is None or cfg is True or cfg is False:
+        return
+    if not isinstance(cfg, dict):
+        raise EventsError("events: sources.sessions must be an object")
+    for key in cfg:
+        if key not in ("interval_s", "waiting"):
+            raise EventsError(f"events: sources.sessions has unknown key '{key}'")
+    value = cfg.get("interval_s", SESSIONS_INTERVAL_S)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 30:
+        raise EventsError("events: sources.sessions.interval_s must be a whole number >= 30")
+    waiting = cfg.get("waiting", [])
+    if not isinstance(waiting, list) or not all(
+        isinstance(w, str) and _WAITING.match(w) for w in waiting
+    ):
+        raise EventsError("events: sources.sessions.waiting must be a list of waiting states")
+
+
+def _validate_push(cfg: Any) -> dict[str, Any] | None:
+    if cfg is None:
+        return None
+    if not isinstance(cfg, dict):
+        raise EventsError("events: push must be an object")
+    for key in cfg:
+        if key not in PUSH_KEYS:
+            raise EventsError(f"events: push has unknown key '{key}'")
+    if not isinstance(cfg.get("url_env"), str) or not _ENV_NAME.match(cfg["url_env"]):
+        raise EventsError("events: push.url_env must name an environment variable")
+    wrapper = cfg.get("wrapper")
+    if (
+        not isinstance(wrapper, list)
+        or not wrapper
+        or not all(isinstance(w, str) and w for w in wrapper)
+    ):
+        raise EventsError("events: push.wrapper must be a command as a list")
+    if not _BODY_KEY.match(str(cfg.get("body_key", "text"))):
+        raise EventsError("events: push.body_key must be a plain key")
+    return {"body_key": "text", **cfg}
+
+
+def sessions_interval(block: dict[str, Any]) -> int | None:
+    """The sessions source's interval, None when the block has no such source."""
+    cfg = (block.get("sources") or {}).get("sessions")
+    if cfg is None or cfg is False:
+        return None
+    return (
+        int(cfg.get("interval_s", SESSIONS_INTERVAL_S))
+        if isinstance(cfg, dict)
+        else SESSIONS_INTERVAL_S
+    )
+
+
+def push(block: dict[str, Any], kind: str) -> bool:
+    return bool(((block.get("routes") or {}).get(kind) or {}).get("push"))
 
 
 def targets(block: dict[str, Any], kind: str) -> list[str]:
@@ -176,8 +269,14 @@ def _repo(value: Any) -> str:
     return value if repo_ok(value) else "?"
 
 
-def render(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
-    """The one line of an event row (``events.jsonl``)."""
+def render(row: dict[str, Any]) -> str:
+    """The one line of an event row (``events.jsonl``): its text and, for a route with ``push``,
+    the push's outcome."""
+    return line(row) + push_suffix(row)
+
+
+def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
+    """The line's text without the push suffix: also the text a push posts."""
     k, f = row.get("kind"), row.get("fields") or {}
     repo = _repo(f.get("repo"))
     run = run_url(repo, _int(f.get("run_id"))) if "run_id" in f else ""
@@ -230,7 +329,38 @@ def render(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
         return str(f.get("error") or "events: invalid")
     if k in ("disk", "local_check"):
         return str(f.get("text") or "")
+    if k == "permission_prompt":
+        return prompt_line(row)
     return f"event {k}"
+
+
+def prompt_line(row: dict[str, Any]) -> str:
+    """The line of an open prompt without its push suffix (the push's text): fixed words, the
+    waiting state, plain-token names and the time; a tool's input never."""
+    f = row.get("fields") or {}
+    what = (
+        f.get("waiting")
+        if isinstance(f.get("waiting"), str) and _WAITING.match(f["waiting"])
+        else "prompt"
+    )
+    window = window_label(f.get("window"))
+    since = str(row.get("source_at") or "")
+    hhmm = since[11:16] if len(since) >= 16 else "?"
+    return (
+        f"{what} · session {session_label(f.get('session'), f.get('sid'))}"
+        + (f" · window {window}" if window else "")
+        + f" · tool {tool_label(f.get('tool'))} · open since {hhmm}Z"
+    )
+
+
+def push_suffix(row: dict[str, Any]) -> str:
+    status = row.get("push")
+    if status is None:
+        return ""
+    if status == "sent":
+        return " · push"
+    reason = status if isinstance(status, str) and _PUSH_REASON.match(status) else "error"
+    return f" · no push: {reason}"
 
 
 def digest(lines: list[str]) -> str:

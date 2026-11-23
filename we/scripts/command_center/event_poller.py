@@ -13,7 +13,9 @@ Lifecycle
     the poller never holds a session's inbox token. ``run`` takes the lock itself, so two
     ``ensure`` at once leave one poller. ``once`` runs one round under the same lock.
 
-Per round (``events.poll_interval_s``, default 300 s)
+Per round (the loop ticks at the smallest interval: ``events.poll_interval_s``, default 300 s,
+and ``events.sources.sessions.interval_s``, default 60 s; each source group runs when its own
+interval is due, so GitHub is still read every ``poll_interval_s``)
     Reload ``events:`` when the config's mtime changed: an invalid block keeps the last valid one
     and sends one ``config_error`` (per distinct error) to ``machinery``. Run the sources
     (``event_sources.Round``; dedupe in ``state.json``, 14 days). Route each new event
@@ -24,6 +26,19 @@ Per round (``events.poll_interval_s``, default 300 s)
     board news item (``board.py news worker --kind gate``, idempotent by the event id). An
     addressed event without a ledger row after ``deliver_timeout_s`` (the tail died) lands in the
     delta too. Write ``heartbeat.json``.
+
+An open prompt (``permission_prompt``, ``event_sources.Round.session_waiting``)
+    A receiver whose own session is the waiting one is skipped for that event (it cannot read a
+    line while it waits); without any other receiver the event escalates (``damage`` or not) to
+    the coordinator's and the ``machinery`` member's running tails and as one board item. A route with
+    ``push: true`` posts the line once through ``events.push`` (``push_notify.py`` under the
+    project's wrapper, no model step) before the row is written; the row's ``push`` is ``sent`` or
+    the reason there was none, and a missing push also makes the board item. Nothing here answers,
+    approves or writes to the waiting session.
+
+Latency bound (``LATENCY_BOUND_S``, 300 s): from the prompt's first sample (the row's
+``source_at``) the second sample comes one sessions interval later (60 s), the tail's next cycle
+within 15 s; the ledger's ``delivered_at - source_at`` is the live number.
 
 Files under ``<crew state dir>/events/<crew id slug>/`` (``path``)
     ``poller.lock`` · ``state.json`` (dedupe, routes mtime, pending deliveries; atomic replace) ·
@@ -63,12 +78,19 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 import crew as crew_mod  # noqa: E402
 import event_routes as routes_mod  # noqa: E402
-from event_sources import Round, event_id, iso  # noqa: E402
+from event_sources import Round, event_id, iso, list_sessions  # noqa: E402
 
 ROTATE_BYTES = 1 << 20
 PRESENCE_FRESH_S = 60
 KEEP_ENV = ("HOME", "PATH", "LANG", "WE_STATE_DIR")
 BOARD = HERE.parent / "board.py"
+NOTIFIER = HERE / "push_notify.py"
+LATENCY_BOUND_S = 300
+SELF_SKIP_KINDS = ("permission_prompt",)  # an event about a session never goes to that session
+PUSH_TIMEOUT_S = 60
+_PUSH_STATUS = re.compile(
+    r"^(sent|HTTP \d{3}|timeout|unreachable|no url|bad url|error [A-Za-z]{1,40})$"
+)
 
 
 # --- the project and its files --------------------------------------------------------------
@@ -192,6 +214,9 @@ def route(
 ) -> tuple[list[dict], list[str], bool]:
     """(addressed ``[{session, as}]``, targets without a receiver, escalated to the coordinator)."""
     kind, dmg = row["kind"], row["damage"]
+    if kind in SELF_SKIP_KINDS:
+        waiting = (row.get("fields") or {}).get("sid")
+        live = [p for p in live if not waiting or p.get("session_id") != waiting]
     to: list[dict] = []
     missing: list[str] = []
     for target in routes_mod.targets(block, kind):
@@ -208,13 +233,18 @@ def route(
         else:
             missing.append(target)
     escalate = False
-    if dmg and not to:
-        slug = routes_mod.member_of(crew, "coordinator")
-        to += [
-            {"session": p["name"], "as": "coordinator"}
-            for p in live
-            if slug and p.get("member") == slug
-        ]
+    routed_prompt = kind in SELF_SKIP_KINDS and bool(routes_mod.targets(block, kind))
+    if (dmg or routed_prompt) and not to:  # an unrouted kind stays silent
+        roles = ("coordinator", "machinery") if kind in SELF_SKIP_KINDS else ("coordinator",)
+        for role in roles:
+            slug = routes_mod.member_of(crew, role)
+            to += [
+                {"session": p["name"], "as": role}
+                for p in live
+                if slug
+                and p.get("member") == slug
+                and {"session": p["name"], "as": role} not in to
+            ]
         escalate = True
     return to, missing, escalate
 
@@ -229,8 +259,10 @@ class Poller:
         run: Callable[..., Any] = subprocess.run,
         env: dict | None = None,
         log: Callable[[str], None] | None = None,
+        sessions: Callable[[], list[dict]] = list_sessions,
     ):
         self.root = Path(root)
+        self.sessions = sessions
         self.dir = Path(folder)
         self.clock = clock
         self.run = run
@@ -263,6 +295,72 @@ class Poller:
             state["config_error"] = text
             return [text]
 
+    def due(self, state: dict, block: dict, now: float) -> set[str]:
+        """The source groups whose interval has passed (a few seconds early counts: the loop's
+        sleep and the round's own time never line up exactly)."""
+        last = state.setdefault("ran", {})
+        out = set()
+        intervals = {"main": int(block.get("poll_interval_s", 300))}
+        sessions = routes_mod.sessions_interval(block)
+        if sessions:
+            intervals["sessions"] = sessions
+        for group, every in intervals.items():
+            if now - float(last.get(group) or 0) >= every - 5:
+                out.add(group)
+                last[group] = now
+        return out
+
+    def push(self, eid: str, text: str, block: dict, now: float) -> str:
+        """One post of ``text`` through the project's wrapper; ``sent`` or the reason why not.
+        The URL never passes here: only the wrapper's child sees it. A sent event id is written
+        to ``pushed.json`` at once: a round that fails after the post never posts it again."""
+        cfg = block.get("push")
+        if not cfg:
+            return "not configured"
+        pushed_file = self.dir / "pushed.json"
+        pushed = read_json(pushed_file, {})
+        pushed = pushed if isinstance(pushed, dict) else {}
+        if eid in pushed:
+            return "sent"
+        status = self._post(text, cfg)
+        if status == "sent":
+            pushed = {k: v for k, v in pushed.items() if now - float(v or 0) < 14 * 86400}
+            pushed[eid] = now
+            with contextlib.suppress(OSError):
+                write_json(pushed_file, pushed)
+        return status
+
+    def _post(self, text: str, cfg: dict) -> str:
+        argv = [
+            *cfg["wrapper"],
+            "--",
+            sys.executable,
+            str(NOTIFIER),
+            "--env",
+            cfg["url_env"],
+            "--body-key",
+            str(cfg.get("body_key") or "text"),
+        ]
+        try:
+            out = self.run(
+                argv,
+                cwd=str(self.root),
+                input=text,
+                capture_output=True,
+                text=True,
+                timeout=PUSH_TIMEOUT_S,
+                check=False,
+                env=self.env,
+            )
+        except subprocess.TimeoutExpired:
+            return "timeout"
+        except (OSError, subprocess.SubprocessError):
+            return "wrapper missing"
+        status = (out.stdout or "").strip().splitlines()[-1:] or [""]
+        if _PUSH_STATUS.match(status[0]):
+            return status[0]
+        return f"wrapper exit {out.returncode}" if out.returncode else "error"
+
     def round(self) -> dict:
         now = self.clock()
         state = read_json(self.dir / "state.json", {})
@@ -270,6 +368,7 @@ class Poller:
             state = {}
         problems = self.reload(state)
         block = self.block or {"routes": {}}
+        due = self.due(state, block, now)
         rnd = Round(
             block.get("sources") or {},
             state,
@@ -278,6 +377,8 @@ class Poller:
             root=str(self.root),
             env=self.env,
             run=self.run,
+            due=due,
+            sessions=self.sessions,
         )
         found = rnd.run_all() if self.block is not None else []
         for text in problems:
@@ -303,6 +404,10 @@ class Poller:
             row["seq"] = seq
             to, missing, escalate = route(row, block, self.crew, live)
             row["to"] = to
+            if routes_mod.push(block, ev.kind):
+                row["push"] = self.push(row["id"], routes_mod.line(row), block, now)
+                if row["push"] != "sent":
+                    escalate = True  # no push: the human learns of it on the board
             line = routes_mod.render(row)
             for target in missing:
                 delta.append(self._delta(row, target, line, now, "no running session"))
@@ -316,6 +421,7 @@ class Poller:
                     "damage": row["damage"],
                 }
             if escalate:
+                row["escalated"] = True
                 state.setdefault("news", {})[row["id"]] = line
             rows.append(row)
         state["seq"] = seq
@@ -330,13 +436,22 @@ class Poller:
             "events": len(rows),
             "delta": len(delta),
             "errors": len(rnd.errors),
-            "interval_s": int(block.get("poll_interval_s", 300)),
+            "interval_s": self.tick(block),
+            "poll_interval_s": int(block.get("poll_interval_s", 300)),
+            "sessions_interval_s": routes_mod.sessions_interval(block),
+            "push": "configured" if block.get("push") else "off",
             "routes": {k: routes_mod.targets(block, k) for k in sorted(block.get("routes") or {})},
             "config_error": state.get("config_error"),
         }
         write_json(self.dir / "heartbeat.json", beat)
         self.log(f"round events={len(rows)} delta={len(delta)} errors={len(rnd.errors)}")
         return beat
+
+    @staticmethod
+    def tick(block: dict) -> int:
+        """The loop's sleep: the smallest interval of the configured source groups."""
+        every = [int(block.get("poll_interval_s", 300)), routes_mod.sessions_interval(block) or 0]
+        return min(e for e in every if e)
 
     @staticmethod
     def _delta(row: dict, role: str, line: str, now: float, reason: str) -> dict:
@@ -512,6 +627,11 @@ def status(start: str | Path | None = None) -> int:
     print(
         f"last round: {beat.get('last_round', 'never')} · interval {beat.get('interval_s', '?')} s"
     )
+    if beat.get("sessions_interval_s"):
+        print(
+            f"source sessions · interval {beat['sessions_interval_s']} s · "
+            f"github every {beat.get('poll_interval_s', '?')} s · push {beat.get('push', 'off')}"
+        )
     if beat.get("config_error"):
         print(f"config error: {beat['config_error']}")
     for kind, to in (beat.get("routes") or {}).items():

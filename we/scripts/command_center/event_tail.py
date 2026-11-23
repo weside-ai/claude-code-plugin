@@ -13,13 +13,15 @@ Lifecycle
     ``ECONNREFUSED``/``ENOENT`` on delivery) → the presence file is removed and the tail exits.
 
 Per cycle (15 s)
-    Write ``presence/<socket key>.json``: ``name`` (the socket key), ``member``, ``roles`` (every
+    Write ``presence/<socket key>.json``: ``name`` (the socket key), ``member``, ``session_id``
+    (the poller skips this session for an event about itself), ``roles`` (every
     crew role key bound to the member), ``parked`` (this session's board line has state
     ``parked``), ``heartbeat``. Then read the event rows (``events.jsonl``, its ``.1`` first) past
     the cursor and keep those addressed to this session (``to[].session``). Per row, in order:
 
     - a kind the current ``events:`` block does not route to one of the member's roles (or to the
-      member; a damage row also as ``coordinator``) → ledger row ``not routed``, no line;
+      member; a damage row also as ``coordinator``, an escalated open prompt also as
+      ``machinery``) → ledger row ``not routed``, no line;
     - the same kind and object delivered within ``fold_s`` → ledger row ``folded``, no line;
     - a ``digest`` route → kept; once an hour all kept lines go as one line;
     - else one line (``event_routes.render``) into the socket, then the ledger row, then the
@@ -136,6 +138,7 @@ class Tail:
         doc = {
             "name": self.key,
             "member": self.member,
+            "session_id": self.session_id,
             "roles": self.roles,
             "parked": self.parked(),
             "heartbeat": self.clock(),
@@ -168,6 +171,8 @@ class Tail:
         allowed = set(routes_mod.targets(self.block, row.get("kind", "")))
         if row.get("damage"):
             allowed.add("coordinator")
+        if row.get("escalated") and row.get("kind") in ep.SELF_SKIP_KINDS:
+            allowed |= {"coordinator", "machinery"}  # an open prompt nobody else receives
         mine = set(self.roles) | {self.member}
         return bool(allowed & mine & set(as_roles))
 

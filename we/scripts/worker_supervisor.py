@@ -87,6 +87,9 @@ from typing import Callable
 
 import worker_launch as wl
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "command_center"))
+from transcript import pending_tool_use
+
 POLL_S = 30
 APPEAR_S = 300
 PROMPT_AGE_S = 15 * 60
@@ -109,25 +112,6 @@ def projects_dir() -> Path:
 
 def jobs_dir() -> Path:
     return Path.home() / ".claude" / "jobs"
-
-
-def _tail_entries(projects: Path, session_id: str | None, kind: str = "assistant"):
-    """The transcript's entries of `kind`, newest first (reads the whole file once)."""
-    files = glob.glob(str(projects / "*" / f"{session_id}.jsonl")) if session_id else []
-    if not files:
-        return []
-    out = []
-    with open(files[0], encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            if f'"{kind}"' not in line:
-                continue
-            try:
-                entry = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(entry, dict) and entry.get("type") == kind:
-                out.append(entry)
-    return out[::-1]
 
 
 def _text(entry: dict) -> str:
@@ -177,13 +161,9 @@ def api_mark(entry: dict | None) -> str | None:
 
 
 def prompt_id(projects: Path, session_id: str | None) -> str | None:
-    """The id of the last tool call the session made: the one a permission prompt waits on."""
-    for entry in _tail_entries(projects, session_id):
-        content = (entry.get("message") or {}).get("content")
-        for part in reversed(content if isinstance(content, list) else []):
-            if isinstance(part, dict) and part.get("type") == "tool_use" and part.get("id"):
-                return str(part["id"])
-    return None
+    """The id of the tool call a permission prompt waits on (``transcript.pending_tool_use``)."""
+    hit = pending_tool_use(projects, session_id)
+    return hit[0] if hit else None
 
 
 def timer_deadline(state: Path, name: str) -> float | None:
