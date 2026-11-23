@@ -769,8 +769,8 @@ survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_ve
 ## Event lines
 
 A crew whose `.weside/config.json` has an `events:` block runs one event poller per project
-(`scripts/command_center/event_poller.py`, started with `event_poller.py ensure`; the hook
-`hooks/events_on_start.py` does that and starts the session's tail, and is not yet in `hooks.json`):
+(`scripts/command_center/event_poller.py`, started by the SessionStart hook `events_on_start.py`,
+by hand with `event_poller.py ensure`):
 it reads GitHub and the cluster for the release path and CI (an RC verdict, a stuck rollout, a
 blocked release PR, main red, a long queue, new issues) and routes each event kind to crew roles
 (`event_routes.py` owns the block's schema). Each member's session runs a tail

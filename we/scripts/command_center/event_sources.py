@@ -414,7 +414,9 @@ class Round:
                         else f"workflow {int(run.get('workflow_id') or 0)}",
                         mins=mins,
                         event=token_of(run.get("event")),
-                        branch=token_of(run.get("head_branch")),
+                        branch=token_of(run.get("head_branch"))
+                        if run.get("event") in TRUSTED_EVENTS
+                        else "?",
                         run_id=int(run["id"]),
                     )
         if dis:
