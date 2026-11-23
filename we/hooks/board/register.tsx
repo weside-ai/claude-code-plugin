@@ -804,7 +804,8 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     )
 
     // An Accept or Deny strikes the card at once: dim, the question struck through, no buttons, the
-    // stamp and the delivery line kept, below the open ones for STRUCK_SHOWN_MS (waitingQueue).
+    // stamp and the delivery line kept, below the open ones for STRUCK_SHOWN_MS, longer while its
+    // answer is undelivered (waitingQueue).
     const queueCard = (q: BoardQueueItem, i: number) => {
       const days = ageDays(q.since ?? undefined, now)
       const last = q.id ? shownAnswer(given[q.id], board?.updated) : undefined

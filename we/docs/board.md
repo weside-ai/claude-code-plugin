@@ -338,7 +338,8 @@ twice, re-read with the board's three-second watch.
 
 **Accept**, **Deny** and **Withdraw** close the question at once: the card stays dim with the question struck
 through, no buttons, the stamp and the delivery line under it, below the open questions for ten minutes
-after the answer (`STRUCK_SHOWN_MS`); after that the pane hides it, whatever the board file still lists,
+after the answer (`STRUCK_SHOWN_MS`); after that the pane hides it unless its answer is still
+undelivered (the stuck answers), whatever the board file still lists,
 and the next board write drops it once its asker has the answer (§ Pruning). A
 later line on that id changes nothing and is not delivered; a follow-up question takes a new id.
 **Update** asks for a check: the question keeps its buttons until the orchestrator rewords or removes
