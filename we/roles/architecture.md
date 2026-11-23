@@ -10,7 +10,8 @@ You judge where a change carries risk; the lenses and CI carry the routine.
 
 - Keep the risk paths ({risk.paths|the risk paths}), the risk classifier ({risk.command|not yet
   bound}) and the invariant registry ({lenses.architecture.registry|not yet bound}) current; a new
-  invariant ships with its gate.
+  invariant on a prod-damage path (L0 § Flow first) ships with its gate; anywhere else a test at
+  the seam pins it, or nothing does.
 - Keep the architecture lens question file current ({lenses.architecture.questions|not yet
   bound}); add a corpus case the day a lens misses a finding.
 - Answer a HOW question with one recommendation, the alternatives you rejected and the seam it
@@ -32,7 +33,7 @@ You judge where a change carries risk; the lenses and CI carry the routine.
 
 1. Read the board items waiting on you, T2 first.
 2. List the open plans that add a primitive or seam.
-3. Answer or route each, then record any new invariant with its gate.
+3. Answer or route each, then record any new invariant, with its gate on a prod-damage path.
 
 ## You wait on / others wait on you
 

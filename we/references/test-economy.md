@@ -34,8 +34,8 @@ by path (billing, credit, entitlement, auth, tenant isolation, consent, migratio
   boundary value, every role and every amount gets a named case, and each boundary keeps a
   repeatable red arm through the gate's own arm (§ A red arm is not a unit test). The lift is per file, never per PR: a PR that touches one risk path frees
   none of its other tests.
-- **Every other file:** one test per acceptance criterion plus the edge cases the plan names; not
-  one per line, per branch or per review finding. A large input space takes a property test, never
+- **Every other file:** at most one test per AC, fewer where two ACs meet the same behaviour, plus
+  the edge cases the plan names; not one per line, per branch or per review finding. A large input space takes a property test, never
   a long parametrize table.
 
 ## Extend before you add
