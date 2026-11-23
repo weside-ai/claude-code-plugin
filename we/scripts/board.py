@@ -9,7 +9,8 @@ Usage:
   board.py [--board FILE] ask [--session NAME] --key KEY --key-title T (--ask Q | --text-file <path or ->)
            --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|window-go|info> [--urgent]
-           [--pr REF [--one-way CLASS]] [--to HUMAN]
+           [--pr REF [--one-way CLASS [--supersede] [--codex-finding T --codex-reason T]]]
+           [--to HUMAN]
   board.py [--board FILE] close-merged
   board.py [--board FILE] prune
   board.py [--board FILE] log correction <session> <kind>
@@ -20,6 +21,7 @@ Usage:
   board.py [--board FILE] bundle
   board.py [--board FILE] news add --title T [--body B] [--kind <info|gate|todo>]
   board.py [--board FILE] news worker --id ID --title T [--body B]
+  board.py [--board FILE] news merged --pr REF
   board.py [--board FILE] escalation open --key KEY --parties ROLE,ROLE --question Q --a T --a-cost C
            --b T --b-cost C --reversible <yes|no> [--touches <vision|money|law|priority>]
   board.py [--board FILE] escalation <route|count>
@@ -53,7 +55,9 @@ answer   writes back an answer the owner gave in a session's chat: one line in
          `owner_queue` nor `news` of the board file and a kind outside the five; a refused write
          writes nothing. A second answer on an id an Accept or Deny already closed is a duplicate:
          it writes no answer line (nothing is carried again), records one `duplicate-answer` line
-         in board-questions.jsonl, says so and exits 0. It opens board.json read-only.
+         in board-questions.jsonl, says so and exits 0. It opens board.json read-only. An Accept
+         on a one-way question with a Codex finding posts the go comment (docs/board.md § Answers
+         given in a chat); a failed post exits 3, and the same Accept again posts it.
 set      writes the caller's own session line (found by `name` through `claude agents --json`
          and CLAUDE_CODE_SESSION_ID; appended with `name` and `session_id` when absent). `--for`
          writes another line and is the coordinator's. `waiting_on=<role>` stamps `since` and
@@ -89,7 +93,10 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          PR (`gh pr view`), else it is refused before the reader; the item keeps `pr_url`.
          `--one-way <class>` (only with merge-go) stamps `one_way`: the pane then names Accept
          Go (it writes `accept`) beside the PR link; the asking session arms on it with
-         `arm_pr.sh <PR>`.
+         `arm_pr.sh <PR>`. The item keeps the PR's `head`. One open one-way question per PR: another
+         is refused naming it, `--supersede` takes it off (`superseded`, `by` the new id).
+         `--codex-finding` and `--codex-reason` (one-way, both) name a skipped Codex finding: one
+         line on the ask, and the owner's Accept posts the go comment (answer.py `post_go`).
          `--kind task` stamps `kind: task` (the pane labels
          Accept as Taken when the task carries a recommendation). `--source <command or link>` stamps where the ask's fact comes from (the
          pane shows it). `--owner <member>` or `--component <name>` (the member whose `components`
@@ -147,6 +154,8 @@ bundle   the coordinator's evening bundle: one news item `B-<date>` of kind `tod
 news     `news add` (the coordinator): one item `N<n>` for the owner at the top of `news`, kind
          `info` (default), `gate` or `todo`, a one-line `--title` and an optional `--body`;
          prints the item. The pane's News frame is for the owner: milestones, gates, todos.
+         `news merged --pr <ref>` (any session): one `info` item `R-<repo>-<n>` for a merged PR
+         that changes RULE_PATHS, once per PR (`rules_news`).
 escalation the decision story between two owners (docs/board.md § Escalations): events in
          board-escalations.jsonl (`open`, `route`, `advise`, `settle`), a record is the fold of
          its events. `open` (a session holding one of the two `--parties` roles) writes `E<n>` at
@@ -331,13 +340,17 @@ class BoardError(Exception):
         self.code = code
 
 
-def _answer_writer():
-    """answer.py's `append`, by path: the one writer of the answers file's line format."""
+def _answer_module():
+    """answer.py, by path: the one writer of the answers file's line format and of the go comment."""
     path = Path(__file__).resolve().parent.parent / "hooks" / "board" / "answer.py"
     spec = importlib.util.spec_from_file_location("we_board_answer", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.append
+    return module
+
+
+def _answer_writer():
+    return _answer_module().append
 
 
 def _now():
@@ -1255,13 +1268,30 @@ def _clear_blocked(state, args, crew, now):
     return 0
 
 
+def _go_comment(state, line, now):
+    """answer.py's `post_go` for one answer line (the one poster of the go comment); 3 and the
+    reason on stderr when the post failed, else 0."""
+    module = _answer_module()
+    failed = module.go_failure(line, module.post_go(str(state.answers_path), line, now=now))
+    if failed:
+        print(f"board.py answer: {failed}", file=sys.stderr)
+        return 3
+    return 0
+
+
 def cmd_answer(state, args, crew, now):
     _text_file(args, "quote", "answer")
+    closed = state.closing_answer(args.id)
+    again = closed is not None and closed.get("answer") == "accept" and args.kind == "accept"
+    if again and _go_comment(state, {**closed, "quote": args.quote or closed.get("quote")}, now):
+        return 3  # the same yes again posts a go comment that failed; nothing else runs again
     if args.id not in state.ids():
+        if again:
+            print(f"board.py answer: {args.id} is accepted and off the board; nothing runs again")
+            return 0
         raise BoardError(
             f"board.py answer: {args.id} is in neither owner_queue nor news of {state.board_path}"
         )
-    closed = state.closing_answer(args.id)
     if closed is not None:
         state.append_question(
             {
@@ -1280,7 +1310,7 @@ def cmd_answer(state, args, crew, now):
         return 0
     line = state.append_answer(args.id, args.kind, args.session, via=args.via, quote=args.quote)
     print(json.dumps(line, ensure_ascii=False))
-    return 0
+    return _go_comment(state, line, now)
 
 
 def cmd_path(state, args, _crew, _now):
@@ -1406,6 +1436,79 @@ def _take_off(board, qid, key=None):
     return [qid]
 
 
+def _open_on_pr(state, pr_url):
+    """The open one-way merge-go questions on `pr_url` (any key), oldest first."""
+    board = state.board()
+    logs = (state.questions(), state.answers())
+    return [
+        q
+        for q in board.get("owner_queue") or []
+        if isinstance(q, dict)
+        and q.get("cause") == "merge-go"
+        and q.get("one_way")
+        and q.get("pr_url") == pr_url
+        and isinstance(q.get("id"), str)
+        and question_status(state, q["id"], board, logs)[0] == "open"
+    ]
+
+
+def _one_per_pr(state, args, fields):
+    """The ids a one-way merge-go takes off the queue: every open one-way question on its PR
+    under `--supersede`; without it an open one refuses the ask (a `duplicate` line), so the
+    owner's yes only ever meets one question per PR and its head."""
+    if not fields.get("one_way") or not fields.get("pr_url"):
+        return []
+    old = _open_on_pr(state, fields["pr_url"])
+    if not old or getattr(args, "supersede", False):
+        return [q["id"] for q in old]
+    first = old[0]
+    state.append_question({**fields, "outcome": "duplicate", "of": first["id"]})
+    head = str(first.get("head") or "")[:12] or "unknown"
+    raise BoardError(
+        f"board.py ask: refused: {first['id']} is the open one-way question on {fields['pr_url']} "
+        f"(head {head}); ask with --supersede to replace it with this head"
+    )
+
+
+def _pr_fields(args, pr_url):
+    """What a question on a PR keeps: `pr_url`, `one_way`, the PR's `head` and a skipped Codex
+    finding (`codex_finding`, `codex_reason`)."""
+    out = {}
+    if pr_url:
+        out["pr_url"] = pr_url
+        if getattr(args, "pr_head", ""):
+            out["head"] = args.pr_head
+    if args.one_way and args.one_way.strip():
+        out["one_way"] = args.one_way.strip()
+    if (getattr(args, "codex_finding", None) or "").strip():
+        out["codex_finding"] = args.codex_finding.strip()
+        out["codex_reason"] = args.codex_reason.strip()
+    return out
+
+
+def _log_superseded(state, superseded, new):
+    """One `superseded` line per question a new head's one-way question took off the queue."""
+    for old in superseded:
+        state.append_question(
+            {
+                "id": old,
+                "ts": new["ts"],
+                "outcome": "superseded",
+                "session": new["session"],
+                "by": new["id"],
+                "reason": f"a new head {str(new.get('head') or '')[:12]} on {new.get('pr_url')}",
+            }
+        )
+
+
+def _codex_line(fields):
+    """The line a skipped Codex finding adds to the ask: what the owner's yes also skips."""
+    return (
+        f"On yes the Codex finding counts as skipped: {fields['codex_finding']} "
+        f"(reason: {fields['codex_reason']})"
+    )
+
+
 def _same_key(state, fields, replacing, distinct=False):
     """The open questions on the question's key (not the one `--replace` names): one with the
     same cause, PR and `--to` human is a duplicate and refuses the ask with one
@@ -1413,7 +1516,7 @@ def _same_key(state, fields, replacing, distinct=False):
     is another question); every other one draws one stderr warning each."""
     key, cause = fields["key"], fields["cause"]
     for q in state.board().get("owner_queue") or []:
-        if not isinstance(q, dict) or q.get("key") != key or q.get("id") == replacing:
+        if not isinstance(q, dict) or q.get("key") != key or q.get("id") in replacing:
             continue
         qid, text = q.get("id"), str(q.get("ask") or "")[:80]
         same = ("cause", "pr_url", "to")
@@ -1521,10 +1624,22 @@ def _ask_failures(args, crew):
     return failures
 
 
-def _pr_arg_refusal(ref, cause, one_way):
-    """The refusal of a question's `--pr`/`--one-way` before any `gh` call, or None."""
+def _pr_arg_refusal(ref, cause, one_way, args=None):
+    """The refusal of a question's `--pr`/`--one-way` (and what only a one-way merge-go carries:
+    `--supersede`, `--codex-finding`, `--codex-reason`) before any `gh` call, or None."""
     if one_way and cause != "merge-go":
         return "board.py ask: --one-way belongs to a merge-go question"
+    finding = (getattr(args, "codex_finding", None) or "").strip()
+    reason = (getattr(args, "codex_reason", None) or "").strip()
+    if (finding or reason or getattr(args, "supersede", False)) and not one_way:
+        return (
+            "board.py ask: --supersede, --codex-finding and --codex-reason belong to a one-way "
+            "merge-go question (--one-way <class>)"
+        )
+    if bool(finding) != bool(reason):
+        return (
+            "board.py ask: a skipped Codex finding needs both --codex-finding and --codex-reason"
+        )
     if not ref:
         return (
             "board.py ask: a merge-go question needs --pr <ref>" if cause == "merge-go" else None
@@ -1536,9 +1651,9 @@ def _pr_arg_refusal(ref, cause, one_way):
 
 def _pr_failure(args):
     """(the open PR's URL, None) or (None, the refusal) for a question's `--pr`; (None, None)
-    when the question names no PR and needs none."""
+    when the question names no PR and needs none. The PR's head sha lands on `args.pr_head`."""
     ref = (args.pr or "").strip()
-    refusal = _pr_arg_refusal(ref, (args.cause or "").strip(), args.one_way)
+    refusal = _pr_arg_refusal(ref, (args.cause or "").strip(), args.one_way, args)
     if refusal or not ref:
         return None, refusal
     pr, failure = _view_pr(ref, None)
@@ -1547,6 +1662,7 @@ def _pr_failure(args):
     if pr.get("state") != "OPEN":
         state = pr.get("state") or "not open"
         return None, f"board.py ask: PR {ref} is {state}; a question on a PR needs an open one"
+    args.pr_head = str(pr.get("headRefOid") or "")
     return str(pr.get("url") or ref), None
 
 
@@ -1768,7 +1884,12 @@ def _repeated(state, args, now):
     _text_file(args, "ask", "ask")
     if not (args.session or "").strip():
         args.session = own_session_name(verb="ask")[0]
-    if args.replace or not (args.session or "").strip() or not (args.ask or "").strip():
+    if (
+        args.replace
+        or getattr(args, "supersede", False)
+        or not (args.session or "").strip()
+        or not (args.ask or "").strip()
+    ):
         return False
     session = args.session.strip()
     fields = {f: (getattr(args, f) or "") for f in ("key", "cause", "recommendation", "ask")}
@@ -1798,16 +1919,18 @@ def cmd_ask(state, args, crew, now):
     fields = {f: getattr(args, f).strip() for f in ASK_FIELDS}
     if args.urgent:
         fields["urgent"] = True
-    if pr_url:
-        fields["pr_url"] = pr_url
-    if args.one_way and args.one_way.strip():
-        fields["one_way"] = args.one_way.strip()
+    fields.update(_pr_fields(args, pr_url))
     fields.update(_ask_extras(args, crew))
-    _same_key(state, {"ts": _iso(now), **fields}, args.replace, args.distinct)
+    superseded = _one_per_pr(state, args, {"ts": _iso(now), **fields})
+    _same_key(
+        state, {"ts": _iso(now), **fields}, {args.replace, *superseded} - {None}, args.distinct
+    )
     asked = fields["ask"]
     if fields["cause"] == "merge-go":
         fields["checks"] = _required_checks(pr_url)
         fields["ask"] = f"{fields['ask']}\n{fields['checks']}"
+    if fields.get("codex_finding"):
+        fields["ask"] = f"{fields['ask']}\n{_codex_line(fields)}"
     fields.update(_asker_stamp(fields["session"], crew=crew))
     base = {"ts": _iso(now), **fields}
     reader, reason = _cold_read(state, base, asked, fields, crew)
@@ -1844,6 +1967,12 @@ def cmd_ask(state, args, crew, now):
             if _is_return_note(line.get("note")):
                 del line["note"]
         replaced.extend(_take_off(board, args.replace, args.key))
+        gone = set(superseded)
+        board["owner_queue"] = [
+            q
+            for q in board.get("owner_queue") or []
+            if not (isinstance(q, dict) and q.get("id") in gone)
+        ]
         qid = state.next_id("Q", board)
         item = {"id": qid, **fields, "since": crew_mod.today(now=now), "ts": base["ts"]}
         board.setdefault("owner_queue", []).append(item)
@@ -1852,6 +1981,7 @@ def cmd_ask(state, args, crew, now):
     def log_posted(qid):
         for old in replaced:
             state.append_question({"id": old, "ts": base["ts"], "outcome": "replaced", "by": qid})
+        _log_superseded(state, superseded, {**base, "id": qid})
         state.append_question({"id": qid, **base, "outcome": "posted", "reader": reader})
 
     qid = state.write_board(posted, after=log_posted)
@@ -2377,6 +2507,76 @@ def cmd_news_worker(state, args, _crew, now):
     result = state.write_board(mutate)
     print("unchanged" if result is UNCHANGED else json.dumps(result, ensure_ascii=False))
     return 0
+
+
+# What a merged PR changes when it changes the crew's rules: the human hears of it as one news line.
+RULE_PATHS = (".claude/", ".weside/", ".github/workflows/")
+_SUMMARY_SKIP = re.compile(r"^\s*(?:<!--|#|\*\*Draft|\||```|https?://\S+$)")
+
+
+def _summary_line(body):
+    """The PR body's first line of prose: no heading, comment, draft line, table or bare link."""
+    for line in str(body or "").splitlines():
+        text = line.strip().lstrip("-*> ").strip()
+        if text and not _SUMMARY_SKIP.match(line):
+            return text if len(text) <= 160 else text[:159] + "…"
+    return ""
+
+
+def rules_news(state, ref, now):
+    """One `info` news item `R-<repo>-<n>` for a merged PR that changes RULE_PATHS: title fixed
+    words and ids, body its first summary line and the paths. Once per PR, also after the item
+    left the board (its id in board-questions.jsonl or the answers file). Returns (outcome,
+    item or text)."""
+    pr, failure = _view_pr(ref, None, fields="number,url,state,body,files")
+    if failure:
+        return "failed", failure
+    url = str(pr.get("url") or ref)
+    if pr.get("state") != "MERGED":
+        return "not merged", url
+    paths = [str(f.get("path") or "") for f in pr.get("files") or [] if isinstance(f, dict)]
+    hits = [p for p in paths if p.startswith(RULE_PATHS)]
+    if not hits:
+        return "no rule paths", url
+    found = re.search(r"github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)", url)
+    repo, number = (found.group(2), found.group(3)) if found else ("repo", str(pr.get("number")))
+    nid = f"R-{repo}-{number}"
+    seen = {line.get("id") for line in state.questions() + state.answers()}
+    if nid in seen:
+        return "unchanged", nid
+    shown = ", ".join(hits[:4]) + (f" and {len(hits) - 4} more" if len(hits) > 4 else "")
+    body = "\n".join(x for x in (_summary_line(pr.get("body")), f"changes {shown}", url) if x)
+
+    def mutate(board):
+        news = board.get("news") if isinstance(board.get("news"), list) else []
+        if any(isinstance(i, dict) and i.get("id") == nid for i in news):
+            return UNCHANGED
+        item = {
+            "id": nid,
+            "kind": "info",
+            "title": f"rules changed: {repo}#{number} merged ({len(hits)} rule file(s))",
+            "body": body,
+            "ts": _iso(now),
+            "pr_url": url,
+        }
+        board["news"] = [item, *news]
+        return item
+
+    result = state.write_board(mutate)
+    return ("unchanged", nid) if result is UNCHANGED else ("added", result)
+
+
+def cmd_news_merged(state, args, _crew, now):
+    """`news merged --pr <ref>`: `rules_news` for one PR; any session, exit 0 unless gh failed."""
+    outcome, what = rules_news(state, args.pr.strip(), now)
+    if outcome == "added":
+        print(json.dumps(what, ensure_ascii=False))
+        return 0
+    print(
+        f"board.py news merged: {outcome}: {what}",
+        file=sys.stderr if outcome == "failed" else None,
+    )
+    return 1 if outcome == "failed" else 0
 
 
 def cmd_prune(state, _args, _crew, _now):
@@ -3298,16 +3498,9 @@ def _linked(key, pr):
     return any(rx.search(m.group(0)) for m in _TICKET_LINE.finditer(str(pr.get("body") or "")))
 
 
-def _view_pr(ref, root):
+def _view_pr(ref, root, fields="state,mergedAt,headRefName,headRefOid,title,body,url"):
     """(the PR's JSON, None) or (None, the failure) for one `gh pr view` of `ref`."""
-    argv = [
-        "gh",
-        "pr",
-        "view",
-        *_gh_argv(ref),
-        "--json",
-        "state,mergedAt,headRefName,title,body,url",
-    ]
+    argv = ["gh", "pr", "view", *_gh_argv(ref), "--json", fields]
     try:
         done = subprocess.run(
             argv, capture_output=True, text=True, timeout=GH_TIMEOUT, check=False, cwd=root
@@ -3999,6 +4192,11 @@ def _add_news_verbs(verbs):
     wk.add_argument("--title", required=True)
     wk.add_argument("--body")
     wk.set_defaults(run=cmd_news_worker)
+    mg = steps.add_parser(
+        "merged", help="one news line for a merged PR that changes .claude, .weside or workflows"
+    )
+    mg.add_argument("--pr", required=True, metavar="REF")
+    mg.set_defaults(run=cmd_news_merged)
 
 
 def _add_staging_verbs(verbs):
@@ -4193,6 +4391,15 @@ def parser():
         "--component", metavar="NAME", help="owner: the member whose components hold it"
     )
     q.add_argument("--replace", metavar="QID", help="replace this open question on the same --key")
+    q.add_argument(
+        "--supersede",
+        action="store_true",
+        help="one-way merge-go: replace the open question on this PR (a new head)",
+    )
+    q.add_argument(
+        "--codex-finding", metavar="TEXT_OR_LINK", help="one-way merge-go: the skipped finding"
+    )
+    q.add_argument("--codex-reason", metavar="TEXT", help="why the asking session skips it")
     q.add_argument(
         "--distinct",
         action="store_true",

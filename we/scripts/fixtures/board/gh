@@ -7,6 +7,8 @@ arguments between `view` and `--json` (joined by spaces) up in the JSON file $FA
 `pr checks <ref> [-R …] --required --json …` prints the same entry's `checks` list and exits its
 `checks_exit` (gh exits 1 on a failed and 8 on a pending check); without `checks` it says what gh
 says on a PR with no required checks and exits 1.
+`pr comment <ref> --body-file -` appends `{"comment": ref, "body": stdin}` to $FAKE_GH_LOG, prints
+a comment URL and exits $FAKE_GH_COMMENT_EXIT (default 0).
 """
 
 import json
@@ -14,6 +16,15 @@ import os
 import sys
 
 args = sys.argv[1:]
+if args[:2] == ["pr", "comment"]:
+    with open(os.environ["FAKE_GH_LOG"], "a") as fh:
+        fh.write(json.dumps({"comment": args[2], "body": sys.stdin.read()}) + "\n")
+    code = int(os.environ.get("FAKE_GH_COMMENT_EXIT") or 0)
+    if code:
+        print("GraphQL: Resource not accessible by integration", file=sys.stderr)
+        sys.exit(code)
+    print(args[2] + "#issuecomment-1")
+    sys.exit(0)
 with open(os.environ["FAKE_GH_LOG"], "a") as fh:
     fh.write(json.dumps(args) + "\n")
 if args[:2] not in (["pr", "view"], ["pr", "checks"]) or "--json" not in args:

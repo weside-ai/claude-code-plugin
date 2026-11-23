@@ -178,6 +178,23 @@ class TestClose:
         assert len(world.transitions()) == 1
         assert f"in_review: {KEY} is in_review already" in out and "trees: none left" in out
 
+    def test_a_merged_rule_change_gets_one_board_news_line(self, world, capsys):
+        world.worker()
+        world.gh["prs"]["acme/app"][-1].update(
+            files=[{"path": ".claude/rules/x.md"}, {"path": "src/export.py"}],
+            body="Tightens the export rule.",
+        )
+        world.save()
+        assert close(KEY, "--keep-worktrees") == 0, capsys.readouterr()
+        assert (
+            "news: R-app-7 rules changed: app#7 merged (1 rule file(s))" in capsys.readouterr().out
+        )
+        board_file = json.loads((world.state / "board.json").read_text())
+        [item] = [n for n in board_file["news"] if n["id"] == "R-app-7"]
+        assert item["body"].splitlines()[0] == "Tightens the export rule."
+        assert close(KEY, "--keep-worktrees") == 0
+        assert "news:" not in capsys.readouterr().out
+
     def test_the_epic_line_lands_by_push_once(self, world, capsys):
         cfg = {"plans": {"land": "push", "secret_scan": "none"}}
         world.write(".weside/config.json", json.dumps(cfg))

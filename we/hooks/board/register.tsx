@@ -196,7 +196,9 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
       ['python3', '-I', `${$.plugin.root}/hooks/board/answer.py`, path, id, answer, ts, ...(me ? [me] : [])],
       { timeoutMs: 10_000 },
     )
-    if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
+    // Exit 3: the line is saved, but the go comment a skipped Codex finding needs failed to post (answer.py).
+    if (run.exitCode === 3) $.ui.toast(`board: ${run.stderr.trim() || `${id}: the go comment on the PR failed`}`)
+    else if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
     await loadAnswers($, file, true)
     if (answer !== 'read' && delivery.isOn) $.clock.after(0, () => void deliverTick($, file))
   } catch (err) {

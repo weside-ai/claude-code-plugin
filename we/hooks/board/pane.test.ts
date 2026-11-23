@@ -246,7 +246,7 @@ test('before /board only the deliverer reads the board, once; the pane re-reads 
 })
 
 // A fake home: board.json, and board-answers.jsonl once answer.py appended to it.
-function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }, board = BOARD) {
+function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sessionId: string; name: string }, board = BOARD, answerExit = 0) {
   const answersPath = '/home/me/.claude/we-state/board-answers.jsonl'
   let lines = ''
   let mtimeMs = 1
@@ -263,6 +263,7 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
       const [, id, answer, ts, session] = e.argv.slice(3)
       lines += `${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`
       mtimeMs += 1
+      if (answerExit) return { value: { exitCode: answerExit, stdout: '', stderr: `answer.py: ${id}: the answer is saved, but the go comment on the PR failed: gh not found`, isStdoutTruncated: false, isStderrTruncated: false } }
       return RUN('')
     }
     return RUN(JSON.stringify({ sessions: [{ name: self.name, sessionId: self.sessionId, pid: 9, status: 'busy', envRead: false }] }))
@@ -272,15 +273,18 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
     return { text: String((e as { text?: unknown }).text) }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
+  const toasts: string[] = []
   on('ui.toast', (_$, e) => {
-    throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
+    if (!answerExit) throw new Error(`unexpected toast: ${String((e as { text?: unknown }).text)}`)
+    toasts.push(String((e as { text?: unknown }).text))
+    return { value: undefined }
   })
   // A line another writer appended (a chat write-back, another session's pane).
   const push = (line: Record<string, unknown>) => {
     lines += `${JSON.stringify(line)}\n`
     mtimeMs += 1
   }
-  return { answersPath, appended, submitted, push }
+  return { answersPath, appended, submitted, push, toasts }
 }
 
 test('Accept in the orchestrator session appends one line, sends nothing itself and shows the answer', async ($, on) => {
@@ -464,6 +468,20 @@ test('answered questions the file still lists stay off the queue; the open ones 
   expect(await ui.find({ type: 'Text', text: 'Open two' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Old go, answered' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'Merge #5?' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a yes whose go comment failed is saved and says so in a toast, never silent', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' }, BOARD, 3)
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  expect(home.toasts).toEqual(['board: answer.py: Q1: the answer is saved, but the go comment on the PR failed: gh not found'])
+  expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
   await ui.unmount()
 })
 

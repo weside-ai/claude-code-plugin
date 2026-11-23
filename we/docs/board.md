@@ -86,7 +86,12 @@ prod live, an epic done), what blocks (`gate`) and what the owner must do (`todo
 writes one with `board.py news add --title "<one line>" [--body "<detail>"] [--kind info|gate|todo]`
 (at the top, id `N<n>`), the machinery writes `todo` items itself (bundle, staging past its SLA,
 signals, and the launcher's supervisor with `board.py news worker --id W-… --title T`: a worker's
-stop its starter could not be told, a permission prompt older than 15 minutes; once per id):
+stop its starter could not be told, a permission prompt older than 15 minutes; once per id).
+`board.py news merged --pr <ref>` (any session; the watcher `watch-pr-checks.sh` on a merge and
+`we-worker close` per merged PR of the story call it) adds one `info` item `R-<repo>-<n>` for a
+merged PR that changes `.claude/`, `.weside/` or `.github/workflows/`: the title in fixed words
+(`rules changed: <repo>#<n> merged (<count> rule file(s))`), the body the PR's first summary line,
+the rule paths and its link. Once per PR, also after the item was read and pruned:
 
 ```json
 "news": [
@@ -274,7 +279,7 @@ names are those of the default board.
 | `updated_by` | who wrote it, shown beside the age |
 | `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `followup`, `followup_route`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
-| `news[]` | optional: short items for the owner with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes `info`, `gate` and `todo` (`news add`; the bundle, an escalation at stage `bundle`, a signal `S<n>` with `for` the role and `key`, § Several humans; staging past its SLA) and `escalation` (a record at stage `escalation`, with `for` the role waited on, shown in the log) |
+| `news[]` | optional: short items for the owner with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes `info`, `gate` and `todo` (`news add`; a rules line `R-<repo>-<n>` by `news merged`; the bundle, an escalation at stage `bundle`, a signal `S<n>` with `for` the role and `key`, § Several humans; staging past its SLA) and `escalation` (a record at stage `escalation`, with `for` the role waited on, shown in the log) |
 | `log[]` | optional, written by `board.py`: entries kept for the record (`decision`, `sample`, older news without an id), the newest 50; the pane folds them under the news (§ News) |
 | `notes` | optional, older: one free text, folded under the news to its first line (§ News) |
 | `staging` | optional, written by `board.py staging`, `book` and `unbook` only: `synced`, `repo`, `sla_hours`, `booking` (`issue`, `holder`, `until`) and `acceptance` (`issue`, `rc`, `opened`, `due`, `keys`, `past_sla`, `news`), each `null` when none is open; the pane draws one `◇ Staging` line per open one, a booking past its `until` as expired, and the past-SLA mark with the block's `sla_hours` (§ Staging) |
@@ -426,6 +431,18 @@ no answer line, so nothing is carried again, one `duplicate-answer` line in `boa
 and exit 0 with `<id> is closed by <kind>; recorded as a duplicate, nothing runs again`. `--board FILE` names another board file. Without that line
 the question stays open on the pane.
 
+**The go comment.** An Accept on a one-way `merge-go` question that carries a Codex finding posts
+one PR comment through `gh` (the session's GitHub identity), from either answer path (`answer.py`
+`post_go`: the pane's press and `board.py answer`). Its first line is exactly
+`<!-- board-go Q<n> head=<the question's 40-hex head sha> -->`, then the owner's answer quoted (the
+chat's `--quote`, else `Go (Accept on the board)`), the finding and the asking session's reason. A
+CI job counts that marker on the PR's current head as the skip; a question superseded by a new head
+never reaches it. Each post leaves one `go-comment` line (`ok`, `pr`, `head`, `url` or `error`) in
+`board-questions.jsonl`. A failed post is never silent: the answer line stands, `answer.py` exits 3
+and the pane shows a toast, `board.py answer` exits 3 with the reason on stderr; the same Accept
+again (`board.py answer <id> accept --session <name> --via chat`) posts it, also after the question
+left the board, and a posted comment is never posted twice.
+
 ## Questions and decisions
 
 `board.py` (in the plugin's `scripts/`) writes `board.json` only through one locked writer: an
@@ -465,7 +482,14 @@ A `merge-go` question also needs `--pr <ref>` (a URL, `<owner>/<repo>#<n>` or a 
 asks about a merge that already happened. `--one-way <class>` (merge-go only) marks a one-way PR:
 the card offers the link and **Go**: an Accept is the owner's go, and the asking session arms the
 PR with `arm_pr.sh <PR>` (no approve on GitHub is the go). The helper reads no board: it names the
-one-way class on its output and on the PR, and refuses the class only to a worker. `board.py close-merged`
+one-way class on its output and on the PR, and refuses the class only to a worker. The item keeps the
+PR's head sha (`head`). A one-way PR has one open question: a second one-way ask on the same PR is
+refused naming the open one, and `--supersede` (a new head) posts it and takes every open one-way
+question on that PR off the queue, each with a `superseded` line naming the new id in `by`, so the
+owner's yes only ever meets the newest head. `--codex-finding <text or link>` with `--codex-reason
+<text>` (one-way only, both or neither) names a Codex finding the asking session skips: the ask gets
+the line `On yes the Codex finding counts as skipped: <finding> (reason: <reason>)`, and the owner's
+Accept counts as that skip (§ Answers, the go comment). `board.py close-merged`
 (also run by `bundle` and `/we:merged`) removes every merge question still in `owner_queue` whose
 PR merged or closed, whatever its answer (a Go, the owner's hand merge) and in whichever repo
 its `pr_url` points, logs one `closed` line each in `board-questions.jsonl` and prints

@@ -41,7 +41,9 @@ One writer for "this story's build is over". In the order it runs:
    (`workers.remove_worktree`, else `git worktree remove`), the local branch is deleted, the remote
    branch too unless an open PR has it as head, and the worker's settings and timer files in the
    launcher's state dir go when no living session holds its name.
-4. **Epic line.** On the move to In Review (or when the key is In Review and the line is
+4. **Rules news.** Each merged PR of the story that changes `.claude/`, `.weside/` or
+   `.github/workflows/` gets its one board news line (`board.py news merged`, `rules_news`).
+5. **Epic line.** On the move to In Review (or when the key is In Review and the line is
    missing): one `## Updates Log` line in the story's epic plan, `updated:` set, a leftover mirror
    block dropped (`references/epic-plan.md` § Upkeep after a merge), naming every merged PR of the
    story and `--learning` (default `none`). Under `plans.land: push` it lands from a detached scratch worktree through
@@ -793,6 +795,21 @@ def _in_review(
     return res
 
 
+def rules_news(ctx: dict, merged: list) -> list[str]:
+    """`board.rules_news` per merged PR: a rule change gets its one board news line; a line per
+    item added or per read that failed."""
+    if ctx["state"] is None:
+        return []
+    out = []
+    for pr in merged:
+        outcome, what = board.rules_news(ctx["state"], pr["url"], board._now())
+        if outcome == "added":
+            out.append(f"news: {what['id']} {what['title']}")
+        elif outcome == "failed":
+            out.append(f"news: {pr['url']} unread for the rules line ({what})")
+    return out
+
+
 def close(key, pr_ref, keep, extra, today, learning="none") -> int:
     try:
         ctx = _context(key)
@@ -811,6 +828,7 @@ def close(key, pr_ref, keep, extra, today, learning="none") -> int:
     top, own = ctx["top"], ctx["own"]
     res = _in_review(key, ctx, prs, unreadable, extra, given)
     out = ["prs: " + ", ".join(f"{label(p, own)} {p['state'].lower()}" for p in prs), *res["out"]]
+    out += rules_news(ctx, merged)
     tidy = True if keep else teardown(top, key, prs, ctx["base"], out)
     epic_ok = True
     if res["closed"]:
