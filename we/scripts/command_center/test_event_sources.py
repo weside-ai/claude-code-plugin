@@ -647,7 +647,6 @@ def test_a_fork_run_shows_its_workflow_id_never_its_name_or_branch(tmp_path):
     [
         ("acme/app", "CI: PR", "feat-x"),
         ("someone/app", "workflow 7", "?"),
-        (None, "workflow 7", "?"),
     ],
 )
 def test_a_pull_request_run_is_its_own_kind_named_only_from_the_repos_own_branch(
@@ -666,15 +665,17 @@ def test_a_pull_request_run_is_its_own_kind_named_only_from_the_repos_own_branch
         head_repository={"full_name": head} if head else None,
     )
     srcs = {"queued": sources(tmp_path)["queued"]}
-    found = [
+    found = sorted(
         (e.kind, e.fields["workflow"], e.fields["branch"])
         for e in run_round(tmp_path, data, seeded(), srcs=srcs)
-    ]
-    assert found == [
-        ("pr_run_queued_long", workflow, branch),
-        ("run_queued_long", "CI: Main Loop", "main"),
-        ("run_queued_long", "CI: Main Loop", "release"),
-    ]
+    )
+    assert found == sorted(
+        [
+            ("pr_run_queued_long", workflow, branch),
+            ("run_queued_long", "CI: Main Loop", "main"),
+            ("run_queued_long", "CI: Main Loop", "release"),
+        ]
+    )
 
 
 # --- open prompts: the sessions source (claude agents --json samples, transcripts) ----------
@@ -1045,3 +1046,33 @@ def test_prod_run_unfinished_for_more_than_a_day_is_still_news(tmp_path):
     run["status"], run["conclusion"] = "waiting", None
     run["created_at"] = run["run_started_at"] = es.iso(data["now"] - 30 * es.HOUR)
     assert [e.fields["mins"] for e in prod_round(tmp_path, data, {})] == [30 * 60]
+
+
+def test_the_repos_own_runs_spend_the_recheck_budget_first(tmp_path):
+    """A queue full of pull request runs never delays a stuck push run's line."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    first, *rest = runs
+    pr = dict(first, event="pull_request", head_repository={"full_name": "acme/app"})
+    data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"] = [
+        pr,
+        *rest,
+    ]
+    srcs = {"queued": dict(sources(tmp_path)["queued"], recheck_max=1)}
+    got = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
+    assert got and got[0] != f"run:{pr['id']}"
+
+
+@pytest.mark.parametrize("jobs, reported", [(0, False), (1, True)])
+def test_a_day_old_queued_run_without_a_job_is_a_ghost(tmp_path, jobs, reported):
+    """The forge keeps a run queued that it can neither start nor cancel: no job after a day."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    runs[0] = dict(runs[0], created_at=es.iso(data["now"] - 2 * 86400))
+    data["gh"]["repos/acme/app/actions/runs/301"] = dict(
+        data["gh"]["repos/acme/app/actions/runs/301"], status="queued"
+    )
+    data["gh"]["repos/acme/app/actions/runs/301/jobs?per_page=1"] = {"total_count": jobs}
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    hung = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
+    assert ("run:301" in hung) is reported

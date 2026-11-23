@@ -130,6 +130,7 @@ KINDS = (
 )
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
+DAY = 24 * HOUR
 TRUSTED_EVENTS = frozenset({"push", "schedule", "workflow_dispatch"})
 PR_EVENTS = frozenset({"pull_request", "pull_request_target"})
 KEEP_S = 14 * 86400
@@ -464,6 +465,10 @@ class Round:
         self.seeded[seed] = True
         return True
 
+    def _ghost(self, repo: str, run_id: Any) -> bool:
+        jobs = self.gh(f"repos/{repo}/actions/runs/{int(run_id)}/jobs?per_page=1")
+        return isinstance(jobs, dict) and jobs.get("total_count") == 0
+
     def queued(self) -> None:
         cfg = self.src.get("queued") or {}
         dis = self.src.get("dispatch") or {}
@@ -487,7 +492,9 @@ class Round:
         if cfg:
             limits = cfg.get("limits") or {}
             checks = int(cfg.get("recheck_max", 5))
-            for run in runs:
+            # The repo's own runs spend the re-read budget first: a full queue of pull request runs
+            # (a digest) never delays a stuck push or schedule run (a line of its own).
+            for run in sorted(runs, key=lambda r: r.get("event") not in TRUSTED_EVENTS):
                 if run["id"] in superseded:
                     continue  # reported as dispatch_superseded, not as a hang
                 mins = int(self.age_s(run.get("created_at")) // 60)
@@ -505,6 +512,11 @@ class Round:
                     continue  # unreadable: the next round reads again
                 if one.get("status") != "queued":
                     self.seen[key] = self.now  # a stale list entry, never a hang
+                    continue
+                if self.age_s(run.get("created_at")) > DAY and self._ghost(repo, run["id"]):
+                    # Queued for a day with no job: a run the forge can neither start nor cancel.
+                    self.seen[key] = self.now
+                    print(f"events: ghost run {repo} {int(run['id'])} skipped", file=sys.stderr)
                     continue
                 if self.new(key):
                     self._hang(repo, run, key, mins)
