@@ -34,7 +34,8 @@ we/                               plugin root
     flow/, board/, plans/         the /flow pane (phase.ts; crewflow.tsx: its section Crew flow), the /board pane and its Zentrale pane (zentrale-pane.tsx, zentrale.ts; board.ts, work.ts, deliver.ts, probe.py,
                                   answer.py, deliveries.py), plan files and PRs both panes read
     SessionStart                  materialize_on_start, process_on_start (L0), role_on_start (role card),
-                                  optimization_reminder, compact_on_start (matcher compact)
+                                  optimization_reminder, compact_on_start (matcher compact),
+                                  events_on_start (the crew's event poller and this session's tail)
     UserPromptSubmit              news_on_prompt (wake counter), sampler_on_prompt (dead sampler, blocked worker)
     PreToolUse                    worker_rights_gate (a process worker's rights and never-list), verification_gate (hint: PR body without a receipt),
                                   draft_reason_gate (hint: draft reason, ready on a conflict), teammate_gate
