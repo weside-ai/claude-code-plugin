@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 import event_poller as ep  # noqa: E402
+import event_routes  # noqa: E402
 import event_sources as es  # noqa: E402
 import event_tail as et  # noqa: E402
 import test_event_routes as ter  # noqa: E402  (crew, project and poller builders)
@@ -214,6 +215,60 @@ def test_fold_filter_and_text(short_tmp, monkeypatch):
     finally:
         for inbox in inboxes.values():
             inbox.close()
+
+
+def test_the_machinery_tail_delivers_an_escalated_permission_prompt(short_tmp, monkeypatch):
+    """No route names the open prompt, so the poller escalated it to the coordinator and the
+    machinery owner: the machinery tail delivers it; the same kind unescalated is not routed."""
+    _, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch)
+    try:
+        k = tails["kiska"].key
+        prompt = {"session": "rust", "tool": "Bash", "waiting": "permission prompt"}
+        escalated = row(1, "permission_prompt", "prompt:a", k, "machinery", **prompt)
+        escalated.update(escalated=True, source_at="2026-11-20T12:00:00Z")
+        plain = row(2, "permission_prompt", "prompt:b", k, "machinery", **prompt)
+        address(folder, [escalated, plain])
+        clock.t += et.CYCLE_S
+        assert tails["kiska"].cycle() == 1
+        [line] = user_lines(inboxes["kiska"])
+        assert line == "permission prompt · session rust · tool Bash · open since 12:00Z"
+        reasons = [r["reason"] for r in ep.read_rows(folder / "ledger.jsonl")]
+        assert reasons == ["delivered", "not routed"]
+    finally:
+        for inbox in inboxes.values():
+            inbox.close()
+
+
+def test_a_pull_request_hang_rides_the_hang_route_as_a_digest(short_tmp, monkeypatch):
+    """Without a route of its own a pull request's queued run goes where the hang route goes, kept
+    for the hourly digest; the repo's own hang stays a line; a route of its own decides alone."""
+    routes = {"run_queued_long": {"to": ["machinery"]}}
+    _, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch, routes)
+    try:
+        k = tails["kiska"].key
+        hang = {"repo": "acme/app", "workflow": "CI", "mins": 61, "event": "push", "run_id": 9}
+        pr = dict(hang, event="pull_request", branch="feat-x", run_id=10)
+        address(
+            folder,
+            [
+                row(1, "run_queued_long", "run:9", k, "machinery", **hang, branch="main"),
+                row(2, "pr_run_queued_long", "run:10", k, "machinery", **pr),
+            ],
+        )
+        clock.t += et.CYCLE_S
+        tails["kiska"].cycle()
+        assert user_lines(inboxes["kiska"]) == [
+            "run queued 61 min · acme/app CI (push, main) · run https://github.com/acme/app/actions/runs/9"
+        ]
+        reasons = [r["reason"] for r in ep.read_rows(folder / "ledger.jsonl")]
+        assert reasons == ["delivered", "digest"]
+    finally:
+        for inbox in inboxes.values():
+            inbox.close()
+    block = {"routes": {**routes, "pr_run_queued_long": {"to": ["tester"]}}}
+    assert event_routes.targets(block, "pr_run_queued_long") == ["tester"]
+    assert event_routes.mode(block, "pr_run_queued_long") == "line"
+    assert event_routes.targets({"routes": {}}, "pr_run_queued_long") == []
 
 
 def test_a_gone_socket_ends_the_tail_and_its_presence(short_tmp, monkeypatch):

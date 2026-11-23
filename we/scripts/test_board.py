@@ -1126,6 +1126,18 @@ class TestOneWayGo:
         assert go(crewless, *argv) == 0  # a duplicate yes posts nothing again
         assert len(self.comments(crewless)) == 1
 
+    def test_the_same_yes_after_the_question_left_the_board_runs_nothing(self, crewless, capsys):
+        qid = self.ask_with_finding(crewless, capsys)
+        argv = ("answer", qid, "accept", "--session", "foxy", "--via", "chat")
+        assert go(crewless, *argv) == 0
+        go(crewless, "prune")
+        queue = board_of(crewless).get("owner_queue") or []
+        assert all(q.get("id") != qid for q in queue)
+        capsys.readouterr()
+        assert go(crewless, *argv) == 0
+        assert "is accepted and off the board; nothing runs again" in capsys.readouterr().out
+        assert len(self.comments(crewless)) == 1
+
     def test_a_pane_yes_posts_it_too(self, crewless, capsys):
         answer_mod = board._answer_module()
         qid = self.ask_with_finding(crewless, capsys)

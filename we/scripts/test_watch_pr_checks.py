@@ -450,6 +450,29 @@ def test_a_merged_or_closed_pr_is_never_red(tmp_path, state, code, word):
     assert (got, out) == (code, [f"final {SHA}: {word}"])
 
 
+@pytest.mark.parametrize(
+    "state, news, calls",
+    [("MERGED", "1", ["news merged --pr o/r#57"]), ("MERGED", "0", []), ("CLOSED", "1", [])],
+)
+def test_a_merge_hands_the_pr_to_the_board_news_once(tmp_path, state, news, calls):
+    """A merged PR goes to `board.py news merged` (it judges the rule paths); off with
+    WATCH_RULES_NEWS=0, never on a closed PR."""
+    log = tmp_path / "python3.log"
+    shim = tmp_path / "python3"
+    shim.write_text(
+        "#!/usr/bin/env bash\n"
+        f'case "$1" in */board.py) shift; echo "$*" >> "{log}"; exit 0 ;; esac\n'
+        f'exec "{shutil.which("python3")}" "$@"\n'
+    )
+    shim.chmod(0o755)
+    run(
+        tmp_path,
+        [_pending(_green()), {**_green(), "state": state}],
+        env_extra={"WATCH_RULES_NEWS": news},
+    )
+    assert (log.read_text().splitlines() if log.exists() else []) == calls
+
+
 def test_expected_head_waits_past_a_red_old_head(tmp_path):
     new = "c" * 40
     fresh = {**_green(), "headRefOid": new}
