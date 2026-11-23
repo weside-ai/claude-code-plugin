@@ -408,7 +408,7 @@ def release_data(minutes: int, title: str = "chore(release): v1.2.3-rc.2") -> di
     data = home()
     now = data["now"]
     created = es.iso(now - minutes * 60)
-    items = data["gh"]["repos/acme/app/issues?state=open&sort=created&direction=desc&per_page=30"]
+    items = data["gh"]["repos/acme/app/pulls?state=open&per_page=100"]
     pr = next(i for i in items if i["number"] == 52)
     pr["created_at"], pr["title"] = created, title
     run = data["gh"][
@@ -474,3 +474,39 @@ def test_a_title_with_a_line_break_never_matches_a_release(tmp_path):
         for e in run_round(tmp_path, data, seeded(), srcs=release_sources(tmp_path))
         if e.kind == "release_pr_blocked"
     ] == []
+
+
+# --- review rounds: dedupe window, a failed read, local checks ---------------------------------
+
+
+def test_an_issue_older_than_the_dedupe_window_is_never_news_again(tmp_path):
+    data = home()
+    items = data["gh"][
+        "repos/acme/infra/issues?state=open&sort=created&direction=desc&per_page=30"
+    ]
+    items[0]["created_at"] = es.iso(data["now"] - 15 * 86400)
+    srcs = {"issues": dict(sources(tmp_path)["issues"], repos=["acme/infra"])}
+    assert run_round(tmp_path, data, seeded(), srcs=srcs) == []
+
+
+def test_a_failed_required_checks_read_leaves_the_run_for_the_next_round(tmp_path):
+    data = home()
+    rules = data["gh"].pop("repos/acme/app/rules/branches/main")
+    srcs = {"red": sources(tmp_path)["red"][:1]}
+    state = seeded()
+    first = [e.object for e in run_round(tmp_path, data, state, srcs=srcs) if e.kind == "main_red"]
+    assert first == ["run:101"]  # run 103 needs the required names, which failed
+    data["gh"]["repos/acme/app/rules/branches/main"] = rules
+    later = run_round(tmp_path, data, state, now=data["now"] + 300, srcs=srcs)
+    assert [e.object for e in later if e.kind == "main_red"] == ["run:103"]
+
+
+def test_two_local_checks_fold_apart(tmp_path):
+    checks = []
+    for name in ("backup", "cert"):
+        script = tmp_path / name
+        script.write_text(f"#!/bin/sh\necho '{name} needs a look'\n")
+        script.chmod(0o755)
+        checks.append(str(script))
+    events = run_round(tmp_path, home(), seeded(), srcs={}, local_checks=checks)
+    assert len({e.object for e in events}) == 2

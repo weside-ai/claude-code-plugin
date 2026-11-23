@@ -93,6 +93,7 @@ class Tail:
         self.session_id = session_id
         self.clock, self.send = clock, send
         self.key = socket_key(socket_path)
+        self.names = {member.lower()}
         self.config = self.root / ".weside" / "config.json"
         self.block: dict = {"routes": {}}
         self.mtime: float | None = None
@@ -112,16 +113,21 @@ class Tail:
             board = json.loads(crew_mod.resolve_board(self.root).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
-        name = (self.member or "").lower()
-        for line in board.get("sessions") or [] if isinstance(board, dict) else []:
-            if not isinstance(line, dict):
-                continue
-            mine = (self.session_id and line.get("session_id") == self.session_id) or (
-                not self.session_id and str(line.get("name") or "").lower() == name
+        lines = (
+            [x for x in (board.get("sessions") or []) if isinstance(x, dict)]
+            if isinstance(board, dict)
+            else []
+        )
+        # this session's line by its id; else (a line the coordinator wrote without an id, an id
+        # that changed with /clear) by the member's slug or name
+        hit = next(
+            (x for x in lines if self.session_id and x.get("session_id") == self.session_id), None
+        )
+        if hit is None:
+            hit = next(
+                (x for x in lines if str(x.get("name") or "").strip().lower() in self.names), None
             )
-            if mine:
-                return line.get("state") == "parked"
-        return False
+        return bool(hit) and hit.get("state") == "parked"
 
     def presence_path(self) -> Path:
         return self.dir / "presence" / f"{self.key}.json"
@@ -151,6 +157,8 @@ class Tail:
             return
         self.mtime = mtime
         _, crew = ep.load_crew(self.root)
+        entry = (crew.get("members") or {}).get(self.member) or {}
+        self.names = {self.member.lower(), str(entry.get("name") or self.member).strip().lower()}
         with contextlib.suppress(routes_mod.EventsError):
             self.block = routes_mod.validate(
                 ep.read_block(self.config), crew
@@ -178,8 +186,8 @@ class Tail:
         """One cycle; the number of lines delivered. ``SessionGoneError`` when the socket is gone."""
         if not os.path.exists(self.sock):
             raise SessionGoneError()
-        self.write_presence()
         self.reload()
+        self.write_presence()
         now = self.clock()
         fold_s = int(self.block.get("fold_s", 600))
         cursor = int(self.state.get("cursor") or 0)

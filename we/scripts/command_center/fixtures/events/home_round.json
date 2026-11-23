@@ -301,12 +301,38 @@
     }
    }
   ],
-  "repos/acme/app/pulls/52": {
-   "head": {
-    "sha": "cccccccccccccccccccccccccccccccccccccccc"
+  "repos/acme/app/pulls?state=open&per_page=100": [
+   {
+    "base": {
+     "ref": "main"
+    },
+    "created_at": "2026-11-20T11:29:00Z",
+    "head": {
+     "sha": "cccccccccccccccccccccccccccccccccccccccc"
+    },
+    "html_url": "https://github.com/acme/app/pull/52",
+    "number": 52,
+    "title": "chore(release): v1.2.3-rc.2",
+    "user": {
+     "login": "release-bot[bot]"
+    }
    },
-   "number": 52
-  },
+   {
+    "base": {
+     "ref": "main"
+    },
+    "created_at": "2026-11-20T11:20:00Z",
+    "head": {
+     "sha": "dddddddddddddddddddddddddddddddddddddddd"
+    },
+    "html_url": "https://github.com/acme/app/issues/51",
+    "number": 51,
+    "title": "a PR",
+    "user": {
+     "login": "carol"
+    }
+   }
+  ],
   "repos/acme/app/rules/branches/main": "test\nClaude Review",
   "repos/acme/infra/actions/runs?branch=main&status=failure&per_page=5": {
    "workflow_runs": [
@@ -371,6 +397,7 @@
    "2026-11-20T12:00:00Z RC-HÄNGT staging deployment api über der Progress-Deadline seit 2026-11-20T11:40:00Z",
    "2026-11-20T12:00:00Z INBOX überholter Dispatch main-loop (main, neuerer da) core/311 · überholter Dispatch main-loop (release, > 6 h queued) core/313 · Issue app#53 \"main red\" (app/main-red) · Issue app#50 \"issue 50\" (alice) · Issue infra#7 \"issue 7\" (bob) · rate_limit core remaining 4321"
   ],
+  "note": "the home watcher found release PRs in the issue list (pulls/<n> for the head); the plugin reads the open PR list, same PRs",
   "recorded": "we-ci-watch --once over these inputs (names renamed to acme); state seeded for issues and rc"
  },
  "kubectl": {

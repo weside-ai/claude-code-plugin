@@ -264,3 +264,47 @@ def test_presence_older_than_a_minute_is_no_receiver(tmp_path):
     presence(tmp_path, "old", "kiska", at=time.time() - 120)
     presence(tmp_path, "new", "kiska", at=time.time())
     assert [p["name"] for p in ep.presences(tmp_path, time.time())] == ["new"]
+
+
+def test_a_lost_state_file_continues_the_sequence(tmp_path, monkeypatch):
+    root = project(tmp_path)
+    folder = tmp_path / "events"
+    poller(tmp_path, root, [release_pr(1)], monkeypatch).round()
+    (folder / "state.json").unlink()
+    poller(tmp_path, root, [release_pr(2)], monkeypatch).round()
+    assert [r["seq"] for r in rows(folder, "events.jsonl")] == [1, 2]
+
+
+def test_a_timeout_names_only_the_roles_not_delivered_and_counts_not_routed_as_undelivered(
+    tmp_path, monkeypatch
+):
+    root = project(tmp_path, {**ROUTES, "rc_verdict_red": {"to": ["machinery", "tester"]}})
+    folder = tmp_path / "events"
+    presence(folder, "kiska-1", "kiska")
+    presence(folder, "smoke-1", "smoke")
+    now = [NOW]
+    ev = es.Event(
+        "rc_verdict_red", "rc:acme/app:1", "run:1", None, {"repo": "acme/app", "run_id": 1}
+    )
+    p = poller(tmp_path, root, [ev], monkeypatch, clock=lambda: now[0])
+    p.round()
+    ep.append_rows(
+        folder / "ledger.jsonl",
+        [
+            {"id": ev.id, "to": "kiska-1", "delivered": True, "reason": "delivered"},
+            {"id": ev.id, "to": "smoke-1", "delivered": False, "reason": "not routed"},
+        ],
+    )
+    now[0] = NOW + 200
+    p.round()
+    assert [(d["role"], d["reason"]) for d in rows(folder, "delta.jsonl")] == [
+        ("tester", "not delivered")
+    ]
+
+
+def test_the_loop_ends_when_its_project_config_is_gone(tmp_path, monkeypatch):
+    monkeypatch.setenv("WE_STATE_DIR", str(tmp_path / "state"))
+    root = project(tmp_path)
+    (root / ".weside" / "config.json").unlink()
+    assert ep.run_loop(root, rounds=5) == 0
+    assert not ep.lock_held(ep.events_dir(root))

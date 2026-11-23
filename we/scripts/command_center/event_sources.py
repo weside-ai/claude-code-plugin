@@ -23,7 +23,8 @@ Kinds and their config keys (``events.sources.<key>``):
     queued list as ``run_queued_long`` (one call), so both need the same repo.
 ``issue_new`` (``issues``: ``{repos, skip_authors}``)
     A new open issue (never a pull request, never one of ``skip_authors``). The first round per
-    repo records the open issues silently: only what comes after is news.
+    repo records the open issues silently: only what comes after is news. An issue older than the
+    14-day dedupe window is never news (its seen key aged out, the issue did not).
 ``rc_verdict_red`` / ``rc_verdict_green`` (``rc``: ``{repo, workflow, plan_job, status_context,
 tag_pattern, tag_refs, clone, issue_titles: {red, infra}}``)
     Per completed ``workflow_dispatch`` run of the loop workflow on a release candidate: the plan
@@ -36,7 +37,7 @@ tag_pattern, tag_refs, clone, issue_titles: {red, infra}}``)
     24 h is never news; an unreadable plan log is retried two rounds, then reported with tag ``?``.
 ``release_pr_blocked`` / ``prod_gate_blocked`` (``release_pr``: ``{repo, rc_title, prod_title,
 wait_min}``)
-    An open bot pull request whose title matches ``rc_title`` (group 1 the tag) is blocked when it
+    From the open pull request list (one call): an open bot pull request whose title matches ``rc_title`` (group 1 the tag) is blocked when it
     is older than ``wait_min`` (default 30) minutes, and once per red check (a required one; any
     red check when the branch requires none). ``prod_title`` matches a production release: the
     same findings are ``prod_gate_blocked``, damage. The title only matches; it never reaches a
@@ -256,18 +257,20 @@ class Round:
             self.errors.append(f"gh {where}: no JSON")
             return None
 
-    def required(self, repo: str, branch: str = "main") -> set[str]:
-        """The branch's required check names, cached 1 h (``required_checks.sh``)."""
-        hit = self.req.get(repo)
+    def required(self, repo: str, branch: str = "main") -> set[str] | None:
+        """The branch's required check names, cached 1 h (``required_checks.sh``); None when the
+        script failed and nothing is cached: the caller retries next round, never judges."""
+        cache = f"{repo}@{branch}"
+        hit = self.req.get(cache)
         if hit and self.now - hit.get("ts", 0) < HOUR:
             return set(hit.get("names") or [])
         out = self._exec(["bash", str(REQUIRED_CHECKS), "--repo", repo, branch], 120)
         if out is None or out.returncode != 0:
             if out is not None:
                 self.errors.append(f"required_checks {repo}: exit {out.returncode}")
-            return set(hit.get("names") or []) if hit else set()
+            return set(hit.get("names") or []) if hit else None
         names = [n for n in out.stdout.splitlines() if n.strip()]
-        self.req[repo] = {"ts": self.now, "names": names}
+        self.req[cache] = {"ts": self.now, "names": names}
         return set(names)
 
     def open_items(self, repo: str) -> list | None:
@@ -331,6 +334,8 @@ class Round:
                 why = "list" if relevant and relevant.match(run.get("name") or "") else None
                 if why is None:
                     names = self.required(repo, branch)
+                    if names is None:
+                        continue  # required checks unreadable: next round judges the run
                     jk = str(run["id"])
                     if jk not in self.jobs:
                         j = self.gh(
@@ -437,6 +442,9 @@ class Round:
                 if "pull_request" in i or (i.get("user") or {}).get("login") in skip:
                     continue
                 key = f"issue:{repo}#{i['number']}"
+                if self.age_s(i.get("created_at")) > KEEP_S - HOUR:
+                    self.seen[key] = self.now  # older than the dedupe window: never news again
+                    continue
                 if self.new(key) and not first:
                     self.emit(
                         "issue_new",
@@ -598,10 +606,11 @@ class Round:
             ("release_pr_blocked", cfg.get("rc_title"), rc_tag),
             ("prod_gate_blocked", cfg.get("prod_title"), prod_tag),
         ]
-        for pr in self.open_items(repo) or []:
-            if "pull_request" not in pr or not (pr.get("user") or {}).get("login", "").endswith(
-                "[bot]"
-            ):
+        # the open PRs on their own (not the shared issue list): a busy repo pushes a release PR
+        # past the newest 30 issues; the list carries each head sha, so no call per PR
+        pulls = self.gh(f"repos/{repo}/pulls?state=open&per_page=100")
+        for pr in pulls if isinstance(pulls, list) else []:
+            if not (pr.get("user") or {}).get("login", "").endswith("[bot]"):
                 continue
             match = None
             for kind, pat, tag_re in pats:
@@ -615,6 +624,8 @@ class Round:
             n = int(pr["number"])
             mins = int(self.age_s(pr.get("created_at")) // 60)
             key = f"rchang:{repo}:pr:{n}:age"
+            if mins > KEEP_S // 60 - 60:
+                self.seen[key] = self.now  # older than the dedupe window: reported long ago
             if mins > wait and self.new(key):
                 self.emit(
                     kind,
@@ -626,11 +637,13 @@ class Round:
                     tag=tag,
                     mins=mins,
                 )
-            head = (self.gh(f"repos/{repo}/pulls/{n}") or {}).get("head", {}).get("sha")
+            head = (pr.get("head") or {}).get("sha")
             if not head:
                 continue
+            names = self.required(repo, (pr.get("base") or {}).get("ref") or "main")
+            if names is None:
+                continue  # required checks unreadable: next round
             cr = self.gh(f"repos/{repo}/commits/{head}/check-runs?filter=latest&per_page=100")
-            names = self.required(repo)
             for c in (cr or {}).get("check_runs", []):
                 key = f"rchang:{repo}:pr:{n}:{c.get('id')}"
                 if (
@@ -794,7 +807,8 @@ class Round:
                 kind = "disk" if text.split()[0].lower() == "disk" else "local_check"
                 key = f"local:{kind}:{int(self.now)}:{event_id(text)}"
                 self.new(key)
-                self.emit(kind, key, kind, iso(self.now), text=text)
+                # one fold object per command and kind: two checks never fold each other's lines
+                self.emit(kind, key, f"{kind}:{event_id(command)}", iso(self.now), text=text)
 
     def error_event(self) -> None:
         if self.errors and self.now - self.st.get("error_ts", 0) >= HOUR:

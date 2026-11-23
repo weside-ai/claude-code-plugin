@@ -2,10 +2,10 @@
 """SessionStart hook: starts the crew's event poller and this session's event tail.
 
 Only in a project whose ``.weside/config.json`` has an ``events:`` block; elsewhere nothing,
-exit 0. Then:
+exit 0. A worker's session (or a consultation) starts nothing either. Otherwise:
 
-1. ``event_poller.ensure``: the project's one poller (``scripts/command_center/event_poller.py``),
-   unless one runs; it starts with ``HOME``, ``PATH`` and ``LANG`` only, never a ``CLAUDE_*``
+1. ``event_poller.ensure``: the project's one poller (``scripts/command_center/event_poller.py``,
+   rooted in the main worktree), unless one runs; it starts with ``HOME``, ``PATH`` and ``LANG`` only, never a ``CLAUDE_*``
    variable, so it holds no inbox token;
 2. ``event_tail.spawn``: this session's tail, only for a crew member's session (its pin) that is no
    worker; the tail gets the session's inbox socket and token in its environment, never in argv or
@@ -37,10 +37,10 @@ def start(hook_input: dict, environ: dict) -> list[str]:
     root = event_poller.project_root(cwd)
     if root is None or event_poller.read_block(root / ".weside" / "config.json") is None:
         return []
-    said = [event_poller.ensure(root, environ)]
     kind, _ = crew_mod.session_kind(environ, hook_input.get("agent_type"), hook_input)
     if kind in ("worker", "consult"):
-        return said
+        return []  # a worker neither hosts the crew's poller nor receives lines
+    said = [event_poller.ensure(root, environ)]
     env = dict(environ)
     if hook_input.get("session_id"):
         env["CLAUDE_CODE_SESSION_ID"] = str(hook_input["session_id"])

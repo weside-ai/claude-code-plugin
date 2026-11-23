@@ -87,7 +87,7 @@ def test_poller_without_claude_env_and_tail_with_the_socket(tmp_path, spawned):
 def test_a_worker_or_a_session_without_a_member_gets_no_tail(tmp_path, spawned):
     root = ter.project(tmp_path)
     worker = events_on_start.start({"cwd": str(root)}, environ(tmp_path, WE_ROLE="worker"))
-    assert worker == ["events: poller 4242 started"]
+    assert worker == [] and spawned.calls == []  # a worker hosts no poller, gets no tail
     plain = events_on_start.start({"cwd": str(root)}, environ(tmp_path))
     assert plain[-1] == "events: no tail (this session is no crew member)"
 

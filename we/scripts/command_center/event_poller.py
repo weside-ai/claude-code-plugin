@@ -117,8 +117,13 @@ def events_dir(root: Path, env: dict | None = None) -> Path:
 
 
 def project_root(start: str | Path | None = None) -> Path | None:
+    """The project as its main worktree holds it: a poller started from a worker's worktree must
+    not die with that worktree (its lock and state are the crew's, shared by every worktree)."""
     config = config_path(start)
-    return config.parent.parent if config is not None else None
+    if config is None:
+        return None
+    main = crew_mod._main_worktree_dir(config) / "config.json"
+    return main.parent.parent if main.is_file() else config.parent.parent
 
 
 def clean_env(env: dict | None = None) -> dict[str, str]:
@@ -286,6 +291,10 @@ class Poller:
             found = rnd.events
         live = presences(self.dir, now)
         seq = int(state.get("seq") or 0)
+        if "seq" not in state:  # a lost state file: continue past the rows the tails have seen
+            seq = max(
+                (int(r.get("seq") or 0) for r in read_rows(self.dir / "events.jsonl")), default=0
+            )
         rows, delta = [], []
         pending = state.setdefault("pending", {})
         for ev in found:
@@ -300,12 +309,11 @@ class Poller:
             if to:
                 pending[row["id"]] = {
                     "at": now,
-                    "to": [a["session"] for a in to],
+                    "to": [[a["session"], a["as"]] for a in to],
                     "kind": row["kind"],
                     "object": row["object"],
                     "line": line,
                     "damage": row["damage"],
-                    "as": [a["as"] for a in to],
                 }
             if escalate:
                 state.setdefault("news", {})[row["id"]] = line
@@ -347,11 +355,17 @@ class Poller:
         pending = state.get("pending") or {}
         if not pending:
             return []
-        done = {(r.get("id"), r.get("to")) for r in read_rows(self.dir / "ledger.jsonl")}
+        # handled: a line went out, or folded into one that did, or waits for the digest; a tail
+        # that judged the row "not routed" (its routes differ) leaves it undelivered
+        done = {
+            (r.get("id"), r.get("to"))
+            for r in read_rows(self.dir / "ledger.jsonl")
+            if r.get("delivered") or r.get("reason") in ("folded", "digest")
+        }
         out = []
         for eid in list(pending):
             p = pending[eid]
-            left = [s for s in p.get("to", []) if (eid, s) not in done]
+            left = [pair for pair in p.get("to", []) if (eid, pair[0]) not in done]
             if not left:
                 del pending[eid]
             elif now - float(p.get("at") or 0) >= timeout:
@@ -361,7 +375,7 @@ class Poller:
                     "object": p.get("object"),
                     "damage": p.get("damage"),
                 }
-                roles = sorted(set(p.get("as") or [])) or ["?"]
+                roles = sorted({pair[1] for pair in left}) or ["?"]
                 out += [
                     self._delta(row, r, p.get("line", ""), now, "not delivered") for r in roles
                 ]
@@ -472,6 +486,10 @@ def run_loop(root: Path, rounds: int | None = None) -> int:
     log(f"start pid={os.getpid()}")
     n = 0
     while True:
+        if not poller.config.is_file():
+            log("stop: the project's config is gone")
+            os.close(fd)  # frees the lock for the next ensure
+            return 0
         try:
             beat = poller.round()
         except Exception as exc:

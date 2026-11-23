@@ -282,3 +282,18 @@ def test_member_and_roles_from_the_pin(short_tmp):
         [],
     )
     assert et.member_and_roles(root, {}) == (None, [])
+
+
+def test_parked_falls_back_to_the_member_name_without_a_session_id(short_tmp, monkeypatch):
+    _, _, _, inboxes, tails = setup(short_tmp, monkeypatch)
+    try:
+        board = short_tmp / "state" / "board.json"
+        board.parent.mkdir(parents=True, exist_ok=True)
+        board.write_text(json.dumps({"sessions": [{"name": "Smoke", "state": "parked"}]}))
+        monkeypatch.setenv("WE_STATE_DIR", str(board.parent))
+        tails["smoke"].session_id = "s-new"  # /clear gave the session a new id
+        tails["smoke"].cycle()
+        assert json.loads(tails["smoke"].presence_path().read_text())["parked"] is True
+    finally:
+        for inbox in inboxes.values():
+            inbox.close()
