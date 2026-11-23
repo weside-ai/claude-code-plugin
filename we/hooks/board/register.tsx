@@ -194,7 +194,9 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
     const ts = new Date(await $.clock.now()).toISOString()
     const run = await $.process.run(
       ['python3', '-I', `${$.plugin.root}/hooks/board/answer.py`, path, id, answer, ts, ...(me ? [me] : [])],
-      { timeoutMs: 10_000 },
+      // Longer than answer.py's own wait on the go comment (GH_TIMEOUT_S): a kill mid-post would
+      // toast a saved answer as lost and could post the comment twice.
+      { timeoutMs: 45_000 },
     )
     // Exit 3: the line is saved, but the go comment a skipped Codex finding needs failed to post (answer.py).
     if (run.exitCode === 3) $.ui.toast(`board: ${run.stderr.trim() || `${id}: the go comment on the PR failed`}`)
