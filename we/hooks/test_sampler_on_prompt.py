@@ -145,7 +145,7 @@ class TestMarkers:
         ts = heartbeat(ws, 20)
         assert hook(ws, session="sid-lead") == []
         # the first marker today prunes
-        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})"]
+        assert hook(ws, "otto") == [f"sampler: stale since 20 min (last line {ts})", BLOCKED_LINE]
         assert sorted(p.name for p in notified.iterdir()) == sorted(
             {yesterday, datetime.now(timezone.utc).strftime("%Y-%m-%d")}
         )
@@ -198,8 +198,24 @@ class TestBlocked:
         board(ws, again)  # a new wait
         assert len(hook(ws, session="sid-lead")) == 1
 
+    def test_the_coordinator_hears_a_permission_wait_until_the_poller_routes_it(self, ws):
+        board(ws, BLOCKED)
+        heartbeat(ws, 1)
+        assert len(hook(ws, "otto")) == 1  # no events block: this hook still tells it
+
     def test_only_the_starter_hears_it_not_the_coordinator(self, ws):
-        """The coordinator's one source for an open prompt is the event poller."""
+        """Where the event poller routes open prompts, it is the coordinator's one source."""
+        (ws / "repo" / ".weside" / "config.json").write_text(
+            json.dumps(
+                {
+                    "events": {
+                        "sources": {"sessions": {}},
+                        "routes": {"permission_prompt": {"to": ["coordinator"]}},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
         board(ws, BLOCKED)
         heartbeat(ws, 1)
         assert hook(ws, "otto") == []
