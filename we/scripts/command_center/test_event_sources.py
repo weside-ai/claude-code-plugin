@@ -787,7 +787,7 @@ def test_prod_tag_run_red_at_the_gate_is_one_damage_event(tmp_path):
     """The prod tag run red at the gate: one line, gate job first; the RC tag run red beside it,
     the green run and the run older than 24 h say nothing; a second round says nothing again."""
     data = prod_data()
-    state = seeded("prod_release")
+    state = seeded("prod_release:acme/app:release.yml")
     events = prod_round(tmp_path, data, state)
     assert [(e.kind, e.object) for e in events] == [("prod_gate_blocked", "run:702")]
     assert lines_of(events, data["now"]) == [
@@ -805,7 +805,7 @@ def test_prod_tag_run_unfinished_past_its_wait(tmp_path, minutes, found):
     run = data["gh"][PROD_RUNS]["workflow_runs"][0]
     run["status"], run["conclusion"] = "queued", None
     run["created_at"] = run["run_started_at"] = es.iso(data["now"] - minutes * 60)
-    state = seeded("prod_release")
+    state = seeded("prod_release:acme/app:release.yml")
     events = prod_round(tmp_path, data, state)
     assert len(events) == found
     if found:
@@ -822,7 +822,7 @@ def test_prod_rc_tag_run_red_is_never_a_prod_event(tmp_path):
     data = prod_data()
     runs = data["gh"][PROD_RUNS]["workflow_runs"]
     runs[:] = [r for r in runs if r["head_branch"].endswith("-rc.4")]
-    assert prod_round(tmp_path, data, seeded("prod_release")) == []
+    assert prod_round(tmp_path, data, seeded("prod_release:acme/app:release.yml")) == []
 
 
 def test_prod_first_round_is_silent(tmp_path):
@@ -847,7 +847,7 @@ def test_prod_first_round_is_silent(tmp_path):
 def test_prod_jobs_unreadable_leaves_the_run_for_the_next_round(tmp_path):
     data = prod_data()
     jobs = data["gh"].pop("repos/acme/app/actions/runs/702/jobs?filter=latest&per_page=100")
-    state = seeded("prod_release")
+    state = seeded("prod_release:acme/app:release.yml")
     assert [e for e in prod_round(tmp_path, data, state) if e.kind == "prod_gate_blocked"] == []
     data["gh"]["repos/acme/app/actions/runs/702/jobs?filter=latest&per_page=100"] = jobs
     later = prod_round(tmp_path, data, state, now=data["now"] + 300)
@@ -857,4 +857,31 @@ def test_prod_jobs_unreadable_leaves_the_run_for_the_next_round(tmp_path):
 def test_prod_tag_with_a_trailing_line_break_never_matches(tmp_path):
     data = prod_data()
     data["gh"][PROD_RUNS]["workflow_runs"][0]["head_branch"] = "v1.2.4\n"
-    assert prod_round(tmp_path, data, seeded("prod_release")) == []
+    assert prod_round(tmp_path, data, seeded("prod_release:acme/app:release.yml")) == []
+
+
+def test_prod_run_that_waited_and_then_failed_is_reported_twice(tmp_path):
+    data = prod_data()
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    run["status"], run["conclusion"] = "waiting", None
+    state = seeded("prod_release:acme/app:release.yml")
+    assert [e.fields["status"] for e in prod_round(tmp_path, data, state)] == ["waiting"]
+    run["status"], run["conclusion"] = "completed", "failure"
+    later = prod_round(tmp_path, data, state, now=data["now"] + 300)
+    assert [e.fields.get("gate") for e in later] == ["Release gate"]
+
+
+def test_prod_rerun_of_a_reported_run_is_reported_again(tmp_path):
+    data = prod_data()
+    state = seeded("prod_release:acme/app:release.yml")
+    assert len(prod_round(tmp_path, data, state)) == 1
+    data["gh"][PROD_RUNS]["workflow_runs"][0]["run_attempt"] = 2
+    assert len(prod_round(tmp_path, data, state, now=data["now"] + 300)) == 1
+
+
+def test_prod_run_unfinished_for_more_than_a_day_is_still_news(tmp_path):
+    data = prod_data()
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    run["status"], run["conclusion"] = "waiting", None
+    run["created_at"] = run["run_started_at"] = es.iso(data["now"] - 30 * es.HOUR)
+    assert [e.fields["mins"] for e in prod_round(tmp_path, data, {})] == [30 * 60]

@@ -624,6 +624,8 @@ PROD_OK = {"repo": "acme/app", "workflow": "release.yml", "gate_job": "Release g
         (dict(PROD_OK, wait_min=0), "sources.prod_release.wait_min must be"),
         (dict(PROD_OK, gate_job=" "), "sources.prod_release.gate_job must be"),
         (dict(PROD_OK, repo="app"), "source repo 'app' is not owner/name"),
+        ({"workflow": "release.yml"}, "sources.prod_release.repo must be owner/name"),
+        (dict(PROD_OK, tag_pattern=r"^v\d+\.\d+\.\d+(-rc\d+)?$"), "takes the RC tag 'v1.2.3-rc1'"),
     ],
 )
 def test_prod_release_source_refused_by_name(cfg, error):

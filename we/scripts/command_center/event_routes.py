@@ -36,8 +36,8 @@ unknown role 'x'``), a ``mode`` other than ``line``/``digest``, a non-boolean ``
 unknown key of the block or of a route, a non-boolean ``push`` (``events: route 'x': push must be
 true or false``), a ``push`` block without ``url_env`` and ``wrapper``, a source repo that is
 no ``owner/name``, and a ``sources.prod_release`` with an unknown key, no workflow file name, a
-``tag_pattern`` that does not compile or takes an RC tag (``v1.2.3-rc.1``), a ``wait_min`` below 1
-or an empty ``gate_job``.
+``tag_pattern`` that does not compile or takes a pre-release tag of ``RC_SAMPLES``, a ``wait_min``
+below 1, an empty ``gate_job`` or no ``repo``.
 
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
 ``config_error`` go to ``machinery`` when no route names them. ``damage`` is true for a kind of
@@ -76,6 +76,7 @@ _BODY_KEY = re.compile(r"^[A-Za-z_]{1,32}$")
 _WAITING = re.compile(r"^[a-z]+( [a-z]+){0,3}$")
 _PUSH_REASON = re.compile(r"^[A-Za-z0-9 ]{1,40}$")
 _WORKFLOW = re.compile(r"^[A-Za-z0-9._-]{1,100}\.ya?ml$")
+RC_SAMPLES = ("v1.2.3-rc.1", "v1.2.3-rc1", "v1.2.3rc1", "1.2.3-rc.1", "v1.2.3-beta.1")
 PROD_RELEASE_KEYS = ("repo", "workflow", "tag_pattern", "wait_min", "gate_job")
 
 BLOCK_KEYS = (
@@ -208,6 +209,8 @@ def _validate_prod_release(cfg: Any) -> None:
     for key in cfg:
         if key not in PROD_RELEASE_KEYS:
             raise EventsError(f"{where} has unknown key '{key}'")
+    if "repo" not in cfg:
+        raise EventsError(f"{where}.repo must be owner/name")
     if not isinstance(cfg.get("workflow"), str) or not _WORKFLOW.match(cfg["workflow"]):
         raise EventsError(f"{where}.workflow must be the workflow's file name")
     pattern = cfg.get("tag_pattern", PROD_TAG)
@@ -217,8 +220,9 @@ def _validate_prod_release(cfg: Any) -> None:
         tag_re = None
     if tag_re is None:
         raise EventsError(f"{where}.tag_pattern must be a regular expression")
-    if tag_re.fullmatch("v1.2.3-rc.1"):
-        raise EventsError(f"{where}.tag_pattern takes the RC tag 'v1.2.3-rc.1'")
+    for rc in RC_SAMPLES:
+        if tag_re.fullmatch(rc):
+            raise EventsError(f"{where}.tag_pattern takes the RC tag '{rc}'")
     wait = cfg.get("wait_min", 30)
     if not isinstance(wait, int) or isinstance(wait, bool) or wait < 1:
         raise EventsError(f"{where}.wait_min must be a whole number >= 1")
