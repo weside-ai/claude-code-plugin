@@ -105,6 +105,13 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
     for repo in _repos(sources):
         if not repo_ok(repo):
             raise EventsError(f"events: source repo '{repo}' is not owner/name")
+    contexts = (
+        (sources.get("rc") or {}).get("status_contexts", [])
+        if isinstance(sources.get("rc"), dict)
+        else []
+    )
+    if not isinstance(contexts, list) or not all(isinstance(c, str) and c for c in contexts):
+        raise EventsError("events: sources.rc.status_contexts must be a list of status contexts")
     routes = out.get("routes") or {}
     if not isinstance(routes, dict):
         raise EventsError("events: routes must be an object")

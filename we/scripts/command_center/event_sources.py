@@ -25,12 +25,13 @@ Kinds and their config keys (``events.sources.<key>``):
     A new open issue (never a pull request, never one of ``skip_authors``). The first round per
     repo records the open issues silently: only what comes after is news. An issue older than the
     14-day dedupe window is never news (its seen key aged out, the issue did not).
-``rc_verdict_red`` / ``rc_verdict_green`` (``rc``: ``{repo, workflow, plan_job, status_context,
+``rc_verdict_red`` / ``rc_verdict_green`` (``rc``: ``{repo, workflow, plan_job, status_contexts,
 tag_pattern, tag_refs, clone, issue_titles: {red, infra}}``)
     Per completed ``workflow_dispatch`` run of the loop workflow on a release candidate: the plan
     job's log names ``"target": "rc"`` and the sha (fallback the ``REF: <sha>`` line); the verdict
-    is the ``status_context`` commit status of that run on the sha (``success`` green, ``failure``
-    red, ``error`` infra), else the run's conclusion (``cancelled``, ``timed_out``: infra). The tag
+    is the commit status of that run on the sha under the first of ``status_contexts`` (a list, in
+    order: a renamed context runs beside the old one for a while) the sha carries (``success``
+    green, ``failure`` red, ``error`` infra), else the run's conclusion (``cancelled``, ``timed_out``: infra). The tag
     comes from ``git ls-remote --tags origin <tag_refs>`` in ``clone`` (default the project root).
     The cause of a red or infra verdict is the open issue titled ``issue_titles[verdict]``, else
     the run's red job names. The first round records the completed runs silently; a run older than
@@ -518,7 +519,17 @@ class Round:
                 info.setdefault("ref", m.group(1))
         return info
 
-    def rc_verdicts(self) -> None:  # noqa: PLR0912
+    def rc_status(self, repo: str, sha: str, run_id: Any, contexts: list[str]) -> str | None:
+        """The verdict of run ``run_id`` on ``sha`` under the first of ``contexts`` present."""
+        sts = self.gh(f"repos/{repo}/commits/{sha}/statuses?per_page=100") or []
+        ours = [x for x in sts if f"/runs/{run_id}/" in (x.get("target_url") or "") + "/"]
+        for context in contexts:
+            hit = [x for x in ours if x.get("context") == context]
+            if hit:  # the list is newest first: the first is the current state
+                return VERDICT.get(hit[0].get("state"))
+        return None
+
+    def rc_verdicts(self) -> None:
         cfg = self.src["rc"]
         repo = cfg["repo"]
         tag_re = re.compile(cfg.get("tag_pattern") or r"^v\d+\.\d+\.\d+-rc\.\d+$")
@@ -548,17 +559,11 @@ class Round:
             if not info.get("unread") and info.get("target") != "rc" and sha not in tags:
                 self.seen[key] = self.now
                 continue  # no release candidate
-            verdict = None
-            if sha:
-                sts = self.gh(f"repos/{repo}/commits/{sha}/statuses?per_page=100") or []
-                hit = [
-                    x
-                    for x in sts
-                    if x.get("context") == cfg.get("status_context")
-                    and f"/runs/{run['id']}/" in (x.get("target_url") or "") + "/"
-                ]
-                if hit:
-                    verdict = VERDICT.get(hit[0].get("state"))
+            verdict = (
+                self.rc_status(repo, sha, run["id"], cfg.get("status_contexts") or [])
+                if sha
+                else None
+            )
             verdict = verdict or {"success": "green", "failure": "red"}.get(
                 run.get("conclusion"), "infra"
             )

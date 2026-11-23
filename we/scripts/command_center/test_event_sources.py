@@ -77,7 +77,7 @@ def sources(tmp: Path) -> dict:
             "repo": "acme/app",
             "workflow": "main-loop.yml",
             "plan_job": "Suite plan",
-            "status_context": "suite/full",
+            "status_contexts": ["suite/full", "suite/rc"],
             "tag_pattern": TAG_RE,
             "tag_refs": "refs/tags/v*-rc.*",
             "issue_titles": {"red": "main red", "infra": "ci infra red"},
@@ -360,6 +360,23 @@ def test_rc_verdict(tmp_path, conclusion, status, line):
     )
     again = run_round(tmp_path, data, state, now=data["now"] + 300, srcs=srcs)
     assert [e for e in again if e.kind.startswith("rc_verdict")] == []
+
+
+@pytest.mark.parametrize("contexts", [["suite/rc"], ["suite/full", "suite/rc"]])
+def test_rc_verdict_reads_the_first_configured_context_present(tmp_path, contexts):
+    """A renamed status context: the sha carries only the new name, or both while they overlap."""
+    data = rc_data("success", None, home()["now"])
+    url = "https://github.com/acme/app/actions/runs/401/job/4012"
+    data["gh"]["repos/acme/app/commits/" + "a" * 40 + "/statuses?per_page=100"] = [
+        {"context": c, "state": "failure", "target_url": url} for c in contexts
+    ] + [{"context": "suite/other", "state": "success", "target_url": url}]
+    srcs = {k: v for k, v in sources(tmp_path).items() if k in RC_ONLY}
+    events = [
+        e
+        for e in run_round(tmp_path, data, seeded(), srcs=srcs)
+        if e.kind.startswith("rc_verdict")
+    ]
+    assert [(e.kind, e.fields["verdict"]) for e in events] == [("rc_verdict_red", "red")]
 
 
 def test_first_round_is_silent_then_one_new_issue_is_one_event(tmp_path):

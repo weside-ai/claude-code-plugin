@@ -245,6 +245,10 @@ def test_validate_refuses_unknown_keys_and_bad_repos():
         event_routes.validate({"sources": {"rc": {"repo": "app; rm"}}}, CREW)
     with pytest.raises(event_routes.EventsError, match="mode must be"):
         event_routes.validate({"routes": {"main_red": {"to": ["kiska"], "mode": "x"}}}, CREW)
+    with pytest.raises(event_routes.EventsError, match="status_contexts must be a list"):
+        event_routes.validate(
+            {"sources": {"rc": {"repo": "a/b", "status_contexts": "suite/rc"}}}, CREW
+        )
     block = event_routes.validate(
         {"routes": {"issue_new": {"to": ["kiska"], "mode": "digest"}}}, CREW
     )
