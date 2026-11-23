@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -572,3 +573,62 @@ def test_push_on_another_kind_posts_that_kinds_line_and_never_twice(tmp_path, mo
     assert posts == [event_routes.line(row)] and posts[0].startswith("release PR #7")
     assert event_routes.render(row) == posts[0] + " · push"
     assert p.push(row["id"], "again", p.block, NOW + 60) == "sent" and len(posts) == 1
+
+
+def prod_run(run_id: int) -> es.Event:
+    return es.Event(
+        "prod_gate_blocked",
+        f"prod:acme/app:{run_id}",
+        f"run:{run_id}",
+        None,
+        {
+            "repo": "acme/app",
+            "tag": "v1.2.4",
+            "run_id": run_id,
+            "conclusion": "failure",
+            "gate": "Release gate",
+            "jobs": ["Release gate"],
+        },
+    )
+
+
+def test_prod_tag_run_without_a_tester_goes_to_the_coordinator_and_the_board(
+    tmp_path, monkeypatch
+):
+    root = project(tmp_path)
+    folder = tmp_path / "events"
+    presence(folder, "samu-1", "samu")
+    p = poller(tmp_path, root, [prod_run(702)], monkeypatch)
+    p.round()
+    row = rows(folder, "events.jsonl")[0]
+    assert row["damage"] is True
+    assert row["to"] == [{"session": "samu-1", "as": "coordinator"}]
+    news = [a for a in p.run.argv if "news" in a]
+    assert len(news) == 1 and news[0][news[0].index("--kind") + 1] == "gate"
+    assert news[0][news[0].index("--title") + 1] == (
+        "prod gate blocked · release v1.2.4 failure · gate refused: Release gate · cause: "
+        "Release gate · run https://github.com/acme/app/actions/runs/702"
+    )
+
+
+PROD_OK = {"repo": "acme/app", "workflow": "release.yml", "gate_job": "Release gate"}
+
+
+@pytest.mark.parametrize(
+    "cfg, error",
+    [
+        (dict(PROD_OK, tag="x"), "sources.prod_release has unknown key 'tag'"),
+        (dict(PROD_OK, workflow="../x"), "sources.prod_release.workflow must be"),
+        (dict(PROD_OK, tag_pattern="v("), "sources.prod_release.tag_pattern must be"),
+        (dict(PROD_OK, tag_pattern=r"^v\S+$"), "takes the RC tag 'v1.2.3-rc.1'"),
+        (dict(PROD_OK, wait_min=0), "sources.prod_release.wait_min must be"),
+        (dict(PROD_OK, gate_job=" "), "sources.prod_release.gate_job must be"),
+        (dict(PROD_OK, repo="app"), "source repo 'app' is not owner/name"),
+        ({"workflow": "release.yml"}, "sources.prod_release.repo must be owner/name"),
+        (dict(PROD_OK, tag_pattern=r"^v\d+\.\d+\.\d+(-rc\d+)?$"), "takes the RC tag 'v1.2.3-rc1'"),
+    ],
+)
+def test_prod_release_source_refused_by_name(cfg, error):
+    with pytest.raises(event_routes.EventsError, match=re.escape(error)):
+        event_routes.validate({"sources": {"prod_release": cfg}}, CREW)
+    event_routes.validate({"sources": {"prod_release": PROD_OK}}, CREW)

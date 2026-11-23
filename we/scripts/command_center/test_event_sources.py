@@ -758,3 +758,130 @@ def test_an_empty_sessions_block_is_on_with_its_defaults(tmp_path):
     found += sample(env, state, "rust_waiting", T0 + 60, {"sessions": {}})
     assert len(found) == 1
     assert event_routes.sessions_interval({"sources": {"sessions": {}}}) == 60
+
+
+# --- the production release as a tag push ------------------------------------------------------
+
+PROD = HERE / "fixtures" / "events" / "prod_release.json"
+PROD_RUNS = "repos/acme/app/actions/workflows/release.yml/runs?event=push&per_page=20"
+PROD_SRC = {
+    "prod_release": {
+        "repo": "acme/app",
+        "workflow": "release.yml",
+        "tag_pattern": r"^v\d+\.\d+\.\d+$",
+        "wait_min": 30,
+        "gate_job": "Release gate",
+    }
+}
+
+
+def prod_data() -> dict:
+    return json.loads(PROD.read_text(encoding="utf-8"))
+
+
+def prod_round(tmp: Path, data: dict, state: dict, now: float | None = None) -> list[es.Event]:
+    return run_round(tmp, data, state, now=now, srcs=PROD_SRC)
+
+
+def test_prod_tag_run_red_at_the_gate_is_one_damage_event(tmp_path):
+    """The prod tag run red at the gate: one line, gate job first; the RC tag run red beside it,
+    the green run and the run older than 24 h say nothing; a second round says nothing again."""
+    data = prod_data()
+    state = seeded("prod_release:acme/app:release.yml")
+    events = prod_round(tmp_path, data, state)
+    assert [(e.kind, e.object) for e in events] == [("prod_gate_blocked", "run:702")]
+    assert lines_of(events, data["now"]) == [
+        "prod gate blocked · release v1.2.4 failure · gate refused: Release gate · cause: "
+        "Release gate, smoke · run https://github.com/acme/app/actions/runs/702"
+    ]
+    assert "Ignore" not in json.dumps(events[0].fields)  # the commit message never enters
+    assert "prod_gate_blocked" in es.DAMAGE_KINDS
+    assert prod_round(tmp_path, data, state, now=data["now"] + 300) == []
+
+
+@pytest.mark.parametrize("minutes, found", [(31, 1), (29, 0)])
+def test_prod_tag_run_unfinished_past_its_wait(tmp_path, minutes, found):
+    data = prod_data()
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    run["status"], run["conclusion"] = "queued", None
+    run["created_at"] = run["run_started_at"] = es.iso(data["now"] - minutes * 60)
+    state = seeded("prod_release:acme/app:release.yml")
+    events = prod_round(tmp_path, data, state)
+    assert len(events) == found
+    if found:
+        assert lines_of(events, data["now"]) == [
+            "prod gate blocked · release v1.2.4 waiting 31 min (queued) · "
+            "run https://github.com/acme/app/actions/runs/702"
+        ]
+        calls = (tmp_path / "inputs.json.calls").read_text()
+        assert "/jobs" not in calls  # jobs only for a run that turned red
+        assert prod_round(tmp_path, data, state, now=data["now"] + 300) == []
+
+
+def test_prod_rc_tag_run_red_is_never_a_prod_event(tmp_path):
+    data = prod_data()
+    runs = data["gh"][PROD_RUNS]["workflow_runs"]
+    runs[:] = [r for r in runs if r["head_branch"].endswith("-rc.4")]
+    assert prod_round(tmp_path, data, seeded("prod_release:acme/app:release.yml")) == []
+
+
+def test_prod_first_round_is_silent(tmp_path):
+    """An empty state records the completed runs; a prod run that fails later is news."""
+    data = prod_data()
+    state: dict = {}
+    assert prod_round(tmp_path, data, state) == []
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    data["gh"][PROD_RUNS]["workflow_runs"].insert(
+        0, dict(run, id=703, head_branch="v1.2.5", created_at=es.iso(data["now"] - 600))
+    )
+    data["gh"]["repos/acme/app/actions/runs/703/jobs?filter=latest&per_page=100"] = {
+        "jobs": [{"name": "deploy", "conclusion": "cancelled"}]
+    }
+    events = prod_round(tmp_path, data, state, now=data["now"] + 300)
+    assert lines_of(events, data["now"]) == [
+        "prod gate blocked · release v1.2.5 failure · cause: deploy · "
+        "run https://github.com/acme/app/actions/runs/703"
+    ]
+
+
+def test_prod_jobs_unreadable_leaves_the_run_for_the_next_round(tmp_path):
+    data = prod_data()
+    jobs = data["gh"].pop("repos/acme/app/actions/runs/702/jobs?filter=latest&per_page=100")
+    state = seeded("prod_release:acme/app:release.yml")
+    assert [e for e in prod_round(tmp_path, data, state) if e.kind == "prod_gate_blocked"] == []
+    data["gh"]["repos/acme/app/actions/runs/702/jobs?filter=latest&per_page=100"] = jobs
+    later = prod_round(tmp_path, data, state, now=data["now"] + 300)
+    assert [e.object for e in later if e.kind == "prod_gate_blocked"] == ["run:702"]
+
+
+def test_prod_tag_with_a_trailing_line_break_never_matches(tmp_path):
+    data = prod_data()
+    data["gh"][PROD_RUNS]["workflow_runs"][0]["head_branch"] = "v1.2.4\n"
+    assert prod_round(tmp_path, data, seeded("prod_release:acme/app:release.yml")) == []
+
+
+def test_prod_run_that_waited_and_then_failed_is_reported_twice(tmp_path):
+    data = prod_data()
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    run["status"], run["conclusion"] = "waiting", None
+    state = seeded("prod_release:acme/app:release.yml")
+    assert [e.fields["status"] for e in prod_round(tmp_path, data, state)] == ["waiting"]
+    run["status"], run["conclusion"] = "completed", "failure"
+    later = prod_round(tmp_path, data, state, now=data["now"] + 300)
+    assert [e.fields.get("gate") for e in later] == ["Release gate"]
+
+
+def test_prod_rerun_of_a_reported_run_is_reported_again(tmp_path):
+    data = prod_data()
+    state = seeded("prod_release:acme/app:release.yml")
+    assert len(prod_round(tmp_path, data, state)) == 1
+    data["gh"][PROD_RUNS]["workflow_runs"][0]["run_attempt"] = 2
+    assert len(prod_round(tmp_path, data, state, now=data["now"] + 300)) == 1
+
+
+def test_prod_run_unfinished_for_more_than_a_day_is_still_news(tmp_path):
+    data = prod_data()
+    run = data["gh"][PROD_RUNS]["workflow_runs"][0]
+    run["status"], run["conclusion"] = "waiting", None
+    run["created_at"] = run["run_started_at"] = es.iso(data["now"] - 30 * es.HOUR)
+    assert [e.fields["mins"] for e in prod_round(tmp_path, data, {})] == [30 * 60]

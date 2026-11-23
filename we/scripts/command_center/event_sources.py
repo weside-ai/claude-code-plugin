@@ -43,6 +43,17 @@ wait_min}``)
     red check when the branch requires none). ``prod_title`` matches a production release: the
     same findings are ``prod_gate_blocked``, damage. The title only matches; it never reaches a
     line (the tag must match ``rc.tag_pattern`` or ``prod_tag_pattern``).
+``prod_gate_blocked`` (``prod_release``: ``{repo, workflow, tag_pattern, wait_min, gate_job}``)
+    A production release that runs as a tag push: one call per round reads the newest 20 ``push``
+    runs of the release workflow (``workflow``: its file name); a run counts when its
+    ``head_branch`` (the pushed tag) matches ``tag_pattern`` in full (default ``PROD_TAG``;
+    ``event_routes.validate`` refuses a pattern that takes an RC tag such as ``v1.2.3-rc.1``).
+    Once per run attempt and finding: concluded ``failure``, ``cancelled``,
+    ``timed_out`` or ``startup_failure`` within 24 h (a second call reads its jobs: the cause is the
+    red job names, ``gate_job`` first and named the gate), and still unfinished past ``wait_min``
+    (default 30) minutes after its start, whatever its age. The first round per repo and workflow
+    records the completed runs silently; an unfinished one past its wait is news at once. Branch
+    pushes of the same workflow share the 20 runs: the workflow should run on tags only.
 ``rc_cut_waiting`` (``rc_cut``: ``{repo, workflow, job, wait_min}``)
     The cut job of an in-progress run of the workflow, running longer than ``wait_min`` (30).
 ``rollout_stuck`` (``rollout``: ``{namespace, kubeconfig}``)
@@ -350,6 +361,7 @@ class Round:
             ("issues", self.issues),
             ("rc", self.rc_verdicts),
             ("release_pr", self.release_prs),
+            ("prod_release", self.prod_release),
             ("rc_cut", self.rc_cut),
             ("rollout", self.rollout),
             ("rate_limit", self.rate_limit),
@@ -735,6 +747,64 @@ class Round:
                         check=name_of(c.get("name")),
                         check_id=int(c["id"]),
                     )
+
+    def prod_release(self) -> None:
+        """``prod_gate_blocked`` from the release workflow's tag-push runs (docstring above)."""
+        cfg = self.src["prod_release"]
+        repo, workflow = cfg["repo"], cfg["workflow"]
+        wait = int(cfg.get("wait_min", 30))
+        gate = cfg.get("gate_job")
+        tag_re = re.compile(cfg.get("tag_pattern") or PROD_TAG)
+        data = self.gh(f"repos/{repo}/actions/workflows/{workflow}/runs?event=push&per_page=20")
+        if data is None:
+            return  # a gh failure: the next round reads again, the first round stays unseeded
+        seed = f"prod_release:{repo}:{workflow}"
+        first = not self.seeded.get(seed)
+        for run in data.get("workflow_runs", []):
+            tag = str(run.get("head_branch") or "")
+            if run.get("event") != "push" or not (
+                _SAFE_TOKEN.match(tag) and tag_re.fullmatch(tag)
+            ):
+                continue
+            # a re-run keeps the run id: each attempt is its own finding
+            key = f"prod:{repo}:{run['id']}:{int(run.get('run_attempt') or 1)}"
+            started = run.get("run_started_at") or run.get("created_at")
+            fields: dict[str, Any] = {"repo": repo, "tag": tag, "run_id": int(run["id"])}
+            if run.get("status") == "completed":
+                if key in self.seen:
+                    continue
+                if (
+                    first
+                    or run.get("conclusion") not in (*RED, "startup_failure")
+                    or self.age_s(run.get("updated_at") or started) > 24 * HOUR
+                ):
+                    self.seen[key] = self.now
+                    continue
+                j = self.gh(
+                    f"repos/{repo}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100"
+                )
+                if j is None:
+                    continue  # next round reads the jobs again
+                red = [
+                    str(x.get("name") or "")
+                    for x in j.get("jobs", [])
+                    if x.get("conclusion") in RED
+                ]
+                fields["conclusion"] = token_of(run.get("conclusion"))
+                fields["jobs"] = [name_of(n) for n in sorted(red, key=lambda n: (n != gate, n))]
+                if gate in red:
+                    fields["gate"] = name_of(gate)
+                when = run.get("updated_at")
+            else:
+                key += ":wait"  # a run that waited and then turns red is reported twice
+                mins = int(self.age_s(started) // 60)
+                if mins <= wait or key in self.seen:
+                    continue
+                fields["mins"], fields["status"] = mins, token_of(run.get("status"))
+                when = started
+            self.new(key)
+            self.emit("prod_gate_blocked", key, f"run:{run['id']}", when, **fields)
+        self.seeded[seed] = True
 
     def rc_cut(self) -> None:
         cfg = self.src["rc_cut"]
