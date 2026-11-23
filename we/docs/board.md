@@ -594,8 +594,9 @@ A line that is missing is appended with `name` and `session_id`; no other field 
 `--key` outside the crew's `naming.key` is refused. The same call again prints
 `board.py blocked: <name> unchanged` and writes nothing. A session that sets its own wait with
 `set waiting_on=…` ends the old wait and drops its `blocked` mark. The prompt hook
-`sampler_on_prompt.py` names a blocked line once per wait to its starter and the coordinator, the
-command JSON-quoted and labelled as data.
+`sampler_on_prompt.py` names a blocked line once per wait to its starter, the command
+JSON-quoted and labelled as data; the coordinator hears of an open prompt from the event poller
+alone (§ Event lines).
 
 `--clear` prints `{cleared, kind, key, since, duration_s, obsolete}`. It marks every open
 `owner_queue` question of that session that the wait raised, posted during the wait (cause
@@ -811,6 +812,16 @@ What finds no running session waits in the coordinator's delta, `delta.jsonl` in
 release) without a receiver goes at once to the coordinator's running session and as one `gate`
 news item. `event_poller.py status` names the poller, its last round, the loaded routes and the
 running tails.
+
+An open prompt in any session on the host (a permission prompt, sandbox request or open dialog,
+seen in two samples of `claude agents --json` one minute apart) is one `permission_prompt` event
+per session and tool call, its line `permission prompt · session <name> · window <window> · tool
+<tool> · open since <HH:MM>Z`. A route with `push: true` also posts that line once to the chat
+webhook of `events.push` (the poller itself, through the project's secret wrapper); the line then
+ends `· push`, or `· no push: <reason>` and the board gets one `gate` item. A prompt in the
+receiver's own session, or no running receiver, goes to the `machinery` member's tail, the
+coordinator's delta and the board. Nothing answers or approves the prompt; the human does, in that
+session's window.
 
 ## Staging
 
