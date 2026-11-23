@@ -1043,7 +1043,7 @@ export const registerBoard = (on: On, options: PluginOptions) => {
     const restStale = resting.flatMap(g => [...(g.head ? [g.head] : []), ...g.workers]).filter(s => ageOf(s)?.level === 'stale').length
 
     const { news, log } = board ? shelveNews(board, given) : { news: [], log: [] }
-    const queue = waitingQueue(board?.queue ?? [], given, board?.updated, now)
+    const queue = waitingQueue(board?.queue ?? [], given, board?.updated, now, new Set(stuck))
     const cards = [...queue.open, ...queue.struck]
     const counts = countBoard(sessions)
     const barWidth = Math.min(20, counts.masters * 4, width - 2)

@@ -442,7 +442,7 @@ test('Accept strikes the card at once: no buttons, the question struck, the stam
 
 // The board file still lists questions answered hours ago (the 03:20 UTC case): the pane shows and counts
 // only the open ones, so an answered card never stands above them.
-test('answered questions the file still lists stay off the queue; the open ones show and count', async ($, on) => {
+test('answered questions the file still lists never count; an undelivered one stays struck, the open ones show and count', async ($, on) => {
   const clock = mock.clock(on, { now: Date.parse('2026-10-30T21:11:00Z') })
   mock.store(on)
   const board = JSON.stringify({
@@ -466,8 +466,10 @@ test('answered questions the file still lists stay off the queue; the open ones 
   expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Open one' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Open two' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Old go, answered' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'Merge #5?' })).toBeUndefined()
+  // Neither answer reached its asker (no delivery row): both stay in view struck and uncounted, under
+  // the open ones, so their delivery lines show.
+  expect((await ui.find({ type: 'Text', text: 'Old go, answered' }))?.props).toMatchObject({ strikethrough: true })
+  expect((await ui.find({ type: 'Text', text: 'Merge #5?' }))?.props).toMatchObject({ strikethrough: true })
   await ui.unmount()
 })
 

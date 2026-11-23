@@ -341,20 +341,22 @@ export const sortQueue = (queue: readonly BoardQueueItem[]): BoardQueueItem[] =>
 export const STRUCK_SHOWN_MS = 10 * MIN
 
 // What the queue frame shows: the open questions, oldest first, which alone count as waiting, then the
-// cards closed within STRUCK_SHOWN_MS. board.py drops a closed question on a later write once its asker
-// has the answer; until then the file still lists it, and the pane never sets it above an open one.
+// cards closed within STRUCK_SHOWN_MS, and any closed card whose answer is still undelivered
+// (`undelivered`, the pane's stuck answers) so its delivery line stays in view. board.py drops a closed
+// question on a later write once its asker has the answer; the pane never sets it above an open one.
 export const waitingQueue = (
   queue: readonly BoardQueueItem[],
   given: Record<string, BoardAnswer>,
   updated: string | undefined,
   now: number,
+  undelivered: ReadonlySet<string> = new Set(),
 ): { open: BoardQueueItem[]; struck: BoardQueueItem[] } => {
   const open: BoardQueueItem[] = []
   const struck: BoardQueueItem[] = []
   for (const q of queue) {
     const last = q.id ? shownAnswer(given[q.id], updated) : undefined
     if (!last || !isClosed(last)) open.push(q)
-    else if (now - Date.parse(last.ts) < STRUCK_SHOWN_MS) struck.push(q)
+    else if (now - Date.parse(last.ts) < STRUCK_SHOWN_MS || (q.id && undelivered.has(q.id))) struck.push(q)
   }
   return { open: sortQueue(open), struck: sortQueue(struck) }
 }
