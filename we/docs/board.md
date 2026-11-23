@@ -439,7 +439,9 @@ one PR comment through `gh` (the session's GitHub identity), from either answer 
 `<!-- board-go Q<n> head=<the question's 40-hex head sha> -->`, then the owner's answer quoted (the
 chat's `--quote`, else `Go (Accept on the board)`), the finding and the asking session's reason. A
 CI job counts that marker on the PR's current head as the skip; a question superseded by a new head
-never reaches it. Each post leaves one `go-comment` line (`ok`, `pr`, `head`, `url` or `error`) in
+never reaches it. The marker records the answer the board holds; it is no proof of who gave it, since
+any session with the same identity could post the line (the crew does not guard against its own
+sessions, so a job reads it only from the bot identity and only on the current head). Each post leaves one `go-comment` line (`ok`, `pr`, `head`, `url` or `error`) in
 `board-questions.jsonl`. A failed post is never silent: the answer line stands, `answer.py` exits 3
 and the pane shows a toast, `board.py answer` exits 3 with the reason on stderr; the same Accept
 again (`board.py answer <id> accept --session <name> --via chat`) posts it, also after the question
