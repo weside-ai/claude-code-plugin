@@ -332,23 +332,24 @@ POOL_KEY = "max_busy_sessions"
 PCT_KEY = "max_active_5h_percent"
 # The utility lane (`we-worker --utility`): a fix round on an open PR's branch, a card, lens or
 # review worker starts against its own cap and its own queue, never behind new build work (measured
-# 22.11.: a fix round for two review warnings waited over an hour behind build starts). The three
+# 22.11.: a fix round for two review warnings waited over an hour behind build starts). The two
 # resource thresholds are the machine's measure of room for both lanes (Kiska, 22.11., `resources`);
 # the caps stay the lid.
 UTILITY_KEY = "max_utility_sessions"
 RATIO_KEY = "max_working_set_ratio"
 PRESSURE_KEY = "max_pressure_full_avg60"
-LOAD_KEY = "max_load5"
 POOL_DEFAULTS = {
     POOL_KEY: 8,
     PCT_KEY: 80,
     UTILITY_KEY: 5,
     RATIO_KEY: 0.84,
     PRESSURE_KEY: 1,
-    LOAD_KEY: 20,
 }
 # the names the utility-only thresholds had before they held both lanes
-RENAMED_KEYS = {"utility_max_load5": LOAD_KEY, "utility_max_pressure_full_avg60": PRESSURE_KEY}
+RENAMED_KEYS = {"utility_max_pressure_full_avg60": PRESSURE_KEY}
+# keys no longer read: the owner dropped the load5 condition (24.11.: no damage it caught beside the
+# working set and pressure; the kills of 22.11. were memory)
+RETIRED_KEYS = ("max_load5", "utility_max_load5")
 # a repo may lower these; the resource thresholds measure the machine and stay in pool.json
 REPO_KEYS = (POOL_KEY, PCT_KEY, UTILITY_KEY)
 BUILD, UTILITY = "build", "utility"
@@ -470,6 +471,9 @@ def pool_limits(state: Path | None = None) -> dict[str, float]:
                 f"we-worker: warning: {path}: {old} is renamed to {new} and not read; rename it",
                 file=sys.stderr,
             )
+    for old in RETIRED_KEYS:
+        if old in doc:
+            print(f"we-worker: note: {path}: {old} is no longer read; remove it", file=sys.stderr)
     limits = {k: _limit(doc.get(k, d), f"{path} {k}") for k, d in POOL_DEFAULTS.items()}
     if limits[RATIO_KEY] > 1:
         raise LaunchError(
@@ -603,7 +607,7 @@ def room_in(accounts: list[dict], max_pct: float) -> tuple[int, int]:
     return room, len(accounts)
 
 
-# Kiska's resource rule (22.11.): all three hold, or a start of either lane waits in its lane's queue.
+# Kiska's resource rule (22.11.): both hold, or a start of either lane waits in its lane's queue.
 # Measured: six kills by the host's memory guard at 94 % working set, four of them at 10 workers, each
 # set off by a peak (one tsc or pytest run takes 2 to 2.5 GiB at once). The working set is what the
 # guard counts: `memory.current - memory.stat file + memory.stat shmem` (page cache the kernel
@@ -694,27 +698,18 @@ def _pressure_full_avg60(cgroup: Path | None) -> float | None:
     return None
 
 
-def _load5(loadavg: Path) -> float | None:
-    try:
-        return float(loadavg.read_text().split()[1])
-    except (OSError, ValueError, IndexError):
-        return None
-
-
 def resources(
     limits: dict[str, float],
     cgroup: Path | None = None,
-    loadavg: Path | None = None,
     meminfo: Path | None = None,
 ) -> list[dict]:
-    """The three conditions of a start in either lane, each `{what, value, want, ok}`: the own
-    cgroup's working set (`working_set`) below `max_working_set_ratio` of its ceiling, memory
-    pressure `full avg60` below `max_pressure_full_avg60`, load5 below `max_load5`. `value` None:
-    unreadable, `ok`. `cgroup` None reads this process's own (`own_cgroup`)."""
+    """The two conditions of a start in either lane, each `{what, value, want, ok}`: the own
+    cgroup's working set (`working_set`) below `max_working_set_ratio` of its ceiling and memory
+    pressure `full avg60` below `max_pressure_full_avg60`. `value` None: unreadable, `ok`.
+    `cgroup` None reads this process's own (`own_cgroup`)."""
     group = own_cgroup() if cgroup is None else cgroup
     ws = working_set(group, _host("/proc/meminfo") if meminfo is None else meminfo)
     pressure = _pressure_full_avg60(group)
-    load = _load5(_host("/proc/loadavg") if loadavg is None else loadavg)
     ratio = None if ws is None else ws[0] / ws[1]
     return [
         {
@@ -731,17 +726,11 @@ def resources(
             "want": f"< {limits[PRESSURE_KEY]:g}",
             "ok": pressure is None or pressure < limits[PRESSURE_KEY],
         },
-        {
-            "what": "load5",
-            "value": None if load is None else f"{load:g}",
-            "want": f"< {limits[LOAD_KEY]:g}",
-            "ok": load is None or load < limits[LOAD_KEY],
-        },
     ]
 
 
 def resource_text(rows: list[dict]) -> str:
-    """`working set 81% (20.3 of 25.0 GiB) (needs < 84%); load5 n/a (needs < 20)` for `rows`."""
+    """`working set 81% (20.3 of 25.0 GiB) (needs < 84%); memory pressure full avg60 n/a (needs < 1)` for `rows`."""
     return "; ".join(f"{r['what']} {r['value'] or 'n/a'} (needs {r['want']})" for r in rows)
 
 
@@ -767,7 +756,6 @@ def capacity(
     prefix: str,
     lane: str = BUILD,
     cgroup: Path | None = None,
-    loadavg: Path | None = None,
     meminfo: Path | None = None,
 ) -> None:
     """Refuse a new worker (`LaunchError`, exit 3) while a queued start of any repo on this machine
@@ -865,7 +853,7 @@ def capacity(
             " starts as soon as the check passes",
             3,
         )
-    missed = [r for r in resources(limits, cgroup, loadavg, meminfo) if not r["ok"]]
+    missed = [r for r in resources(limits, cgroup, meminfo) if not r["ok"]]
     if missed:
         raise LaunchError(
             f"{lane} lane waits for room on the machine: {resource_text(missed)} ({pool_path()});"

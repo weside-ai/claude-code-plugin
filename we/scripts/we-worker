@@ -85,7 +85,7 @@
 #   Room:    a start of either lane needs room on the machine (pool.json): the own cgroup's working
 #            set (memory.current - memory.stat file + memory.stat shmem) below `max_working_set_ratio`
 #            (0.84) of memory.max (MemTotal without a limit), memory.pressure `full avg60` below
-#            `max_pressure_full_avg60` (1), load5 below `max_load5` (20); an unreadable one counts
+#            `max_pressure_full_avg60` (1); an unreadable one counts
 #            as met (`n/a`). Without room a --bg start waits in its lane's queue, --queue or not, and
 #            names the missed condition; a window start exits 4
 #   Tree: without --tree or --here a start stays where the caller stands; only under `.weside/config.json`

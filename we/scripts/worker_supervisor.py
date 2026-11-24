@@ -713,7 +713,6 @@ ROOM_PREFIX = "room for both lanes: "
 def resource_line(
     state: Path,
     cgroup: Path | None = None,
-    loadavg: Path | None = None,
     meminfo: Path | None = None,
 ) -> str:
     """`we-worker status`'s last line: the machine's room for a start of either lane
@@ -722,7 +721,7 @@ def resource_line(
         limits = wl.pool_limits(state)
     except wl.LaunchError as exc:
         return f"{ROOM_PREFIX}unknown ({exc})"
-    rows = wl.resources(limits, cgroup, loadavg, meminfo)
+    rows = wl.resources(limits, cgroup, meminfo)
     verdict = "ok" if all(r["ok"] for r in rows) else "starts wait"
     return f"{ROOM_PREFIX}{verdict}: {wl.resource_text(rows)}"
 

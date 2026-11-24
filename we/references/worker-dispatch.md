@@ -142,13 +142,12 @@ it started in (`WE_WORKER_LANE` in its settings file, `lane` in its marker and `
 line). The master starts a utility worker with `worker_launch.py launch --utility` (the template's
 `{lane}`); a story's build worker never.
 
-**Room on the machine.** A start of either lane that passes its cap also needs room, all three or
+**Room on the machine.** A start of either lane that passes its cap also needs room, both or
 it waits (Kiska, 22.11.: the host's memory guard killed workers six times at 94 % working set, four
 of them at 10 workers, each set off by one tsc or pytest peak of 2 to 2.5 GiB): the own cgroup's
 working set (`memory.current − memory.stat file + memory.stat shmem`) below
 `max_working_set_ratio` (0.84, a share: 0 < r ≤ 1) of `memory.max`, or of MemTotal in `/proc/meminfo` when the limit
-reads `max`; `memory.pressure` `full avg60` below `max_pressure_full_avg60` (1); load5 below
-`max_load5` (20); each a `pool.json` key of the machine. A missed condition is no refusal: the
+reads `max`; `memory.pressure` `full avg60` below `max_pressure_full_avg60` (1); each a `pool.json` key of the machine. A missed condition is no refusal: the
 start exits 4 and a `--bg` start waits in its lane's queue, `--queue` or not, naming the missed
 condition with its value and threshold; the queue's waiter checks the same rule before it tries
 (`worker_launch.resources`, `worker_supervisor.machine_room`). A window start cannot wait and exits

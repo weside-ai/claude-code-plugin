@@ -985,14 +985,18 @@ def test_capacity_refuses_a_limit_that_is_no_number(cap):
 
 
 def test_pool_json_with_an_old_key_names_its_new_name(tmp_path, capsys):
-    (tmp_path / "pool.json").write_text(
-        json.dumps({"utility_max_load5": 30, "utility_max_pressure_full_avg60": 2})
-    )
-    limits = wl.pool_limits(tmp_path)
-    assert (limits["max_load5"], limits["max_pressure_full_avg60"]) == (20, 1)  # not read
+    (tmp_path / "pool.json").write_text(json.dumps({"utility_max_pressure_full_avg60": 2}))
+    assert wl.pool_limits(tmp_path)["max_pressure_full_avg60"] == 1  # not read
     err = capsys.readouterr().err
-    assert "utility_max_load5 is renamed to max_load5" in err
     assert "utility_max_pressure_full_avg60 is renamed to max_pressure_full_avg60" in err
+
+
+def test_a_retired_load5_key_is_ignored_with_a_note(tmp_path, capsys):
+    (tmp_path / "pool.json").write_text(json.dumps({"max_load5": 1000, "utility_max_load5": 30}))
+    limits = wl.pool_limits(tmp_path)
+    assert "max_load5" not in limits and limits == wl.POOL_DEFAULTS
+    err = capsys.readouterr().err
+    assert "max_load5 is no longer read" in err and "utility_max_load5 is no longer read" in err
 
 
 def test_a_host_root_outside_a_test_run_warns_once(tmp_path, monkeypatch, capsys):
@@ -1002,7 +1006,7 @@ def test_a_host_root_outside_a_test_run_warns_once(tmp_path, monkeypatch, capsys
     assert capsys.readouterr().err == ""  # the test run (conftest.py) sets WE_TEST_RUN
     monkeypatch.delenv(wl.TEST_RUN_ENV)
     wl._host("/proc/meminfo")
-    wl._host("/proc/loadavg")
+    wl._host("/proc/self/cgroup")
     err = capsys.readouterr().err
     assert err.count("\n") == 1 and f"WE_WORKER_HOST_ROOT={tmp_path} outside a test run" in err
 
@@ -1163,9 +1167,7 @@ def lanes(tmp_path, monkeypatch):
         if pool is not None:
             (state / "pool.json").write_text(json.dumps(pool))
         try:
-            wl.capacity(
-                tmp_path, "we-worker", lane, cgroup, tmp_path / "loadavg", tmp_path / "meminfo"
-            )
+            wl.capacity(tmp_path, "we-worker", lane, cgroup, tmp_path / "meminfo")
         except wl.LaunchError as exc:
             return exc.code, str(exc)
         return 0, ""
@@ -1229,18 +1231,16 @@ def test_the_working_set_drops_page_cache_and_keeps_shmem(tmp_path):
     (group / "memory.max").write_text("max\n")
     (tmp_path / "meminfo").write_text("MemTotal:        2048000 kB\nMemFree:  1 kB\n")
     assert wl.working_set(group, tmp_path / "meminfo") == (650 * wl.MIB, 2048000 * 1024)
-    rows = wl.resources(wl.POOL_DEFAULTS, group, tmp_path / "loadavg", tmp_path / "meminfo")
+    rows = wl.resources(wl.POOL_DEFAULTS, group, tmp_path / "meminfo")
     assert rows[0]["value"] == "32% (0.6 of 2.0 GiB)" and rows[0]["ok"]
     (tmp_path / "meminfo").unlink()  # neither a limit nor meminfo: n/a, met
     assert wl.working_set(group, tmp_path / "meminfo") is None
 
 
 def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(lanes, tmp_path):
-    """Kiska's rule (22.11.): working set < 84 % of memory.max, pressure full avg60 < 1,
-    load5 < 20, for both lanes; an unreadable source counts as met and reads `n/a`."""
+    """Kiska's rule (22.11.): working set < 84 % of memory.max and pressure full avg60 < 1, for
+    both lanes; an unreadable source counts as met and reads `n/a`. No load average condition."""
     run, group = lanes["run"], lanes["cgroup"]
-    loadavg = tmp_path / "loadavg"
-    loadavg.write_text("3.00 19.99 12.00 1/2 3\n")
     _cgroup(group, used_pct=77, file_mib=3000, shmem_mib=100)  # page cache is no load
     assert run(0, 0, "utility") == (0, "")
     assert run(0, 0, "build") == (0, "")
@@ -1250,7 +1250,7 @@ def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(la
         assert code == wl.RESOURCE_HALT, err
         assert f"{lane} lane waits for room" in err and "refused" not in err
         assert "working set 86% (6.9 of 8.0 GiB) (needs < 84%)" in err
-        assert "load5" not in err  # only the missed condition
+        assert "pressure" not in err  # only the missed condition
     assert run(0, 0, "build", pool={"max_working_set_ratio": 0.9}) == (0, "")
     assert run(0, 0, "build", pool={"max_working_set_ratio": 1}) == (0, "")  # the ceiling itself
     code, err = run(0, 0, "build", pool={"max_working_set_ratio": 84})  # a percent, not a share
@@ -1259,15 +1259,12 @@ def test_a_start_of_either_lane_waits_for_room_and_names_the_missed_condition(la
     _cgroup(group, full_avg60=1.0)
     assert "memory pressure full avg60 1 (needs < 1)" in run(0, 0, "build")[1]
     _cgroup(group)
-    loadavg.write_text("3.00 20.00 12.00 1/2 3\n")
-    assert "load5 20 (needs < 20)" in run(0, 0, "utility")[1]
-    assert run(0, 0, "utility", pool={"max_load5": 30}) == (0, "")
+    assert run(0, 0, "utility") == (0, "")  # a busy CPU alone never holds a start
     # the cap is checked first and still refuses with 3
-    assert run(8, 0, "build", pool={"max_load5": 20})[0] == 3
-    # no cgroup v2, no meminfo, no loadavg: met, shown as n/a
-    loadavg.unlink()
-    rows = wl.resources(wl.pool_limits(lanes["state"]), tmp_path / "none", loadavg, loadavg)
-    assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, None, None]
+    assert run(8, 0, "build")[0] == 3
+    # no cgroup v2, no meminfo: met, shown as n/a
+    rows = wl.resources(wl.pool_limits(lanes["state"]), tmp_path / "none", tmp_path / "none")
+    assert all(r["ok"] for r in rows) and [r["value"] for r in rows] == [None, None]
     assert wl.resource_text(rows[:1]) == "working set n/a (needs < 84%)"
     assert run(0, 0, "build", cgroup=tmp_path / "none") == (0, "")
 
