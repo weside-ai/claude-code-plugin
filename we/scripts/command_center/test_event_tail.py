@@ -245,20 +245,23 @@ def test_a_pull_request_hang_goes_to_its_epic_master_as_a_digest(short_tmp, monk
     master, kept for the hourly digest; the repo's own hang stays a line on its route; a route of
     its own decides alone."""
     routes = {"run_queued_long": {"to": ["machinery"]}}
-    _, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch, routes)
+    root, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch, routes)
+    inboxes["master"] = FakeInbox(short_tmp / "master.sock")
+    tails["master"] = et.Tail(root, folder, inboxes["master"].path, TOKEN, None, [], clock=clock)
     try:
-        k = tails["kiska"].key
+        k, m = tails["kiska"].key, tails["master"].key
         hang = {"repo": "acme/app", "workflow": "CI", "mins": 61, "event": "push", "run_id": 9}
         pr = dict(hang, event="pull_request", branch="feat/ACME-1-x", run_id=10, story="ACME-1")
         address(
             folder,
             [
                 row(1, "run_queued_long", "run:9", k, "machinery", **hang, branch="main"),
-                row(2, "pr_run_queued_long", "run:10", k, "epic_master", **pr),
+                row(2, "pr_run_queued_long", "run:10", m, "epic_master", **pr),
             ],
         )
         clock.t += et.CYCLE_S
         tails["kiska"].cycle()
+        tails["master"].cycle()
         assert user_lines(inboxes["kiska"]) == [
             "run queued 61 min · acme/app CI (push, main) · run https://github.com/acme/app/actions/runs/9"
         ]
@@ -435,5 +438,40 @@ def test_a_master_tail_without_a_member_receives_rows_addressed_to_its_session(
         ]
         reasons = [r["reason"] for r in ep.read_rows(folder / "ledger.jsonl")]
         assert reasons == ["delivered", "not routed"]
+    finally:
+        inbox.close()
+
+
+@pytest.mark.parametrize("member, delivered", [("mira", False), (None, True)])
+def test_epic_master_rows_reach_only_a_master_tail(short_tmp, monkeypatch, member, delivered):
+    """A companion's tail drops a row addressed to it only as `epic_master`; a master's tail
+    (member null) delivers it (ledger rows for PR #7419, #7424 on 24.11.)."""
+    routes = {"pr_merged": {"to": ["epic_master"]}}
+    root = ter.project(short_tmp, routes)
+    folder = short_tmp / "events"
+    inbox = FakeInbox(short_tmp / "m.sock")
+    try:
+        tail = et.Tail(
+            root, folder, inbox.path, TOKEN, member, [], session_id="sid-x", clock=Clock()
+        )
+        address(
+            folder,
+            [
+                row(
+                    1,
+                    "pr_merged",
+                    "pr:acme/app#7",
+                    tail.key,
+                    "epic_master",
+                    repo="acme/app",
+                    number=7,
+                    sha="bbbbbbb",
+                )
+            ],
+        )
+        tail.cycle()
+        reasons = [r["reason"] for r in ep.read_rows(folder / "ledger.jsonl")]
+        assert reasons == (["delivered"] if delivered else ["not routed"])
+        assert bool(user_lines(inbox)) is delivered
     finally:
         inbox.close()

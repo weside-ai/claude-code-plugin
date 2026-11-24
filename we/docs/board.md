@@ -463,7 +463,8 @@ holds, a field passed as a flag `--now x` → `now=x`, an answer kind `no` → `
 
 **`set` — the session's own line.** `board.py set now="<step>" state=<state> waiting_on=<role>`
 writes the line whose `name` is the caller's, as `claude agents --json` lists it for its
-`CLAUDE_CODE_SESSION_ID` (a missing line is appended with `name` and `session_id`; a session without
+`CLAUDE_CODE_SESSION_ID` (the line takes the caller's `session_id`; without a line of that name the line
+with that `session_id` takes the new name, else one is appended with both; a session without
 a name is told to `/rename` first; `--session <name>` is only checked against that name). Only `waiting_on`, `state`, `now`, `topic` (one line), `keys` (comma-separated, each a match of
 `naming.key`; an empty value clears it) and `epic` (a ticket key or an epic number, read by
 `scripts/epic_state.py`) and `wake` (one line: the checkable trigger that wakes a parked session) are settable; `state` takes
@@ -816,7 +817,8 @@ routes and the running tails.
 
 A route may name `epic_master`: the master session of the event's epic, found over the board's
 session lines and the ticket snapshot (`epic_owner.py`, whose docstring owns the resolution). A
-master without a companion (`WE_ROLE=master`) runs a tail for it; a worker never does. The `pulls`
+master without a companion (`WE_ROLE=master`) runs a tail for it; a worker never does, and a
+companion's tail never receives an `epic_master` row, even when its board line lists the epic. The `pulls`
 source reads one GraphQL query per repo and round and gives one line per transition and head:
 `pr_checks_red`, `pr_conflict`, `pr_review_verdict`, `pr_green`, `pr_merged`, each `PR #<n> <repo>
 · <what> · <check or head> · <url>`. A pull request's run queued past its limit (`pr_run_queued_long`) goes to the epic's master too, in its hourly digest, unless a route of its own says else; a run without a story key (a fork, a branch without a key) takes the `run_queued_long` route instead, since it has no epic to find. A `main_red` with failing test ids comes from the RC suite's

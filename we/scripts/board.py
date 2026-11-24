@@ -1048,9 +1048,18 @@ def cmd_set(state, args, crew, now):
 
 
 def _session_line(board, name, session_id):
-    """The board line named `name`, appended with `name` and `session_id` when absent."""
+    """The board line named `name` (it takes the caller's `session_id`, new after /clear or a
+    resume), else the one with `session_id` (a renamed session: it takes the new name, so one
+    session keeps one line), else a new line with both."""
     sessions = board.setdefault("sessions", [])
-    line = next((s for s in sessions if isinstance(s, dict) and s.get("name") == name), None)
+    lines = [s for s in sessions if isinstance(s, dict)]
+    line = next((s for s in lines if s.get("name") == name), None)
+    if line is not None and session_id:
+        line["session_id"] = session_id  # a new id after /clear or a resume keeps the line
+    if line is None and session_id:
+        line = next((s for s in lines if s.get("session_id") == session_id), None)
+        if line is not None:
+            line["name"] = name
     if line is None:
         line = {"name": name}
         if session_id:
