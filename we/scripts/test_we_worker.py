@@ -27,7 +27,8 @@ with open(os.environ["STUB_LOG"], "a") as fh:
                          "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
                          "companion": os.environ.get("WESIDE_COMPANION"),
                          "key": os.environ.get("WE_STORY_KEY"), "cwd": os.getcwd(),
-                         "queue_turn": os.environ.get("WE_WORKER_QUEUE_TURN")}) + "\n")
+                         "queue_turn": os.environ.get("WE_WORKER_QUEUE_TURN"),
+                         "over_limit": os.environ.get("WE_WORKER_OVER_LIMIT")}) + "\n")
 if args[:2] == ["agents", "--json"]:
     print(json.dumps(rows)); sys.exit(0)
 if args[:1] == ["stop"]:
@@ -127,6 +128,17 @@ def test_help_is_english_and_names_every_verb(tmp_path):
     assert out.startswith("we-worker — start and steer a process worker")
     for verb in ("status", "stop <name|id>", "logs <name|id>", "waiting"):
         assert verb in out
+
+
+def test_a_start_past_the_limit_does_not_hand_its_override_to_the_worker(tmp_path):
+    """Red without the unset: the started worker inherits WE_WORKER_OVER_LIMIT, and every
+    we-worker call inside it would skip the lane cap and the room rule unlogged."""
+    project, env = setup(tmp_path)
+    env["WE_WORKER_OVER_LIMIT"] = "owner's word"
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    assert call["over_limit"] is None
 
 
 def test_a_flag_is_no_worker_name(tmp_path):

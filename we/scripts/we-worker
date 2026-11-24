@@ -721,7 +721,7 @@ if [[ "${WE_WORKER_NO_SUPERVISOR:-}" != 1 ]]; then
 fi
 
 for var in $(compgen -e | grep -E '^CLAUDE' || true); do unset "$var"; done
-unset WESIDE_COMPANION WE_ROLE_ID WE_WORKER_QUEUE_TURN
+unset WESIDE_COMPANION WE_ROLE_ID WE_WORKER_QUEUE_TURN WE_WORKER_OVER_LIMIT
 export WE_ROLE=worker WE_STORY_KEY="$key" WE_STARTER="${starter:-}" WE_WORKER_NAME="$name" WE_WORKER_LANE="$lane"
 
 if [[ $bg -eq 1 ]]; then
