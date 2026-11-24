@@ -615,6 +615,26 @@ def never(  # noqa: PLR0911, PLR0912
     return None
 
 
+# The never-list items a crash of the gate does not open: secrets, deletion and the PROD paths
+# (a push to main, a merge past the checks). Everything else fails open on a crash.
+HARD = ("secrets", "delete", "main", "merge")
+
+
+def hard_never(command: str) -> str | None:
+    """The `HARD` never-list item `command` hits, judged on the text alone (no git, no crew file,
+    `main`/`master` as the protected names): what the gate still denies after it crashed."""
+    text = command.replace("\\\n", " ")
+    main = "|".join(MAIN_NAMES)
+    for item, pattern in NEVER:
+        if not item.startswith(HARD):
+            continue
+        compiled = re.compile(pattern.replace("{main}", main))
+        found = compiled.search(text) or compiled.search(normalised(text))
+        if found:
+            return item.format(*(found.groups() or ("",)))
+    return None
+
+
 # ---------------------------------------------------------------- the rights
 
 
