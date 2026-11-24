@@ -635,45 +635,50 @@ class Round:
                 continue
             if "pull_request" in issue or (issue.get("user") or {}).get("login") not in trusted:
                 continue
-            found = _MARKER.search(str(issue.get("body") or ""))
-            try:
-                # the writer escapes < and > in the issue body (an HTML comment ends at the first >)
-                text = found.group(1) if found else ""
-                text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
-                doc = json.loads(text) if found else None
-            except ValueError:
-                doc = None
-            if not isinstance(doc, dict) or doc.get("kind") != "main_red":
-                continue
-            run = doc.get("run")
-            if not isinstance(run, int) or isinstance(run, bool) or run <= 0:
-                continue
-            key = f"marker:{repo}:{run}"
-            if not self._say(key, False):
-                continue  # seen (and refreshed while the issue stays open)
-            failing = doc.get("failing")
-            ids = (
-                [i for i in failing if isinstance(i, str) and _NODE_ID.match(i)]
-                if isinstance(failing, list)
-                else []
-            )
-            sha = str(doc.get("sha") or "")
-            epics = doc.get("epics")
-            self.emit(
-                "main_red",
-                key,
-                f"run:{run}",
-                issue.get("updated_at"),
-                repo=repo,
-                sha=sha[:7] if re.match(r"^[0-9a-f]{7,40}$", sha) else "?",
-                failing=ids[:MARKER_IDS],
-                unreadable=not ids,
-                run_id=run,
-                epics=[e for e in epics if isinstance(e, str) and _KEY.match(e)][:5]
-                if isinstance(epics, list)
-                else [],
-                origin="marker",
-            )
+            # one marker per lane (rc, night) in the same issue: each lane rewrites only its own block
+            for found in _MARKER.finditer(str(issue.get("body") or "")):
+                self._red_marker(repo, issue, found)
+
+    def _red_marker(self, repo: str, issue: dict, found: re.Match) -> None:
+        """One ``main_red`` for one marker block of the issue, unless its run was seen."""
+        try:
+            # the writer escapes < and > in the issue body (an HTML comment ends at the first >)
+            text = found.group(1)
+            text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+            doc = json.loads(text)
+        except ValueError:
+            doc = None
+        if not isinstance(doc, dict) or doc.get("kind") != "main_red":
+            return
+        run = doc.get("run")
+        if not isinstance(run, int) or isinstance(run, bool) or run <= 0:
+            return
+        key = f"marker:{repo}:{run}"
+        if not self._say(key, False):
+            return  # seen (and refreshed while the issue stays open)
+        failing = doc.get("failing")
+        ids = (
+            [i for i in failing if isinstance(i, str) and _NODE_ID.match(i)]
+            if isinstance(failing, list)
+            else []
+        )
+        sha = str(doc.get("sha") or "")
+        epics = doc.get("epics")
+        self.emit(
+            "main_red",
+            key,
+            f"run:{run}",
+            issue.get("updated_at"),
+            repo=repo,
+            sha=sha[:7] if re.match(r"^[0-9a-f]{7,40}$", sha) else "?",
+            failing=ids[:MARKER_IDS],
+            unreadable=not ids,
+            run_id=run,
+            epics=[e for e in epics if isinstance(e, str) and _KEY.match(e)][:5]
+            if isinstance(epics, list)
+            else [],
+            origin="marker",
+        )
 
     # --- pull requests ------------------------------------------------------------------
 

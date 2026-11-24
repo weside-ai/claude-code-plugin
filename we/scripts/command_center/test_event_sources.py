@@ -1194,6 +1194,26 @@ def test_pr_state_transitions(tmp_path):
     ]
 
 
+def test_one_issue_carries_a_marker_per_lane(tmp_path):
+    """Red without finditer: the rc and the night lane each keep their own marker block in the
+    one `main red` issue, and both reach the master; the first block alone was read before."""
+    issues = json.loads((EVENTS / "issue-main-red.json").read_text(encoding="utf-8"))
+    body = issues[0]["body"]
+    night = body.replace("9001", "9002").replace(
+        '"kind":"main_red"', '"kind":"main_red","lane":"night"'
+    )
+    issues[0]["body"] = body + "\n" + night[night.index("<!--") :]
+    path = "repos/acme/app/issues?state=open&sort=updated&direction=desc&per_page=20"
+    data = {"now": T0, "tags": "", "gh": {path: issues}}
+    srcs_only = {
+        "rc": {"repo": "acme/app", "workflow": "x.yml", "trusted_authors": ["acme-bot[bot]"]}
+    }
+    state: dict = {"seeded": {"rc": True}}
+    rnd = es.Round(srcs_only, state, T0, root=str(tmp_path), env=fake_env(tmp_path, data))
+    rnd.red_markers()
+    assert sorted(ev.object for ev in rnd.events) == ["run:9001", "run:9002"]
+
+
 def test_main_red_marker(tmp_path):
     """The marker of a trusted author is one main_red with its failing ids; another author's copy
     is ignored; a second round says nothing."""
