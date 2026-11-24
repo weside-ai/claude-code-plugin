@@ -109,7 +109,7 @@ plus its session id (§ Dev-only worker contract, **Signature**).
 
 Every denial of the worker rights brake is one line in `<state dir>/brakes.jsonl`
 (`worker_rights.brake_log`): the count of false alarms. A crash of the brake is a defect, not a
-brake: it fails open with one `outcome: crash` line, and denies only the hard items
+brake: it fails open with one `crash` line (the exception's class, never its message), and denies only the hard items
 (`worker_rights.HARD`: secrets, deletion, a push to main, a merge past the checks).
 `check` names a living session of the same key on stderr: a follow-up goes to it by `SendMessage`.
 After the check `we-worker` refuses a start (exit 3, nothing starts) while a queued start of any

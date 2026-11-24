@@ -24,9 +24,9 @@ For a worker it
      `gh pr merge` there is a never-list item.
 `ask …` names the marker's Lead (`ask your Lead <name>`), else `ask your starter`. A crash is a
 defect, not a brake: an exception while judging fails open (`crashed`: one stderr line, one
-`outcome: crash` line in the brake log, the call goes to the normal permissions), except that a
-worker's call is still denied on a `worker_rights.HARD` item (secrets, deletion, a push to main, a
-merge past the checks), judged on the text alone. Every denial is one `deny` line in
+`crash` line in the brake log naming the exception's class, never its message; the call goes to
+the normal permissions), except that a worker's call is still denied on a `worker_rights.HARD`
+item (secrets, deletion, a push to main, a merge past the checks), judged on the text alone. Every denial is one `deny` line in
 `<state dir>/brakes.jsonl` (`worker_rights.brake_log`), so the false alarms can be counted; a failed
 write never changes the decision. A PreToolUse deny holds under
 `bypassPermissions`.
@@ -108,9 +108,10 @@ def decide(payload: dict, env: dict) -> tuple[str, str] | None:  # noqa: PLR0911
     return "allow", f"worker right {held} (worker_rights_gate)"
 
 
-def record(payload: dict, env: dict, reason: str, outcome: str | None = None) -> None:
-    """One line in `brakes.jsonl` (`worker_rights.brake_log`): `deny`, or with `outcome: crash`
-    an exception the gate failed open on; silent on any failure."""
+def record(payload: dict, env: dict, reason: str, error: str | None = None) -> None:
+    """One line in `brakes.jsonl` (`worker_rights.brake_log` owns the shape): `deny` with the
+    reason's `item`, or with `error` a `crash` line naming only the exception's class (its message
+    may quote the command); silent on any failure."""
     with contextlib.suppress(Exception):
         import worker_rights as wr  # noqa: PLC0415
 
@@ -118,18 +119,25 @@ def record(payload: dict, env: dict, reason: str, outcome: str | None = None) ->
         with contextlib.suppress(Exception):
             marker = _marker(payload) or {}
         command = str((payload.get("tool_input") or {}).get("command", ""))
-        row = {
-            "type": "crash" if outcome == "crash" else "deny",
-            "gate": "worker_rights_gate",
-            "item": reason.rsplit(": ask ", 1)[0],
-            "name": marker.get("name"),
-            "key": env.get("WE_STORY_KEY") or marker.get("key"),
-            "session_id": payload.get("session_id"),
-            "argv0": wr.argv0(command),
-        }
-        if outcome:
-            row["outcome"] = outcome
-        wr.brake_log(payload.get("cwd"), row)
+        head = (
+            {"type": "crash", "gate": "worker_rights_gate", "error": error}
+            if error
+            else {
+                "type": "deny",
+                "gate": "worker_rights_gate",
+                "item": reason.rsplit(": ask ", 1)[0],
+            }
+        )
+        wr.brake_log(
+            payload.get("cwd"),
+            {
+                **head,
+                "name": marker.get("name"),
+                "key": env.get("WE_STORY_KEY") or marker.get("key"),
+                "session_id": payload.get("session_id"),
+                "argv0": wr.argv0(command),
+            },
+        )
 
 
 def crashed(payload: dict, env: dict, exc: Exception) -> tuple[str, str] | None:
@@ -139,7 +147,7 @@ def crashed(payload: dict, env: dict, exc: Exception) -> tuple[str, str] | None:
     print(
         f"worker_rights_gate: crashed, fails open ({type(exc).__name__}: {exc})", file=sys.stderr
     )
-    record(payload, env, f"{type(exc).__name__}: {exc}", outcome="crash")
+    record(payload, env, "crashed", error=type(exc).__name__)
     if payload.get("tool_name") != "Bash":
         return None
     try:

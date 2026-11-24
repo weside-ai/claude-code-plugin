@@ -860,7 +860,7 @@ def _crash(world, monkeypatch, command, role="worker"):
     import worker_rights_gate as gate  # noqa: PLC0415
 
     def boom(_payload, _env):
-        raise RuntimeError("x")
+        raise RuntimeError("token=s3cr3t")
 
     monkeypatch.setattr(gate, "decide", boom)
     payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(world["repo"])}
@@ -876,10 +876,15 @@ def test_a_crash_fails_open_with_one_stderr_line_and_one_crash_row(
         _crash(world, monkeypatch, "git status", role)
         out, err = capsys.readouterr()
         assert out == ""  # no decision: the normal permissions judge the call
-        assert err.count("\n") == 1 and "RuntimeError: x" in err
-    rows = [json.loads(x) for x in (own_state_dir / "brakes.jsonl").read_text().splitlines()]
-    assert [(r["gate"], r["outcome"]) for r in rows] == [("worker_rights_gate", "crash")] * 2
-    assert rows[0]["item"] == "RuntimeError: x" and rows[0]["argv0"] == "git"
+        assert err.count("\n") == 1 and "RuntimeError" in err
+    log = (own_state_dir / "brakes.jsonl").read_text()
+    assert "s3cr3t" not in log  # the exception's message never reaches the persistent log
+    rows = [json.loads(x) for x in log.splitlines()]
+    assert [(r["type"], r["gate"], r["error"]) for r in rows] == [
+        ("crash", "worker_rights_gate", "RuntimeError")
+    ] * 2
+    assert all("outcome" not in r and "item" not in r for r in rows)  # `outcome` judges a line
+    assert rows[0]["argv0"] == "git"
 
 
 @pytest.mark.usefixtures("own_state_dir")

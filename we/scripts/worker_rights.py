@@ -1274,6 +1274,9 @@ def brake_log(cwd: str | Path | None, record: dict) -> Path | None:
       `deny`  (the worker rights gate): `gate`, `item` (the never-list item or the failed right),
               `name`, `key`, `session_id`, `argv0` (the first word of the command; never the
               command itself, which may carry a secret value)
+      `crash` (the worker rights gate failed open on an exception): `gate`, `error` (the
+              exception's class only; its message may quote the command), `name`, `key`,
+              `session_id`, `argv0`
       `card`  (a card worker's verdict, written by its starter where it posts it; `main` below):
               `verdict` (`PASS` or `BLOCKING`), `pr`
       `outcome` (added later by the starter): `kind` (the line's type it judges, e.g. `card`),
