@@ -358,6 +358,59 @@ def test_a_lost_ref_lock_is_a_race_and_lands_on_the_next_try(make, capsys, monke
     assert world.remote_head() == "docs(ACME-1): plan"
 
 
+BYPASS = (
+    "remote: Bypassed rule violations for refs/heads/main:\n"
+    "remote: - Changes must be made through a pull request.\n"
+)
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [
+        rejected("cannot lock ref 'refs/heads/main': is at 1a2b but expected 3c4d", BYPASS),
+        subprocess.CompletedProcess(
+            [],
+            1,
+            "To github.com:acme/app.git\n!\tHEAD:refs/heads/main\t[rejected] (non-fast-forward)\nDone\n",
+            BYPASS,
+        ),
+    ],
+    ids=["lock-race", "non-fast-forward"],
+)
+def test_a_lost_race_under_the_bypass_notice_retries_and_lands(make, capsys, monkeypatch, lost):
+    world = make()
+    commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n", "docs(ACME-1): plan")
+    real_push, calls = plan_push.push, []
+
+    def lost_once(remote, branch):
+        calls.append(branch)
+        if len(calls) == 1:
+            world.other_push("docs/plans/ACME-2-story.md")
+            return lost
+        return real_push(remote, branch)
+
+    monkeypatch.setattr(plan_push, "push", lost_once)
+
+    assert plan_push.main([]) == 0
+    assert len(calls) == 2
+    assert world.remote_head() == "docs(ACME-1): plan"
+    assert "land by PR" not in capsys.readouterr().err
+
+
+def test_a_pure_rule_rejection_under_the_bypass_notice_stays_exit_3(make, capsys, monkeypatch):
+    world = make()
+    commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n")
+    monkeypatch.setattr(
+        plan_push,
+        "push",
+        lambda *_: rejected("push declined due to repository rule violations", BYPASS),
+    )
+
+    assert plan_push.main([]) == plan_push.REJECTED
+    assert "this repo takes no direct push; land by PR" in capsys.readouterr().err
+    assert world.remote_head() == "init"
+
+
 def test_a_named_ruleset_stays_no_direct_push_and_prints_the_ref_line(make, capsys, monkeypatch):
     world = make()
     commit(world.scratch, "docs/plans/ACME-1-story.md", "# plan\n")
