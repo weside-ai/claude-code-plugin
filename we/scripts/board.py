@@ -5,7 +5,7 @@ Usage:
   board.py [--board FILE] answer <id> <accept|deny|followup|update|withdraw> --session NAME --via chat
            [--quote "<the owner's words>" | --text-file <path or ->]
   board.py [--board FILE] path [--crew-only]
-  board.py [--board FILE] set [--for NAME | --session NAME] <field>=<value> …   fields: waiting_on, state, now, topic, keys, epic
+  board.py [--board FILE] set [--for NAME | --session NAME] <field>=<value> …   fields: waiting_on, state, now, topic, keys, epic, wake
   board.py [--board FILE] ask [--session NAME] --key KEY --key-title T (--ask Q | --text-file <path or ->)
            --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|window-go|info> [--urgent]
@@ -65,7 +65,8 @@ set      writes the caller's own session line (found by `name` through `claude a
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
          `since`. `topic=<text>` and `keys=<KEY>[,<KEY>…]` (each a match of the crew's
          `naming.key`) write the line's own topic and keys, `epic=<KEY or number>` the epic a
-         master's compaction hook reads (`epic_state.py`); an empty value clears them.
+         master's compaction hook reads (`epic_state.py`), `wake=<checkable trigger>` what wakes a
+         parked session (the coordinator's sweep reads it); an empty value clears them.
          `--session <name>` is checked against the caller's own name and refused when it differs.
          A refused value (and a field passed as a flag, `--now x`, or an answer kind like `no`)
          prints the valid values and `corrected call: board.py …` with the value it likely
@@ -291,7 +292,7 @@ KINDS = ("accept", "deny", "followup", "update", "withdraw")
 CLOSING = ("accept", "deny", "withdraw")  # withdraw: the asker's human takes back an `ask --to`
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
-SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys", "epic")
+SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys", "epic", "wake")
 CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "window-go", "info")
 DECISION_KINDS = ("cut", "fence", "process")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
@@ -907,7 +908,7 @@ def _parse_assignments(items, crew):
                 f"board.py set: epic {value!r} is neither a ticket key of the crew's naming.key "
                 "nor an epic number"
             )
-        elif key in ("now", "topic") and "\n" in value:
+        elif key in ("now", "topic", "wake") and "\n" in value:
             failures.append(f"board.py set: {key} is one line")
             fix = f"{key}={' '.join(value.split())}"
         elif key == "keys":
@@ -1028,7 +1029,7 @@ def cmd_set(state, args, crew, now):
             # the session set its own wait: a `blocked` mark of the old wait is over
             if ended[-1] is not None:
                 line.pop("blocked", None)
-        for key in ("state", "now", "topic", "keys", "epic"):
+        for key in ("state", "now", "topic", "keys", "epic", "wake"):
             if key in fields:
                 if fields[key] in ("", []):
                     line.pop(key, None)  # `topic=` / `keys=` clears it
@@ -1367,7 +1368,22 @@ def cmd_show(state, args, _crew, _now):
     qid = args.id
     status, item, lines, answers = question_status(state, qid)
     if status is None:
-        raise BoardError(f"board.py show: {qid} is in neither owner_queue nor the logs")
+        # a session's own board line: `show <session>` is what a restarted master tries first
+        line = next(
+            (
+                s
+                for s in state.board().get("sessions") or []
+                if isinstance(s, dict) and s.get("name") == qid
+            ),
+            None,
+        )
+        if line is not None:
+            print(json.dumps(line, ensure_ascii=False, indent=1))
+            return 0
+        raise BoardError(
+            f"board.py show: {qid} is in neither owner_queue nor the logs, and no session line"
+            " carries that name"
+        )
     posted = next((q for q in lines if q.get("outcome") == "posted"), None)
     question = dict(item or posted or {"id": qid})
     question.pop("reader", None)
@@ -1499,6 +1515,14 @@ def _log_superseded(state, superseded, new):
                 "reason": f"a new head {str(new.get('head') or '')[:12]} on {new.get('pr_url')}",
             }
         )
+
+
+# a skipped Codex finding written into the question reads as a second decision to the reader;
+# its flags carry it as part of the one yes (the reader never sees that line)
+CODEX_IN_ASK = (
+    " (a skipped Codex finding goes into --codex-finding and --codex-reason, not into --ask:"
+    " the yes covers it as part of the one merge decision)"
+)
 
 
 def _codex_line(fields):
@@ -1875,7 +1899,15 @@ def _cold_read(state, base, asked, fields, crew):
         # log line says so (`reader: {"error": …}`).
         print(f"board.py ask: reader-error: {exc}; posted unread", file=sys.stderr)
         return {"error": str(exc)}, None
-    return {k: answer.get(k) for k in ("decides", "on_yes", "form")}, _reader_verdict(answer)
+    reason = _reader_verdict(answer)
+    if (
+        reason is not None
+        and fields.get("cause") == "merge-go"
+        and not fields.get("codex_finding")
+        and re.search(r"codex", asked, re.I)
+    ):
+        reason += CODEX_IN_ASK
+    return {k: answer.get(k) for k in ("decides", "on_yes", "form")}, reason
 
 
 def _repeated(state, args, now):
@@ -4329,8 +4361,10 @@ def _add_flow_verbs(verbs):
 
 
 def _add_read_verbs(verbs):
-    sh = verbs.add_parser("show", help="one question with its answers and status (read-only)")
-    sh.add_argument("id")
+    sh = verbs.add_parser(
+        "show", help="one question with its answers and status, or a session's line (read-only)"
+    )
+    sh.add_argument("id", help="a question id, or a session name for its board line")
     sh.set_defaults(run=cmd_show)
     pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
     pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")

@@ -11,6 +11,8 @@ the tickets and git telling the same story. You route; you do not build.
 - Start a build master for the next epic in the order {product|the product owner} set, while fewer
   than {limits.masters} run; name it `{naming.master}`; park it when its epic closes or waits.
 - Start a worker for a single story that has no epic master.
+- Park a session with its trigger on its line (`board.py set --for <name> state=parked
+  wake="<checkable trigger>"`); each sweep checks the parked lines' triggers and wakes the met ones.
 - Sessions post their own questions (`board.py ask`) and get the answer directly.
   Questions for {human.local} that reach you as one `{question_label}` line (a worker's, or a session
   without the board) you post with `board.py ask --session <asker>`; its last field
@@ -35,6 +37,9 @@ the tickets and git telling the same story. You route; you do not build.
   (`references/companion-session.md` § Reaching an on-call owner), so you neither relay nor batch it.
 - Keep your strands (questions, sessions, promised replies) as a task list, so a compaction loses
   none.
+- Decisions out of a talk with {human.local} go to their owner as one package (each decision, its
+  open questions, work packages with owner and a measurable criterion), never as a trickle of
+  messages; follow it until each package has a ticket key or an explicit "we do not do this".
 - Past 250 k context, run `/compact` at your next natural boundary (a sweep's end).
 - Several humans ({me} is yours): run `board.py signals` on every sweep and route a Selected event to its epic's master within one sweep.
 - At start and on every sweep, run `session_refresh.py list --due` and carry out its `plan <name>`

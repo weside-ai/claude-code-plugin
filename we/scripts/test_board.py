@@ -564,6 +564,17 @@ class TestAsk:
         assert go(crewless, "show", "Q999") == 1
         assert "Q999 is in neither owner_queue nor the logs" in capsys.readouterr().err
 
+    def test_show_prints_a_sessions_board_line_by_name(self, crewless, capsys):
+        """A restarted master reads its own line with `show <session>`; red arm: "rust is in
+        neither owner_queue nor the logs" although the line existed."""
+        data = board_of(crewless)
+        data["sessions"] = [{"name": "rust", "epic": "PROJ-7", "now": "building PROJ-8"}]
+        (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+        assert go(crewless, "show", "rust") == 0
+        assert json.loads(capsys.readouterr().out)["now"] == "building PROJ-8"
+        assert go(crewless, "show", "nobody") == 1
+        assert "no session line carries that name" in capsys.readouterr().err
+
     def test_a_plan_slug_stands_for_a_key_before_the_ticket_exists(self, crewless, capsys):
         answer_with(crewless, CLEAR)
         assert go(crewless, *ask_argv(**{"--key": "onboarding-v2"})) == 0
@@ -1267,6 +1278,19 @@ class TestMergeQuestion:
         assert f"PR o/r#5 is {state}" in capsys.readouterr().err
         assert not (crewless / "reader-calls.jsonl").exists()
         assert (crewless / "board.json").read_bytes() == before
+
+    @pytest.mark.usefixtures("merge_gh")
+    def test_a_codex_skip_in_the_ask_is_returned_with_the_flags_to_use(self, crewless, capsys):
+        """Red arm: the reader returned "two decisions" for a merge question that named its
+        skipped Codex finding in --ask, and the asker dropped the sentence the rule asks for."""
+        answer_with(crewless, {**CLEAR, "form": ["two decisions in one"]})
+        ask = "Merge #5? The yes also skips Codex finding 1 (false positive)."
+        assert (
+            go(crewless, *self.merge_argv("--pr", "o/r#5", "--one-way", "money"), "--ask", ask)
+            == 1
+        )
+        err = capsys.readouterr().err
+        assert "two decisions in one" in err and "--codex-finding and --codex-reason" in err
 
     @pytest.mark.usefixtures("merge_gh")
     def test_an_open_one_way_pr_is_posted_with_its_url_and_class(self, crewless):
@@ -3946,6 +3970,14 @@ def test_set_writes_topic_and_keys_and_clears_them(crewless):
     assert go(crewless, "set", "topic=", "keys=") == 0
     line = line_of(crewless, "lead-12")
     assert "topic" not in line and "keys" not in line
+
+
+def test_set_writes_a_parked_sessions_wake_trigger(crewless):
+    """Red arm: the wake triggers of parked sessions lived only in the coordinator's memory file."""
+    assert go(crewless, "set", "state=parked", "wake=plan of PROJ-12 on main") == 0
+    line = line_of(crewless, "lead-12")
+    assert (line["state"], line["wake"]) == ("parked", "plan of PROJ-12 on main")
+    assert go(crewless, "set", "wake=") == 0 and "wake" not in line_of(crewless, "lead-12")
 
 
 def test_ask_stamps_kind_source_and_owner_by_component(crewed, capsys):

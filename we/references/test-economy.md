@@ -44,7 +44,8 @@ Find the test that already exercises the behaviour and add the assertion or the 
 test function needs a behaviour no existing test reaches; the report names that behaviour. A review
 finding becomes an assertion in the existing test of that behaviour; a new test only when the
 finding shows a behaviour no test reaches. A request for one more test of a behaviour that is
-already tested is answered with the test that covers it.
+already tested is answered with the test that covers it. A table or property test that covers
+cases single tests already hold deletes those singles in the same PR.
 
 | Bad | Good |
 |---|---|

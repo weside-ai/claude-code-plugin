@@ -47,7 +47,7 @@ def flag(hook_input: dict, env: Any, runner: cos.Runner = subprocess.run) -> Pat
         return None
     crew_path, crew = found
     cwd = Path(str(hook_input.get("cwd") or os.getcwd()))
-    board = cos.load_board(cos.board_path(crew))
+    board = cos.load_board(cos.board_path(crew, crew_path, env))
     line = cos.find_session(board, session_id, "", cos.tmux_window(env, runner)) if board else None
     roots = list(dict.fromkeys([cos.git_root(cwd, runner) or cwd, crew_path.parent.parent]))
     try:
@@ -57,7 +57,7 @@ def flag(hook_input: dict, env: Any, runner: cos.Runner = subprocess.run) -> Pat
         return None
     if not epic_state.is_stale(log[-1][0] if log else None, str(crew["sla"]["tz"])):
         return None
-    target = cos.board_path(crew).parent / cos.FLAG_DIR / session_id
+    target = cos.board_path(crew, crew_path, env).parent / cos.FLAG_DIR / session_id
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(str(plan) + "\n", encoding="utf-8")

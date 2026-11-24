@@ -710,15 +710,19 @@ def _given(key: str, ref: str, ctx: dict) -> dict:
     return given
 
 
-def _hold(key: str, ctx: dict, given: dict | None, urls: list[str]) -> str | None:
-    """Why In Review waits although every PR the key shows is merged, or None."""
+def _hold(
+    key: str, ctx: dict, given: dict | None, urls: list[str], fast: bool = False
+) -> str | None:
+    """Why In Review waits although every PR the key shows is merged, or None. A fast-lane story
+    (`fast`: its row came `via: fast`) has no plan by definition and one PR in one repo: the
+    merged PR is all that must land."""
     try:
         names = holders(ctx["top"], key, ctx["pattern"], closed_names(ctx["top"], given))
     except wl.LaunchError as exc:
         return f"held: claude agents unreadable ({exc}); no worker on {key} judged ended"
     if names:
         return held_line(key, names)
-    if not ctx["plan"]:
+    if not ctx["plan"] and not fast:
         how = (
             f"once every repo landed: python3 {HERE / 'board.py'} move {key} in_review "
             + " ".join(f"--pr {u}" for u in urls)
@@ -769,7 +773,8 @@ def _in_review(
             + (f"; follow-up PRs: {', '.join(after)}" if after else "")
         )
         return res
-    res["held"] = _hold(key, ctx, given, [p["url"] for p in merged])
+    fast = (last.get(key) or {}).get("via") == "fast"
+    res["held"] = _hold(key, ctx, given, [p["url"] for p in merged], fast)
     if res["held"]:
         res["closed"] = False
         res["out"] += [res["held"], f"in_review: {key} stays {was or 'unmoved'}"]

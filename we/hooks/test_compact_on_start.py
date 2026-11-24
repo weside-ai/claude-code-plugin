@@ -205,3 +205,18 @@ def test_the_hooks_run_as_scripts(tmp_path):
             check=False,
         )
         assert done.returncode == 0 and done.stdout == "", name
+
+
+def test_crew_without_board_file_reads_the_state_dir_board(tmp_path):
+    """A crew without `board.file` finds its board where board.py does (the state dir), never a
+    path named "None" (retro: "Board: None unreadable" for a session whose line existed)."""
+    root = workspace(tmp_path, UPDATES)
+    crew_file = root / ".weside" / "crew.json"
+    data = json.loads(crew_file.read_text())
+    data.pop("board")
+    crew_file.write_text(json.dumps(data))
+    text, _ = cos.render(
+        hook(root), {**MASTER, "WE_STATE_DIR": str(tmp_path / "state")}, Runner(root)
+    )
+    assert "unreadable" not in text
+    assert "- now: building PROJ-8" in text

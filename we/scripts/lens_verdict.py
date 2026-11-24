@@ -100,7 +100,7 @@ on, kept by every later capped round), prints the standing findings and the line
 lens holder decides`` (or, when every lens was green, ``round cap: changed after the last round;
 one holder confirms``) and exits 1. ``decide ID LENS --by ROLE "<one sentence>"`` records the
 holder's decision on that lens for today's subject hash: ``ROLE`` is a role key, the lens's own
-when the lens key is one; refused within the cap, on a stale panel, on a lens without a verdict
+when the lens key is one (a crew member's name stands for the one role it holds); refused within the cap, on a stale panel, on a lens without a verdict
 (record it with ``write --failed``), and on a green lens while another is red. A decided lens
 prints ``lens <lens>: green (decided by <role>: <sentence>)`` (``confirmed`` on a green one); a
 lens green from the earlier round prints ``green (judged round N @ <blob>, round cap)``. A capped
@@ -1214,6 +1214,22 @@ def severity_line(
     }
 
 
+def _role_key(root: Path, by: str) -> str:
+    """`by` as a role key: a member's slug or name (a companion's name included) becomes the role
+    it holds in the crew (a session knows its name, not its key); anything else stays as given."""
+    if by in crew_mod.ROLE_KEYS:
+        return by
+    try:
+        _path, crew = crew_mod.find_and_load(root)
+    except crew_mod.CrewError:
+        return by
+    found = crew_mod.member(crew or {}, by)
+    held = [
+        r for r, slug in ((crew or {}).get("roles") or {}).items() if found and slug == found[0]
+    ]
+    return held[0] if len(held) == 1 else by
+
+
 def decide(
     root: Path, vid: str, lens: str, by: str, sentence: str, now: str | None = None
 ) -> dict[str, Any]:
@@ -1221,6 +1237,7 @@ def decide(
     kind, subject = parse_id(vid)
     if kind != "ready":
         raise UnusableError(f"decide: {vid} is no Ready panel (ready-<KEY>)")
+    by = _role_key(root, by)
     if by not in crew_mod.ROLE_KEYS:
         raise RefusedError(f"decide: --by {by!r} is no role key ({', '.join(crew_mod.ROLE_KEYS)})")
     if lens in crew_mod.ROLE_KEYS and by != lens:
