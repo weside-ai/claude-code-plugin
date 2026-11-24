@@ -234,9 +234,9 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    (body, receipt from `pr-body-receipt.py` in the PR branch's worktree, never retyped; `--draft` only per its step 4), plus one
    line naming money, auth or tenant work when the diff has it. Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
-4. Event-routed project (`references/session-traps.md` § CI and checks): start no watcher; each `PR #<n>` line
-   maps to step 5's branch of the same name (red, green and not armed, merged, conflict), and you keep
-   working until it arrives. Otherwise run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
+4. Event-routed project (`references/session-traps.md` § CI and checks): start no watcher and run no
+   `gh pr checks`; each `PR #<n>` line is handled as that section says (red → a worker runs `/we:ci-review`,
+   green → `arm_pr.sh`, conflict → the PR's worker, merged → `/we:merged`), and you keep working until it arrives. Otherwise run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed (`--human-merge` on a one-way PR waiting for the human's go). Its header lists
    the exit codes; start it from the main checkout (`references/session-traps.md` § CI and checks). One checks watcher per PR: a worker running `/we:ci-review` on it watches until green
    (L0 §Sessions), then you arm it `--until-merged`. Meanwhile refine or prepare the next story.
@@ -244,7 +244,7 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit or the PR's event line, without asking:
    - red, or exit 6 (Codex WARNING/BLOCKING on the head; the watcher has disarmed auto-merge on it and on a red
      review check) → `/we:ci-review <PR>`, which re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
-     or a `we:dev-medium` worker in `<wt>` runs it. Green but not yet armed → the same, open threads and
+     or a `we:dev-medium` worker in `<wt>` runs it; in an event-routed project always the worker (ci-review watches). Green but not yet armed → the same, open threads and
      findings remain on a green run.
    - `final … merged` (exit 0, or 7 with red non-required checks named) or `merged-green` → `/we:merged <PR>`
      yourself; `merged-red` (exit 15, a human merged before CI ended) → the fix first, its waiters told;
