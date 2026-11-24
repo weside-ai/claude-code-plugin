@@ -381,8 +381,8 @@ def owner_suffix(row: dict[str, Any]) -> str:
     names = [n for n in row.get("owner") or [] if isinstance(n, str) and _SESSION_NAME.match(n)]
     if names:
         return " · owner " + ", ".join(names)
-    epic = str(row.get("owner_epic") or "")
-    return " · owner delta: coordinator · " + (epic if _KEY.match(epic) else "epic unknown")
+    epics = [e for e in str(row.get("owner_epic") or "").split(", ") if _KEY.match(e)]
+    return " · owner delta: coordinator · " + (", ".join(epics) or "epic unknown")
 
 
 def _by(f: dict[str, Any]) -> str:

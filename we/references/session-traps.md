@@ -43,7 +43,8 @@ cards point here instead of repeating them.
   (`event_poller.py status` lists the routes). There a master starts no `watch-pr-checks.sh`,
   `watch-pr-conflicts.sh` or `gh pr checks` for its PRs: one poller reads every open PR in one query
   per repo and round, while a watcher per PR and session drained the quota every session shares. It
-  acts on each line instead: `checks red` or `review red` → `/we:ci-review` in a worker; `conflict`
+  acts on each line instead: `checks red` or `review red` → on an armed PR disarm auto-merge
+  first (`--disable-auto`: no watcher disarms it now), then `/we:ci-review` in a worker; `conflict`
   → back to the PR's worker (merge the base); `green` → `arm_pr.sh` (a one-way class waits for the
   human's go); `merged` → `/we:merged`; `main red … owner <you>` → the fix first. Elsewhere (a solo
   project, a crew without the poller) the watcher steps stay. A worker running `/we:ci-review` or

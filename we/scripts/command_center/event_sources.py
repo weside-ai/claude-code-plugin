@@ -21,7 +21,7 @@ Kinds and their config keys (``events.sources.<key>``):
     The RC suite's open issue by an author of ``rc.trusted_authors`` whose body carries the marker
     ``<!-- we-event {"kind":"main_red","sha":…,"run":…,"failing":[…],"epics":[…]} -->`` is a
     ``main_red`` too (``&lt;``, ``&gt;`` and ``&amp;`` in it unescaped), once per marker run id, read from the open-issue list of ``rc.repo`` (shared
-    with ``issue_new``, no call of its own): at most ``MARKER_IDS`` failing ids matching
+    by update time, 20 a round: the RC issue stays open for long and the shared list loses it): at most ``MARKER_IDS`` failing ids matching
     ``_NODE_ID``; none readable gives ``ids unreadable``. A marker of another author is ignored.
 ``pr_checks_red`` / ``pr_conflict`` / ``pr_review_verdict`` / ``pr_green`` / ``pr_merged`` (``pulls``:
 ``{repos, review_rx, merged_window}``)
@@ -190,14 +190,14 @@ _KEY = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 _MARKER = re.compile(r"<!--\s*we-event\s+(\{.*?\})\s*-->", re.DOTALL)
 MARKER_IDS = 10
 DEFAULT_KEY_RX = r"[A-Z]+-\d+"
-PR_RED = ("FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE", "ERROR")
 PULLS_QUERY = """query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     open: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes { number title headRefName headRefOid baseRefName mergeable
         commits(last: 1) { nodes { commit { oid statusCheckRollup { contexts(first: 100) { nodes {
           __typename
-          ... on CheckRun { databaseId name status conclusion }
+          ... on CheckRun { databaseId name status conclusion startedAt
+            checkSuite { workflowRun { workflow { name } } } }
           ... on StatusContext { context state }
         } } } } } } }
     }
@@ -251,6 +251,29 @@ def list_sessions() -> list[dict]:
 
 def run_url(repo: str, run_id: Any) -> str:
     return f"{GH}/{repo}/actions/runs/{int(run_id)}"
+
+
+def newest(nodes: list[dict]) -> list[dict]:
+    """Only the newest run of each check (workflow and name) on the head, as `watch-pr-checks.sh`'s
+    CLASSIFY judges: a draft run's red check beside the ready run's is history. A run not started
+    yet counts as the newest."""
+
+    def ckey(c: dict) -> tuple:
+        wf = (((c.get("checkSuite") or {}).get("workflowRun") or {}).get("workflow") or {}).get(
+            "name"
+        )
+        return (wf or "", c.get("name") or c.get("context") or "")
+
+    def at(c: dict) -> str:
+        t = str(c.get("startedAt") or c.get("createdAt") or "")
+        return "9999" if not t or t.startswith("0001-") else t
+
+    best: dict[tuple, dict] = {}
+    for c in nodes:
+        k = ckey(c)
+        if k not in best or at(c) >= at(best[k]):
+            best[k] = c
+    return [c for c in nodes if best.get(ckey(c)) is c]
 
 
 def epoch(ts: Any) -> float | None:
@@ -562,7 +585,16 @@ class Round:
         cfg = self.src.get("rc") or {}
         repo = cfg.get("repo")
         trusted = set(cfg.get("trusted_authors") or [])
-        for issue in (self.open_items(repo) if repo else None) or []:
+        # its own list by update time: the RC suite keeps one issue open and rewrites its marker,
+        # and the shared list (newest 30 by creation) loses a long-open issue behind newer PRs
+        listed = (
+            self.gh(f"repos/{repo}/issues?state=open&sort=updated&direction=desc&per_page=20")
+            if repo
+            else None
+        )
+        for issue in listed if isinstance(listed, list) else []:
+            if not isinstance(issue, dict):
+                continue
             if "pull_request" in issue or (issue.get("user") or {}).get("login") not in trusted:
                 continue
             found = _MARKER.search(str(issue.get("body") or ""))
@@ -579,8 +611,8 @@ class Round:
             if not isinstance(run, int) or isinstance(run, bool) or run <= 0:
                 continue
             key = f"marker:{repo}:{run}"
-            if not self.new(key):
-                continue
+            if not self._say(key, False):
+                continue  # seen (and refreshed while the issue stays open)
             failing = doc.get("failing")
             ids = (
                 [i for i in failing if isinstance(i, str) and _NODE_ID.match(i)]
@@ -642,9 +674,15 @@ class Round:
                 continue
             seed = f"pulls:{repo}"
             first = not self.seeded.get(seed)
+            unread = False
             for pr in (node.get("open") or {}).get("nodes") or []:
-                if isinstance(pr, dict) and isinstance(pr.get("number"), int):
-                    self._pr_state(repo, pr, first, review, flow_report)
+                if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
+                    continue
+                names = self.required(repo, pr.get("baseRefName") or "main")
+                if names is None:
+                    unread = True  # required checks unreadable: the next round judges this PR
+                    continue
+                self._pr_state(repo, pr, first, review, flow_report, names)
             for pr in (node.get("merged") or {}).get("nodes") or []:
                 if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
                     continue
@@ -661,7 +699,8 @@ class Round:
                     pr.get("mergedAt"),
                     sha=oid[:7] if _SHA.match(oid) else "?",
                 )
-            self.seeded[seed] = True
+            if not unread:  # a first round that could not judge a PR stays the silent one
+                self.seeded[seed] = True
 
     def _pr_emit(self, kind: str, key: str, repo: str, pr: dict, at: Any, **fields: Any) -> None:
         story = self.story_key(pr.get("headRefName"), pr.get("title"))
@@ -676,56 +715,53 @@ class Round:
             **fields,
         )
 
-    def _pr_state(self, repo: str, pr: dict, first: bool, review: re.Pattern, fr: Any) -> None:
+    def _say(self, key: str, first: bool) -> bool:
+        """A transition: a key not seen before, outside the silent first round. A key already seen
+        is refreshed: a state that stays (a PR green for weeks) never ages out and fires again."""
+        if key in self.seen:
+            self.seen[key] = self.now
+            return False
+        self.seen[key] = self.now
+        return not first
+
+    def _pr_state(
+        self, repo: str, pr: dict, first: bool, review: re.Pattern, fr: Any, names: set[str]
+    ) -> None:
         n, head = pr["number"], str(pr.get("headRefOid") or "")
         if not _SHA.match(head):
             return
         at = iso(self.now)
-
-        def say(key: str) -> bool:  # a transition: new, and not the silent first round
-            return self.new(key) and not first
-
-        if pr.get("mergeable") == "CONFLICTING" and say(f"prconf:{repo}#{n}:{head}"):
+        if pr.get("mergeable") == "CONFLICTING" and self._say(f"prconf:{repo}#{n}:{head}", first):
             self._pr_emit("pr_conflict", f"prconf:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
-        names = self.required(repo, pr.get("baseRefName") or "main")
-        if names is None:
-            return  # required checks unreadable: the next round judges
-        contexts = fr.head_contexts(pr)
         commit = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
-        nodes = ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []
-        for raw in nodes if commit.get("oid") == head else []:
-            if not isinstance(raw, dict):
-                continue
+        if commit.get("oid") != head:
+            return
+        rollup = (commit.get("statusCheckRollup") or {}).get("contexts") or {}
+        nodes = newest([c for c in rollup.get("nodes") or [] if isinstance(c, dict)])
+        for raw in nodes:
             check = raw.get("name") or raw.get("context")
             verdict = fr.context_class(raw)
             cid = raw.get("databaseId") if isinstance(raw.get("databaseId"), int) else None
             ident = cid if cid is not None else f"{head}:{event_id(str(check))}"
+            # a check name reaches the line only when the repo's rules require it or the review
+            # pattern matches it in full; any other name is the PR's own text (a workflow it adds)
+            known = check in names or review.fullmatch(str(check or ""))
+            extra = {
+                "check": name_of(check) if known else "check",
+                **({"check_id": cid} if cid else {}),
+            }
             if review.search(str(check or "")):
-                if verdict != "pending" and say(f"prrev:{repo}#{n}:{ident}"):
-                    self._pr_emit(
-                        "pr_review_verdict",
-                        f"prrev:{repo}#{n}:{ident}",
-                        repo,
-                        pr,
-                        at,
-                        check=name_of(check),
-                        verdict=verdict,
-                        **({"check_id": cid} if cid else {}),
-                    )
+                key = f"prrev:{repo}#{n}:{ident}"
+                if verdict != "pending" and self._say(key, first):
+                    self._pr_emit("pr_review_verdict", key, repo, pr, at, verdict=verdict, **extra)
                 continue
-            red = (raw.get("conclusion") or raw.get("state")) in PR_RED
-            if red and (not names or check in names) and say(f"prred:{repo}#{n}:{ident}"):
-                self._pr_emit(
-                    "pr_checks_red",
-                    f"prred:{repo}#{n}:{ident}",
-                    repo,
-                    pr,
-                    at,
-                    check=name_of(check),
-                    **({"check_id": cid} if cid else {}),
-                )
+            key = f"prred:{repo}#{n}:{ident}"
+            if verdict == "fail" and (not names or check in names) and self._say(key, first):
+                self._pr_emit("pr_checks_red", key, repo, pr, at, **extra)
+        judged = dict(commit, statusCheckRollup={"contexts": {"nodes": nodes}})
+        contexts = fr.head_contexts(dict(pr, commits={"nodes": [{"commit": judged}]}))
         verdict, _fails = fr.pr_verdict(contexts, sorted(names))
-        if verdict == "pass" and say(f"prgreen:{repo}#{n}:{head}"):
+        if verdict == "pass" and self._say(f"prgreen:{repo}#{n}:{head}", first):
             self._pr_emit("pr_green", f"prgreen:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
 
     def _first_red(self, repo: str, branch: str, data: dict) -> bool:

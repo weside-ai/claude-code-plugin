@@ -15,6 +15,8 @@ Epic → board lines
     whose ``keys`` hold it. A line in state ``done`` drops, and so does a companion's line
     (``companion`` set): a companion owns and reviews, the build master without a companion builds
     and acts on the line. Two lines on one epic both receive.
+    A parked line drops before the key wins (but for ``main_red``): an active master of the same
+    epic then receives.
 Board line → receiver
     The fresh tail presence whose ``session_id`` equals the line's. A parked line receives
     ``main_red`` (damage to its own epic) and nothing else: every other kind goes to the
@@ -98,11 +100,14 @@ class Resolver:
             return found.group(1)
         return key if key in self.epics else None
 
-    def board_lines(self, key: str | None, epic: str) -> list[dict]:
+    def board_lines(self, key: str | None, epic: str, kind: str = "") -> list[dict]:
         live = [
             x
             for x in self.lines
-            if x.get("state") != "done" and not x.get("companion") and x.get("session_id")
+            if x.get("state") != "done"
+            and not x.get("companion")
+            and x.get("session_id")
+            and (kind in PARKED_KINDS or x.get("state") != "parked")
         ]
         if key:
             hit = [x for x in live if key in (x.get("keys") or [])]
@@ -122,9 +127,7 @@ class Resolver:
         out = Owners(epic=", ".join(epics))
         by_sid = {p.get("session_id"): p for p in presences if p.get("session_id")}
         for epic in epics:
-            for line in self.board_lines(key if len(epics) == 1 else None, epic):
-                if line.get("state") == "parked" and kind not in PARKED_KINDS:
-                    continue
+            for line in self.board_lines(key if len(epics) == 1 else None, epic, kind):
                 p = by_sid.get(line.get("session_id"))
                 if p and p["name"] not in out.to:
                     out.to.append(p["name"])
