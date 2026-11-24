@@ -25,8 +25,11 @@ Kinds and their config keys (``events.sources.<key>``):
     ``_NODE_ID``; none readable gives ``ids unreadable``. A marker of another author is ignored.
 ``pr_checks_red`` / ``pr_conflict`` / ``pr_review_verdict`` / ``pr_green`` / ``pr_merged`` (``pulls``:
 ``{repos, review_rx, merged_window}``)
-    Per repo and round one GraphQL query (``PULLS_QUERY``): the open pull requests (first 50) with
-    head, base, ``mergeable`` and the head commit's rollup, and the 20 last updated merged ones. A
+    Per repo and round one GraphQL query (``pulls_query``): the open pull requests (first 50) with
+    head, base, ``mergeable`` and the head commit's rollup, the 20 last updated merged ones, and per
+    PR open in the round before its contexts' ``isRequired(pullRequestNumber:)``, which
+    ``arm_pr.sh`` counts beside the branch's list; a PR new this round gets no ``pr_green`` before
+    the next one. A
     context's verdict is ``flow_report.context_class`` (a set conclusion wins over the status) and
     the PR's ``flow_report.pr_verdict`` over the base's required checks (``required_checks.sh``,
     cached 1 h): the rule ``arm_pr.sh`` judges by. Transitions only, each once: a required check
@@ -204,8 +207,43 @@ PULLS_QUERY = """query($owner: String!, $name: String!) {
     merged: pullRequests(states: MERGED, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) {
       nodes { number title headRefName mergedAt mergeCommit { oid } }
     }
-  }
+ALIASES  }
 }"""
+# `isRequired` takes the PR's number, which a list query cannot pass per node: each PR open in
+# the round before gets an aliased block in the same query (`arm_pr.sh`'s READ asks the same).
+PR_REQUIRED = """    pr{n}: pullRequest(number: {n}) {{ headRefOid
+      commits(last: 1) {{ nodes {{ commit {{ oid statusCheckRollup {{ contexts(first: 100) {{ nodes {{
+        __typename
+        ... on CheckRun {{ databaseId name isRequired(pullRequestNumber: {n}) }}
+        ... on StatusContext {{ context isRequired(pullRequestNumber: {n}) }}
+      }} }} }} }} }} }}
+    }}
+"""
+
+
+def pulls_query(numbers: list[int]) -> str:
+    """The one query of a repo's round: the lists plus ``isRequired`` per known open PR."""
+    aliases = "".join(PR_REQUIRED.format(n=int(n)) for n in sorted(set(numbers))[:50])
+    return PULLS_QUERY.replace("ALIASES", aliases)
+
+
+def with_required(pr: dict, alias: Any) -> bool:
+    """Copy the alias's ``isRequired`` onto the PR's head contexts; False when the alias is
+    missing or names another head (the flags are then unknown and no ``pr_green`` is judged)."""
+    if not isinstance(alias, dict) or alias.get("headRefOid") != pr.get("headRefOid"):
+        return False
+    commit = (((alias.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+    flags = {}
+    for c in ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []:
+        if isinstance(c, dict):
+            ident = c.get("databaseId") if c.get("__typename") == "CheckRun" else c.get("context")
+            flags[(c.get("__typename"), ident)] = c.get("isRequired") is True
+    mine = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+    for c in ((mine.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []:
+        if isinstance(c, dict):
+            ident = c.get("databaseId") if c.get("__typename") == "CheckRun" else c.get("context")
+            c["isRequired"] = flags.get((c.get("__typename"), ident), False)
+    return True
 
 
 def name_of(value: Any, limit: int = 100) -> str:
@@ -668,21 +706,26 @@ class Round:
         window = float(cfg.get("merged_window", 2)) * HOUR
         for repo in cfg.get("repos") or []:
             owner, name = repo.split("/", 1)
-            data = self.graphql(PULLS_QUERY, owner=owner, name=name)
+            known = self.st.setdefault("pulls_open", {})
+            data = self.graphql(pulls_query(known.get(repo) or []), owner=owner, name=name)
             node = ((data or {}).get("data") or {}).get("repository")
             if not isinstance(node, dict):
                 continue
             seed = f"pulls:{repo}"
             first = not self.seeded.get(seed)
             unread = False
+            opened = []
             for pr in (node.get("open") or {}).get("nodes") or []:
                 if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
                     continue
+                opened.append(pr["number"])
                 names = self.required(repo, pr.get("baseRefName") or "main")
                 if names is None:
                     unread = True  # required checks unreadable: the next round judges this PR
                     continue
-                self._pr_state(repo, pr, first, review, flow_report, names)
+                flags = with_required(pr, node.get(f"pr{pr['number']}"))
+                self._pr_state(repo, pr, first, review, flow_report, names, flags)
+            known[repo] = opened
             for pr in (node.get("merged") or {}).get("nodes") or []:
                 if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
                     continue
@@ -725,8 +768,18 @@ class Round:
         return not first
 
     def _pr_state(
-        self, repo: str, pr: dict, first: bool, review: re.Pattern, fr: Any, names: set[str]
+        self,
+        repo: str,
+        pr: dict,
+        first: bool,
+        review: re.Pattern,
+        fr: Any,
+        names: set[str],
+        flags: bool = True,
     ) -> None:
+        """One PR's transitions; ``flags`` False: its ``isRequired`` are unread this round (a PR
+        new since the last round), so no ``pr_green`` yet: ``arm_pr.sh`` may still judge it
+        pending."""
         n, head = pr["number"], str(pr.get("headRefOid") or "")
         if not _SHA.match(head):
             return
@@ -756,12 +809,13 @@ class Round:
                     self._pr_emit("pr_review_verdict", key, repo, pr, at, verdict=verdict, **extra)
                 continue
             key = f"prred:{repo}#{n}:{ident}"
-            if verdict == "fail" and (not names or check in names) and self._say(key, first):
+            required = not names or check in names or raw.get("isRequired") is True
+            if verdict == "fail" and required and self._say(key, first):
                 self._pr_emit("pr_checks_red", key, repo, pr, at, **extra)
         judged = dict(commit, statusCheckRollup={"contexts": {"nodes": nodes}})
         contexts = fr.head_contexts(dict(pr, commits={"nodes": [{"commit": judged}]}))
         verdict, _fails = fr.pr_verdict(contexts, sorted(names))
-        if verdict == "pass" and self._say(f"prgreen:{repo}#{n}:{head}", first):
+        if flags and verdict == "pass" and self._say(f"prgreen:{repo}#{n}:{head}", first):
             self._pr_emit("pr_green", f"prgreen:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
 
     def _first_red(self, repo: str, branch: str, data: dict) -> bool:

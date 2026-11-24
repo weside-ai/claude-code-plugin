@@ -1085,8 +1085,44 @@ PULLS = json.loads((EVENTS / "pulls-graphql-open.json").read_text(encoding="utf-
 T0 = 1_795_176_000.0
 
 
+def _served(answer: dict, asked: list) -> dict:
+    """The answer GitHub gives the source's query: the list carries no `isRequired` (a list query
+    cannot pass a PR number), each `pr<n>` alias carries it per context (test nodes keep it in
+    `isRequired` and default to false). Only the PRs the query asked (`asked`) get one."""
+    out = json.loads(json.dumps(answer))
+    repo = out["data"]["repository"]
+    for pr in repo["open"]["nodes"]:
+        commit = pr["commits"]["nodes"][0]["commit"]
+        alias = []
+        for c in commit["statusCheckRollup"]["contexts"]["nodes"]:
+            alias.append(
+                {k: c.get(k) for k in ("__typename", "databaseId", "name", "context")}
+                | {"isRequired": bool(c.pop("isRequired", False))}
+            )
+        if pr["number"] not in asked:
+            continue
+        repo.setdefault(
+            f"pr{pr['number']}",
+            {
+                "headRefOid": pr["headRefOid"],
+                "commits": {
+                    "nodes": [
+                        {
+                            "commit": {
+                                "oid": commit["oid"],
+                                "statusCheckRollup": {"contexts": {"nodes": alias}},
+                            }
+                        }
+                    ]
+                },
+            },
+        )
+    return out
+
+
 def _pulls_round(tmp: Path, answer: dict, state: dict, now: float) -> list[es.Event]:
-    data = {"now": now, "tags": "", "gh": {"graphql": answer}}
+    asked = (state.get("pulls_open") or {}).get("acme/app") or []
+    data = {"now": now, "tags": "", "gh": {"graphql": _served(answer, asked)}}
     state.setdefault("req", {})["acme/app@main"] = {"ts": now, "names": ["test"]}
     srcs = {"pulls": {"repos": ["acme/app"], "review_rx": "^(Claude|Codex) Review$"}}
     return es.Round(srcs, state, now, root=str(tmp), env=fake_env(tmp, data)).run_all()
@@ -1257,3 +1293,43 @@ def test_pr_lines_name_only_known_checks_and_judge_the_newest_run(tmp_path):
     srcs = {"pulls": {"repos": ["acme/app"]}}
     es.Round(srcs, unread, T0, root=str(tmp_path), env=fake_env(tmp_path, data)).run_all()
     assert not unread["seeded"].get("pulls:acme/app")  # required_checks.sh failed: not seeded
+
+
+def test_pr_green_waits_on_a_check_required_for_the_pr_only(tmp_path):
+    """`arm_pr.sh` counts a check GitHub marks required for this PR (`isRequired`) beside the
+    branch's list: while it runs the PR is pending there, so no `green` line; once it passes, one.
+    The query asks `isRequired(pullRequestNumber:)` per PR known from the round before."""
+    answer, state = json.loads(json.dumps(PULLS)), {}
+    _pulls_round(tmp_path, answer, state, T0)
+    pr = _pr(answer)
+    for name in ("test", "Claude Review", "lint"):
+        _ctx(pr, name).update(status="COMPLETED", conclusion="SUCCESS")
+    nodes = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]
+    nodes.append(
+        {
+            "__typename": "CheckRun",
+            "databaseId": 15,
+            "name": "preview",
+            "status": "IN_PROGRESS",
+            "conclusion": None,
+            "isRequired": True,
+        }
+    )
+    found = _pulls_round(tmp_path, answer, state, T0 + 300)
+    assert "pr_green" not in [e.kind for e in found if e.fields.get("number") == 7]
+    calls = (tmp_path / "inputs.json.calls").read_text()
+    assert (
+        "isRequired(pullRequestNumber: 7)" in calls and "isRequired(pullRequestNumber: 8)" in calls
+    )
+    _ctx(pr, "preview").update(status="COMPLETED", conclusion="SUCCESS")
+    found = _pulls_round(tmp_path, answer, state, T0 + 600)
+    assert [e.kind for e in found if e.fields.get("number") == 7] == ["pr_green"]
+
+
+def test_a_pr_new_this_round_gets_no_green_before_its_required_flags_are_read(tmp_path):
+    answer, state = json.loads(json.dumps(PULLS)), {"seeded": {"pulls:acme/app": True}}
+    for name in ("test", "Claude Review", "lint"):
+        _ctx(_pr(answer), name).update(status="COMPLETED", conclusion="SUCCESS")
+    first = _pulls_round(tmp_path, answer, state, T0)
+    assert "pr_green" not in [e.kind for e in first]
+    assert [e.kind for e in _pulls_round(tmp_path, answer, state, T0 + 300)] == ["pr_green"]
