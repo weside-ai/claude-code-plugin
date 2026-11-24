@@ -52,7 +52,9 @@ Exit codes:
      commits, so the caller waits for it (its URL) and never takes the PR way meanwhile
   3  the server rejected the push naming a rule (`GH013`, `GH006`, `Repository rule violations`,
      `protected branch`, `through a pull request`, `must use a pull request`, `TF402455`): this
-     repo takes no direct push, land by PR. Any other `[remote rejected]` is exit 2, never the PR way
+     repo takes no direct push, land by PR. A rejected ref line naming a lost race (lock race,
+     non-fast-forward, fetch first) is retried first, whatever else the output holds (a bypass
+     actor's push prints the rule on every push). Any other `[remote rejected]` is exit 2, never the PR way
   4  refused by the secret scan: a finding, or no scanner configured (or it did not run); nothing
      was pushed, and this commit lands by no route, the PR way included. Its own code because a
      caller falls back to a PR on 1, and that fallback would push the finding to the forge
@@ -102,6 +104,9 @@ RULE = re.compile(
 LOCK_RACE = re.compile(
     r"cannot lock ref|incorrect old value|failed to update ref|is at \S+ but expected", re.I
 )
+# A ref line that lost to a concurrent push. It decides before RULE: GitHub prints its bypass
+# notice ("Changes must be made through a pull request") on every push of a bypass actor.
+STALE = re.compile(r"non-fast-forward|fetch first", re.I)
 REF_LINE_MAX = 300
 WORKFLOW = "docs-push.yml"
 WORKFLOW_PATH = f".github/workflows/{WORKFLOW}"
@@ -317,6 +322,9 @@ def land(remote: str, branch: str | None) -> list[str]:
             return _landed(before, branch)
         text = out.stdout + out.stderr
         line = ref_line(out.stdout)
+        rows = "\n".join(row for row in out.stdout.splitlines() if row.startswith("!"))
+        if LOCK_RACE.search(rows) or STALE.search(rows):
+            continue
         if RULE.search(text):
             raise PushError(REJECTED, f"{NO_PUSH_LINE}\n{line}")
         if "[remote rejected]" in text and not LOCK_RACE.search(text):
