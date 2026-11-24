@@ -44,7 +44,7 @@ For a branch built outside `/we:master`; master § Push, PR, CI does the same in
 5. Report the URL. Under the crew's `merge.armer: workflow` the repo's workflow arms and its own rules
    say when a PR opens as a draft; nobody runs `arm_pr.sh` there. Otherwise, who arms and when: the table in `/we:master` § Close the run (a `T0` or `T2` PR that is not one-way
    is armed with `${CLAUDE_PLUGIN_ROOT}/scripts/arm_pr.sh <PR>` right after create, unless it carries a `plan: waits for …` line; the repo's required checks hold the merge).
-6. A master in an event-routed project starts no watcher: it acts on the PR's lines
+6. An event-routed master starts no watcher: it acts on the PR's lines
    (`references/session-traps.md` § CI and checks). Anyone else (a worker, a solo run) arms the watcher as a
    background command: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <head> --until-merged`. The watch follows L0 §Sessions (a worker until green, its starter until the merge).
    Without auto-merge it prints `waiting … auto-merge off` once at green and watches on to the merge, a push

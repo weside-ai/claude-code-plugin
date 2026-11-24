@@ -16,7 +16,7 @@ refiner worker for a story without a plan; start one build worker (`we:dev-mediu
 one, through the template `worker_launch.py backend` prints, as a session of its own in a repo with a crew (`worker-dispatch.md`
 § Worker launch backend). You never build in your own session (one exception: a CI fix of ≤ 5 lines without user-visible text) and never
 through a build subagent: a subagent reads and reviews, never builds. User-visible text never comes from you: its
-owner writes or approves it before a worker builds it. Each story is one PR per repo, in its plan's order (L0 §Units): push once per story, open its PR, follow CI on the poller's lines where the project is event-routed, else with `scripts/watch-pr-checks.sh` (`references/session-traps.md` § CI and checks). You never merge by hand; arming auto-merge per
+owner writes or approves it before a worker builds it. Each story is one PR per repo, in its plan's order (L0 §Units): push once per story, open its PR, follow CI on the poller's lines where you are event-routed, else with `scripts/watch-pr-checks.sh` (`references/session-traps.md` § CI and checks). You never merge by hand; arming auto-merge per
 § Close the run (with its `ready` merge) is the human's standing permission (owner 30.09.2026). You stop only for a protected
 action (release, a staging deploy the epic's Orchestration contract does not grant, anything destructive); an open question parks only the chunk it blocks. Every other
 status note goes into the same message as your next tool call. A question for the human is, in a
@@ -234,7 +234,7 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    (body, receipt from `pr-body-receipt.py` in the PR branch's worktree, never retyped; `--draft` only per its step 4), plus one
    line naming money, auth or tenant work when the diff has it. Link the PR to the ticket and move
    no status: In Review is "PR merged and linked" (L0 §Lifecycle) and `/we:merged` sets it.
-4. Event-routed project (`references/session-traps.md` § CI and checks): start no watcher and run no
+4. Event-routed master (`references/session-traps.md` § CI and checks): start no watcher and run no
    `gh pr checks`; each `PR #<n>` line is handled as that section says (red → a worker runs `/we:ci-review`,
    green → `arm_pr.sh`, conflict → the PR's worker, merged → `/we:merged`), and you keep working until it arrives. Otherwise run `${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR> --sha <pushed sha>` as a background command,
    with `--until-merged` once auto-merge is armed (`--human-merge` on a one-way PR waiting for the human's go). Its header lists
@@ -244,7 +244,7 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    `/we:merged` by hand on it (owner 28.10.2026). On the watcher's exit or the PR's event line, without asking:
    - red, or exit 6 (Codex WARNING/BLOCKING on the head; the watcher has disarmed auto-merge on it and on a red
      review check) → `/we:ci-review <PR>`, which re-arms when green. Never from the shared main checkout: `EnterWorktree(path=<wt>)` first,
-     or a `we:dev-medium` worker in `<wt>` runs it; in an event-routed project always the worker (ci-review watches). Green but not yet armed → the same, open threads and
+     or a `we:dev-medium` worker in `<wt>` runs it; as an event-routed master always the worker (ci-review watches). Green but not yet armed → the same, open threads and
      findings remain on a green run.
    - `final … merged` (exit 0, or 7 with red non-required checks named) or `merged-green` → `/we:merged <PR>`
      yourself; `merged-red` (exit 15, a human merged before CI ended) → the fix first, its waiters told;

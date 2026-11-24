@@ -361,7 +361,7 @@ parked: <branch> (<why>)   time limit, quota or a stop: checkpoint pushed to wip
 ```
 
 The starter acts on that line alone: `armed` → `watch-pr-checks.sh <PR> --sha <sha> --until-merged`
-(an event-routed project: no watcher, the PR's `merged` line; `references/session-traps.md` § CI and checks),
+(an event-routed master: no watcher, the PR's `merged` line; `references/session-traps.md` § CI and checks),
 on its merge (`merged`, `merged-green`) `/we:merged <PR>` (it runs `we-worker close <KEY> --pr <n>`), on
 `merged-red` (exit 15) the fix first; `held` → the PR continues
 at `/we:master` § Push, PR, CI step 5 or the one-way row; `parked` → resume per the line. The Stop

@@ -38,16 +38,19 @@ cards point here instead of repeating them.
 
 ## CI and checks
 
-- **Where the poller routes PR state, a master waits on its lines, not on a watcher.** The project is
-  *event-routed* when `.weside/config.json` `events.routes` sends the `pr_*` kinds to `epic_master`
-  (`event_poller.py status` lists the routes). There a master starts no `watch-pr-checks.sh`,
+- **Where the poller delivers PR state to a master, it waits on its lines, not on a watcher.** A master is
+  *event-routed* when three things hold: `.weside/config.json` `events.routes` sends the `pr_*` kinds to
+  `epic_master` (`event_poller.py status` lists the routes), its session start printed
+  `events: tail … for master` (a master without a companion), and its board line carries its
+  `session_id` and epic and is not parked. Lacking one, its lines go to the coordinator instead and it
+  keeps the watcher steps. An event-routed master starts no `watch-pr-checks.sh`,
   `watch-pr-conflicts.sh` or `gh pr checks` for its PRs: one poller reads every open PR in one query
   per repo and round, while a watcher per PR and session drained the quota every session shares. It
   acts on each line instead: `checks red` or `review red` → on an armed PR disarm auto-merge
   first (`--disable-auto`: no watcher disarms it now), then `/we:ci-review` in a worker; `conflict`
   → back to the PR's worker (merge the base); `green` → `arm_pr.sh` (a one-way class waits for the
   human's go); `merged` → `/we:merged`; `main red … owner <you>` → the fix first. Elsewhere (a solo
-  project, a crew without the poller) the watcher steps stay. A worker running `/we:ci-review` or
+  project, a crew without the poller, a master bound to a companion) the watcher steps stay. A worker running `/we:ci-review` or
   carrying its PR (`PR owner: worker`) keeps `watch-pr-checks.sh`: the lines go to its starter.
 - **A watcher's exit 0 is not green.** A watch loop ends on an expired token, and a chained
   `; echo` exits 0 anyway: act only on `gh run view <id> --json status,conclusion` or on
