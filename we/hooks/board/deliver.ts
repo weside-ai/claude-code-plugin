@@ -26,10 +26,9 @@
 // Without a running coordinator a pane writes one marker row per answer older than 60 s; the
 // deliverer delivers it anyway, its newer row superseding the marker.
 import type { BoardAcceptVariant, BoardAnswer, BoardAnswerKind, BoardDeliveredKind, BoardDelivery, BoardDeliveryRole, BoardPromptKind } from '../../types'
-import { answerKindOf, answerPrompt } from './board'
+import { CLOSING, answerKindOf, answerPrompt } from './board'
 
-const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild']
-const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
+const DELIVERED: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild', 'pr_merged', 'pr_closed']
 
 // How long a pane waits for any ledger row of an answer before it marks the coordinator not running.
 export const MARK_AFTER_MS = 60_000
@@ -51,6 +50,8 @@ export type AnswerLine = {
   // from the board item at delivery): a bare "Q7: Accept" was read the wrong way round.
   ask?: string
   recommendation?: string
+  // The PR a `pr_merged`/`pr_closed` line closed its question on (`board.py close-merged`).
+  pr?: string
 }
 
 const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
@@ -83,6 +84,7 @@ export const answerLines = (text: string): AnswerLine[] => {
       ...(str(a.quote) ? { quote: str(a.quote) } : {}),
       ...(str(a.ask) ? { ask: str(a.ask) } : {}),
       ...(str(a.recommendation) ? { recommendation: str(a.recommendation) } : {}),
+      ...(str(a.pr) ? { pr: str(a.pr) } : {}),
     })
   }
   return out
@@ -246,7 +248,9 @@ const quoteOf = (line: AnswerLine) => `${questionOf(line)}${line.quote ? `\nThe 
 // reply was read from (`board.py signals`, `via: ticket`), else the pane.
 const WRITTEN = { chat: 'in the chat of', ticket: 'on' } as Record<string, string>
 export const writerNote = (line: AnswerLine) =>
-  line.answer === 'rebuild'
+  line.answer === 'pr_merged' || line.answer === 'pr_closed'
+    ? ' (closed by board.py close-merged)'
+    : line.answer === 'rebuild'
     ? ` (Refresh pressed on the board pane in ${line.session ?? 'a session without a name'})`
     : ` (answered ${WRITTEN[line.via ?? ''] ?? 'from the board pane in'} ${line.session ?? 'a session without a name'})`
 
@@ -256,12 +260,12 @@ const kindOf = (line: AnswerLine, accept?: AcceptAs): BoardPromptKind => (line.a
 
 // The prompt the coordinator receives: today's text per kind, the owner's words when the owner gave them.
 export const coordinatorText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
-  `${answerPrompt(kindOf(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
+  `${answerPrompt(kindOf(line, accept), line.id, prompts, accept?.pr ?? line.pr)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to the asker: the same answer; for Update, the request to check the question.
 const askerKind = (line: AnswerLine, accept?: AcceptAs): BoardPromptKind => (line.answer === 'update' ? 'update_asker' : kindOf(line, accept))
 export const askerText = (line: AnswerLine, prompts: Prompts, accept?: AcceptAs) =>
-  `${answerPrompt(askerKind(line, accept), line.id, prompts, accept?.pr)}${writerNote(line)}${quoteOf(line)}`
+  `${answerPrompt(askerKind(line, accept), line.id, prompts, accept?.pr ?? line.pr)}${writerNote(line)}${quoteOf(line)}`
 
 // The peer message to a gone asker's starter: the asker's text, marked as such.
 export const starterText = (line: AnswerLine, asker: string, prompts: Prompts, accept?: AcceptAs) =>

@@ -7,11 +7,12 @@ import type { Part } from './work'
 
 const MIN = 60_000
 const DAY = 86_400_000
-const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild']
+const DELIVERED_KINDS: readonly BoardDeliveredKind[] = ['accept', 'deny', 'followup', 'update', 'withdraw', 'rebuild', 'pr_merged', 'pr_closed']
 const PROMPT_KINDS: readonly BoardPromptKind[] = [...DELIVERED_KINDS, 'update_asker', 'accept_hand', 'accept_task', 'followup_route']
 const KINDS: readonly BoardAnswerKind[] = [...DELIVERED_KINDS, 'read']
-// An Accept, Deny or Withdraw closes its question: the pane strikes it, and later lines on that id change nothing.
-const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw']
+// An Accept, Deny or Withdraw closes its question, as does close-merged's `pr_merged`/`pr_closed`: the pane
+// strikes it, and later lines on that id change nothing.
+export const CLOSING: readonly BoardAnswerKind[] = ['accept', 'deny', 'withdraw', 'pr_merged', 'pr_closed']
 const NEWS_KINDS: readonly BoardNewsKind[] = ['info', 'gate', 'todo']
 
 // The retired answer words Discuss and Info are Follow-up: an answers line pressed before the rename and
@@ -289,6 +290,8 @@ const DEFAULT_PROMPT: Record<BoardPromptKind, string> = {
   update: '{id}: please check whether this question is still current and correctly worded (goal still active? needs an update?)',
   withdraw: '{id}: withdrawn on the board; take its label off the ticket and say so in one comment there',
   update_asker: 'check whether {id} is still current and well worded; re-ask it with a new id or withdraw it',
+  pr_merged: '{id}: PR von Hand gemergt, die Frage ist erledigt ({pr})',
+  pr_closed: '{id}: PR geschlossen, die Frage ist erledigt ({pr})',
   accept_hand: "{id}: the owner's go on {pr} — the asking session arms that PR with `arm_pr.sh`; `board.py show {id}` keeps the go",
   accept_task: '{id}: taken — the owner does this task; do not do it yourself',
   followup_route: '{id}: Follow-up → tell the owner in one line: talk to {who}. Do not answer or relay it yourself.',

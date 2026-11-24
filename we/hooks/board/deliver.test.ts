@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 
-import { answerLines, BUSY_MAX_MS, deliveryLine, isFinal, keyOf, ledgerState, markerRows, noticeMatches, rebuildWaits, transcriptVerdict, versionAtLeast, writerNote } from './deliver'
+import { answerLines, askerText, BUSY_MAX_MS, deliveryLine, isFinal, keyOf, ledgerState, markerRows, noticeMatches, rebuildWaits, transcriptVerdict, versionAtLeast, writerNote } from './deliver'
 import type { Awaiting } from './deliver'
 
 type T$ = Parameters<TestBody>[0]
@@ -1026,4 +1026,17 @@ test('transcriptVerdict without a seen mark: the stored prompt counts, anything 
   expect(transcriptVerdict({ ...a, seen: 0 }, [said('assistant', 'working')] as never, 2_000)).toBe('busy')
   expect(transcriptVerdict({ ...a, seen: 0 }, [said('assistant', 'working')] as never, 1_000 + BUSY_MAX_MS)).toBe('lost')
   expect(transcriptVerdict(a, undefined, 2_000)).toBe('lost')
+})
+
+test('a question close-merged closed on a hand merge reaches its asker with the PR, and a later line on it is no answer', () => {
+  const pr = 'https://github.com/o/r/pull/5'
+  const text = [
+    JSON.stringify({ id: 'Q7', answer: 'pr_merged', ts: '2026-11-24T21:06:08Z', session: 'close-merged', pr }),
+    JSON.stringify({ id: 'Q7', answer: 'accept', ts: '2026-11-24T21:07:00Z', session: 'foxy' }),
+    JSON.stringify({ id: 'Q8', answer: 'pr_closed', ts: '2026-11-24T21:06:08Z', session: 'close-merged', pr }),
+  ].join('\n')
+  const lines = answerLines(text)
+  expect(lines.map(l => `${l.id} ${l.answer}`)).toEqual(['Q7 pr_merged', 'Q8 pr_closed'])
+  expect(askerText(lines[0], undefined)).toBe(`Q7: PR von Hand gemergt, die Frage ist erledigt (${pr}) (closed by board.py close-merged)`)
+  expect(askerText(lines[1], undefined)).toBe(`Q8: PR geschlossen, die Frage ist erledigt (${pr}) (closed by board.py close-merged)`)
 })

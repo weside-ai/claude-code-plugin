@@ -74,6 +74,8 @@ const ANSWER: Record<BoardAnswerKind, { label: string; color: string }> = {
   withdraw: { label: 'withdrawn', color: 'inactive' },
   read: { label: 'read', color: 'inactive' },
   rebuild: { label: 'rebuild asked', color: 'inactive' },
+  pr_merged: { label: 'PR merged', color: 'success' },
+  pr_closed: { label: 'PR closed', color: 'inactive' },
 }
 
 const NEWS: Record<BoardNewsKind, { glyph: string; color: string }> = {
@@ -200,6 +202,8 @@ async function answerQuestion($: $, file: string, id: string, answer: BoardAnswe
     )
     // Exit 3: the line is saved, but the go comment a skipped Codex finding needs failed to post (answer.py).
     if (run.exitCode === 3) $.ui.toast(`board: ${run.stderr.trim() || `${id}: the go comment on the PR failed`}`)
+    // Exit 4: an earlier line closed the question (a hand merge the card did not show yet); nothing written.
+    else if (run.exitCode === 4) $.ui.toast(`board: ${run.stderr.trim() || `${id} ist schon erledigt`}`)
     else if (run.exitCode !== 0) throw new Error(run.stderr.trim() || `answer.py exit ${run.exitCode}`)
     await loadAnswers($, file, true)
     if (answer !== 'read' && delivery.isOn) $.clock.after(0, () => void deliverTick($, file))
