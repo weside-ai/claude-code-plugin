@@ -491,6 +491,7 @@ take_lock
 quota_wait
 SHA=""
 MERGED_EARLY=""
+WAITING=""  # closed_exit reads it; the --sha wait can reach it before watch_head
 until view; do tick; done
 SHA=$(head -n 1 <<<"$OUT")
 if [ -n "$EXPECT" ]; then

@@ -37,6 +37,9 @@ if path not in data["gh"]:
     sys.stderr.write("HTTP 404: Not Found\n")
     sys.exit(1)
 value = data["gh"][path]
+if isinstance(value, str) and "\x1b" in value and "--allow-escape-sequences" not in args:
+    sys.stderr.write("refusing to print terminal escape sequences; pass --allow-escape-sequences\n")
+    sys.exit(1)
 if isinstance(value, str):
     sys.stdout.write(value + ("\n" if value and not value.endswith("\n") else ""))
 elif jq:
@@ -374,6 +377,23 @@ def test_rc_verdict(tmp_path, conclusion, status, line):
     assert [e for e in again if e.kind.startswith("rc_verdict")] == []
 
 
+def test_rc_plan_log_with_escape_sequences_is_read(tmp_path):
+    """Red: gh refused a plan log holding terminal escapes (exit 1) and the verdict line said
+    `plan log unreadable`; the poller passes the flag and strips the escapes itself."""
+    data = rc_data("success", "success", home()["now"])
+    log = "repos/acme/app/actions/jobs/4011/logs"
+    data["gh"][log] = "\x1b[36;1m" + data["gh"][log].rstrip("\n") + "\x1b[0m\n"
+    srcs = {k: v for k, v in sources(tmp_path).items() if k in RC_ONLY}
+    events = [
+        e
+        for e in run_round(tmp_path, data, seeded(), srcs=srcs)
+        if e.kind.startswith("rc_verdict")
+    ]
+    assert lines_of(events, data["now"]) == [
+        "RC v1.2.3-rc.1 green · run https://github.com/acme/app/actions/runs/401"
+    ]
+
+
 @pytest.mark.parametrize("contexts", [["suite/rc"], ["suite/full", "suite/rc"]])
 def test_rc_verdict_reads_the_first_configured_context_present(tmp_path, contexts):
     """A renamed status context: the sha carries only the new name, or both while they overlap."""
@@ -676,6 +696,32 @@ def test_a_pull_request_run_is_its_own_kind_named_only_from_the_repos_own_branch
             ("run_queued_long", "CI: Main Loop", "release"),
         ]
     )
+
+
+def test_a_pull_request_hang_carries_the_story_of_its_own_branch(tmp_path):
+    """The ``epic_master`` target finds the master over ``story``: a run from the repo's own branch
+    carries its key, a fork's run none."""
+    data = home()
+    runs = data["gh"]["repos/acme/app/actions/runs?status=queued&per_page=100"]["workflow_runs"]
+    runs[0] = dict(
+        runs[0],
+        event="pull_request",
+        head_branch="fix/AB-77-hang",
+        head_repository={"full_name": "acme/app"},
+    )
+    runs[1] = dict(
+        runs[1],
+        event="pull_request",
+        head_branch="fix/AB-78-fork",
+        head_repository={"full_name": "fork/app"},
+    )
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    found = {
+        e.object: e.fields.get("story")
+        for e in run_round(tmp_path, data, seeded(), srcs=srcs)
+        if e.kind == "pr_run_queued_long"
+    }
+    assert found == {"run:301": "AB-77"}
 
 
 # --- open prompts: the sessions source (claude agents --json samples, transcripts) ----------
@@ -1063,6 +1109,28 @@ def test_the_repos_own_runs_spend_the_recheck_budget_first(tmp_path):
     assert got and got[0] != f"run:{pr['id']}"
 
 
+@pytest.mark.parametrize(
+    "job_status, reported", [("in_progress", False), ("completed", False), ("queued", True)]
+)
+def test_a_queued_run_whose_jobs_started_is_no_hang(tmp_path, job_status, reported):
+    """Red: a run the forge still listed and read as queued was reported `queued 64 min` while
+    its jobs had run for an hour; a run any of whose jobs has started is not queued."""
+    data = home()
+    data["gh"]["repos/acme/app/actions/runs/301"] = dict(
+        data["gh"]["repos/acme/app/actions/runs/301"], status="queued"
+    )
+    data["gh"]["repos/acme/app/actions/runs/301/jobs?filter=latest&per_page=100"] = {
+        "total_count": 2,
+        "jobs": [
+            {"status": "queued", "started_at": None},
+            {"status": job_status, "started_at": "2026-11-20T10:00:00Z"},
+        ],
+    }
+    srcs = {"queued": sources(tmp_path)["queued"]}
+    hung = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
+    assert ("run:301" in hung) is reported
+
+
 @pytest.mark.parametrize("jobs, reported", [(0, False), (1, True)])
 def test_a_day_old_queued_run_without_a_job_is_a_ghost(tmp_path, jobs, reported):
     """The forge keeps a run queued that it can neither start nor cancel: no job after a day."""
@@ -1072,7 +1140,10 @@ def test_a_day_old_queued_run_without_a_job_is_a_ghost(tmp_path, jobs, reported)
     data["gh"]["repos/acme/app/actions/runs/301"] = dict(
         data["gh"]["repos/acme/app/actions/runs/301"], status="queued"
     )
-    data["gh"]["repos/acme/app/actions/runs/301/jobs?per_page=1"] = {"total_count": jobs}
+    data["gh"]["repos/acme/app/actions/runs/301/jobs?filter=latest&per_page=100"] = {
+        "total_count": jobs,
+        "jobs": [{"status": "queued"}] * jobs,
+    }
     srcs = {"queued": sources(tmp_path)["queued"]}
     hung = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
     assert ("run:301" in hung) is reported

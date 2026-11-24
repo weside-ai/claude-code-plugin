@@ -43,9 +43,11 @@ Kinds and their config keys (``events.sources.<key>``):
 ``run_queued_long`` (``queued``: ``{repo, limit_min, limits, recheck_max}``)
     A run queued longer than ``limit_min`` (default 60) or ``limits[<workflow name>]``; a superseded
     dispatch (below) is not one. The queued list also returns finished runs: each candidate past
-    its limit is read once by its id and counts only while that read says ``queued``; at most
-    ``recheck_max`` (default 5) such reads a round, the rest wait for the next round. A pull
-    request's run is ``pr_run_queued_long`` instead, a digest unless a route of its own says else
+    its limit is read once by its id and counts only while that read says ``queued`` and none of
+    its jobs has started (a run reads ``queued`` while one job waits for a runner and the others
+    run); at most ``recheck_max`` (default 5) such reads a round, the rest wait for the next round.
+    A pull request's run is ``pr_run_queued_long`` instead, with ``story`` from a head branch of
+    the repo itself: to the epic's master as a digest unless a route of its own says else
     (``event_routes.py``). A fork's run shows its workflow id and branch ``?``, never its names.
 ``dispatch_superseded`` (``dispatch``: ``{repo, workflow, stale_h}``)
     A queued ``workflow_dispatch`` run of the workflow file when a newer dispatch of the same ref
@@ -181,6 +183,7 @@ _K8S = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
 _REASON = re.compile(r"^[A-Za-z]{1,64}$")
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_ESCAPES = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]")  # CSI and two-byte escapes
 _REPO = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 PROD_TAG = r"^v\d+\.\d+\.\d+$"
 WAITING = ("permission prompt", "sandbox request", "dialog open")
@@ -434,7 +437,9 @@ class Round:
             return None
 
     def gh(self, path: str, raw: bool = False) -> Any:
-        argv = ["gh", "api", path]
+        """``raw``: the body as text, terminal escapes stripped (a job log carries colour codes,
+        and gh refuses to print them without ``--allow-escape-sequences``)."""
+        argv = ["gh", "api", path, *(["--allow-escape-sequences"] if raw else [])]
         out = self._exec(argv, 60)
         where = path.split("?", maxsplit=1)[0]
         if out is None:
@@ -443,7 +448,7 @@ class Round:
             self.errors.append(f"gh {where}: exit {out.returncode}")
             return None
         if raw:
-            return out.stdout
+            return _ESCAPES.sub("", out.stdout)
         try:
             return json.loads(out.stdout)
         except ValueError:
@@ -834,9 +839,27 @@ class Round:
         self.seeded[seed] = True
         return True
 
-    def _ghost(self, repo: str, run_id: Any) -> bool:
-        jobs = self.gh(f"repos/{repo}/actions/runs/{int(run_id)}/jobs?per_page=1")
-        return isinstance(jobs, dict) and jobs.get("total_count") == 0
+    def _still_queued(self, repo: str, run: dict) -> bool | None:
+        """Whether a queued list entry is a hang: None when a read failed (the next round reads
+        again). The list keeps finished runs, and a run reads ``queued`` while one job waits for a
+        runner and the others run: only a run none of whose jobs has started counts."""
+        one = self.gh(f"repos/{repo}/actions/runs/{int(run['id'])}")
+        if one is None:
+            return None
+        if one.get("status") != "queued":
+            return False  # a stale list entry
+        jobs = self.gh(
+            f"repos/{repo}/actions/runs/{int(run['id'])}/jobs?filter=latest&per_page=100"
+        )
+        if not isinstance(jobs, dict):
+            return None
+        if any(j.get("status") in ("in_progress", "completed") for j in jobs.get("jobs") or []):
+            return False
+        if self.age_s(run.get("created_at")) > DAY and jobs.get("total_count") == 0:
+            # Queued for a day with no job: a run the forge can neither start nor cancel.
+            print(f"events: ghost run {repo} {int(run['id'])} skipped", file=sys.stderr)
+            return False
+        return True
 
     def queued(self) -> None:
         cfg = self.src.get("queued") or {}
@@ -876,16 +899,11 @@ class Round:
                 if checks <= 0:
                     continue
                 checks -= 1
-                one = self.gh(f"repos/{repo}/actions/runs/{run['id']}")
-                if one is None:
+                still = self._still_queued(repo, run)
+                if still is None:
                     continue  # unreadable: the next round reads again
-                if one.get("status") != "queued":
-                    self.seen[key] = self.now  # a stale list entry, never a hang
-                    continue
-                if self.age_s(run.get("created_at")) > DAY and self._ghost(repo, run["id"]):
-                    # Queued for a day with no job: a run the forge can neither start nor cancel.
-                    self.seen[key] = self.now
-                    print(f"events: ghost run {repo} {int(run['id'])} skipped", file=sys.stderr)
+                if not still:
+                    self.seen[key] = self.now  # never a hang: not read again
                     continue
                 if self.new(key):
                     self._hang(repo, run, key, mins)
@@ -911,12 +929,14 @@ class Round:
 
     def _hang(self, repo: str, run: dict, key: str, mins: int) -> None:
         """One queued run past its limit: ``run_queued_long`` for a run of the repo's own events,
-        ``pr_run_queued_long`` (a digest by default) for a pull request's run."""
+        ``pr_run_queued_long`` (to the epic's master as a digest by default, ``story`` from the
+        head branch) for a pull request's run."""
         event = run.get("event")
         head = (run.get("head_repository") or {}).get("full_name")
         # A fork's pull_request run names its own workflow and branch: only a run the repo itself
         # started, or a pull request from one of its own branches, shows them; a fork shows the id.
         own = event in TRUSTED_EVENTS or (event in PR_EVENTS and head == repo)
+        story = self.story_key(run.get("head_branch"))  # epic_master finds its master over it
         self.emit(
             "pr_run_queued_long" if event in PR_EVENTS else "run_queued_long",
             key,
@@ -931,6 +951,7 @@ class Round:
             branch=token_of(run.get("head_branch")) if own else "?",
             run_id=int(run["id"]),
             **(self.by("queued", run) if own else {}),
+            **({"story": story} if own and event in PR_EVENTS and story else {}),
         )
 
     def issues(self) -> None:

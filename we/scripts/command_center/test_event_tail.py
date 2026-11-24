@@ -239,9 +239,11 @@ def test_the_machinery_tail_delivers_an_escalated_permission_prompt(short_tmp, m
             inbox.close()
 
 
-def test_a_pull_request_hang_rides_the_hang_route_as_a_digest(short_tmp, monkeypatch):
-    """Without a route of its own a pull request's queued run goes where the hang route goes, kept
-    for the hourly digest; the repo's own hang stays a line; a route of its own decides alone."""
+def test_a_pull_request_hang_goes_to_its_epic_master_as_a_digest(short_tmp, monkeypatch):
+    """Red: a pull request's queued run rode the repo hang route (machinery), and tails that did
+    not know that parent left it `not routed`. Without a route of its own it goes to the epic's
+    master, kept for the hourly digest; the repo's own hang stays a line on its route; a route of
+    its own decides alone."""
     routes = {"run_queued_long": {"to": ["machinery"]}}
     _, folder, clock, inboxes, tails = setup(short_tmp, monkeypatch, routes)
     try:
@@ -252,7 +254,7 @@ def test_a_pull_request_hang_rides_the_hang_route_as_a_digest(short_tmp, monkeyp
             folder,
             [
                 row(1, "run_queued_long", "run:9", k, "machinery", **hang, branch="main"),
-                row(2, "pr_run_queued_long", "run:10", k, "machinery", **pr),
+                row(2, "pr_run_queued_long", "run:10", k, "epic_master", **pr),
             ],
         )
         clock.t += et.CYCLE_S
@@ -265,10 +267,11 @@ def test_a_pull_request_hang_rides_the_hang_route_as_a_digest(short_tmp, monkeyp
     finally:
         for inbox in inboxes.values():
             inbox.close()
+    assert event_routes.targets({"routes": routes}, "pr_run_queued_long") == ["epic_master"]
+    assert event_routes.mode({"routes": routes}, "pr_run_queued_long") == "digest"
     block = {"routes": {**routes, "pr_run_queued_long": {"to": ["tester"]}}}
     assert event_routes.targets(block, "pr_run_queued_long") == ["tester"]
     assert event_routes.mode(block, "pr_run_queued_long") == "line"
-    assert event_routes.targets({"routes": {}}, "pr_run_queued_long") == []
 
 
 def test_a_gone_socket_ends_the_tail_and_its_presence(short_tmp, monkeypatch):
