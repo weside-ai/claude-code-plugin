@@ -20,6 +20,14 @@ holding the row by its session id (a starting background row lists no pid yet):
   line to its starter, once per block: `<name> blocked since <HH:MM> UTC: <its last text line>`,
   over the same inbox socket, else as a board news item; 312 of 485 measured worker hours were
   `blocked`, and the starter did not know;
+- a worker idle (`state` `idle` or `done`, or a window worker's `status` `idle`) after a turn that
+  sent its marker's starter no report (`hooks/worker_report_gate.py`'s `reported` false; the gate
+  lets the second stop pass) for `workers.unreported_notify_minutes` (default 5) gets one line to its
+  starter, once per turn: `<name> idle since <HH:MM> UTC without a report: <its last text line>`;
+  a worker whose process ends with no end reason and no report gets `<name> ended without a
+  report: <its last text line>` instead, unless the idle line already named that turn. Both go over
+  the inbox socket, else as a board news item: a report left as plain text reached its starter
+  103 min late;
 - a worker whose report is in (`state` `done`, or a window worker idle after its turn sent the
   report to its marker's starter, `hooks/worker_report_gate.py`'s test) and idle for
   `workers.idle_stop_minutes` (default 30) is stopped with `we-worker stop`, its tree stays (close
@@ -318,11 +326,16 @@ def _watch_prompt(row, name, tree, sid, projects, now, first_seen, reported, boa
     )
 
 
-IDLE_DEFAULTS = {"blocked_notify_minutes": 15, "idle_stop_minutes": 30}
+IDLE_DEFAULTS = {
+    "blocked_notify_minutes": 15,
+    "idle_stop_minutes": 30,
+    "unreported_notify_minutes": 5,
+}
 
 
 def idle_limits(tree: str) -> dict[str, float | None]:
-    """`workers.blocked_notify_minutes` and `workers.idle_stop_minutes` in seconds, None when off
+    """`workers.blocked_notify_minutes`, `.idle_stop_minutes` and `.unreported_notify_minutes` in
+    seconds, None when off
     (`0` or `null`); a missing or unreadable value keeps its default: a typo must not silence it."""
     try:
         block = wl.workers_block(Path(tree))
@@ -366,6 +379,34 @@ def report_in(row: dict, marker: dict | None, projects: Path, sid: str | None) -
         return reported(files[0], str(lead))
     except OSError:
         return False
+
+
+def unreported(marker: dict | None, projects: Path, sid: str | None) -> str | None:
+    """The turn key (its last assistant entry) when the transcript's current turn sent the marker's
+    starter no report, else None; None too when nothing can be judged (no marker, no starter, no
+    transcript): a worker started by hand is never named on a guess."""
+    lead = (marker or {}).get("starter") or (marker or {}).get("lead")
+    files = glob.glob(str(projects / "*" / f"{sid}.jsonl")) if sid and lead else []
+    if not files:
+        return None
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+    try:
+        from worker_report_gate import reported  # noqa: PLC0415
+    finally:
+        sys.path.pop(0)
+    try:
+        if reported(files[0], str(lead)):
+            return None
+    except OSError:
+        return None
+    last = last_assistant(projects, sid) or {}
+    return str(last.get("uuid") or last.get("timestamp") or _text(last)[-200:] or "turn")
+
+
+def _idle_row(row: dict) -> bool:
+    return row.get("state") in ("idle", "done") or (
+        not row.get("state") and row.get("status") == "idle"
+    )
 
 
 def stop_by_launcher(row: dict) -> bool:
@@ -416,10 +457,49 @@ class Idle:
         self.blocked_said = False
         self.idle_since: float | None = None
         self.stop_tried = False
+        self.quiet_since: float | None = None
+        self.quiet_said: set[str] = set()
 
     def poll(self, row: dict, now: float) -> None:
         self._blocked(row, now)
+        self._unreported(row, now)
         self._idle(row, now)
+
+    def tell(self, item: str, line: str) -> None:
+        """One line to the starter, else a board news item `W-<name>-<item>`."""
+        if not self.send(f"we-worker: {line}"):
+            self.board(self.tree, f"W-{self.name}-{item}", line)
+
+    def _unreported(self, row: dict, now: float) -> None:
+        limit = self.limits.get("unreported_notify_minutes")
+        if limit is None or not _idle_row(row):
+            self.quiet_since = None
+            return
+        turn = unreported(wl.read_marker(self.tree), self.projects, self.sid)
+        if turn is None or turn in self.quiet_said:
+            self.quiet_since = None if turn is None else self.quiet_since
+            return
+        if self.quiet_since is None:
+            self.quiet_since = now
+        if now - self.quiet_since < limit:
+            return
+        self.quiet_said.add(turn)
+        hhmm = dt.datetime.fromtimestamp(self.quiet_since, dt.timezone.utc).strftime("%H:%M")
+        why = last_line(self.projects, self.sid) or "no text line"
+        self.tell(
+            f"unreported-{int(self.quiet_since)}",
+            f"{self.name} idle since {hhmm} UTC without a report: {why}",
+        )
+
+    def ended_unreported(self) -> None:
+        """The plain exit's line: no end reason and no report, and no idle line for that turn."""
+        if self.limits.get("unreported_notify_minutes") is None:
+            return
+        turn = unreported(wl.read_marker(self.tree), self.projects, self.sid)
+        if turn is None or turn in self.quiet_said:
+            return
+        why = last_line(self.projects, self.sid) or "no text line"
+        self.tell(f"end-{(self.sid or 'x')[:8]}", f"{self.name} ended without a report: {why}")
 
     def _blocked(self, row: dict, now: float) -> None:
         limit = self.limits.get("blocked_notify_minutes")
@@ -433,9 +513,9 @@ class Idle:
         self.blocked_said = True
         hhmm = dt.datetime.fromtimestamp(self.blocked_since, dt.timezone.utc).strftime("%H:%M")
         why = last_line(self.projects, self.sid) or str(row.get("waitingFor") or "no status line")
-        line = f"{self.name} blocked since {hhmm} UTC: {why}"
-        if not self.send(f"we-worker: {line}"):
-            self.board(self.tree, f"W-{self.name}-blocked-{int(self.blocked_since)}", line)
+        self.tell(
+            f"blocked-{int(self.blocked_since)}", f"{self.name} blocked since {hhmm} UTC: {why}"
+        )
 
     def _idle(self, row: dict, now: float) -> None:
         limit = self.limits.get("idle_stop_minutes")
@@ -530,6 +610,8 @@ def supervise(
         line = notice(name, reason, sid, tree)
         if not send(line):
             board(tree, f"W-{name}-end-{(sid or 'x')[:8]}", line.removeprefix("we-worker: "))
+    elif not stopped:
+        idle.ended_unreported()
     try:
         again = bool(_living(sessions(), name))
     except wl.LaunchError:

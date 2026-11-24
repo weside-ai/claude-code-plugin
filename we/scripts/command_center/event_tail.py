@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """A session's event tail: delivers the event lines routed to its roles into its inbox socket.
 
-One tail per Claude Code session of a crew member (keyed by the session's inbox socket), started
-by ``hooks/events_on_start.py``. It calls no API: it reads the poller's files
+One tail per Claude Code session of a crew member, or of a master without one (``WE_ROLE=master``,
+no ``WESIDE_COMPANION``), keyed by the session's inbox socket, started by
+``hooks/events_on_start.py``. It calls no API: it reads the poller's files
 (``event_poller.py``) and writes into its own session only.
 
 Lifecycle
     ``run`` takes a non-blocking ``flock`` on ``<dir>/tails/<socket key>.lock`` (one tail per
     socket; a second start exits). The inbox token comes from ``CLAUDE_CODE_MESSAGING_TOKEN`` and
-    is removed from the environment at start: it never reaches argv or a file. A session without a
-    member (no ``WESIDE_COMPANION`` the crew knows) gets no tail. The socket gone (the file, or
+    is removed from the environment at start: it never reaches argv or a file. A session that is
+    neither a member (``WESIDE_COMPANION`` the crew knows) nor a master gets no tail; a worker never
+    (its starter hears from it). A master's tail has ``member`` null and no roles: it receives only
+    rows addressed to its session as ``epic_master`` (``epic_owner.py``). The socket gone (the file, or
     ``ECONNREFUSED``/``ENOENT`` on delivery) → the presence file is removed and the tail exits.
 
 Per cycle (15 s)
@@ -20,8 +23,8 @@ Per cycle (15 s)
     the cursor and keep those addressed to this session (``to[].session``). Per row, in order:
 
     - a kind the current ``events:`` block does not route to one of the member's roles (or to the
-      member; a damage row also as ``coordinator``, an escalated open prompt also as
-      ``machinery``) → ledger row ``not routed``, no line;
+      member, or to ``epic_master``; a damage row also as ``coordinator``, an escalated open prompt
+      also as ``machinery``) → ledger row ``not routed``, no line;
     - the same kind and object delivered within ``fold_s`` → ledger row ``folded``, no line;
     - a ``digest`` route → kept; once an hour all kept lines go as one line;
     - else one line (``event_routes.render``) into the socket, then the ledger row, then the
@@ -82,7 +85,7 @@ class Tail:
         folder: Path,
         socket_path: str,
         token: str,
-        member: str,
+        member: str | None,
         roles: list[str],
         *,
         session_id: str = "",
@@ -91,11 +94,11 @@ class Tail:
     ):
         self.root, self.dir = Path(root), Path(folder)
         self.sock, self._token = socket_path, token
-        self.member, self.roles = member, list(roles)
+        self.member, self.roles = member or None, list(roles)
         self.session_id = session_id
         self.clock, self.send = clock, send
         self.key = socket_key(socket_path)
-        self.names = {member.lower()}
+        self.names = {member.lower()} if member else set()
         self.config = self.root / ".weside" / "config.json"
         self.block: dict = {"routes": {}}
         self.mtime: float | None = None
@@ -160,8 +163,12 @@ class Tail:
             return
         self.mtime = mtime
         _, crew = ep.load_crew(self.root)
-        entry = (crew.get("members") or {}).get(self.member) or {}
-        self.names = {self.member.lower(), str(entry.get("name") or self.member).strip().lower()}
+        if self.member:
+            entry = (crew.get("members") or {}).get(self.member) or {}
+            self.names = {
+                self.member.lower(),
+                str(entry.get("name") or self.member).strip().lower(),
+            }
         with contextlib.suppress(routes_mod.EventsError):
             self.block = routes_mod.validate(
                 ep.read_block(self.config), crew
@@ -173,7 +180,7 @@ class Tail:
             allowed.add("coordinator")
         if row.get("escalated") and row.get("kind") in ep.SELF_SKIP_KINDS:
             allowed |= {"coordinator", "machinery"}  # an open prompt nobody else receives
-        mine = set(self.roles) | {self.member}
+        mine = set(self.roles) | {self.member, routes_mod.EPIC_MASTER} - {None}
         return bool(allowed & mine & set(as_roles))
 
     def _send(self, text: str) -> None:
@@ -275,6 +282,14 @@ class Tail:
             return "gone"
 
 
+def is_master(environ: dict) -> bool:
+    """A master session without a companion: ``WE_ROLE=master`` and no ``WESIDE_COMPANION``."""
+    return (
+        str(environ.get("WE_ROLE") or "").strip() == "master"
+        and not str(environ.get("WESIDE_COMPANION") or "").strip()
+    )
+
+
 def member_and_roles(root: Path, environ: dict) -> tuple[str | None, list[str]]:
     """The crew member this session is (its pin) and every role key bound to it."""
     pin = str(environ.get("WESIDE_COMPANION") or "").strip()
@@ -311,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
     sock = os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET", "")
     root = Path(a.root)
     member, roles = member_and_roles(root, dict(os.environ))
-    if fcntl is None or not sock or not token or not member:
+    if fcntl is None or not sock or not token or not (member or is_master(os.environ)):
         return 2
     folder = ep.events_dir(root)
     fd = take_lock(folder, socket_key(sock))
@@ -335,8 +350,8 @@ def spawn(root: Path, environ: dict[str, Any]) -> str:
     import subprocess  # noqa: PLC0415
 
     member, _ = member_and_roles(root, environ)
-    if not member:
-        return "events: no tail (this session is no crew member)"
+    if not member and not is_master(environ):
+        return "events: no tail (this session is no crew member and no master)"
     if not environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or not environ.get(
         "CLAUDE_CODE_MESSAGING_TOKEN"
     ):
@@ -350,7 +365,7 @@ def spawn(root: Path, environ: dict[str, Any]) -> str:
         close_fds=True,
         env=dict(environ),
     )
-    return f"events: tail {proc.pid} for {member}"
+    return f"events: tail {proc.pid} for {member or 'master'}"
 
 
 if __name__ == "__main__":

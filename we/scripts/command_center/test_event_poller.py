@@ -198,3 +198,169 @@ def test_sessions_source_runs_on_its_own_interval(tmp_path):
     assert len([a for a in calls.argv if a[:2] == ["sh", "-c"]]) == 2
     assert {b["interval_s"] for b in beats} == {60}
     assert beats[0]["poll_interval_s"] == 300 and beats[0]["sessions_interval_s"] == 60
+
+
+# --- the epic's master (epic_master) and the owner report -------------------------------------
+
+import shutil  # noqa: E402
+
+import event_sources as es  # noqa: E402
+
+EVENTS = HERE / "fixtures" / "events"
+NOW = ter.NOW
+MASTER_ROUTES = {
+    "main_red": {"to": ["epic_master", "machinery"]},
+    "pr_checks_red": {"to": ["epic_master"]},
+}
+
+
+def marker_red(run: int = 9001) -> es.Event:
+    return es.Event(
+        "main_red",
+        f"marker:acme/app:{run}",
+        f"run:{run}",
+        es.iso(NOW - 120),
+        {
+            "repo": "acme/app",
+            "sha": "abc1234",
+            "failing": ["tests/test_a.py::test_one", "tests/test_b.py::test_two[x]"],
+            "unreadable": False,
+            "run_id": run,
+            "epics": ["ACME-3215"],
+            "origin": "marker",
+        },
+    )
+
+
+def crew_board(tmp: Path, monkeypatch, drop: str | None = None) -> Path:
+    state = tmp / "state"
+    state.mkdir(exist_ok=True)
+    monkeypatch.setenv("WE_STATE_DIR", str(state))
+    board = json.loads((EVENTS / "board.json").read_text())
+    board["sessions"] = [s for s in board["sessions"] if s["name"] != drop]
+    (state / "board.json").write_text(json.dumps(board))
+    shutil.copy(EVENTS / "board-tickets.json", state / "board-tickets.json")
+    return state
+
+
+def master_presence(folder: Path, name: str, sid: str) -> None:
+    (folder / "presence").mkdir(parents=True, exist_ok=True)
+    doc = {
+        "name": name,
+        "member": None,
+        "session_id": sid,
+        "roles": [],
+        "parked": False,
+        "heartbeat": NOW,
+    }
+    (folder / "presence" / f"{name}.json").write_text(json.dumps(doc))
+
+
+def test_route_epic_master(tmp_path, monkeypatch):
+    """The marker's epic reaches its running master with the owner in the line; without that
+    master's board line one delta row names the epic and no other master gets a line."""
+    root = ter.project(tmp_path, MASTER_ROUTES)
+    folder = tmp_path / "events"
+    crew_board(tmp_path, monkeypatch)
+    master_presence(folder, "sock-master-1", "sid-master-1")
+    master_presence(folder, "sock-master-2", "sid-master-2")
+    master_presence(folder, "sock-owl", "sid-owl")  # a companion's line holding the story key
+    ter.poller(tmp_path, root, [marker_red()], monkeypatch).round()
+    (row,) = ter.rows(folder, "events.jsonl")
+    assert row["to"] == [{"session": "sock-master-1", "as": "epic_master"}]
+    assert ep.routes_mod.render(row) == (
+        "main red acme/app · abc1234 · failing: tests/test_a.py::test_one, "
+        "tests/test_b.py::test_two[x] · run https://github.com/acme/app/actions/runs/9001"
+        " · owner kleinzeug-3215"
+    )
+    delta = ter.rows(folder, "delta.jsonl")
+    assert [d["role"] for d in delta] == ["machinery"]  # no running machinery session
+
+    other = tmp_path / "second"
+    other.mkdir()
+    root2 = ter.project(other, MASTER_ROUTES)
+    folder2 = other / "events"
+    crew_board(other, monkeypatch, drop="kleinzeug-3215")
+    master_presence(folder2, "sock-master-2", "sid-master-2")
+    ter.poller(other, root2, [marker_red()], monkeypatch).round()
+    (row2,) = ter.rows(folder2, "events.jsonl")
+    assert row2["to"] == []
+    masters = [d for d in ter.rows(folder2, "delta.jsonl") if d["role"] == "epic_master"]
+    assert [(d["epic"], d["reason"]) for d in masters] == [("ACME-3215", "no running master")]
+    assert masters[0]["line"].endswith(" · owner delta: coordinator · ACME-3215")
+
+
+def test_route_epic_master_from_a_story_key(tmp_path, monkeypatch):
+    """A PR's story key → its epic over the ticket snapshot; a parked master gets no PR line (delta);
+    a key nobody knows is `epic unknown` with the PR number."""
+    root = ter.project(tmp_path, MASTER_ROUTES)
+    folder = tmp_path / "events"
+    state = crew_board(tmp_path, monkeypatch)
+    master_presence(folder, "sock-master-1", "sid-master-1")
+
+    def red(n: int, story: str) -> es.Event:
+        return es.Event(
+            "pr_checks_red",
+            f"prred:acme/app#{n}:1",
+            f"pr:acme/app#{n}",
+            None,
+            {"repo": "acme/app", "number": n, "story": story, "check": "test", "check_id": n},
+        )
+
+    ter.poller(tmp_path, root, [red(7, "ACME-3216"), red(9, "ZZZ-1")], monkeypatch).round()
+    rows = {r["object"]: r for r in ter.rows(folder, "events.jsonl")}
+    assert rows["pr:acme/app#7"]["to"] == [{"session": "sock-master-1", "as": "epic_master"}]
+    (unknown,) = ter.rows(folder, "delta.jsonl")
+    assert (unknown["reason"], unknown["pr"]) == ("epic unknown", 9)
+    board = json.loads((state / "board.json").read_text())
+    board["sessions"][0]["state"] = "parked"
+    (state / "board.json").write_text(json.dumps(board))
+    ter.poller(tmp_path, root, [red(8, "ACME-3216"), marker_red(9004)], monkeypatch).round()
+    rows = {r["object"]: r for r in ter.rows(folder, "events.jsonl")}
+    assert rows["pr:acme/app#8"]["to"] == []  # parked: the PR line goes to the delta
+    assert rows["run:9004"]["to"] == [{"session": "sock-master-1", "as": "epic_master"}]
+
+
+def test_owners_report(tmp_path):
+    """Every red event of the window has an owner: a delivery, a delta row, else `owner none`."""
+    folder = tmp_path / "events"
+    folder.mkdir()
+    at = es.iso(NOW - 3600)
+    ep.append_rows(
+        folder / "events.jsonl",
+        [
+            {"seq": 1, "id": "a", "kind": "main_red", "object": "run:1", "source_at": at},
+            {"seq": 2, "id": "b", "kind": "rc_verdict_red", "object": "run:2", "source_at": at},
+            {"seq": 3, "id": "c", "kind": "main_red", "object": "run:3", "source_at": at},
+            {"seq": 4, "id": "d", "kind": "pr_green", "object": "pr:x#1", "source_at": at},
+            {
+                "seq": 5,
+                "id": "e",
+                "kind": "main_red",
+                "object": "run:5",
+                "source_at": es.iso(NOW - 30 * 3600),
+            },
+        ],
+    )
+    ep.append_rows(
+        folder / "ledger.jsonl",
+        [
+            {
+                "id": "a",
+                "to": "sock-master-1",
+                "delivered": True,
+                "delivered_at": es.iso(NOW - 3300),
+            },
+        ],
+    )
+    ep.append_rows(
+        folder / "delta.jsonl",
+        [
+            {"id": "b", "role": "epic_master", "epic": "ACME-3215", "reason": "no running master"},
+        ],
+    )
+    assert ep.owners_report(folder, NOW, ep.parse_since("24h")) == [
+        f"{at} main_red run:1 · owner sock-master-1 delivered {es.iso(NOW - 3300)} (5 min)",
+        f"{at} rc_verdict_red run:2 · delta: coordinator · ACME-3215",
+        f"{at} main_red run:3 · owner none",
+    ]

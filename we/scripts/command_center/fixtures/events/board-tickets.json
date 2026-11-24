@@ -1,0 +1,22 @@
+{
+ "schema_version": 2,
+ "@taken": "2026-11-20T12:00:00Z",
+ "stories": {
+  "ACME-3216": {
+   "status": "In Progress",
+   "epic": "ACME-3215"
+  },
+  "ACME-3301": {
+   "status": "In Progress",
+   "epic": "ACME-3300"
+  }
+ },
+ "epics": {
+  "ACME-3215": {
+   "status": "In Progress"
+  },
+  "ACME-3300": {
+   "status": "In Progress"
+  }
+ }
+}

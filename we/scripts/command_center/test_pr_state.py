@@ -19,6 +19,7 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE))
 import flow_report as fr  # noqa: E402
 
 ARM = (HERE.parent / "arm_pr.sh").read_text(encoding="utf-8")
@@ -100,6 +101,9 @@ CONTEXTS = [
     run_ctx("red", conclusion="FAILURE"),
     run_ctx("cancelled", conclusion="CANCELLED"),
     run_ctx("pr-only", required=True),
+    # a completed run whose check run still says IN_PROGRESS: the set conclusion is the verdict
+    run_ctx("stale-status-green", status="IN_PROGRESS", conclusion="SUCCESS"),
+    run_ctx("stale-status-red", status="IN_PROGRESS", conclusion="FAILURE"),
 ]
 
 
@@ -136,6 +140,7 @@ def test_parity_with_arm_pr_jq():
         "\t".join([c["v"], str(c["required"]).lower(), c["name"]]) for c in fr.head_contexts(node)
     ]
     assert checks == mine
+    assert {c["name"]: c["v"] for c in fr.head_contexts(node)}["stale-status-green"] == "pass"
     # a last commit that is not the head lists no check, on both sides
     lagging = pr_node(CONTEXTS, last="b" * 40)
     assert jq_lines(lagging)[1:] == [] and fr.head_contexts(lagging) == []
@@ -218,3 +223,18 @@ def test_open_pr_states_asks_one_aliased_query():
     assert "isRequired(pullRequestNumber: 7)" in seen[0]["query"]
     assert "isRequired(pullRequestNumber: 9)" in seen[0]["query"]
     assert fr.open_pr_state(run, "acme/app", 7)["number"] == 7
+
+
+def test_the_pulls_query_asks_is_required_as_arm_pr_reads_it():
+    """The poller's one query per repo asks `isRequired` per PR for every context type `READ` asks
+    it for: `pr_green` and `arm_pr.sh` count the same required checks."""
+    import event_sources as es  # noqa: PLC0415
+
+    read = _quoted("READ")
+    query = es.pulls_query([7, 9])
+    for typename in ("CheckRun", "StatusContext"):
+        assert re.search(rf"on {typename}\{{[^}}]*isRequired\(pullRequestNumber:\$number\)", read)
+        for n in (7, 9):
+            assert re.search(
+                rf"on {typename} \{{[^}}]*isRequired\(pullRequestNumber: {n}\)", query
+            ), (typename, n)

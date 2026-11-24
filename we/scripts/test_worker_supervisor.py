@@ -299,14 +299,33 @@ def test_a_window_worker_idle_after_its_report_is_stopped(box, repo):
 @pytest.mark.parametrize(
     "block, want",
     [
-        ({}, {"blocked_notify_minutes": 900.0, "idle_stop_minutes": 1800.0}),
         (
-            {"blocked_notify_minutes": 0, "idle_stop_minutes": None},
-            {"blocked_notify_minutes": None, "idle_stop_minutes": None},
+            {},
+            {
+                "blocked_notify_minutes": 900.0,
+                "idle_stop_minutes": 1800.0,
+                "unreported_notify_minutes": 300.0,
+            },
+        ),
+        (
+            {
+                "blocked_notify_minutes": 0,
+                "idle_stop_minutes": None,
+                "unreported_notify_minutes": 0,
+            },
+            {
+                "blocked_notify_minutes": None,
+                "idle_stop_minutes": None,
+                "unreported_notify_minutes": None,
+            },
         ),
         (
             {"blocked_notify_minutes": 5, "idle_stop_minutes": "soon"},
-            {"blocked_notify_minutes": 300.0, "idle_stop_minutes": 1800.0},
+            {
+                "blocked_notify_minutes": 300.0,
+                "idle_stop_minutes": 1800.0,
+                "unreported_notify_minutes": 300.0,
+            },
         ),
     ],
 )
@@ -314,6 +333,62 @@ def test_idle_limits_read_the_workers_block(repo, block, want):
     (repo / ".weside").mkdir(exist_ok=True)
     (repo / ".weside" / "config.json").write_text(json.dumps({"workers": block}))
     assert ws.idle_limits(str(repo)) == want
+
+
+# A worker's end always reaches its starter: a report left as its final text (no SendMessage)
+# reached the master 103 min late.
+
+QUIET = {**ON, "unreported_notify_minutes": 5 * 60.0}
+GO = {"type": "user", "message": {"content": "go"}}
+LAST = {
+    "type": "assistant",
+    "uuid": "u1",
+    "message": {"content": [{"type": "text", "text": "report:\nAC 1 green, PR #7 open"}]},
+}
+SENT = {
+    "type": "assistant",
+    "uuid": "u2",
+    "message": {"content": [{"type": "tool_use", "name": "SendMessage", "input": {"to": "lead"}}]},
+}
+
+
+def test_unreported_idle_line(box, repo):
+    ws.wl.write_marker(repo, name=NAME, starter="lead")
+    _transcript(box["projects"], [GO, LAST])
+    box["run"](LIVE, *_minutes(20, state="idle"), GONE, limits=QUIET, tree=str(repo))
+    lines = [t for t in box["sent"] if "without a report" in t]
+    assert len(lines) == 1, box[
+        "sent"
+    ]  # once per turn, not once per poll, and no end line after it
+    assert lines[0].startswith(f"we-worker: {NAME} idle since ") and lines[0].endswith(
+        " UTC without a report: AC 1 green, PR #7 open"
+    ), lines[0]
+    box["sent"].clear()
+    _transcript(box["projects"], [GO, LAST, SENT])  # the report went out: no line
+    box["run"](LIVE, *_minutes(20, state="idle"), GONE, limits=QUIET, tree=str(repo))
+    assert not [t for t in box["sent"] if "report" in t], box["sent"]
+
+
+def test_plain_exit_line(box, repo):
+    ws.wl.write_marker(repo, name=NAME, starter="lead")
+    _transcript(box["projects"], [GO, LAST])
+    assert (
+        box["run"](LIVE, *_minutes(2, state="working"), GONE, limits=QUIET, tree=str(repo))
+        == "ended"
+    )
+    assert box["sent"] == [f"we-worker: {NAME} ended without a report: AC 1 green, PR #7 open"]
+    box["sent"].clear()
+    (box["state"] / f"{NAME}.settings.json").write_text("{}")
+    _transcript(box["projects"], [GO, LAST, SENT])
+    box["run"](LIVE, GONE, limits=QUIET, tree=str(repo))
+    assert not box["sent"]
+    (box["state"] / f"{NAME}.settings.json").write_text("{}")
+    _transcript(box["projects"], [GO, LAST])
+    box["run"](LIVE, GONE, limits=QUIET, send_ok=False, tree=str(repo))
+    ((iid, title),) = box["items"]
+    assert iid == f"W-{NAME}-end-s1" and title.endswith(
+        "ended without a report: AC 1 green, PR #7 open"
+    )
 
 
 def test_a_session_that_never_shows_up_keeps_its_files(box):
