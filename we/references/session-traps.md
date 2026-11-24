@@ -38,6 +38,16 @@ cards point here instead of repeating them.
 
 ## CI and checks
 
+- **Where the poller routes PR state, a master waits on its lines, not on a watcher.** The project is
+  *event-routed* when `.weside/config.json` `events.routes` sends the `pr_*` kinds to `epic_master`
+  (`event_poller.py status` lists the routes). There a master starts no `watch-pr-checks.sh`,
+  `watch-pr-conflicts.sh` or `gh pr checks` for its PRs: one poller reads every open PR in one query
+  per repo and round, while a watcher per PR and session drained the quota every session shares. It
+  acts on each line instead: `checks red` or `review red` → `/we:ci-review` in a worker; `conflict`
+  → back to the PR's worker (merge the base); `green` → `arm_pr.sh` (a one-way class waits for the
+  human's go); `merged` → `/we:merged`; `main red … owner <you>` → the fix first. Elsewhere (a solo
+  project, a crew without the poller) the watcher steps stay. A worker running `/we:ci-review` or
+  carrying its PR (`PR owner: worker`) keeps `watch-pr-checks.sh`: the lines go to its starter.
 - **A watcher's exit 0 is not green.** A watch loop ends on an expired token, and a chained
   `; echo` exits 0 anyway: act only on `gh run view <id> --json status,conclusion` or on
   `watch-pr-checks.sh`'s verdict line. `gh run watch` is no watcher here: it polls REST every 3 s
