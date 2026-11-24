@@ -90,7 +90,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
   "agents": { "visible_teammates": false, "worker_launch": "subagent",
               "accounts_command": "<command printing the chosen account as JSON, or null>" },
   "build": { "pr_owner": "master|worker" },
-  "workers": { "blocked_notify_minutes": 15, "idle_stop_minutes": 30,
+  "workers": { "blocked_notify_minutes": 15, "idle_stop_minutes": 30, "unreported_notify_minutes": 5,
                "tree": "caller|own",
                "add_worktree": "<command with {path} {branch}, or null>",
                "remove_worktree": "<command with {path}, or null>",

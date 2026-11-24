@@ -222,8 +222,9 @@ Every variable the launcher decides stands in the file's `env`, a cleared one as
 caller's shell.
 
 Each start also starts the supervisor, which tells the starter about a worker's stop and cleans up
-after it, names a long-`blocked` worker to its starter and stops an idle one whose report is in
-(`workers.blocked_notify_minutes`, `workers.idle_stop_minutes`; its docstring owns the rules); `we-worker close <KEY>` is the one closing step after a merge (In Review, teardown, the
+after it, names a long-`blocked` worker to its starter, names one whose turn or process ended
+without its report, and stops an idle one whose report is in (`workers.blocked_notify_minutes`,
+`workers.unreported_notify_minutes`, `workers.idle_stop_minutes`; its docstring owns the rules); `we-worker close <KEY>` is the one closing step after a merge (In Review, teardown, the
 epic's log line; `scripts/worker_close.py`, whose docstring owns its holds: a living or queued
 worker on the key, no story plan on the default branch). `we-worker gc` removes what dead sessions left (`scripts/worker_supervisor.py`, its
 docstring owns both, and the one end reason `we-worker status` prints). `we-worker stop` prints the

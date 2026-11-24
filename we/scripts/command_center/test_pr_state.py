@@ -100,6 +100,9 @@ CONTEXTS = [
     run_ctx("red", conclusion="FAILURE"),
     run_ctx("cancelled", conclusion="CANCELLED"),
     run_ctx("pr-only", required=True),
+    # a completed run whose check run still says IN_PROGRESS: the set conclusion is the verdict
+    run_ctx("stale-status-green", status="IN_PROGRESS", conclusion="SUCCESS"),
+    run_ctx("stale-status-red", status="IN_PROGRESS", conclusion="FAILURE"),
 ]
 
 
@@ -136,6 +139,7 @@ def test_parity_with_arm_pr_jq():
         "\t".join([c["v"], str(c["required"]).lower(), c["name"]]) for c in fr.head_contexts(node)
     ]
     assert checks == mine
+    assert {c["name"]: c["v"] for c in fr.head_contexts(node)}["stale-status-green"] == "pass"
     # a last commit that is not the head lists no check, on both sides
     lagging = pr_node(CONTEXTS, last="b" * 40)
     assert jq_lines(lagging)[1:] == [] and fr.head_contexts(lagging) == []

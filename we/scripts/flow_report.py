@@ -460,9 +460,13 @@ def context_class(node: dict) -> str:
         if state == "SUCCESS":
             return "pass"
         return "pending" if state in ("PENDING", "EXPECTED") else "fail"
+    # A set conclusion is the verdict whatever the status says (GitHub can leave a completed
+    # check run at IN_PROGRESS beside its conclusion); none and not COMPLETED is pending.
+    if node.get("conclusion"):
+        return "pass" if node.get("conclusion") in GREEN else "fail"
     if node.get("status") != "COMPLETED":
         return "pending"
-    return "pass" if node.get("conclusion") in GREEN else "fail"
+    return "fail"
 
 
 def head_contexts(pr: dict) -> list:
