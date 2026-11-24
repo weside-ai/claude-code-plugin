@@ -46,7 +46,8 @@ lands in the coordinator's delta with the epic (``event_poller.py``).
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
 ``config_error`` go to ``machinery`` when no route names them; ``pr_run_queued_long`` without a
 route of its own goes to ``epic_master`` as a digest (``FALLBACK``, ``DIGEST_FALLBACK``): the
-pull request's master acts on its own queue, like the other ``pr_*`` kinds. ``damage`` is true for a kind of
+pull request's master acts on its own queue, like the other ``pr_*`` kinds; one without a story
+(a fork, a branch without a key) takes the ``run_queued_long`` route instead (``route_kind``). ``damage`` is true for a kind of
 ``event_sources.DAMAGE_KINDS`` or a route that says so: a damage event reaches a parked session
 too and, without any running receiver, the coordinator at once (``event_poller.py``).
 
@@ -329,7 +330,22 @@ def push(block: dict[str, Any], kind: str) -> bool:
     return bool(((block.get("routes") or {}).get(kind) or {}).get("push"))
 
 
-def targets(block: dict[str, Any], kind: str) -> list[str]:
+def route_kind(block: dict[str, Any], kind: str, fields: dict[str, Any] | None = None) -> str:
+    """The kind whose route an event takes: a ``pr_run_queued_long`` without a route of its own
+    and without a story (a fork, a branch without a key) has no epic to find, so it takes the
+    ``run_queued_long`` route; ``fields`` None (a kind alone) keeps the kind."""
+    if (
+        kind == "pr_run_queued_long"
+        and fields is not None
+        and not fields.get("story")
+        and not (block.get("routes") or {}).get(kind)
+    ):
+        return "run_queued_long"
+    return kind
+
+
+def targets(block: dict[str, Any], kind: str, fields: dict[str, Any] | None = None) -> list[str]:
+    kind = route_kind(block, kind, fields)
     routes = block.get("routes") or {}
     route = routes.get(kind)
     if route:
@@ -337,7 +353,8 @@ def targets(block: dict[str, Any], kind: str) -> list[str]:
     return list(FALLBACK.get(kind, []))
 
 
-def mode(block: dict[str, Any], kind: str) -> str:
+def mode(block: dict[str, Any], kind: str, fields: dict[str, Any] | None = None) -> str:
+    kind = route_kind(block, kind, fields)
     route = (block.get("routes") or {}).get(kind)
     if not route and kind in DIGEST_FALLBACK:
         return "digest"

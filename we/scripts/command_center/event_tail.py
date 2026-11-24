@@ -175,7 +175,7 @@ class Tail:
             )  # invalid: keep the last
 
     def routed(self, row: dict, as_roles: list[str]) -> bool:
-        allowed = set(routes_mod.targets(self.block, row.get("kind", "")))
+        allowed = set(routes_mod.targets(self.block, row.get("kind", ""), row.get("fields") or {}))
         if row.get("damage"):
             allowed.add("coordinator")
         if row.get("escalated") and row.get("kind") in ep.SELF_SKIP_KINDS:
@@ -235,7 +235,7 @@ class Tail:
             reason, delivered = "not routed", False
         elif now - float(fold.get(fkey) or 0) < fold_s:
             reason, delivered = "folded", False
-        elif routes_mod.mode(self.block, row.get("kind", "")) == "digest":
+        elif routes_mod.mode(self.block, row.get("kind", ""), row.get("fields") or {}) == "digest":
             kept.append(line)
             reason, delivered = "digest", False
         else:

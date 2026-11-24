@@ -234,7 +234,7 @@ def route(
         live = [p for p in live if not waiting or p.get("session_id") != waiting]
     to: list[dict] = []
     missing: list[str] = []
-    for target in routes_mod.targets(block, kind):
+    for target in routes_mod.targets(block, kind, row.get("fields") or {}):
         if target == routes_mod.EPIC_MASTER:
             found = owners(kind, row.get("fields") or {}, live) if owners else None
             hits = found.to if found else []
@@ -262,7 +262,9 @@ def route(
         else:
             missing.append(target)
     escalate = False
-    routed_prompt = kind in SELF_SKIP_KINDS and bool(routes_mod.targets(block, kind))
+    routed_prompt = kind in SELF_SKIP_KINDS and bool(
+        routes_mod.targets(block, kind, row.get("fields") or {})
+    )
     if (dmg or routed_prompt) and not to:  # an unrouted kind stays silent
         roles = ("coordinator", "machinery") if kind in SELF_SKIP_KINDS else ("coordinator",)
         for role in roles:
@@ -482,8 +484,9 @@ class Poller:
 
     def resolver(self, block: dict, found: list) -> epic_owner.Resolver | None:
         """The round's view of board and snapshot, only when a found kind routes to its master."""
-        kinds = {e.kind for e in found}
-        if any(routes_mod.EPIC_MASTER in routes_mod.targets(block, k) for k in kinds):
+        if any(
+            routes_mod.EPIC_MASTER in routes_mod.targets(block, e.kind, e.fields) for e in found
+        ):
             return epic_owner.Resolver(self.root, self.crew)
         return None
 

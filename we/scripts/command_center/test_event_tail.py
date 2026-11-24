@@ -249,7 +249,7 @@ def test_a_pull_request_hang_goes_to_its_epic_master_as_a_digest(short_tmp, monk
     try:
         k = tails["kiska"].key
         hang = {"repo": "acme/app", "workflow": "CI", "mins": 61, "event": "push", "run_id": 9}
-        pr = dict(hang, event="pull_request", branch="feat-x", run_id=10)
+        pr = dict(hang, event="pull_request", branch="feat/ACME-1-x", run_id=10, story="ACME-1")
         address(
             folder,
             [

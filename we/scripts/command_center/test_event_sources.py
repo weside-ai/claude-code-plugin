@@ -379,10 +379,13 @@ def test_rc_verdict(tmp_path, conclusion, status, line):
 
 def test_rc_plan_log_with_escape_sequences_is_read(tmp_path):
     """Red: gh refused a plan log holding terminal escapes (exit 1) and the verdict line said
-    `plan log unreadable`; the poller passes the flag and strips the escapes itself."""
+    `plan log unreadable`; the poller passes the flag and strips the escapes itself, an OSC
+    sequence with its payload."""
     data = rc_data("success", "success", home()["now"])
     log = "repos/acme/app/actions/jobs/4011/logs"
-    data["gh"][log] = "\x1b[36;1m" + data["gh"][log].rstrip("\n") + "\x1b[0m\n"
+    osc = "\x1b]8;;https://x.example\x07\x1b]0;title\x1b\\"  # OSC payloads, BEL and ST
+    assert es._ESCAPES.sub("", osc + "\x1b[1mok") == "ok"
+    data["gh"][log] = osc + "\x1b[36;1m" + data["gh"][log].rstrip("\n") + "\x1b[0m\n"
     srcs = {k: v for k, v in sources(tmp_path).items() if k in RC_ONLY}
     events = [
         e

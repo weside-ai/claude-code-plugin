@@ -183,7 +183,11 @@ _K8S = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
 _REASON = re.compile(r"^[A-Za-z]{1,64}$")
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
-_ESCAPES = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]")  # CSI and two-byte escapes
+_ESCAPES = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?"  # OSC with its payload, to BEL or ST
+    r"|\x1b\[[0-?]*[ -/]*[@-~]"  # CSI
+    r"|\x1b[@-_]"  # two-byte escapes
+)
 _REPO = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 PROD_TAG = r"^v\d+\.\d+\.\d+$"
 WAITING = ("permission prompt", "sandbox request", "dialog open")
