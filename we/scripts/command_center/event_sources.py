@@ -20,7 +20,7 @@ Kinds and their config keys (``events.sources.<key>``):
     culprit leaves both out (the route then says ``epic unknown``).
     The RC suite's open issue by an author of ``rc.trusted_authors`` whose body carries the marker
     ``<!-- we-event {"kind":"main_red","sha":…,"run":…,"failing":[…],"epics":[…]} -->`` is a
-    ``main_red`` too, once per marker run id, read from the open-issue list of ``rc.repo`` (shared
+    ``main_red`` too (``&lt;``, ``&gt;`` and ``&amp;`` in it unescaped), once per marker run id, read from the open-issue list of ``rc.repo`` (shared
     with ``issue_new``, no call of its own): at most ``MARKER_IDS`` failing ids matching
     ``_NODE_ID``; none readable gives ``ids unreadable``. A marker of another author is ignored.
 ``pr_checks_red`` / ``pr_conflict`` / ``pr_review_verdict`` / ``pr_green`` / ``pr_merged`` (``pulls``:
@@ -48,7 +48,7 @@ Kinds and their config keys (``events.sources.<key>``):
     A queued ``workflow_dispatch`` run of the workflow file when a newer dispatch of the same ref
     is queued, or when it waited longer than ``stale_h`` (default 6) hours. Read from the same
     queued list as ``run_queued_long`` (one call), so both need the same repo.
-``requested_by_rx`` (optional, on ``rc``, ``queued`` and ``dispatch``)
+``requested_by_rx`` (optional, on ``rc``, ``queued``, ``dispatch`` and ``rc_cut``)
     A regex whose group 1 reads the requester from a run's ``display_title`` (a workflow whose
     ``run-name`` ends ``· <requested_by or event>``); one plain token becomes ``by`` and the line
     ends ``· by <token>``.
@@ -567,7 +567,10 @@ class Round:
                 continue
             found = _MARKER.search(str(issue.get("body") or ""))
             try:
-                doc = json.loads(found.group(1)) if found else None
+                # the writer escapes < and > in the issue body (an HTML comment ends at the first >)
+                text = found.group(1) if found else ""
+                text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+                doc = json.loads(text) if found else None
             except ValueError:
                 doc = None
             if not isinstance(doc, dict) or doc.get("kind") != "main_red":
@@ -1159,6 +1162,7 @@ class Round:
                             repo=repo,
                             mins=mins,
                             run_id=int(run["id"]),
+                            **self.by("rc_cut", run),
                         )
 
     def rollout(self) -> None:  # noqa: PLR0912

@@ -1179,6 +1179,17 @@ def test_main_red_marker(tmp_path):
         "main red acme/app · abc1234 · failing: tests/test_a.py::test_one, "
         "tests/test_b.py::test_two[x] · run https://github.com/acme/app/actions/runs/9001"
     )
+    escaped = json.loads(json.dumps(issues))
+    escaped[0]["body"] = (
+        escaped[0]["body"].replace("9001", "9005").replace("test_two[x]", "test_two[&lt;x&gt;]")
+    )
+    data["gh"][path] = escaped
+    esc = es.Round(srcs_only, state, T0 + 60, root=str(tmp_path), env=fake_env(tmp_path, data))
+    esc.red_markers()
+    (unesc,) = esc.events
+    assert unesc.fields["failing"] == ["tests/test_a.py::test_one"]  # `<` is no node id character
+    data["gh"][path] = issues
+    env = fake_env(tmp_path, data)
     again = es.Round(srcs_only, state, T0 + 300, root=str(tmp_path), env=env)
     again.red_markers()
     assert again.events == []

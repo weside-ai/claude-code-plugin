@@ -449,7 +449,7 @@ def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
             )
         return f"{head}release PR #{n} {f.get('tag')} waiting {_int(f.get('mins'))} min · {GH}/{repo}/pull/{n}"
     if k == "rc_cut_waiting":
-        return f"RC cut waiting {_int(f.get('mins'))} min · {run}"
+        return f"RC cut waiting {_int(f.get('mins'))} min · {run}{_by(f)}"
     if k == "rollout_stuck":
         if f.get("what") == "job":
             return f"rollout stuck · job {f.get('name')} failed: {f.get('reason')}"
