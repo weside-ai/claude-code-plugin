@@ -1,0 +1,88 @@
+{
+ "_source": "shape of the pulls source's GraphQL answer (PULLS_QUERY); neutral names",
+ "data": {
+  "repository": {
+   "open": {
+    "nodes": [
+     {
+      "number": 7,
+      "title": "fix: something",
+      "headRefName": "fix/ACME-3216-x",
+      "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "baseRefName": "main",
+      "mergeable": "MERGEABLE",
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "databaseId": 11,
+              "name": "test",
+              "status": "IN_PROGRESS",
+              "conclusion": null
+             },
+             {
+              "__typename": "CheckRun",
+              "databaseId": 12,
+              "name": "Claude Review",
+              "status": "IN_PROGRESS",
+              "conclusion": null
+             },
+             {
+              "__typename": "CheckRun",
+              "databaseId": 13,
+              "name": "lint",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS"
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "number": 8,
+      "title": "chore: ACME-3301 docs",
+      "headRefName": "docs-tidy",
+      "headRefOid": "cccccccccccccccccccccccccccccccccccccccc",
+      "baseRefName": "main",
+      "mergeable": "MERGEABLE",
+      "commits": {
+       "nodes": [
+        {
+         "commit": {
+          "oid": "cccccccccccccccccccccccccccccccccccccccc",
+          "statusCheckRollup": {
+           "contexts": {
+            "nodes": [
+             {
+              "__typename": "CheckRun",
+              "databaseId": 21,
+              "name": "test",
+              "status": "QUEUED",
+              "conclusion": null
+             }
+            ]
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "merged": {
+    "nodes": []
+   }
+  }
+ }
+}

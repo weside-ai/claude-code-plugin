@@ -14,6 +14,32 @@ Kinds and their config keys (``events.sources.<key>``):
     name matches ``relevant`` (a regex, default none), else when one of its red jobs is a required
     check of the branch (``required_checks.sh``, cached 1 h). An older red run of the same workflow
     is marked seen silently. The first round per repo and branch records the red runs silently.
+    Each new red run's culprit is the pull request of its head commit (``commits/<sha>/pulls``, one
+    call per new red run): its number and story key (``Round.key_rx`` on its head branch, else its
+    title) ride in the event for the ``epic_master`` target (``epic_owner.py``); an unreadable
+    culprit leaves both out (the route then says ``epic unknown``).
+    The RC suite's open issue by an author of ``rc.trusted_authors`` whose body carries the marker
+    ``<!-- we-event {"kind":"main_red","sha":…,"run":…,"failing":[…],"epics":[…]} -->`` is a
+    ``main_red`` too (``&lt;``, ``&gt;`` and ``&amp;`` in it unescaped), once per marker run id, read from the open-issue list of ``rc.repo`` (shared
+    by update time, 20 a round: the RC issue stays open for long and the shared list loses it): at most ``MARKER_IDS`` failing ids matching
+    ``_NODE_ID``; none readable gives ``ids unreadable``. A marker of another author is ignored.
+``pr_checks_red`` / ``pr_conflict`` / ``pr_review_verdict`` / ``pr_green`` / ``pr_merged`` (``pulls``:
+``{repos, review_rx, merged_window}``)
+    Per repo and round one GraphQL query (``pulls_query``): the open pull requests (first 50) with
+    head, base, ``mergeable`` and the head commit's rollup, the 20 last updated merged ones, and per
+    PR open in the round before its contexts' ``isRequired(pullRequestNumber:)``, which
+    ``arm_pr.sh`` counts beside the branch's list; a PR new this round gets no ``pr_green`` before
+    the next one. A
+    context's verdict is ``flow_report.context_class`` (a set conclusion wins over the status) and
+    the PR's ``flow_report.pr_verdict`` over the base's required checks (``required_checks.sh``,
+    cached 1 h): the rule ``arm_pr.sh`` judges by. Transitions only, each once: a required check
+    concluded failure, cancelled or timed out (``pr_checks_red``, per check id; any check when the
+    base requires none), ``mergeable`` CONFLICTING (``pr_conflict``, per head), a check whose name
+    matches ``review_rx`` (default ``review``, case-insensitive) concluded (``pr_review_verdict``,
+    pass or red, per check id; such a check is never also ``pr_checks_red``), the verdict ``pass``
+    (``pr_green``, per head), merged within ``merged_window`` hours (default 2) (``pr_merged``, per
+    PR). The first round per repo records silently. Each event carries the PR's story key from its
+    head branch, else its title (the title only matches, it never enters a field).
 ``run_queued_long`` (``queued``: ``{repo, limit_min, limits, recheck_max}``)
     A run queued longer than ``limit_min`` (default 60) or ``limits[<workflow name>]``; a superseded
     dispatch (below) is not one. The queued list also returns finished runs: each candidate past
@@ -25,6 +51,10 @@ Kinds and their config keys (``events.sources.<key>``):
     A queued ``workflow_dispatch`` run of the workflow file when a newer dispatch of the same ref
     is queued, or when it waited longer than ``stale_h`` (default 6) hours. Read from the same
     queued list as ``run_queued_long`` (one call), so both need the same repo.
+``requested_by_rx`` (optional, on ``rc``, ``queued``, ``dispatch`` and ``rc_cut``)
+    A regex whose group 1 reads the requester from a run's ``display_title`` (a workflow whose
+    ``run-name`` ends ``· <requested_by or event>``); one plain token becomes ``by`` and the line
+    ends ``· by <token>``.
 ``issue_new`` (``issues``: ``{repos, skip_authors}``)
     A new open issue (never a pull request, never one of ``skip_authors``). The first round per
     repo records the open issues silently: only what comes after is news. An issue older than the
@@ -127,7 +157,13 @@ KINDS = (
     "poll_error",
     "config_error",
     "permission_prompt",
+    "pr_checks_red",
+    "pr_conflict",
+    "pr_review_verdict",
+    "pr_green",
+    "pr_merged",
 )
+PR_KINDS = ("pr_checks_red", "pr_conflict", "pr_review_verdict", "pr_green", "pr_merged")
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
 DAY = 24 * HOUR
@@ -152,6 +188,62 @@ SESSIONS_INTERVAL_S = 60
 _SESSION_ID = re.compile(r"^[A-Za-z0-9-]{8,80}$")
 _SESSION_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _TOOL = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_NODE_ID = re.compile(r"^[A-Za-z0-9_./:\[\]-]{1,200}$")
+_KEY = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+_MARKER = re.compile(r"<!--\s*we-event\s+(\{.*?\})\s*-->", re.DOTALL)
+MARKER_IDS = 10
+DEFAULT_KEY_RX = r"[A-Z]+-\d+"
+PULLS_QUERY = """query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    open: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { number title headRefName headRefOid baseRefName mergeable
+        commits(last: 1) { nodes { commit { oid statusCheckRollup { contexts(first: 100) { nodes {
+          __typename
+          ... on CheckRun { databaseId name status conclusion startedAt
+            checkSuite { workflowRun { workflow { name } } } }
+          ... on StatusContext { context state }
+        } } } } } } }
+    }
+    merged: pullRequests(states: MERGED, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { number title headRefName mergedAt mergeCommit { oid } }
+    }
+ALIASES  }
+}"""
+# `isRequired` takes the PR's number, which a list query cannot pass per node: each PR open in
+# the round before gets an aliased block in the same query (`arm_pr.sh`'s READ asks the same).
+PR_REQUIRED = """    pr{n}: pullRequest(number: {n}) {{ headRefOid
+      commits(last: 1) {{ nodes {{ commit {{ oid statusCheckRollup {{ contexts(first: 100) {{ nodes {{
+        __typename
+        ... on CheckRun {{ databaseId name isRequired(pullRequestNumber: {n}) }}
+        ... on StatusContext {{ context isRequired(pullRequestNumber: {n}) }}
+      }} }} }} }} }} }}
+    }}
+"""
+
+
+def pulls_query(numbers: list[int]) -> str:
+    """The one query of a repo's round: the lists plus ``isRequired`` per known open PR."""
+    aliases = "".join(PR_REQUIRED.format(n=int(n)) for n in sorted(set(numbers))[:50])
+    return PULLS_QUERY.replace("ALIASES", aliases)
+
+
+def with_required(pr: dict, alias: Any) -> bool:
+    """Copy the alias's ``isRequired`` onto the PR's head contexts; False when the alias is
+    missing or names another head (the flags are then unknown and no ``pr_green`` is judged)."""
+    if not isinstance(alias, dict) or alias.get("headRefOid") != pr.get("headRefOid"):
+        return False
+    commit = (((alias.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+    flags = {}
+    for c in ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []:
+        if isinstance(c, dict):
+            ident = c.get("databaseId") if c.get("__typename") == "CheckRun" else c.get("context")
+            flags[(c.get("__typename"), ident)] = c.get("isRequired") is True
+    mine = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+    for c in ((mine.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []:
+        if isinstance(c, dict):
+            ident = c.get("databaseId") if c.get("__typename") == "CheckRun" else c.get("context")
+            c["isRequired"] = flags.get((c.get("__typename"), ident), False)
+    return True
 
 
 def name_of(value: Any, limit: int = 100) -> str:
@@ -197,6 +289,29 @@ def list_sessions() -> list[dict]:
 
 def run_url(repo: str, run_id: Any) -> str:
     return f"{GH}/{repo}/actions/runs/{int(run_id)}"
+
+
+def newest(nodes: list[dict]) -> list[dict]:
+    """Only the newest run of each check (workflow and name) on the head, as `watch-pr-checks.sh`'s
+    CLASSIFY judges: a draft run's red check beside the ready run's is history. A run not started
+    yet counts as the newest."""
+
+    def ckey(c: dict) -> tuple:
+        wf = (((c.get("checkSuite") or {}).get("workflowRun") or {}).get("workflow") or {}).get(
+            "name"
+        )
+        return (wf or "", c.get("name") or c.get("context") or "")
+
+    def at(c: dict) -> str:
+        t = str(c.get("startedAt") or c.get("createdAt") or "")
+        return "9999" if not t or t.startswith("0001-") else t
+
+    best: dict[tuple, dict] = {}
+    for c in nodes:
+        k = ckey(c)
+        if k not in best or at(c) >= at(best[k]):
+            best[k] = c
+    return [c for c in nodes if best.get(ckey(c)) is c]
 
 
 def epoch(ts: Any) -> float | None:
@@ -263,8 +378,12 @@ class Round:
         run: Runner = subprocess.run,
         due: set[str] | None = None,
         sessions: Callable[[], list[dict]] = list_sessions,
+        key_rx: str | re.Pattern | None = None,
     ):
         self.src = sources or {}
+        self.key_rx = (
+            re.compile(key_rx or DEFAULT_KEY_RX) if not isinstance(key_rx, re.Pattern) else key_rx
+        )
         self.due = due  # the source groups this round runs (``main``, ``sessions``); None: all
         self.list_sessions = sessions
         self.st = state
@@ -372,6 +491,7 @@ class Round:
             ("rc_cut", self.rc_cut),
             ("rollout", self.rollout),
             ("rate_limit", self.rate_limit),
+            ("pulls", self.pulls),
         ]
         main = self.due is None or "main" in self.due
         on = self.src.get("sessions") not in (None, False)  # {} is on with its defaults
@@ -386,6 +506,11 @@ class Round:
                     step()
                 except Exception as exc:
                     self.errors.append(f"source {key}: {type(exc).__name__}")
+        if main and (self.src.get("rc") or {}).get("trusted_authors"):
+            try:
+                self.red_markers()
+            except Exception as exc:
+                self.errors.append(f"source rc markers: {type(exc).__name__}")
         if self.local_checks and main:
             try:
                 self.local()
@@ -452,7 +577,251 @@ class Round:
                     sha=str(run.get("head_sha") or "")[:7],
                     why=why,
                     run_id=int(run["id"]),
+                    **self.culprit(repo, run.get("head_sha")),
                 )
+
+    def by(self, source: str, run: dict) -> dict[str, str]:
+        """``{by: <token>}`` from the run's title through ``sources.<source>.requested_by_rx``
+        (group 1, one plain token), else {}: who dispatched the run, or ``schedule``/``push``."""
+        rx = (self.src.get(source) or {}).get("requested_by_rx")
+        if not isinstance(rx, str) or not rx:
+            return {}
+        try:
+            found = re.search(rx, str(run.get("display_title") or ""))
+        except re.error:
+            return {}
+        token = found.group(1) if found and found.groups() else ""
+        return {"by": token} if token and re.match(r"^[A-Za-z0-9_.-]{1,64}$", token) else {}
+
+    def story_key(self, branch: Any, title: Any = None) -> str | None:
+        """The story key of a head branch, else of a title (which only matches)."""
+        for text in (branch, title):
+            found = self.key_rx.search(str(text or ""))
+            if found and _KEY.match(found.group(0)):
+                return found.group(0)
+        return None
+
+    def culprit(self, repo: str, sha: Any) -> dict[str, Any]:
+        """The pull request a red push run's head commit came from: ``{pr, story}``, else {}. A read
+        failure stays quiet: the event goes on without them and its route names ``epic unknown``."""
+        if not (isinstance(sha, str) and _SHA.match(sha)):
+            return {}
+        out = self._exec(["gh", "api", f"repos/{repo}/commits/{sha}/pulls"], 60)
+        try:
+            pulls = json.loads(out.stdout) if out is not None and out.returncode == 0 else None
+        except ValueError:
+            pulls = None
+        for pr in pulls if isinstance(pulls, list) else []:
+            if not isinstance(pr, dict) or not isinstance(pr.get("number"), int):
+                continue
+            key = self.story_key((pr.get("head") or {}).get("ref"), pr.get("title"))
+            return {"pr": int(pr["number"]), **({"story": key} if key else {})}
+        return {}
+
+    def red_markers(self) -> None:
+        """``main_red`` from the RC suite's issue marker (module docstring)."""
+        cfg = self.src.get("rc") or {}
+        repo = cfg.get("repo")
+        trusted = set(cfg.get("trusted_authors") or [])
+        # its own list by update time: the RC suite keeps one issue open and rewrites its marker,
+        # and the shared list (newest 30 by creation) loses a long-open issue behind newer PRs
+        listed = (
+            self.gh(f"repos/{repo}/issues?state=open&sort=updated&direction=desc&per_page=20")
+            if repo
+            else None
+        )
+        for issue in listed if isinstance(listed, list) else []:
+            if not isinstance(issue, dict):
+                continue
+            if "pull_request" in issue or (issue.get("user") or {}).get("login") not in trusted:
+                continue
+            # one marker per lane (rc, night) in the same issue: each lane rewrites only its own block
+            for found in _MARKER.finditer(str(issue.get("body") or "")):
+                self._red_marker(repo, issue, found)
+
+    def _red_marker(self, repo: str, issue: dict, found: re.Match) -> None:
+        """One ``main_red`` for one marker block of the issue, unless its run was seen."""
+        try:
+            # the writer escapes < and > in the issue body (an HTML comment ends at the first >)
+            text = found.group(1)
+            text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+            doc = json.loads(text)
+        except ValueError:
+            doc = None
+        if not isinstance(doc, dict) or doc.get("kind") != "main_red":
+            return
+        run = doc.get("run")
+        if not isinstance(run, int) or isinstance(run, bool) or run <= 0:
+            return
+        key = f"marker:{repo}:{run}"
+        if not self._say(key, False):
+            return  # seen (and refreshed while the issue stays open)
+        failing = doc.get("failing")
+        ids = (
+            [i for i in failing if isinstance(i, str) and _NODE_ID.match(i)]
+            if isinstance(failing, list)
+            else []
+        )
+        sha = str(doc.get("sha") or "")
+        epics = doc.get("epics")
+        self.emit(
+            "main_red",
+            key,
+            f"run:{run}",
+            issue.get("updated_at"),
+            repo=repo,
+            sha=sha[:7] if re.match(r"^[0-9a-f]{7,40}$", sha) else "?",
+            failing=ids[:MARKER_IDS],
+            unreadable=not ids,
+            run_id=run,
+            epics=[e for e in epics if isinstance(e, str) and _KEY.match(e)][:5]
+            if isinstance(epics, list)
+            else [],
+            origin="marker",
+        )
+
+    # --- pull requests ------------------------------------------------------------------
+
+    def graphql(self, query: str, **variables: str) -> Any:
+        argv = ["gh", "api", "graphql", "-f", f"query={query}"]
+        for k, v in variables.items():
+            argv += ["-f", f"{k}={v}"]
+        out = self._exec(argv, 60)
+        if out is None:
+            return None
+        if out.returncode != 0:
+            self.errors.append(f"gh graphql: exit {out.returncode}")
+            return None
+        try:
+            data = json.loads(out.stdout)
+        except ValueError:
+            self.errors.append("gh graphql: no JSON")
+            return None
+        return data if isinstance(data, dict) else None
+
+    def pulls(self) -> None:
+        """PR state transitions (module docstring), one GraphQL query per repo and round."""
+        scripts = str(Path(__file__).resolve().parent.parent)
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import flow_report  # noqa: PLC0415  (the verdict rule arm_pr.sh judges by)
+
+        cfg = self.src.get("pulls") or {}
+        review = re.compile(cfg.get("review_rx") or "review", re.IGNORECASE)
+        window = float(cfg.get("merged_window", 2)) * HOUR
+        for repo in cfg.get("repos") or []:
+            owner, name = repo.split("/", 1)
+            known = self.st.setdefault("pulls_open", {})
+            data = self.graphql(pulls_query(known.get(repo) or []), owner=owner, name=name)
+            node = ((data or {}).get("data") or {}).get("repository")
+            if not isinstance(node, dict):
+                continue
+            seed = f"pulls:{repo}"
+            first = not self.seeded.get(seed)
+            unread = False
+            opened = []
+            for pr in (node.get("open") or {}).get("nodes") or []:
+                if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
+                    continue
+                opened.append(pr["number"])
+                names = self.required(repo, pr.get("baseRefName") or "main")
+                if names is None:
+                    unread = True  # required checks unreadable: the next round judges this PR
+                    continue
+                flags = with_required(pr, node.get(f"pr{pr['number']}"))
+                self._pr_state(repo, pr, first, review, flow_report, names, flags)
+            known[repo] = opened
+            for pr in (node.get("merged") or {}).get("nodes") or []:
+                if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
+                    continue
+                n = pr["number"]
+                key = f"prmerged:{repo}#{n}"
+                if self.age_s(pr.get("mergedAt")) > window or not self.new(key) or first:
+                    continue
+                oid = str((pr.get("mergeCommit") or {}).get("oid") or "")
+                self._pr_emit(
+                    "pr_merged",
+                    key,
+                    repo,
+                    pr,
+                    pr.get("mergedAt"),
+                    sha=oid[:7] if _SHA.match(oid) else "?",
+                )
+            if not unread:  # a first round that could not judge a PR stays the silent one
+                self.seeded[seed] = True
+
+    def _pr_emit(self, kind: str, key: str, repo: str, pr: dict, at: Any, **fields: Any) -> None:
+        story = self.story_key(pr.get("headRefName"), pr.get("title"))
+        self.emit(
+            kind,
+            key,
+            f"pr:{repo}#{int(pr['number'])}",
+            at,
+            repo=repo,
+            number=int(pr["number"]),
+            **({"story": story} if story else {}),
+            **fields,
+        )
+
+    def _say(self, key: str, first: bool) -> bool:
+        """A transition: a key not seen before, outside the silent first round. A key already seen
+        is refreshed: a state that stays (a PR green for weeks) never ages out and fires again."""
+        if key in self.seen:
+            self.seen[key] = self.now
+            return False
+        self.seen[key] = self.now
+        return not first
+
+    def _pr_state(
+        self,
+        repo: str,
+        pr: dict,
+        first: bool,
+        review: re.Pattern,
+        fr: Any,
+        names: set[str],
+        flags: bool = True,
+    ) -> None:
+        """One PR's transitions; ``flags`` False: its ``isRequired`` are unread this round (a PR
+        new since the last round), so no ``pr_green`` yet: ``arm_pr.sh`` may still judge it
+        pending."""
+        n, head = pr["number"], str(pr.get("headRefOid") or "")
+        if not _SHA.match(head):
+            return
+        at = iso(self.now)
+        if pr.get("mergeable") == "CONFLICTING" and self._say(f"prconf:{repo}#{n}:{head}", first):
+            self._pr_emit("pr_conflict", f"prconf:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
+        commit = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+        if commit.get("oid") != head:
+            return
+        rollup = (commit.get("statusCheckRollup") or {}).get("contexts") or {}
+        nodes = newest([c for c in rollup.get("nodes") or [] if isinstance(c, dict)])
+        for raw in nodes:
+            check = raw.get("name") or raw.get("context")
+            verdict = fr.context_class(raw)
+            cid = raw.get("databaseId") if isinstance(raw.get("databaseId"), int) else None
+            ident = cid if cid is not None else f"{head}:{event_id(str(check))}"
+            # a check name reaches the line only when the repo's rules require it or the review
+            # pattern matches it in full; any other name is the PR's own text (a workflow it adds)
+            known = check in names or review.fullmatch(str(check or ""))
+            extra = {
+                "check": name_of(check) if known else "check",
+                **({"check_id": cid} if cid else {}),
+            }
+            if review.search(str(check or "")):
+                key = f"prrev:{repo}#{n}:{ident}"
+                if verdict != "pending" and self._say(key, first):
+                    self._pr_emit("pr_review_verdict", key, repo, pr, at, verdict=verdict, **extra)
+                continue
+            key = f"prred:{repo}#{n}:{ident}"
+            required = not names or check in names or raw.get("isRequired") is True
+            if verdict == "fail" and required and self._say(key, first):
+                self._pr_emit("pr_checks_red", key, repo, pr, at, **extra)
+        judged = dict(commit, statusCheckRollup={"contexts": {"nodes": nodes}})
+        contexts = fr.head_contexts(dict(pr, commits={"nodes": [{"commit": judged}]}))
+        verdict, _fails = fr.pr_verdict(contexts, sorted(names))
+        if flags and verdict == "pass" and self._say(f"prgreen:{repo}#{n}:{head}", first):
+            self._pr_emit("pr_green", f"prgreen:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
 
     def _first_red(self, repo: str, branch: str, data: dict) -> bool:
         """The first round per repo and branch records its red runs silently: a fresh poller would
@@ -537,6 +906,7 @@ class Round:
                         why="newer" if newer else "stale",
                         hours=int(float(dis.get("stale_h", 6))),
                         run_id=int(run["id"]),
+                        **self.by("dispatch", run),
                     )
 
     def _hang(self, repo: str, run: dict, key: str, mins: int) -> None:
@@ -560,6 +930,7 @@ class Round:
             event=token_of(event),
             branch=token_of(run.get("head_branch")) if own else "?",
             run_id=int(run["id"]),
+            **(self.by("queued", run) if own else {}),
         )
 
     def issues(self) -> None:
@@ -706,6 +1077,7 @@ class Round:
                 "tag": tag,
                 "verdict": verdict,
                 "run_id": int(run["id"]),
+                **self.by("rc", run),
             }
             if info.get("unread"):
                 fields["unread"] = True
@@ -885,6 +1257,7 @@ class Round:
                             repo=repo,
                             mins=mins,
                             run_id=int(run["id"]),
+                            **self.by("rc_cut", run),
                         )
 
     def rollout(self) -> None:  # noqa: PLR0912

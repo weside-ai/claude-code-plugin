@@ -1,0 +1,116 @@
+{
+ "_source": "a live rollup (2026-11-24): every run completed, yet one check run still reports status IN_PROGRESS beside conclusion SUCCESS; repo and ids neutralised",
+ "headRefOid": "1e7d00dd419915f6833a7de64f98636e9f6debf5",
+ "statusCheckRollup": [
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:12:52Z",
+   "conclusion": "FAILURE",
+   "detailsUrl": "https://github.com/o/r/actions/runs/101/job/201",
+   "name": "Claude Review (Analyze)",
+   "startedAt": "2026-11-23T11:11:45Z",
+   "status": "COMPLETED",
+   "workflowName": "Review: Claude"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:15:01Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/202",
+   "name": "Schema",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:15:24Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/103/job/203",
+   "name": "Build wheel",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "Wire release"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:12:57Z",
+   "conclusion": "FAILURE",
+   "detailsUrl": "https://github.com/o/r/actions/runs/101/job/204",
+   "name": "Claude Review",
+   "startedAt": "2026-11-23T11:12:54Z",
+   "status": "COMPLETED",
+   "workflowName": "Review: Claude"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:15:24Z",
+   "conclusion": "SKIPPED",
+   "detailsUrl": "https://github.com/o/r/actions/runs/103/job/205",
+   "name": "Publish",
+   "startedAt": "2026-11-23T11:15:25Z",
+   "status": "COMPLETED",
+   "workflowName": "Wire release"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:12:06Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/206",
+   "name": "Hygiene",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:12:10Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/207",
+   "name": "Ledger",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:12:53Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/208",
+   "name": "Markdown",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:11:52Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/209",
+   "name": "Secret Scan",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "IN_PROGRESS",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:16:34Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/210",
+   "name": "Rust",
+   "startedAt": "2026-11-23T11:11:46Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  },
+  {
+   "__typename": "CheckRun",
+   "completedAt": "2026-11-23T11:16:40Z",
+   "conclusion": "SUCCESS",
+   "detailsUrl": "https://github.com/o/r/actions/runs/102/job/211",
+   "name": "CI Summary",
+   "startedAt": "2026-11-23T11:16:36Z",
+   "status": "COMPLETED",
+   "workflowName": "CI"
+  }
+ ]
+}

@@ -392,3 +392,45 @@ def test_permission_prompt_line(short_tmp, monkeypatch):
         assert ledger["delivered"] and took == 75 and took < ep.LATENCY_BOUND_S
     finally:
         inbox.close()
+
+
+def test_a_master_tail_without_a_member_receives_rows_addressed_to_its_session(
+    short_tmp, monkeypatch
+):
+    """A master's tail (no member, no roles) delivers the rows addressed to its session as
+    `epic_master`; a row addressed to it under a role it does not hold stays `not routed`."""
+    routes = {"pr_green": {"to": ["epic_master"]}, "main_red": {"to": ["machinery"]}}
+    root = ter.project(short_tmp, routes)
+    folder = short_tmp / "events"
+    inbox = FakeInbox(short_tmp / "m.sock")
+    try:
+        tail = et.Tail(
+            root, folder, inbox.path, TOKEN, None, [], session_id="sid-m", clock=Clock()
+        )
+        tail.write_presence()
+        doc = json.loads(tail.presence_path().read_text())
+        assert (doc["member"], doc["roles"], doc["session_id"]) == (None, [], "sid-m")
+        address(
+            folder,
+            [
+                row(
+                    1,
+                    "pr_green",
+                    "pr:acme/app#7",
+                    tail.key,
+                    "epic_master",
+                    repo="acme/app",
+                    number=7,
+                    sha="bbbbbbb",
+                ),
+                row(2, "main_red", "run:1", tail.key, "machinery", repo="acme/app", run_id=1),
+            ],
+        )
+        assert tail.cycle() == 1
+        assert user_lines(inbox) == [
+            "PR #7 acme/app · green · head bbbbbbb · https://github.com/acme/app/pull/7"
+        ]
+        reasons = [r["reason"] for r in ep.read_rows(folder / "ledger.jsonl")]
+        assert reasons == ["delivered", "not routed"]
+    finally:
+        inbox.close()

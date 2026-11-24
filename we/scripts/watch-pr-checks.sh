@@ -166,6 +166,9 @@ BORN=$(date +%s)
 # verdict pending | pass | fail | cancelled. Only the newest run of each check (workflow and
 # name) on the head counts: a draft run's red ci-summary beside the ready run is history, not red.
 # A run not started yet (no startedAt, or gh's zero time 0001-01-01…) counts as the newest.
+# A set conclusion is the verdict whatever the status says: GitHub can leave a check run at
+# IN_PROGRESS beside its conclusion after the run completed, and judging the status first kept such
+# a head pending until the lifetime cap. No conclusion and not COMPLETED is pending.
 CLASSIFY='def ckey: [(.workflowName // ""), (.name // .context // "")];
   def at: ((.startedAt // .createdAt // "") | if . == "" or startswith("0001-") then "9999" else . end);
   def newest: . as $all | [$all[] | . as $c | select(all($all[]; ckey != ($c | ckey) or at <= ($c | at)))];
@@ -176,9 +179,10 @@ CLASSIFY='def ckey: [(.workflowName // ""), (.name // .context // "")];
   (((.statusCheckRollup // []) | newest)[] | (
   (if .__typename == "StatusContext" then
      (if .state == "SUCCESS" then "pass" elif (.state == "PENDING" or .state == "EXPECTED") then "pending" else "fail" end)
-   elif .status != "COMPLETED" then "pending"
    elif (.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED") then "pass"
    elif .conclusion == "CANCELLED" then "cancelled"
+   elif (.conclusion // "") != "" then "fail"
+   elif .status != "COMPLETED" then "pending"
    else "fail" end)
   + "\t" + (.name // .context)
   + "\t" + (((.detailsUrl // .targetUrl // "") | capture("/actions/runs/(?<id>[0-9]+)") | .id) // "")
@@ -190,7 +194,8 @@ RUNS='.[] | "\(.databaseId)\t\(.attempt)\t\(.status)\t\(.conclusion // "")\t\(.w
 CODEX_BODY='[.comments[]? | select(.body | contains("<!-- codex-review -->"))] | last | .body // ""'
 
 ERRORS=0
-GH_ERR=$(mktemp) && trap 'rm -f "$GH_ERR"' EXIT
+GH_ERR=$(mktemp) && LOGS=$(mktemp -d) || { echo "no temp dir: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$GH_ERR" "$LOGS"' EXIT
 gh_try() {  # gh_try <var> <gh args...>: stores stdout in <var>; exits 2 after MAX_ERRORS failures
   # stdout only: gh prints notices (upgrade, preview commands) on stderr, even on success.
   local var=$1 out; shift
@@ -350,10 +355,17 @@ disarm() {  # prints the auto-merge note after disarming an armed PR; never exit
 failed_log() {  # failed_log <run id>: the last lines the failed steps printed, empty on any error
   # GitHub's log echoes each step's `run:` script first (`##[group]Run …`, then the script lines in
   # ANSI cyan): that echo is the workflow's text, not what happened, so it is dropped.
-  local out
+  # Read once per run attempt and head (LOGS, a file per run and attempt: callers run it in a
+  # subshell); a rerun by anyone is a new attempt in RUNROWS and is read again.
+  local out attempt cache
+  attempt=$(awk -F'\t' -v r="$1" '$1 == r { print $2 }' <<<"$RUNROWS" | head -n 1)
+  cache="${LOGS:?}/${1//[^0-9]/}-${attempt//[^0-9]/}"
   [ -n "$1" ] || return 0
-  out=$(gh run view "$1" -R "$REPO" --log-failed 2>/dev/null) || return 0
-  grep -v -e '##\[group\]' -e $'\x1b\\[36;1m' <<<"$out" | tail -n 200
+  if [ ! -f "$cache" ]; then
+    out=$(gh run view "$1" -R "$REPO" --log-failed 2>/dev/null) || return 0
+    grep -v -e '##\[group\]' -e $'\x1b\\[36;1m' <<<"$out" | tail -n 200 >"$cache"
+  fi
+  cat "$cache"
 }
 error_lines() {  # error_lines <run id>: only the failure's own annotations (`##[error]`, `::error::`)
   failed_log "$1" | grep -E '##\[error\]|::error::'
@@ -445,6 +457,7 @@ infra_rerun() {  # infra_rerun <name> <run id>: rerun a first-attempt run that f
   [ -n "$match" ] || return 1
   gh run rerun "$run" -R "$REPO" --failed >/dev/null 2>&1 || return 1
   RERUN="$RERUN"$'\n'"$run"
+  rm -f "${LOGS:?}/${run//[^0-9]/}"-*
   echo "infra: $name failed on \"$match\" — rerun once (run $run)"
   return 0
 }
@@ -502,6 +515,7 @@ watch_head() {  # (re)start the per-head state: on start and, with --until-merge
   CODEX_SEEN=""
   CODEX_TRIES=0
   RERUN=""
+  rm -f "${LOGS:?}"/* 2>/dev/null
   WAITING=""
   OFF_SAID=""
 }

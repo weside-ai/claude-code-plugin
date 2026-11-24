@@ -89,7 +89,7 @@ def test_a_worker_or_a_session_without_a_member_gets_no_tail(tmp_path, spawned):
     worker = events_on_start.start({"cwd": str(root)}, environ(tmp_path, WE_ROLE="worker"))
     assert worker == [] and spawned.calls == []  # a worker hosts no poller, gets no tail
     plain = events_on_start.start({"cwd": str(root)}, environ(tmp_path))
-    assert plain[-1] == "events: no tail (this session is no crew member)"
+    assert plain[-1] == "events: no tail (this session is no crew member and no master)"
 
 
 def test_a_failure_is_one_line_and_exit_0(tmp_path, monkeypatch, capsys):
@@ -101,3 +101,15 @@ def test_a_failure_is_one_line_and_exit_0(tmp_path, monkeypatch, capsys):
     assert events_on_start.main() == 0
     out, err = capsys.readouterr()
     assert (out, err.strip()) == ("", "events_on_start: skipped (RuntimeError: boom)")
+
+
+def test_a_master_without_a_companion_gets_a_tail_a_worker_none(tmp_path, spawned):
+    root = ter.project(tmp_path)
+    said = events_on_start.start(
+        {"cwd": str(root), "session_id": "sid-m"}, environ(tmp_path, WE_ROLE="master")
+    )
+    assert said == ["events: poller 4242 started", "events: tail 4242 for master"]
+    assert spawned.calls[-1]["env"]["CLAUDE_CODE_SESSION_ID"] == "sid-m"
+    spawned.calls.clear()
+    assert events_on_start.start({"cwd": str(root)}, environ(tmp_path, WE_ROLE="worker")) == []
+    assert spawned.calls == []
