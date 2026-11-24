@@ -17,9 +17,10 @@ PR's current head as the skip. Each post leaves one `go-comment` line in <stem>-
 a question with a posted comment is not posted again. A failed post exits 3 after the answer
 line is written, its reason on stderr.
 
-A press on a question an earlier line closed (an Accept, Deny or Withdraw, or close-merged's
-`pr_merged`/`pr_closed` after a hand merge the card did not show yet) writes nothing and exits 4
-with the note `Qn ist schon erledigt: PR gemergt` on stderr, which the pane shows.
+A press on a question close-merged's `pr_merged`/`pr_closed` closed (a hand merge the card did not
+show yet) writes nothing and exits 4 with the note `Qn ist schon erledigt: PR gemergt` on stderr,
+which the pane shows. A press after an earlier Accept, Deny or Withdraw is written as before:
+board.py reads it as a duplicate, and a repeated Accept retries a go comment that failed to post.
 """
 
 import json
@@ -36,10 +37,8 @@ PANE = ("accept", "deny", "followup", "update", "withdraw", "read", "rebuild")
 # board.py close-merged's answers on a merge-go question whose PR merged or closed; never a press.
 PR_DONE = {"pr_merged": "PR gemergt", "pr_closed": "PR geschlossen"}
 ANSWERS = (*PANE, *PR_DONE)
-CLOSING = ("accept", "deny", "withdraw", *PR_DONE)
 # The presses that answer a question; Read and Refresh do not.
 QUESTION_PRESSES = ("accept", "deny", "followup", "update", "withdraw")
-LABEL = {"accept": "Accept", "deny": "Deny", "withdraw": "Withdraw", **PR_DONE}
 
 
 def append(
@@ -93,17 +92,17 @@ def _log_lines(path):
 
 
 def closed_note(answers_path, qid, answer):
-    """The pane's note for a press on a question an earlier line closed (a hand merge the card did
-    not show yet), else None: the press would change nothing, so it is not written."""
+    """The pane's note for a press on a question close-merged closed (a hand merge the card did not
+    show yet), else None. An earlier Accept, Deny or Withdraw gets None: that press is written."""
     if answer not in QUESTION_PRESSES:
         return None
     closer = next(
-        (r for r in _log_lines(answers_path) if r.get("id") == qid and r.get("answer") in CLOSING),
+        (r for r in _log_lines(answers_path) if r.get("id") == qid and r.get("answer") in PR_DONE),
         None,
     )
     if closer is None:
         return None
-    return f"{qid} ist schon erledigt: {LABEL[closer['answer']]}"
+    return f"{qid} ist schon erledigt: {PR_DONE[closer['answer']]}"
 
 
 def go_body(item, record):
