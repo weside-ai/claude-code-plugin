@@ -55,8 +55,10 @@ MEMORY = (
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
-def board_path(crew: dict[str, Any]) -> Path:
-    return Path(os.path.expanduser(str(crew["board"]["file"])))
+def board_path(crew: dict[str, Any], crew_path: Path | None = None, env: Any = None) -> Path:
+    """The crew's board as `board.py` finds it (`crew.board_file`): `board.file`, else the state
+    dir's `board.json`; a crew without `board.file` never reads a path named "None"."""
+    return crewlib.board_file(crew_path, crew, env)
 
 
 def tmux_window(env: Any, runner: Runner = subprocess.run) -> str:
@@ -97,8 +99,7 @@ def fmt(value: object, cap: int) -> str:
     return text if len(text) <= cap else text[: cap - 1] + "…"
 
 
-def board_block(crew: dict, board: dict | None, line: dict | None, cap: int) -> str:
-    path = crew["board"]["file"]
+def board_block(crew: dict, board: dict | None, line: dict | None, cap: int, path: Path) -> str:
     coordinator = crewlib.holder_name(crew, "coordinator") or "the coordinator"
     if board is None:
         return f"Board: {path} unreadable; your board line could not be restored."
@@ -206,10 +207,10 @@ def git_root(cwd: Path, runner: Runner) -> Path | None:
     return Path(out).resolve() if done.returncode == 0 and out else None
 
 
-def take_flag(crew: dict, session_id: str) -> bool:
+def take_flag(board: Path, session_id: str) -> bool:
     if not session_id or "/" in session_id:
         return False
-    flag = board_path(crew).parent / FLAG_DIR / session_id
+    flag = board.parent / FLAG_DIR / session_id
     try:
         flag.unlink()
     except OSError:
@@ -240,10 +241,11 @@ def render(
         return None, None
     session_id = str(hook_input.get("session_id") or "")
     _, pin = crewlib.session_kind(env, None, hook_input)
-    board = load_board(board_path(crew))
+    path = board_path(crew, crew_path, env)
+    board = load_board(path)
     window = "" if board is None else tmux_window(env, runner)
     line = find_session(board, session_id, pin, window) if board else None
-    flagged = take_flag(crew, session_id)
+    flagged = take_flag(path, session_id)
     head = ["Context restored after compaction:"]
     if flagged:
         head.insert(
@@ -258,7 +260,12 @@ def render(
     entries, cap = LOG_ENTRIES, FIELD_CAP
     while True:
         epic = epic_block(data, entries) if data else ""
-        parts = [*head, board_block(crew, board, line, cap), *([epic] if epic else []), *tail]
+        parts = [
+            *head,
+            board_block(crew, board, line, cap, path),
+            *([epic] if epic else []),
+            *tail,
+        ]
         text = "\n\n".join(parts)
         if len(text) <= render_process.BUDGET:
             return text, None

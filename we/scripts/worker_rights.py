@@ -22,8 +22,8 @@ cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tr
 a path `git` keeps it; `ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag,
 `ALLOW_PUSH_WITHOUT_MAIN`, `--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
 other `gh pr merge` than `--disable-auto` unless it is the merge line below, typed as a command of
-its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command, `--disable-auto`
-included; `arm_pr.sh` run anywhere in a command that names `WE_ROLE` or clears the environment
+its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command but a part that is
+`--disable-auto` alone (a fix round's `cd <tree> && … --disable-auto` stops a merge, opens none); `arm_pr.sh` run anywhere in a command that names `WE_ROLE` or clears the environment
 (`env -i`, `exec -c`, `sudo`): the script refuses a worker's one-way class by that variable, and the
 gate cannot tell which value the script will see); the crew's `deny_text` anywhere in the command.
 
@@ -33,6 +33,8 @@ of `worker_rights.repos`, a worker with a story key, on a branch that is not the
 carries that key, may run without asking
   `gh pr ready` (`pr_ready`) and `gh pr comment` (`pr_comment`), with no selector or one naming the PR
   whose head is its branch in its repo (`gh pr view --json` resolves it; a `gh` failure denies);
+  `gh pr comment` with `-R <another repo>` names a PR there whose head branch carries its key (the
+  other half of a two-repo story);
   `pr_ready.sh <PR> ready|undo` is a form of `pr_ready` and must name that own PR (its `gh pr edit`
   of the `**Draft:**` line rides along);
   the crew's `branch_rc` command prefix (a branch RC: the repo's pre-push guard holds the receipt).
@@ -609,10 +611,35 @@ def never(  # noqa: PLR0911, PLR0912
         # (`… --disable-auto && gh pr merge 7 --squash`) must not open the second one
         argv = simple_argv(command)
         if argv is None:
-            return "merge (gh pr merge only as a command of its own)"
-        if "--disable-auto" not in argv and owner != "worker":
+            if not _only_disarms(command, text):
+                return "merge (gh pr merge only as a command of its own)"
+        elif "--disable-auto" not in argv and owner != "worker":
             return "merge (a worker merges only under build.pr_owner: worker)"
     return None
+
+
+def _disarm(argv: list[str]) -> bool:
+    """`argv` is a `gh pr merge <sel> --disable-auto` with no other flag than a repo."""
+    if not argv or os.path.basename(argv[0]) != "gh":
+        return False
+    args, _repo = _gh_split(argv)
+    if args[:2] != ["pr", "merge"]:
+        return False
+    flags = [t.split("=", 1)[0] for t in args[2:] if t.startswith("-")]
+    return "--disable-auto" in flags and not set(flags) - {"--disable-auto", "-R", "--repo"}
+
+
+def _only_disarms(command: str, text: str) -> bool:
+    """Every merge call the text holds is a disarm in a part of its own (`cd <tree> && <disarm>`):
+    a fix round's first step stops a merge and opens none. One hidden in a `bash -c` string or a
+    substitution counts in the text but in no part, so the chain still refuses."""
+    merges = [p for p in map(strip_keywords, segments(command)) if p and _merge_part(p)]
+    found = len(re.findall(_GH_PR_MERGE, text))
+    return bool(merges) and len(merges) == found and all(_disarm(p) for p in merges)
+
+
+def _merge_part(argv: list[str]) -> bool:
+    return os.path.basename(argv[0]) == "gh" and _gh_split(argv)[0][:2] == ["pr", "merge"]
 
 
 # ---------------------------------------------------------------- the rights
@@ -975,6 +1002,24 @@ def _thread_refusal(args: list[str]) -> str | None:
     return "gh api graphql: a worker runs resolveReviewThread as the only mutation"
 
 
+def _key_pr_refusal(
+    selector: str | None, repo: str | None, key: str, cwd: Where, deadline: float | None
+) -> str | None:
+    """Why PR `selector` in the other repo `repo` is not this worker's (its head branch does not
+    carry `key`), else None; a `gh` failure refuses."""
+    if not selector or not repo:
+        return "a comment in another repo names its PR"
+    timeout = GH_TIMEOUT_S if deadline is None else min(GH_TIMEOUT_S, _left(deadline))
+    try:
+        head = _gh_pr_head(selector, repo, cwd if isinstance(cwd, (str, Path)) else None, timeout)
+    except Exception as exc:  # fail closed
+        return f"PR {selector} in {repo} could not be resolved ({exc})"
+    branch = str(head.get("headRefName") or "")
+    if not _carries(branch, key):
+        return f"PR {selector} in {repo}: its head {branch or '?'} does not carry the key {key}"
+    return None
+
+
 def _carries(name: str, key: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(key)}(?![\d])", name) is not None
 
@@ -1028,6 +1073,10 @@ def right_refusal(  # noqa: PLR0911, PLR0912
         return _ready_script_refusal(ready_run, slug, branch, cwd, deadline)
     args, global_repo = _gh_split(argv)
     named = global_repo or _repo_flag(args)
+    if right == "pr_comment" and named and slug_of(named) != slug:
+        # a two-repo story: the worker answers the reviews on its PR in the other repo, whose
+        # head branch carries its key; a comment changes no code there
+        return _key_pr_refusal(_selector(args), slug_of(named), key, cwd, deadline)
     if named and slug_of(named) != slug:
         return f"{named} is another repo than {slug}"
     if right == "resolve_thread":

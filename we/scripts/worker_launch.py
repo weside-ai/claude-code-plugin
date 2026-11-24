@@ -357,6 +357,9 @@ LANES = (BUILD, UTILITY)
 LANE_ENV = "WE_WORKER_LANE"
 NAME_ENV = "WE_WORKER_NAME"
 QUEUE_TURN_ENV = "WE_WORKER_QUEUE_TURN"
+# a start past the lane cap and the room rule on the owner's word (`we-worker start-now`); its value
+# is that word, and the brakes log keeps it (`worker_supervisor.start_now`)
+OVER_LIMIT_ENV = "WE_WORKER_OVER_LIMIT"
 CSWAP_TIMEOUT_S = 20
 
 

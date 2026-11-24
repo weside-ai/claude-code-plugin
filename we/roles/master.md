@@ -59,7 +59,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 
 ## At start
 
-1. Read your epic's board line and the newest entries of its Updates Log.
+1. Read your epic's board line (`board.py show <your session name>`) and the newest entries of its Updates Log.
 2. List your open PRs, running workers and unanswered questions.
 3. Name the one next move in one line, then make it.
 4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4 for every open PR you own.

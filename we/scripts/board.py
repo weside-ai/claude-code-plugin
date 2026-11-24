@@ -1367,7 +1367,22 @@ def cmd_show(state, args, _crew, _now):
     qid = args.id
     status, item, lines, answers = question_status(state, qid)
     if status is None:
-        raise BoardError(f"board.py show: {qid} is in neither owner_queue nor the logs")
+        # a session's own board line: `show <session>` is what a restarted master tries first
+        line = next(
+            (
+                s
+                for s in state.board().get("sessions") or []
+                if isinstance(s, dict) and s.get("name") == qid
+            ),
+            None,
+        )
+        if line is not None:
+            print(json.dumps(line, ensure_ascii=False, indent=1))
+            return 0
+        raise BoardError(
+            f"board.py show: {qid} is in neither owner_queue nor the logs, and no session line"
+            " carries that name"
+        )
     posted = next((q for q in lines if q.get("outcome") == "posted"), None)
     question = dict(item or posted or {"id": qid})
     question.pop("reader", None)
@@ -1499,6 +1514,14 @@ def _log_superseded(state, superseded, new):
                 "reason": f"a new head {str(new.get('head') or '')[:12]} on {new.get('pr_url')}",
             }
         )
+
+
+# a skipped Codex finding written into the question reads as a second decision to the reader;
+# its flags carry it as part of the one yes (the reader never sees that line)
+CODEX_IN_ASK = (
+    " (a skipped Codex finding goes into --codex-finding and --codex-reason, not into --ask:"
+    " the yes covers it as part of the one merge decision)"
+)
 
 
 def _codex_line(fields):
@@ -1875,7 +1898,15 @@ def _cold_read(state, base, asked, fields, crew):
         # log line says so (`reader: {"error": …}`).
         print(f"board.py ask: reader-error: {exc}; posted unread", file=sys.stderr)
         return {"error": str(exc)}, None
-    return {k: answer.get(k) for k in ("decides", "on_yes", "form")}, _reader_verdict(answer)
+    reason = _reader_verdict(answer)
+    if (
+        reason is not None
+        and fields.get("cause") == "merge-go"
+        and not fields.get("codex_finding")
+        and re.search(r"codex", asked, re.I)
+    ):
+        reason += CODEX_IN_ASK
+    return {k: answer.get(k) for k in ("decides", "on_yes", "form")}, reason
 
 
 def _repeated(state, args, now):
@@ -4329,8 +4360,10 @@ def _add_flow_verbs(verbs):
 
 
 def _add_read_verbs(verbs):
-    sh = verbs.add_parser("show", help="one question with its answers and status (read-only)")
-    sh.add_argument("id")
+    sh = verbs.add_parser(
+        "show", help="one question with its answers and status, or a session's line (read-only)"
+    )
+    sh.add_argument("id", help="a question id, or a session name for its board line")
     sh.set_defaults(run=cmd_show)
     pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
     pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")

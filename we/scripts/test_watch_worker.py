@@ -34,7 +34,7 @@ def _repo(tmp_path):
     return wt
 
 
-def _run(wt, interval="0.2", stall="60", max_s="60", during=None, lock=None):
+def _run(wt, interval="0.2", stall="60", max_s="60", during=None, lock=None, flags=()):
     env = {
         **os.environ,
         "WESIDE_TESTS_LOCK": str(lock or wt.parent / "no-slot.lock"),
@@ -45,7 +45,7 @@ def _run(wt, interval="0.2", stall="60", max_s="60", during=None, lock=None):
     if during:
         threading.Timer(0.5, during).start()
     res = subprocess.run(
-        ["bash", str(SCRIPT), str(wt), "dev-X"],
+        ["bash", str(SCRIPT), *flags, str(wt), "dev-X"],
         capture_output=True,
         text=True,
         env=env,
@@ -55,10 +55,34 @@ def _run(wt, interval="0.2", stall="60", max_s="60", during=None, lock=None):
     return res.returncode, res.stdout.splitlines()
 
 
-def test_a_commit_ends_the_watch_with_its_line(tmp_path):
+def _commit(wt):
+    _git(
+        wt,
+        "-c",
+        "user.email=a@b",
+        "-c",
+        "user.name=a",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "phase 1 done",
+    )
+
+
+def test_a_commit_is_a_line_and_the_watch_goes_on_to_its_lifetime(tmp_path):
+    """Red arm: every commit ended the watch, and a master re-armed it six times for one worker."""
+    wt = _repo(tmp_path)
+    code, out = _run(wt, max_s="2", during=lambda: _commit(wt))
+    assert code == 3
+    assert out[0].endswith(" phase 1 done") and out[1] == "alive: dev-X · 1 commit(s) in 0 min"
+
+
+def test_on_commit_ends_the_watch_with_its_line(tmp_path):
     wt = _repo(tmp_path)
     code, out = _run(
         wt,
+        flags=("--on-commit",),
         during=lambda: _git(
             wt,
             "-c",

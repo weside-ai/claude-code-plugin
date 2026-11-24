@@ -77,6 +77,10 @@
 #            the starter one line on start, failure or timeout (--queue-timeout, default 2h). From
 #            a main checkout a queued start gets its own worktree, whatever `workers.tree` says.
 #            The cap is the machine's: <state dir>/pool.json `max_busy_sessions` (default 8)
+#            A queued start reads its brief file only when it starts: `we-worker amend <name>
+#            --brief-file <f>` replaces it while it waits; `we-worker prio <name> --first|--after
+#            <other>` moves it in its lane; `we-worker start-now <name> --reason "<the owner's word>"`
+#            starts it at once past the cap and the room rule, one `override` line in brakes.jsonl
 #   --utility  the utility lane: a fix round on an open PR's branch, a card, lens or review worker.
 #            It counts against pool.json `max_utility_sessions` (default 5), not against the build
 #            cap, waits in its own queue (never behind build starts), and starts only with room on
@@ -102,8 +106,10 @@
 #                          lives: claude would start a copy) refuses without starting
 # A start under a name a running session of any kind holds, or a tmux window already carries, refuses
 # as well, naming that session's tree and state: steer it, or stop it first.
-# A flag before the claude args that neither we-worker nor `claude --help` knows refuses (a typo like
-# `--cwd` would otherwise reach claude as a prompt): run `we-worker <name> --tree <tree> …` instead.
+# we-worker's own flags count in any position before the brief (`--bg --agent x --tree <p>` too).
+# A flag that neither we-worker nor `claude --help` knows refuses (a typo like `--cwd` would
+# otherwise reach claude as a prompt): run `we-worker <name> --tree <tree> …` instead. A refused
+# start also prints `we-worker: NOT STARTED: <name> (exit <n>; …)` on stdout.
 # A start refuses (exit 2, before any claude call) a name that does not start with the story key (crew
 # `naming.key`, `<key>-<chunk>`; `worker_launch.py check`). The brief is the last argument; a --bg
 # start without one (none, or a flag last) refuses (exit 2; a window start may be empty), so does a last argument that is blank (`"$(cat <brief>)"` of an empty or unwritten
@@ -129,7 +135,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--utility] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...] | gc [--apply] | close <KEY> [--pr <ref>] | close --sweep [--apply] | status [<name|id>] | stop <name|id> | checkpoint <name|id> | logs <name|id> [-n N] [--raw] | waiting  (help: we-worker --help)" >&2
+  echo "usage: we-worker <name> [--bg [--queue [--queue-timeout <duration>]]] [--utility] [--limit <duration>] [--tree <path> | --here] [--branch <b>] [--account auto|<name>] [claude args...] | gc [--apply] | close <KEY> [--pr <ref>] | close --sweep [--apply] | status [<name|id>] | stop <name|id> | checkpoint <name|id> | logs <name|id> [-n N] [--raw] | waiting | amend <name> --brief-file <f> | prio <name> --first|--after <name> | start-now <name> --reason <the owner's word>  (help: we-worker --help)" >&2
   exit 2
 }
 
@@ -401,6 +407,19 @@ for hm, t in out[-int(sys.argv[3]):]:
       env -u CLAUDE_CONFIG_DIR claude logs "$id" 2>&1 | sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g; s/\x1b\\][^\x07]*\x07//g; s/\r//g'
       exit "${PIPESTATUS[0]}"
     ;;
+  amend | prio | start-now)
+    # a queued start's brief, its place in its lane, or its start past the limit on the owner's word
+    [[ $# -ge 2 && -n "$2" ]] || usage
+    sup=$(plugin_script scripts/worker_supervisor.py)
+    [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py)" >&2; exit 2; }
+    verb=$1 qname=$2
+    shift 2
+    case $verb in
+      amend) [[ "${1:-}" == --brief-file && -n "${2:-}" ]] || usage; exec python3 "$sup" amend --name "$qname" --brief-file "$2" ;;
+      prio) [[ "${1:-}" == --first || ("${1:-}" == --after && -n "${2:-}") ]] || usage; exec python3 "$sup" prio --name "$qname" "$@" ;;
+      start-now) [[ "${1:-}" == --reason && -n "${2:-}" ]] || usage; exec python3 "$sup" start-now --name "$qname" --reason "$2" ;;
+    esac
+    ;;
   gc)
     sup=$(plugin_script scripts/worker_supervisor.py)
     [[ -n "$sup" && -f "$sup" ]] || { echo "we-worker: plugin we not installed (no worker_supervisor.py)" >&2; exit 2; }
@@ -417,6 +436,11 @@ for hm, t in out[-int(sys.argv[3]):]:
 esac
 shift
 
+# A refused start says so on stdout too: a caller that filters the launch output (`| grep -m1 …`)
+# sees no stderr and took a never-started worker for a running one (measured: 18 h). A start
+# replaces this shell (`exec`), which runs no EXIT trap; a queued start exits 0.
+trap 'rc=$?; [[ $rc -ne 0 && -z "${WE_WORKER_QUEUE_TURN:-}" ]] && echo "we-worker: NOT STARTED: $name (exit $rc; the reason is on stderr)"' EXIT
+
 all=("$@")
 bg=0
 queue=0
@@ -427,6 +451,9 @@ here=0
 branch=""
 account=""
 lane=build
+# we-worker's own flags count in any position before the brief; everything else (claude's flags
+# and their values, the brief) keeps its order for claude
+rest=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --bg) bg=1; shift ;;
@@ -443,9 +470,10 @@ while [[ $# -gt 0 ]]; do
     --queue) queue=1; shift ;;
     --queue-timeout) [[ $# -ge 2 ]] || { echo "we-worker: --queue-timeout needs a duration (2h, 90m)" >&2; exit 2; }; queue_timeout=$2; shift 2 ;;
     --queue-timeout=*) queue_timeout=${1#--queue-timeout=}; shift ;;
-    *) break ;;
+    *) rest+=("$1"); shift ;;
   esac
 done
+set -- ${rest[@]+"${rest[@]}"}
 
 # A living session under this name, of any kind, or a tmux window of that name: a second start
 # would make two workers answer to one name (and write in one worktree).
@@ -547,7 +575,12 @@ fi
 # Exit 4 is no refusal: the machine lacks room (the resource rule), a --bg start of either lane waits
 # in its lane's queue without --queue; a waiter's rerun hands the 4 back as "still no room".
 rc=0
-python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" || rc=$?
+if [[ -n "${WE_WORKER_OVER_LIMIT:-}" ]]; then
+  # `we-worker start-now`: past the lane cap and the room rule on the owner's word, logged there
+  echo "we-worker: $name starts over the limit: $WE_WORKER_OVER_LIMIT"
+else
+  python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" || rc=$?
+fi
 if [[ $rc -eq 4 && -n "${WE_WORKER_QUEUE_TURN:-}" ]]; then
   exit 4
 fi

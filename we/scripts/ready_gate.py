@@ -816,6 +816,27 @@ class Gate:
                 "receipt check",
                 f"receipt check failed without a reason (exit {done.returncode})",
             )
+        if done.returncode != 0 and self._behind():
+            # the check reads the files the plan names from this tree: one behind the ref misses
+            # a receipt that landed there, and the refusal alone does not say so
+            self.fail(
+                "receipt check",
+                f"this checkout is behind {self._ref()}: a file the plan names may be there only;"
+                f" run from a tree at {self._ref()}",
+            )
+
+    def _behind(self) -> bool:
+        """``risk.rules_from`` holds a commit this checkout's HEAD lacks; False when unreadable."""
+        try:
+            done = subprocess.run(
+                ["git", "-C", str(self.root), "merge-base", "--is-ancestor", self._ref(), "HEAD"],
+                capture_output=True,
+                timeout=RECEIPT_TIMEOUT,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return done.returncode == 1
 
     def _epic_plan(self, key: str | None) -> tuple[Path, str] | None:
         if not key:

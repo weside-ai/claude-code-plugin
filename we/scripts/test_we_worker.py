@@ -419,6 +419,36 @@ def test_a_queued_utility_start_waits_in_its_own_lane_of_the_queue(tmp_path):
     assert not started(tmp_path)
 
 
+def test_a_queued_start_is_amended_reordered_and_started_now_on_the_owners_word(tmp_path):
+    """Red arm: the queue order and a waiting brief changed only by a hand edit of the queue JSON,
+    and an owner's "start it over the limit" had no way at all."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    project, env = setup(tmp_path, rows=busy)
+    queue = tmp_path / "home/.claude/we-state/workers/queue"
+    for name in ("AC-12-impl", "AC-13-impl"):
+        assert "queued" in run(project, env, name, "--bg", "--queue", GO).stdout
+    newer = tmp_path / "brief.md"
+    newer.write_text("## Goal\nthe amended brief\n")
+    assert run(project, env, "amend", "AC-13-impl", "--brief-file", str(newer)).returncode == 0
+    assert (queue / "AC-13-impl.brief.md").read_text() == newer.read_text()
+    proc = run(project, env, "prio", "AC-13-impl", "--first")
+    assert "AC-13-impl is now position 1" in proc.stdout, proc.stderr
+    proc = run(project, env, "prio", "AC-12-impl", "--after", "AC-13-impl")
+    assert "position 2" in proc.stdout, proc.stderr
+    assert run(project, env, "amend", "AC-99-x", "--brief-file", str(newer)).returncode == 1
+    proc = run(project, env, "start-now", "AC-13-impl", "--reason", "owner: needed tonight")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert started(tmp_path)[0]["argv"][-1] == newer.read_text()
+    assert not (queue / "AC-13-impl.json").exists()
+    [line] = [b for b in brakes(tmp_path) if b["type"] == "override"]
+    assert (line["name"], line["reason"], line["outcome"]) == (
+        "AC-13-impl",
+        "owner: needed tonight",
+        "started",
+    )
+    assert run(project, env, "stop", "AC-12-impl").returncode == 0
+
+
 def test_a_start_without_room_waits_in_its_lane_without_queue(tmp_path):
     """Kiska (22.11.): six kills by the host's memory guard at 94 % working set; a build start
     the room rule halts is no refusal: it waits in the build queue without --queue."""
@@ -764,6 +794,25 @@ def test_an_unknown_flag_later_among_the_claude_args_refuses(tmp_path):
     proc = run(project, env, "AC-12-impl", "--bg", "--agent", "x", "--cwd", "/x", GO)
     assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
     assert not started(tmp_path)
+
+
+def test_a_we_worker_flag_after_a_claude_flag_counts(tmp_path):
+    """Red arm: `--bg --agent x --tree <p>` refused "--tree is neither a we-worker flag"."""
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "we:dev-medium", "--here", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert started(tmp_path)[0]["argv"][-3:] == ["--agent", "we:dev-medium", GO]
+
+
+def test_a_refused_start_says_not_started_on_stdout(tmp_path):
+    """Red arm: a master filtered the launch output and took a refused start for a running worker."""
+    project, env = setup(tmp_path)
+    proc = run(project, env, "goldens-measure", "--bg", GO)
+    assert proc.returncode == 2
+    assert (
+        proc.stdout.strip()
+        == "we-worker: NOT STARTED: goldens-measure (exit 2; the reason is on stderr)"
+    )
 
 
 def test_a_claude_flag_passes(tmp_path):
