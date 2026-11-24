@@ -96,7 +96,9 @@ report ends you.
      `${CLAUDE_PLUGIN_ROOT}/references/story-plan.md`. A defect at one place takes its § Short form; the gate
      says when it needs the full form. Real phases even for a small full-form story, each independently
      committable; `rg` the changed symbols under the test trees for call sites that break. Every AC is checkable
-     against a running system, not against the diff. A sentence users read about privacy, retention, consent,
+     against a running system, not against the diff. A parity oracle compares against a reference
+     outside the code under test (good: "equal to the recorded host request"; bad: "equal to the other
+     turn's body" when both run through one serializer). A sentence users read about privacy, retention, consent,
      security or a crisis carries, in its AC, the verdict of the crew member with `specialist: legal` where the crew has one.
    - Every `receipt` AC gets its check in the staging-check file `.weside/verify.md` names, in the planned state it
      names, check id `AC<n>` (story-plan.md § Verification); `**Staging checks:**` names the file. A repo whose

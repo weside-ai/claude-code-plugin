@@ -1470,8 +1470,8 @@ def test_decide_turns_the_panel_green_and_a_later_change_makes_it_stale(repo):
     red_round(repo, "v3")
     code, _, err = run("decide", vid, "product", "--by", "architecture", "fine as is")
     assert code == 1 and "held by the role product" in err
-    code, out, err = run("decide", vid, "product", "--by", "product", "The risk is accepted.")
-    assert code == 0, err
+    code, out, err = run("decide", vid, "product", "--by", "Ada", "The risk is accepted.")
+    assert code == 0, err  # a member's name stands for the role it holds (red arm: "no role key")
     assert "lens product: green (decided by product: The risk is accepted.)" in out
     assert out.splitlines()[-1] == f"panel {vid}: green (decided)"
     assert lv.check_ready(repo, vid)[3] == [

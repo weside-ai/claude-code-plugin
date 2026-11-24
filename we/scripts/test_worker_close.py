@@ -377,6 +377,27 @@ class TestRefusals:
         assert f"board.py move {KEY} in_review --pr https://github.com/acme/app/pull/7" in out
         assert world.transitions() == [] and not tree.exists()
 
+    def test_a_fast_lane_story_without_a_plan_moves_on_its_merged_pr(self, world, capsys):
+        """Red arm: `close` held every fast-lane story ("no story plan … move it yourself"), and
+        the master moved each by hand although the lane has no plan by definition."""
+        git(world.top, "rm", "-q", f"docs/plans/{KEY}-story.md")
+        world.commit("drop plan")
+        git(world.top, "push", "-q", "origin", "HEAD:main")
+        row = {
+            "key": KEY,
+            "from": "backlog",
+            "to": "in_progress",
+            "via": "fast",
+            "ts": "2026-11-18T08:00:00Z",
+        }
+        world.state.mkdir(parents=True, exist_ok=True)
+        (world.state / "board-transitions.jsonl").write_text(json.dumps(row) + "\n")
+        world.worker()
+        close(KEY)
+        out = capsys.readouterr().out
+        assert "held: no story plan" not in out
+        assert world.transitions()[-1]["to"] == "in_review", out
+
     def test_a_remote_branch_with_an_open_pr_stays(self, world):
         world.pr(5, "OPEN", "feat/shared")
         line = worker_close.remote_branch(world.top, "feat/shared", "main", set())

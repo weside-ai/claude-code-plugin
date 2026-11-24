@@ -27,7 +27,8 @@ with open(os.environ["STUB_LOG"], "a") as fh:
                          "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
                          "companion": os.environ.get("WESIDE_COMPANION"),
                          "key": os.environ.get("WE_STORY_KEY"), "cwd": os.getcwd(),
-                         "queue_turn": os.environ.get("WE_WORKER_QUEUE_TURN")}) + "\n")
+                         "queue_turn": os.environ.get("WE_WORKER_QUEUE_TURN"),
+                         "over_limit": os.environ.get("WE_WORKER_OVER_LIMIT")}) + "\n")
 if args[:2] == ["agents", "--json"]:
     print(json.dumps(rows)); sys.exit(0)
 if args[:1] == ["stop"]:
@@ -127,6 +128,32 @@ def test_help_is_english_and_names_every_verb(tmp_path):
     assert out.startswith("we-worker — start and steer a process worker")
     for verb in ("status", "stop <name|id>", "logs <name|id>", "waiting"):
         assert verb in out
+
+
+def test_a_start_past_the_limit_does_not_hand_its_override_to_the_worker(tmp_path):
+    """Red without the unset: the started worker inherits WE_WORKER_OVER_LIMIT, and every
+    we-worker call inside it would skip the lane cap and the room rule unlogged."""
+    project, env = setup(tmp_path)
+    env["WE_WORKER_OVER_LIMIT"] = "owner's word"
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    (call,) = started(tmp_path)
+    assert call["over_limit"] is None
+
+
+def test_a_start_past_the_limit_passes_the_cap_but_not_the_accounts_quota(tmp_path):
+    """Red without the quota-only check: `start-now` skipped the whole capacity call, so the
+    owner's word for the cap also started a worker on spent accounts."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    project, env = setup(tmp_path, rows=busy)
+    env.update(WE_WORKER_OVER_LIMIT="owner's word", STUB_CSWAP_PCT="99")
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 3 and "active account 5h at 99 %" in proc.stderr, proc.stderr
+    assert not started(tmp_path)
+    env["STUB_CSWAP_PCT"] = "10"
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert len(started(tmp_path)) == 1
 
 
 def test_a_flag_is_no_worker_name(tmp_path):
@@ -417,6 +444,36 @@ def test_a_queued_utility_start_waits_in_its_own_lane_of_the_queue(tmp_path):
     for name in ("AC-12-impl", "AC-12-fix"):
         assert run(project, env, "stop", name).returncode == 0
     assert not started(tmp_path)
+
+
+def test_a_queued_start_is_amended_reordered_and_started_now_on_the_owners_word(tmp_path):
+    """Red arm: the queue order and a waiting brief changed only by a hand edit of the queue JSON,
+    and an owner's "start it over the limit" had no way at all."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    project, env = setup(tmp_path, rows=busy)
+    queue = tmp_path / "home/.claude/we-state/workers/queue"
+    for name in ("AC-12-impl", "AC-13-impl"):
+        assert "queued" in run(project, env, name, "--bg", "--queue", GO).stdout
+    newer = tmp_path / "brief.md"
+    newer.write_text("## Goal\nthe amended brief\n")
+    assert run(project, env, "amend", "AC-13-impl", "--brief-file", str(newer)).returncode == 0
+    assert (queue / "AC-13-impl.brief.md").read_text() == newer.read_text()
+    proc = run(project, env, "prio", "AC-13-impl", "--first")
+    assert "AC-13-impl is now position 1" in proc.stdout, proc.stderr
+    proc = run(project, env, "prio", "AC-12-impl", "--after", "AC-13-impl")
+    assert "position 2" in proc.stdout, proc.stderr
+    assert run(project, env, "amend", "AC-99-x", "--brief-file", str(newer)).returncode == 1
+    proc = run(project, env, "start-now", "AC-13-impl", "--reason", "owner: needed tonight")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert started(tmp_path)[0]["argv"][-1] == newer.read_text()
+    assert not (queue / "AC-13-impl.json").exists()
+    [line] = [b for b in brakes(tmp_path) if b["type"] == "override"]
+    assert (line["name"], line["reason"], line["outcome"]) == (
+        "AC-13-impl",
+        "owner: needed tonight",
+        "started",
+    )
+    assert run(project, env, "stop", "AC-12-impl").returncode == 0
 
 
 def test_a_start_without_room_waits_in_its_lane_without_queue(tmp_path):
@@ -764,6 +821,25 @@ def test_an_unknown_flag_later_among_the_claude_args_refuses(tmp_path):
     proc = run(project, env, "AC-12-impl", "--bg", "--agent", "x", "--cwd", "/x", GO)
     assert proc.returncode == 2 and "--cwd is neither a we-worker flag" in proc.stderr
     assert not started(tmp_path)
+
+
+def test_a_we_worker_flag_after_a_claude_flag_counts(tmp_path):
+    """Red arm: `--bg --agent x --tree <p>` refused "--tree is neither a we-worker flag"."""
+    project, env = setup(tmp_path)
+    proc = run(project, env, "AC-12-impl", "--bg", "--agent", "we:dev-medium", "--here", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert started(tmp_path)[0]["argv"][-3:] == ["--agent", "we:dev-medium", GO]
+
+
+def test_a_refused_start_says_not_started_on_stdout(tmp_path):
+    """Red arm: a master filtered the launch output and took a refused start for a running worker."""
+    project, env = setup(tmp_path)
+    proc = run(project, env, "goldens-measure", "--bg", GO)
+    assert proc.returncode == 2
+    assert (
+        proc.stdout.strip()
+        == "we-worker: NOT STARTED: goldens-measure (exit 2; the reason is on stderr)"
+    )
 
 
 def test_a_claude_flag_passes(tmp_path):

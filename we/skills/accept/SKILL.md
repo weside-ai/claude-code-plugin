@@ -63,9 +63,15 @@ For each epic whose story moved to Done in this run and whose plan has `line:`, 
 master posts "good as is?" on the board itself and tells the coordinator
 (`references/epic-plan.md` § Finish line).
 
+For each key moved to Done, `rg -l "depends_on: .*<KEY>" docs/plans/` on the default branch names
+the stories that waited on it: send `<KEY> Done · <dependent KEY> may start` to the master whose
+board line carries the dependent key (no master: the coordinator), so the promise needs no one's
+memory.
+
 ## Done when
 
 - [ ] every `done` entry has its row in `board-transitions.jsonl` and its `carry:` ops executed
 - [ ] every `route:` and `hold:` line reached its member
 - [ ] every epic whose line this run completed is reported to its master
+- [ ] every story whose `depends_on` names a key moved to Done is reported to its master
 - [ ] every open walk has a worker, or is named in your report with why it waits
