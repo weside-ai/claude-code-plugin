@@ -644,3 +644,33 @@ def test_remove_files_takes_the_brief_and_keeps_the_starter_log(tmp_path):
     gone = ws._remove_files(tmp_path, NAME)
     assert sorted(gone) == sorted([f"{NAME}.settings.json", f"{NAME}.json", f"{NAME}.brief.md"])
     assert [p.name for p in tmp_path.iterdir()] == ["launched.jsonl"]
+
+
+def test_amend_and_prio_never_show_the_waiter_a_half_written_entry(queue, monkeypatch):
+    """Red with a plain `write_text`: the waiter's poll between truncate and write reads no entry
+    and exits as "removed", the queued start lost. The read in the middle of each write is that
+    poll, made deterministic; `prio` also leaves `queued_at` alone, so the waited minutes hold."""
+    t = queue["clock"]()
+    queue["put"]("AC-1-a", t)
+    queue["put"]("AC-2-b", t + 1)
+    entry = queue["state"] / "queue" / "AC-2-b.json"
+    seen = []
+    real = Path.write_text
+
+    def torn(self, data, *args, **kwargs):
+        if self.parent == entry.parent and entry.name in self.name:  # the entry or its temp file
+            real(self, data[: len(data) // 2], *args, **kwargs)
+            seen.append(ws._read(entry))
+        return real(self, data, *args, **kwargs)
+
+    entry.write_text(json.dumps({**ws._read(entry), "brief_file": None}))  # amend rewrites it
+    monkeypatch.setattr(Path, "write_text", torn)
+    ws.amend(queue["state"], "AC-2-b", "## Goal\nnewer\n")
+    assert ws.reorder(queue["state"], "AC-2-b", None) == 1
+    monkeypatch.setattr(Path, "write_text", real)
+    assert len(seen) == 2 and all(doc is not None for doc in seen)
+    assert [d["name"] for d in ws.queued(queue["state"])] == ["AC-2-b", "AC-1-a"]
+    assert ws._read(entry)["queued_at"] == t + 1
+    queue["clock"].sleep(3600)
+    assert queue["wait"]("AC-2-b", [0]) == "started"
+    assert "started after 59 min" in queue["sent"][0]  # queued at t + 1, not at its new place

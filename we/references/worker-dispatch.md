@@ -131,7 +131,7 @@ starts, fails or times out; `we-worker status` lists queued starts, `we-worker s
 one (`scripts/worker_supervisor.py`, the comment above `queue_dir`). A queued start reads its brief
 only when it starts: `we-worker amend <name> --brief-file <f>` replaces it while it waits,
 `we-worker prio <name> --first|--after <other>` moves it in its lane, and `we-worker start-now
-<name> --reason "<the human's word>"` starts it at once past the cap and the room rule (one
+<name> --reason "<the human's word>"` starts it at once past the cap and the room rule, never past the accounts' quota (one
 `override` line in `brakes.jsonl`). A `--queue` start runs as a background command
 (`run_in_background: true`), never behind a shell `&`; `we-worker status` comes before a second
 start of the same name. The launcher's own flags count in any position before the brief, and a
@@ -251,7 +251,7 @@ With a template, the Lead:
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
    --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`;
-   `--utility` for a fix round, card, lens or review worker, § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
+   `--utility` for a member of § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each

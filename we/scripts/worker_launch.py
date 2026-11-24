@@ -330,8 +330,8 @@ AGENTS_TIMEOUT_S = 30
 POOL_FILE = "pool.json"
 POOL_KEY = "max_busy_sessions"
 PCT_KEY = "max_active_5h_percent"
-# The utility lane (`we-worker --utility`): a fix round on an open PR's branch, a card, lens or
-# review worker starts against its own cap and its own queue, never behind new build work (measured
+# The utility lane (`we-worker --utility`; its members: references/worker-dispatch.md § Utility
+# lane) starts against its own cap and its own queue, never behind new build work (measured
 # 22.11.: a fix round for two review warnings waited over an hour behind build starts). The two
 # resource thresholds are the machine's measure of room for both lanes (Kiska, 22.11., `resources`);
 # the caps stay the lid.
@@ -513,6 +513,12 @@ def lane_of(state: Path, name: object, cwd: object = None) -> str:
     return UTILITY if (env or {}).get(LANE_ENV) == UTILITY else BUILD
 
 
+def queue_order(doc: dict) -> float:
+    """A queued start's place in its lane: `order_at` once `we-worker prio` moved it, else its
+    `queued_at`."""
+    return float(doc.get("order_at", doc.get("queued_at", 0)))
+
+
 def queued_ahead(state: Path, me: str | None, lane: str = BUILD) -> list[dict]:
     """The queued starts of `lane` (`worker_supervisor.queued`) whose waiter lives and that came
     before `me` (the waiter's own entry, `$WE_WORKER_QUEUE_TURN`); for a start that is not queued,
@@ -530,10 +536,10 @@ def queued_ahead(state: Path, me: str | None, lane: str = BUILD) -> list[dict]:
     mine = next((d for d in rows if d["name"] == me), None)
     if mine is None:
         return rows
-    # the name breaks a tie in `queued_at`: two entries of the same second must not each see the
+    # the name breaks a tie in the order: two entries of the same second must not each see the
     # other ahead of it, or both wait out their timeout
-    turn = (mine.get("queued_at", 0), me)
-    return [d for d in rows if d["name"] != me and (d.get("queued_at", 0), d["name"]) < turn]
+    turn = (queue_order(mine), me)
+    return [d for d in rows if d["name"] != me and (queue_order(d), d["name"]) < turn]
 
 
 def lane_key(lane: str) -> str:
@@ -760,6 +766,7 @@ def capacity(
     lane: str = BUILD,
     cgroup: Path | None = None,
     meminfo: Path | None = None,
+    quota_only: bool = False,
 ) -> None:
     """Refuse a new worker (`LaunchError`, exit 3) while a queued start of any repo on this machine
     waits ahead of it (`queued_ahead`: first come, first served across repos), while the busy
@@ -780,20 +787,24 @@ def capacity(
     (`busy_by_lane`), each behind its own queue; the 5h check holds for both. A start of either lane
     that passes them also needs room on the machine (`resources`), else it halts with exit 4
     (`RESOURCE_HALT`): no refusal, `we-worker` queues it in its lane's queue, and the line names the
-    missed condition, its value and its threshold."""
+    missed condition, its value and its threshold.
+
+    `quota_only` (`we-worker start-now`, the owner's word past the limit): only the accounts'
+    check runs; the queue, the lane cap and the room rule are passed."""
     machine = pool_limits()
     sources: dict[str, str] = {}
     limits = cap_limits(repo, sources=sources)
     cap_key = lane_key(lane)
     max_busy, max_pct = limits[cap_key], limits[PCT_KEY]
     state = _state_dir()
-    ahead = queued_ahead(state, os.environ.get(QUEUE_TURN_ENV), lane)
+    ahead = [] if quota_only else queued_ahead(state, os.environ.get(QUEUE_TURN_ENV), lane)
     counts: dict[str, int] | None = None
+    busy: int | None = None
     try:
-        counts = busy_by_lane(sessions(), state)
-        busy: int | None = counts[lane]
+        if not quota_only:
+            counts = busy_by_lane(sessions(), state)
+            busy = counts[lane]
     except LaunchError as exc:
-        busy = None
         print(
             f"{prefix}: warning: busy sessions unreadable ({exc}); that check is skipped",
             file=sys.stderr,
@@ -838,17 +849,15 @@ def capacity(
             " repos: add --queue to the we-worker start",
             3,
         )
+    if quota_only and full:
+        raise LaunchError(
+            f"refused, no worker started: the owner's word passes the {lane} lane's cap and the"
+            f" room rule, not the accounts' quota: {_quota_text(room, pct, max_pct)},"
+            f" {sources[PCT_KEY]}); try again later",
+            3,
+        )
     if (busy is not None and busy >= max_busy) or full:
-        if room is not None:
-            quota = (
-                f"no account in rotation has room (0 of {room[1]} with 7d under"
-                f" {SEVEN_DAY_FULL} % and 5h at or under {max_pct:g} %"
-                if room[0] == 0
-                else f"{room[0]} of {room[1]} accounts in rotation with room (5h limit {max_pct:g} %"
-            )
-        else:
-            shown_pct = "?" if pct is None else f"{pct:g}"
-            quota = f"active account 5h at {shown_pct} % (limit {max_pct:g} %"
+        quota = _quota_text(room, pct, max_pct)
         raise LaunchError(
             f"refused, no worker started: {lane} lane: {shown_busy} workers busy (limit"
             f" {max_busy:g} for the machine, {cap_key} of {pool_path()}{beside}), {quota},"
@@ -856,13 +865,26 @@ def capacity(
             " starts as soon as the check passes",
             3,
         )
-    missed = [r for r in resources(limits, cgroup, meminfo) if not r["ok"]]
+    missed = [] if quota_only else [r for r in resources(limits, cgroup, meminfo) if not r["ok"]]
     if missed:
         raise LaunchError(
             f"{lane} lane waits for room on the machine: {resource_text(missed)} ({pool_path()});"
             " the start waits in its lane's queue and starts as soon as the check passes",
             RESOURCE_HALT,
         )
+
+
+def _quota_text(room: tuple[int, int] | None, pct: float | None, max_pct: float) -> str:
+    """The accounts' part of a refusal, open at its parenthesis (the caller adds the source)."""
+    if room is not None:
+        if room[0] == 0:
+            return (
+                f"no account in rotation has room (0 of {room[1]} with 7d under"
+                f" {SEVEN_DAY_FULL} % and 5h at or under {max_pct:g} %"
+            )
+        return f"{room[0]} of {room[1]} accounts in rotation with room (5h limit {max_pct:g} %"
+    shown_pct = "?" if pct is None else f"{pct:g}"
+    return f"active account 5h at {shown_pct} % (limit {max_pct:g} %"
 
 
 def claude_env() -> dict:
@@ -2131,6 +2153,7 @@ def _gate_parsers(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--prefix", default="worker_launch")
     p.add_argument("--lane", choices=LANES, default=BUILD)
+    p.add_argument("--quota-only", action="store_true")
     p = sub.add_parser("needs")
     p.add_argument("--repo", type=Path, default=Path.cwd())
     p.add_argument("--all", action="store_true")
@@ -2275,7 +2298,7 @@ def _gate_verb(args: argparse.Namespace) -> int:
         if args.cmd == "needs":
             check_needs(sys.stdin.read(), args.repo)
         else:
-            capacity(args.repo, args.prefix, args.lane)
+            capacity(args.repo, args.prefix, args.lane, quota_only=args.quota_only)
     except LaunchError as exc:
         print(f"{args.prefix}: {exc}", file=sys.stderr)
         return exc.code

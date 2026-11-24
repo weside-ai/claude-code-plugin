@@ -80,8 +80,9 @@
 #            A queued start reads its brief file only when it starts: `we-worker amend <name>
 #            --brief-file <f>` replaces it while it waits; `we-worker prio <name> --first|--after
 #            <other>` moves it in its lane; `we-worker start-now <name> --reason "<the owner's word>"`
-#            starts it at once past the cap and the room rule, one `override` line in brakes.jsonl
-#   --utility  the utility lane: a fix round on an open PR's branch, a card, lens or review worker.
+#            starts it at once past the cap and the room rule (the accounts' quota still holds),
+#            one `override` line in brakes.jsonl
+#   --utility  the utility lane; who starts there: references/worker-dispatch.md § Utility lane.
 #            It counts against pool.json `max_utility_sessions` (default 5), not against the build
 #            cap, waits in its own queue (never behind build starts), and starts only with room on
 #            the machine. The 5h check and the room rule hold for both lanes. The lane is the
@@ -576,7 +577,9 @@ fi
 # in its lane's queue without --queue; a waiter's rerun hands the 4 back as "still no room".
 rc=0
 if [[ -n "${WE_WORKER_OVER_LIMIT:-}" ]]; then
-  # `we-worker start-now`: past the lane cap and the room rule on the owner's word, logged there
+  # `we-worker start-now`: past the lane cap and the room rule on the owner's word, logged there;
+  # the accounts' quota still holds
+  python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" --quota-only || exit $?
   echo "we-worker: $name starts over the limit: $WE_WORKER_OVER_LIMIT"
 else
   python3 "$wl" capacity --repo "$PWD" --prefix we-worker --lane "$lane" || rc=$?

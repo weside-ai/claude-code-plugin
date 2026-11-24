@@ -40,7 +40,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   compaction loses none.
 - Your memory file holds the current state, not a diary: at each Updates Log line rewrite its head
   (open strands, resume ids, triggers) and cut what the Updates Log, a PR or the ticket records;
-  under ~200 lines, or a fresh start cannot read it whole.
+  under ~200 lines, so a fresh start reads it whole.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
 - Post your questions for {human.local} on the board yourself (`board.py ask`); the answer comes
@@ -62,7 +62,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 
 ## At start
 
-1. Read your epic's board line (`board.py show <your session name>`) and the newest entries of its Updates Log.
+1. Read your epic's board line (`board.py show <your session name>`) and its newest Updates Log entries.
 2. List your open PRs, running workers and unanswered questions.
 3. Name the one next move in one line, then make it.
 4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4 for every open PR you own.

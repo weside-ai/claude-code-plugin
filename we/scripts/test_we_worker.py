@@ -141,6 +141,21 @@ def test_a_start_past_the_limit_does_not_hand_its_override_to_the_worker(tmp_pat
     assert call["over_limit"] is None
 
 
+def test_a_start_past_the_limit_passes_the_cap_but_not_the_accounts_quota(tmp_path):
+    """Red without the quota-only check: `start-now` skipped the whole capacity call, so the
+    owner's word for the cap also started a worker on spent accounts."""
+    busy = [{"id": f"b{i}", "name": f"S{i}", "status": "busy", "pid": 1} for i in range(8)]
+    project, env = setup(tmp_path, rows=busy)
+    env.update(WE_WORKER_OVER_LIMIT="owner's word", STUB_CSWAP_PCT="99")
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 3 and "active account 5h at 99 %" in proc.stderr, proc.stderr
+    assert not started(tmp_path)
+    env["STUB_CSWAP_PCT"] = "10"
+    proc = run(project, env, "AC-12-impl", "--bg", GO)
+    assert proc.returncode == 0, proc.stderr
+    assert len(started(tmp_path)) == 1
+
+
 def test_a_flag_is_no_worker_name(tmp_path):
     project, env = setup(tmp_path)
     proc = run(project, env, "--nope")

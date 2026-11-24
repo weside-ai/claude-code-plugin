@@ -699,7 +699,7 @@ def status_lines(
 
 def restart_waiters(state: Path, spawn: Callable[[str], int] | None = None) -> list[str]:
     """Start a new waiter for every queued start whose waiter is dead (a crash, a pod restart);
-    the entry keeps its place (`queued_at`) and deadline. Returns the names."""
+    the entry keeps its place (`queue_order`) and deadline. Returns the names."""
     spawn = spawn_waiter if spawn is None else spawn
     names = [str(q["name"]) for q in queued(state) if not waiter_lives(q)]
     for name in names:
@@ -815,10 +815,18 @@ def _read(path: Path) -> dict | None:
     return doc if isinstance(doc, dict) and doc.get("name") else None
 
 
+def _write(path: Path, text: str) -> None:
+    """Replace `path` whole (a temp file beside it, then `os.replace`): the waiter polls a queue
+    entry, and a read between truncate and write finds no entry and exits as removed."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def queued(state: Path) -> list[dict]:
     """The queued starts, oldest first."""
     rows = [d for d in map(_read, sorted(queue_dir(state).glob("*.json"))) if d]
-    return sorted(rows, key=lambda d: (d.get("queued_at", 0), d["name"]))
+    return sorted(rows, key=lambda d: (wl.queue_order(d), d["name"]))
 
 
 def enqueue(
@@ -870,7 +878,7 @@ def set_waiter(state: Path, name: str, pid: int) -> None:
     if doc:
         doc["waiter_pid"] = pid
         doc["waiter_start"] = proc_start(pid)
-        path.write_text(json.dumps(doc, indent=2) + "\n")
+        _write(path, json.dumps(doc, indent=2) + "\n")
 
 
 def _drop(state: Path, name: str) -> dict | None:
@@ -1250,16 +1258,17 @@ def amend(state: Path, name: str, brief: str) -> dict | None:
     if doc is None:
         return None
     brief_file = queue_dir(state) / f"{name}.brief.md"
-    brief_file.write_text(brief)
+    _write(brief_file, brief)
     if doc.get("brief_file") != str(brief_file):
         doc["brief_file"] = str(brief_file)
-        path.write_text(json.dumps(doc, indent=2) + "\n")
+        _write(path, json.dumps(doc, indent=2) + "\n")
     return doc
 
 
 def reorder(state: Path, name: str, after: str | None) -> int:
     """Move the queued start `name` to the head of its lane (`after` None) or right behind the
-    queued start `after` of the same lane, by its `queued_at`; deadline and waiter stay. Returns its
+    queued start `after` of the same lane, by its `order_at`; `queued_at` (the waited minutes),
+    deadline and waiter stay. Returns its
     new position in the lane; raises `LaunchError` (exit 1) for an entry that is not queued or of
     another lane."""
     doc = _read(queue_dir(state) / f"{name}.json")
@@ -1268,16 +1277,16 @@ def reorder(state: Path, name: str, after: str | None) -> int:
     lane = wl.entry_lane(doc)
     rows = [d for d in queued(state) if wl.entry_lane(d) == lane and d["name"] != name]
     if after is None:
-        at = (rows[0].get("queued_at", 0) - 1.0) if rows else doc.get("queued_at", 0)
+        at = (wl.queue_order(rows[0]) - 1.0) if rows else wl.queue_order(doc)
     else:
         k = next((i for i, d in enumerate(rows) if d["name"] == after), None)
         if k is None:
             raise wl.LaunchError(f"{after} is not queued in the {lane} lane", 1)
-        here = float(rows[k].get("queued_at", 0))
-        nxt = float(rows[k + 1].get("queued_at", here + 2.0)) if k + 1 < len(rows) else here + 2.0
+        here = wl.queue_order(rows[k])
+        nxt = wl.queue_order(rows[k + 1]) if k + 1 < len(rows) else here + 2.0
         at = (here + nxt) / 2
-    doc["queued_at"] = at
-    (queue_dir(state) / f"{name}.json").write_text(json.dumps(doc, indent=2) + "\n")
+    doc["order_at"] = at
+    _write(queue_dir(state) / f"{name}.json", json.dumps(doc, indent=2) + "\n")
     return [d["name"] for d in queued(state) if wl.entry_lane(d) == lane].index(name) + 1
 
 
