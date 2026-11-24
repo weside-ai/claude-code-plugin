@@ -18,7 +18,8 @@ Epic → board lines
     A parked line drops before the key wins (but for ``main_red``): an active master of the same
     epic then receives.
 Board line → receiver
-    The fresh tail presence whose ``session_id`` equals the line's. A parked line receives
+    The fresh tail presence whose ``session_id`` equals the line's and whose ``member`` is null (a
+    master's tail): a companion's tail never receives, whatever its line says. A parked line receives
     ``main_red`` (damage to its own epic) and nothing else: every other kind goes to the
     coordinator's delta with the epic, as does a line without a running tail.
 """
@@ -125,7 +126,11 @@ class Resolver:
                 return Owners(reason="epic unknown")
             epics = [epic]
         out = Owners(epic=", ".join(epics))
-        by_sid = {p.get("session_id"): p for p in presences if p.get("session_id")}
+        by_sid = {
+            p.get("session_id"): p
+            for p in presences
+            if p.get("session_id") and not p.get("member")  # a companion's tail never receives
+        }
         for epic in epics:
             for line in self.board_lines(key if len(epics) == 1 else None, epic, kind):
                 p = by_sid.get(line.get("session_id"))

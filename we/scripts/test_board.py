@@ -301,6 +301,7 @@ class TestSet:
         after = board_of(crewless)
         assert line_of(crewless, "lead-12") == {
             "name": "lead-12",
+            "session_id": "sid-12",
             "state": "ci",
             "now": "phase 3",
             "updated_at": "2026-11-03T10:00Z",
@@ -3319,11 +3320,17 @@ class TestBlocked:
         old = line_of(crewed, "other")
         assert go(crewed, "blocked", "other", "--kind", "permission") == 0
         new = line_of(crewed, "other")
-        assert set(new) - set(old) == {"blocked", "waiting_on", "sla_due", "updated_at"}
+        assert set(new) - set(old) == {
+            "blocked",
+            "waiting_on",
+            "sla_due",
+            "updated_at",
+            "session_id",  # the line takes the sampled session's id
+        }
         assert {
             k: v
             for k, v in new.items()
-            if k not in ("blocked", "waiting_on", "since", "sla_due", "updated_at")
+            if k not in ("blocked", "waiting_on", "since", "sla_due", "updated_at", "session_id")
         } == {k: v for k, v in old.items() if k not in ("since", "updated_at")}
 
     @pytest.mark.parametrize(
@@ -4132,3 +4139,37 @@ def test_docs_name_every_flag_of_every_verb():
     chat = docs.split("### Answers given in a chat", 1)[1].split("\n## ", 1)[0]
     missing += [f"answer {k}" for k in kinds if f"`{k}`" not in chat]
     assert not missing, f"docs/board.md names none of: {missing}"
+
+
+def test_set_after_a_rename_takes_over_the_line_of_the_same_session(crewless):
+    """A renamed session keeps one line: `set` under the new name finds its line by session id,
+    renames it and keeps its fields (two lines with one session_id seen 24.11.)."""
+    data = board_of(crewless)
+    data["sessions"] = [
+        {"name": "old", "session_id": "sid-12", "epic": "PROJ-7", "keys": ["PROJ-8"]}
+    ]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    assert go(crewless, "set", "now=phase 3") == 0
+    sessions = board_of(crewless)["sessions"]
+    assert len(sessions) == 1
+    line = sessions[0]
+    assert (line["name"], line["session_id"], line["epic"], line["keys"], line["now"]) == (
+        "lead-12",
+        "sid-12",
+        "PROJ-7",
+        ["PROJ-8"],
+        "phase 3",
+    )
+
+
+def test_set_with_a_new_session_id_keeps_the_named_line(crewless):
+    """A session with a new id after /clear or a resume keeps its line and the line takes the id
+    (board line `rust` kept d3401f3c while its tail reported ff3188f1, 24.11.)."""
+    data = board_of(crewless)
+    data["sessions"] = [{"name": "lead-12", "session_id": "old", "epic": "PROJ-7"}]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    assert go(crewless, "set", "now=phase 3") == 0
+    sessions = board_of(crewless)["sessions"]
+    assert [(s["name"], s["session_id"], s["epic"]) for s in sessions] == [
+        ("lead-12", "sid-12", "PROJ-7")
+    ]

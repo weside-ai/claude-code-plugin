@@ -12,7 +12,8 @@ Lifecycle
     is removed from the environment at start: it never reaches argv or a file. A session that is
     neither a member (``WESIDE_COMPANION`` the crew knows) nor a master gets no tail; a worker never
     (its starter hears from it). A master's tail has ``member`` null and no roles: it receives only
-    rows addressed to its session as ``epic_master`` (``epic_owner.py``). The socket gone (the file, or
+    rows addressed to its session as ``epic_master`` (``epic_owner.py``); a member's tail never takes
+    such a row. The socket gone (the file, or
     ``ECONNREFUSED``/``ENOENT`` on delivery) → the presence file is removed and the tail exits.
 
 Per cycle (15 s)
@@ -180,7 +181,9 @@ class Tail:
             allowed.add("coordinator")
         if row.get("escalated") and row.get("kind") in ep.SELF_SKIP_KINDS:
             allowed |= {"coordinator", "machinery"}  # an open prompt nobody else receives
-        mine = set(self.roles) | {self.member, routes_mod.EPIC_MASTER} - {None}
+        mine = set(self.roles) | {self.member} - {None}
+        if self.member is None:  # epic_master reaches only a master's tail
+            mine.add(routes_mod.EPIC_MASTER)
         return bool(allowed & mine & set(as_roles))
 
     def _send(self, text: str) -> None:
