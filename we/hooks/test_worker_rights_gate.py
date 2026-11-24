@@ -854,25 +854,55 @@ def test_a_marker_worker_names_its_lead(world):
     assert hook(world, "gh secret set X", session="s-lead", WE_ROLE=None) == (None, "")
 
 
-@pytest.mark.usefixtures("own_state_dir")
-def test_an_error_while_judging_fails_closed(world, monkeypatch, capsys):
+def _crash(world, monkeypatch, command, role="worker"):
+    """Run the hook on `command` while `decide` raises."""
     sys.path.insert(0, str(HOOK.parent))
     import worker_rights_gate as gate  # noqa: PLC0415
 
     def boom(_payload, _env):
-        raise RuntimeError("x")
+        raise RuntimeError("token=s3cr3t")
 
     monkeypatch.setattr(gate, "decide", boom)
-    payload = {
-        "tool_name": "Bash",
-        "tool_input": {"command": "git status"},
-        "cwd": str(world["repo"]),
-    }
-    for role, denied in (("worker", True), ("master", False)):
-        monkeypatch.setenv("WE_ROLE", role)
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        gate.main()
-        assert ("fail closed" in capsys.readouterr().out) is denied
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(world["repo"])}
+    monkeypatch.setenv("WE_ROLE", role)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    gate.main()
+
+
+def test_a_crash_fails_open_with_one_stderr_line_and_one_crash_row(
+    world, monkeypatch, capsys, own_state_dir
+):
+    for role in ("worker", "master"):
+        _crash(world, monkeypatch, "git status", role)
+        out, err = capsys.readouterr()
+        assert out == ""  # no decision: the normal permissions judge the call
+        assert err.count("\n") == 1 and "RuntimeError" in err
+    log = (own_state_dir / "brakes.jsonl").read_text()
+    assert "s3cr3t" not in log  # the exception's message never reaches the persistent log
+    rows = [json.loads(x) for x in log.splitlines()]
+    assert [(r["type"], r["gate"], r["error"]) for r in rows] == [
+        ("crash", "worker_rights_gate", "RuntimeError")
+    ] * 2
+    assert all("outcome" not in r and "item" not in r for r in rows)  # `outcome` judges a line
+    assert rows[0]["argv0"] == "git"
+
+
+@pytest.mark.usefixtures("own_state_dir")
+@pytest.mark.parametrize(
+    ("command", "item"),
+    [
+        ("gh secret set X", "secrets"),
+        ("gh repo delete acme/app --yes", "delete"),
+        ("git push origin --delete feat/x", "delete"),
+        ("git push origin HEAD:main", "main"),
+        ("gh pr merge 7 --admin", "merge"),
+    ],
+)
+def test_a_crash_still_denies_the_hard_prod_part(world, monkeypatch, capsys, command, item):
+    _crash(world, monkeypatch, command)
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"].startswith(f"never for a worker ({item}")
 
 
 def test_a_broken_crew_costs_the_rights_not_the_worker(world):

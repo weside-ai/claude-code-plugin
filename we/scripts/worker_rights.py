@@ -455,6 +455,26 @@ NEVER = (
 )
 
 
+# The never-list items a crash of the gate does not open: secrets, deletion and the PROD paths
+# (a push to main, a merge past the checks). Everything else fails open on a crash.
+HARD = ("secrets", "delete", "main", "merge")
+
+
+def hard_never(command: str) -> str | None:
+    """The `HARD` never-list item `command` hits, judged on the text alone (no git, no crew file,
+    `main`/`master` as the protected names): what the gate still denies after it crashed."""
+    text = command.replace("\\\n", " ")
+    main = "|".join(MAIN_NAMES)
+    for item, pattern in NEVER:
+        if not item.startswith(HARD):
+            continue
+        compiled = re.compile(pattern.replace("{main}", main))
+        found = compiled.search(text) or compiled.search(normalised(text))
+        if found:
+            return item.format(*(found.groups() or ("",)))
+    return None
+
+
 def _tags_pushed(text: str, cwd: Where) -> str | None:
     """A word after `git push` that names a tag of the repo (`git push origin v1.2`), else None."""
     words = {
@@ -1254,6 +1274,9 @@ def brake_log(cwd: str | Path | None, record: dict) -> Path | None:
       `deny`  (the worker rights gate): `gate`, `item` (the never-list item or the failed right),
               `name`, `key`, `session_id`, `argv0` (the first word of the command; never the
               command itself, which may carry a secret value)
+      `crash` (the worker rights gate failed open on an exception): `gate`, `error` (the
+              exception's class only; its message may quote the command), `name`, `key`,
+              `session_id`, `argv0`
       `card`  (a card worker's verdict, written by its starter where it posts it; `main` below):
               `verdict` (`PASS` or `BLOCKING`), `pr`
       `outcome` (added later by the starter): `kind` (the line's type it judges, e.g. `card`),

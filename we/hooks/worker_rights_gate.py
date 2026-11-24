@@ -22,8 +22,11 @@ For a worker it
      parts sharing one deadline; it allows a held right without a prompt only on a command of its
      own (`worker_rights.simple_argv`). A held right in a chain only passes this gate; a
      `gh pr merge` there is a never-list item.
-`ask …` names the marker's Lead (`ask your Lead <name>`), else `ask your starter`. Fail closed: an
-exception while judging a worker's command denies it. Every denial is one `deny` line in
+`ask …` names the marker's Lead (`ask your Lead <name>`), else `ask your starter`. A crash is a
+defect, not a brake: an exception while judging fails open (`crashed`: one stderr line, one
+`crash` line in the brake log naming the exception's class, never its message; the call goes to
+the normal permissions), except that a worker's call is still denied on a `worker_rights.HARD`
+item (secrets, deletion, a push to main, a merge past the checks), judged on the text alone. Every denial is one `deny` line in
 `<state dir>/brakes.jsonl` (`worker_rights.brake_log`), so the false alarms can be counted; a failed
 write never changes the decision. A PreToolUse deny holds under
 `bypassPermissions`.
@@ -105,25 +108,62 @@ def decide(payload: dict, env: dict) -> tuple[str, str] | None:  # noqa: PLR0911
     return "allow", f"worker right {held} (worker_rights_gate)"
 
 
-def record(payload: dict, env: dict, reason: str) -> None:
-    """One `deny` line in `brakes.jsonl` (`worker_rights.brake_log`); silent on any failure."""
+def record(payload: dict, env: dict, reason: str, error: str | None = None) -> None:
+    """One line in `brakes.jsonl` (`worker_rights.brake_log` owns the shape): `deny` with the
+    reason's `item`, or with `error` a `crash` line naming only the exception's class (its message
+    may quote the command); silent on any failure."""
     with contextlib.suppress(Exception):
         import worker_rights as wr  # noqa: PLC0415
 
-        marker = _marker(payload) or {}
+        marker: dict = {}
+        with contextlib.suppress(Exception):
+            marker = _marker(payload) or {}
         command = str((payload.get("tool_input") or {}).get("command", ""))
-        wr.brake_log(
-            payload.get("cwd"),
-            {
+        head = (
+            {"type": "crash", "gate": "worker_rights_gate", "error": error}
+            if error
+            else {
                 "type": "deny",
                 "gate": "worker_rights_gate",
                 "item": reason.rsplit(": ask ", 1)[0],
+            }
+        )
+        wr.brake_log(
+            payload.get("cwd"),
+            {
+                **head,
                 "name": marker.get("name"),
                 "key": env.get("WE_STORY_KEY") or marker.get("key"),
                 "session_id": payload.get("session_id"),
                 "argv0": wr.argv0(command),
             },
         )
+
+
+def crashed(payload: dict, env: dict, exc: Exception) -> tuple[str, str] | None:
+    """A crash is a defect, not a brake: one stderr line, one `crash` row, and the call passes
+    to the normal permissions, except a `worker_rights.HARD` item (secrets, deletion, the PROD
+    paths), which a worker's call is still denied on. That last check failing too denies."""
+    print(
+        f"worker_rights_gate: crashed, fails open ({type(exc).__name__}: {exc})", file=sys.stderr
+    )
+    record(payload, env, "crashed", error=type(exc).__name__)
+    if payload.get("tool_name") != "Bash":
+        return None
+    try:
+        worker = env.get("WE_ROLE") == "worker" or bool(_marker(payload))
+    except Exception:
+        worker = env.get("WE_ROLE") == "worker"
+    if not worker:
+        return None
+    command = str((payload.get("tool_input") or {}).get("command", ""))
+    try:
+        import worker_rights as wr  # noqa: PLC0415
+
+        item = wr.hard_never(command)
+    except Exception:
+        return "deny", "never for a worker (the hard check crashed too): ask your starter"
+    return ("deny", f"never for a worker ({item}): ask your starter") if item else None
 
 
 def main() -> None:
@@ -133,23 +173,17 @@ def main() -> None:
         return
     if not isinstance(payload, dict):
         return
+    env = dict(os.environ)
     try:
-        verdict = decide(payload, dict(os.environ))
-    except Exception as exc:  # fail closed for a worker, stay out for everyone else
-        try:
-            worker = os.environ.get("WE_ROLE") == "worker" or bool(_marker(payload))
-        except Exception:
-            worker = os.environ.get("WE_ROLE") == "worker"
-        if not worker or payload.get("tool_name") != "Bash":
-            print(f"worker_rights_gate: skipped ({type(exc).__name__}: {exc})", file=sys.stderr)
-            return
-        verdict = (
-            "deny",
-            f"worker_rights_gate failed ({type(exc).__name__}: {exc}); fail closed: ask your starter",
-        )
+        verdict = decide(payload, env)
+    except Exception as exc:
+        verdict = crashed(payload, env, exc)
+        if verdict:
+            _out(*verdict)
+        return
     if verdict:
         if verdict[0] == "deny":
-            record(payload, dict(os.environ), verdict[1])
+            record(payload, env, verdict[1])
         _out(*verdict)
 
 
