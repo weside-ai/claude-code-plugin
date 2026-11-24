@@ -7,8 +7,8 @@ exit 0. A worker's session (or a consultation) starts nothing either. Otherwise:
 1. ``event_poller.ensure``: the project's one poller (``scripts/command_center/event_poller.py``,
    rooted in the main worktree), unless one runs; it starts with ``HOME``, ``PATH`` and ``LANG`` only, never a ``CLAUDE_*``
    variable, so it holds no inbox token;
-2. ``event_tail.spawn``: this session's tail, only for a crew member's session (its pin) that is no
-   worker; the tail gets the session's inbox socket and token in its environment, never in argv or
+2. ``event_tail.spawn``: this session's tail, only for a crew member's session (its pin) or a
+   master without a companion (``WE_ROLE=master``: it receives its epic's lines), never a worker; the tail gets the session's inbox socket and token in its environment, never in argv or
    a file, and ``CLAUDE_CODE_SESSION_ID`` from the hook input (it reads the session's board line).
 
 Prints nothing on success: the lines arrive later through the inbox. Fails open: any failure is

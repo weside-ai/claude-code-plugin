@@ -14,6 +14,29 @@ Kinds and their config keys (``events.sources.<key>``):
     name matches ``relevant`` (a regex, default none), else when one of its red jobs is a required
     check of the branch (``required_checks.sh``, cached 1 h). An older red run of the same workflow
     is marked seen silently. The first round per repo and branch records the red runs silently.
+    Each new red run's culprit is the pull request of its head commit (``commits/<sha>/pulls``, one
+    call per new red run): its number and story key (``Round.key_rx`` on its head branch, else its
+    title) ride in the event for the ``epic_master`` target (``epic_owner.py``); an unreadable
+    culprit leaves both out (the route then says ``epic unknown``).
+    The RC suite's open issue by an author of ``rc.trusted_authors`` whose body carries the marker
+    ``<!-- we-event {"kind":"main_red","sha":…,"run":…,"failing":[…],"epics":[…]} -->`` is a
+    ``main_red`` too, once per marker run id, read from the open-issue list of ``rc.repo`` (shared
+    with ``issue_new``, no call of its own): at most ``MARKER_IDS`` failing ids matching
+    ``_NODE_ID``; none readable gives ``ids unreadable``. A marker of another author is ignored.
+``pr_checks_red`` / ``pr_conflict`` / ``pr_review_verdict`` / ``pr_green`` / ``pr_merged`` (``pulls``:
+``{repos, review_rx, merged_window}``)
+    Per repo and round one GraphQL query (``PULLS_QUERY``): the open pull requests (first 50) with
+    head, base, ``mergeable`` and the head commit's rollup, and the 20 last updated merged ones. A
+    context's verdict is ``flow_report.context_class`` (a set conclusion wins over the status) and
+    the PR's ``flow_report.pr_verdict`` over the base's required checks (``required_checks.sh``,
+    cached 1 h): the rule ``arm_pr.sh`` judges by. Transitions only, each once: a required check
+    concluded failure, cancelled or timed out (``pr_checks_red``, per check id; any check when the
+    base requires none), ``mergeable`` CONFLICTING (``pr_conflict``, per head), a check whose name
+    matches ``review_rx`` (default ``review``, case-insensitive) concluded (``pr_review_verdict``,
+    pass or red, per check id; such a check is never also ``pr_checks_red``), the verdict ``pass``
+    (``pr_green``, per head), merged within ``merged_window`` hours (default 2) (``pr_merged``, per
+    PR). The first round per repo records silently. Each event carries the PR's story key from its
+    head branch, else its title (the title only matches, it never enters a field).
 ``run_queued_long`` (``queued``: ``{repo, limit_min, limits, recheck_max}``)
     A run queued longer than ``limit_min`` (default 60) or ``limits[<workflow name>]``; a superseded
     dispatch (below) is not one. The queued list also returns finished runs: each candidate past
@@ -25,6 +48,10 @@ Kinds and their config keys (``events.sources.<key>``):
     A queued ``workflow_dispatch`` run of the workflow file when a newer dispatch of the same ref
     is queued, or when it waited longer than ``stale_h`` (default 6) hours. Read from the same
     queued list as ``run_queued_long`` (one call), so both need the same repo.
+``requested_by_rx`` (optional, on ``rc``, ``queued`` and ``dispatch``)
+    A regex whose group 1 reads the requester from a run's ``display_title`` (a workflow whose
+    ``run-name`` ends ``· <requested_by or event>``); one plain token becomes ``by`` and the line
+    ends ``· by <token>``.
 ``issue_new`` (``issues``: ``{repos, skip_authors}``)
     A new open issue (never a pull request, never one of ``skip_authors``). The first round per
     repo records the open issues silently: only what comes after is news. An issue older than the
@@ -127,7 +154,13 @@ KINDS = (
     "poll_error",
     "config_error",
     "permission_prompt",
+    "pr_checks_red",
+    "pr_conflict",
+    "pr_review_verdict",
+    "pr_green",
+    "pr_merged",
 )
+PR_KINDS = ("pr_checks_red", "pr_conflict", "pr_review_verdict", "pr_green", "pr_merged")
 DAMAGE_KINDS = ("prod_gate_blocked",)  # damage by nature; a route may mark more
 HOUR = 3600
 DAY = 24 * HOUR
@@ -152,6 +185,27 @@ SESSIONS_INTERVAL_S = 60
 _SESSION_ID = re.compile(r"^[A-Za-z0-9-]{8,80}$")
 _SESSION_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _TOOL = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_NODE_ID = re.compile(r"^[A-Za-z0-9_./:\[\]-]{1,200}$")
+_KEY = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+_MARKER = re.compile(r"<!--\s*we-event\s+(\{.*?\})\s*-->", re.DOTALL)
+MARKER_IDS = 10
+DEFAULT_KEY_RX = r"[A-Z]+-\d+"
+PR_RED = ("FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE", "ERROR")
+PULLS_QUERY = """query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    open: pullRequests(states: OPEN, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { number title headRefName headRefOid baseRefName mergeable
+        commits(last: 1) { nodes { commit { oid statusCheckRollup { contexts(first: 100) { nodes {
+          __typename
+          ... on CheckRun { databaseId name status conclusion }
+          ... on StatusContext { context state }
+        } } } } } } }
+    }
+    merged: pullRequests(states: MERGED, first: 20, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { number title headRefName mergedAt mergeCommit { oid } }
+    }
+  }
+}"""
 
 
 def name_of(value: Any, limit: int = 100) -> str:
@@ -263,8 +317,12 @@ class Round:
         run: Runner = subprocess.run,
         due: set[str] | None = None,
         sessions: Callable[[], list[dict]] = list_sessions,
+        key_rx: str | re.Pattern | None = None,
     ):
         self.src = sources or {}
+        self.key_rx = (
+            re.compile(key_rx or DEFAULT_KEY_RX) if not isinstance(key_rx, re.Pattern) else key_rx
+        )
         self.due = due  # the source groups this round runs (``main``, ``sessions``); None: all
         self.list_sessions = sessions
         self.st = state
@@ -372,6 +430,7 @@ class Round:
             ("rc_cut", self.rc_cut),
             ("rollout", self.rollout),
             ("rate_limit", self.rate_limit),
+            ("pulls", self.pulls),
         ]
         main = self.due is None or "main" in self.due
         on = self.src.get("sessions") not in (None, False)  # {} is on with its defaults
@@ -386,6 +445,11 @@ class Round:
                     step()
                 except Exception as exc:
                     self.errors.append(f"source {key}: {type(exc).__name__}")
+        if main and (self.src.get("rc") or {}).get("trusted_authors"):
+            try:
+                self.red_markers()
+            except Exception as exc:
+                self.errors.append(f"source rc markers: {type(exc).__name__}")
         if self.local_checks and main:
             try:
                 self.local()
@@ -452,7 +516,214 @@ class Round:
                     sha=str(run.get("head_sha") or "")[:7],
                     why=why,
                     run_id=int(run["id"]),
+                    **self.culprit(repo, run.get("head_sha")),
                 )
+
+    def by(self, source: str, run: dict) -> dict[str, str]:
+        """``{by: <token>}`` from the run's title through ``sources.<source>.requested_by_rx``
+        (group 1, one plain token), else {}: who dispatched the run, or ``schedule``/``push``."""
+        rx = (self.src.get(source) or {}).get("requested_by_rx")
+        if not isinstance(rx, str) or not rx:
+            return {}
+        try:
+            found = re.search(rx, str(run.get("display_title") or ""))
+        except re.error:
+            return {}
+        token = found.group(1) if found and found.groups() else ""
+        return {"by": token} if token and re.match(r"^[A-Za-z0-9_.-]{1,64}$", token) else {}
+
+    def story_key(self, branch: Any, title: Any = None) -> str | None:
+        """The story key of a head branch, else of a title (which only matches)."""
+        for text in (branch, title):
+            found = self.key_rx.search(str(text or ""))
+            if found and _KEY.match(found.group(0)):
+                return found.group(0)
+        return None
+
+    def culprit(self, repo: str, sha: Any) -> dict[str, Any]:
+        """The pull request a red push run's head commit came from: ``{pr, story}``, else {}. A read
+        failure stays quiet: the event goes on without them and its route names ``epic unknown``."""
+        if not (isinstance(sha, str) and _SHA.match(sha)):
+            return {}
+        out = self._exec(["gh", "api", f"repos/{repo}/commits/{sha}/pulls"], 60)
+        try:
+            pulls = json.loads(out.stdout) if out is not None and out.returncode == 0 else None
+        except ValueError:
+            pulls = None
+        for pr in pulls if isinstance(pulls, list) else []:
+            if not isinstance(pr, dict) or not isinstance(pr.get("number"), int):
+                continue
+            key = self.story_key((pr.get("head") or {}).get("ref"), pr.get("title"))
+            return {"pr": int(pr["number"]), **({"story": key} if key else {})}
+        return {}
+
+    def red_markers(self) -> None:
+        """``main_red`` from the RC suite's issue marker (module docstring)."""
+        cfg = self.src.get("rc") or {}
+        repo = cfg.get("repo")
+        trusted = set(cfg.get("trusted_authors") or [])
+        for issue in (self.open_items(repo) if repo else None) or []:
+            if "pull_request" in issue or (issue.get("user") or {}).get("login") not in trusted:
+                continue
+            found = _MARKER.search(str(issue.get("body") or ""))
+            try:
+                doc = json.loads(found.group(1)) if found else None
+            except ValueError:
+                doc = None
+            if not isinstance(doc, dict) or doc.get("kind") != "main_red":
+                continue
+            run = doc.get("run")
+            if not isinstance(run, int) or isinstance(run, bool) or run <= 0:
+                continue
+            key = f"marker:{repo}:{run}"
+            if not self.new(key):
+                continue
+            failing = doc.get("failing")
+            ids = (
+                [i for i in failing if isinstance(i, str) and _NODE_ID.match(i)]
+                if isinstance(failing, list)
+                else []
+            )
+            sha = str(doc.get("sha") or "")
+            epics = doc.get("epics")
+            self.emit(
+                "main_red",
+                key,
+                f"run:{run}",
+                issue.get("updated_at"),
+                repo=repo,
+                sha=sha[:7] if re.match(r"^[0-9a-f]{7,40}$", sha) else "?",
+                failing=ids[:MARKER_IDS],
+                unreadable=not ids,
+                run_id=run,
+                epics=[e for e in epics if isinstance(e, str) and _KEY.match(e)][:5]
+                if isinstance(epics, list)
+                else [],
+                origin="marker",
+            )
+
+    # --- pull requests ------------------------------------------------------------------
+
+    def graphql(self, query: str, **variables: str) -> Any:
+        argv = ["gh", "api", "graphql", "-f", f"query={query}"]
+        for k, v in variables.items():
+            argv += ["-f", f"{k}={v}"]
+        out = self._exec(argv, 60)
+        if out is None:
+            return None
+        if out.returncode != 0:
+            self.errors.append(f"gh graphql: exit {out.returncode}")
+            return None
+        try:
+            data = json.loads(out.stdout)
+        except ValueError:
+            self.errors.append("gh graphql: no JSON")
+            return None
+        return data if isinstance(data, dict) else None
+
+    def pulls(self) -> None:
+        """PR state transitions (module docstring), one GraphQL query per repo and round."""
+        scripts = str(Path(__file__).resolve().parent.parent)
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import flow_report  # noqa: PLC0415  (the verdict rule arm_pr.sh judges by)
+
+        cfg = self.src.get("pulls") or {}
+        review = re.compile(cfg.get("review_rx") or "review", re.IGNORECASE)
+        window = float(cfg.get("merged_window", 2)) * HOUR
+        for repo in cfg.get("repos") or []:
+            owner, name = repo.split("/", 1)
+            data = self.graphql(PULLS_QUERY, owner=owner, name=name)
+            node = ((data or {}).get("data") or {}).get("repository")
+            if not isinstance(node, dict):
+                continue
+            seed = f"pulls:{repo}"
+            first = not self.seeded.get(seed)
+            for pr in (node.get("open") or {}).get("nodes") or []:
+                if isinstance(pr, dict) and isinstance(pr.get("number"), int):
+                    self._pr_state(repo, pr, first, review, flow_report)
+            for pr in (node.get("merged") or {}).get("nodes") or []:
+                if not (isinstance(pr, dict) and isinstance(pr.get("number"), int)):
+                    continue
+                n = pr["number"]
+                key = f"prmerged:{repo}#{n}"
+                if self.age_s(pr.get("mergedAt")) > window or not self.new(key) or first:
+                    continue
+                oid = str((pr.get("mergeCommit") or {}).get("oid") or "")
+                self._pr_emit(
+                    "pr_merged",
+                    key,
+                    repo,
+                    pr,
+                    pr.get("mergedAt"),
+                    sha=oid[:7] if _SHA.match(oid) else "?",
+                )
+            self.seeded[seed] = True
+
+    def _pr_emit(self, kind: str, key: str, repo: str, pr: dict, at: Any, **fields: Any) -> None:
+        story = self.story_key(pr.get("headRefName"), pr.get("title"))
+        self.emit(
+            kind,
+            key,
+            f"pr:{repo}#{int(pr['number'])}",
+            at,
+            repo=repo,
+            number=int(pr["number"]),
+            **({"story": story} if story else {}),
+            **fields,
+        )
+
+    def _pr_state(self, repo: str, pr: dict, first: bool, review: re.Pattern, fr: Any) -> None:
+        n, head = pr["number"], str(pr.get("headRefOid") or "")
+        if not _SHA.match(head):
+            return
+        at = iso(self.now)
+
+        def say(key: str) -> bool:  # a transition: new, and not the silent first round
+            return self.new(key) and not first
+
+        if pr.get("mergeable") == "CONFLICTING" and say(f"prconf:{repo}#{n}:{head}"):
+            self._pr_emit("pr_conflict", f"prconf:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
+        names = self.required(repo, pr.get("baseRefName") or "main")
+        if names is None:
+            return  # required checks unreadable: the next round judges
+        contexts = fr.head_contexts(pr)
+        commit = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
+        nodes = ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []
+        for raw in nodes if commit.get("oid") == head else []:
+            if not isinstance(raw, dict):
+                continue
+            check = raw.get("name") or raw.get("context")
+            verdict = fr.context_class(raw)
+            cid = raw.get("databaseId") if isinstance(raw.get("databaseId"), int) else None
+            ident = cid if cid is not None else f"{head}:{event_id(str(check))}"
+            if review.search(str(check or "")):
+                if verdict != "pending" and say(f"prrev:{repo}#{n}:{ident}"):
+                    self._pr_emit(
+                        "pr_review_verdict",
+                        f"prrev:{repo}#{n}:{ident}",
+                        repo,
+                        pr,
+                        at,
+                        check=name_of(check),
+                        verdict=verdict,
+                        **({"check_id": cid} if cid else {}),
+                    )
+                continue
+            red = (raw.get("conclusion") or raw.get("state")) in PR_RED
+            if red and (not names or check in names) and say(f"prred:{repo}#{n}:{ident}"):
+                self._pr_emit(
+                    "pr_checks_red",
+                    f"prred:{repo}#{n}:{ident}",
+                    repo,
+                    pr,
+                    at,
+                    check=name_of(check),
+                    **({"check_id": cid} if cid else {}),
+                )
+        verdict, _fails = fr.pr_verdict(contexts, sorted(names))
+        if verdict == "pass" and say(f"prgreen:{repo}#{n}:{head}"):
+            self._pr_emit("pr_green", f"prgreen:{repo}#{n}:{head}", repo, pr, at, sha=head[:7])
 
     def _first_red(self, repo: str, branch: str, data: dict) -> bool:
         """The first round per repo and branch records its red runs silently: a fresh poller would
@@ -537,6 +808,7 @@ class Round:
                         why="newer" if newer else "stale",
                         hours=int(float(dis.get("stale_h", 6))),
                         run_id=int(run["id"]),
+                        **self.by("dispatch", run),
                     )
 
     def _hang(self, repo: str, run: dict, key: str, mins: int) -> None:
@@ -560,6 +832,7 @@ class Round:
             event=token_of(event),
             branch=token_of(run.get("head_branch")) if own else "?",
             run_id=int(run["id"]),
+            **(self.by("queued", run) if own else {}),
         )
 
     def issues(self) -> None:
@@ -706,6 +979,7 @@ class Round:
                 "tag": tag,
                 "verdict": verdict,
                 "run_id": int(run["id"]),
+                **self.by("rc", run),
             }
             if info.get("unread"):
                 fields["unread"] = True

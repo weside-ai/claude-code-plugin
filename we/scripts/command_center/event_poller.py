@@ -52,6 +52,12 @@ Usage:
   event_poller.py run --root DIR [--rounds N]  the loop, in the foreground
   event_poller.py once [--from DIR]            one round, then exit (refused while a poller runs)
   event_poller.py status [--from DIR]          the poller, its last round, its mapping, the tails
+  event_poller.py owners [--from DIR] [--since 24h]
+                                               every red event of the window (``RED_KINDS``) with
+                                               its owner: the receiving session and its ledger
+                                               ``delivered_at`` (minutes from ``source_at``), else
+                                               ``delta: coordinator · <epic or role>``, else
+                                               ``owner none``
   event_poller.py path [--from DIR] [--delta | --ledger | --events]
 """
 
@@ -77,6 +83,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 import crew as crew_mod  # noqa: E402
+import epic_owner  # noqa: E402
 import event_routes as routes_mod  # noqa: E402
 from event_sources import Round, event_id, iso, list_sessions  # noqa: E402
 
@@ -210,9 +217,17 @@ def presences(folder: Path, now: float) -> list[dict]:
 
 
 def route(
-    row: dict, block: dict, crew: dict, live: list[dict]
+    row: dict,
+    block: dict,
+    crew: dict,
+    live: list[dict],
+    owners: Callable[[str, dict, list[dict]], epic_owner.Owners] | None = None,
 ) -> tuple[list[dict], list[str], bool]:
-    """(addressed ``[{session, as}]``, targets without a receiver, escalated to the coordinator)."""
+    """(addressed ``[{session, as}]``, targets without a receiver, escalated to the coordinator).
+
+    ``epic_master`` goes to the sessions ``owners`` finds (``epic_owner.Resolver.owners``); none
+    found leaves it missing with ``row["owner_epic"]`` (the epic, or why there is none) for the
+    delta row. A ``main_red`` row also gets ``owner``: the receiving board lines' names."""
     kind, dmg = row["kind"], row["damage"]
     if kind in SELF_SKIP_KINDS:
         waiting = (row.get("fields") or {}).get("sid")
@@ -220,6 +235,20 @@ def route(
     to: list[dict] = []
     missing: list[str] = []
     for target in routes_mod.targets(block, kind):
+        if target == routes_mod.EPIC_MASTER:
+            found = owners(kind, row.get("fields") or {}, live) if owners else None
+            hits = found.to if found else []
+            to += [
+                {"session": n, "as": target}
+                for n in hits
+                if {"session": n, "as": target} not in to
+            ]
+            row["owner"] = found.names if found and hits else []
+            if not hits:
+                row["owner_epic"] = (found.epic or found.reason) if found else "epic unknown"
+                row["owner_reason"] = found.reason if found else "epic unknown"
+                missing.append(target)
+            continue
         slug = routes_mod.member_of(crew, target)
         hits = [
             p for p in live if slug and p.get("member") == slug and (dmg or not p.get("parked"))
@@ -379,8 +408,10 @@ class Poller:
             run=self.run,
             due=due,
             sessions=self.sessions,
+            key_rx=epic_owner.key_rx(self.crew),
         )
         found = rnd.run_all() if self.block is not None else []
+        resolver = self.resolver(block, found)
         for text in problems:
             rnd.emit(
                 "config_error",
@@ -402,15 +433,16 @@ class Poller:
             seq += 1
             row = ev.row(iso(now), routes_mod.damage(block, ev.kind))
             row["seq"] = seq
-            to, missing, escalate = route(row, block, self.crew, live)
+            to, missing, escalate = route(
+                row, block, self.crew, live, resolver.owners if resolver else None
+            )
             row["to"] = to
             if routes_mod.push(block, ev.kind):
                 row["push"] = self.push(row["id"], routes_mod.line(row), block, now)
                 if row["push"] != "sent":
                     escalate = True  # no push: the human learns of it on the board
             line = routes_mod.render(row)
-            for target in missing:
-                delta.append(self._delta(row, target, line, now, "no running session"))
+            delta += [self._missing(row, target, line, now) for target in missing]
             if to:
                 pending[row["id"]] = {
                     "at": now,
@@ -441,11 +473,32 @@ class Poller:
             "sessions_interval_s": routes_mod.sessions_interval(block),
             "push": "configured" if block.get("push") else "off",
             "routes": {k: routes_mod.targets(block, k) for k in sorted(block.get("routes") or {})},
+            "sources": sorted(block.get("sources") or {}),
             "config_error": state.get("config_error"),
         }
         write_json(self.dir / "heartbeat.json", beat)
         self.log(f"round events={len(rows)} delta={len(delta)} errors={len(rnd.errors)}")
         return beat
+
+    def resolver(self, block: dict, found: list) -> epic_owner.Resolver | None:
+        """The round's view of board and snapshot, only when a found kind routes to its master."""
+        kinds = {e.kind for e in found}
+        if any(routes_mod.EPIC_MASTER in routes_mod.targets(block, k) for k in kinds):
+            return epic_owner.Resolver(self.root, self.crew)
+        return None
+
+    def _missing(self, row: dict, target: str, line: str, now: float) -> dict:
+        """The delta row of a target without a receiver; ``epic_master``'s names the epic (or
+        ``epic unknown`` with the PR number)."""
+        if target != routes_mod.EPIC_MASTER:
+            return self._delta(row, target, line, now, "no running session")
+        d = self._delta(row, target, line, now, row.get("owner_reason") or "?")
+        d["epic"] = row.get("owner_epic")
+        fields = row.get("fields") or {}
+        pr = fields.get("number") or fields.get("pr")
+        if isinstance(pr, int):
+            d["pr"] = pr
+        return d
 
     @staticmethod
     def tick(block: dict) -> int:
@@ -616,6 +669,54 @@ def run_loop(root: Path, rounds: int | None = None) -> int:
         time.sleep(max(30, int(beat.get("interval_s") or 300)))
 
 
+RED_KINDS = ("main_red", "rc_verdict_red")
+
+
+def parse_since(text: str) -> float:
+    """``24h``, ``90m``, ``2d`` or plain seconds → seconds."""
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)([smhd]?)", str(text).strip())
+    if not m:
+        raise ValueError(f"since: {text!r} is no duration (24h, 90m, 2d)")
+    return float(m.group(1)) * {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}[m.group(2)]
+
+
+def owners_report(folder: Path, now: float, since_s: float) -> list[str]:
+    """One line per red event of the window: ``<source_at> <kind> <object> · owner …``."""
+    from event_sources import epoch  # noqa: PLC0415
+
+    ledger: dict[str, list[dict]] = {}
+    for r in read_rows(folder / "ledger.jsonl"):
+        if r.get("delivered"):
+            ledger.setdefault(str(r.get("id")), []).append(r)
+    delta: dict[str, list[dict]] = {}
+    for r in read_rows(folder / "delta.jsonl"):
+        delta.setdefault(str(r.get("id")), []).append(r)
+    out = []
+    for row in read_rows(folder / "events.jsonl"):
+        if row.get("kind") not in RED_KINDS:
+            continue
+        at = epoch(row.get("source_at")) or epoch(row.get("observed_at"))
+        if at is None or now - at > since_s:
+            continue
+        head = f"{row.get('source_at') or row.get('observed_at')} {row.get('kind')} {row.get('object')}"
+        hits = ledger.get(str(row.get("id"))) or []
+        if hits:
+            parts = []
+            for h in hits:
+                done = epoch(h.get("delivered_at"))
+                mins = f" ({int((done - at) // 60)} min)" if done is not None else ""
+                parts.append(f"{h.get('to')} delivered {h.get('delivered_at')}{mins}")
+            out.append(f"{head} · owner " + "; ".join(parts))
+        elif delta.get(str(row.get("id"))):
+            names = sorted(
+                {str(d.get("epic") or d.get("role") or "?") for d in delta[str(row["id"])]}
+            )
+            out.append(f"{head} · delta: coordinator · {', '.join(names)}")
+        else:
+            out.append(f"{head} · owner none")
+    return out
+
+
 def status(start: str | Path | None = None) -> int:
     root = project_root(start)
     if root is None:
@@ -634,11 +735,13 @@ def status(start: str | Path | None = None) -> int:
         )
     if beat.get("config_error"):
         print(f"config error: {beat['config_error']}")
+    if beat.get("sources"):
+        print(f"sources {', '.join(beat['sources'])}")
     for kind, to in (beat.get("routes") or {}).items():
         print(f"route {kind} -> {', '.join(to)}")
     for p in presences(folder, time.time()):
         print(
-            f"tail {p.get('name')} · {p.get('member')} · {','.join(p.get('roles') or [])}"
+            f"tail {p.get('name')} · {p.get('member') or 'master'} · {','.join(p.get('roles') or [])}"
             f"{' · parked' if p.get('parked') else ''}"
         )
     return 0
@@ -647,9 +750,11 @@ def status(start: str | Path | None = None) -> int:
 def main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("ensure", "once", "status", "path"):
+    for name in ("ensure", "once", "status", "path", "owners"):
         p = sub.add_parser(name)
         p.add_argument("--from", dest="start")
+        if name == "owners":
+            p.add_argument("--since", default="24h")
         if name == "path":
             g = p.add_mutually_exclusive_group()
             for f in ("delta", "ledger", "events"):
@@ -670,6 +775,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0911
         print("events: no .weside/config.json", file=sys.stderr)
         return 1
     folder = events_dir(root)
+    if a.cmd == "owners":
+        for text in owners_report(folder, time.time(), parse_since(a.since)):
+            print(text)
+        return 0
     if a.cmd == "path":
         name = next((f for f in ("delta", "ledger", "events") if getattr(a, f)), None)
         print(folder / f"{name}.jsonl" if name else folder)

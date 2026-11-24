@@ -1076,3 +1076,123 @@ def test_a_day_old_queued_run_without_a_job_is_a_ghost(tmp_path, jobs, reported)
     srcs = {"queued": sources(tmp_path)["queued"]}
     hung = [e.object for e in run_round(tmp_path, data, seeded(), srcs=srcs)]
     assert ("run:301" in hung) is reported
+
+
+# --- the PR state source and the main red marker ------------------------------------------------
+
+EVENTS = HERE / "fixtures" / "events"
+PULLS = json.loads((EVENTS / "pulls-graphql-open.json").read_text(encoding="utf-8"))
+T0 = 1_795_176_000.0
+
+
+def _pulls_round(tmp: Path, answer: dict, state: dict, now: float) -> list[es.Event]:
+    data = {"now": now, "tags": "", "gh": {"graphql": answer}}
+    state.setdefault("req", {})["acme/app@main"] = {"ts": now, "names": ["test"]}
+    srcs = {"pulls": {"repos": ["acme/app"], "review_rx": "review"}}
+    return es.Round(srcs, state, now, root=str(tmp), env=fake_env(tmp, data)).run_all()
+
+
+def _pr(answer: dict, n: int = 7) -> dict:
+    return next(p for p in answer["data"]["repository"]["open"]["nodes"] if p["number"] == n)
+
+
+def _ctx(pr: dict, name: str) -> dict:
+    nodes = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]
+    return next(c for c in nodes if c["name"] == name)
+
+
+def test_pr_state_transitions(tmp_path):
+    """One line per transition and head; an unchanged state none; one GraphQL call per round."""
+    answer, state = json.loads(json.dumps(PULLS)), {}
+    lines = []
+
+    def step(minutes: int) -> list[tuple[str, dict]]:
+        found = _pulls_round(tmp_path, answer, state, T0 + minutes * 60)
+        lines.extend(event_routes.render({"kind": e.kind, "fields": e.fields}) for e in found)
+        return [(e.kind, e.fields) for e in found]
+
+    assert step(0) == []  # the first round records silently
+    pr = _pr(answer)
+    _ctx(pr, "test").update(status="COMPLETED", conclusion="FAILURE")
+    _ctx(pr, "Claude Review").update(status="COMPLETED", conclusion="FAILURE")
+    got = step(5)
+    assert [k for k, _ in got] == ["pr_checks_red", "pr_review_verdict"]
+    assert all(f["story"] == "ACME-3216" and f["number"] == 7 for _, f in got)
+    assert step(10) == []  # unchanged: no second line
+    head = "b" * 40
+    pr.update(headRefOid=head, mergeable="CONFLICTING")
+    pr["commits"]["nodes"][0]["commit"]["oid"] = head
+    for name, cid in (("test", 31), ("Claude Review", 32), ("lint", 33)):
+        _ctx(pr, name).update(databaseId=cid, status="QUEUED", conclusion=None)
+    assert [k for k, _ in step(15)] == ["pr_conflict"]
+    pr["mergeable"] = "MERGEABLE"
+    for name in ("test", "Claude Review", "lint"):
+        _ctx(pr, name).update(status="COMPLETED", conclusion="SUCCESS")
+    _ctx(pr, "lint").update(status="IN_PROGRESS")  # a set conclusion wins over a stale status
+    assert [k for k, _ in step(20)] == ["pr_review_verdict", "pr_green"]
+    assert step(25) == []
+    repo = answer["data"]["repository"]
+    repo["open"]["nodes"] = [p for p in repo["open"]["nodes"] if p["number"] != 7]
+    repo["merged"]["nodes"] = [
+        {
+            "number": 7,
+            "title": "fix: something",
+            "headRefName": "fix/ACME-3216-x",
+            "mergedAt": es.iso(T0 + 29 * 60),
+            "mergeCommit": {"oid": "d" * 40},
+        }
+    ]
+    assert [k for k, _ in step(30)] == ["pr_merged"]
+    assert step(35) == []
+    calls = (tmp_path / "inputs.json.calls").read_text().splitlines()
+    assert sum(c.startswith("api graphql") for c in calls) == 8  # one per repo and round
+    assert not [c for c in calls if "pulls/" in c or "check-runs" in c]
+    url = "https://github.com/acme/app"
+    assert lines == [
+        f"PR #7 acme/app · checks red · test · {url}/runs/11",
+        f"PR #7 acme/app · review red · Claude Review · {url}/runs/12",
+        f"PR #7 acme/app · conflict with the base · head bbbbbbb · {url}/pull/7",
+        f"PR #7 acme/app · review pass · Claude Review · {url}/runs/32",
+        f"PR #7 acme/app · green · head bbbbbbb · {url}/pull/7",
+        f"PR #7 acme/app · merged · merge commit ddddddd · {url}/pull/7",
+    ]
+
+
+def test_main_red_marker(tmp_path):
+    """The marker of a trusted author is one main_red with its failing ids; another author's copy
+    is ignored; a second round says nothing."""
+    issues = json.loads((EVENTS / "issue-main-red.json").read_text(encoding="utf-8"))
+    path = "repos/acme/app/issues?state=open&sort=created&direction=desc&per_page=30"
+    data = {"now": T0, "tags": "", "gh": {path: issues}}
+    srcs_only = {
+        "rc": {"repo": "acme/app", "workflow": "x.yml", "trusted_authors": ["acme-bot[bot]"]}
+    }
+    state: dict = {"seeded": {"rc": True}}
+    env = fake_env(tmp_path, data)
+    rnd = es.Round(srcs_only, state, T0, root=str(tmp_path), env=env)
+    rnd.red_markers()
+    (ev,) = rnd.events
+    assert ev.kind == "main_red" and ev.object == "run:9001"
+    assert ev.fields["failing"] == ["tests/test_a.py::test_one", "tests/test_b.py::test_two[x]"]
+    assert ev.fields["epics"] == ["ACME-3215"]
+    assert event_routes.render({"kind": ev.kind, "fields": ev.fields}) == (
+        "main red acme/app · abc1234 · failing: tests/test_a.py::test_one, "
+        "tests/test_b.py::test_two[x] · run https://github.com/acme/app/actions/runs/9001"
+    )
+    again = es.Round(srcs_only, state, T0 + 300, root=str(tmp_path), env=env)
+    again.red_markers()
+    assert again.events == []
+    issues[0]["body"] = (
+        issues[0]["body"]
+        .replace("9001", "9003")
+        .replace("tests/test_a.py::test_one", "rm -rf /; echo")
+        .replace('"tests/test_b.py::test_two[x]"', '"x y"')
+    )
+    data["gh"][path] = issues
+    env = fake_env(tmp_path, data)
+    third = es.Round(srcs_only, state, T0 + 600, root=str(tmp_path), env=env)
+    third.red_markers()
+    (bad,) = third.events
+    assert event_routes.render({"kind": bad.kind, "fields": bad.fields}).split(" · ")[2] == (
+        "failing: ids unreadable"
+    )

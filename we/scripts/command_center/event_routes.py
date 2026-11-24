@@ -39,6 +39,10 @@ no ``owner/name``, and a ``sources.prod_release`` with an unknown key, no workfl
 ``tag_pattern`` that does not compile or takes a pre-release tag of ``RC_SAMPLES``, a ``wait_min``
 below 1, an empty ``gate_job`` or no ``repo``.
 
+The target ``epic_master`` names no role: it is the master session of the event's epic, found
+over the board (``epic_owner.py``); every crew may name it. Without a running master the event
+lands in the coordinator's delta with the epic (``event_poller.py``).
+
 Routing (``targets``): a kind goes to the targets of its route; ``poll_error`` and
 ``config_error`` go to ``machinery`` when no route names them; ``pr_run_queued_long`` without a
 route of its own takes the targets of ``run_queued_long``'s route as a digest (``PARENT``). ``damage`` is true for a kind of
@@ -48,7 +52,10 @@ too and, without any running receiver, the coordinator at once (``event_poller.p
 The line (``render``) is built from fixed words, integers, validated tags, workflow, check, job
 and deployment names and GitHub URLs built from ids; a PR or issue title never enters it (the
 line lands in a session as a user turn). The one exception is a local check's own line, written
-by a host command its owner configured.
+by a host command its owner configured. A ``main_red`` addressed to ``epic_master`` ends with the
+receiving sessions (``· owner <session>``, board names validated as tokens) or ``· owner delta:
+coordinator · <epic>``; a dispatched run's line ends ``· by <token>`` when the poller read the
+requester from the run's title (``requested_by``).
 """
 
 from __future__ import annotations
@@ -60,6 +67,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from event_sources import (
+    _KEY,
+    _NODE_ID,
+    _SESSION_NAME,
     DAMAGE_KINDS,
     GH,
     KINDS,
@@ -92,6 +102,8 @@ BLOCK_KEYS = (
 ROUTE_KEYS = ("to", "mode", "damage", "push")
 PUSH_KEYS = ("url_env", "wrapper", "body_key")
 MODES = ("line", "digest")
+EPIC_MASTER = "epic_master"  # a target every crew may name: the epic's master session
+_BY = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 DEFAULTS = {"poll_interval_s": 300, "deliver_timeout_s": 180, "fold_s": 600}
 FALLBACK = {"poll_error": ["machinery"], "config_error": ["machinery"]}
 PARENT = {
@@ -116,7 +128,7 @@ def _repos(sources: dict[str, Any]) -> list[Any]:
     for key, value in sources.items():
         if key == "red":
             found += [e.get("repo") if isinstance(e, dict) else e for e in value or []]
-        elif key == "issues" and isinstance(value, dict):
+        elif key in ("issues", "pulls") and isinstance(value, dict):
             found += list(value.get("repos") or [])
         elif isinstance(value, dict) and "repo" in value:
             found.append(value.get("repo"))
@@ -161,7 +173,8 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
     routes = out.get("routes") or {}
     if not isinstance(routes, dict):
         raise EventsError("events: routes must be an object")
-    known = crew_targets(crew)
+    known = crew_targets(crew) | {EPIC_MASTER}
+    _validate_owner_sources(sources)
     for kind, route in routes.items():
         if kind not in KINDS:
             raise EventsError(f"events: unknown event '{kind}'")
@@ -184,6 +197,47 @@ def validate(block: Any, crew: dict[str, Any] | None) -> dict[str, Any]:  # noqa
             raise EventsError(f"events: route '{kind}': push must be true or false")
     out["sources"], out["routes"], out["local_checks"] = sources, routes, checks
     return out
+
+
+def _validate_owner_sources(sources: dict[str, Any]) -> None:
+    """``pulls``, ``rc.trusted_authors`` and every ``requested_by_rx``."""
+    _validate_pulls(sources.get("pulls"))
+    rc = sources.get("rc") if isinstance(sources.get("rc"), dict) else {}
+    authors = rc.get("trusted_authors", [])
+    if not isinstance(authors, list) or not all(isinstance(a, str) and a for a in authors):
+        raise EventsError("events: sources.rc.trusted_authors must be a list of logins")
+    for key, cfg in sources.items():
+        rx = cfg.get("requested_by_rx") if isinstance(cfg, dict) else None
+        if rx is None:
+            continue
+        try:
+            ok = isinstance(rx, str) and re.compile(rx).groups >= 1
+        except re.error:
+            ok = False
+        if not ok:
+            raise EventsError(
+                f"events: sources.{key}.requested_by_rx must be a regex with a group"
+            )
+
+
+def _validate_pulls(cfg: Any) -> None:
+    if cfg is None:
+        return
+    where = "events: sources.pulls"
+    if not isinstance(cfg, dict):
+        raise EventsError(f"{where} must be an object")
+    for key in cfg:
+        if key not in ("repos", "review_rx", "merged_window"):
+            raise EventsError(f"{where} has unknown key '{key}'")
+    if not isinstance(cfg.get("repos"), list) or not cfg["repos"]:
+        raise EventsError(f"{where}.repos must be a list of owner/name")
+    try:
+        re.compile(cfg.get("review_rx", "review"))
+    except (re.error, TypeError):
+        raise EventsError(f"{where}.review_rx must be a regular expression") from None
+    window = cfg.get("merged_window", 2)
+    if not isinstance(window, (int, float)) or isinstance(window, bool) or window <= 0:
+        raise EventsError(f"{where}.merged_window must be hours > 0")
 
 
 def _validate_sessions(cfg: Any) -> None:
@@ -315,9 +369,50 @@ def _repo(value: Any) -> str:
 
 
 def render(row: dict[str, Any]) -> str:
-    """The one line of an event row (``events.jsonl``): its text and, for a route with ``push``,
-    the push's outcome."""
-    return line(row) + push_suffix(row)
+    """The one line of an event row (``events.jsonl``): its text, its owner, and, for a route with
+    ``push``, the push's outcome."""
+    return line(row) + owner_suffix(row) + push_suffix(row)
+
+
+def owner_suffix(row: dict[str, Any]) -> str:
+    """`` · owner <session>`` of a ``main_red`` routed to its epic's master, or the delta's epic."""
+    if row.get("kind") != "main_red" or "owner" not in row:
+        return ""
+    names = [n for n in row.get("owner") or [] if isinstance(n, str) and _SESSION_NAME.match(n)]
+    if names:
+        return " · owner " + ", ".join(names)
+    epic = str(row.get("owner_epic") or "")
+    return " · owner delta: coordinator · " + (epic if _KEY.match(epic) else "epic unknown")
+
+
+def _by(f: dict[str, Any]) -> str:
+    by = f.get("by")
+    return f" · by {by}" if isinstance(by, str) and _BY.match(by) else ""
+
+
+PR_WORDS = {
+    "pr_checks_red": "checks red",
+    "pr_conflict": "conflict with the base",
+    "pr_green": "green",
+    "pr_merged": "merged",
+}
+
+
+def pr_line(k: str, f: dict[str, Any]) -> str:
+    """``PR #<n> <repo> · <kind words> · <check name> · <url>``: ids, validated names, URLs."""
+    repo, n = _repo(f.get("repo")), _int(f.get("number"))
+    pr_url = f"{GH}/{repo}/pull/{n}"
+    check_url = f"{GH}/{repo}/runs/{_int(f.get('check_id'))}" if f.get("check_id") else pr_url
+    sha = str(f.get("sha") or "")
+    sha = sha if re.match(r"^[0-9a-f]{7}$", sha) else "?"
+    if k == "pr_review_verdict":
+        word = "pass" if f.get("verdict") == "pass" else "red"
+        return f"PR #{n} {repo} · review {word} · {f.get('check')} · {check_url}"
+    if k == "pr_checks_red":
+        return f"PR #{n} {repo} · checks red · {f.get('check')} · {check_url}"
+    if k == "pr_merged":
+        return f"PR #{n} {repo} · merged · merge commit {sha} · {pr_url}"
+    return f"PR #{n} {repo} · {PR_WORDS.get(k, k)} · head {sha} · {pr_url}"
 
 
 def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
@@ -326,14 +421,14 @@ def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
     repo = _repo(f.get("repo"))
     run = run_url(repo, _int(f.get("run_id"))) if "run_id" in f else ""
     if k == "rc_verdict_green":
-        return f"RC {f.get('tag')} green · run {run}"
+        return f"RC {f.get('tag')} green · run {run}{_by(f)}"
     if k == "rc_verdict_red":
         if f.get("issue"):
             cause = f"{GH}/{repo}/issues/{_int(f.get('issue'))}"
         else:
             cause = ", ".join(str(j) for j in f.get("jobs") or []) or "unknown"
         unread = " · plan log unreadable" if f.get("unread") else ""
-        return f"RC {f.get('tag')} {f.get('verdict')} · run {run} · cause: {cause}{unread}"
+        return f"RC {f.get('tag')} {f.get('verdict')} · run {run} · cause: {cause}{unread}{_by(f)}"
     if k == "prod_gate_blocked" and "run_id" in f:
         what = (
             f"waiting {_int(f.get('mins'))} min ({f.get('status')})"
@@ -359,18 +454,24 @@ def line(row: dict[str, Any]) -> str:  # noqa: PLR0911, PLR0912
         if f.get("what") == "job":
             return f"rollout stuck · job {f.get('name')} failed: {f.get('reason')}"
         return f"rollout stuck · deployment {f.get('name')} past its progress deadline since {f.get('since')}"
+    if k == "main_red" and f.get("origin") == "marker":
+        ids = [i for i in f.get("failing") or [] if isinstance(i, str) and _NODE_ID.match(i)]
+        failing = ", ".join(ids) if ids else "ids unreadable"
+        return f"main red {repo} · {f.get('sha')} · failing: {failing} · run {run}"
     if k == "main_red":
         return f"main red {repo} · {f.get('workflow')} ({f.get('event')}, {f.get('sha')}, {f.get('why')}) · run {run}"
+    if k in PR_WORDS or k == "pr_review_verdict":
+        return pr_line(k, f)
     if k in ("run_queued_long", "pr_run_queued_long"):
         return (
             f"run queued {_int(f.get('mins'))} min · {repo} {f.get('workflow')} "
-            f"({f.get('event')}, {f.get('branch')}) · run {run}"
+            f"({f.get('event')}, {f.get('branch')}) · run {run}{_by(f)}"
         )
     if k == "dispatch_superseded":
         why = (
             "newer one queued" if f.get("why") == "newer" else f"> {_int(f.get('hours'))} h queued"
         )
-        return f"dispatch superseded ({f.get('branch')}, {why}) · run {run}"
+        return f"dispatch superseded ({f.get('branch')}, {why}) · run {run}{_by(f)}"
     if k == "issue_new":
         n = _int(f.get("number"))
         return f"new issue {repo}#{n} · {GH}/{repo}/issues/{n}"

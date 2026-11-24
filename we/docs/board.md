@@ -811,8 +811,19 @@ tail without a restart: `hooks/events_on_start.py`, run in the project with `{"s
 What finds no running session waits in the coordinator's delta, `delta.jsonl` in the folder
 `event_poller.py path` prints (its row: the `event_poller.py` docstring); a parked session gets only damage kinds. A damage kind (a blocked production
 release) without a receiver goes at once to the coordinator's running session and as one `gate`
-news item. `event_poller.py status` names the poller, its last round, the loaded routes and the
-running tails.
+news item. `event_poller.py status` names the poller, its last round, its sources, the loaded
+routes and the running tails.
+
+A route may name `epic_master`: the master session of the event's epic, found over the board's
+session lines and the ticket snapshot (`epic_owner.py`, whose docstring owns the resolution). A
+master without a companion (`WE_ROLE=master`) runs a tail for it; a worker never does. The `pulls`
+source reads one GraphQL query per repo and round and gives one line per transition and head:
+`pr_checks_red`, `pr_conflict`, `pr_review_verdict`, `pr_green`, `pr_merged`, each `PR #<n> <repo>
+· <what> · <check or head> · <url>`. A `main_red` with failing test ids comes from the RC suite's
+issue marker (`event_sources.py`) and ends `· owner <session>`; without a running master of its
+epic it lands in the delta as `owner delta: coordinator · <epic>`, and a parked master still gets
+it (damage to its own epic). `event_poller.py owners --since 24h` lists every red event of the
+window with its owner: the receiving session and its delivery time, the delta row, or `owner none`.
 
 An open prompt in any session on the host (a permission prompt, sandbox request or open dialog,
 seen in two samples of `claude agents --json` one minute apart) is one `permission_prompt` event
