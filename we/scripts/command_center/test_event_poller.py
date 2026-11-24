@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 import event_poller as ep  # noqa: E402
+import event_routes  # noqa: E402
 import test_event_routes as ter  # noqa: E402  (its crew and project builder)
 
 SCRIPT = HERE / "event_poller.py"
@@ -319,6 +320,37 @@ def test_route_epic_master_from_a_story_key(tmp_path, monkeypatch):
     rows = {r["object"]: r for r in ter.rows(folder, "events.jsonl")}
     assert rows["pr:acme/app#8"]["to"] == []  # parked: the PR line goes to the delta
     assert rows["run:9004"]["to"] == [{"session": "sock-master-1", "as": "epic_master"}]
+
+
+def test_a_queued_pr_run_without_a_story_takes_the_repo_hang_route(tmp_path, monkeypatch):
+    """Red: a fork's queued pull request run (no story key) went to `epic_master` and landed in
+    the coordinator's delta as `epic unknown`. Without a story it takes the `run_queued_long`
+    route's targets; a run from an own branch with a key still goes to its epic's master."""
+    routes = {**MASTER_ROUTES, "run_queued_long": {"to": ["machinery"]}}
+    root = ter.project(tmp_path, routes)
+    folder = tmp_path / "events"
+    crew_board(tmp_path, monkeypatch)
+    master_presence(folder, "sock-master-1", "sid-master-1")
+
+    def hang(run: int, **extra) -> es.Event:
+        fields = {"repo": "acme/app", "mins": 61, "event": "pull_request", "run_id": run}
+        return es.Event(
+            "pr_run_queued_long", f"hang:{run}", f"run:{run}", None, {**fields, **extra}
+        )
+
+    fork = hang(11, workflow="workflow 7", branch="?")
+    own = hang(12, workflow="CI", branch="feat/ACME-3216-x", story="ACME-3216")
+    ter.poller(tmp_path, root, [fork, own], monkeypatch).round()
+    rows = {r["object"]: r for r in ter.rows(folder, "events.jsonl")}
+    assert rows["run:12"]["to"] == [{"session": "sock-master-1", "as": "epic_master"}]
+    assert [(d["role"], d.get("epic")) for d in ter.rows(folder, "delta.jsonl")] == [
+        ("machinery", None)
+    ]
+    assert event_routes.targets({"routes": routes}, "pr_run_queued_long", fork.fields) == [
+        "machinery"
+    ]
+    assert event_routes.mode({"routes": routes}, "pr_run_queued_long", fork.fields) == "line"
+    assert event_routes.mode({"routes": routes}, "pr_run_queued_long", own.fields) == "digest"
 
 
 def test_owners_report(tmp_path):

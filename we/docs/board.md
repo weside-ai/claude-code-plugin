@@ -819,7 +819,7 @@ session lines and the ticket snapshot (`epic_owner.py`, whose docstring owns the
 master without a companion (`WE_ROLE=master`) runs a tail for it; a worker never does. The `pulls`
 source reads one GraphQL query per repo and round and gives one line per transition and head:
 `pr_checks_red`, `pr_conflict`, `pr_review_verdict`, `pr_green`, `pr_merged`, each `PR #<n> <repo>
-· <what> · <check or head> · <url>`. A `main_red` with failing test ids comes from the RC suite's
+· <what> · <check or head> · <url>`. A pull request's run queued past its limit (`pr_run_queued_long`) goes to the epic's master too, in its hourly digest, unless a route of its own says else; a run without a story key (a fork, a branch without a key) takes the `run_queued_long` route instead, since it has no epic to find. A `main_red` with failing test ids comes from the RC suite's
 issue marker (`event_sources.py`) and ends `· owner <session>`; without a running master of its
 epic it lands in the delta as `owner delta: coordinator · <epic>`, and a parked master still gets
 it (damage to its own epic). `event_poller.py owners --since 24h` lists every red event of the

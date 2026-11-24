@@ -485,6 +485,13 @@ def test_expected_head_never_arriving_has_its_own_exit(tmp_path):
     assert (code, out) == (5, [f"head never reached {'d' * 40} (still {SHA}) after 0s"])
 
 
+def test_a_pr_merged_before_the_expected_head_ends_merged(tmp_path):
+    """Red: `--sha` on a PR that merged on an older head died on `WAITING: unbound variable`, exit 1."""
+    merged = {**_green(), "state": "MERGED"}
+    code, out = run(tmp_path, [merged], "--sha", "e" * 40)
+    assert (code, out) == (0, [f"final {SHA}: merged"])
+
+
 @pytest.mark.parametrize("verdict", ["WARNING", "BLOCKING"])
 def test_codex_warning_on_the_head_returns_before_the_merge(tmp_path, verdict):
     armed = {**_with_codex(_pending(_green()), "FAILURE"), "autoMergeRequest": {"enabledAt": "x"}}
