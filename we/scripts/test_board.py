@@ -3972,6 +3972,14 @@ def test_set_writes_topic_and_keys_and_clears_them(crewless):
     assert "topic" not in line and "keys" not in line
 
 
+def test_set_writes_a_parked_sessions_wake_trigger(crewless):
+    """Red arm: the wake triggers of parked sessions lived only in the coordinator's memory file."""
+    assert go(crewless, "set", "state=parked", "wake=plan of PROJ-12 on main") == 0
+    line = line_of(crewless, "lead-12")
+    assert (line["state"], line["wake"]) == ("parked", "plan of PROJ-12 on main")
+    assert go(crewless, "set", "wake=") == 0 and "wake" not in line_of(crewless, "lead-12")
+
+
 def test_ask_stamps_kind_source_and_owner_by_component(crewed, capsys):
     answer_with(crewed, CLEAR)
     argv = [

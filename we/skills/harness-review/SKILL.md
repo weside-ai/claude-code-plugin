@@ -34,8 +34,15 @@ heads and rounds per code PR, `Required checks: red heads` (`rerun green` is a f
 `Brakes per day` and `Brake outcomes`. A brake line no `outcome` judged counts as a false alarm:
 a brake that does not count its stops cannot show it pays (`product`, 12.11.2026).
 
+Then follow the work: an inventory finds only what is already on a list. Take five merged stories
+(small, feature, tooling), and give every minute from the first sign of work to the merge one class
+(work, machine, waiting for a slot, lock or queue, waiting for a person, rework with its cause,
+unknown) from `flow_intervals.py`'s rows and the logs; rank the causes. A cause on no inventory of
+§ 3 joins the deletion test there, and each `unknown` names the log that is missing.
+
 - [ ] the report file under `reports/` exists, or the run printed why not
 - [ ] every `n/a` row is named with its missing source, never read as zero
+- [ ] five stories traced, their minutes per class and the ranked causes noted
 - [ ] the three largest waits in hours and every brake's danger / false alarm / unjudged counts are noted
 
 ## 2 · Ask the roles

@@ -38,6 +38,9 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   or a fresh start from your memory file.
 - Keep your open strands (workers, PRs, questions, promised replies) as a task list, so a
   compaction loses none.
+- Your memory file holds the current state, not a diary: at each Updates Log line rewrite its head
+  (open strands, resume ids, triggers) and cut what the Updates Log, a PR or the ticket records;
+  under ~200 lines, or a fresh start cannot read it whole.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
 - Post your questions for {human.local} on the board yourself (`board.py ask`); the answer comes

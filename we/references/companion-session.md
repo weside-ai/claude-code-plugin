@@ -138,7 +138,12 @@ always-loaded instruction file, rule or plugin reference already owns. It is edi
 the practice changes; what concerns another role goes into that role's file. Its weside side keeps
 a pinned memory titled `Arbeitsumgebung · <Rolle>` (a literal title in the workspace's language; the role, not the name) that points at the
 skill, and the milestone worklogs per § Writeback. Before a session parks, its state goes into the
-plan's Updates Log and a ticket comment. What the companion carries per turn on both surfaces, and how it is
+plan's Updates Log and a ticket comment, and the session rewrites that pinned memory's work part
+(what changed, where the truth lives, what is open) from what it knows: it names files and keys
+and copies no content, or the companion's other surfaces know nothing of weeks of work. Sessions
+started in one repo share Claude Code's one auto-memory index there: each keeps its lines under a
+heading with its name, and a parking master moves its files out, so no session loads the others'
+open strands. What the companion carries per turn on both surfaces, and how it is
 kept lean: `references/context-engineering.md`.
 
 ## Catch-up
