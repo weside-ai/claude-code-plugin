@@ -210,6 +210,32 @@ def test_a_receipt_check_failing_without_a_line_is_one_failure(tmp_path):
     ]
 
 
+def test_a_failing_receipt_check_in_a_checkout_behind_the_ref_says_so(tmp_path):
+    """Red arm: from a checkout behind origin/main the check missed a receipt that had landed
+    there and the gate refused without naming the cause."""
+    root = repo(tmp_path)
+    shutil.rmtree(root / ".git")
+    (root / "fake_receipt_check.py").write_text("import sys\nsys.exit(1)\n")
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            check=True,
+            capture_output=True,
+        )
+
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "a")
+    git("commit", "-q", "--allow-empty", "-m", "b")
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    git("reset", "-q", "--soft", "HEAD~1")
+    out = gate(root, "story", plan(root, "green"))
+    assert out.returncode == 1
+    assert "this checkout is behind origin/main" in out.stdout
+    git("reset", "-q", "--soft", "origin/main")
+    assert "behind" not in gate(root, "story", plan(root, "green")).stdout
+
+
 def test_a_receipt_check_not_on_disk_is_not_runnable(tmp_path):
     root = repo(tmp_path, oracles__receipt_check="no-such-checker-anywhere --flag")
     out = gate(root, "story", plan(root, "green"))

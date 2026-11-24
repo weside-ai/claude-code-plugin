@@ -20,6 +20,14 @@ holding the row by its session id (a starting background row lists no pid yet):
   line to its starter, once per block: `<name> blocked since <HH:MM> UTC: <its last text line>`,
   over the same inbox socket, else as a board news item; 312 of 485 measured worker hours were
   `blocked`, and the starter did not know;
+- a worker idle (`state` `idle` or `done`, or a window worker's `status` `idle`) after a turn that
+  sent its marker's starter no report (`hooks/worker_report_gate.py`'s `reported` false; the gate
+  lets the second stop pass) for `workers.unreported_notify_minutes` (default 5) gets one line to its
+  starter, once per turn: `<name> idle since <HH:MM> UTC without a report: <its last text line>`;
+  a worker whose process ends with no end reason and no report gets `<name> ended without a
+  report: <its last text line>` instead, unless the idle line already named that turn. Both go over
+  the inbox socket, else as a board news item: a report left as plain text reached its starter
+  103 min late;
 - a worker whose report is in (`state` `done`, or a window worker idle after its turn sent the
   report to its marker's starter, `hooks/worker_report_gate.py`'s test) and idle for
   `workers.idle_stop_minutes` (default 30) is stopped with `we-worker stop`, its tree stays (close
@@ -318,11 +326,16 @@ def _watch_prompt(row, name, tree, sid, projects, now, first_seen, reported, boa
     )
 
 
-IDLE_DEFAULTS = {"blocked_notify_minutes": 15, "idle_stop_minutes": 30}
+IDLE_DEFAULTS = {
+    "blocked_notify_minutes": 15,
+    "idle_stop_minutes": 30,
+    "unreported_notify_minutes": 5,
+}
 
 
 def idle_limits(tree: str) -> dict[str, float | None]:
-    """`workers.blocked_notify_minutes` and `workers.idle_stop_minutes` in seconds, None when off
+    """`workers.blocked_notify_minutes`, `.idle_stop_minutes` and `.unreported_notify_minutes` in
+    seconds, None when off
     (`0` or `null`); a missing or unreadable value keeps its default: a typo must not silence it."""
     try:
         block = wl.workers_block(Path(tree))
@@ -366,6 +379,34 @@ def report_in(row: dict, marker: dict | None, projects: Path, sid: str | None) -
         return reported(files[0], str(lead))
     except OSError:
         return False
+
+
+def unreported(marker: dict | None, projects: Path, sid: str | None) -> str | None:
+    """The turn key (its last assistant entry) when the transcript's current turn sent the marker's
+    starter no report, else None; None too when nothing can be judged (no marker, no starter, no
+    transcript): a worker started by hand is never named on a guess."""
+    lead = (marker or {}).get("starter") or (marker or {}).get("lead")
+    files = glob.glob(str(projects / "*" / f"{sid}.jsonl")) if sid and lead else []
+    if not files:
+        return None
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+    try:
+        from worker_report_gate import reported  # noqa: PLC0415
+    finally:
+        sys.path.pop(0)
+    try:
+        if reported(files[0], str(lead)):
+            return None
+    except OSError:
+        return None
+    last = last_assistant(projects, sid) or {}
+    return str(last.get("uuid") or last.get("timestamp") or _text(last)[-200:] or "turn")
+
+
+def _idle_row(row: dict) -> bool:
+    return row.get("state") in ("idle", "done") or (
+        not row.get("state") and row.get("status") == "idle"
+    )
 
 
 def stop_by_launcher(row: dict) -> bool:
@@ -416,10 +457,49 @@ class Idle:
         self.blocked_said = False
         self.idle_since: float | None = None
         self.stop_tried = False
+        self.quiet_since: float | None = None
+        self.quiet_said: set[str] = set()
 
     def poll(self, row: dict, now: float) -> None:
         self._blocked(row, now)
+        self._unreported(row, now)
         self._idle(row, now)
+
+    def tell(self, item: str, line: str) -> None:
+        """One line to the starter, else a board news item `W-<name>-<item>`."""
+        if not self.send(f"we-worker: {line}"):
+            self.board(self.tree, f"W-{self.name}-{item}", line)
+
+    def _unreported(self, row: dict, now: float) -> None:
+        limit = self.limits.get("unreported_notify_minutes")
+        if limit is None or not _idle_row(row):
+            self.quiet_since = None
+            return
+        turn = unreported(wl.read_marker(self.tree), self.projects, self.sid)
+        if turn is None or turn in self.quiet_said:
+            self.quiet_since = None if turn is None else self.quiet_since
+            return
+        if self.quiet_since is None:
+            self.quiet_since = now
+        if now - self.quiet_since < limit:
+            return
+        self.quiet_said.add(turn)
+        hhmm = dt.datetime.fromtimestamp(self.quiet_since, dt.timezone.utc).strftime("%H:%M")
+        why = last_line(self.projects, self.sid) or "no text line"
+        self.tell(
+            f"unreported-{int(self.quiet_since)}",
+            f"{self.name} idle since {hhmm} UTC without a report: {why}",
+        )
+
+    def ended_unreported(self) -> None:
+        """The plain exit's line: no end reason and no report, and no idle line for that turn."""
+        if self.limits.get("unreported_notify_minutes") is None:
+            return
+        turn = unreported(wl.read_marker(self.tree), self.projects, self.sid)
+        if turn is None or turn in self.quiet_said:
+            return
+        why = last_line(self.projects, self.sid) or "no text line"
+        self.tell(f"end-{(self.sid or 'x')[:8]}", f"{self.name} ended without a report: {why}")
 
     def _blocked(self, row: dict, now: float) -> None:
         limit = self.limits.get("blocked_notify_minutes")
@@ -433,9 +513,9 @@ class Idle:
         self.blocked_said = True
         hhmm = dt.datetime.fromtimestamp(self.blocked_since, dt.timezone.utc).strftime("%H:%M")
         why = last_line(self.projects, self.sid) or str(row.get("waitingFor") or "no status line")
-        line = f"{self.name} blocked since {hhmm} UTC: {why}"
-        if not self.send(f"we-worker: {line}"):
-            self.board(self.tree, f"W-{self.name}-blocked-{int(self.blocked_since)}", line)
+        self.tell(
+            f"blocked-{int(self.blocked_since)}", f"{self.name} blocked since {hhmm} UTC: {why}"
+        )
 
     def _idle(self, row: dict, now: float) -> None:
         limit = self.limits.get("idle_stop_minutes")
@@ -530,6 +610,8 @@ def supervise(
         line = notice(name, reason, sid, tree)
         if not send(line):
             board(tree, f"W-{name}-end-{(sid or 'x')[:8]}", line.removeprefix("we-worker: "))
+    elif not stopped:
+        idle.ended_unreported()
     try:
         again = bool(_living(sessions(), name))
     except wl.LaunchError:
@@ -699,7 +781,7 @@ def status_lines(
 
 def restart_waiters(state: Path, spawn: Callable[[str], int] | None = None) -> list[str]:
     """Start a new waiter for every queued start whose waiter is dead (a crash, a pod restart);
-    the entry keeps its place (`queued_at`) and deadline. Returns the names."""
+    the entry keeps its place (`queue_order`) and deadline. Returns the names."""
     spawn = spawn_waiter if spawn is None else spawn
     names = [str(q["name"]) for q in queued(state) if not waiter_lives(q)]
     for name in names:
@@ -815,10 +897,18 @@ def _read(path: Path) -> dict | None:
     return doc if isinstance(doc, dict) and doc.get("name") else None
 
 
+def _write(path: Path, text: str) -> None:
+    """Replace `path` whole (a temp file beside it, then `os.replace`): the waiter polls a queue
+    entry, and a read between truncate and write finds no entry and exits as removed."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def queued(state: Path) -> list[dict]:
     """The queued starts, oldest first."""
     rows = [d for d in map(_read, sorted(queue_dir(state).glob("*.json"))) if d]
-    return sorted(rows, key=lambda d: (d.get("queued_at", 0), d["name"]))
+    return sorted(rows, key=lambda d: (wl.queue_order(d), d["name"]))
 
 
 def enqueue(
@@ -870,7 +960,7 @@ def set_waiter(state: Path, name: str, pid: int) -> None:
     if doc:
         doc["waiter_pid"] = pid
         doc["waiter_start"] = proc_start(pid)
-        path.write_text(json.dumps(doc, indent=2) + "\n")
+        _write(path, json.dumps(doc, indent=2) + "\n")
 
 
 def _drop(state: Path, name: str) -> dict | None:
@@ -1242,6 +1332,109 @@ def _queue_verb(args: argparse.Namespace, state: Path) -> int:
     return 0
 
 
+def amend(state: Path, name: str, brief: str) -> dict | None:
+    """Replace the brief of the queued start `name` (the waiter reads it only at the start, so the
+    start runs with the newest one); None when no such entry waits."""
+    path = queue_dir(state) / f"{name}.json"
+    doc = _read(path)
+    if doc is None:
+        return None
+    brief_file = queue_dir(state) / f"{name}.brief.md"
+    _write(brief_file, brief)
+    if doc.get("brief_file") != str(brief_file):
+        doc["brief_file"] = str(brief_file)
+        _write(path, json.dumps(doc, indent=2) + "\n")
+    return doc
+
+
+def reorder(state: Path, name: str, after: str | None) -> int:
+    """Move the queued start `name` to the head of its lane (`after` None) or right behind the
+    queued start `after` of the same lane, by its `order_at`; `queued_at` (the waited minutes),
+    deadline and waiter stay. Returns its
+    new position in the lane; raises `LaunchError` (exit 1) for an entry that is not queued or of
+    another lane."""
+    doc = _read(queue_dir(state) / f"{name}.json")
+    if doc is None:
+        raise wl.LaunchError(f"{name} is not queued", 1)
+    lane = wl.entry_lane(doc)
+    rows = [d for d in queued(state) if wl.entry_lane(d) == lane and d["name"] != name]
+    if after is None:
+        at = (wl.queue_order(rows[0]) - 1.0) if rows else wl.queue_order(doc)
+    else:
+        k = next((i for i, d in enumerate(rows) if d["name"] == after), None)
+        if k is None:
+            raise wl.LaunchError(f"{after} is not queued in the {lane} lane", 1)
+        here = wl.queue_order(rows[k])
+        nxt = wl.queue_order(rows[k + 1]) if k + 1 < len(rows) else here + 2.0
+        at = (here + nxt) / 2
+    doc["order_at"] = at
+    _write(queue_dir(state) / f"{name}.json", json.dumps(doc, indent=2) + "\n")
+    return [d["name"] for d in queued(state) if wl.entry_lane(d) == lane].index(name) + 1
+
+
+def start_now(state: Path, name: str, reason: str, start=None) -> tuple[int, str]:
+    """Start the queued `name` at once, past the lane cap and the room rule, on the owner's word
+    (`reason`): one `override` line in the brakes log, the entry and its waiter go on success."""
+    doc = _read(queue_dir(state) / f"{name}.json")
+    if doc is None:
+        return 1, f"{name} is not queued"
+    os.environ[wl.OVER_LIMIT_ENV] = reason
+    try:
+        code, out = (start or start_queued)(doc)
+    finally:
+        os.environ.pop(wl.OVER_LIMIT_ENV, None)
+    import worker_rights  # noqa: PLC0415
+
+    worker_rights.brake_log(
+        doc.get("tree"),
+        {
+            "type": "override",
+            "gate": "worker capacity",
+            "name": name,
+            "reason": reason[:200],
+            "outcome": "started" if code == 0 else f"exit {code}",
+        },
+    )
+    if code == 0:
+        unqueue(state, name)
+    return code, out
+
+
+def _amend_verb(args: argparse.Namespace, state: Path) -> int:
+    try:
+        brief = Path(args.brief_file).read_text()
+    except OSError as exc:
+        print(f"we-worker: amend: {exc}", file=sys.stderr)
+        return 2
+    if not brief.strip():
+        print("we-worker: amend: the brief file is empty; the queued brief stays", file=sys.stderr)
+        return 2
+    if amend(state, args.name, brief) is None:
+        print(
+            f"we-worker: {args.name} is not queued; steer a running worker with SendMessage",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"we-worker: the queued start of {args.name} now carries the brief of {args.brief_file}")
+    return 0
+
+
+def _prio_verb(args: argparse.Namespace, state: Path) -> int:
+    try:
+        pos = reorder(state, args.name, args.after)
+    except wl.LaunchError as exc:
+        print(f"we-worker: prio: {exc}", file=sys.stderr)
+        return exc.code
+    print(f"we-worker: {args.name} is now position {pos} of its lane")
+    return 0
+
+
+def _start_now_verb(args: argparse.Namespace, state: Path) -> int:
+    code, out = start_now(state, args.name, args.reason)
+    print(out)
+    return code
+
+
 def _unqueue_verb(args: argparse.Namespace, state: Path) -> int:
     if unqueue(state, args.name) is None:
         return 1
@@ -1331,9 +1524,27 @@ VERBS = {
     "queue": _queue_verb,
     "unqueue": _unqueue_verb,
     "wait-queue": _wait_verb,
+    "amend": _amend_verb,
+    "prio": _prio_verb,
+    "start-now": _start_now_verb,
     "resolve": _resolve_verb,
     "stopped": _stopped_verb,
 }
+
+
+def _add_queue_edit_verbs(sub) -> None:
+    """`amend`, `prio` and `start-now` of a queued start (`we-worker` passes them through)."""
+    p = sub.add_parser("amend")
+    p.add_argument("--name", required=True)
+    p.add_argument("--brief-file", required=True)
+    p = sub.add_parser("prio")
+    p.add_argument("--name", required=True)
+    where = p.add_mutually_exclusive_group(required=True)
+    where.add_argument("--first", action="store_true")
+    where.add_argument("--after")
+    p = sub.add_parser("start-now")
+    p.add_argument("--name", required=True)
+    p.add_argument("--reason", required=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1361,6 +1572,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--lane", choices=wl.LANES, default=wl.BUILD)
     for verb in ("unqueue", "wait-queue"):
         sub.add_parser(verb).add_argument("--name", required=True)
+    _add_queue_edit_verbs(sub)
     sub.add_parser("resolve").add_argument("--key", required=True)
     p = sub.add_parser("stopped")
     p.add_argument("--name", required=True)

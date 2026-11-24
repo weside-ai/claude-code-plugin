@@ -79,7 +79,9 @@ we/                               plugin root
                                   open prompts and local checks into events, routed by the `events:` block),
                                   event_sources.py (each event kind and its source), event_routes.py (the
                                   `events:` schema, the line text), event_tail.py (a session's delivery of its
-                                  routed lines), push_notify.py (the poller's one webhook post to the human),
+                                  routed lines), epic_owner.py (the `epic_master` target: a PR's or red run's
+                                  master session over board and ticket snapshot), push_notify.py (the
+                                  poller's one webhook post to the human),
                                   transcript.py (a session's last tool call: the one a prompt waits on)
                                   command_center/crewd.py (we-crewd: the Zentrale as a read-only web page, bound
                                   to the host's own address, its port and the pane's probe), redaction.py (the one

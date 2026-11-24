@@ -130,19 +130,30 @@ while the machine has room.
 waiter starts it once the check passes, first come first served across every repo, gives it its
 own worktree when it was queued from a main checkout, and tells the starter one line when it
 starts, fails or times out; `we-worker status` lists queued starts, `we-worker stop <name>` removes
-one (`scripts/worker_supervisor.py`, the comment above `queue_dir`). A worker blocked on the
+one (`scripts/worker_supervisor.py`, the comment above `queue_dir`). A queued start reads its brief
+only when it starts: `we-worker amend <name> --brief-file <f>` replaces it while it waits,
+`we-worker prio <name> --first|--after <other>` moves it in its lane, and `we-worker start-now
+<name> --reason "<the human's word>"` starts it at once past the cap and the room rule, never past the accounts' quota (one
+`override` line in `brakes.jsonl`). A `--queue` start runs as a background command
+(`run_in_background: true`), never behind a shell `&`; `we-worker status` comes before a second
+start of the same name. The launcher's own flags count in any position before the brief, and a
+refused start prints `we-worker: NOT STARTED: <name> …` on stdout as well: a launch whose output
+goes through a filter checks that line or the exit code (`we-worker … >log 2>&1; echo "rc=$?"`),
+never only a `grep` for the started line. A worker blocked on the
 host's test slot (`scripts/slot_lock.py`, the slot's one holder and reader) shows
 `waits: test-slot` in `we-worker status`: it counts as busy, holds its memory and does no work.
 
 **Utility lane.** `we-worker <name> --utility …` starts a worker that keeps work already underway
-moving: a fix round on an open PR's branch, a card, lens or review worker. Build work starts without
-the flag. A utility start counts the utility lane's busy workers against `pool.json`
+moving: a fix round on an open PR's branch, a card, lens or review worker; a refiner, a read-only
+measurement and a fast-lane fix (no plan file, one repo, one script and its test) start there too,
+as light workers (no test suite, gate or build of their own) that never wait behind full builds.
+Other build work starts without the flag. A utility start counts the utility lane's busy workers against `pool.json`
 `max_utility_sessions` (default 5; a repo may lower it), never against `max_busy_sessions`, and with
 `--queue` it waits in its own queue: a fix round never waits behind new build work (measured
 22.11.: one waited over an hour). The 5h check holds for both lanes. A worker belongs to the lane
 it started in (`WE_WORKER_LANE` in its settings file, `lane` in its marker and `launched.jsonl`
 line). The master starts a utility worker with `worker_launch.py launch --utility` (the template's
-`{lane}`); a story's build worker never.
+`{lane}`); a full build never.
 
 **Room on the machine.** A start of either lane that passes its cap also needs room, both or
 it waits (Kiska, 22.11.: the host's memory guard killed workers six times at 94 % working set, four
@@ -224,8 +235,9 @@ Every variable the launcher decides stands in the file's `env`, a cleared one as
 caller's shell.
 
 Each start also starts the supervisor, which tells the starter about a worker's stop and cleans up
-after it, names a long-`blocked` worker to its starter and stops an idle one whose report is in
-(`workers.blocked_notify_minutes`, `workers.idle_stop_minutes`; its docstring owns the rules); `we-worker close <KEY>` is the one closing step after a merge (In Review, teardown, the
+after it, names a long-`blocked` worker to its starter, names one whose turn or process ended
+without its report, and stops an idle one whose report is in (`workers.blocked_notify_minutes`,
+`workers.unreported_notify_minutes`, `workers.idle_stop_minutes`; its docstring owns the rules); `we-worker close <KEY>` is the one closing step after a merge (In Review, teardown, the
 epic's log line; `scripts/worker_close.py`, whose docstring owns its holds: a living or queued
 worker on the key, no story plan on the default branch). `we-worker gc` removes what dead sessions left (`scripts/worker_supervisor.py`, its
 docstring owns both, and the one end reason `we-worker status` prints). `we-worker stop` prints the
@@ -242,11 +254,13 @@ With a template, the Lead:
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
    --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`;
-   `--utility` for a fix round, card, lens or review worker, § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
+   `--utility` for a member of § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
-   steer. A steer is `SendMessage(to=<name>)`, as for a subagent.
+   steer. A steer is `SendMessage(to=<name>)`, as for a subagent. A steer that adds work asks for a
+   one-line pickup reply; none within one watchdog interval → stop the worker and start a fresh one
+   from the full brief file, never a second steer (a worker that lost its brief answers no steer).
 4. Arms the watchdog (§ Watchdog). Its exit 4 `exited: <name>` means the session ended: read the
    report, else `claude logs <name>`.
 5. Stops the worker with `worker_launch.py stop --name <name> --worktree <wt>` instead of
@@ -361,7 +375,8 @@ held: <PR> (<why>)         one-way, hold label, draft, a human decision, the rou
 parked: <branch> (<why>)   time limit, quota or a stop: checkpoint pushed to wip/<KEY>-<slug>, the resume command in <why>
 ```
 
-The starter acts on that line alone: `armed` → `watch-pr-checks.sh <PR> --sha <sha> --until-merged`,
+The starter acts on that line alone: `armed` → `watch-pr-checks.sh <PR> --sha <sha> --until-merged`
+(an event-routed master: no watcher, the PR's `merged` line; `references/session-traps.md` § CI and checks),
 on its merge (`merged`, `merged-green`) `/we:merged <PR>` (it runs `we-worker close <KEY> --pr <n>`), on
 `merged-red` (exit 15) the fix first; `held` → the PR continues
 at `/we:master` § Push, PR, CI step 5 or the one-way row; `parked` → resume per the line. The Stop
@@ -460,10 +475,14 @@ before the edit. Everything else is `rg`; the brief needs no line for it.
 
 For a worker expected to run longer than ~30 min: `${CLAUDE_PLUGIN_ROOT}/scripts/watch-worker.sh <wt> <name>`
 as a background command (a Bash call of its own with `run_in_background: true`, never `&` or
-`disown`). It exits on the first event (a commit, a 25-min stall, the worktree gone, a 25-min
-lifetime cap); its header lists the lines and exit codes. When the worker's report arrives or the
+`disown`). It exits on what nobody else reports (a 25-min stall, the worktree gone, the session
+ended) and on its 25-min lifetime cap; a commit is a line it prints and watches on (`--on-commit`
+ends on it); its header lists the lines and exit codes. When the worker's report arrives or the
 worker is stopped, `TaskStop` its watchdog by task id in the same turn, never by a `pkill` pattern.
 A short worker needs none: the report gates send it back to work.
+
+A worker whose next step waits on another PR's merge pushes, reports what is left and ends; its
+starter resumes it on that merge. Waiting, it holds a slot and polls until its time limit.
 
 An `exited:` line naming `auth` restarts the worker at once with the resume command it names (after
 `usage-limit`: at the reset), one line to the coordinator; a worker that died stays a row in

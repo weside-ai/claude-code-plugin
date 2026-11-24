@@ -1,0 +1,22 @@
+[
+ {
+  "number": 61,
+  "title": "main red",
+  "user": {
+   "login": "acme-bot[bot]"
+  },
+  "created_at": "2026-11-20T10:00:00Z",
+  "updated_at": "2026-11-20T11:58:00Z",
+  "body": "## main is red\n\nOwner lines for people.\n\n<!-- we-event {\"kind\": \"main_red\", \"sha\": \"abc1234000000000000000000000000000000000\", \"run\": 9001, \"failing\": [\"tests/test_a.py::test_one\", \"tests/test_b.py::test_two[x]\"], \"epics\": [\"ACME-3215\"]} -->\n"
+ },
+ {
+  "number": 62,
+  "title": "copy of the marker",
+  "user": {
+   "login": "mallory"
+  },
+  "created_at": "2026-11-20T11:00:00Z",
+  "updated_at": "2026-11-20T11:59:00Z",
+  "body": "## main is red\n\nOwner lines for people.\n\n<!-- we-event {\"kind\": \"main_red\", \"sha\": \"abc1234000000000000000000000000000000000\", \"run\": 9002, \"failing\": [\"tests/test_a.py::test_one\", \"tests/test_b.py::test_two[x]\"], \"epics\": [\"ACME-3215\"]} -->\n"
+ }
+]

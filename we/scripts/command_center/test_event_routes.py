@@ -597,3 +597,58 @@ def test_prod_release_source_refused_by_name(cfg, error):
     with pytest.raises(event_routes.EventsError, match=re.escape(error)):
         event_routes.validate({"sources": {"prod_release": cfg}}, CREW)
     event_routes.validate({"sources": {"prod_release": PROD_OK}}, CREW)
+
+
+# --- epic_master, the PR kinds and the requester ----------------------------------------------
+
+
+def test_epic_master_is_a_target_of_every_crew():
+    block = event_routes.validate(
+        {"routes": {"pr_green": {"to": ["epic_master"]}, "main_red": {"to": ["epic_master"]}}},
+        CREW,
+    )
+    assert event_routes.targets(block, "pr_green") == ["epic_master"]
+    for bad, error in (
+        ({"pulls": {"repos": ["nope"]}}, "events: source repo 'nope' is not owner/name"),
+        ({"pulls": {"repos": ["a/b"], "x": 1}}, "events: sources.pulls has unknown key 'x'"),
+        ({"rc": {"trusted_authors": "bot"}}, "events: sources.rc.trusted_authors must be a list"),
+        ({"rc": {"requested_by_rx": "no group"}}, "events: sources.rc.requested_by_rx must be"),
+    ):
+        with pytest.raises(event_routes.EventsError, match=re.escape(error)):
+            event_routes.validate({"sources": bad}, CREW)
+
+
+def test_dispatch_by(tmp_path):
+    """The run's title names its requester: the line ends `· by <token>`; a token that is no
+    plain word, or no regex, adds nothing."""
+    rx = r"· ([^ ]+)$"
+    srcs = {"rc": {"requested_by_rx": rx}, "dispatch": {"requested_by_rx": rx}}
+    rnd = es.Round(srcs, {}, NOW, root=str(tmp_path), env={"PATH": os.environ["PATH"]})
+    assert rnd.by("rc", {"display_title": "Main loop · Smoketest"}) == {"by": "Smoketest"}
+    assert rnd.by("rc", {"display_title": "Main loop · schedule"}) == {"by": "schedule"}
+    assert rnd.by("rc", {"display_title": "Main loop · $(rm -rf ~)"}) == {}
+    assert rnd.by("queued", {"display_title": "Main loop · Smoketest"}) == {}
+    run = "https://github.com/acme/app/actions/runs/5"
+    green = {
+        "kind": "rc_verdict_green",
+        "fields": {"repo": "acme/app", "tag": "v1.2.3-rc.1", "run_id": 5, "by": "Smoketest"},
+    }
+    assert event_routes.render(green) == f"RC v1.2.3-rc.1 green · run {run} · by Smoketest"
+    sup = {
+        "kind": "dispatch_superseded",
+        "fields": {"repo": "acme/app", "branch": "main", "why": "newer", "run_id": 5, "by": "a b"},
+    }
+    assert event_routes.render(sup) == f"dispatch superseded (main, newer one queued) · run {run}"
+    queued = {
+        "kind": "run_queued_long",
+        "fields": {
+            "repo": "acme/app",
+            "mins": 70,
+            "workflow": "CI",
+            "event": "workflow_dispatch",
+            "branch": "main",
+            "run_id": 5,
+            "by": "Smoketest",
+        },
+    }
+    assert event_routes.render(queued).endswith(" · by Smoketest")

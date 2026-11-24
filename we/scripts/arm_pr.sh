@@ -136,8 +136,9 @@ JQ='.data.repository.pullRequest as $p
      | (.statusCheckRollup.contexts.nodes // [])[]
      | [(if .__typename == "StatusContext" then
            (if .state == "SUCCESS" then "pass" elif (.state == "PENDING" or .state == "EXPECTED") then "pending" else "fail" end)
-         elif .status != "COMPLETED" then "pending"
          elif (.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED") then "pass"
+         elif (.conclusion // "") != "" then "fail"
+         elif .status != "COMPLETED" then "pending"
          else "fail" end),
         (.isRequired | tostring), (.name // .context)] | @tsv)'
 ARM='mutation($id:ID!,$sha:GitObjectID!,$method:PullRequestMergeMethod!){

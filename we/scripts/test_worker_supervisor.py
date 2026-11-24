@@ -299,14 +299,33 @@ def test_a_window_worker_idle_after_its_report_is_stopped(box, repo):
 @pytest.mark.parametrize(
     "block, want",
     [
-        ({}, {"blocked_notify_minutes": 900.0, "idle_stop_minutes": 1800.0}),
         (
-            {"blocked_notify_minutes": 0, "idle_stop_minutes": None},
-            {"blocked_notify_minutes": None, "idle_stop_minutes": None},
+            {},
+            {
+                "blocked_notify_minutes": 900.0,
+                "idle_stop_minutes": 1800.0,
+                "unreported_notify_minutes": 300.0,
+            },
+        ),
+        (
+            {
+                "blocked_notify_minutes": 0,
+                "idle_stop_minutes": None,
+                "unreported_notify_minutes": 0,
+            },
+            {
+                "blocked_notify_minutes": None,
+                "idle_stop_minutes": None,
+                "unreported_notify_minutes": None,
+            },
         ),
         (
             {"blocked_notify_minutes": 5, "idle_stop_minutes": "soon"},
-            {"blocked_notify_minutes": 300.0, "idle_stop_minutes": 1800.0},
+            {
+                "blocked_notify_minutes": 300.0,
+                "idle_stop_minutes": 1800.0,
+                "unreported_notify_minutes": 300.0,
+            },
         ),
     ],
 )
@@ -314,6 +333,62 @@ def test_idle_limits_read_the_workers_block(repo, block, want):
     (repo / ".weside").mkdir(exist_ok=True)
     (repo / ".weside" / "config.json").write_text(json.dumps({"workers": block}))
     assert ws.idle_limits(str(repo)) == want
+
+
+# A worker's end always reaches its starter: a report left as its final text (no SendMessage)
+# reached the master 103 min late.
+
+QUIET = {**ON, "unreported_notify_minutes": 5 * 60.0}
+GO = {"type": "user", "message": {"content": "go"}}
+LAST = {
+    "type": "assistant",
+    "uuid": "u1",
+    "message": {"content": [{"type": "text", "text": "report:\nAC 1 green, PR #7 open"}]},
+}
+SENT = {
+    "type": "assistant",
+    "uuid": "u2",
+    "message": {"content": [{"type": "tool_use", "name": "SendMessage", "input": {"to": "lead"}}]},
+}
+
+
+def test_unreported_idle_line(box, repo):
+    ws.wl.write_marker(repo, name=NAME, starter="lead")
+    _transcript(box["projects"], [GO, LAST])
+    box["run"](LIVE, *_minutes(20, state="idle"), GONE, limits=QUIET, tree=str(repo))
+    lines = [t for t in box["sent"] if "without a report" in t]
+    assert len(lines) == 1, box[
+        "sent"
+    ]  # once per turn, not once per poll, and no end line after it
+    assert lines[0].startswith(f"we-worker: {NAME} idle since ") and lines[0].endswith(
+        " UTC without a report: AC 1 green, PR #7 open"
+    ), lines[0]
+    box["sent"].clear()
+    _transcript(box["projects"], [GO, LAST, SENT])  # the report went out: no line
+    box["run"](LIVE, *_minutes(20, state="idle"), GONE, limits=QUIET, tree=str(repo))
+    assert not [t for t in box["sent"] if "report" in t], box["sent"]
+
+
+def test_plain_exit_line(box, repo):
+    ws.wl.write_marker(repo, name=NAME, starter="lead")
+    _transcript(box["projects"], [GO, LAST])
+    assert (
+        box["run"](LIVE, *_minutes(2, state="working"), GONE, limits=QUIET, tree=str(repo))
+        == "ended"
+    )
+    assert box["sent"] == [f"we-worker: {NAME} ended without a report: AC 1 green, PR #7 open"]
+    box["sent"].clear()
+    (box["state"] / f"{NAME}.settings.json").write_text("{}")
+    _transcript(box["projects"], [GO, LAST, SENT])
+    box["run"](LIVE, GONE, limits=QUIET, tree=str(repo))
+    assert not box["sent"]
+    (box["state"] / f"{NAME}.settings.json").write_text("{}")
+    _transcript(box["projects"], [GO, LAST])
+    box["run"](LIVE, GONE, limits=QUIET, send_ok=False, tree=str(repo))
+    ((iid, title),) = box["items"]
+    assert iid == f"W-{NAME}-end-s1" and title.endswith(
+        "ended without a report: AC 1 green, PR #7 open"
+    )
 
 
 def test_a_session_that_never_shows_up_keeps_its_files(box):
@@ -644,3 +719,33 @@ def test_remove_files_takes_the_brief_and_keeps_the_starter_log(tmp_path):
     gone = ws._remove_files(tmp_path, NAME)
     assert sorted(gone) == sorted([f"{NAME}.settings.json", f"{NAME}.json", f"{NAME}.brief.md"])
     assert [p.name for p in tmp_path.iterdir()] == ["launched.jsonl"]
+
+
+def test_amend_and_prio_never_show_the_waiter_a_half_written_entry(queue, monkeypatch):
+    """Red with a plain `write_text`: the waiter's poll between truncate and write reads no entry
+    and exits as "removed", the queued start lost. The read in the middle of each write is that
+    poll, made deterministic; `prio` also leaves `queued_at` alone, so the waited minutes hold."""
+    t = queue["clock"]()
+    queue["put"]("AC-1-a", t)
+    queue["put"]("AC-2-b", t + 1)
+    entry = queue["state"] / "queue" / "AC-2-b.json"
+    seen = []
+    real = Path.write_text
+
+    def torn(self, data, *args, **kwargs):
+        if self.parent == entry.parent and entry.name in self.name:  # the entry or its temp file
+            real(self, data[: len(data) // 2], *args, **kwargs)
+            seen.append(ws._read(entry))
+        return real(self, data, *args, **kwargs)
+
+    entry.write_text(json.dumps({**ws._read(entry), "brief_file": None}))  # amend rewrites it
+    monkeypatch.setattr(Path, "write_text", torn)
+    ws.amend(queue["state"], "AC-2-b", "## Goal\nnewer\n")
+    assert ws.reorder(queue["state"], "AC-2-b", None) == 1
+    monkeypatch.setattr(Path, "write_text", real)
+    assert len(seen) == 2 and all(doc is not None for doc in seen)
+    assert [d["name"] for d in ws.queued(queue["state"])] == ["AC-2-b", "AC-1-a"]
+    assert ws._read(entry)["queued_at"] == t + 1
+    queue["clock"].sleep(3600)
+    assert queue["wait"]("AC-2-b", [0]) == "started"
+    assert "started after 59 min" in queue["sent"][0]  # queued at t + 1, not at its new place

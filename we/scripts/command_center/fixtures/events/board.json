@@ -1,0 +1,43 @@
+{
+ "sessions": [
+  {
+   "name": "kleinzeug-3215",
+   "role": "master",
+   "epic": "ACME-3215",
+   "keys": [
+    "ACME-3216",
+    "ACME-3217"
+   ],
+   "state": "build",
+   "session_id": "sid-master-1"
+  },
+  {
+   "name": "other-3300",
+   "role": "master",
+   "epic": "ACME-3300",
+   "keys": [
+    "ACME-3301"
+   ],
+   "state": "build",
+   "session_id": "sid-master-2"
+  },
+  {
+   "name": "Owl",
+   "role": "master",
+   "companion": "Owl",
+   "keys": [
+    "ACME-3216"
+   ],
+   "state": "active",
+   "session_id": "sid-owl"
+  },
+  {
+   "name": "ACME-3216-build",
+   "keys": [
+    "ACME-3216"
+   ],
+   "state": "done",
+   "session_id": "sid-worker"
+  }
+ ]
+}

@@ -332,6 +332,29 @@ def test_another_repo_is_denied(world, command):
     assert decision == "deny" and "another repo" in reason
 
 
+def test_a_comment_on_the_keys_pr_in_another_repo_is_allowed(world):
+    """Red arm: a two-repo story's worker could not answer the reviews on its PR in the other
+    repo ("another repo"); the master posted each reply for it."""
+    decision, reason = hook(world, "gh pr comment 7 -R acme/other --body x")
+    assert decision == "allow", reason
+    decision, reason = hook(world, "gh pr comment 8 -R acme/other --body x")
+    assert decision == "deny" and "does not carry the key ABC-12" in reason
+
+
+@pytest.mark.parametrize("owner", ["master", "worker"])
+def test_a_disarm_in_a_chain_is_no_never_item(world, owner):
+    """Red arm: a fix round's `cd <tree> && … --disable-auto` was "never for a worker", so every
+    fix round cost the master a disarm relay."""
+    assert wr.never("cd . && gh pr merge 7 --disable-auto", str(world["repo"]), {}, owner) is None
+    for command in (
+        "cd . && gh pr merge 7 --disable-auto --squash",
+        "cd . && gh pr merge 7 --disable-auto && bash -c 'gh pr merge 7 --squash'",
+    ):
+        assert wr.never(command, str(world["repo"]), {}, owner) == (
+            "merge (gh pr merge only as a command of its own)"
+        ), command
+
+
 def test_the_default_branch_is_denied(world):
     _git(world["repo"], "checkout", "-q", "main")
     decision, reason = hook(world, "gh pr ready")

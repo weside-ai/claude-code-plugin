@@ -1321,3 +1321,65 @@ def test_a_failed_draft_run_replaced_by_an_open_run_prints_no_failure(tmp_path):
         tmp_path, [d, d, ready], runs=[[draft, queued], [draft, queued], [draft, done]]
     )
     assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+
+
+# A set conclusion wins over a stale status: a live head whose runs had all completed while one
+# check run still said IN_PROGRESS beside conclusion SUCCESS kept the watcher pending until its
+# lifetime cap (`gave up`), and re-read the failed logs on every tick.
+
+STALE = json.loads((HERE / "fixtures" / "watch" / "stale-status-rollup.json").read_text())
+STALE_RUNS = [
+    {
+        "databaseId": r,
+        "attempt": 1,
+        "status": "completed",
+        "conclusion": c,
+        "workflowName": w,
+        "event": "pull_request",
+        "createdAt": "2026-11-24T11:00:00Z",
+    }
+    for r, c, w in (
+        (101, "failure", "Review: Claude"),
+        (102, "success", "CI"),
+        (103, "success", "Wire release"),
+    )
+]
+
+
+def test_conclusion_wins_over_stale_status(tmp_path):
+    sha = STALE["headRefOid"]
+    code, out = run(
+        tmp_path,
+        [STALE],
+        "--sha",
+        sha[:7],
+        runs=(STALE_RUNS,),
+        env_extra={"WATCH_MAX_LIFETIME": "3"},
+    )
+    assert code == 1, out
+    assert (
+        out[-1] == f"final {sha}: red · failed: Claude Review (Analyze), Claude Review · {MERGE}"
+    )
+    assert not any(line.startswith("gave up") for line in out)
+    views = [
+        c
+        for c in (tmp_path / "calls.log").read_text().splitlines()
+        if "| pr view 57" in c and "comments" not in c
+    ]
+    assert len(views) <= 3, views  # within two intervals: three reads, two ticks between them
+
+
+def test_failed_log_once_per_run(tmp_path):
+    code, out = run(
+        tmp_path,
+        [STALE],
+        runs=(STALE_RUNS,),
+        quiet="1",
+        env_extra={
+            "WATCH_MAX_LIFETIME": "5",
+            "GH_LOG_FAILED": "##[error]Process completed with exit code 1.",
+        },
+    )
+    assert code == 1, out
+    reads = [c for c in (tmp_path / "calls.log").read_text().splitlines() if "--log-failed" in c]
+    assert len(reads) == 1, reads
