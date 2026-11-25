@@ -889,6 +889,9 @@ def test_extensions_reads_open_and_decided_entries():
     ]
     assert ready_gate.line_keys(ready_gate.frontmatter(text)) == ["PROJ-12", "PROJ-13"]
     assert ready_gate.line_keys({}) is None
+    # a trailing comment kept the brackets on the first and last key
+    commented = {"line": "[PROJ-1, PROJ-2, PROJ-3]  # a note"}
+    assert ready_gate.line_keys(commented) == ["PROJ-1", "PROJ-2", "PROJ-3"]
 
 
 # --- the short form: a defect at one place ----------------------------------------------------

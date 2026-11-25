@@ -22,7 +22,7 @@ improves one epic and never decomposes it; it hands off by printing the next ver
   optional `select: owner` (the epic's owner reads every story before Selected, § Finish line).
 - A Story's `epic:` is the Epic's ticket key, or the Epic file stem without ticketing. Readers match
   a Story to an Epic on either value (file stem, `epic:` or `ticket:` of the Epic plan).
-- Frontmatter lines are bare `key: value`: the parsers (`ready_gate.py`, `epic_state.py`) keep a trailing `# comment` in the value.
+- Frontmatter lines are bare `key: value`: the parsers (`ready_gate.py`, `epic_state.py`) keep a trailing `# comment` in the value, except `line:`, whose keys end at a `#` comment after a space.
 - A Story named only in an Epic's `## Sequencing` has no key: `/we:master <epic>` rosters it only
   after it has a ticket or a plan.
 - Readers below the Epic (`/we:plan-story`, `/we:master`) read the Epic's success section and

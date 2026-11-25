@@ -1048,10 +1048,12 @@ def risk_globs(rules: str) -> list[tuple[str, re.Pattern[str]]]:
 
 
 def line_keys(meta: dict[str, str]) -> list[str] | None:
-    """The finish line's story keys, None when the epic plan has no ``line:`` yet."""
+    """The finish line's story keys, None when the epic plan has no ``line:`` yet; the keys end
+    at a `` #`` comment (``frontmatter`` keeps it in the value). Every reader of the line calls
+    this: the epic gate, ``board.py``'s finish-line checks and ``epic_state.finish_line``."""
     if "line" not in meta:
         return None
-    return inline_list(meta["line"])
+    return inline_list(meta["line"].split(" #", 1)[0])
 
 
 def extensions(text: str) -> list[tuple[bool, str]]:
