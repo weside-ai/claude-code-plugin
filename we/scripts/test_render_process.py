@@ -23,7 +23,7 @@ INBOX = (
     "**The board is Hal's only inbox:** the push line, the bundle and an escalation each point at "
     "a board item."
 )
-ONE_WAY = "A one-way PR merges\n  on Hal's board yes: the master asks it on the board"
+ONE_WAY = "A one-way PR merges\n  on Hal's board yes: the master asks it on the board (`board.py ask --cause merge-go"
 
 
 @pytest.fixture(autouse=True)
@@ -163,7 +163,7 @@ WORKER_ENDS = (
     "  the worker watches to green, its starter to the merge or its event line."
 )
 REARM = (
-    "4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4"
+    "2. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4"
     " for every open PR you own.\n"
 )
 

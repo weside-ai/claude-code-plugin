@@ -20,8 +20,7 @@ Invocation: `/we:resume` (this session) · `--broadcast` (every running session 
    tree with a checkpoint (**Checkpoint** in `references/worker-dispatch.md`): the parked work is on
    `wip/<branch without its type prefix>` and in the worktree's last commit):
    - stopped mid-task → `SendMessage(to=<name>, "continue where you stopped")`;
-   - already reported → shut it down and verify it is gone (`TaskStop`, or no process under
-     `/proc`).
+   - already reported → `we-worker stop <name>` (a subagent or teammate: `TaskStop`).
 3. **Waits.** Re-arm the monitors and background waits the stop killed: the CI watch on each open PR
    (`${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr-checks.sh <PR>` as a background command, `--until-merged` for an armed PR; an
    event-routed master re-arms none and reads each PR's state once with `gh pr view <PR>`, the lines carry the rest:
