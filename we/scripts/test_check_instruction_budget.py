@@ -326,6 +326,41 @@ class GateTest(unittest.TestCase):
             ],
         )
 
+    def test_totals_report_only(self):
+        self.write(".claude/rules/always.md", lines(3))
+        self.write(".claude/rules/scoped.md", '---\npaths:\n  - "src/**"\n---\n' + lines(2))
+        self.write(".weside/roles/ada.md", lines(4))
+        self.write(".weside/roles/ada/notes.md", lines(5))
+        self.write("skills/do/SKILL.md", "---\nname: do\ndescription: Does it.\n---\n" + lines(6))
+        self.write("docs/CLAUDE.md", lines(2))
+        code, out = self.run_gate()
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root), "--totals"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, code, result.stdout)
+        report = result.stdout.splitlines()
+        # rules 3 + 6, role files 4 + 5, skill 10, AGENTS.md 3 + docs/CLAUDE.md 2
+        self.assertEqual(
+            report[:2],
+            [
+                "totals (lines): rules 9 (always-on 3, path-scoped 6) · role files 9 · skills 10"
+                " · instruction files 5 · all 33",
+                "role sums: no crew",
+            ],
+        )
+        self.assertEqual(report[2:], out.splitlines())  # the findings as without the flag
+        refused = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(self.root), "--totals", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(refused.stdout, "")
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -540,6 +575,31 @@ class ProcessRenderTest(unittest.TestCase):
         code, out = self.gate()
         self.assertEqual(code, 1, out)
         self.assertIn("✗ .weside/roles/ada.md: 3501 chars > 3500 [card-size]", out)
+
+    def test_totals_role_sum(self):
+        """A crew session's line: card and addendum as ``card_parts`` gives them, plus the files in
+        the folder beside the addendum."""
+        self.save()
+        roles = self.root / ".weside" / "roles"
+        roles.mkdir()
+        (roles / "ada.md").write_text(lines(4), encoding="utf-8")
+        (roles / "ada").mkdir()
+        (roles / "ada" / "notes.md").write_text(lines(5), encoding="utf-8")
+        (roles / "ada" / "deep").mkdir()
+        (roles / "ada" / "deep" / "more.md").write_text(lines(2), encoding="utf-8")
+        path = self.root / ".weside" / "crew.json"
+        card = len(
+            render_process.card_parts(
+                path, crewlib.load(path), "product", "ada", run_hooks=False
+            ).card.splitlines()
+        )
+        code, _ = self.gate()
+        code_totals, report = self.gate("--totals")
+        self.assertEqual(code_totals, code, report)
+        self.assertIn(
+            f"role product Ada: {card + 11} (card {card} + addendum 4 + files 7)", report
+        )
+        self.assertRegex(report, r"role hr Hana: \d+ \(card \d+ \+ addendum 0 \+ files 0\)")
 
 
 class RoleCardTest(unittest.TestCase):
