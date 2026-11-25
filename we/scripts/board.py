@@ -33,7 +33,7 @@ Usage:
   board.py [--board FILE] claim <KEY> [--release] [--input FILE]
   board.py [--board FILE] inbox [--input FILE]
   board.py [--board FILE] reply <KEY> <accept|deny|followup|update> [--text T]
-  board.py [--board FILE] show <Q>
+  board.py [--board FILE] show <Q> [<Q>…] [--line]
   board.py [--board FILE] withdraw <Q> [--for <Q2>] [--reason T]
   board.py [--board FILE] supersede <Q> --by <Q2> [--reason T]
   board.py [--board FILE] move <KEY> <on_hold|backlog|in_progress|in_review|in_test|done>
@@ -48,7 +48,9 @@ show     prints one question as JSON: the open `owner_queue` item (else its `pos
          or Withdraw, `withdrawn`/`superseded`, `open`, else `closed`/`replaced`/`pruned` or
          `off the board`: `question_status`, the one definition of open). The answer a pane
          click wrote lives only in the answers file, never in board.json: read it here before
-         repeating another session's question to the owner. Read-only; exit 1 for an unknown id.
+         repeating another session's question to the owner. `--line` (implied by several ids)
+         prints one `<id> <status> <when> (<reason>) · <key> · <ask>` line per id to paste.
+         Read-only; exit 1 for an unknown id.
 answer   writes back an answer the owner gave in a session's chat: one line in
          board-answers.jsonl beside the board file, which the deliverer in the orchestrator's
          session then carries like a press of the /board pane. It refuses an id that is in neither
@@ -59,7 +61,8 @@ answer   writes back an answer the owner gave in a session's chat: one line in
          on a one-way question with a Codex finding posts the go comment (docs/board.md § Answers
          given in a chat); a failed post exits 3, and the same Accept again posts it.
 set      writes the caller's own session line (found by `name` through `claude agents --json`
-         and CLAUDE_CODE_SESSION_ID; appended with `name` and `session_id` when absent). `--for`
+         and CLAUDE_CODE_SESSION_ID; appended with `name` and `session_id` when absent; its `cwd`
+         follows the session's; `_session_line` keeps one line per session). `--for`
          writes another line and is the coordinator's. `waiting_on=<role>` stamps `since` and
          `sla_due` (the crew's `sla`, counted in daytime hours); the same role keeps them, another
          resets them, `waiting_on=` ends a wait and clears all three. `state` and `now` never touch
@@ -775,14 +778,13 @@ def load_crew(start=None):
     return defaults
 
 
-def own_session_name(env=None, verb="set"):
-    """(name, session id) of the calling session as `claude agents --json` lists it."""
+def own_session_name(env=None, verb="set", rows=None):
+    """(name, session id) of the calling session as `claude agents --json` lists it; `rows` is that
+    listing when the caller already read it."""
     env = os.environ if env is None else env
     session_id = env.get("CLAUDE_CODE_SESSION_ID") or None
-    try:
-        rows = wl.sessions()
-    except wl.LaunchError as exc:
-        raise BoardError(f"board.py {verb}: {exc}") from None
+    if rows is None:
+        rows = _agent_rows(verb)
     try:
         return wl.lead_address(rows, session_id), session_id
     except wl.LaunchError:
@@ -1015,10 +1017,14 @@ def cmd_set(state, args, crew, now):
         )
     if failures:
         raise BoardError("\n".join(failures))
+    rows, own_cwd = [], None
     if args.for_ is not None:
         name, session_id = args.for_, None
     else:
-        name, session_id = own_session_name()
+        rows = _agent_rows("set")
+        name, session_id = own_session_name(rows=rows)
+        own = next((r for r in rows if r.get("sessionId") == session_id), {})
+        own_cwd = str(own.get("cwd") or os.getcwd())  # a restart in another repo moves the line
         if args.session is not None and args.session != name:
             raise BoardError(
                 f"board.py set: --session {args.session}: set writes this session's own line, "
@@ -1028,7 +1034,9 @@ def cmd_set(state, args, crew, now):
     ended = []
 
     def mutate(board):
-        line = _session_line(board, name, session_id)
+        line = _session_line(board, name, session_id, rows)
+        if own_cwd and line.get("session_id") == session_id:
+            line["cwd"] = own_cwd
         if "waiting_on" in fields:
             ended.append(_apply_wait(line, fields["waiting_on"], crew, now))
             # the session set its own wait: a `blocked` mark of the old wait is over
@@ -1052,15 +1060,32 @@ def cmd_set(state, args, crew, now):
     return 0
 
 
-def _session_line(board, name, session_id):
+def _session_line(board, name, session_id, rows=(), verb="set"):
     """The board line named `name` (it takes the caller's `session_id`, new after /clear or a
-    resume), else the one with `session_id` (a renamed session: it takes the new name, so one
-    session keeps one line), else a new line with both."""
+    resume, unless `rows` of `claude agents --json` list its id under this name with a living
+    process (`claude agents` keeps a dead worker's row, so liveness is `_pid_lives`): then two
+    sessions share the name, the line keeps its id and stderr says so), else the one with
+    `session_id` (a renamed session: it takes the new name), else a new line with both. Any other
+    line with the line's `session_id` folds into it (its fields only where the line has none), so
+    one session keeps one line."""
     sessions = board.setdefault("sessions", [])
     lines = [s for s in sessions if isinstance(s, dict)]
     line = next((s for s in lines if s.get("name") == name), None)
-    if line is not None and session_id:
-        line["session_id"] = session_id  # a new id after /clear or a resume keeps the line
+    held = (line or {}).get("session_id")
+    if line is not None and session_id and held != session_id:
+        if held and any(
+            r.get("sessionId") == held
+            and r.get("name") == name
+            and wl._pid_lives(r.get("pid", "-"))
+            for r in rows
+        ):
+            print(
+                f"board.py {verb}: {name} is also live as session {held[:8]}; the line keeps it"
+                " — /rename this session",
+                file=sys.stderr,
+            )
+        else:
+            line["session_id"] = session_id  # a new id after /clear or a resume keeps the line
     if line is None and session_id:
         line = next((s for s in lines if s.get("session_id") == session_id), None)
         if line is not None:
@@ -1070,6 +1095,11 @@ def _session_line(board, name, session_id):
         if session_id:
             line["session_id"] = session_id
         sessions.append(line)
+    for other in [s for s in lines if s is not line and s.get("session_id")]:
+        if other["session_id"] == line.get("session_id"):
+            for key, value in other.items():
+                line.setdefault(key, value)
+            sessions.remove(other)
     return line
 
 
@@ -1108,11 +1138,11 @@ def cmd_log(state, args, crew, now):
     return 0
 
 
-def _agent_rows():
+def _agent_rows(verb="blocked"):
     try:
         return wl.sessions()
     except wl.LaunchError as exc:
-        raise BoardError(f"board.py blocked: {exc}") from None
+        raise BoardError(f"board.py {verb}: {exc}") from None
 
 
 def _row_named(rows, name):
@@ -1181,7 +1211,7 @@ def cmd_blocked(state, args, crew, now):
     ended = []
 
     def mutate(board):
-        line = _session_line(board, args.name, row.get("sessionId"))
+        line = _session_line(board, args.name, row.get("sessionId"), rows, "blocked")
         old = line.get("blocked") if isinstance(line.get("blocked"), dict) else None
         blocked = dict(fresh)
         if old and old.get("kind") == args.kind and old.get("since"):
@@ -1376,10 +1406,43 @@ def question_status(state, qid, board=None, logs=None):
     return status, item, lines, answers
 
 
+def _status_line(state, qid, board, logs):
+    """`<id> <status> <when> (<reason>) · <key> · <ask's first line>`, or `<id> unknown`."""
+    status, item, lines, answers = question_status(state, qid, board, logs)
+    if status is None:
+        return None
+    closing = [a for a in answers if a.get("answer") in CLOSING]
+    took = [q for q in lines if q.get("outcome") in GONE or q.get("outcome") in OFF_BOARD]
+    if closing:
+        why = closing[0]
+    elif status == "open":
+        why = {"ts": item.get("since")}
+    else:
+        why = (took or [{}])[-1]
+    posted = next((q for q in lines if q.get("outcome") == "posted"), None) or {}
+    question = item or posted
+    ask = str(question.get("ask") or "").strip().splitlines()
+    reason = f" ({why['reason']})" if why.get("reason") else ""
+    return (
+        f"{qid} {status} {why.get('ts') or '-'}{reason} · {question.get('key') or '-'}"
+        f" · {(ask[0] if ask else '')[:80]}"
+    )
+
+
 def cmd_show(state, args, _crew, _now):
     """One question as every session sees it: the open item (or its posted line), its answers
-    from the answers file and its status (`question_status`); exit 1 for an id the board never had."""
-    qid = args.id
+    from the answers file and its status (`question_status`); exit 1 for an id the board never had.
+    With `--line`, or more than one id, one status line per id (`_status_line`) to paste when a
+    question is passed on; exit 1 when any id is unknown."""
+    if args.line or len(args.id) > 1:
+        board, logs = state.board(), (state.questions(), state.answers())
+        unknown = 0
+        for qid in args.id:
+            text = _status_line(state, qid, board, logs)
+            unknown += text is None
+            print(text or f"{qid} unknown")
+        return 1 if unknown else 0
+    qid = args.id[0]
     status, item, lines, answers = question_status(state, qid)
     if status is None:
         # a session's own board line: `show <session>` is what a restarted master tries first
@@ -4387,7 +4450,12 @@ def _add_read_verbs(verbs):
     sh = verbs.add_parser(
         "show", help="one question with its answers and status, or a session's line (read-only)"
     )
-    sh.add_argument("id", help="a question id, or a session name for its board line")
+    sh.add_argument(
+        "id", nargs="+", help="a question id, or a session name for its board line; several ids"
+    )
+    sh.add_argument(
+        "--line", action="store_true", help="one status line per id (implied by several ids)"
+    )
     sh.set_defaults(run=cmd_show)
     pa = verbs.add_parser("path", help="print the board file a verb without --board writes")
     pa.add_argument("--crew-only", action="store_true", help="only the crew's board.file")

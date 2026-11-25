@@ -394,6 +394,13 @@ def addendum_path(crew_path: Path, crew: dict[str, Any], role: str, slug: str) -
     return crew_path.parent.parent.resolve() / ".weside" / "roles" / f"{role}.md"
 
 
+def named_files(addendum: Path) -> list[Path]:
+    """The files in the folder beside an addendum (``.weside/roles/<slug>/``): the working notes
+    name them, and the session reads each when its step comes up."""
+    folder = addendum.with_suffix("")
+    return sorted(p for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else []
+
+
 def agents_head(repo: Path) -> str | None:
     """``repo/AGENTS.md`` up to its first level-2 heading, or None."""
     path = repo / "AGENTS.md"
@@ -853,6 +860,32 @@ def total_rows(
         total = sum(n for _, _, n in rows)
         rows += [("rules-any-file", str(p), _chars(p)) for p in any_file]
         out.append(Total(label, slug, rows, total))
+    return out
+
+
+def role_lines(
+    crew_path: Path, crew: dict[str, Any], role: str, absent: list[str] | None = None
+) -> list[tuple[str, int, int, int]]:
+    """Per session of ``role`` (sessions and ``absent`` as in ``total_rows``): (label, card lines,
+    addendum lines, lines of its ``named_files``), the card and addendum as ``card_parts`` gives
+    them; ``check-instruction-budget.py --totals`` prints it."""
+    out = []
+    for label, _, slug in _sessions(crew_path, crew, role):
+        if not _places(crew_path, crew, slug, label, absent):
+            continue
+        parts = card_parts(crew_path, crew, role, slug, run_hooks=False)
+        files = named_files(addendum_path(crew_path, crew, role, slug))
+        out.append(
+            (
+                label,
+                len(parts.card.splitlines()),
+                len(parts.addendum[1].splitlines()) if parts.addendum else 0,
+                sum(
+                    len(p.read_text(encoding="utf-8", errors="replace").splitlines())
+                    for p in files
+                ),
+            )
+        )
     return out
 
 

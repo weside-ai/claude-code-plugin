@@ -2,7 +2,7 @@
 """Close the optimization inbox entries that settled themselves: the first step of `/we:optimize`.
 
 Usage: optimization_close.py [--store <dir>] [--config <file>] [--prs-json <file>] [--today YYYY-MM-DD]
-                             [--expire-all-before YYYY-MM-DD]
+                             [--expire-all-before YYYY-MM-DD] [--plugin-prs-json <file>]
 
 For every open entry in `<store>/inbox/` (default `.weside/optimization`; format:
 `references/optimization-store.md` § Inbox entry), in this order:
@@ -28,6 +28,21 @@ key. The caller commits all of it with the rest of the run. Merged PRs come from
 from `--prs-json` (the same JSON). Prints one line per closed entry (`applied <key> · <url>`,
 `expired <key> · <n> days, <m> evidence line(s)`) and a final `closed <a> applied, <e> expired,
 <o> open`. Exit 0; 2 when the store, the config or the PR list cannot be read.
+
+Then the `LEDGER.md` rows whose `decision` is `upstream` (a finding handed to the plugin's
+maintainers). None → nothing more is read or printed. Otherwise the plugin's merged PRs come from one
+`gh pr list -R <owner/name> --state merged --search "merged:>=<oldest upstream date>" --limit 500`
+(the repository from `plugin.json` beside this script), cached in
+`~/.cache/we/plugin-prs/<owner>-<name>.json` and reused while it was fetched today and covers the
+oldest row date (at most one search a day); `--plugin-prs-json` replaces search and cache. Per row,
+the newest PR merged on or after the row's date whose title or body names its key decides by the
+first line naming it: the whole word `rejected` → `rejected`, `deferred` → stays `upstream`, else
+`applied` (`change` the PR, `review_by` merge date plus `review_days`). A row with no such PR (a
+`deferred` one included) whose date is `review_days` or more old → `expired`. The row is rewritten
+in place, its evidence gains the PR or the age. Prints one line per closed row (`upstream applied
+<key> · <url>`, `upstream rejected <key> · <url>`, `upstream expired <key> · <n> days`) after the
+`closed …` line, then `upstream: <a> applied, <r> rejected, <e> expired, <o> open`. A failed search
+or an unreadable `plugin.json` prints `upstream: not checked (<reason>)` and keeps exit 0.
 """
 
 from __future__ import annotations
@@ -48,6 +63,8 @@ EXPIRE_DAYS = 14
 REVIEW_DAYS = 30
 EXPIRED = "expired"  # the inbox subfolder of expired entries; retro_write.py revives from it
 _NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})-(.+)\.md$")
+_CELL_SPLIT = re.compile(r"(?<!\\)\|")
+_REPO = re.compile(r"github\.com[/:]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
 _FIELD = re.compile(r"^(?P<k>[a-z_]+):\s*(?P<v>.*?)\s*(?:#.*)?$")
 
 
@@ -239,6 +256,152 @@ def close(
     return out
 
 
+def _cells(line: str) -> list[str] | None:
+    """The raw cells of a ledger table row (escapes kept), or None for any other line."""
+    if not line.startswith("|") or re.match(r"^\|(\s*:?-+:?\s*\|)+\s*$", line):
+        return None
+    parts = _CELL_SPLIT.split(line.rstrip("\n"))
+    cells = [c.strip() for c in parts[1:-1]]
+    return cells if len(cells) == 9 else None
+
+
+def _date(text: str) -> datetime.date | None:
+    try:
+        return datetime.date.fromisoformat(str(text)[:10])
+    except ValueError:
+        return None
+
+
+def plugin_prs(since: datetime.date, today: datetime.date, prs_json: Path | None) -> list[dict]:
+    """The plugin repository's merged PRs since `since`: one search a day, cached."""
+    if prs_json is not None:
+        prs = json.loads(prs_json.read_text())
+    else:
+        manifest = Path(__file__).resolve().parents[1] / ".claude-plugin" / "plugin.json"
+        found = _REPO.search(str(json.loads(manifest.read_text()).get("repository") or ""))
+        if not found:
+            raise ValueError("plugin.json names no GitHub repository")
+        owner, name = found.groups()
+        cache = Path.home() / ".cache" / "we" / "plugin-prs" / f"{owner}-{name}.json"
+        try:
+            cached = json.loads(cache.read_text())
+            if (
+                cached.get("fetched") == today.isoformat()
+                and str(cached.get("since")) <= since.isoformat()
+            ):
+                return [p for p in cached.get("prs") or [] if isinstance(p, dict)]
+        except (OSError, json.JSONDecodeError, AttributeError):
+            pass  # absent or corrupt: search again
+        prs = json.loads(
+            subprocess.run(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "-R",
+                    f"{owner}/{name}",
+                    "--state",
+                    "merged",
+                    "--search",
+                    f"merged:>={since.isoformat()}",
+                    "--limit",
+                    "500",
+                    "--json",
+                    "number,title,body,url,mergedAt",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=True,
+            ).stdout
+        )
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(
+            json.dumps({"fetched": today.isoformat(), "since": since.isoformat(), "prs": prs})
+        )
+    if not isinstance(prs, list):
+        raise ValueError("plugin PRs: not a JSON list")
+    return [p for p in prs if isinstance(p, dict)]
+
+
+def _verdict(pr: dict, key: str) -> str:
+    """`rejected`, `deferred` or `applied`: the first line of title or body that names the key."""
+    for line in f"{pr.get('title') or ''}\n{pr.get('body') or ''}".splitlines():
+        if names_key(key, line):
+            for word in ("rejected", "deferred"):
+                if re.search(rf"\b{word}\b", line, re.IGNORECASE):
+                    return word
+            return "applied"
+    return "applied"
+
+
+def close_upstream(
+    ledger: Path, today: datetime.date, review_days: int, prs_json: Path | None
+) -> list[str]:
+    """Close the ledger's `upstream` rows by the plugin's merged PRs; [] when there is none."""
+    if not ledger.exists():
+        return []
+    lines = ledger.read_text().splitlines(keepends=True)
+    rows = [
+        (i, cells)
+        for i, cells in ((i, _cells(line)) for i, line in enumerate(lines))
+        if cells and cells[3] == "upstream" and _date(cells[0])
+    ]
+    if not rows:
+        return []
+    since = min(_date(cells[0]) for _, cells in rows)
+    try:
+        prs = plugin_prs(since, today, prs_json)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError) as exc:
+        return [
+            f"upstream: not checked ({str(exc).splitlines()[0] if str(exc) else type(exc).__name__})"
+        ]
+    prs = sorted(prs, key=lambda p: str(p.get("mergedAt") or ""), reverse=True)
+    out, counts = [], {"applied": 0, "rejected": 0, "expired": 0, "open": 0}
+    for i, cells in rows:
+        key, born = cells[1].replace("\\|", "|"), _date(cells[0])
+        pr = next(
+            (
+                p
+                for p in prs
+                if (_date(p.get("mergedAt") or "") or born) >= born
+                and names_key(key, f"{p.get('title') or ''}\n{p.get('body') or ''}")
+            ),
+            None,
+        )
+        verdict = _verdict(pr, key) if pr is not None else None
+        age = (today - born).days
+        if verdict in ("applied", "rejected"):
+            url = pr.get("url") or f"#{pr.get('number')}"
+            merged = _date(pr.get("mergedAt") or "") or today
+            cells[3] = verdict
+            cells[4] += f"; plugin PR {cell(url)}"
+            cells[7] = (
+                (merged + datetime.timedelta(days=review_days)).isoformat()
+                if verdict == "applied"
+                else "—"
+            )
+            cells[8] = cell(url)
+            out.append(f"upstream {verdict} {key} · {url}")
+        elif age >= review_days:
+            verdict = "expired"
+            cells[3] = verdict
+            cells[4] += f"; no plugin PR in {age} days"
+            cells[7] = cells[8] = "—"
+            out.append(f"upstream expired {key} · {age} days")
+        else:
+            counts["open"] += 1
+            continue
+        counts[verdict] += 1
+        lines[i] = "| " + " | ".join(cells) + " |\n"
+    ledger.write_text("".join(lines))
+    out.append(
+        f"upstream: {counts['applied']} applied, {counts['rejected']} rejected,"
+        f" {counts['expired']} expired, {counts['open']} open"
+    )
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--store", type=Path, default=Path(".weside/optimization"))
@@ -246,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prs-json", type=Path)
     parser.add_argument("--today")
     parser.add_argument("--expire-all-before", metavar="YYYY-MM-DD")
+    parser.add_argument("--plugin-prs-json", type=Path)
     args = parser.parse_args(argv)
     try:
         today = (
@@ -262,6 +426,10 @@ def main(argv: list[str] | None = None) -> int:
             datetime.date.fromisoformat(args.expire_all_before) if args.expire_all_before else None
         )
         for line in close(args.store, prs, today, expire_days, review_days, before):
+            print(line)
+        for line in close_upstream(
+            args.store / "LEDGER.md", today, review_days, args.plugin_prs_json
+        ):
             print(line)
     except (CloseError, ValueError, OSError) as exc:
         print(f"optimization_close: {exc}", file=sys.stderr)

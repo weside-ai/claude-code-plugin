@@ -18,8 +18,8 @@ Wanted stop: the `check` lines. Every other status note goes with the next tool 
 /we:lens samples [--keeper SLUG]  the sampled green verdicts a keeper has not read
 ```
 
-`LV` below is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lens_verdict.py"`, run from the repo the plan or PR belongs to.
-Scratch files go to the session's scratchpad directory (`$S`).
+`LV` below is `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/lens_verdict.py"`, run from the repo the plan or PR belongs to. Scratch
+files go to the session's scratchpad `$S`; a new round on a panel id first removes `$S/lens-<id>-*.txt`, so § 3 records no old answer.
 
 ## 1. Start the panel
 

@@ -239,12 +239,12 @@ after it, names a long-`blocked` worker to its starter, names one whose turn or 
 without its report, and stops an idle one whose report is in (`workers.blocked_notify_minutes`,
 `workers.unreported_notify_minutes`, `workers.idle_stop_minutes`; its docstring owns the rules); `we-worker close <KEY>` is the one closing step after a merge (In Review, teardown, the
 epic's log line; `scripts/worker_close.py`, whose docstring owns its holds: a living or queued
-worker on the key, no story plan on the default branch). `we-worker gc` removes what dead sessions left (`scripts/worker_supervisor.py`, its
-docstring owns both, and the one end reason `we-worker status` prints). `we-worker stop` prints the
-stopped worker's full session id and its resume command; a follow-up brief resumes it with
-`we-worker <name> --bg --resume <name>`, which finds the session through its kept
-`<name>.resume.json` (7 days) after `claude agents` dropped it; `--resume <prefix>` takes a unique
-prefix of the session id (at least four hex digits) and names the candidates when it is ambiguous.
+worker on the key, no story plan, an unbuilt phase). `we-worker gc` removes what dead sessions left
+(`scripts/worker_supervisor.py`'s docstring owns both and the end reason `we-worker status` prints).
+`we-worker stop` prints the worker's session id and resume command: `we-worker <name> --bg --resume
+<name>` (its kept `<name>.resume.json`, 7 days) or `--resume <id prefix>`. Copy a stopped tree's
+untracked files (`git -C <tree> status -s`) to the scratchpad before removing it; a reversed stop
+recreates the tree at its path, copies them back and resumes with a steer naming the new scope.
 
 With a template, the Lead:
 

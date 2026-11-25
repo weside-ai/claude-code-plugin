@@ -28,8 +28,6 @@ runs on a broadcast's brief, § Broadcast).
 - The plugin's own checkout (`origin` matches `repository` in `plugin.json`): print the findings, write nothing.
 - `--auto` and `--collect`: the staging dir, store reference § Staging.
 
-A manual single retro (no `--auto`, `--collect`, `--broadcast`) commits its entries itself (§ Write step 2).
-
 ## Auto mode
 
 `/we:master` and `/we:merged` each decide by their own criteria whether a cycle earns a retro,
@@ -46,24 +44,28 @@ then dispatch it here the same way:
 ## Broadcast
 
 One retro across every running session, decided in one PR instead of one per session. Recipients,
-the caller's own part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.md`.
+the caller's own part and tracking: `${CLAUDE_PLUGIN_ROOT}/references/broadcast.md`. Without a
+focus at most once a week: when the charter's `last_broadcast:` on the default branch is under
+seven days old, ask the caller once for a focus before the briefs; none given → say in one line
+that no broadcast goes out, and stop.
 
 1. **Brief.** Each recipient gets: "Run `/we:retro --collect` on your own session, focus:
-   <focus>. Reply to <orchestrator's name> with one line `RETRO · <your name> · <n> entries:
+   <focus>. At most two entries, the most important first; `nothing` is the expected answer.
+   Reply to <orchestrator's name> with one line `RETRO · <your name> · <a> add, <r> remove:
    <keys>` or `RETRO · <your name> · nothing`. On the critical path, finish your current step
-   first." Without a focus the brief asks for lived
-   practice that beats the documented one and would be lost on a restart; no complaints, no
-   one-off incidents, nothing a rule already says.
+   first." Without a focus the brief asks two questions of equal rank: what did you load, follow
+   or wait on this cycle that did not help, and what would you delete; which lived practice beats
+   the documented one and would be lost on a restart. No one-off incidents, nothing a rule says.
 2. **Own retro.** Run `--collect` on your own session with the same focus; your `RETRO · …` line is
    a row like the others.
 3. **Decide.** In one worktree off fresh `origin/<default>`: move the staging dir's entries into
-   `inbox/` (the move empties staging), run `/we:optimize` there, commit one PR. Right before the
-   commit, read staging again: a receiver that appended an evidence line after the move found
-   no file and staged a new one under the same key. Fold each such file's evidence lines into the
-   worktree's entry of that key, then remove it from staging.
+   `inbox/` (the move empties staging), run `/we:optimize` there, set the charter's
+   `last_broadcast:` to today, commit one PR. Right before the commit, read staging again: a
+   receiver that appended an evidence line after the move found no file and staged a new one under
+   the same key: fold its evidence lines into that key's worktree entry, then remove it from staging.
 
-`--collect` (the receiver): Gather and Findings on its own session, scoped to the focus. Write
-only to the staging dir, deduplicated by key against staging and the main checkout's `inbox/`
+`--collect` (the receiver): Gather and Findings on its own session, scoped to the focus, at most
+two entries. Write only to the staging dir, deduplicated by key against staging and the main checkout's `inbox/`
 (§ Write step 1); no commit, no branch, no PR. Close with exactly the one `RETRO · …` line, sent
 by `SendMessage` to the orchestrator (the orchestrator's own run keeps it as its row).
 
@@ -72,8 +74,9 @@ by `SendMessage` to the orchestrator (the orchestrator's own run keeps it as its
 - The transcript: in context, or `~/.claude/projects/<repo-id>/<session>.jsonl` (after a compaction,
   or the `--session` id), scoped to this cycle. Look for user corrections, nudges ("go on"), stops
   that announced instead of acting, avoidable questions, loops on one problem, false "green" reports,
-  expensive tool calls (one output over ~10k tokens, an MCP loaded and never used) and information the
-  session lacked and had to guess (logs, staging data, a ticket it could not read).
+  expensive tool calls (one output over ~10k tokens, an MCP loaded and never used), information the
+  session lacked and had to guess (logs, staging data, a ticket it could not read), and instruction
+  text it loaded or followed, or a wait it sat out, that changed nothing.
 - `--key <KEY>`: every PR that names it (`gh pr list --state all --search <KEY>`, for an epic each
   story key of its plan too), the commits on `origin/<default>` that name it, its plan and Updates
   Log, and the transcripts under `~/.claude/projects/*/` that name it (privacy guard first); one
@@ -100,7 +103,7 @@ waits on whom, a wake window, a crew setting) is kept: its target is the crew fi
 friction no file in the repo or the plugin could change is dropped.
 
 Map each to an entry: target file (path-bound rule > always-loaded instruction file > crew file or
-role file > `docs/` > plugin file, the L0 included), pattern (`gap` for a missing instruction; otherwise the audit id it matches, e.g.
+role file > `docs/` > plugin file, the L0 included), pattern (`gap` for a missing instruction, `remove` for one that did not help; otherwise the audit id it matches, e.g.
 `G2-volatile` for a line the code contradicts, `G2-conflict` for two files that disagree,
 `G2-recency` for a rule that steered the session around a problem that was not there), action and
 confidence (High when the transcript shows the user correcting it, else Medium). A rule only a
@@ -115,11 +118,8 @@ The entry body carries the proposed lines. Evidence line: `- <date> retro PR #<N
 
 ## Write
 
-1. Per finding, `ls .weside/optimization/inbox/????-??-??-<key>.md` (and staging): a hit gains an evidence
-   line. Before a
-   new file, read the inbox, staging and `LEDGER.md` entries on the same target file; one that
-   describes the same failure gains the evidence line under its key (store reference § Inbox entry,
-   stable keys). Only then a new file. A target outside the repo is written as `target: ~/<path>`.
+1. Per finding, its key per the store reference § Inbox entry (stable keys: inbox, staging and
+   `LEDGER.md` on the same target file first); a target outside the repo is `target: ~/<path>`.
    Every entry, new or a repeat, goes through `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/retro_write.py <dir> <body-file>`
    (the whole entry written to the scratchpad first): it creates the file exclusively or appends the evidence lines
    to the file that holds the key. Never `cat >` or the Write tool into the inbox: parallel writers of one broadcast

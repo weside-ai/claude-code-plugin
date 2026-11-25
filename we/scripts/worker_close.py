@@ -20,7 +20,7 @@ One writer for "this story's build is over". In the order it runs:
    repos without a merged PR, and moves nothing. A key already In Review or later moves nothing again; its
    merged PRs after that row print as follow-ups. Without a crew file there is no transitions
    log: it says so, and the session moves the ticket with its ticketing tool.
-   Two holds on top, each moving nothing and recording nothing while the teardown still runs:
+   Three holds on top, each moving nothing and recording nothing while the teardown still runs:
    **a living worker on the key** (`holders`: a living session whose name carries the key or
    whose launcher marker names it, or a queued start with a living waiter; the caller's own
    session and, with `--pr`, the worker whose tree has that PR's head branch do not count), since
@@ -29,7 +29,9 @@ One writer for "this story's build is over". In the order it runs:
    unreadable holds too. **No story plan on `origin/<default>`**, since then nothing names the
    repos that must land (a repo whose PR titles never carry the key stays invisible): the session
    moves the ticket itself (with a crew file by the printed `board.py move`, a hand move in the
-   transitions log).
+   transitions log). **An unbuilt phase** (`unbuilt_phase`): with two or more phases in the
+   checkout's repo, each needs a merged PR whose merge commit touches one of its paths; a phase
+   without paths, and a merge commit git cannot read (named), count as built.
 3. **Teardown** (`--keep-worktrees` skips it). A worktree is the story's when its launcher marker
    names the key, or its branch is the head branch of one of the story's PRs or carries the key
    as a whole token. Each one stays, named, when it is the caller's own tree, a living session
@@ -688,7 +690,8 @@ def _context(key: str) -> dict:
         "no_board": no_board,
         "pattern": pattern,
         "base": base,
-        "repos": plan_repos(own, plan_text(top, base, key)),
+        "repos": plan_repos(own, text := plan_text(top, base, key)),
+        "phases": ready_gate.phases(text),
         "plan": has_plan(top, base, key),
     }
 
@@ -710,9 +713,44 @@ def _given(key: str, ref: str, ctx: dict) -> dict:
     return given
 
 
-def _hold(
-    key: str, ctx: dict, given: dict | None, urls: list[str], fast: bool = False
-) -> str | None:
+def _own_phase(phase, own: str) -> bool:
+    if not phase.repo:
+        return True
+    repo = phase.repo.lower()
+    return repo == own.lower() or ("/" not in repo and own.lower().endswith("/" + repo))
+
+
+def unbuilt_phase(key: str, ctx: dict, merged: list) -> str | None:
+    """The held line for the first own-repo phase no merged PR's merge commit touches, or None."""
+    own = [p for p in ctx.get("phases") or [] if _own_phase(p, ctx["own"])]
+    if len(own) < 2:
+        return None
+    touched: set = set()
+    for pr in merged:
+        if pr["repo"] != ctx["own"]:
+            continue
+        files = pr["merge"] and _git(
+            ctx["top"], "diff", "--name-only", f"{pr['merge']}^1", pr["merge"]
+        )
+        if not files:
+            print(
+                f"we-worker close: {label(pr, ctx['own'])}: merge commit unreadable; "
+                "its phases count as built",
+                file=sys.stderr,
+            )
+            return None
+        touched.update(files.split())
+    for phase in own:
+        paths = [path for path, other in phase.paths if not other]
+        if paths and not any(f == x or f.startswith(x + "/") for x in paths for f in touched):
+            return (
+                f"held: phase {phase.number} of {key} has no merged PR touching its files "
+                f"({paths[0]}); close after it lands, or move {key} to In Review yourself"
+            )
+    return None
+
+
+def _hold(key: str, ctx: dict, given: dict | None, merged: list, fast: bool = False) -> str | None:
     """Why In Review waits although every PR the key shows is merged, or None. A fast-lane story
     (`fast`: its row came `via: fast`) has no plan by definition and one PR in one repo: the
     merged PR is all that must land."""
@@ -725,7 +763,7 @@ def _hold(
     if not ctx["plan"] and not fast:
         how = (
             f"once every repo landed: python3 {HERE / 'board.py'} move {key} in_review "
-            + " ".join(f"--pr {u}" for u in urls)
+            + " ".join(f"--pr {p['url']}" for p in merged)
             + " (a hand move in the transitions log)"
             if ctx["state"] is not None
             else "with your ticketing tool (references/ticketing.md)"
@@ -734,7 +772,7 @@ def _hold(
             f"held: no story plan for {key} on origin/{ctx['base']} names the repos that must "
             f"land; move {key} to In Review yourself {how}"
         )
-    return None
+    return None if fast else unbuilt_phase(key, ctx, merged)
 
 
 def _in_review(
@@ -774,7 +812,7 @@ def _in_review(
         )
         return res
     fast = (last.get(key) or {}).get("via") == "fast"
-    res["held"] = _hold(key, ctx, given, [p["url"] for p in merged], fast)
+    res["held"] = _hold(key, ctx, given, merged, fast)
     if res["held"]:
         res["closed"] = False
         res["out"] += [res["held"], f"in_review: {key} stays {was or 'unmoved'}"]

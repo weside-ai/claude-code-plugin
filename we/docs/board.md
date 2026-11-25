@@ -186,16 +186,12 @@ files. It needs no `cwd` and nothing is fetched for it:
 derives every open work tree with a fresh fetch. It also asks the coordinator to rebuild the board: one
 line `{"id": "rebuild", "answer": "rebuild", ts, session}` in the answers file, which the deliverer
 carries like an answer (§ Delivery): by prompt into the coordinator's session (at once when the pane
-runs there), with its ledger row, resubmit and refusal. The prompt is the board's
-`answer_prompts.rebuild`, else `Rebuild the board: check the session lines, the open questions and
-the news against the ticketing system, git and the PRs, and correct every stale line (board.py set
---for, withdraw, prune)`, followed by `(Refresh pressed on the board pane in <session>)`. A press
-writes no line while an earlier request is still owed, newer than the ledger's epoch and without a
-verdict on its coordinator row, so a coordinator that is busy or not running gets one request, not
-one per press; a stored or refused request lets the next press ask again. Before the deliverer's
-first start (no epoch) requests stay ten minutes apart (`rebuildWaits`, `REBUILD_MS` in
-`deliver.ts`). Without a coordinator a press writes none.
-Opening the pane re-reads without asking.
+runs there), with its ledger row, resubmit and refusal; its text is the board's
+`answer_prompts.rebuild`, else the default in `board.ts`. A press writes no line while an earlier
+request is still owed (newer than the ledger's epoch, no verdict on its coordinator row): a busy or
+stopped coordinator gets one request, not one per press, and a stored or refused one lets the next
+press ask again. Before the deliverer's first start requests stay ten minutes apart (`rebuildWaits`,
+`REBUILD_MS` in `deliver.ts`). Without a coordinator a press writes none. Opening the pane re-reads without asking.
 
 ## Opening it
 
@@ -303,7 +299,7 @@ names are those of the default board.
 | `sessions[].updated_at` | `YYYY-MM-DDTHH:MMZ`: when the line was last written; `board.py set` stamps it, a hand write should too. The pane shows the line's age (this, else `since`) beside its lamps: dim while fresh, grey from 6 h, red and marked `stale` from 24 h; a stale line folded into **+ N idle/other** is counted on that button (`(1 stale)`), never hidden without a trace |
 | `session_age_hours` | optional `{"grey": 6, "stale": 24}`: moves both age thresholds (board.ts `SESSION_AGE_HOURS`); a pair that is not `0 < grey < stale` is ignored |
 | `sessions[].priority` | a number, lower first; sessions without one after those with one; shown as `P<n>` in the title, or before `direction` |
-| `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id, so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
+| `sessions[].cwd`, `.session_id` | optional, never shown: the directory the session runs in and its Claude Code session id (`board.py set` refreshes both on its own line; two live sessions sharing a name keep the first one's id, and one session keeps one line), so the orchestrator keeps the list of its masters and can restore one after a workspace crash in the right directory with `claude --resume <session_id>`; a master's `cwd` is also the repo its work tree is read from (§ Work) |
 | `sessions[].work` | optional: a master's ready work tree, which replaces the derived one (§ Work) |
 | `companion`, `keys`, `topic`, `now`, `pr`, `direction`, `note` | shown as written: name in brackets, ticket keys, topic (dimmed), current step, PR number, `P<priority> · direction`, a warning line; a worker shows lamp, name, keys, PR, live status, start lamp and `now` on one line |
 
@@ -316,7 +312,8 @@ one-way merge question), **Deny**, **Follow-up** and **Update**; a question
 sent to a human on another machine (`to`) carries only **Withdraw**; each news item carries **Read**. A press appends one line to `board-answers.jsonl` in the board
 file's folder (default `~/.claude/we-state/board-answers.jsonl`) and never writes `board.json`, so
 an `owner_queue` item keeps no answer: `board.py show <Q>` prints the question with its answer lines
-and its status, the read before any session repeats it or writes the same answer again:
+and its status, the read before any session repeats it or writes the same answer again; `show <Q>
+<Q>…` (or `--line`) prints one status line per id, the text to pass on:
 
 ```json
 {"id": "Q1", "answer": "accept", "ts": "2026-10-30T17:12:00.000Z", "session": "Orchestrator"}
@@ -804,10 +801,10 @@ survives restarts. `lenses.acceptance.sample` stays the lens sampler's (`lens_ve
 
 A crew whose `.weside/config.json` has an `events:` block runs one event poller per project
 (`scripts/command_center/event_poller.py`, started by the SessionStart hook `events_on_start.py`,
-by hand with `event_poller.py ensure`):
-it reads GitHub and the cluster for the release path and CI (an RC verdict, a stuck rollout, a
-blocked release PR or production tag run, main red, a long queue, new issues) and routes each event kind to crew roles
-(`event_routes.py` owns the block's schema). Each member's session runs a tail
+by hand with `event_poller.py ensure`): it reads GitHub and the cluster for the release path and CI
+(an RC verdict, a stuck rollout, a blocked release PR or production tag run, main red, a long
+queue, new issues) and routes each event kind to crew roles (`event_routes.py` owns the block's
+schema). Each member's session runs a tail
 (`event_tail.py`, whose docstring owns folding, digests and the line text) that writes the lines
 routed to its roles into its own inbox; a line never carries a title. A running session starts its
 tail without a restart: `hooks/events_on_start.py`, run in the project with `{"session_id": "<its id>"}` on stdin.
@@ -815,8 +812,11 @@ tail without a restart: `hooks/events_on_start.py`, run in the project with `{"s
 What finds no running session waits in the coordinator's delta, `delta.jsonl` in the folder
 `event_poller.py path` prints (its row: the `event_poller.py` docstring); a parked session gets only damage kinds. A damage kind (a blocked production
 release) without a receiver goes at once to the coordinator's running session and as one `gate`
-news item. `event_poller.py status` names the poller, its last round, its sources, the loaded
-routes and the running tails.
+news item. A line that came or did not come is traced after `event_poller.py status` (poller, last
+round, sources, routes, running tails) in three steps: the poller's `ledger.jsonl` and `delta.jsonl`
+(`to`, `reason`); the tail's `presence/<socket key>.json` (`member`, `session_id`, `heartbeat`) and
+its `tails/<socket key>.lock`, one lock per socket, so two process hits on one session are the start
+hook, not a second tail; the board line (`session_id`, `keys`, `epic`, `companion`).
 
 A route may name `epic_master`: the master session of the event's epic, found over the board's
 session lines and the ticket snapshot (`epic_owner.py`, whose docstring owns the resolution). A

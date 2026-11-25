@@ -101,12 +101,12 @@ and classify it from the log:
 - **Real:** an assertion, lint, type or coverage failure, or a verdict the review never posted. Fix it,
   including a pre-existing failure that blocks this PR.
 - **Review runner:** `VERDICT:ERROR`, no verdict, or a checkout HTTP 429. Run `gh run rerun <id> --failed`, change no code,
-  and do not count it as a round.
-- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. In a large monorepo this is a
-  big share of red test jobs. Re-run once. A re-run that fails on different tests confirms the noise. The same failure
-  twice is either real or infrastructure: report it rather than inventing a fix. A gate that is still red after confirmed noise is
-  terminal state 3 (blocked), with both run ids. A red run rarely turns green on the same SHA, so the re-run
-  diagnoses the failure and does not fix it.
+  and do not count it as a round. Red twice on an exhausted review quota: hand the run id to the `machinery` owner (bounded
+  reruns, one line back on success or on giving up), keep auto-merge armed and stop watching.
+- **Test noise:** an xdist worker crash or timeout, or shared DB state in a test your diff does not touch. Re-run once.
+  A re-run that fails on different tests confirms the noise. The same failure twice is either real or infrastructure:
+  report it rather than inventing a fix. A gate that is still red after confirmed noise is terminal state 3 (blocked),
+  with both run ids. A red run rarely turns green on the same SHA, so the re-run diagnoses the failure, not fixes it.
 - **Never started:** check the merge state before waiting.
 
 **Instruction files in the diff.** Only when `git diff --name-only origin/$BASE...HEAD` lists a

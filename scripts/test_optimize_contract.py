@@ -27,11 +27,24 @@ class SunsetContractTest(unittest.TestCase):
             "an unrecurred, unmeasured change must not become a `remove` candidate: "
             "the change may be why the failure stopped",
         )
-        unmeasured = bullet(text, "Unmeasured")
-        for fragment in ("no `remove` candidate", "ablation", "`review_by` moves forward"):
-            self.assertIn(fragment, unmeasured, f"Unmeasured bullet lacks {fragment}")
+        # Delete first: a due change with no measured effect goes unless its owner names the
+        # damage it catches; no recurrence is no measurement.
+        unproven = bullet(text, "Unproven")
+        for fragment in (
+            "past `review_by` with no measured effect",
+            "no recurrence is no measurement",
+            "is a `remove` candidate",
+            "names in one sentence the damage it catches",
+        ):
+            self.assertIn(fragment, unproven, f"Unproven bullet lacks {fragment}")
+        flat = " ".join(text.split())
+        self.assertIn(
+            "A batch of `remove` candidates, each needing only its reason, is one question with the "
+            'default "remove"',
+            flat,
+        )
 
-    def test_skill_keeps_unmeasured_changes(self):
+    def test_skill_removes_unproven_changes(self):
         self.check(SKILL.read_text(encoding="utf-8"))
 
 
