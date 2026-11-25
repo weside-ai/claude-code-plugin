@@ -25,13 +25,14 @@ In the store's checkout, up to date with the default branch:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/optimization_close.py"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-instruction-budget.py" --totals   # note `all`: the close line's before
 git fetch -q origin && git show origin/<default>:.weside/optimization/CHARTER.md
 ```
 
-The script sets every inbox entry a merged PR names to `applied` and every unconfirmed old one to
-`expired` (rules: store reference § Inbox entry, Lifecycle), writes their ledger rows and prints
-them; its changes go into this run's store commit. Exit 2: relay the line and decide by hand.
-Steps 3 to 5 decide only what is left.
+The script sets every inbox entry a merged PR names to `applied` and every unconfirmed old one to `expired` (rules: store
+reference § Inbox entry, Lifecycle), closes LEDGER `upstream` rows as applied, rejected or expired (`upstream: …` lines;
+`upstream: not checked (…)` keeps exit 0) and prints them; every row it rewrites goes into this run's store commit.
+Exit 2: relay the line and decide by hand. Steps 3 to 5 decide only what is left.
 
 Read the charter (goal, decisions, findings, next steps), then `LEDGER.md`, then every file in
 `inbox/`, plus entries staged under `~/.claude/we-inbox/<repo>/` by an auto or collect retro: move each into
@@ -132,12 +133,11 @@ Before the turn ends, each fact once:
 
 - every decided candidate → a `LEDGER.md` row per the store's § Ledger row, and its inbox file
   deleted in the same commit;
-- a new decision → replace the charter's line on that topic, old wording in parentheses
-  ("replaces <date>: …");
+- a new decision → replace the charter's line on that topic, old wording in parentheses ("replaces <date>: …");
 - a changed finding → replace its row; next steps updated; `last_optimize:` set to today;
 - the charter stays within 200 lines.
 
 Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land). Close with one line: candidates applied /
 rejected, inbox left, step 4's rows read and remove candidates, lines +/− per target file and the
-run's change of `all` in `check-instruction-budget.py --totals` (positive: name the removals that
+run's change of `all` in `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check-instruction-budget.py" --totals` (positive: name the removals that
 offset it, or ask the decider once), the next step; then offer each `workspace` repo with an inbox.

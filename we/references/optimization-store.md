@@ -98,7 +98,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
   `action: remove`, `source: retro`, key `remove--<target-slug>`, a second line of one file
   `--<line-slug>` added; the body quotes the line (or names its line number where the rule above
   forbids text) and says in one sentence why it did not help and what the session did instead.
-  `/we:optimize` decides it before any add and needs only that reason.
+  It needs only that reason; when it is decided: `/we:optimize` § 3 and § 4.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
 - **Lifecycle:** `/we:optimize` decides an entry `applied` or `rejected`, writes its ledger row and
