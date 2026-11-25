@@ -2631,6 +2631,15 @@ class TestMove:
         ), err
         assert_untouched(moving, before, out, adapter)
 
+    @pytest.mark.parametrize("key", ["PROJ-12", "PROJ-13"])
+    def test_the_first_and_last_key_of_a_commented_line_move(self, moving, key):
+        """`line: [A, B]  # note` kept `[` on A and `]  # note` on B. Red arm: both refused."""
+        epic = moving / "work" / "docs" / "plans" / "PROJ-1-epic.md"
+        text = epic.read_text(encoding="utf-8")
+        epic.write_text(text.replace("PROJ-13]", "PROJ-13]  # a note", 1), encoding="utf-8")
+        land(moving / "work")
+        assert act(moving, "move", key, "backlog", "--epic", "PROJ-1", adapter=fake()) == 0
+
     def test_an_epic_without_a_line_warns_and_moves(self, moving, capsys):
         """A running epic from before the finish line: PROJ-2 has no `line:`."""
         assert act(moving, "move", KEY, "backlog", "--epic", "PROJ-3", adapter=fake()) == 0

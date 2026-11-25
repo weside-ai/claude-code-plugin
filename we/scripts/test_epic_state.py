@@ -109,6 +109,12 @@ def test_finish_line_counts_done_keys_open_extensions_and_age():
     assert es.line_summary(line) == "1/2 line done · 2 extensions open · 9 d old"
 
 
+def test_a_commented_line_reads_its_keys():
+    """`line: [A, B]  # note` became one string key. Red arm: keys == ["[PROJ-71, …"]."""
+    text = LINED.replace("line: [PROJ-71, PROJ-72]", "line: [PROJ-71, PROJ-72]  # a note")
+    assert es.finish_line(text, {}, dt.date(2026, 1, 10))["keys"] == ["PROJ-71", "PROJ-72"]
+
+
 def test_the_line_is_reached_when_every_key_is_done():
     states = {"PROJ-71": "done", "PROJ-72": "done"}
     line = es.finish_line(LINED, states, dt.date(2026, 1, 10))

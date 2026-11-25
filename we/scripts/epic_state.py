@@ -40,6 +40,9 @@ from pathlib import Path
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ready_gate
+
 NOT_FOUND = "epic plan not found: set `epic` on your board line"
 QUERY_CAP = 256
 GH_TIMEOUT = 5
@@ -209,10 +212,9 @@ def finish_line(
     text: str, last_states: dict[str, str], today_date: dt.date
 ) -> dict[str, Any] | None:
     meta = frontmatter(text)
-    if "line" not in meta:
+    keys = ready_gate.line_keys(ready_gate.frontmatter(text))  # the one parser of `line:`
+    if keys is None:
         return None
-    raw = meta["line"]
-    keys = raw if isinstance(raw, list) else [raw] if raw else []
     done = [k for k in keys if last_states.get(k) == "done"]
     try:
         age: int | None = (today_date - dt.date.fromisoformat(str(meta.get("created")))).days
