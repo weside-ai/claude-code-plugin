@@ -31,8 +31,8 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   subagent for a wide read or a review; give a story to one worker (the default); start two to
   four workers only for independent chunks. Multi-agent work costs ~15× the tokens.
 - Build workers start through the crew's launcher; where it is missing, crew `launch.subagent_fallback`
-  decides (`worker-dispatch.md` § Worker launch backend); a card worker may be a subagent when
-  heavy slots are full (§ Card worker).
+  decides (`worker-dispatch.md` § Worker launch backend); a card worker's subagent case: § Card
+  worker.
 - Past 250 k context, `/compact` at your next boundary (`we-worker close` already wrote the
   epic's Updates Log line).
 - Parked, you end your process instead of idling with your context; you come back by `--resume`
