@@ -47,3 +47,5 @@ def test_measurement_hooks_never_block():
     for g in groups:
         (h,) = g["hooks"]
         assert h["async"] is True and h["command"].endswith('hooks/subagent_timing.py"')
+    (stop,) = [h for g in HOOKS["Stop"] for h in g["hooks"] if "subagent_timing" in h["command"]]
+    assert stop["async"] is True and stop["command"].endswith('hooks/subagent_timing.py"')
