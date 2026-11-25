@@ -574,8 +574,7 @@ BOUND_SECURITY_LINE = (
     "  - Bo owns its label, runs on call; a worker with its card reviews each card hit."
 )
 TRUST_LINE = (
-    "- On a card hit (`trust-loosening`, `brake-review`): a read-only card worker with {security}'s "
-    "card (`references/worker-dispatch.md` § Card worker; a subagent while the heavy slots are full) "
+    "- On a card hit (`trust-loosening`, `brake-review`): a fresh worker with {security}'s card "
     "reviews the head, its verdict a PR comment; auto-merge does not wait on it; on a one-way PR it "
     "goes to {human} with the T2 panel."
 )
@@ -647,10 +646,8 @@ def test_the_master_card_carries_the_trust_loosening_order_only_when_bound():
     assert TRUST_LINE in (rp.ROLES / "master.md").read_text(encoding="utf-8")
     with_owner = rp.render_card(bound(), "master")
     assert (
-        "- On a card hit (`trust-loosening`, `brake-review`): a read-only card worker with Bo's "
-        "card (`references/worker-dispatch.md` § Card worker; a subagent while the heavy slots "
-        "are full) reviews the head, its verdict a PR comment; auto-merge does not wait on it;"
-        in with_owner
+        "- On a card hit (`trust-loosening`, `brake-review`): a fresh worker with Bo's card "
+        "reviews the head, its verdict a PR comment; auto-merge does not wait on it;" in with_owner
     )
     assert "trust-loosening" not in rp.render_card(generic(), "master")
 
