@@ -95,7 +95,7 @@ Written always, also when step 4 is declined. Only keys a verb reads:
                "add_worktree": "<command with {path} {branch}, or null>",
                "remove_worktree": "<command with {path}, or null>",
                "context": { "auto_memory": "off", "disable_plugins": [], "deny_mcp_servers": [],
-                            "auto_compact_window": null } },
+                            "deny_tools": [], "skills_off": [], "auto_compact_window": null } },
   "plans": { "land": "pr", "push_paths": ["docs/plans/**"], "secret_scan": null },
   "time": { "zone": "<IANA zone, e.g. Europe/Berlin>" },
   "acceptance": { "receipts_workflow": "<workflow path whose RC run uploads accept.json, or null>",

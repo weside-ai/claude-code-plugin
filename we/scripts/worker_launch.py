@@ -82,7 +82,9 @@ Usage:
                                                    (`worker_rights.py`), the command as its
                                                    SessionStart hook, the lean context of
                                                    `workers.context` (`apply_context`); with the
-                                                   brief, the ticketing plugin off when its
+                                                   brief, the denied tools and skills its Needs
+                                                   line names given back (`give_back`) and the
+                                                   ticketing plugin off when its
                                                    skills need no ticket (`ticketing_unneeded`);
                                                    --account-file adds the chosen account
                                                    (`apply_account`)
@@ -1367,7 +1369,10 @@ def apply_context(doc: dict, repo: Path, name: str | None, state: Path) -> dict:
     `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, `own` points `autoMemoryDirectory` at
     `<state>/<name>.memory`, `shared` leaves memory alone; `disable_plugins` → `enabledPlugins`
     false, `deny_mcp_servers` → `deniedMcpServers` by `serverName`, `auto_compact_window` →
-    `autoCompactWindow`."""
+    `autoCompactWindow`, `deny_tools` → bare tool names appended to `permissions.deny` after the
+    never-list (a bare-name deny drops the tool's schema from the context), `skills_off` →
+    `skillOverrides` `off` (built-in, user and project skills; a plugin skill goes only with its
+    plugin). A brief's `Needs:` line gives an entry of the last two back (`give_back`)."""
     ctx = workers_block(repo).get("context")
     if ctx is None:
         return doc
@@ -1398,6 +1403,40 @@ def apply_context(doc: dict, repo: Path, name: str | None, state: Path) -> dict:
                 f"workers.context.auto_compact_window: a number of tokens {low}-{high}", 2
             )
         doc["autoCompactWindow"] = window
+    tools = _names(ctx, "deny_tools")
+    if tools:
+        deny = doc.setdefault("permissions", {}).setdefault("deny", [])
+        deny += [t for t in dict.fromkeys(tools) if t not in deny]
+    skills = _names(ctx, "skills_off")
+    if skills:
+        doc.setdefault("skillOverrides", {}).update(dict.fromkeys(skills, "off"))
+    return doc
+
+
+def give_back(doc: dict, brief: str, repo: Path, never: list[str]) -> dict:
+    """Give a brief the tools and skills `workers.context` takes from every worker: a name on its
+    `Needs:` lines, or in the frontmatter `needs:` of a `/we:<skill>` it names, that is in
+    `deny_tools` leaves `permissions.deny`, one in `skills_off` leaves `skillOverrides`. The
+    brief is read through its pointer files (`brief_text`). An entry of the never-list (`never`,
+    `worker_rights.settings`) stays, whatever the brief says."""
+    ctx = workers_block(repo).get("context")
+    if not isinstance(ctx, dict):
+        return doc
+    tools, skills = set(_names(ctx, "deny_tools")), set(_names(ctx, "skills_off"))
+    if not tools and not skills:
+        return doc
+    text = brief_text(brief)
+    wanted = set(brief_needs(text)) | {n for s in brief_skills(text) for n in skill_needs(s)}
+    back = (wanted & tools) - set(never)
+    deny = doc.get("permissions", {}).get("deny")
+    if back and isinstance(deny, list):
+        deny[:] = [d for d in deny if d not in back]
+    overrides = doc.get("skillOverrides")
+    if isinstance(overrides, dict):
+        for name in wanted & skills:
+            overrides.pop(name, None)
+        if not overrides:
+            del doc["skillOverrides"]
     return doc
 
 
@@ -1405,7 +1444,7 @@ NEEDS_RE = re.compile(r"^\s*Needs:\s*(.*)$", re.MULTILINE)
 
 
 def brief_needs(brief: str) -> list[str]:
-    """The names of a brief's `Needs: <plugin or MCP server>, …` lines, in order."""
+    """The names of a brief's `Needs: <plugin, MCP server, tool or skill>, …` lines, in order."""
     names = []
     for line in NEEDS_RE.findall(brief):
         names += [n.strip().strip("`") for n in line.split(",") if n.strip().strip("`")]
@@ -1763,17 +1802,18 @@ def write_settings(
     lane: str | None = None,
 ) -> dict:
     """The worker's `--settings` file (`worker_rights.settings`), with the timer's hook, the
-    lean context of `workers.context` (`apply_context`), the chosen account (`apply_account`)
-    and, for a brief whose skills need no ticket, the ticketing plugin turned off
-    (`ticketing_unneeded`)."""
+    lean context of `workers.context` (`apply_context`), the chosen account (`apply_account`),
+    the denied tools and skills the brief needs given back (`give_back`) and, for a brief whose
+    skills need no ticket, the ticketing plugin turned off (`ticketing_unneeded`)."""
     import worker_rights  # noqa: PLC0415
 
-    doc = apply_context(
-        worker_rights.settings(repo, key, starter, name, lane), repo, name, out.parent
-    )
+    doc = worker_rights.settings(repo, key, starter, name, lane)
+    never = list(doc.get("permissions", {}).get("deny", []))
+    doc = apply_context(doc, repo, name, out.parent)
     if account:
         apply_account(doc, account)
     if brief:
+        give_back(doc, brief, repo, never)
         turn_off(doc, ticketing_unneeded(brief, repo))
     commands = [session_start] if session_start else []
     out.parent.mkdir(parents=True, exist_ok=True)

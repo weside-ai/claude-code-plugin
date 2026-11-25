@@ -773,6 +773,75 @@ class TestSettings:
         if context.get("auto_memory") == "shared":
             assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in doc["env"]
 
+    def _settings(self, env, tmp_path, context, *brief):
+        if context is not None:
+            (env["wt"] / ".weside").mkdir(exist_ok=True)
+            (env["wt"] / ".weside" / "config.json").write_text(
+                json.dumps({"workers": {"context": context}})
+            )
+        out_file = tmp_path / "state" / "KEY-1-w1.settings.json"
+        args = ("--repo", str(env["wt"]), "--key", "KEY-1", "--out", str(out_file))
+        if brief:
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), "settings", *args, "--brief-stdin"],
+                input=brief[0],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        else:
+            proc = _run("settings", *args)
+        return proc, (json.loads(out_file.read_text()) if proc.returncode == 0 else None)
+
+    def test_deny_tools_and_skills_off_land_in_the_worker_settings(self, env, tmp_path):
+        _, plain = self._settings(env, tmp_path, None)
+        never = plain["permissions"]["deny"]
+        context = {"deny_tools": ["Artifact", "Workflow", "Artifact"], "skills_off": ["dataviz"]}
+        proc, doc = self._settings(env, tmp_path, context)
+        assert proc.returncode == 0, proc.stderr
+        assert doc["permissions"]["deny"] == [*never, "Artifact", "Workflow"]
+        assert doc["skillOverrides"] == {"dataviz": "off"}
+        for key, value in [
+            ("deny_tools", "Artifact"),
+            ("deny_tools", ["Artifact", ""]),
+            ("skills_off", [3]),
+            ("skills_off", {"dataviz": "off"}),
+        ]:
+            proc, _ = self._settings(env, tmp_path, {key: value})
+            assert proc.returncode == 2 and f"workers.context.{key}" in proc.stderr, (key, value)
+
+    @pytest.mark.parametrize("context", [None, {}, {"disable_plugins": [], "deny_tools": []}])
+    def test_a_context_without_the_two_keys_writes_the_same_document(self, env, tmp_path, context):
+        import worker_rights  # noqa: PLC0415
+
+        proc, doc = self._settings(env, tmp_path, context, "Needs: Artifact, dataviz\n")
+        assert proc.returncode == 0, proc.stderr
+        want = worker_rights.settings(env["wt"], "KEY-1", None, None, None)
+        if context is not None:
+            want["env"]["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+        assert doc == want
+
+    def test_a_needs_line_gives_a_denied_tool_and_skill_back(self, env, tmp_path):
+        _, plain = self._settings(env, tmp_path, None)
+        never = plain["permissions"]["deny"]
+        guarded = next(d for d in never if d.startswith("Bash("))
+        context = {
+            "deny_tools": ["Artifact", "Workflow", guarded],
+            "skills_off": ["dataviz", "init"],
+            "disable_plugins": ["sentry@market"],
+        }
+        pointer = tmp_path / "brief.md"
+        pointer.write_text(f"Build it.\nNeeds: Artifact, dataviz, {guarded}\n")
+        proc, doc = self._settings(env, tmp_path, context, f"Read {pointer} and follow it.\n")
+        assert proc.returncode == 0, proc.stderr
+        assert doc["permissions"]["deny"] == [*never, "Workflow"]  # the never-list stays
+        assert doc["skillOverrides"] == {"init": "off"}
+        proc, doc = self._settings(env, tmp_path, context, "Needs: dataviz, init\n")
+        assert "skillOverrides" not in doc and "Artifact" in doc["permissions"]["deny"]
+        proc = _needs(env["wt"], "Needs: Artifact, sentry\n")  # a plugin need still refuses
+        assert proc.returncode == 2 and "turns off (sentry@market)" in proc.stderr
+        assert _needs(env["wt"], "Needs: Artifact, dataviz\n").returncode == 0
+
 
 def test_add_tree_runs_the_repos_template_with_path_and_branch(env, tmp_path):
     (env["repo"] / ".weside").mkdir()

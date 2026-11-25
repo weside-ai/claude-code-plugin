@@ -215,14 +215,18 @@ file stays rights and `env` only. Keys (`worker_launch.py apply_context` owns th
 | `disable_plugins: ["<plugin>@<marketplace>"]` | `enabledPlugins: {<id>: false}` |
 | `deny_mcp_servers: ["<server>"]` | `deniedMcpServers: [{"serverName": <server>}]` |
 | `auto_compact_window: <tokens>` | `autoCompactWindow` (100000–1000000) |
+| `deny_tools: ["<tool>"]` | the bare names appended to `permissions.deny` after the never-list: the tool's schema leaves the context |
+| `skills_off: ["<skill>"]` | `skillOverrides: {<skill>: "off"}`: built-in, user and project skills; a plugin skill goes only with its plugin |
 
-A brief that needs a tool says so in one line, `Needs: <plugin or MCP server>, …`; when
+A brief that needs a tool says so in one line, `Needs: <plugin, MCP server, tool or skill>, …`; when
 `disable_plugins` (by id or bare name) or `deny_mcp_servers` turns one of them off, the start
 refuses (exit 2) and names it, instead of a worker that silently lacks it (`worker_launch.py
 needs`). The same holds for every `/we:<skill>` the brief names: a skill declares its needs in its
 frontmatter (`needs: [<plugin or MCP server>, …]`; `ticketing` is the project's ticketing plugin,
 `references/ticketing.md`), and the refusal names the skill and the plugin. A brief needs no
-`Needs:` line for what its skills declare.
+`Needs:` line for what its skills declare. A `Needs:` name (or a skill's declared need) on
+`deny_tools` or `skills_off` is given back to that worker, never refused; a never-list rule stays
+(`worker_launch.py give_back`).
 
 A brief that names `/we:<skill>`s (directly or in the file of its `Read <path> and follow it.`
 line), none of which needs `ticketing`, starts without the ticketing plugin (`enabledPlugins`
