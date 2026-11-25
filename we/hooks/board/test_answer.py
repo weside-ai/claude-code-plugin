@@ -103,8 +103,8 @@ def test_append_takes_via_and_quote_from_board_py(tmp_path):
 @pytest.mark.parametrize(
     "closer, note",
     [
-        ("pr_merged", "Q7 ist schon erledigt: PR gemergt"),
-        ("pr_closed", "Q7 ist schon erledigt: PR geschlossen"),
+        ("pr_merged", "Q7 is already settled: PR merged"),
+        ("pr_closed", "Q7 is already settled: PR closed"),
     ],
 )
 def test_a_press_on_a_merge_closed_question_writes_nothing_and_names_why(

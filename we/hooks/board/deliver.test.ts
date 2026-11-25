@@ -1037,6 +1037,6 @@ test('a question close-merged closed on a hand merge reaches its asker with the 
   ].join('\n')
   const lines = answerLines(text)
   expect(lines.map(l => `${l.id} ${l.answer}`)).toEqual(['Q7 pr_merged', 'Q8 pr_closed'])
-  expect(askerText(lines[0], undefined)).toBe(`Q7: PR von Hand gemergt, die Frage ist erledigt (${pr}) (closed by board.py close-merged)`)
-  expect(askerText(lines[1], undefined)).toBe(`Q8: PR geschlossen, die Frage ist erledigt (${pr}) (closed by board.py close-merged)`)
+  expect(askerText(lines[0], undefined)).toBe(`Q7: the PR was merged by hand; the question is settled (${pr}) (closed by board.py close-merged)`)
+  expect(askerText(lines[1], undefined)).toBe(`Q8: the PR was closed; the question is settled (${pr}) (closed by board.py close-merged)`)
 })

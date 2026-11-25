@@ -18,7 +18,7 @@ a question with a posted comment is not posted again. A failed post exits 3 afte
 line is written, its reason on stderr.
 
 A press on a question close-merged's `pr_merged`/`pr_closed` closed (a hand merge the card did not
-show yet) writes nothing and exits 4 with the note `Qn ist schon erledigt: PR gemergt` on stderr,
+show yet) writes nothing and exits 4 with the note `Qn is already settled: PR merged` on stderr,
 which the pane shows. A press after an earlier Accept, Deny or Withdraw is written as before:
 board.py reads it as a duplicate, and a repeated Accept retries a go comment that failed to post.
 """
@@ -35,7 +35,7 @@ HEAD = re.compile(r"[0-9a-f]{40}")
 
 PANE = ("accept", "deny", "followup", "update", "withdraw", "read", "rebuild")
 # board.py close-merged's answers on a merge-go question whose PR merged or closed; never a press.
-PR_DONE = {"pr_merged": "PR gemergt", "pr_closed": "PR geschlossen"}
+PR_DONE = {"pr_merged": "PR merged", "pr_closed": "PR closed"}
 ANSWERS = (*PANE, *PR_DONE)
 # The presses that answer a question; Read and Refresh do not.
 QUESTION_PRESSES = ("accept", "deny", "followup", "update", "withdraw")
@@ -102,7 +102,7 @@ def closed_note(answers_path, qid, answer):
     )
     if closer is None:
         return None
-    return f"{qid} ist schon erledigt: {PR_DONE[closer['answer']]}"
+    return f"{qid} is already settled: {PR_DONE[closer['answer']]}"
 
 
 def go_body(item, record):

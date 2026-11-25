@@ -262,7 +262,7 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
       appended.push(e.argv.slice(3))
       const [, id, answer, ts, session] = e.argv.slice(3)
       // Exit 4: an earlier line closed the question; answer.py writes nothing.
-      if (answerExit === 4) return { value: { exitCode: 4, stdout: '', stderr: `${id} ist schon erledigt: PR gemergt\n`, isStdoutTruncated: false, isStderrTruncated: false } }
+      if (answerExit === 4) return { value: { exitCode: 4, stdout: '', stderr: `${id} is already settled: PR merged\n`, isStdoutTruncated: false, isStderrTruncated: false } }
       lines += `${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`
       mtimeMs += 1
       if (answerExit) return { value: { exitCode: answerExit, stdout: '', stderr: `answer.py: ${id}: the answer is saved, but the go comment on the PR failed: gh not found`, isStdoutTruncated: false, isStderrTruncated: false } }
@@ -498,7 +498,7 @@ test('a press on a question a hand merge closed after the render shows a note an
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   await ui.press({ key: 'accept-Q1' })
   await clock.settle()
-  expect(home.toasts).toEqual(['board: Q1 ist schon erledigt: PR gemergt'])
+  expect(home.toasts).toEqual(['board: Q1 is already settled: PR merged'])
   expect(home.submitted).toEqual([])
   await ui.unmount()
 })

@@ -500,9 +500,9 @@ Accept counts as that skip (§ Answers, the go comment). `board.py close-merged`
 PR merged or closed, in whichever repo its `pr_url` points, and prints `closed <id>: PR <state> <url>`
 per question: one a Go closed already leaves the queue with one `closed` line in `board-questions.jsonl`;
 an open one (for the human, merging by hand is the yes) gets the answer line `pr_merged` or `pr_closed`
-with `pr`, which the deliverer carries to its asker like any answer (`Qn: PR von Hand gemergt, die Frage
-ist erledigt (<url>)`) and `prune` drops once carried; a later answer on it is a duplicate, a press on
-its card writes nothing and shows `Qn ist schon erledigt: PR gemergt`.
+with `pr`, which the deliverer carries to its asker like any answer (`Qn: the PR was merged by hand; the question
+is settled (<url>)`) and `prune` drops once carried; a later answer on it is a duplicate, a press on
+its card writes nothing and shows `Qn is already settled: PR merged`.
 Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of
 `templates/cold-reader.md`) in an empty directory, with no tools, no MCP server, no settings files, hooks
 off, no session file and the global login, given only the question (the asker's own text: the required-checks line a
