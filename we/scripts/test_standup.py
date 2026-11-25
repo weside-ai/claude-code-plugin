@@ -739,6 +739,18 @@ def test_orchestration_map(tree):
     ]
 
 
+def test_a_commented_line_reads_through_the_one_parser(tree):
+    """A `line:` with a trailing comment keeps its keys and drops the comment's (`ready_gate.line_keys`)."""
+    epic = tree / "repo" / "docs" / "plans" / "PROJ-9010-epic.md"
+    epic.write_text(
+        epic.read_text().replace(
+            "line: [PROJ-9011]", "line: [PROJ-9011, PROJ-9012] # PROJ-9099 comes later"
+        )
+    )
+    doc = run(tree, "PROJ-9010")
+    assert doc["epic"]["intent"]["line"] == ["PROJ-9011", "PROJ-9012"]
+
+
 def test_cell_escapes_foreign_markup():
     assert standup.cell("a | b\nc `d`\x1b[31m") == "a \\| b c 'd'"
 

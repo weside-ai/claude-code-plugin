@@ -110,6 +110,7 @@ import epic_state  # noqa: E402
 import flow_intervals as fi  # noqa: E402
 import flow_log  # noqa: E402
 import flow_report  # noqa: E402
+import ready_gate  # noqa: E402
 
 SCHEMA_VERSION = 1
 FIELDS = (
@@ -232,14 +233,6 @@ def _items(lines: list) -> list:
     ]
 
 
-def _line_keys(value, pattern: str) -> list:
-    """The `line:` keys; a value `epic_state.frontmatter` left as text (a trailing comment) is
-    searched for keys."""
-    if isinstance(value, list):
-        return [str(v) for v in value if v]
-    return re.findall(pattern, str(value or "").split("#", 1)[0])
-
-
 def plan_files(root: Path, runner=subprocess.run) -> tuple:
     """`({file name: text} of `docs/plans/*.md` without `_archive/`, where)`: from the remote's
     default branch (`origin/HEAD`, else `origin/main`) in one `git cat-file --batch`, as `/flow`
@@ -295,7 +288,7 @@ def plan_files(root: Path, runner=subprocess.run) -> tuple:
     return {p.name: p.read_text(encoding="utf-8") for p in plans.glob("*.md")}, "working tree"
 
 
-def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
+def read_plans(root: Path, runner=subprocess.run) -> dict:
     """`{epics: {KEY: epic}, stories: {KEY: epic KEY or None}, forks: {KEY: lines}, ref}` from
     `plan_files`; `forks` holds the `## Open Fork` section of each story plan that has one."""
     files, ref = plan_files(root, runner)
@@ -318,7 +311,7 @@ def read_plans(root: Path, pattern: str, runner=subprocess.run) -> dict:
             "title": re.sub(r"^(Epic|Plan)\s*:\s*", "", title),
             "status": meta.get("status"),
             "serves": meta.get("serves") if meta.get("serves") not in ("null", "") else None,
-            "line": _line_keys(meta.get("line"), pattern),
+            "line": ready_gate.line_keys(ready_gate.frontmatter(text)) or [],  # the one parser
             "line_goal": meta.get("line_goal") or None,
             "outcome": _first_sentence(_section(text, "Outcome")),
             "success_criteria": _items(_section(text, "Success Criteria")),
@@ -557,7 +550,7 @@ def build(  # noqa: PLR0912, PLR0915  one call per source, in order
             branch_name = _branch_name(cwd)
         scoped, why = scope(key, branch_name, conversation_keys, pattern)
 
-    plans = g.read("plans", lambda: read_plans(cwd, pattern))
+    plans = g.read("plans", lambda: read_plans(cwd))
     epics = (plans or {}).get("epics", {})
     story_epic = (plans or {}).get("stories", {})
     forks = (plans or {}).get("forks", {})
