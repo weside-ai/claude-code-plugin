@@ -106,3 +106,110 @@ def test_skill_hook_prints_no_decision_and_exits_zero(tmp_path):
     )
     assert (res.returncode, res.stdout, res.stderr) == (0, "", "")
     assert (tmp_path / ".claude" / "we-timing" / "s1.jsonl").exists()
+
+
+L0 = "# The crew process (L0)\n\nL0-SECRET-TEXT"
+CARD = "# Role card: product\n\n## Cornerstone\nCARD-SECRET-TEXT"
+
+
+def _transcript(path: Path) -> None:
+    def att(a, ts="2026-11-25T09:00:00.000Z"):
+        return {"type": "attachment", "timestamp": ts, "attachment": a}
+
+    stdout = json.dumps(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": L0}}
+    )
+    entries = [
+        att(
+            {
+                "type": "hook_success",
+                "hookEvent": "SessionStart",
+                "hookName": "SessionStart:startup",
+                "command": "command hook 3",
+                "stdout": stdout,
+            }
+        ),
+        att(
+            {
+                "type": "hook_additional_context",
+                "hookEvent": "SessionStart",
+                "content": [L0, CARD, "other hook"],
+            }
+        ),
+        att(
+            {
+                "type": "instructions",
+                "files": [
+                    {"path": "/w/AGENTS.md", "type": "Project", "content": "A" * 11},
+                    {"path": "/w/.claude/rules/r.md", "type": "Project", "content": "R" * 5},
+                    {
+                        "path": "/cfg/projects/w/memory/MEMORY.md",
+                        "type": "AutoMem",
+                        "content": "M" * 7,
+                    },
+                ],
+            }
+        ),
+        {"type": "user", "message": {"content": "hi"}},
+    ]
+    path.write_text("".join(json.dumps(e) + "\n" for e in entries) + "not json\n")
+
+
+def test_stop_records_the_loads_claude_code_fires_no_event_for(tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    _transcript(transcript)
+    payload = {"session_id": "s1", "hook_event_name": "Stop", "transcript_path": str(transcript)}
+    out = record(payload, tmp_path)
+    text = out.read_text()
+    lines = [json.loads(x) for x in text.splitlines()]
+    got = {x["file_path"]: (x["memory_type"], x["chars"], x["load_reason"]) for x in lines}
+    assert got == {
+        "process/L0.md": ("Plugin", len(L0), "session_start"),
+        "roles/product.md": ("Plugin", len(CARD), "session_start"),
+        "/w/AGENTS.md": ("Project", 11, "session_start"),
+        "/cfg/projects/w/memory/MEMORY.md": ("AutoMem", 7, "session_start"),
+    }
+    assert {x["source"] for x in lines} == {"transcript"}
+    assert {x["event"] for x in lines} == {"InstructionsLoaded"}
+    assert lines[0]["ts"] == 1795597200.0
+    for secret in ("SECRET", "AAA", "MMM", "other hook"):
+        assert secret not in text
+    record(payload, tmp_path)  # a second run over the same transcript adds no line
+    assert out.read_text() == text
+    with transcript.open("a") as fh:  # a compact appends a boundary and a new load
+        fh.write(json.dumps({"type": "system", "subtype": "compact_boundary"}) + "\n")
+        fh.write(
+            json.dumps(
+                {
+                    "type": "attachment",
+                    "attachment": {
+                        "type": "instructions",
+                        "files": [
+                            {"path": "/w/AGENTS.md", "type": "Project", "content": "A" * 12}
+                        ],
+                    },
+                }
+            )
+            + "\n"
+        )
+    record(payload, tmp_path)
+    last = json.loads(out.read_text().splitlines()[-1])
+    assert (last["file_path"], last["chars"], last["load_reason"]) == (
+        "/w/AGENTS.md",
+        12,
+        "compact",
+    )
+    assert len(out.read_text().splitlines()) == 5
+
+
+def test_subagent_stop_reads_the_agent_transcript_under_its_own_offset(tmp_path):
+    transcript = tmp_path / "agent.jsonl"
+    _transcript(transcript)
+    base = {"session_id": "s1", "agent_id": "a1", "agent_type": "we:dev-medium", "cwd": "/w"}
+    payload = {**base, "hook_event_name": "SubagentStop", "agent_transcript_path": str(transcript)}
+    out = record(payload, tmp_path)
+    lines = [json.loads(x) for x in out.read_text().splitlines()]
+    assert lines[0]["event"] == "SubagentStop"
+    loads = [x for x in lines if x.get("source") == "transcript"]
+    assert len(loads) == 4 and {x["agent_id"] for x in loads} == {"a1"}
+    assert (tmp_path / ".claude" / "we-timing" / "s1.a1.offset").is_file()

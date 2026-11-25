@@ -439,6 +439,18 @@ def find(start: str | Path | None = None) -> Path | None:
     return None
 
 
+def declaring_root(start: str | Path | None = None) -> Path | None:
+    """The directory whose own crew file or `config.json` pointer ``find`` stopped at, or None:
+    a repo pointing at another repo's crew file is itself the place it measures."""
+    d = Path(start or Path.cwd()).resolve()
+    for root in (d, *d.parents):
+        if _crew_at(root) is not False:
+            return root
+        if (root / ".git").exists():
+            return None
+    return None
+
+
 def _crew_at(root: Path) -> Path | None | bool:
     """The crew file ``root`` declares, None for a dangling pointer, False when it declares none."""
     own = root / ".weside" / "crew.json"

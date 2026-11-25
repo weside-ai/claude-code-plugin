@@ -154,3 +154,32 @@ def test_md_writes_the_report_and_the_next_run_shows_the_delta(
     out = run(repo, home, capsys).out
     [row] = [x for x in out.splitlines() if x.startswith("instructions AGENTS.md")]
     assert row.split()[-1] == "+10"
+
+
+def test_a_repo_pointing_at_a_foreign_crew_measures_itself(tmp_path, monkeypatch, capsys):
+    """Repo B's config points at repo A's crew file: B's master and worker are measured in B
+    (its chain, rules, memory, transcripts), a member working in A is one line."""
+    a, home = world(tmp_path, monkeypatch)
+    b = tmp_path / "b"
+    (b / ".weside").mkdir(parents=True)
+    (b / ".claude" / "rules").mkdir(parents=True)
+    (b / ".weside" / "config.json").write_text(json.dumps({"crew": "../repo/.weside/crew.json"}))
+    (b / "AGENTS.md").write_text("# B\n\n" + "b" * 77 + "\n")
+    (b / ".claude" / "rules" / "b.md").write_text("# B rule\n\n" + "r" * 33 + "\n")
+    subprocess.run(["git", "init", "-q", str(b)], check=True)
+    cfg = Path(cl.claude_home.config_dir())
+    project = cfg / "projects" / cl.project_slug(b.resolve())
+    (project / "memory").mkdir(parents=True)
+    (project / "memory" / "MEMORY.md").write_text("B-MEMORY\n")
+    (project / "b1.jsonl").write_text("\n".join(json.dumps(e) for e in TRANSCRIPT) + "\n")
+    argv = ["--from", str(b), "--home", str(home), "--role", "worker", "--role", "product"]
+    assert cl.main([*argv, "--md"]) == 0
+    captured = capsys.readouterr()
+    out = captured.out
+    assert "| instructions AGENTS.md | disk | 83 |" in out  # B's own, not A's
+    assert "| rules without paths (1) | disk | 44 |" in out
+    assert "| MEMORY.md | disk | 9 |" in out
+    assert "transcript: b1.jsonl" in out
+    assert "product Ada: works in repo, measured there" in out
+    assert "no optimization store" in captured.err
+    assert not (a / ".weside" / "optimization" / "reports").exists()

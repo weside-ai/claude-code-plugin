@@ -1344,3 +1344,14 @@ def test_a_spent_hook_deadline_refuses_every_gated_gh_read(world, monkeypatch):
     assert reason and "ran past the worker gate's" in reason, reason
     arm = wr.right_refusal(["arm_pr.sh", "7"], "arm", rights, KEY, repo, "worker", spent)
     assert arm and "ran past the worker gate's" in arm, arm
+
+
+def test_the_sourced_devbox_env_passes_and_a_never_item_behind_it_does_not(world):
+    """The app-verification form a repo prescribes sources its devbox env, alone or before its
+    shell check: no decision. The same prefix before a never-list item is denied as before."""
+    source = ". " + '"$(' + "a devbox env --path" + ')"'
+    assert hook(world, source) == (None, "")
+    assert hook(world, source + " && scripts/dev/shell-verify.sh /home") == (None, "")
+    decision, reason = hook(world, source + " && cat /dev/shm/" + "vault-1000/x.json")
+    assert decision == "deny", reason
+    assert reason.startswith("never for a worker (crew deny_text (/dev/shm/vault-)")

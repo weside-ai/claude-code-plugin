@@ -51,8 +51,8 @@ this repo's always-loaded rules in that window (none → report "no usage data f
 `.claude/rules/**` file with no `InstructionsLoaded` `file_path` ending in its `.claude/rules/<path>`
 (worktrees load it under other roots) and a skill whose name after the last `:` matches no
 `PreToolUse` `skill` or `UserPromptExpansion` `command_name` becomes a `sunset` entry, source
-`audit`, action `flag`, confidence `Medium`. `AGENTS.md` read as project instructions fires no
-`InstructionsLoaded`.
+`audit`, action `flag`, confidence `Medium`. Lines with `source: "transcript"` (`AGENTS.md`,
+memory) are no rules.
 
 Two homes: a Claude Code file (`AGENTS.md`, a rule, a skill) that cites a vault path (`handbook/…`) or
 carries the companion platform's own content (situation report, ranking, team register, rooms) is an entry,

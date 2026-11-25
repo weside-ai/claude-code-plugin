@@ -3,7 +3,7 @@
 
 Per-session state (``~/.claude/we-timing/<session>.jsonl``, ``<state dir>/conflict-gate/<session>.json``)
 grows by one file per session and nothing else removes it. ``prune(folder, pattern)`` deletes the
-files matching ``pattern`` whose mtime is older than ``MAX_AGE_DAYS`` (45: `/we:instruction-audit` reads a 30-day span of `we-timing`, plus a margin), at most once per
+files matching ``pattern`` (one glob or a tuple of them) whose mtime is older than ``MAX_AGE_DAYS`` (45: `/we:instruction-audit` reads a 30-day span of `we-timing`, plus a margin), at most once per
 ``EVERY_S`` (one day) per folder: the folder's ``.pruned`` file stamps the last sweep. Never raises:
 a sweep that fails leaves the files for the next one.
 """
@@ -21,7 +21,7 @@ STAMP = ".pruned"
 
 def prune(
     folder: Path,
-    pattern: str,
+    pattern: str | tuple[str, ...],
     max_age_days: float = MAX_AGE_DAYS,
     every_s: float = EVERY_S,
     now: float | None = None,
@@ -35,7 +35,8 @@ def prune(
             return 0
         stamp.touch()
         cutoff = now - max_age_days * 86_400
-        for path in folder.glob(pattern):
+        patterns = (pattern,) if isinstance(pattern, str) else pattern
+        for path in (p for pat in patterns for p in folder.glob(pat)):
             with contextlib.suppress(OSError):
                 if path.is_file() and path.stat().st_mtime < cutoff:
                     path.unlink()

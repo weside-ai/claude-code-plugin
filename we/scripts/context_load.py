@@ -33,6 +33,11 @@ Duplicate sentences: sentences of ``MIN_SENTENCE`` characters or more that stand
 loaded files, with both places; never from a memory file. The quote is at most ``QUOTE`` characters
 and only when both files lie in the repo or the plugin; otherwise the line names the places alone.
 
+The repo is the one that declares the crew (``crew.declaring_root``): a repo whose
+``.weside/config.json`` points at another repo's crew file measures itself, its master and worker
+with its own instruction chain, rules, auto-memory and transcripts; a named member working
+elsewhere is one line ``<label>: works in <repo>, measured there``.
+
 ``--md`` writes ``reports/context-<UTC date>.md`` under ``.weside/optimization/`` of the repo
 (``references/optimization-store.md`` § Layout); the report's last line carries its numbers for the
 next run's delta. No store: one line on stderr, nothing written.
@@ -67,6 +72,7 @@ HEAD_LINES = 2_000  # a transcript's first request lies within its first lines
 SCAN_FILES = 5_000  # transcripts looked at per workplace, newest first
 WORKER_MARK = "You are a worker:"  # the first line of process/L0-worker.md
 L0_MARK = "The crew process (L0)"  # the heading of process/L0.md
+CARD_MARK = re.compile(r"\A\s*# Role card: ([a-z][a-z-]*)")  # the first line of roles/<role>.md
 DATA = "<!-- context-load "
 NA = "n/a (no transcript)"
 MEMORY_OFF = "off (workers.context)"
@@ -101,6 +107,7 @@ class Session(NamedTuple):
     texts: list[tuple[str, str, bool]]  # (place, text, quotable)
     transcript: str  # the transcript's file name, or NA
     measured: int | None = None  # tokens of the first request, from the transcript
+    elsewhere: str = ""  # the workplace's name when the member works in another repo
 
 
 # --- disk ----------------------------------------------------------------------------------
@@ -156,10 +163,15 @@ def shown(path: str, repo: Path, home: Path) -> str:
 
 
 def disk_session(
-    crew_path: Path, crew: dict[str, Any], role: str, total: render_process.Total, home: Path
+    crew_path: Path,
+    crew: dict[str, Any],
+    role: str,
+    total: render_process.Total,
+    home: Path,
+    place: Path | None = None,
 ) -> tuple[list[Row], list[tuple[str, str, bool]], Path]:
-    repo = crew_path.parent.parent.resolve()
-    work = render_process._places(crew_path, crew, total.slug, total.label, [])
+    repo = (place or crew_path.parent.parent).resolve()
+    work = render_process._places(crew_path, crew, total.slug, total.label, [], place)
     work_dir = work[0] if work else repo
     roots = (repo, PLUGIN.resolve())
     rows: list[Row] = []
@@ -272,6 +284,43 @@ def _lines(path: Path):
                 yield entry
 
 
+def start_contexts(att: Any) -> list[str]:
+    """The SessionStart ``additionalContext`` texts a transcript attachment carries: the
+    ``hook_additional_context`` list (all hooks of one start), or one ``hook_success`` of a
+    SessionStart hook (its ``stdout`` JSON). Both shapes stand in a transcript for one start."""
+    if not isinstance(att, dict):
+        return []
+    if att.get("type") == "hook_additional_context":
+        content = att.get("content")
+        items = content if isinstance(content, list) else [content]
+        return [x for x in items if isinstance(x, str)]
+    if att.get("type") == "hook_success" and att.get("hookEvent") == "SessionStart":
+        try:
+            out = json.loads(att.get("stdout") or "")
+        except (TypeError, ValueError):
+            return []
+        text = (
+            (out.get("hookSpecificOutput") or {}).get("additionalContext")
+            if isinstance(out, dict)
+            else None
+        )
+        return [text] if isinstance(text, str) else []
+    return []
+
+
+def plugin_file(text: str) -> str | None:
+    """The plugin file a SessionStart context is: a role card (its first line), the worker's short
+    form or the L0; None for any other hook's output."""
+    card = CARD_MARK.match(text)
+    if card:
+        return f"roles/{card[1]}.md"
+    if WORKER_MARK in text:
+        return "process/L0-worker.md"
+    if L0_MARK in text:
+        return "process/L0.md"
+    return None
+
+
 def session_role(path: Path, names: dict[str, str]) -> str | None:
     """The role of the transcript's session: a holder's name as its title, else the short form
     (worker) or the L0 (master) in its SessionStart context."""
@@ -280,12 +329,11 @@ def session_role(path: Path, names: dict[str, str]) -> str | None:
         title = entry.get("customTitle") or entry.get("agentName")
         if isinstance(title, str) and title.strip().lower() in names:
             return names[title.strip().lower()]
-        att = entry.get("attachment")
-        if isinstance(att, dict) and att.get("type") == "hook_additional_context":
-            text = json.dumps(att, ensure_ascii=False)
-            if WORKER_MARK in text:
+        for text in start_contexts(entry.get("attachment")):
+            part = plugin_file(text)
+            if part == "process/L0-worker.md":
                 found = "worker"
-            elif L0_MARK in text and found is None:
+            elif part == "process/L0.md" and found is None:
                 found = "master"
         if entry.get("type") == "api-request-shape":
             break
@@ -399,8 +447,15 @@ def duplicates(texts: list[tuple[str, str, bool]]) -> list[tuple[str, list[str],
 
 
 def measure(
-    crew_path: Path, crew: dict[str, Any], roles: list[str], home: Path
+    crew_path: Path,
+    crew: dict[str, Any],
+    roles: list[str],
+    home: Path,
+    place: Path | None = None,
 ) -> list[tuple[str, Session, list[tuple[str, int]], list]]:
+    """Per session: (role, Session, largest files, duplicates). ``place`` is the repo measured
+    (None: the crew repo); a named member working elsewhere is a Session with ``elsewhere``."""
+    foreign = place is not None and place.resolve() != crew_path.parent.parent.resolve()
     names = {}
     for role in crewlib.ROLE_KEYS:
         name = crewlib.holder_name(crew, role)
@@ -414,8 +469,13 @@ def measure(
     cache: dict[Path, dict[str, tuple[str, dict[str, int]]]] = {}
     for role in roles:
         absent: list[str] = []
-        for total in render_process.total_rows(crew_path, crew, role, home, absent):
-            rows, texts, work = disk_session(crew_path, crew, role, total, home)
+        for total in render_process.total_rows(crew_path, crew, role, home, absent, place):
+            rows, texts, work = disk_session(crew_path, crew, role, total, home, place)
+            if foreign and total.slug and work != place.resolve():
+                out.append(
+                    (role, Session(total.label, [], 0, [], NA, elsewhere=work.name), [], [])
+                )
+                continue
             if work not in cache:
                 files = transcript_files(projects, work)
                 cache[work] = newest_transcripts(files, names, set(roles))
@@ -504,6 +564,9 @@ def render(results: list, before: dict, repo: Path, home: Path, md: bool) -> str
     head = "Characters exact from disk and transcript; tokens estimated as characters ÷ 4."
     out.append(f"# Context load\n\n{head}" if md else head)
     for _, session, files, dups in results:
+        if session.elsewhere:
+            out.append(f"\n{session.label}: works in {session.elsewhere}, measured there")
+            continue
         out.append(f"\n## {session.label}\n" if md else f"\n# {session.label}")
         if not session.rows:
             out.append("skipped: its workplace or an extra repo is absent")
@@ -595,10 +658,11 @@ def main(argv: list[str] | None = None) -> int:
             print("context_load: no crew file here; nothing measured", file=sys.stderr)
             return 0
         home = Path(args.home) if args.home else Path.home()
-        repo = crew_path.parent.parent.resolve()
+        repo = (crewlib.declaring_root(args.start) or crew_path.parent.parent).resolve()
         today = crewlib.today(repo)
         store = store_of(repo)
-        results = measure(crew_path, crew, args.role or list(render_process.all_roles()), home)
+        roles = args.role or list(render_process.all_roles())
+        results = measure(crew_path, crew, roles, home, repo)
         text = render(results, previous(store, today), repo, home, args.md)
         sys.stdout.write(text)
         if args.md:

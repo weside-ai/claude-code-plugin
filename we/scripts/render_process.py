@@ -756,12 +756,18 @@ def _sessions(crew_path: Path, crew: dict[str, Any], role: str) -> list[tuple[st
 
 
 def _places(
-    crew_path: Path, crew: dict[str, Any], slug: str, label: str, absent: list[str] | None
+    crew_path: Path,
+    crew: dict[str, Any],
+    slug: str,
+    label: str,
+    absent: list[str] | None,
+    place: Path | None = None,
 ) -> list[Path]:
-    """A member's workplace then extra repos, the crew repo for an unpinned session; empty (and
-    ``label`` noted in ``absent``) when one is missing and ``absent`` is a list."""
+    """A member's workplace then extra repos; for an unpinned session ``place``, else the crew
+    repo; empty (and ``label`` noted in ``absent``) when one is missing and ``absent`` is a
+    list."""
     if not slug:
-        return [crew_path.parent.parent.resolve()]
+        return [(place or crew_path.parent.parent).resolve()]
     try:
         return crewlib.workplace_paths(crew_path, crew, slug)
     except crewlib.CrewError:
@@ -793,15 +799,17 @@ def total_rows(
     role: str,
     home: Path | None = None,
     absent: list[str] | None = None,
+    place: Path | None = None,
 ) -> list[Total]:
     """Per session of ``role``: its ``Total`` (rows of (part, path, chars), sum). CrewError for an
     unknown role or a workplace that does not exist, unless ``absent`` is a list: then such a
     session is left out and its label appended there (a CI checkout without the sibling repos);
-    RenderError for a card plus addendum over ``BUDGET``."""
+    RenderError for a card plus addendum over ``BUDGET``. ``place`` is the workplace of an
+    unpinned session (master, worker), the crew repo when None."""
     home = home or Path.home()
     out = []
     for label, kind, slug in _sessions(crew_path, crew, role):
-        places = _places(crew_path, crew, slug, label, absent)
+        places = _places(crew_path, crew, slug, label, absent, place)
         if not places:
             continue
         work, extras = places[0], places[1:]
@@ -904,8 +912,12 @@ def _load(start: str | None) -> tuple[Path, dict[str, Any]] | None:
     return crew_path, crew
 
 
-def _print_totals(crew_path: Path, crew: dict[str, Any], role: str, home: str | None) -> None:
-    for label, _, rows, total in total_rows(crew_path, crew, role, Path(home) if home else None):
+def _print_totals(
+    crew_path: Path, crew: dict[str, Any], role: str, home: str | None, start: str | None
+) -> None:
+    place = crewlib.declaring_root(start)
+    home_path = Path(home) if home else None
+    for label, _, rows, total in total_rows(crew_path, crew, role, home_path, place=place):
         print(f"# {label}")
         summed = [r for r in rows if r[0] != "rules-any-file"]
         for part, path, n in summed:
@@ -956,7 +968,7 @@ def main(argv: list[str]) -> int:
         if args.all_roles:
             _print_sizes(crew_path, crew)
         elif args.total:
-            _print_totals(crew_path, crew, args.role, args.home)
+            _print_totals(crew_path, crew, args.role, args.home, args.start)
         else:
             _print_role(crew_path, crew, args.role)
     except (crewlib.CrewError, RenderError, OSError) as exc:

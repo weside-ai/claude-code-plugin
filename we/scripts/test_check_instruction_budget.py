@@ -405,14 +405,25 @@ class ProcessRenderTest(unittest.TestCase):
         )
         return result.returncode, result.stdout
 
+    def inside(self, path: Path, crew: dict, t: render_process.Total) -> int:
+        """A session's total minus the instruction files and rules outside its workplace."""
+        work = crewlib.workplace_path(path, crew, t.slug) if t.slug else self.root
+        return t.total - sum(
+            n
+            for part, p, n in t.rows
+            if part in ("instructions", "rules")
+            and not Path(p).resolve().is_relative_to(work.resolve())
+        )
+
     def sums(self) -> dict[str, int]:
+        """The inside sum per role, the largest of its sessions."""
         path = self.root / ".weside" / "crew.json"
         crew = crewlib.load(path)
         out = {}
         for role in render_process.all_roles():
             rows = render_process.total_rows(path, crew, role, self.home)
             if rows:
-                out[role] = max(t.total for t in rows)
+                out[role] = max(self.inside(path, crew, t) for t in rows)
         return out
 
     def test_a_repo_without_crew_is_skipped_and_a_fitting_crew_passes(self):
@@ -484,16 +495,51 @@ class ProcessRenderTest(unittest.TestCase):
         code, out = self.gate("--role-totals", "--home", str(self.home))
         self.assertEqual(code, 0, out)
         self.assertIn(
-            f"machinery Kit: {sums['machinery']} chars (limit machinery {sums['machinery']})", out
+            f"machinery Kit: {sums['machinery']} chars inside infra (limit machinery "
+            f"{sums['machinery']}) · shared 0",
+            out,
         )
+        self.assertIn("shared: 0 chars (no limit): none", out)
         low = {**sums, "hr": sums["hr"] - 1}
         self.save({"optimization": {"budget": {"role_total_chars": low}}})
         code, out = self.gate("--role-totals", "--home", str(self.home))
         self.assertEqual(code, 1, out)
         self.assertIn(
-            f"✗ .weside/config.json: role hr (hr Hana) loads {sums['hr']} chars > {sums['hr'] - 1}",
+            f"✗ .weside/config.json: role hr (hr Hana) loads {sums['hr']} chars inside biz > "
+            f"{sums['hr'] - 1}",
             out,
         )
+        rule = self.root / ".claude" / "rules" / "grow.md"
+        rule.parent.mkdir(parents=True)
+        rule.write_text("x", encoding="utf-8")
+        self.save({"optimization": {"budget": {"role_total_chars": sums}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"role master (master) loads {sums['master'] + 1} chars inside app", out)
+
+    def test_shared_files_are_named_not_counted_against_a_role(self):
+        """An ancestor `AGENTS.md` above every workplace is shared: it grows the shared line, no
+        role; the key `shared` bounds that line alone."""
+        self.save()
+        sums = self.sums()
+        self.save({"optimization": {"budget": {"role_total_chars": sums}}})
+        ancestor = self.ws / "AGENTS.md"
+        ancestor.write_text("w" * 1_234, encoding="utf-8")
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 0, out)
+        self.assertIn(
+            f"master: {sums['master']} chars inside app (limit master {sums['master']}) · "
+            "shared 1234",
+            out,
+        )
+        self.assertIn(f"shared: 1234 chars (no limit): {ancestor.resolve()}", out)
+        self.assertNotIn("[role-total]", out)
+        tight = {**sums, "shared": 1_233}
+        self.save({"optimization": {"budget": {"role_total_chars": tight}}})
+        code, out = self.gate("--role-totals", "--home", str(self.home))
+        self.assertEqual(code, 1, out)
+        self.assertIn("✗ .weside/config.json: the shared files load 1234 chars > 1233", out)
+        self.assertEqual(out.count("[role-total]"), 1, out)
 
     def test_a_role_without_limit_fails_closed_and_slack_asks_to_lower(self):
         self.save()
@@ -516,10 +562,9 @@ class ProcessRenderTest(unittest.TestCase):
         rows = render_process.total_rows(path, crewlib.load(path), "specialist", self.home)
         return {f"specialist:{t.slug}": t.total for t in rows}
 
-    def test_ci_skips_an_absent_workplace_and_adds_the_assumed_outside(self):
-        """A CI checkout lacks the sibling repos and the files above the repo: the control fails
-        on the missing workplace, `--skip-absent` names the session instead, and
-        `--assume-outside N` adds N to every sum the limits then judge."""
+    def test_ci_skips_an_absent_workplace(self):
+        """A CI checkout lacks the sibling repos: the control fails on the missing workplace,
+        `--skip-absent` names the session instead."""
         self.save()
         sums = self.sums()
         self.save({"optimization": {"budget": {"role_total_chars": sums}}})
@@ -531,16 +576,6 @@ class ProcessRenderTest(unittest.TestCase):
         code, out = self.gate("--role-totals", "--home", str(self.home), "--skip-absent")
         self.assertEqual(code, 0, out)
         self.assertIn("machinery Kit: skipped, its workplace or an extra repo is absent", out)
-        self.assertIn("outside app: 0 chars", out)
-        code, out = self.gate(
-            "--role-totals", "--home", str(self.home), "--skip-absent", "--assume-outside", "7"
-        )
-        self.assertEqual(code, 1, out)
-        self.assertIn(
-            f"✗ .weside/config.json: role master (master) loads {sums['master'] + 7} chars > "
-            f"{sums['master']} [role-total]",
-            out,
-        )
 
     def test_a_member_key_wins_over_its_role_key(self):
         self.save()
@@ -551,8 +586,8 @@ class ProcessRenderTest(unittest.TestCase):
         code, out = self.gate("--role-totals", "--home", str(self.home), "--slack", "500")
         self.assertEqual(code, 0, out)
         self.assertIn(
-            f"specialist Bo: {members['specialist:bo']} chars (limit specialist:bo "
-            f"{members['specialist:bo']})",
+            f"specialist Bo: {members['specialist:bo']} chars inside app (limit specialist:bo "
+            f"{members['specialist:bo']}) · shared 0",
             out,
         )
         low = {**tight, "specialist:lex": members["specialist:lex"] - 1}
