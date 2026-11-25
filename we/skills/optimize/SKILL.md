@@ -94,8 +94,8 @@ Per candidate, top down, until the decider stops or the inbox is empty. Every de
   repo fact, or instruction text that passes admission. Everything else is `rejected` with its
   reason, unasked.
 - **Admission.** Instruction text added or reworded, a role's own file included, goes to the decider
-  only when all four hold, else it is rejected with the failed condition. Replacing a line at least
-  as long in the same file, of no mandatory class, lifts 2; the ledger reason names that line:
+  only when all four hold, else it is rejected naming each failed condition by number. A same-file
+  replacement of a line at least as long, of no mandatory class, lifts 2; the ledger reason names it:
   1. it names the observed failure;
   2. the failure occurred at least twice (evidence lines), once in a mandatory class (step 4), or
      it is a repository fact (a contradicted claim, a gate violation);

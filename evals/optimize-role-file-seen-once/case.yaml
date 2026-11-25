@@ -23,5 +23,5 @@ graders:
     flags: "i"
   - name: names-condition-2
     type: regex
-    pattern: "condition 2|\\(2\\)|twice|two (evidence|occurrences)|seen once|one evidence"
+    pattern: "condition 2|\\(2\\)|twice|two (evidence|occurrences)|seen (only )?once|one evidence"
     flags: "i"

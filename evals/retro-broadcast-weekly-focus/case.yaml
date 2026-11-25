@@ -21,9 +21,14 @@ graders:
     type: regex
     pattern: "focus"
     flags: "i"
+  - name: first-message-to-caller
+    type: regex
+    pattern: "(?<!not )\\bto\\W{0,4}(you|the (human|person|caller)|Hal)\\b"
+    flags: "i"
   - name: no-brief-yet
     type: regex
-    pattern: "--collect"
+    pattern: "^\\W*To:\\W*(Ada|Vic|Kit)"
+    flags: "im"
     match: "not_contains"
   - name: names-the-recent-broadcast
     type: regex

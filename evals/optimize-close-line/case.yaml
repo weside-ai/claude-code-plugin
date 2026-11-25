@@ -29,5 +29,5 @@ graders:
     flags: "i"
   - name: step-4-rows
     type: regex
-    pattern: "remove candidate"
+    pattern: "remov\\w*\\W+candidate|candidates?\\W+(to|for)\\W+remov"
     flags: "i"
