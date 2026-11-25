@@ -40,10 +40,10 @@ we/                               plugin root
     PreToolUse                    worker_rights_gate (a process worker's rights and never-list), verification_gate (hint: PR body without a receipt),
                                   draft_reason_gate (hint: draft reason, ready on a conflict), teammate_gate
     Stop                          store_conversation_hook, conflict_gate (own DIRTY PRs, green PRs that lost their
-                                  arm), reply_language_gate, question_gate, worker_report_gate (process workers)
+                                  arm), reply_language_gate, question_gate, worker_report_gate (process workers), subagent_timing
     PreCompact                    epic_age_precompact (stale Updates Log)
     SubagentStop                  the dev-worker report gate (a hook on `we:dev-*`, no script)
-    timing and telemetry          subagent_timing (SubagentStart/Stop, InstructionsLoaded, UserPromptExpansion, Skill)
+    timing and telemetry          subagent_timing (SubagentStart/Stop, Stop, InstructionsLoaded, UserPromptExpansion, Skill)
     attention                     tmux_attention (window title white while the session waits, grey at rest)
   scripts/
     crew                          crew.py (the one reader of .weside/crew.json), render_process.py, start.py,

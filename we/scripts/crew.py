@@ -429,11 +429,17 @@ class CrewError(Exception):
 
 def find(start: str | Path | None = None) -> Path | None:
     """The crew file in force for ``start``, or None."""
+    root = declaring_root(start)
+    return None if root is None else _crew_at(root)  # type: ignore[return-value]
+
+
+def declaring_root(start: str | Path | None = None) -> Path | None:
+    """The directory whose own crew file or `config.json` pointer ``find`` stopped at, or None:
+    a repo pointing at another repo's crew file is itself the place it measures."""
     d = Path(start or Path.cwd()).resolve()
     for root in (d, *d.parents):
-        found = _crew_at(root)
-        if found is not False:
-            return found
+        if _crew_at(root) is not False:
+            return root
         if (root / ".git").exists():
             return None
     return None

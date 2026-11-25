@@ -35,14 +35,16 @@ warning (`[card-dup-terms]`): a reworded duplicate is the common case of the cut
 
 `--role-totals` (opt-in; it reads the sibling repos and the home ancestors a session loads, so it
 runs where they are, not in CI): per session of each role, `render_process.py --role R --total`
-against `optimization.budget.role_total_chars` (`{"<role>": chars, "<role>:<slug>": chars}`; a
-member key bounds that member and wins over its role key); over the limit → error, a session
-without a limit → error `no total limit for role <R>` (fail-closed). `--slack N`: a limit more
-than N chars above the largest sum it bounds is an error too (lower it: a limit only falls).
-The report names the chars a session in the repo loads from outside it (ancestor instruction
-files, `<home>/.claude/CLAUDE.md` and rules). Where those files and the sibling repos are absent
-(CI), `--skip-absent` leaves out a session whose workplace or extra repo is missing (named, not
-an error) and `--assume-outside N` adds N chars to every remaining sum, so the same limits hold.
+split in two. Shared are the instruction files and rules the session loads from outside its
+workplace (ancestor `AGENTS.md`/`CLAUDE.md`, `<home>/.claude/CLAUDE.md` and rules): files no
+repo owns and every session loads alike. Inside is the rest, its own text. The inside sum is
+judged against `optimization.budget.role_total_chars` (`{"<role>": chars, "<role>:<slug>":
+chars}`; a member key bounds that member and wins over its role key); over the limit → error, a
+session without a limit → error `no total limit for role <R>` (fail-closed). One line names the
+shared files and their largest sum; the key `shared` bounds that sum (over → error; absent → the
+line only). `--slack N`: a limit more than N chars above the largest sum it bounds is an error
+too (lower it: a limit only falls). Where the sibling repos are absent (CI), `--skip-absent`
+leaves out a session whose workplace or extra repo is missing (named, not an error).
 
 `--totals` (opt-in, report only: no finding, the exit code stays; refused with `--json`): before
 the findings, the lines per category over the files the gate scans (`exclude` applies): rules
@@ -53,7 +55,7 @@ folder beside the addendum, as `render_process.role_lines` counts them (`role su
 without a crew file).
 
 Usage: check-instruction-budget.py [--root DIR] [--json | --totals]
-         [--role-totals [--home DIR] [--slack N] [--skip-absent] [--assume-outside N]]
+         [--role-totals [--home DIR] [--slack N] [--skip-absent]]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
 
@@ -658,24 +660,29 @@ def _check_addenda(repo: Repo, crew: dict, cards: Path, l0: list[str]) -> None:
             repo.error("card-size", rel, str(exc))
 
 
-def _outside(root: Path, rows: list[tuple[str, str, int]]) -> int:
-    """Chars of instruction files and rules a session loads from outside ``root``."""
-    base = root.resolve()
-    return sum(
-        n
+def _outside(work: Path, rows: list[tuple[str, str, int]]) -> dict[str, int]:
+    """Instruction files and rules a session loads from outside its workplace ``work``: the
+    shared files, path → chars."""
+    base = work.resolve()
+    return {
+        path: n
         for part, path, n in rows
         if part in ("instructions", "rules") and not Path(path).resolve().is_relative_to(base)
-    )
+    }
+
+
+def _workplace(path: Path, crew: dict, slug: str, root: Path) -> Path:
+    """The session's workplace: the member's, ``root`` for an unpinned session."""
+    if not slug:
+        return root
+    return crewlib.workplace_path(path, crew, slug)
 
 
 def role_totals(
-    repo: Repo,
-    home: Path | None,
-    slack: int | None,
-    skip_absent: bool = False,
-    assume_outside: int = 0,
+    repo: Repo, home: Path | None, slack: int | None, skip_absent: bool = False
 ) -> list[str]:
-    """Check each role's total against ``role_total_chars``; returns one report line per sum."""
+    """Check each role's inside sum against ``role_total_chars`` and the shared sum against its
+    key ``shared``; returns one report line per session, then the shared line."""
     path = crewlib.at(repo.root)
     if path is None:
         repo.error("role-total", ".", "no crew here: --role-totals needs one")
@@ -690,40 +697,54 @@ def role_totals(
         repo.error("role-total", label, str(exc))
         return report
     absent: list[str] = []
+    shared_files: dict[str, int] = {}
+    tops: dict[str, int] = {}
     for role in render_process.all_roles():
         try:
             sessions = render_process.total_rows(
-                path, crew, role, home, absent if skip_absent else None
+                path, crew, role, home, absent if skip_absent else None, repo.root
             )
         except (crewlib.CrewError, render_process.RenderError) as exc:
             repo.error("role-total", label, f"role {role}: {exc}")
             continue
-        tops: dict[str, int] = {}
-        for member, slug, rows, measured in sessions:
-            total = measured + assume_outside
-            if role == "master":
-                report.append(
-                    f"outside {repo.root.name}: {_outside(repo.root, rows)} chars "
-                    f"(ancestor instruction files and home; assumed {assume_outside})"
-                )
+        for member, slug, rows, total in sessions:
+            work = _workplace(path, crew, slug, repo.root)
+            outside = _outside(work, rows)
+            shared_files.update(outside)
+            shared = sum(outside.values())
+            tops["shared"] = max(tops.get("shared", 0), shared)
+            inner = total - shared
             key = render_process.limit_key(role, slug, limits)
             limit = limits.get(key)
             if not isinstance(limit, int):
                 repo.error("role-total", config, f"no total limit for role {role}")
                 continue
-            report.append(f"{member}: {total} chars (limit {key} {limit})")
-            tops[key] = max(tops.get(key, 0), total)
-            if total > limit:
-                repo.error(
-                    "role-total", config, f"role {role} ({member}) loads {total} chars > {limit}"
-                )
-        for key, top in tops.items():
-            if slack is not None and limits[key] - top > slack:
+            report.append(
+                f"{member}: {inner} chars inside {work.name} (limit {key} {limit}) · shared {shared}"
+            )
+            tops[key] = max(tops.get(key, 0), inner)
+            if inner > limit:
                 repo.error(
                     "role-total",
                     config,
-                    f"lower `{key}` to {top} in {config} (limit {limits[key]})",
+                    f"role {role} ({member}) loads {inner} chars inside {work.name} > {limit}",
                 )
+    if "shared" in tops:
+        limit = limits.get("shared")
+        bound = f"limit shared {limit}" if isinstance(limit, int) else "no limit"
+        names = ", ".join(sorted(shared_files)) or "none"
+        report.append(f"shared: {tops['shared']} chars ({bound}): {names}")
+        if isinstance(limit, int) and tops["shared"] > limit:
+            repo.error(
+                "role-total", config, f"the shared files load {tops['shared']} chars > {limit}"
+            )
+    for key, top in tops.items():
+        if slack is not None and isinstance(limits.get(key), int) and limits[key] - top > slack:
+            repo.error(
+                "role-total",
+                config,
+                f"lower `{key}` to {top} in {config} (limit {limits[key]})",
+            )
     report += [f"{who}: skipped, its workplace or an extra repo is absent" for who in absent]
     return report
 
@@ -794,9 +815,6 @@ def main() -> int:
         help="--role-totals: skip a session without workplace",
     )
     parser.add_argument(
-        "--assume-outside", type=int, default=0, help="--role-totals: add N chars to each sum"
-    )
-    parser.add_argument(
         "--totals", action="store_true", help="report line sums per category and crew session"
     )
     args = parser.parse_args()
@@ -808,7 +826,7 @@ def main() -> int:
             print(line)
     if args.role_totals:
         home = Path(args.home) if args.home else None
-        for line in role_totals(repo, home, args.slack, args.skip_absent, args.assume_outside):
+        for line in role_totals(repo, home, args.slack, args.skip_absent):
             if not args.json:
                 print(f"  {line}")
     errors = [f for f in repo.findings if f.severity == "error"]
