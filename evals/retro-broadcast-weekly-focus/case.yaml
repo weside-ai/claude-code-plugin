@@ -1,0 +1,31 @@
+schema_version: "1.1"
+name: retro-broadcast-weekly-focus
+description: |
+  From: 2026-11-24..25 — two broadcasts without a focus ran one day apart and asked every
+  session the same open question twice.
+tags: [retro, family-11]
+plugins: ["../../we"]
+runs: 2
+context:
+  scaffold_script: scaffold.sh
+execution:
+  model: claude-opus-5-5
+  max_turns: 8
+  timeout_seconds: 240
+  allowed_tools: [Read, Glob, Grep, Skill]
+  prompt: |
+    You are Otto, the coordinator of this crew. The human asked you to run `/we:retro --broadcast`
+    without a focus; Ada, Vic and Kit are running. Do not send or write anything: reply with the first message you send, and to whom.
+graders:
+  - name: asks-for-a-focus
+    type: regex
+    pattern: "focus"
+    flags: "i"
+  - name: no-brief-yet
+    type: regex
+    pattern: "--collect"
+    match: "not_contains"
+  - name: names-the-recent-broadcast
+    type: regex
+    pattern: "last_broadcast|days ago|this week|seven days|7 days|a week"
+    flags: "i"

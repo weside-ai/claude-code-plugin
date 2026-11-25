@@ -9,10 +9,10 @@ description: >
 
 1. Act only on what the store says, read from the default branch: the shared checkout often lags,
    and where memory disagrees, the files win. Store format: `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md`.
-2. No change without evidence and the decider's yes: the HR role, which decides weekly (L0 §Changing
-   this); without a crew, the user. Evidence is a measured number, or a
-   repository fact (a contradicted claim, a gate violation, a documented limit). Every applied
-   change carries a review date and is removed again when it does not pay off (step 4).
+2. No change without evidence and the decider's yes, or a remove default the decider let stand one
+   run (step 5): the HR role, which decides weekly (L0 §Changing this); without a crew, the user.
+   Evidence is a measured number or a repository fact (a contradicted claim, a gate violation, a
+   documented limit). Every applied change carries a review date and goes when it does not pay off.
 3. A product-owner decision (product, comfort, cost above a cap, deleting) is one question with a
    recommendation, never a ledger entry on its own.
 4. Commits follow the target repo's own instruction files. Where they say nothing about where
@@ -53,36 +53,37 @@ inbox as it is.
 
 - Merge files that carry one key into the oldest; their evidence lines add up.
 - Group by target file. Two entries on one file that pull in opposite directions are decided together.
-- Order: evidence count × confidence (High 3, Medium 2, Low 1); `gap` and `G2-conflict` entries
-  with a user correction among their evidence go first.
+- Order: `remove` candidates first (retro entries and step 4), then evidence count × confidence
+  (High 3, Medium 2, Low 1); `gap` and `G2-conflict` entries with a user correction lead the adds.
 - **Pre-sort** (optional, the decider asks for it, or the inbox holds more than ten entries after
   consolidation): one read-only worker (`we:explore-medium`) gets the inbox and ledger paths and
-  returns the ten entries it would decide first, each with one line why. Check each line at its
-  entry; step 5 decides these ten, the rest stays in `inbox/` for the next run.
+  returns the ten adds it would decide first, each with one line why. Check each line at its
+  entry; step 5 decides the removals and these ten, the rest stays in `inbox/` for the next run.
 - **A rejected key again.** An entry whose key has a `rejected` ledger row goes on only when its new
   evidence answers that row's reason (the count adds the row's evidence: a second occurrence answers
   "seen once"). Otherwise delete the file in the store commit; the rejection stands.
 
-## 4 · Measure "after", sunset, ablation
+## 4 · Delete first: after, sunset, ablation
 
 - **After.** Ledger rows with an `after` still pending get their number now via the adapter, or
   without one from recurrence (store reference § Measurement adapter); a row
   that cannot be measured yet keeps `pending` and names when it can (a plugin change: after release
-  and `/plugin update`). An `applied` row without `review_by` gets its date plus
-  `optimization.review_days` (default 30), unless its change was a removal (`—`).
+  and `/plugin update`); a missing `review_by` per store reference § Ledger row.
 - **Sunset.** An `applied` row whose `review_by` has passed becomes a `remove` candidate
   (`source: sunset`) when its `after` shows no improvement over `before`, when its failure recurred
   after the apply date (an evidence line for its key), or when a gate now enforces the same thing.
-- **Unmeasured.** A row past `review_by` whose failure never recurred and that nothing measures is
-  no `remove` candidate: the change may be why the failure stopped. With an ablation command it goes
-  to ablation first; without one its `review_by` moves forward by `review_days`, nothing else.
+- **Unproven.** An `applied` instruction-text row past `review_by` with no measured effect (no
+  recurrence is no measurement) and no mandatory class (money, tenant isolation or authorization,
+  data or deletion, secrets, release) is a `remove` candidate (`source: sunset`). It stays one more
+  `review_days` only when the target file's owner (a role file: that role; else the decider) names
+  in one sentence the damage it catches in prod or by mistake ("useful" is not enough).
 - **Ablation.** Of the `applied` instruction changes past `review_by` that sunset did not pick, two
-  per run, the unmeasured ones first, then the oldest, go through the adapter's ablation command
-  (the change reverted in a bench copy, probes run); no difference → a `remove` candidate
-  (`source: ablation`). No adapter or no ablation command → skip it and say so in one line.
+  per run, the oldest first, go through the adapter's ablation command (the change reverted in a
+  bench copy, probes run): no difference → a `remove` candidate (`source: ablation`); none → say so.
 - Keys, the row a removal retires, and what a rejection moves:
-  `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Ledger row. Order them into the step-3
-  list with one evidence line each, confidence Medium.
+  `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Ledger row. They head the step-3
+  list with one evidence line each, confidence Medium. Step 4 runs every run before step 5, also
+  with a full inbox; a run that stops early stops after the removals.
 
 ## 5 · Decide
 
@@ -92,11 +93,12 @@ Per candidate, top down, until the decider stops or the inbox is empty. Every de
 - **Only what lasts goes to the decider:** a gate, a hook, a script, a deletion, a fix of a contradicted
   repo fact, or instruction text that passes admission. Everything else is `rejected` with its
   reason, unasked.
-- **Admission.** A candidate that adds or rewords instruction text goes to the decider only when all
-  four hold; otherwise it is rejected with the condition that failed:
+- **Admission.** Instruction text added or reworded, a role's own file included, goes to the decider
+  only when all four hold, else it is rejected with the failed condition. Replacing a line at least
+  as long in the same file, of no mandatory class, lifts 2; the ledger reason names that line:
   1. it names the observed failure;
-  2. the failure occurred at least twice (evidence lines), once in a high-damage area (money,
-     security, data loss), or it is a repository fact (a contradicted claim, a gate violation);
+  2. the failure occurred at least twice (evidence lines), once in a mandatory class (step 4), or
+     it is a repository fact (a contradicted claim, a gate violation);
   3. when the failure recurred while an instruction on the topic stood, the remedy is a gate, a
      hook or a deletion, not a second wording
      (`${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md` § What earns a line); a model-fit
@@ -106,16 +108,13 @@ Per candidate, top down, until the decider stops or the inbox is empty. Every de
      the recurrence metric (store reference § Measurement adapter); a correction
      toward a contradicted repo fact uses the re-check of that fact as its metric. No metric →
      reject.
-
-  A `remove` candidate needs only the reason. A plugin skill is measured with `claude plugin eval`
-  (or the `skill-creator` plugin's evals); a skill nobody invokes shows up in `/skill-doctor`.
 - **Proposal.** The exact lines (NEW or EDIT) against `${CLAUDE_PLUGIN_ROOT}/references/instruction-authoring.md`,
-  the number of lines it adds to always-loaded context (rules without `paths:`, `AGENTS.md`,
-  `CLAUDE.md`), and the gate result after the edit.
-- **Batch the questions**, two to four candidates per batch, each one question line (L0 §Talking and
-  the board): the change, its benefit in one sentence, your recommendation. With a crew they go to the
-  HR role; without one, as plain text at the end of the message, the recommendation last. Chosen →
-  applied; not chosen → `rejected` ("not chosen"). Say so in the question.
+  the lines it adds and removes in its target file, and the gate result after the edit.
+- **Batch the questions** to the decider (rule 2), two to four candidates per batch, each one
+  question line (L0 §Talking and the board): the change, its benefit in one sentence, your
+  recommendation last. Chosen → applied; not chosen → `rejected` ("not chosen"); say so in it. A
+  batch of `remove` candidates, each needing only its reason, is one question with the default
+  "remove"; without an answer by the next run the default holds.
 
 ## 6 · Apply
 
@@ -139,5 +138,6 @@ Before the turn ends, each fact once:
 - the charter stays within 200 lines.
 
 Commit per `${CLAUDE_PLUGIN_ROOT}/references/optimization-store.md` § Layout (where store commits land). Close with one line: candidates applied /
-rejected, inbox left, the next step. Then offer each `workspace` repo whose inbox is not
-empty.
+rejected, inbox left, step 4's rows read and remove candidates, lines +/− per target file and the
+run's change of `all` in `check-instruction-budget.py --totals` (positive: name the removals that
+offset it, or ask the decider once), the next step; then offer each `workspace` repo with an inbox.

@@ -18,7 +18,7 @@ Plugin checkout and workspace.
 
 | Path | Holds | Written by |
 |---|---|---|
-| `CHARTER.md` | goal, decisions, current findings, next steps; frontmatter `last_optimize: YYYY-MM-DD` | `/we:optimize` |
+| `CHARTER.md` | goal, decisions, current findings, next steps; frontmatter `last_optimize:` and `last_broadcast:` (`YYYY-MM-DD`; one field each, no log) | `/we:optimize`; `last_broadcast:` `/we:retro` § Broadcast 3 |
 | `LEDGER.md` | one row per decided candidate | `/we:optimize` |
 | `inbox/<YYYY-MM-DD>-<key>.md` | one open finding per file | `/we:retro`, `/we:instruction-audit`, `/we:harness-review` |
 | `inbox/expired/<YYYY-MM-DD>-<key>.md` | an expired entry, readable until a new evidence line revives it | `scripts/optimization_close.py` |
@@ -89,21 +89,28 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 - **Pattern ids** reuse the prompt-audit taxonomy that ships with Claude Code (`claude-api` skill,
   `shared/prompt-audit.md`): `G1a`–`G1f`, the Group 2 rows as `G2-verbose`, `G2-freedom`,
   `G2-recency`, `G2-volatile`, `G2-conflict`, `G2-time`, `G2-history`, `G2-triggers`, then `G3`,
-  `G4`. Five ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
-  changed source, `gap` for a missing instruction (action `add`), `sunset` and `ablation` for a
+  `G4`. Six ids sit outside it: `gate:<check>` for a gate violation, `guideline-changed` for a
+  changed source, `gap` for a missing instruction (action `add`), `remove` (below), `sunset` and `ablation` for a
   `remove` or `flag` candidate `/we:optimize` step 4 writes against an applied ledger row; their key is
   `sunset--<row key>` or `ablation--<row key>`. `/we:instruction-audit` § 3 also writes `sunset`
   (source `audit`, no ledger row) for a rule or skill with no recorded use; its key is `sunset--<target-slug>`.
+- **A `remove` entry** (a retro finding: text loaded or followed that did not help): `pattern: remove`,
+  `action: remove`, `source: retro`, key `remove--<target-slug>`, a second line of one file
+  `--<line-slug>` added; the body quotes the line (or names its line number where the rule above
+  forbids text) and says in one sentence why it did not help and what the session did instead.
+  `/we:optimize` decides it before any add and needs only that reason.
 - No `merge=union` for the inbox: on a changed frontmatter line it keeps both sides as duplicate
   YAML keys, without a conflict marker. One file per finding keeps real conflicts rare and visible.
 - **Lifecycle:** `/we:optimize` decides an entry `applied` or `rejected`, writes its ledger row and
   deletes the inbox file in the same commit. Before it decides, `scripts/optimization_close.py`
-  closes two kinds by rule (its docstring owns the row it writes): an entry whose key a merged PR's
+  closes three kinds by rule (its docstring owns the row it writes): an entry whose key a merged PR's
   title or body names, merged on or after the entry's first-seen date and changing no file under
   `.weside/optimization/`, is `applied` with that PR as evidence; an entry with fewer than two evidence lines whose first-seen date is
   `optimization.expire_days` or more days old is `expired` (`--expire-all-before <date>`: every entry
   first seen before it, in one run). An expired entry moves to `inbox/expired/`; a new evidence line
-  under its key revives it to `inbox/` through `retro_write.py`. A later finding on a rejected key is a fresh file under
+  under its key revives it to `inbox/` through `retro_write.py`. The third kind is a `LEDGER.md` row
+  `upstream`: `applied` or `rejected` when a merged PR of the plugin's repository names its key,
+  `expired` `review_days` after its date without one (the script's docstring owns the rule). A later finding on a rejected key is a fresh file under
   that key; `/we:optimize` § 3 puts it to the user only when it answers the rejection's reason.
 
 ## Ledger row
@@ -113,7 +120,7 @@ The quoted line, why it no longer fits, and the proposed replacement text.
 `| date | key | target | decision | evidence | metric | before → after | review_by | change |`
 
 - `decision`: `applied` · `rejected` · `upstream` (reported to the plugin's
-  maintainers) · `removed` (a later sunset or ablation removal took the change out) · `expired`
+  maintainers; `optimization_close.py` closes it) · `removed` (a later sunset or ablation removal took the change out) · `expired`
   (closed unconfirmed by `optimization_close.py`; a new evidence line under its key reopens it, the row stays).
 - `metric`: what shows the effect (the adapter command, or the re-check of a repo fact); every
   applied row that adds or rewords text has one. An applied removal has `—` here and in `review_by`.
@@ -152,7 +159,8 @@ line: `before` is its count of `retro` evidence lines at apply (the ledger row k
 `after` the `retro` lines under the same key dated after the apply date. Since applying deletes the
 inbox file, a retro that sees the failure again writes a fresh file under the old key (the ledger
 row is the stable-key match); `/we:optimize` step 4 reads that file as the row's `after` before it
-decides it as a candidate. Zero after `review_by` means it held. An
+decides it as a candidate. Zero after `review_by` shows that the failure did not return, not that
+the line stopped it: no measured effect (`/we:optimize` § 4, Unproven). An
 audit or gate entry without retro evidence has no recurrence metric. A plugin skill is measured with `claude plugin eval` (or
 the `skill-creator` plugin's evals) instead; an unused skill shows up in `/skill-doctor`.
 

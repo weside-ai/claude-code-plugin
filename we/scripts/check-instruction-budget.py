@@ -44,7 +44,15 @@ files, `<home>/.claude/CLAUDE.md` and rules). Where those files and the sibling 
 (CI), `--skip-absent` leaves out a session whose workplace or extra repo is missing (named, not
 an error) and `--assume-outside N` adds N chars to every remaining sum, so the same limits hold.
 
-Usage: check-instruction-budget.py [--root DIR] [--json]
+`--totals` (opt-in, report only: no finding, the exit code stays; refused with `--json`): before
+the findings, the lines per category over the files the gate scans (`exclude` applies): rules
+`.claude/rules/**/*.md` (always-on and path-scoped), role files `.weside/roles/**/*.md`, skills
+`**/SKILL.md`, instruction files (`AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`) and `all`, their
+sum; then one line per crew session with the lines it loads, card + addendum + the files in the
+folder beside the addendum, as `render_process.role_lines` counts them (`role sums: no crew`
+without a crew file).
+
+Usage: check-instruction-budget.py [--root DIR] [--json | --totals]
          [--role-totals [--home DIR] [--slack N] [--skip-absent] [--assume-outside N]]
 PyYAML is optional: without it the strict-YAML checks are skipped and say so.
 """
@@ -720,6 +728,46 @@ def role_totals(
     return report
 
 
+def totals(repo: Repo) -> list[str]:
+    """The `--totals` report (module docstring): line sums per category, then per crew session."""
+
+    def lines(rels: list[str]) -> int:
+        return sum(line_count(repo.text(rel)) for rel in rels)
+
+    rules = repo.instruction_paths(lambda r: r.startswith(".claude/rules/") and r.endswith(".md"))
+    always = [
+        r for r in rules if rule_loading.parse_rule(repo.text(r), repo.root / r).is_always_on
+    ]
+    role_files = lines(
+        repo.instruction_paths(lambda r: r.startswith(".weside/roles/") and r.endswith(".md"))
+    )
+    skills = lines(repo.instruction_paths(lambda r: r.endswith("SKILL.md")))
+    files = lines(repo.instruction_paths(lambda r: r.rsplit("/", 1)[-1] in INSTRUCTION_FILES))
+    rule_lines, always_lines = lines(rules), lines(always)
+    out = [
+        f"totals (lines): rules {rule_lines} (always-on {always_lines}, path-scoped"
+        f" {rule_lines - always_lines}) · role files {role_files} · skills {skills}"
+        f" · instruction files {files} · all {rule_lines + role_files + skills + files}"
+    ]
+    path = crewlib.at(repo.root)
+    if path is None:
+        return [*out, "role sums: no crew"]
+    try:
+        crew = crewlib.load(path)
+        absent: list[str] = []
+        for role in render_process.all_roles():
+            for label, card, addendum, named in render_process.role_lines(
+                path, crew, role, absent
+            ):
+                out.append(
+                    f"role {label}: {card + addendum + named} (card {card} + addendum {addendum}"
+                    f" + files {named})"
+                )
+    except (crewlib.CrewError, render_process.RenderError, OSError) as exc:
+        out.append(f"role sums: not read ({exc})")
+    return out
+
+
 def run(root: Path) -> Repo:
     budget, exclude = load_config(root)
     repo = Repo(root=root, budget=budget, exclude=exclude, files=rule_loading.list_files(root))
@@ -748,8 +796,16 @@ def main() -> int:
     parser.add_argument(
         "--assume-outside", type=int, default=0, help="--role-totals: add N chars to each sum"
     )
+    parser.add_argument(
+        "--totals", action="store_true", help="report line sums per category and crew session"
+    )
     args = parser.parse_args()
+    if args.totals and args.json:
+        parser.error("--totals prints text; it does not combine with --json")
     repo = run(rule_loading.repo_root(args.root))
+    if args.totals:
+        for line in totals(repo):
+            print(line)
     if args.role_totals:
         home = Path(args.home) if args.home else None
         for line in role_totals(repo, home, args.slack, args.skip_absent, args.assume_outside):

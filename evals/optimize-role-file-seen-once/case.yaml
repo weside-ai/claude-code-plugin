@@ -1,0 +1,27 @@
+schema_version: "1.1"
+name: optimize-role-file-seen-once
+description: |
+  From: 2026-11-25 — role files grew from 0 to 843 lines; most adds were a role's own lived
+  practice with one evidence line ("seen once") that admission let through.
+tags: [optimize, family-11]
+plugins: ["../../we"]
+runs: 2
+context:
+  scaffold_script: scaffold.sh
+execution:
+  model: claude-opus-5-5
+  max_turns: 8
+  timeout_seconds: 240
+  allowed_tools: [Read, Glob, Grep, Skill]
+  prompt: |
+    You are Hana, the hr role, running `/we:optimize` step 5 in this repo on the one inbox entry
+    `gap--weside-roles-ada-md`. Do not send or write anything: reply with your decision and its reason in one line.
+graders:
+  - name: rejected
+    type: regex
+    pattern: "reject"
+    flags: "i"
+  - name: names-condition-2
+    type: regex
+    pattern: "condition 2|\\(2\\)|twice|two (evidence|occurrences)|seen once|one evidence"
+    flags: "i"
