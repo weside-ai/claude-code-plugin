@@ -213,3 +213,54 @@ def test_subagent_stop_reads_the_agent_transcript_under_its_own_offset(tmp_path)
     loads = [x for x in lines if x.get("source") == "transcript"]
     assert len(loads) == 4 and {x["agent_id"] for x in loads} == {"a1"}
     assert (tmp_path / ".claude" / "we-timing" / "s1.a1.offset").is_file()
+
+
+def _instructions(chars: int) -> str:
+    att = {"type": "instructions", "files": [{"path": "/w/AGENTS.md", "type": "Project"}]}
+    att["files"][0]["content"] = "A" * chars
+    return json.dumps({"type": "attachment", "attachment": att}) + "\n"
+
+
+BOUNDARY = json.dumps({"type": "system", "subtype": "compact_boundary"}) + "\n"
+
+
+def _stop(tmp_path, transcript):
+    payload = {"session_id": "s1", "hook_event_name": "Stop", "transcript_path": str(transcript)}
+    record(payload, tmp_path)
+    out = tmp_path / ".claude" / "we-timing" / "s1.jsonl"
+    return [json.loads(x) for x in out.read_text().splitlines()] if out.exists() else []
+
+
+def test_a_load_after_a_boundary_read_by_a_later_run_is_labelled_compact(tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text(_instructions(3) + BOUNDARY)
+    assert [x["load_reason"] for x in _stop(tmp_path, transcript)] == ["session_start"]
+    with transcript.open("a") as fh:
+        fh.write(_instructions(4))
+    assert [(x["chars"], x["load_reason"]) for x in _stop(tmp_path, transcript)][-1] == (
+        4,
+        "compact",
+    )
+
+
+def test_a_rewritten_shorter_transcript_is_read_from_the_start(tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text(_instructions(3) + BOUNDARY + _instructions(4))
+    assert [x["load_reason"] for x in _stop(tmp_path, transcript)] == [
+        "session_start",
+        "compact",
+    ]
+    transcript.write_text(_instructions(5))
+    last = _stop(tmp_path, transcript)[-1]
+    assert (last["chars"], last["load_reason"]) == (5, "session_start")
+
+
+def test_an_unfinished_last_line_waits_and_is_read_whole_next_run(tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    line = _instructions(6)
+    transcript.write_text(_instructions(3) + line[:20])
+    assert [x["chars"] for x in _stop(tmp_path, transcript)] == [3]
+    with transcript.open("a") as fh:
+        fh.write(line[20:])
+    lines = _stop(tmp_path, transcript)
+    assert [x["chars"] for x in lines] == [3, 6]

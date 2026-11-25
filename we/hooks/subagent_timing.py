@@ -7,11 +7,12 @@ A session's file ages out after 45 days (`scripts/state_prune.py`, at most one s
 
 Claude Code fires `InstructionsLoaded` for rules only. On `Stop` (the session's transcript) and
 `SubagentStop` (the subagent's `agent_transcript_path`) the hook reads the transcript from the byte
-offset stored in `<session>[.<agent_id>].offset` and adds the rest with `source: "transcript"`:
+offset stored in `<session>[.<agent_id>].offset` (with the last `load_reason`) and adds the rest with `source: "transcript"`:
 each file of an `instructions` attachment outside `/.claude/rules/` (`AGENTS.md` and its kin,
 `MEMORY.md`), and the L0 and role card in the SessionStart context (`context_load.start_contexts`,
 `context_load.plugin_file`), with `chars` and the entry's time; `load_reason` is `compact` after a
-compact boundary. Sizes and paths only, never a file's or hook's text."""
+compact boundary, also for a later run. `chars` of the L0 and the card is the length of the whole
+SessionStart context they arrive in, not of the file. Sizes and paths only, never a file's or hook's text."""
 
 from __future__ import annotations
 
@@ -106,18 +107,20 @@ def transcript_loads(payload: dict, home: Path, session: str) -> Path | None:
     folder.mkdir(parents=True, exist_ok=True)
     mark = folder / f"{session}{'.' + _safe(agent) if agent else ''}.offset"
     try:
-        offset = int(mark.read_text())
-    except (OSError, ValueError):
-        offset = 0
+        stored = mark.read_text().split()
+        offset = int(stored[0])
+        reason = stored[1] if len(stored) > 1 else "session_start"
+    except (OSError, ValueError, IndexError):
+        offset, reason = 0, "session_start"
     with open(source, "rb") as fh:
         fh.seek(0, 2)
         if offset > fh.tell():
-            offset = 0  # a rewritten transcript: read it again
+            offset, reason = 0, "session_start"  # a rewritten transcript: read it again
         fh.seek(offset)
         data = fh.read()
     data = data[: data.rfind(b"\n") + 1]  # whole lines only; the rest waits for the next run
     lines: list[dict] = []
-    reason, seen = "session_start", set()
+    seen: set[str] = set()
     for raw in data.splitlines():
         try:
             entry = json.loads(raw)
@@ -136,7 +139,7 @@ def transcript_loads(payload: dict, home: Path, session: str) -> Path | None:
     if lines:
         with out.open("a", encoding="utf-8") as fh:
             fh.writelines(json.dumps(x) + "\n" for x in lines)
-    mark.write_text(str(offset + len(data)))
+    mark.write_text(f"{offset + len(data)} {reason}")
     state_prune.prune(folder, ("*.jsonl", "*.offset"))
     return out
 

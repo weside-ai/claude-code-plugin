@@ -429,14 +429,8 @@ class CrewError(Exception):
 
 def find(start: str | Path | None = None) -> Path | None:
     """The crew file in force for ``start``, or None."""
-    d = Path(start or Path.cwd()).resolve()
-    for root in (d, *d.parents):
-        found = _crew_at(root)
-        if found is not False:
-            return found
-        if (root / ".git").exists():
-            return None
-    return None
+    root = declaring_root(start)
+    return None if root is None else _crew_at(root)  # type: ignore[return-value]
 
 
 def declaring_root(start: str | Path | None = None) -> Path | None:
