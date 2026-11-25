@@ -303,6 +303,7 @@ class TestSet:
         assert line_of(crewless, "lead-12") == {
             "name": "lead-12",
             "session_id": "sid-12",
+            "cwd": str(crewless / "work"),
             "state": "ci",
             "now": "phase 3",
             "updated_at": "2026-11-03T10:00Z",
@@ -320,6 +321,7 @@ class TestSet:
         assert line_of(crewless, "fresh-1") == {
             "name": "fresh-1",
             "session_id": "sid-12",
+            "cwd": str(crewless / "work"),
             "state": "active",
             "updated_at": "2026-11-03T10:00Z",
         }
@@ -4242,3 +4244,119 @@ def test_set_with_a_new_session_id_keeps_the_named_line(crewless):
     assert [(s["name"], s["session_id"], s["epic"]) for s in sessions] == [
         ("lead-12", "sid-12", "PROJ-7")
     ]
+
+
+def test_set_keeps_the_id_of_a_live_session_sharing_the_name(crewless, capsys):
+    """Two live sessions named alike took the line from each other on every `set`, and delivery
+    flipped between their tails. Red arm: the line takes the second session's id."""
+    data = board_of(crewless)
+    data["sessions"] = [{"name": "lead-12", "session_id": "sid-a", "epic": "PROJ-7"}]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    both = [{"sessionId": "sid-a", "name": "lead-12"}, {"sessionId": "sid-12", "name": "lead-12"}]
+    (crewless / "agents.json").write_text(json.dumps(both), encoding="utf-8")
+    assert go(crewless, "set", "now=x") == 0
+    line = line_of(crewless, "lead-12")
+    assert (line["session_id"], line["now"], "cwd" in line) == ("sid-a", "x", False)
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 1 and "sid-a" in err[0] and "/rename" in err[0]
+    # the old id no longer listed under this name: the line takes the caller's
+    (crewless / "agents.json").write_text(
+        json.dumps([{"sessionId": "sid-a", "name": "elsewhere"}, both[1]]), encoding="utf-8"
+    )
+    assert go(crewless, "set", "now=y") == 0
+    assert line_of(crewless, "lead-12")["session_id"] == "sid-12"
+
+
+def test_set_takes_the_line_from_a_dead_row_sharing_the_name(crewless, capsys, monkeypatch):
+    """`claude agents` keeps a dead worker's row: a worker restarted under its name with a new id
+    never took its line and every call warned /rename. Red arm: the line keeps `sid-a`."""
+    data = board_of(crewless)
+    data["sessions"] = [{"name": "lead-12", "session_id": "sid-a"}]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    both = [
+        {"sessionId": "sid-a", "name": "lead-12", "pid": 4242},
+        {"sessionId": "sid-12", "name": "lead-12"},
+    ]
+    (crewless / "agents.json").write_text(json.dumps(both), encoding="utf-8")
+    monkeypatch.setattr(board.wl, "_pid_lives", lambda pid: str(pid) != "4242")
+    assert go(crewless, "set", "now=x") == 0
+    assert line_of(crewless, "lead-12")["session_id"] == "sid-12"
+    assert "/rename" not in capsys.readouterr().err
+
+
+def test_blocked_keeps_the_id_of_a_live_session_sharing_the_name(crewed, capsys):
+    data = board_of(crewed)
+    data["sessions"] = [{"name": WORKER, "session_id": "sid-a"}]
+    (crewed / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    agents(crewed, BLOCKED_ROW, {**BLOCKED_ROW, "sessionId": "sid-a", "pid": os.getpid()})
+    assert go(crewed, "blocked", WORKER, "--kind", "permission", "--starter", "lead-12") == 0
+    assert line_of(crewed, WORKER)["session_id"] == "sid-a"
+    assert "/rename" in capsys.readouterr().err
+
+
+def test_set_folds_a_duplicate_line_of_the_same_session(crewless):
+    """A board that already held two lines of one session kept both. Red arm: two lines remain."""
+    data = board_of(crewless)
+    data["sessions"] = [
+        {"name": "old", "session_id": "sid-12", "topic": "kept", "now": "stale"},
+        {"name": "lead-12", "session_id": "sid-12", "epic": "PROJ-7"},
+    ]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    assert go(crewless, "set", "now=x") == 0
+    sessions = board_of(crewless)["sessions"]
+    assert [(s["name"], s["session_id"], s["epic"], s["topic"], s["now"]) for s in sessions] == [
+        ("lead-12", "sid-12", "PROJ-7", "kept", "x")
+    ]
+
+
+def test_set_refreshes_the_own_lines_cwd(crewed, monkeypatch):
+    """A session restarted in another repo kept the old `cwd` on its line. Red arm: `/repo-a` stays."""
+    data = board_of(crewed)
+    data["sessions"] = [
+        {"name": "lead-12", "session_id": "sid-12", "cwd": "/repo-a"},
+        {"name": "other", "session_id": "sid-o", "cwd": "/repo-o"},
+    ]
+    (crewed / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    (crewed / "agents.json").write_text(
+        json.dumps([{"sessionId": "sid-12", "name": "lead-12", "cwd": "/repo-b"}]), "utf-8"
+    )
+    assert go(crewed, "set", "now=x") == 0
+    assert line_of(crewed, "lead-12")["cwd"] == "/repo-b"
+    pin(monkeypatch, "otto")
+    assert go(crewed, "set", "--for", "other", "now=y") == 0
+    assert (line_of(crewed, "other")["cwd"], line_of(crewed, "other")["session_id"]) == (
+        "/repo-o",
+        "sid-o",
+    )
+    assert go(crewed, "set", "cwd=/x") != 0
+
+
+def test_show_line_prints_each_status(crewless, capsys):
+    """A question closed by a hand merge was passed on as waiting. Red arm: `show` takes one id."""
+    data = board_of(crewless)
+    data["owner_queue"] = [
+        {"id": "Q8", "key": "PROJ-2", "ask": "Open one?\nmore", "since": "2026-11-02"}
+    ]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    log = crewless / "board-questions.jsonl"
+    rows = [
+        {
+            "id": "Q7",
+            "ts": "2026-11-01T09:00Z",
+            "outcome": "posted",
+            "key": "PROJ-1",
+            "ask": "Merge?",
+        },
+        {"id": "Q7", "ts": "2026-11-02T21:06Z", "outcome": "closed", "reason": "PR 9 merged"},
+    ]
+    log.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    capsys.readouterr()
+    assert go(crewless, "show", "Q7", "Q8") == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "Q7 closed 2026-11-02T21:06Z (PR 9 merged) · PROJ-1 · Merge?",
+        "Q8 open 2026-11-02 · PROJ-2 · Open one?",
+    ]
+    assert go(crewless, "show", "Q7", "Q404", "--line") == 1
+    assert capsys.readouterr().out.splitlines()[-1] == "Q404 unknown"
+    assert go(crewless, "show", "Q7") == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "closed"

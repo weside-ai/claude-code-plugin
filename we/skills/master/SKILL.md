@@ -259,9 +259,10 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
    - exit 14 (another watcher holds this PR) → nothing to do; its notification carries the result.
    Bounds, no `/loop` or `/goal`: ci-review's three rounds; the watcher's 6-h lifetime (exit 9 →
    report); at most three re-arms per PR head; a repeat finding (ci-review § 4) stops and reports.
-6. A conflict the `conflict_gate.py` Stop hook or the watcher (exit 12) names goes back to the
-   PR's worker (merge the default branch, after-merge check, push) without asking; re-arm the watch after the push,
-   and auto-merge once green (`conflict_gate.py` names a PR it saw armed that is now green and unarmed).
+6. A conflict the `conflict_gate.py` Stop hook or the watcher (exit 12) names goes back to the PR's worker (merge the
+   default branch, after-merge check, push) without asking; re-arm the watch after the push, and auto-merge once green
+   (the hook names one left unarmed). A Draft waiting on an unmerged dependency or open measurement merges main once,
+   when that clears; till then the hook gets the reason. A ready PR's conflict goes back at once.
 
 ## Close the run
 
@@ -286,9 +287,8 @@ A worker briefed `PR owner: worker` runs steps 2–3 and its fix rounds; you act
   - A code PR with a `plan: waits for <docs PR> and Selected` line (§ Build) is armed only once that
     docs PR merged and the story is Selected and pulled; no check holds it until then.
   - **Card hit** (and every one-way PR): start a security card worker on the head
-    (`<KEY>-card`, `worker_launch.py launch --utility`, `references/worker-dispatch.md`
-    § Worker launch backend; brief per
-    `references/worker-dispatch.md` § Card worker); it writes its verdict to a file, you post it
+    (`<KEY>-card`, `worker_launch.py launch --utility`, `references/worker-dispatch.md` § Worker launch
+    backend; brief per § Card worker there); it writes its verdict to a file, you post it
     unchanged. It is input for the people who read the PR, not a condition of the arm.
   - **One-way:** post the T2 panel and the card verdict, then post the merge question yourself with
     the PR link, the class and both verdicts:

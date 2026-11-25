@@ -19,8 +19,7 @@ changes the account's selection: `select_companion` to another name is refused, 
 second companion takes a second session. An unknown name answers HTTP 422.
 
 `scripts/wclaude` is the launcher: a menu over the members of the repo's crew (`scripts/crew.py
-members`; § Crew), `--as <Name>` without a menu, `0` clears
-the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
+members`; § Crew), `--as <Name>` without a menu, `0` clears the pin; every other argument goes to `claude`, `-c` (continue) included. It passes `--name <Name>` unless you pass a name: the
 hook's `sessionTitle` does not rename a new session's row in `claude agents` (Claude Code 2.1.310). `/we:setup` § 5 installs it through
 `scripts/install_launcher.py`. Every session it starts is a master (`WE_ROLE=master`) on the global
 login, which follows the account switcher like a plain `claude`. `--pin` holds the session on one
@@ -55,9 +54,10 @@ hooks key on the role key, never on the name. On a machine whose human runs no c
 board's deliverer is the first role that human runs (`crew.py deliverer`); a companion name that is
 another member's slug is refused (`crew.py validate`), since a slug resolves first.
 
-A companion session is a normal Claude Code session; what binds it to its companion is the pin
-header, so start companion sessions through `wclaude` (a plain `claude` is unpinned and acts as the
-account's selected companion).
+A companion session is a normal Claude Code session bound by the pin header: start it through
+`wclaude` (a plain `claude` is unpinned and acts as the account's selected companion). Its role
+skill is a project skill and loads only from the start directory (the member's `workplace`); a copy
+under `~/.claude/skills/` shadows it, so a cross-repo role keeps its skill where its sessions start.
 
 `claude --bg` does not carry the launching shell's environment: the session comes from a pre-warmed
 `claude bg-spare` of the `claude daemon` and has the daemon's environment (`/proc/<pid>/environ` of
@@ -224,13 +224,13 @@ by the kind of question; nobody batches or relays it:
   backlog, anything irreversible or outward-facing): start the owner fresh, now, with the question
   in the first message: `start.py launch <member> --fresh --consult --brief <file>` (§ Launch and pin). The role card, the
   role notes (`.weside/roles/<slug>.md`) and the companion's memory carry the continuity. The owner
-  answers by SendMessage, notes what will recur and ends their process. A fresh start costs one
+  answers by SendMessage, notes what will recur (role notes or card) and ends their process. A fresh start costs one
   cold start; resuming an old session reloads its whole history uncached.
 - **A thread from the same day:** resume that session (`claude --resume <id> "<question>"` in the
   same line) instead; its history is still short and cached.
 
-An answer that will be asked again goes into the owner's role notes or card, so the next asker
-reads it instead of waking them.
+Several small open ends for one owner go as numbered lines in one file, each answered with done, I
+do it, we don't or not true.
 
 ## Refresh
 

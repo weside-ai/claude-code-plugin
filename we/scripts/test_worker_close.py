@@ -254,6 +254,35 @@ class TestRefusals:
         assert len(world.transitions()[0]["pr"]) == 2
         assert "merged (PRs #7, acme/lib#3)" in capsys.readouterr().out
 
+    def test_an_unbuilt_phase_holds_in_review(self, world, capsys):
+        """A two-phase story went In Review on its first PR. Red arm: the move on PR #7 alone."""
+        world.write(
+            f"docs/plans/{KEY}-story.md",
+            STORY + "\n### Phase 2: import\n- **Files:** `src/imp.py`\n",
+        )
+        world.commit("plan")
+        git(world.top, "push", "-q", "origin", "HEAD:main")
+        world.worker()
+        first = world.gh["prs"]["acme/app"][0]
+        first["mergeCommit"] = {"oid": first["headRefOid"]}
+        world.save()
+        assert close(KEY) == 1
+        out = capsys.readouterr().out
+        assert f"held: phase 2 of {KEY} has no merged PR touching its files (src/imp.py)" in out
+        assert world.transitions() == []
+        assert not (world.tmp / f"app-{KEY}-w").exists()  # the teardown still ran
+        tree = world.tmp / "imp"
+        git(world.top, "worktree", "add", "-q", "-b", f"feat/{KEY}-imp", str(tree), "origin/main")
+        world.write("src/imp.py", "y = 1\n", tree)
+        oid = world.commit("feat: import", tree)
+        git(tree, "push", "-q", "origin", f"HEAD:refs/heads/feat/{KEY}-imp")
+        git(world.top, "worktree", "remove", "--force", str(tree))
+        world.pr(8, "MERGED", f"feat/{KEY}-imp", oid)
+        world.gh["prs"]["acme/app"][-1]["mergeCommit"] = {"oid": oid}
+        world.save()
+        assert close(KEY) == 0
+        assert len(world.transitions()[0]["pr"]) == 2
+
     @pytest.mark.parametrize("url", ["https://github.com/acme/lib", "../lib.git"])
     def test_a_submodule_landed_by_fast_forward_counts_as_landed(self, world, capsys, url):
         sub = "1" * 40
