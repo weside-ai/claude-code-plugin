@@ -188,10 +188,10 @@ line `{"id": "rebuild", "answer": "rebuild", ts, session}` in the answers file, 
 carries like an answer (§ Delivery): by prompt into the coordinator's session (at once when the pane
 runs there), with its ledger row, resubmit and refusal; its text is the board's
 `answer_prompts.rebuild`, else the default in `board.ts`. A press writes no line while an earlier
-request is still owed (newer than the ledger's epoch, no verdict on its coordinator row), so a busy
-or stopped coordinator gets one request, not one per press; before the deliverer's first start
-requests stay ten minutes apart (`rebuildWaits`, `REBUILD_MS` in `deliver.ts`). Without a
-coordinator a press writes none. Opening the pane re-reads without asking.
+request is still owed (newer than the ledger's epoch, no verdict on its coordinator row): a busy or
+stopped coordinator gets one request, not one per press, and a stored or refused one lets the next
+press ask again. Before the deliverer's first start requests stay ten minutes apart (`rebuildWaits`,
+`REBUILD_MS` in `deliver.ts`). Without a coordinator a press writes none. Opening the pane re-reads without asking.
 
 ## Opening it
 

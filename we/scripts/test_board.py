@@ -4267,11 +4267,28 @@ def test_set_keeps_the_id_of_a_live_session_sharing_the_name(crewless, capsys):
     assert line_of(crewless, "lead-12")["session_id"] == "sid-12"
 
 
+def test_set_takes_the_line_from_a_dead_row_sharing_the_name(crewless, capsys, monkeypatch):
+    """`claude agents` keeps a dead worker's row: a worker restarted under its name with a new id
+    never took its line and every call warned /rename. Red arm: the line keeps `sid-a`."""
+    data = board_of(crewless)
+    data["sessions"] = [{"name": "lead-12", "session_id": "sid-a"}]
+    (crewless / "board.json").write_text(json.dumps(data), encoding="utf-8")
+    both = [
+        {"sessionId": "sid-a", "name": "lead-12", "pid": 4242},
+        {"sessionId": "sid-12", "name": "lead-12"},
+    ]
+    (crewless / "agents.json").write_text(json.dumps(both), encoding="utf-8")
+    monkeypatch.setattr(board.wl, "_pid_lives", lambda pid: str(pid) != "4242")
+    assert go(crewless, "set", "now=x") == 0
+    assert line_of(crewless, "lead-12")["session_id"] == "sid-12"
+    assert "/rename" not in capsys.readouterr().err
+
+
 def test_blocked_keeps_the_id_of_a_live_session_sharing_the_name(crewed, capsys):
     data = board_of(crewed)
     data["sessions"] = [{"name": WORKER, "session_id": "sid-a"}]
     (crewed / "board.json").write_text(json.dumps(data), encoding="utf-8")
-    agents(crewed, BLOCKED_ROW, {**BLOCKED_ROW, "sessionId": "sid-a"})
+    agents(crewed, BLOCKED_ROW, {**BLOCKED_ROW, "sessionId": "sid-a", "pid": os.getpid()})
     assert go(crewed, "blocked", WORKER, "--kind", "permission", "--starter", "lead-12") == 0
     assert line_of(crewed, WORKER)["session_id"] == "sid-a"
     assert "/rename" in capsys.readouterr().err

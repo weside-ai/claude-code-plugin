@@ -1062,7 +1062,8 @@ def cmd_set(state, args, crew, now):
 
 def _session_line(board, name, session_id, rows=(), verb="set"):
     """The board line named `name` (it takes the caller's `session_id`, new after /clear or a
-    resume, unless `rows` of `claude agents --json` list its id live under this name: then two
+    resume, unless `rows` of `claude agents --json` list its id under this name with a living
+    process (`claude agents` keeps a dead worker's row, so liveness is `_pid_lives`): then two
     sessions share the name, the line keeps its id and stderr says so), else the one with
     `session_id` (a renamed session: it takes the new name), else a new line with both. Any other
     line with the line's `session_id` folds into it (its fields only where the line has none), so
@@ -1072,7 +1073,12 @@ def _session_line(board, name, session_id, rows=(), verb="set"):
     line = next((s for s in lines if s.get("name") == name), None)
     held = (line or {}).get("session_id")
     if line is not None and session_id and held != session_id:
-        if held and any(r.get("sessionId") == held and r.get("name") == name for r in rows):
+        if held and any(
+            r.get("sessionId") == held
+            and r.get("name") == name
+            and wl._pid_lives(r.get("pid", "-"))
+            for r in rows
+        ):
             print(
                 f"board.py {verb}: {name} is also live as session {held[:8]}; the line keeps it"
                 " — /rename this session",
