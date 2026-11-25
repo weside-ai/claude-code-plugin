@@ -261,6 +261,8 @@ function answersHome(on: Parameters<Parameters<typeof test>[1]>[1], self: { sess
     if (String(e.argv[2]).endsWith('/answer.py')) {
       appended.push(e.argv.slice(3))
       const [, id, answer, ts, session] = e.argv.slice(3)
+      // Exit 4: an earlier line closed the question; answer.py writes nothing.
+      if (answerExit === 4) return { value: { exitCode: 4, stdout: '', stderr: `${id} is already settled: PR merged\n`, isStdoutTruncated: false, isStderrTruncated: false } }
       lines += `${JSON.stringify({ id, answer, ts, session: session ?? null })}\n`
       mtimeMs += 1
       if (answerExit) return { value: { exitCode: answerExit, stdout: '', stderr: `answer.py: ${id}: the answer is saved, but the go comment on the PR failed: gh not found`, isStdoutTruncated: false, isStderrTruncated: false } }
@@ -484,6 +486,20 @@ test('a yes whose go comment failed is saved and says so in a toast, never silen
   await clock.settle()
   expect(home.toasts).toEqual(['board: answer.py: Q1: the answer is saved, but the go comment on the PR failed: gh not found'])
   expect(await ui.find({ type: 'Text', text: /✓ accepted/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a press on a question a hand merge closed after the render shows a note and writes nothing', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const home = answersHome(on, { sessionId: 's-lead', name: 'lead' }, BOARD, 4)
+  await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
+  await ui.press({ key: 'accept-Q1' })
+  await clock.settle()
+  expect(home.toasts).toEqual(['board: Q1 is already settled: PR merged'])
+  expect(home.submitted).toEqual([])
   await ui.unmount()
 })
 

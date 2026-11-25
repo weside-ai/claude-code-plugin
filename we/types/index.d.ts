@@ -236,8 +236,9 @@ export type BoardView = {
 
 // One line of the answers file, <stem>-answers.jsonl (docs/board.md): a press of Accept, Deny, Follow-up, Update or
 // Withdraw (a question sent to another human) on a question, of Read on a news item, or Refresh's
-// request to the coordinator to rebuild the board (`rebuild`, id `rebuild`).
-export type BoardAnswerKind = 'accept' | 'deny' | 'followup' | 'update' | 'withdraw' | 'read' | 'rebuild'
+// request to the coordinator to rebuild the board (`rebuild`, id `rebuild`), or `board.py close-merged`'s
+// close of a merge-go question whose PR merged (`pr_merged`, the owner's hand merge) or closed (`pr_closed`).
+export type BoardAnswerKind = 'accept' | 'deny' | 'followup' | 'update' | 'withdraw' | 'read' | 'rebuild' | 'pr_merged' | 'pr_closed'
 // The answers the deliverer carries; Read only appends its line.
 export type BoardDeliveredKind = Exclude<BoardAnswerKind, 'read'>
 // The texts a delivery sends, each overridable by the board's `answer_prompts`: one per delivered kind

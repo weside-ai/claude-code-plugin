@@ -115,9 +115,10 @@ ask      posts a question for the owner after a cold reader (`cold_reader.py`) u
          pane shows it waiting on that human, with Withdraw only), and the carry
          is the comment `board_humans.question_comment` and the label
          `board_humans.question_label`; `signals` reads the reply back.
-close-merged removes every `merge-go` question in `owner_queue` whose PR (its `pr_url`, in
-         any repo) is MERGED or CLOSED, whatever its answer, the owner's hand merge included (one
-         `closed` line each in board-questions.jsonl) and prints `closed <id>: PR <state> <url>`
+close-merged closes every `merge-go` question in `owner_queue` whose PR (its `pr_url`, in
+         any repo) is MERGED or CLOSED: an open one, the owner's hand merge included, gets the
+         answer `pr_merged`/`pr_closed` with the PR url, which reaches its asker like any answer;
+         one a Go closed already leaves the queue (one `closed` line in board-questions.jsonl); it prints `closed <id>: PR <state> <url>`
          per question, `closed: none` without one; `bundle` runs it first.
 prune    drops what is handled from board.json (docs/board.md § Pruning) and prints the ids:
          a question or item an Accept or Deny closed once nothing is owed to its asker any more
@@ -289,7 +290,10 @@ import worker_launch as wl  # noqa: E402  (the one reader of `claude agents --js
 
 DEFAULT_BOARD = str(Path(crew_mod.DEFAULT_STATE_DIR) / crew_mod.BOARD_NAME)
 KINDS = ("accept", "deny", "followup", "update", "withdraw")
-CLOSING = ("accept", "deny", "withdraw")  # withdraw: the asker's human takes back an `ask --to`
+# close-merged's answers on a merge-go question whose PR merged or closed: for the human, merging is the yes.
+PR_DONE = {"MERGED": "pr_merged", "CLOSED": "pr_closed"}
+# withdraw: the asker's human takes back an `ask --to`
+CLOSING = ("accept", "deny", "withdraw", *PR_DONE.values())
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
 SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys", "epic", "wake")
@@ -314,7 +318,7 @@ UNCHANGED = object()  # a `write_board` mutation returning this leaves board.jso
 # Pruning (docs/board.md § Pruning): a closed question waits until its asker is carried, since the
 # deliverer finds the asker only on the board; returned items and bundles go PRUNE_AFTER_H after
 # their ts.
-DELIVERED_KINDS = KINDS  # the answer kinds the deliverer carries; `read` is not one
+DELIVERED_KINDS = (*KINDS, *PR_DONE.values())  # the kinds the deliverer carries; `read` is not one
 PRUNE_AFTER_H = 24
 # board-questions.jsonl outcomes that take a question off the board for good
 GONE = ("withdrawn", "superseded")
@@ -507,7 +511,7 @@ class StateDir:
             (a for a in self.answers() if a.get("id") == qid and a.get("answer") in CLOSING), None
         )
 
-    def append_answer(self, qid, kind, session, via=None, quote=None, ts=None):
+    def append_answer(self, qid, kind, session, via=None, quote=None, ts=None, pr=None):
         """One answer line; it quotes the question's `ask` and `recommendation` from the open item,
         so the line reads without the board."""
         stamp = ts or _now().isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -529,6 +533,7 @@ class StateDir:
             quote=quote,
             ask=item.get("ask") or None,
             recommendation=item.get("recommendation") or None,
+            pr=pr,
         )
 
     def questions(self):
@@ -1295,10 +1300,10 @@ def cmd_answer(state, args, crew, now):
     again = closed is not None and closed.get("answer") == "accept" and args.kind == "accept"
     if again and _go_comment(state, {**closed, "quote": args.quote or closed.get("quote")}, now):
         return 3  # the same yes again posts a go comment that failed; nothing else runs again
-    if args.id not in state.ids():
-        if again:
-            print(f"board.py answer: {args.id} is accepted and off the board; nothing runs again")
-            return 0
+    if again and args.id not in state.ids():
+        print(f"board.py answer: {args.id} is accepted and off the board; nothing runs again")
+        return 0
+    if closed is None and args.id not in state.ids():
         raise BoardError(
             f"board.py answer: {args.id} is in neither owner_queue nor news of {state.board_path}"
         )
@@ -2459,9 +2464,11 @@ def open_questions(state, board):
 
 
 def close_merged(state, now):
-    """Drop every `merge-go` question in `owner_queue` whose PR is MERGED or CLOSED, whatever its
-    answer (open, accepted, the owner merging by hand) and whichever repo the PR is in (its
-    `pr_url`); returns {id: (state, pr)}. `gh` runs before the board lock, never under it."""
+    """Close every `merge-go` question in `owner_queue` whose PR is MERGED or CLOSED, whichever
+    repo the PR is in (its `pr_url`); returns {id: (state, pr)}. An open one gets the answer line
+    `pr_merged`/`pr_closed` with the PR url, which the deliverer carries to its asker like any
+    answer and `prune` drops once delivered; one an answer closed already (a Go) leaves the queue at
+    once with a `closed` line. `gh` runs before the board lock, never under it."""
     board = state.board()
     done = {}
     for q in board.get("owner_queue") or []:
@@ -2469,18 +2476,25 @@ def close_merged(state, now):
             continue
         if not isinstance(q.get("id"), str):
             continue
+        closer = state.closing_answer(q["id"])
+        if closer is not None and closer.get("answer") in PR_DONE.values():
+            continue  # closed here before; prune drops it once its asker has the line
         pr, failure = _view_pr(str(q["pr_url"]), None)
-        if failure is None and pr.get("state") in ("MERGED", "CLOSED"):
-            done[q["id"]] = (pr["state"], str(pr.get("url") or q["pr_url"]))
+        if failure is None and pr.get("state") in PR_DONE:
+            done[q["id"]] = (pr["state"], str(pr.get("url") or q["pr_url"]), closer is None)
     if not done:
         return {}
+    for qid, (pr_state, url, unanswered) in done.items():
+        if unanswered:
+            state.append_answer(qid, PR_DONE[pr_state], "close-merged", ts=_iso(now), pr=url)
 
     def mutate(b):
         queue = b.get("owner_queue") or []
-        gone = [q.get("id") for q in queue if isinstance(q, dict) and q.get("id") in done]
+        drop = {qid for qid, (_s, _u, unanswered) in done.items() if not unanswered}
+        gone = [q.get("id") for q in queue if isinstance(q, dict) and q.get("id") in drop]
         if not gone:
             return UNCHANGED
-        b["owner_queue"] = [q for q in queue if not (isinstance(q, dict) and q.get("id") in done)]
+        b["owner_queue"] = [q for q in queue if not (isinstance(q, dict) and q.get("id") in drop)]
         return gone
 
     def log(gone):
@@ -2489,8 +2503,8 @@ def close_merged(state, now):
                 {"id": qid, "ts": _iso(now), "outcome": "closed", "reason": f"PR {done[qid][0]}"}
             )
 
-    gone = state.write_board(mutate, after=log)
-    return {} if gone is UNCHANGED else {qid: done[qid] for qid in gone}
+    state.write_board(mutate, after=log)
+    return {qid: (pr_state, url) for qid, (pr_state, url, _a) in done.items()}
 
 
 def cmd_close_merged(state, _args, _crew, now):

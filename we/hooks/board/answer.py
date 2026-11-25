@@ -16,6 +16,11 @@ answer quoted, the finding and the asking session's reason. A CI job counts that
 PR's current head as the skip. Each post leaves one `go-comment` line in <stem>-questions.jsonl;
 a question with a posted comment is not posted again. A failed post exits 3 after the answer
 line is written, its reason on stderr.
+
+A press on a question close-merged's `pr_merged`/`pr_closed` closed (a hand merge the card did not
+show yet) writes nothing and exits 4 with the note `Qn is already settled: PR merged` on stderr,
+which the pane shows. A press after an earlier Accept, Deny or Withdraw is written as before:
+board.py reads it as a duplicate, and a repeated Accept retries a go comment that failed to post.
 """
 
 import json
@@ -28,10 +33,17 @@ from datetime import datetime, timezone
 GH_TIMEOUT_S = 30
 HEAD = re.compile(r"[0-9a-f]{40}")
 
-ANSWERS = ("accept", "deny", "followup", "update", "withdraw", "read", "rebuild")
+PANE = ("accept", "deny", "followup", "update", "withdraw", "read", "rebuild")
+# board.py close-merged's answers on a merge-go question whose PR merged or closed; never a press.
+PR_DONE = {"pr_merged": "PR merged", "pr_closed": "PR closed"}
+ANSWERS = (*PANE, *PR_DONE)
+# The presses that answer a question; Read and Refresh do not.
+QUESTION_PRESSES = ("accept", "deny", "followup", "update", "withdraw")
 
 
-def append(path, qid, answer, ts, session, via=None, quote=None, ask=None, recommendation=None):
+def append(
+    path, qid, answer, ts, session, via=None, quote=None, ask=None, recommendation=None, pr=None
+):
     if answer not in ANSWERS:
         raise ValueError(f"answer must be one of {', '.join(ANSWERS)}")
     record = {"id": qid, "answer": answer, "ts": ts, "session": session or None}
@@ -43,6 +55,8 @@ def append(path, qid, answer, ts, session, via=None, quote=None, ask=None, recom
         record["ask"] = ask
     if recommendation:
         record["recommendation"] = recommendation
+    if pr:
+        record["pr"] = pr
     line = json.dumps(record, ensure_ascii=False) + "\n"
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
@@ -75,6 +89,20 @@ def _log_lines(path):
     except (OSError, ValueError):
         return []
     return [r for r in rows if isinstance(r, dict)]
+
+
+def closed_note(answers_path, qid, answer):
+    """The pane's note for a press on a question close-merged closed (a hand merge the card did not
+    show yet), else None. An earlier Accept, Deny or Withdraw gets None: that press is written."""
+    if answer not in QUESTION_PRESSES:
+        return None
+    closer = next(
+        (r for r in _log_lines(answers_path) if r.get("id") == qid and r.get("answer") in PR_DONE),
+        None,
+    )
+    if closer is None:
+        return None
+    return f"{qid} is already settled: {PR_DONE[closer['answer']]}"
 
 
 def go_body(item, record):
@@ -188,6 +216,13 @@ def main(argv):
     if len(argv) not in (5, 6):
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
+    if argv[3] not in PANE:
+        print(f"answer.py: answer must be one of {', '.join(PANE)}", file=sys.stderr)
+        return 2
+    note = closed_note(argv[1], argv[2], argv[3])
+    if note:
+        print(note, file=sys.stderr)
+        return 4
     record = append(argv[1], argv[2], argv[3], argv[4], argv[5] if len(argv) == 6 else None)
     failed = go_failure(record, post_go(argv[1], record))
     if failed:

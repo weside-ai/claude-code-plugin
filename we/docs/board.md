@@ -279,7 +279,7 @@ names are those of the default board.
 |---|---|
 | `updated` | ISO timestamp of the last write; `board.py` stamps it on every write of the coordinator (a worker's `set` leaves it); the header shows its age, yellow from 2 h, red from 8 h |
 | `updated_by` | who wrote it, shown beside the age |
-| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `followup`, `followup_route`, `update`, `withdraw`, `update_asker` and `rebuild` texts the deliverer sends (§ Answers, § Refresh) |
+| `answer_prompts` | optional `accept`, `accept_hand`, `accept_task`, `deny`, `followup`, `followup_route`, `update`, `withdraw`, `update_asker`, `rebuild`, `pr_merged` and `pr_closed` texts the deliverer sends (§ Answers, § Refresh) |
 | `priorities` | a list or one string; the pane shows it as one dimmed line under the header, a list joined with ` · ` |
 | `news[]` | optional: short items for the owner with `id`, `title`, `body`, `ts`, `kind`, each with a **Read** button (§ News); `board.py` writes `info`, `gate` and `todo` (`news add`; a rules line `R-<repo>-<n>` by `news merged`; the bundle, an escalation at stage `bundle`, a signal `S<n>` with `for` the role and `key`, § Several humans; staging past its SLA) and `escalation` (a record at stage `escalation`, with `for` the role waited on, shown in the log) |
 | `log[]` | optional, written by `board.py`: entries kept for the record (`decision`, `sample`, older news without an id), the newest 50; the pane folds them under the news (§ News) |
@@ -290,7 +290,7 @@ names are those of the default board.
 | `owner_queue[].session`, `.key`, `.ask`, `.recommendation` | who asks, the ticket, the question, the asker's recommendation; **Accept** shows only with a recommendation, **Deny** always |
 | `owner_queue[].to`, `.to_name`, `.label` | optional: a question `board.py ask --to` sent to a human on another machine, that human's name and the ticket label it carries (§ Several humans); its answer comes from the ticket, so the card shows `waiting on <to_name> (label <label>)` and only **Withdraw** |
 | `owner_queue[].key_title`, `.cause`, `.ts` | the ticket's title, why the owner is asked (`merge-go`, `plan`, `prod`, `cut-fence`, `access-click`, `window-go`, `info`; a `window-go` is a go the owner must type in the asking session's own window, its `ask` naming that window and the exact sentence) and when it was posted (ISO UTC); `board.py ask` writes all three |
-| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `merge go (<class>): <url>` and names **Accept** **Go** (it writes `accept`, the owner's go: the deliverer sends `accept_hand`, § Answers, and the asking session arms the PR with `arm_pr.sh <PR>`), and `board.py close-merged` drops an open one once the PR is merged or closed |
+| `owner_queue[].pr_url`, `.one_way` | the open PR a `merge-go` question is about and its one-way class (`board.py ask --pr`, `--one-way`); with both, the card shows `merge go (<class>): <url>` and names **Accept** **Go** (it writes `accept`, the owner's go: the deliverer sends `accept_hand`, § Answers, and the asking session arms the PR with `arm_pr.sh <PR>`), and `board.py close-merged` closes it once the PR is merged or closed |
 | `owner_queue[].kind`, `.source`, `.owner` | `task` (`board.py ask --kind task`: the card offers **Taken** in place of **Accept** and stamps `taken`; the deliverer sends `accept_task`, § Answers); where the ask's fact comes from (`--source`, shown dimmed under the ask); the member who owns the subject (`--owner`, or `--component` resolved through the crew's `members.*.components`): the deliverer sends that session a copy of every answer (§ Answers) |
 | `owner_queue[].urgent`, `.obsolete` | `true` for a question asked `--urgent` (listed first in the bundle); the reason a question became moot (`board.py blocked --clear`, § Blocked workers) |
 | `sessions[].name` | the session's name as `claude agents` lists it; the live column matches on it |
@@ -325,7 +325,7 @@ and its status, the read before any session repeats it or writes the same answer
 | Field | Meaning |
 |---|---|
 | `id` | the question's `owner_queue[].id`, or the item's `news[].id` |
-| `answer` | `accept`, `deny`, `followup`, `update` or `withdraw` for a question; `read` for a news item; `rebuild` for Refresh's request (id `rebuild`, § Refresh) |
+| `answer` | `accept`, `deny`, `followup`, `update` or `withdraw` for a question, `pr_merged` or `pr_closed` when `board.py close-merged` closed it (with `pr`); `read` for a news item; `rebuild` for Refresh's request (id `rebuild`, § Refresh) |
 | `ts` | when it was pressed, ISO UTC |
 | `session` | the name of the session the line was written in, as `claude agents` lists it; `null` when the live column does not know it |
 | `ask`, `recommendation` | the open question's ask and recommendation, verbatim, on a line `board.py` wrote; a pane line takes them from the board item when it is delivered |
@@ -496,10 +496,13 @@ owner's yes only ever meets the newest head. `--codex-finding <text or link>` wi
 <text>` (one-way only, both or neither) names a Codex finding the asking session skips: the ask gets
 the line `On yes the Codex finding counts as skipped: <finding> (reason: <reason>)`, and the owner's
 Accept counts as that skip (§ Answers, the go comment). `board.py close-merged`
-(also run by `bundle` and `/we:merged`) removes every merge question still in `owner_queue` whose
-PR merged or closed, whatever its answer (a Go, the owner's hand merge) and in whichever repo
-its `pr_url` points, logs one `closed` line each in `board-questions.jsonl` and prints
-`closed <id>: PR <state> <url>` per question.
+(also run by `bundle` and `/we:merged`) closes every merge question still in `owner_queue` whose
+PR merged or closed, in whichever repo its `pr_url` points, and prints `closed <id>: PR <state> <url>`
+per question: one a Go closed already leaves the queue with one `closed` line in `board-questions.jsonl`;
+an open one (for the human, merging by hand is the yes) gets the answer line `pr_merged` or `pr_closed`
+with `pr`, which the deliverer carries to its asker like any answer (`Qn: the PR was merged by hand; the question
+is settled (<url>)`) and `prune` drops once carried; a later answer on it is a duplicate, a press on
+its card writes nothing and shows `Qn is already settled: PR merged`.
 Then a cold reader judges the question: one `claude -p` run (the prompt, model and effort of
 `templates/cold-reader.md`) in an empty directory, with no tools, no MCP server, no settings files, hooks
 off, no session file and the global login, given only the question (the asker's own text: the required-checks line a

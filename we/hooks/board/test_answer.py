@@ -98,3 +98,44 @@ def test_append_takes_via_and_quote_from_board_py(tmp_path):
             "quote": "no",
         }
     )
+
+
+@pytest.mark.parametrize(
+    "closer, note",
+    [
+        ("pr_merged", "Q7 is already settled: PR merged"),
+        ("pr_closed", "Q7 is already settled: PR closed"),
+    ],
+)
+def test_a_press_on_a_merge_closed_question_writes_nothing_and_names_why(
+    tmp_path, capsys, closer, note
+):
+    """Red arm (24.11.): a press on a card close-merged closed after the render was appended and
+    lost silently; now the pane gets exit 4 and the note to show."""
+    path = tmp_path / "board-answers.jsonl"
+    answer.append(str(path), "Q7", closer, "2026-11-24T21:06:08Z", "close-merged")
+    before = path.read_text()
+    assert (
+        answer.main(["answer.py", str(path), "Q7", "accept", "2026-11-24T21:07:00Z", "foxy"]) == 4
+    )
+    assert capsys.readouterr().err.strip() == note
+    assert path.read_text() == before
+    # Read and Refresh are no answers to the question: they still write
+    assert answer.main(["answer.py", str(path), "Q7", "read", "2026-11-24T21:07:00Z"]) == 0
+
+
+def test_the_pane_cannot_write_close_merged_kinds(tmp_path):
+    path = tmp_path / "a.jsonl"
+    assert answer.main(["answer.py", str(path), "Q7", "pr_merged", "t"]) == 2
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("closer", ["accept", "deny", "withdraw"])
+def test_a_press_after_an_earlier_answer_is_still_written(tmp_path, closer):
+    """board.py reads it as a duplicate; a repeated Accept retries a failed go comment."""
+    path = tmp_path / "board-answers.jsonl"
+    answer.append(str(path), "Q7", closer, "2026-11-24T21:06:08Z", "foxy")
+    assert (
+        answer.main(["answer.py", str(path), "Q7", "accept", "2026-11-24T21:07:00Z", "foxy"]) == 0
+    )
+    assert len(path.read_text().splitlines()) == 2

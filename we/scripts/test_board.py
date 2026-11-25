@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -1374,8 +1375,76 @@ class TestMergeQuestion:
             f"closed Q21: PR MERGED {other}",
         ]
         assert [q["id"] for q in board_of(crewless)["owner_queue"]] == ["Q7"]
-        closed = jsonl(crewless / "board-questions.jsonl")[-3]
-        assert (closed["id"], closed["outcome"], closed["reason"]) == ("Q8", "closed", "PR MERGED")
+        closed = [q for q in jsonl(crewless / "board-questions.jsonl") if q["outcome"] == "closed"]
+        assert [(q["id"], q["reason"]) for q in closed] == [
+            ("Q8", "PR MERGED"),
+            ("Q20", "PR MERGED"),
+        ]
+        # Q21 was open: it got the answer its asker reads (no ledger here, so prune dropped it)
+        last = jsonl(crewless / "board-answers.jsonl")[-1]
+        assert (last["id"], last["answer"], last["pr"]) == ("Q21", "pr_merged", other)
+
+    HAND: ClassVar[dict] = {
+        "id": "Q20",
+        "cause": "merge-go",
+        "pr_url": PR_URL,
+        "session": "lead-12",
+    }
+
+    @pytest.mark.parametrize("pr_state", ["MERGED", "CLOSED"])
+    def test_a_hand_merge_reaches_the_asker_as_an_answer(self, crewless, merge_gh, pr_state):
+        """Red arm (24.11.): the owner merged by hand, close-merged dropped the open question and
+        wrote only a log line; nothing went to the answers file, so its asker kept waiting."""
+        epoch_row(crewless)
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["owner_queue"].append(dict(self.HAND))
+        )
+        merge_gh(pr_state)
+        assert go(crewless, "close-merged") == 0
+        lines = [a for a in jsonl(crewless / "board-answers.jsonl") if a["id"] == "Q20"]
+        kind = {"MERGED": "pr_merged", "CLOSED": "pr_closed"}[pr_state]
+        assert [(a["answer"], a["pr"], a["session"]) for a in lines] == [
+            (kind, PR_URL, "close-merged")
+        ]
+        # the deliverer finds the asker only on the board: the item stays until prune sees it carried
+        assert "Q20" in [q["id"] for q in board_of(crewless)["owner_queue"]]
+        status, *_ = board.question_status(board.StateDir(crewless / "board.json"), "Q20")
+        assert status == f"answered: {kind}"
+        assert go(crewless, "close-merged") == 0  # a second run writes nothing again
+        assert len([a for a in jsonl(crewless / "board-answers.jsonl") if a["id"] == "Q20"]) == 1
+
+    @pytest.mark.usefixtures("merge_gh")
+    def test_an_open_pr_writes_no_answer(self, crewless):
+        epoch_row(crewless)
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["owner_queue"].append(dict(self.HAND))
+        )
+        assert go(crewless, "close-merged") == 0
+        assert not [a for a in jsonl(crewless / "board-answers.jsonl") if a.get("id") == "Q20"]
+
+    def test_a_later_go_on_a_hand_merged_question_runs_nothing(self, crewless, merge_gh, capsys):
+        """A Go after the hand merge is a duplicate: no answer line, no go comment on the PR."""
+        epoch_row(crewless)
+        item = {
+            **self.HAND,
+            "one_way": "money",
+            "head": HEAD_A,
+            "codex_finding": "retry loop",
+            "codex_reason": "capped",
+        }
+        board.StateDir(crewless / "board.json").write_board(
+            lambda b: b["owner_queue"].append(item)
+        )
+        merge_gh("MERGED")
+        go(crewless, "close-merged")
+        before = jsonl(crewless / "board-answers.jsonl")
+        assert go(crewless, "answer", "Q20", "accept", "--session", "foxy", "--via", "chat") == 0
+        assert "recorded as a duplicate" in capsys.readouterr().out
+        assert jsonl(crewless / "board-answers.jsonl") == before
+        dup = jsonl(crewless / "board-questions.jsonl")[-1]
+        assert (dup["outcome"], dup["closed_by"]) == ("duplicate-answer", "pr_merged")
+        calls = crewless / "gh-calls.jsonl"
+        assert not any("comment" in argv for argv in (jsonl(calls) if calls.exists() else []))
 
     def test_close_merged_leaves_other_causes_and_questions_without_a_pr(self, crewless, merge_gh):
         board.StateDir(crewless / "board.json").write_board(
