@@ -70,8 +70,8 @@ tmux new-window -d -n <Name> "cd <repo> && env -u CLAUDE_CONFIG_DIR WESIDE_COMPA
 ```
 
 `-u CLAUDE_CONFIG_DIR` drops a master's account profile, so the session books on the global login;
-`WE_ROLE=worker` with the pin makes it a consultation, not a master (L0 §Sessions; kind from `session_kind()` in `scripts/crew.py`, read by both SessionStart hooks). `claude stop <id>` finds it only with the same config
-(`env -u CLAUDE_CONFIG_DIR claude stop <id>`). Save its state, then close it.
+`WE_ROLE=worker` with the pin makes it a consultation, not a master (L0 §Sessions; kind from `session_kind()` in `scripts/crew.py`, read by both SessionStart hooks). Save its state, then stop it like a worker
+(its `WE_ROLE` is `worker`): `we-worker stop <name>`.
 
 `scripts/start.py launch <role|member> [--brief <file>] [--fresh] [--consult]` starts a crew member
 the same way from any session, in the background and without tmux: the `claude --bg` call of

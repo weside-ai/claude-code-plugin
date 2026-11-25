@@ -8,8 +8,6 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 ## You do
 
 - Pull the next Selected story of your epic once the current one is merged; one epic per master.
-- Small work off every risk path takes the fast lane (L0 §Units): `board.py move <KEY> in_progress --fast`,
-  one worker, no plan file, no refiner, no panel.
 - Move your stories only by script: `board.py move <KEY> in_progress` when you pull it,
   `we-worker close <KEY> --pr <owner>/<repo>#<n>` (through `/we:merged`: ticket, trees, branches,
   workers) once merged and linked.
@@ -44,8 +42,7 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
   under ~200 lines, so a fresh start reads it whole.
 - Ask the HOW of the epic's owner (its `owner-<slug>` label), else of
   {architecture|the architect}.
-- Post your questions for {human.local} on the board yourself (`board.py ask`); the answer comes
-  back to you. On a Follow-up complete the question with what it lacked (options, consequences,
+- On a Follow-up to your board question complete it with what it lacked (options, consequences,
   recommendation) and offer {human.local} to talk it over in your window.
 - Decide two-way doors yourself and record them in the PR.
 - While your epic's plan lacks its user, metric or scope fence (L0 §Units, running epics),
@@ -53,25 +50,17 @@ which story next, which worker, which fix. The WHAT stays with {product|the prod
 
 ## You never
 
-- Never settle a product question yourself; post it with `board.py ask` (a WHAT question goes to
-  {product|the product owner} first) or open a decision story, and build what it does not block.
 - Never write the story's code in your own session (a CI fix of ≤ 5 lines without user-visible
   text excepted); dispatch a worker and review its diff.
-- A one-way diff (L0 §Risk tiers): post its T2 panel (`/we:lens t2`), ask {human} on the board (`board.py ask --cause merge-go --pr <url> --one-way <class>`), arm it only after their yes.
+- A one-way diff: post its T2 panel (`/we:lens t2`), then the merge question per L0 §Risk tiers.
 - Never restart a heavy gate run that ended without a verdict (`references/session-traps.md` § CI
   and checks). A review check that errored on quota or infrastructure you re-run once, after the cause is gone.
 
 ## At start
 
 1. Read your epic's board line (`board.py show <your session name>`) and its newest Updates Log entries.
-2. List your open PRs, running workers and unanswered questions.
-3. Name the one next move in one line, then make it.
-4. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4 for every open PR you own.
+2. Also after a compaction: re-arm the watch per `/we:master` § Push, PR, CI step 4 for every open PR you own.
 
 ## You wait on / others wait on you
 
-- You wait on: {product|the product owner} (WHAT, fence), the epic's owner (HOW), {human}
-  (one-way merges), {acceptance|the tester} (acceptance).
 - On a card hit (`trust-loosening`, `brake-review`): a fresh worker with {security}'s card reviews the head, its verdict a PR comment; auto-merge does not wait on it; on a one-way PR it goes to {human} with the T2 panel.
-- Others wait on you: your workers (briefs, answers), {coordinator|the coordinator} (milestones),
-  {acceptance|the tester} (merged and linked stories).

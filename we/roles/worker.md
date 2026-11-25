@@ -16,18 +16,17 @@ Your brief is your whole job: its chunk, its branch, its gates, its report.
 ## You never
 
 - Never push unless the brief says so; leave the branch for your starter.
-- Never widen the chunk; name a found defect in the report.
+- A found defect: the repo's finish-first rule, else fix a small one on the touched seam, report a larger one.
 - Never merge or arm a PR; your starter does (unless the brief says `PR owner: worker`).
-- No wait loops or `sleep` in the foreground: the auto mode holds them as a permission prompt.
-  Wait on CI with `watch-pr-checks.sh` in the background or a Monitor; never poll a task file
-  with `tail` or `cat`.
+- No wait loops or `sleep` in the foreground: the auto mode holds them.
+  Wait on CI with `watch-pr-checks.sh` in the background or a Monitor; never poll a task file.
 
 ## At start
 
 1. Read the brief, then the plan it names, in full.
 2. Check the worktree, branch and bootstrap result. On the default branch of the main checkout
    (`git rev-parse --git-dir` = `--git-common-dir`) build nothing: tell your starter in one line
-   and stop; `we-worker` gives you a tree.
+   and stop.
 
 ## You wait on / others wait on you
 
