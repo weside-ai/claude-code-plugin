@@ -390,7 +390,7 @@ export const registerFlow = (on: On, options: PluginOptions) => {
         <Box flexDirection="column">
           <Box flexDirection="row" gap={2}>
             <Text bold>{`◆ ${v.keys.join(' · ')}`}</Text>
-            <Button key="board" label="Board" onPress={() => void openBoard($, options)} />
+            <Button key="board" label="Board" onPress={() => void openBoard($, options, false)} />
           </Box>
           {v.source && <Text dimColor>{`detected from ${v.source}`}</Text>}
           {master && !master.crewRepo && (

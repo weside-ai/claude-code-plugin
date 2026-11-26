@@ -32,7 +32,12 @@ Fields:
 - ``due`` (the coordinator's trigger): behind, at rest, no worker, and (a) the release between the
   two versions changed ``process/``, ``roles/`` or ``hooks/`` (the two cache folders compared file
   by file; an old folder gone: every minor or major bump counts), or (b) the session started
-  ``sessions.refresh_after_days`` (crew, default 3) days ago or more.
+  ``sessions.refresh_after_days`` (crew, default 3) days ago or more; or, at rest and no worker
+  whether behind or not, (c) its Claude Code is older than the installed one.
+- ``claude_code``: the version of the process's binary (the versioned target of
+  ``/proc/<pid>/exe``), ``?`` when unreadable (no ``/proc``); the installed one is the target of
+  the ``claude`` launcher, else ``claude --version`` (``installed_claude_code``). Compared by
+  number; either one unreadable raises no reason.
 """
 
 from __future__ import annotations
@@ -40,6 +45,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -132,6 +141,42 @@ def changed(old_root: Path | None, new_root: Path | None, old: str, new: str) ->
     return list(WATCHED) if ok[:2] != nk[:2] else []
 
 
+VERSION_NAME = re.compile(r"^\d+(?:\.\d+)+$")
+
+
+def _version_of_binary(path: str) -> str | None:
+    """``…/versions/2.1.332`` → ``2.1.332``: Claude Code's binaries are named by their version."""
+    name = Path(path.removesuffix(" (deleted)")).name
+    return name if VERSION_NAME.match(name) else None
+
+
+def claude_code_of(pid: int) -> str | None:
+    """The Claude Code version a live process runs, from ``/proc/<pid>/exe``; None without it."""
+    try:
+        return _version_of_binary(os.readlink(f"/proc/{pid}/exe"))
+    except OSError:
+        return None
+
+
+def installed_claude_code() -> str | None:
+    """The Claude Code version a fresh start runs: the ``claude`` launcher's versioned target,
+    else the first number of ``claude --version``; None when neither answers."""
+    launcher = shutil.which("claude")
+    if not launcher:
+        return None
+    found = _version_of_binary(os.path.realpath(launcher))
+    if found:
+        return found
+    try:
+        out = subprocess.run(
+            [launcher, "--version"], capture_output=True, text=True, timeout=10, check=False
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.match(r"\s*(\d+(?:\.\d+)+)", out)
+    return match.group(1) if match else None
+
+
 def refresh_days(cwd: str | None) -> float:
     try:
         _, crew = crewlib.find_and_load(cwd)
@@ -180,6 +225,8 @@ def roll_call(
     read_marker: Callable = worker_launch.read_marker,
     read_env: Callable = startlib.env_values,
     state: Path | None = None,
+    read_claude_code: Callable = claude_code_of,
+    claude_code: Callable = installed_claude_code,
 ) -> list[dict]:
     """One dict per live session (module docstring § Fields)."""
     env = _env() if env is None else env
@@ -189,6 +236,7 @@ def roll_call(
     roots = plugin_install.cache_roots(env)
     entries = plugin_install.installs(env)
     starters, queued = _starters(rows, read_marker, state), _queued(state)
+    cc_new = claude_code()
     out = []
     for row in rows:
         pid = row.get("pid")
@@ -211,15 +259,20 @@ def roll_call(
         rest = state_ == "idle" and not workers and not waits
         started = row.get("startedAt")
         age = (now - float(started) / 1000) / 86400 if isinstance(started, (int, float)) else None
-        due = ""
+        cc_old = read_claude_code(pid)
+        reasons = []
         if behind == "yes" and rest and role != "worker":
             old_root = next((r / old for r in roots if (r / old).is_dir()), None)
             new_root = Path(str(entry["installPath"])) if entry.get("installPath") else None
             parts = changed(old_root, new_root, old, new)
             if parts:
-                due = "changed " + ", ".join(parts)
+                reasons.append("changed " + ", ".join(parts))
             elif age is not None and age >= refresh_days(cwd):
-                due = f"started {age:.1f} days ago"
+                reasons.append(f"started {age:.1f} days ago")
+        older = cc_old and cc_new and key(cc_old) and key(cc_new) and key(cc_old) < key(cc_new)
+        if older and rest and role != "worker":
+            reasons.append(f"Claude Code {cc_old} older than installed {cc_new}")
+        due = "; ".join(reasons)
         out.append(
             {
                 "name": name,
@@ -236,6 +289,7 @@ def roll_call(
                 "at_rest": rest,
                 "workers": workers,
                 "queued": waits,
+                "claude_code": cc_old or "?",
                 "age_days": round(age, 1) if age is not None else None,
                 "due": due,
             }

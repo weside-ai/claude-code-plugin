@@ -227,6 +227,23 @@ def test_cli_role_and_all_roles(tmp_path):
     ]
 
 
+def test_cli_role_takes_a_member_name_and_refuses_an_unknown_value(tmp_path):
+    """A brief that names a companion (``Hana``) gets that role's card; a value that is neither a
+    role key nor a role holder's name exits 2 naming the keys, so no brief goes out without a card."""
+    repo = crew_repo(tmp_path)
+    for workplace in ("biz", "infra"):
+        (tmp_path / workplace).mkdir()
+    by_key = run("--role", "hr", "--from", str(repo))
+    assert by_key.returncode == 0, by_key.stderr
+    for name in ("Hana", "hana"):
+        by_name = run("--role", name, "--from", str(repo))
+        assert by_name.returncode == 0 and by_name.stdout == by_key.stdout
+    for value in ("Bo", "nobody", ""):  # Bo is a member without a role
+        bad = run("--role", value, "--from", str(repo))
+        assert bad.returncode == 2 and "product, architecture" in bad.stderr, value
+        assert bad.stdout == ""
+
+
 def test_serves_needs_a_crew_that_loads(tmp_path):
     repo = crew_repo(tmp_path)
     assert run("--serves", "--from", str(repo)).returncode == 0

@@ -143,7 +143,7 @@ plan's Updates Log and a ticket comment, and the session rewrites that pinned me
 and copies no content, or the companion's other surfaces know nothing of weeks of work. Sessions
 started in one repo share Claude Code's one auto-memory index there: each keeps its lines under a
 heading with its name, and a parking master moves its files out, so no session loads the others'
-open strands. What the companion carries per turn on both surfaces, and how it is
+open strands. What the index may hold: `process/L0.md` § Changing this. What the companion carries per turn on both surfaces, and how it is
 kept lean: `references/context-engineering.md`.
 
 ## Catch-up
@@ -245,7 +245,8 @@ version, state, `behind`, and `at_rest` (idle, no live worker it started, no que
 its docstring owns the fields and their sources. `list --due` keeps the sessions the coordinator
 refreshes at `/we:start` and on each sweep: behind, at rest, no worker, and either the release
 between the two versions changed `process/`, `roles/` or `hooks/`, or the session started
-`sessions.refresh_after_days` (crew, default 3) days ago. `session_refresh.py plan <name>` prints
+`sessions.refresh_after_days` (crew, default 3) days ago; or, at rest and no worker, its Claude Code
+is older than the installed one. `session_refresh.py plan <name>` prints
 the steps: the message that makes it save its state and reply with the crew's `labels.ready`, how
 it stops (a background session `claude stop`; the human's own window `/exit` by the human), how it
 starts fresh (`start.py launch <role> --fresh`; the coordinator `wclaude --start --fresh` in the

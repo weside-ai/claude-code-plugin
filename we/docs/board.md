@@ -60,7 +60,7 @@ Finish what is open → money → marketing.
 
 [ + 2 idle/other ]
 
-[ Refresh ]  [ Flow ]
+[ Refresh ]  [ Zentrale ]
 file 18:10 UTC · live 18:10 UTC · watch 3 s, all 1 min
 ● runs  ◉ waits for you  ○ rests  ? unknown
 second ● = start mode
@@ -195,8 +195,8 @@ press ask again. Before the deliverer's first start requests stay ten minutes ap
 
 ## Opening it
 
-`/board` opens the pane; the flow pane's **Board** button does the same, and the board's **Flow**
-button opens `/flow`: first its section **Crew flow** (who works, who waits on whom since when, CI
+`/board` opens the pane with the Flow pane (`/flow`) as its neighbour tab, the Board in front; the
+flow pane's **Board** button does the same. The Flow pane shows first its section **Crew flow** (who works, who waits on whom since when, CI
 queue and run per open PR, stories waiting on acceptance, every gap, and the swimlane page's path),
 read from the last snapshot of `scripts/flow_intervals.py --snapshot` with its age shown; a snapshot
 older than 5 min starts one refresh in the background. Below it come the story lights for what this
