@@ -120,8 +120,7 @@ first line are the default branch's verdict: exit 0 green, else red; the command
 of the open epics it adds with their status; null fetches no epics); ``repos`` (``owner/name`` GitHub slugs the
 command centre reads beside the crew repo's ``origin``, without loading them into a session like
 ``extra_repos``; ``command_center/gh_source.py`` ``repos_of`` reads it); ``flow_log.py`` owns the line format), ``worker_rights`` (what a
-process worker may do without asking and what it never does, all off by default: ``repos`` the
-``owner/name`` slugs whose ``origin`` grants the rights, ``pr_ready``, ``pr_comment``, ``branch_rc``
+process worker runs without asking and what it never does: ``branch_rc``
 (a command prefix or null), ``deny_commands`` (command prefixes added to the never-list),
 ``deny_text`` (strings no worker command may contain); ``worker_rights.py`` owns the rules). ``zentrale`` (the command centre's web view, ``command_center/crewd.py``: ``web_url`` the https URL
 the Zentrale pane links to, null = no link; ``link_hosts`` the hosts with an optional path prefix a
@@ -386,9 +385,6 @@ DEFAULTS: dict[str, Any] = {
         "repos": [],
     },
     "worker_rights": {
-        "repos": [],
-        "pr_ready": False,
-        "pr_comment": False,
         "branch_rc": None,
         "deny_commands": [],
         "deny_text": [],
@@ -411,6 +407,9 @@ RETIRED_KEYS = (
     "release.prod_on",
     "release.rc_job",
     "oracles.receipt_schema",
+    "worker_rights.repos",
+    "worker_rights.pr_ready",
+    "worker_rights.pr_comment",
 )
 STUB_MARKER = "<!-- we:stub"
 TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "companion-skill" / "SKILL.md"

@@ -21,9 +21,6 @@ import worker_rights as wr  # noqa: E402
 KEY = "ABC-12"
 BRANCH = f"feat/{KEY}-hook"
 RIGHTS = {
-    "repos": ["acme/app"],
-    "pr_ready": True,
-    "pr_comment": True,
     "branch_rc": "a release staging",
     "deny_commands": ["secret-pipe.sh", "wsec put"],
     "deny_text": ["/dev/shm/vault-", "token-file.json"],
@@ -185,50 +182,54 @@ def hook(world, command, cwd=None, session="s-1", **env):
     return spec["permissionDecision"], spec["permissionDecisionReason"]
 
 
-# ---------------------------------------------------------------- AC 5: the rights pass
+# ---------------------------------------------------------------- what the gate leaves alone
 
 
 @pytest.mark.parametrize(
     "command",
     [
         "gh pr ready",
-        "gh pr ready 7",
-        "/plugin/scripts/pr_ready.sh 7 ready --sha 0123abc",
-        "bash pr_ready.sh 7 undo 'waits on the lens — ready when it passes'",
-        "gh pr comment --body x",
-        "gh pr comment 7 --body x",
-        "gh pr comment -R acme/app 7 -b x",
-        "gh pr comment https://github.com/acme/app/pull/7 --body x",
-        "a release staging",
-        'gh pr comment --body "Fixed \\`foo\\` in bar"',
+        "gh pr ready 8",
+        "/plugin/scripts/pr_ready.sh 8 ready --sha 0123abc",
+        "gh pr comment 8 --body x",
+        "gh pr comment 12 -R acme/other --body x",
+        "gh pr comment 8 --delete-last --yes",
+        "a release staging rc",
+        "env gh pr ready 8",
+        "bash -c 'gh pr comment 8 -b x'",
     ],
 )
-def test_a_held_right_is_allowed_without_a_prompt(world, command):
-    prs = json.loads((world["tmp"] / "prs.json").read_text())
-    prs["https://github.com/acme/app/pull/7"] = prs["7"]
-    (world["tmp"] / "prs.json").write_text(json.dumps(prs))
-    decision, reason = hook(world, command)
+def test_ready_comment_and_branch_rc_stay_out_of_the_gate(world, command):
+    """Rows R1 to R5 and N7 are gone: a comment or a ready flag changes no code and no prod, so
+    the gate gives no decision and `settings` allows them; a crew granting nothing changes that
+    not."""
+    _git(world["repo"], "checkout", "-q", "main")  # the default branch was a refusal (R4)
+    assert hook(world, command, WE_STORY_KEY=None) == (None, "")
+
+
+@pytest.mark.parametrize("owner", ["master", "worker"])
+def test_a_held_right_is_allowed_without_a_prompt(world, owner):
+    _pr_owner(world["repo"], owner)
+    decision, reason = hook(world, "gh pr merge 7 --disable-auto")
     assert decision == "allow", reason
+    if owner == "worker":
+        assert hook(world, "/plugin/scripts/arm_pr.sh 7 --method squash")[0] == "allow"
+        assert hook(world, "gh pr edit 7 --add-label y --title z")[0] == "allow"
 
 
 def test_a_held_right_in_a_compound_command_only_passes(world):
-    assert hook(world, "git status && gh pr ready") == (None, "")
+    assert hook(world, "git status && gh pr merge 7 --disable-auto") == (None, "")
 
 
 @pytest.mark.parametrize(
     ("command", "why"),
     [
-        ("cd /x && gh pr ready 8", "not this branch's PR"),
-        ("cd . && gh pr comment 8 --body 'skipped: x'", "not this branch's PR"),
-        ("git status; gh pr ready -R acme/other", "another repo"),
-        ("true || gh pr comment 8 -b x", "not this branch's PR"),
-        ("echo x | gh pr ready 8", "not this branch's PR"),
-        ("cd .\ngh pr ready 8", "not this branch's PR"),
-        ("gh pr ready && gh pr comment 8 --body x", "not this branch's PR"),
-        ("pr_ready.sh 8 ready", "not this branch's PR"),
-        ("bash pr_ready.sh -R acme/other 7 ready", "another repo"),
-        ("pr_ready.sh --sha 0123abc", "pr_ready.sh without a PR"),
-        ("cd . && pr_ready.sh 8 ready", "not this branch's PR"),
+        ("cd /x && gh pr merge 8 --disable-auto", "not this branch's PR"),
+        ("git status; gh pr merge -R acme/other 7 --disable-auto", "another repo"),
+        ("true || gh pr merge 7 --squash", "without --match-head-commit"),
+        ("echo x | gh pr merge 7 --disable-auto --merge", "takes no other flag"),
+        ("cd .\ngh pr merge 10 --disable-auto", "comes from fork/app"),
+        ("cd . && gh pr merge 9 --disable-auto", "could not be resolved"),
     ],
 )
 def test_a_right_inside_a_command_chain_is_judged_on_its_segment(world, command, why):
@@ -236,38 +237,20 @@ def test_a_right_inside_a_command_chain_is_judged_on_its_segment(world, command,
     assert decision == "deny" and why in reason, reason
 
 
-def test_a_release_inside_a_command_chain_is_judged_on_the_branch(world):
-    _git(world["repo"], "checkout", "-q", "-b", "feat/other")
-    decision, reason = hook(world, "cd . && a release staging rc")
-    assert decision == "deny" and f"does not carry the key {KEY}" in reason
-
-
 @pytest.mark.parametrize(
     ("command", "right"),
     [
-        ("env gh pr ready 6999", "pr_ready behind env"),
-        ("command gh pr ready 6999", "pr_ready behind command"),
-        ("GH_X=1 gh pr ready 6999", "pr_ready behind an assignment"),
-        ("timeout 9 gh pr ready 6999", "pr_ready behind timeout"),
-        ("nohup gh pr ready 6999", "pr_ready behind nohup"),
-        ("exec gh pr ready 6999", "pr_ready behind exec"),
-        ("echo 6999 | xargs gh pr ready", "pr_ready behind xargs"),
-        ("env gh pr ready 7", "pr_ready behind env"),
-        ("env gh pr comment 6999 --body 'Codex #1 skipped: x'", "pr_comment behind env"),
-        ("env a release staging rc", "branch_rc behind env"),
-        ("bash -c 'a release staging rc'", "branch_rc in bash -c"),
-        ("bash -c 'gh pr ready 6999'", "pr_ready in bash -c"),
-        ("sh -c 'cd . && gh pr comment 6999 -b x'", "pr_comment in sh -c"),
-        ("env bash -lc 'gh pr ready 6999'", "pr_ready in bash -c"),
-        ('eval "gh pr ready 6999"', "pr_ready in eval"),
-        ("echo `gh pr ready 6999`", "pr_ready in a command substitution"),
-        ('echo "$(gh pr ready 6999)"', "pr_ready in a command substitution"),
-        ("x=$(gh pr ready 7)", "pr_ready in a command substitution"),
-        ("bash -c 'eval \"env gh pr ready 6999\"'", "pr_ready behind env in eval in bash -c"),
+        ("env arm_pr.sh 7", "arm behind env"),
+        ("X=1 arm_pr.sh 7", "arm behind an assignment"),
+        ("timeout 9 arm_pr.sh 7", "arm behind timeout"),
+        ("bash -c 'arm_pr.sh 7'", "arm in bash -c"),
+        ('eval "arm_pr.sh 7"', "arm in eval"),
+        ('echo "$(arm_pr.sh 7)"', "arm in a command substitution"),
     ],
 )
 def test_a_right_behind_a_wrapper_or_in_a_nested_shell_is_refused(world, command, right):
-    """Security card #276 a71e339 WARNING 2: a right holds only as a command of its own."""
+    """Security card #276 a71e339 WARNING 2: an arm holds only as a command of its own (R1b)."""
+    _pr_owner(world["repo"], "worker")
     decision, reason = hook(world, command)
     assert decision == "deny", reason
     assert f"not a worker right ({right}: a right only as a command of its own" in reason, reason
@@ -276,9 +259,27 @@ def test_a_right_behind_a_wrapper_or_in_a_nested_shell_is_refused(world, command
 @pytest.mark.parametrize(
     "command",
     [
-        "{ gh pr ready 8; }",
-        "if true; then gh pr ready 8; fi",
-        "while false; do gh pr ready 8; done",
+        "env gh pr merge 7 --squash",
+        "timeout 9 gh pr merge 7 --disable-auto",
+        "bash -c 'gh pr merge 7 --squash'",
+        'eval "gh pr merge 7 --squash"',
+        "echo `gh pr merge 7 --squash`",
+    ],
+)
+def test_a_hidden_merge_is_a_never_item_for_every_owner(world, command):
+    for owner in ("master", "worker"):
+        _pr_owner(world["repo"], owner)
+        decision, reason = hook(world, command)
+        assert decision == "deny", reason
+        assert "merge (gh pr merge only as a visible part of the command)" in reason, reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "{ gh pr merge 8 --disable-auto; }",
+        "if true; then gh pr merge 8 --disable-auto; fi",
+        "while false; do gh pr merge 8 --disable-auto; done",
     ],
 )
 def test_a_right_after_a_shell_keyword_is_judged(world, command):
@@ -302,112 +303,18 @@ def test_ordinary_wrapped_work_passes(world, command):
     assert hook(world, command) == (None, "")
 
 
-# ---------------------------------------------------------------- AC 6: the rights' conditions
-
-
-def test_another_pr_is_denied(world):
-    decision, reason = hook(world, "gh pr comment 8 --body x")
-    assert (
-        decision == "deny"
-        and "not this branch's PR" in reason
-        and reason.endswith("ask your starter")
-    )
-
-
-def test_a_pr_from_a_fork_is_denied(world):
-    decision, reason = hook(world, "gh pr ready 10")
-    assert decision == "deny" and "comes from fork/app" in reason
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "gh pr ready -R acme/other",
-        "gh -R acme/other pr comment --body x",
-        "gh pr ready --repo=acme/other",
-    ],
-)
-def test_another_repo_is_denied(world, command):
-    decision, reason = hook(world, command)
-    assert decision == "deny" and "another repo" in reason
-
-
-def test_a_comment_on_the_keys_pr_in_another_repo_is_allowed(world):
-    """Red arm: a two-repo story's worker could not answer the reviews on its PR in the other
-    repo ("another repo"); the master posted each reply for it."""
-    decision, reason = hook(world, "gh pr comment 7 -R acme/other --body x")
-    assert decision == "allow", reason
-    decision, reason = hook(world, "gh pr comment 8 -R acme/other --body x")
-    assert decision == "deny" and "does not carry the key ABC-12" in reason
-
-
 @pytest.mark.parametrize("owner", ["master", "worker"])
-def test_a_disarm_in_a_chain_is_no_never_item(world, owner):
-    """Red arm: a fix round's `cd <tree> && … --disable-auto` was "never for a worker", so every
-    fix round cost the master a disarm relay."""
-    assert wr.never("cd . && gh pr merge 7 --disable-auto", str(world["repo"]), {}, owner) is None
-    for command in (
-        "cd . && gh pr merge 7 --disable-auto --squash",
-        "cd . && gh pr merge 7 --disable-auto && bash -c 'gh pr merge 7 --squash'",
-    ):
-        assert wr.never(command, str(world["repo"]), {}, owner) == (
-            "merge (gh pr merge only as a command of its own)"
-        ), command
-
-
-def test_the_default_branch_is_denied(world):
-    _git(world["repo"], "checkout", "-q", "main")
-    decision, reason = hook(world, "gh pr ready")
-    assert decision == "deny" and "default branch" in reason
-
-
-def test_a_branch_without_the_key_is_denied(world):
-    _git(world["repo"], "checkout", "-q", "-b", "feat/other")
-    decision, reason = hook(world, "a release staging")
-    assert decision == "deny" and f"does not carry the key {KEY}" in reason
-
-
-def test_a_repo_without_rights_is_denied(world):
-    repo = make_repo(world["tmp"], name="plain", rights=None)
-    decision, reason = hook(world, "gh pr ready", cwd=repo)
-    assert decision == "deny" and "grants no worker rights" in reason
-
-
-def test_a_repo_without_a_crew_is_denied(world):
-    repo = make_repo(world["tmp"], name="nocrew", crew=False)
-    decision, reason = hook(world, "gh pr comment --body x", cwd=repo)
-    assert decision == "deny" and "acme/nocrew grants no worker rights" in reason
-
-
-def test_a_repo_pointing_at_another_repos_crew_is_denied(world):
-    """The infrastructure case: its config.json points `crew` at the core repo's crew file."""
-    infra = make_repo(world["tmp"], name="infra", crew=False, branch="main")
-    (infra / ".weside").mkdir()
-    pointer = os.path.relpath(world["repo"] / ".weside" / "crew.json", infra)
-    (infra / ".weside" / "config.json").write_text(json.dumps({"crew": pointer}))
-    _git(infra, "add", ".weside")
-    _commit(infra, "pointer")
-    _publish(infra)
-    _git(infra, "checkout", "-q", "-b", BRANCH)
-    decision, reason = hook(world, "gh pr ready", cwd=infra)
-    assert decision == "deny" and "acme/infra grants no worker rights" in reason
-
-
-def test_a_right_the_crew_does_not_grant_is_denied(world):
-    repo = make_repo(world["tmp"], name="half", rights={"repos": ["acme/half"], "pr_ready": True})
-    decision, reason = hook(world, "gh pr comment --body x", cwd=repo)
-    assert decision == "deny" and "pr_comment is not granted" in reason
-    assert hook(world, "gh pr ready", cwd=repo)[0] == "allow"
-
-
-def test_a_worker_without_a_key_is_denied(world):
-    decision, reason = hook(world, "gh pr ready", WE_STORY_KEY=None)
-    assert decision == "deny" and "without a story key" in reason
-
-
-def test_a_gh_failure_while_resolving_the_pr_denies(world):
-    decision, reason = hook(world, "gh pr ready 9")
-    assert decision == "deny" and "could not be resolved" in reason
+def test_a_merge_part_in_a_chain_is_no_never_item(world, owner):
+    """Red arm: a fix round's `cd <tree> && … --disable-auto` and the `ready` line in a chain were
+    "never for a worker" (N23), so the starter relayed each one. A visible part is judged like any
+    right now; a hidden one beside it still refuses."""
+    _pr_owner(world["repo"], owner)
+    for command in ("cd . && gh pr merge 7 --disable-auto", "cd . && gh pr merge 7 --squash"):
+        assert wr.never(command, str(world["repo"]), {}) is None, command
+    command = "cd . && gh pr merge 7 --disable-auto && bash -c 'gh pr merge 7 --squash'"
+    assert wr.never(command, str(world["repo"]), {}) == (
+        "merge (gh pr merge only as a visible part of the command)"
+    )
 
 
 # ---------------------------------------------------------------- AC 7: the never-list
@@ -435,16 +342,19 @@ NEVER = [
     ("git push origin +HEAD:refs/heads/main", "main (git push to main)"),
     ("git push origin feat/x:master", "main (git push to master)"),
     ("git push --all origin", "main (git push --all)"),
-    ("ALLOW_COMMIT_TO_MAIN=1 git commit -m x", "main (ALLOW_COMMIT_TO_MAIN)"),
     ("git push origin v1.2.3-rc.1", "guard bypass (git push of the tag v1.2.3-rc.1)"),
     ("git push origin refs/tags/v9", "guard bypass (git push of a tag)"),
     ("git push origin tag v9", "guard bypass (git push of a tag)"),
     ("git push --tags", "guard bypass (git push of a tag)"),
-    ("ALLOW_PUSH_WITHOUT_MAIN=1 git push origin HEAD", "guard bypass (ALLOW_PUSH_WITHOUT_MAIN)"),
-    ("git push --no-verify origin HEAD", "guard bypass (--no-verify)"),
-    ("git commit --no-verify -m x", "guard bypass (--no-verify)"),
+    ("git commit --no-verify -m x", "guard bypass (git commit --no-verify)"),
+    ("git commit -m x --no-verif", "guard bypass (git commit --no-verify)"),
+    ("git -C . commit --no-verify -m x", "guard bypass (git commit --no-verify)"),
     ("git commit -nm x", "guard bypass (git commit -n)"),
-    ("git -c core.hooksPath=/dev/null push origin HEAD", "guard bypass (core.hooksPath)"),
+    ("git -c core.hooksPath=/dev/null commit -m x", "guard bypass (core.hooksPath on a commit)"),
+    ("SKIP=gitleaks git commit -m x", "guard bypass (SKIP=gitleaks)"),
+    ("SKIP=ruff-format,gitleaks git commit -m x", "guard bypass (SKIP=gitleaks)"),
+    ('SKIP="gitleaks" git commit -m x', "guard bypass (SKIP=gitleaks)"),
+    ("export SKIP=gitleaks; git add a && git commit -m x", "guard bypass (SKIP=gitleaks)"),
     ("cat /dev/shm/vault-1000/x.json", "crew deny_text (/dev/shm/vault-)"),
     ("jq . ~/token-file.json", "crew deny_text (token-file.json)"),
     # every form a worker types
@@ -475,21 +385,18 @@ NEVER = [
     ("command -p gh secret list", "secrets (gh secret)"),
     ("git push origin 'refs/heads/*:refs/heads/*'", "main (git push of a ref pattern"),
     ("git push --dele origin feat/x", "delete (git push --delete)"),
-    ("git push --no-verif origin HEAD", "guard bypass (--no-verify)"),
-    ("git config core.hookspath /dev/null", "guard bypass (core.hooksPath)"),
     ('echo "`gh secret list`"', "secrets (gh secret)"),
     ("cd ../main-checkout && git push", None),
     # the never-list through git's own place flags
     ("git --git-dir=.git push origin main", "main (git push to main)"),
     ("git --work-tree . push --delete origin feat/x", "delete (git push --delete)"),
     ("git -C ../main-checkout push", None),
-    # a merge other than the line arm_pr.sh prints
+    # a merge past the checks, or one no part shows
     ("gh pr merge 7 --admin", "merge (gh pr merge --admin)"),
     ("gh pr merge 7 --auto --squash", "merge (gh pr merge --auto)"),
-    ("gh pr merge 7 --merge", "merge (a worker merges only under build.pr_owner: worker)"),
     (
-        "gh pr merge 7 --disable-auto && gh pr merge 7 --squash",
-        "merge (gh pr merge only as a command of its own)",
+        "gh pr merge 7 --disable-auto && bash -c 'gh pr merge 7 --squash'",
+        "merge (gh pr merge only as a visible part of the command)",
     ),
 ]
 
@@ -540,15 +447,16 @@ def test_ordinary_work_passes(world, command):
 @pytest.mark.parametrize(
     "command",
     [
-        "cat <<'EOF' > body.md\nnever --no-verify here? it is data\nEOF",
+        "cat <<'EOF' > body.md\nnever gh secret set here? it is data\nEOF",
         "echo 'literal $(gh secret set X)'",
-        "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nnot --no-verify, data\nEOF\n)\" && git log -1",
+        "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nnot gh secret set, data\nEOF\n)\" && git log -1",
+        "git commit -m 'drop --no-verify from the docs'",
         "sed -n '1,5p' f; cat > /tmp/x <<EOF\ngh secret set X\nEOF",
     ],
 )
 def test_data_naming_a_never_item_is_denied_like_the_settings_deny_rules(world, command):
     """No parser tells data from a command: the gate denies what the `--settings` deny globs
-    (`Bash(*--no-verify*)`, `Bash(*gh secret *)`) already deny for the same text."""
+    (`Bash(*git*commit*--no-verify*)`, `Bash(*gh secret *)`) already deny for the same text."""
     assert hook(world, command)[0] == "deny"
 
 
@@ -646,8 +554,8 @@ def test_a_push_is_judged_in_the_tree_git_runs_it_in(world, command):
         ["git", "-C", str(tree), "rev-parse", "--absolute-git-dir"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()  # fmt: skip
-    decision, reason = hook(world, command.format(tree=tree, gitdir=gitdir), cwd=main)
-    assert decision == "allow", reason
+    # a push is no right: the gate gives no decision
+    assert hook(world, command.format(tree=tree, gitdir=gitdir), cwd=main) == (None, "")
 
 
 @pytest.mark.parametrize(
@@ -658,7 +566,6 @@ def test_a_push_is_judged_in_the_tree_git_runs_it_in(world, command):
         ("git -C {tree} push && git -C {main} push", "main (a git push from main:"),
         ("cd {tree} && git push", "main (a git push from main:"),
         ("git -C {tree} push origin main", "main (git push to main)"),
-        ("git -C {tree} push origin HEAD:feat/ABC-99-x", "pushes only branches carrying ABC-12"),
     ],
 )
 def test_a_push_from_a_main_checkout_stays_denied_outside_its_own_tree(world, command, why):
@@ -754,8 +661,7 @@ def test_a_git_dir_onto_the_main_checkout_is_refused_from_a_worktree(world):
 def test_a_simple_push_through_git_dir_and_work_tree_passes_from_main(world):
     main, tree = _main_checkout_with_tree(world)
     text = f"git --git-dir={tree}/.git --work-tree={tree} push origin feat/ABC-12-tree"
-    decision, reason = hook(world, text, cwd=main)
-    assert decision == "allow", reason
+    assert hook(world, text, cwd=main) == (None, "")
 
 
 def test_a_push_spelt_apart_is_judged_where_it_runs(world):
@@ -771,42 +677,11 @@ def test_a_tag_is_judged_in_every_place_a_push_runs(world):
     assert decision == "deny" and "git push of the tag v-only-there" in reason, reason
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "git --git-dir={other}/.git push origin feat/ABC-12-x",
-        "git --work-tree {repo} --git-dir {other}/.git push origin feat/ABC-12-x",
-    ],
-)
-def test_a_push_through_git_dir_reads_the_switch_of_that_repo(world, command):
-    # the switch is read with git's own place options: rooted by --show-toplevel, a --git-dir
-    # alone read the session's repo as top level and its build.pr_owner opened the other repo
-    _pr_owner(world["repo"], "worker")
-    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
-    text = command.format(other=other, repo=world["repo"])
-    decision, reason = hook(world, text)
-    assert decision == "deny" and "another repo than acme/app" in reason, reason
-    _pr_owner(other, "worker")
-    assert hook(world, text)[0] == "allow"
-
-
-@pytest.mark.parametrize("switch", [None, "master"])
-def test_a_push_into_another_repo_needs_that_repos_own_switch(world, switch):
-    _pr_owner(world["repo"], "worker")
-    other = make_repo(world["tmp"], name="other", owner="evil", branch="feat/ABC-12-x")
-    if switch:
-        _pr_owner(other, switch)
-    decision, reason = hook(world, f"git -C {other} push origin feat/ABC-12-x")
-    assert decision == "deny" and "another repo than acme/app" in reason, reason
-    _pr_owner(other, "worker")  # the other repo's own default branch opens it
-    assert hook(world, f"git -C {other} push origin feat/ABC-12-x")[0] == "allow"
-
-
 def test_every_denial_is_one_line_in_brakes_jsonl_without_the_command(world):
     state = world["tmp"] / "state"
     decision, _reason = hook(world, "printf s3cr3t-value | wsec put NAME", WE_STATE_DIR=str(state))
     assert decision == "deny"
-    hook(world, "gh pr ready 8", WE_STATE_DIR=str(state))
+    hook(world, "gh pr merge 8 --disable-auto", WE_STATE_DIR=str(state))
     hook(world, "git status", WE_STATE_DIR=str(state))  # no denial, no line
     text = (state / "brakes.jsonl").read_text()
     assert "s3cr3t-value" not in text
@@ -849,7 +724,8 @@ def test_a_marker_worker_names_its_lead(world):
         world, "gh secret set X", session="s-w", WE_ROLE=None, WE_STORY_KEY=None
     )
     assert decision == "deny" and reason.endswith("ask your Lead LEAD-1")
-    assert hook(world, "gh pr ready", session="s-w", WE_ROLE=None, WE_STORY_KEY=None)[0] == "allow"
+    disarm = "gh pr merge 7 --disable-auto"
+    assert hook(world, disarm, session="s-w", WE_ROLE=None, WE_STORY_KEY=None)[0] == "allow"
     # the Lead in the same tree is no worker
     assert hook(world, "gh secret set X", session="s-lead", WE_ROLE=None) == (None, "")
 
@@ -905,54 +781,34 @@ def test_a_crash_still_denies_the_hard_prod_part(world, monkeypatch, capsys, com
     assert out["permissionDecisionReason"].startswith(f"never for a worker ({item}")
 
 
-def test_a_broken_crew_costs_the_rights_not_the_worker(world):
-    (world["repo"] / ".weside" / "crew.json").write_text(
-        json.dumps({**CREW, "worker_rights": {"repos": "acme/app"}})
-    )
-    _git(world["repo"], "add", ".weside")
-    _commit(world["repo"], "broken")
-    _publish(world["repo"])
-    assert hook(world, "git status") == (None, "")
-    assert hook(world, "gh pr ready")[0] == "deny"
-    assert hook(world, "gh secret set X")[0] == "deny"
-
-
-def test_the_worktrees_own_crew_edit_grants_nothing(world):
-    repo = make_repo(world["tmp"], name="plain", rights=None)
-    (repo / ".weside" / "crew.json").write_text(
-        json.dumps({**CREW, "worker_rights": {**RIGHTS, "repos": ["acme/plain"]}})
-    )
-    decision, reason = hook(world, "gh pr ready", cwd=repo)
-    assert decision == "deny" and "grants no worker rights" in reason
-
-
-def test_a_shorter_key_does_not_own_a_longer_keys_branch(world):
-    _git(world["repo"], "checkout", "-q", "-b", "feat/ABC-123-other")
-    decision, reason = hook(world, "gh pr ready")
-    assert decision == "deny" and "does not carry the key ABC-12" in reason
-
-
 # ---------------------------------------------------------------- the settings record (AC 8)
 
 
-def test_settings_grant_exactly_the_repos_rights_and_deny_the_never_list(world):
-    doc = wr.settings(world["repo"], KEY)
-    assert doc["permissions"]["allow"] == [
+def _base_allow():
+    script = SCRIPTS / "pr_ready.sh"
+    return [
         "Bash(gh pr ready*)",
-        f"Bash({SCRIPTS / 'pr_ready.sh'} *)",
-        f"Bash(bash {SCRIPTS / 'pr_ready.sh'} *)",
+        f"Bash({script} *)",
+        f"Bash(bash {script} *)",
         "Bash(gh pr comment*)",
-        "Bash(a release staging*)",
     ]
+
+
+def test_settings_allow_ready_and_comment_and_deny_the_never_list(world):
+    doc = wr.settings(world["repo"], KEY)
+    assert doc["permissions"]["allow"] == [*_base_allow(), "Bash(a release staging*)"]
     deny = doc["permissions"]["deny"]
     for rule in (
         "Bash(*gh secret *)",
         "Bash(*git push* main)",
-        "Bash(*--no-verify*)",
+        "Bash(*git*commit*--no-verify*)",
+        "Bash(*core.hooksPath*commit*)",
+        "Bash(*SKIP=*gitleaks*commit*)",
         "Bash(*secret-pipe.sh*)",
         "Read(//dev/shm/vault-**)",
     ):
         assert rule in deny
+    assert not [r for r in deny if "ALLOW_" in r or r in ("Bash(*--no-verify*)",)]
     assert doc["env"] == {
         "WE_ROLE": "worker",
         "WE_STORY_KEY": KEY,
@@ -966,7 +822,7 @@ def test_settings_grant_exactly_the_repos_rights_and_deny_the_never_list(world):
     }
     assert wr.settings(world["repo"], KEY, starter="Samu")["env"]["WE_STARTER"] == "Samu"
     plain = make_repo(world["tmp"], name="plain", rights=None)
-    assert wr.settings(plain, KEY)["permissions"]["allow"] == []
+    assert wr.settings(plain, KEY)["permissions"]["allow"] == _base_allow()
 
 
 # ---------------------------------------------------------------- the PR owner rights (build.pr_owner)
@@ -989,63 +845,70 @@ def _head(repo):
     ).stdout.strip()
 
 
-MERGE_DENY = "never for a worker (merge (a worker merges only under build.pr_owner: worker))"
-
 RESOLVE = (
     "gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id})"
     "{thread{isResolved}}}' -f id=PRRT_1"
 )
-PR_OWNER_COMMANDS = [
+# commands the gate no longer judges for any owner (R6, R7): no decision, `settings` allows them
+UNJUDGED = [
     "git push -u origin feat/ABC-12-hook",
     "git push",
-    "git push origin HEAD:wip/ABC-12-hook",
+    "git push origin HEAD:feat/ABC-99-other",
     "gh pr create --title x --body-file b.md",
-    "gh pr edit 7 --add-label y --title z",
-    "gh pr comment 7 --body x",
-    "/plugin/scripts/arm_pr.sh 7 --method squash",
-    "gh pr merge 7 --disable-auto",
+    "gh pr create --head feat/ABC-99-other",
+    "gh pr comment 8 --body x",
     RESOLVE,
 ]
 
 
-@pytest.mark.parametrize(
-    "command", [*PR_OWNER_COMMANDS[:3], "gh pr merge 7 --merge", "arm_pr.sh 7"]
-)
+@pytest.mark.parametrize("owner", ["master", "worker"])
+@pytest.mark.parametrize("command", UNJUDGED)
+def test_push_create_comment_and_resolve_stay_out_of_the_gate(world, owner, command):
+    _pr_owner(world["repo"], owner)
+    assert hook(world, command) == (None, "")
+
+
+@pytest.mark.parametrize("command", ["arm_pr.sh 7", "gh pr edit 8 --remove-label hold"])
 def test_under_master_the_pr_owner_rights_stay_out_of_the_gate(world, command):
+    _hold_crew(world["repo"])
     _pr_owner(world["repo"], "master")
-    decision, reason = hook(world, command)
-    if "gh pr merge" in command:  # a worker under master never merges
-        assert decision == "deny" and reason.startswith(MERGE_DENY), reason
-    else:
-        assert (decision, reason) == (None, "")
+    assert hook(world, command) == (None, "")
 
 
-@pytest.mark.parametrize("command", PR_OWNER_COMMANDS)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh pr edit 8 --add-label y --title z",
+        "/plugin/scripts/arm_pr.sh 8 --method squash",
+        "bash arm_pr.sh 8",
+        "arm_pr.sh --repo other/app 7",
+        "gh pr merge 7 --disable-auto",
+    ],
+)
 def test_under_worker_the_pr_owner_rights_are_allowed(world, command):
-    repo = make_repo(
-        world["tmp"], name="app2", rights=None
-    )  # no worker_rights: the switch opts in
-    prs = json.loads((world["tmp"] / "prs.json").read_text())
-    prs["7"]["headRepository"]["name"] = "app2"
-    (world["tmp"] / "prs.json").write_text(json.dumps(prs))
-    _pr_owner(repo, "worker")
-    decision, reason = hook(world, command, cwd=repo)
+    """R7 (own PR for an edit) and R9 (own PR for an arm) are gone: `arm_pr.sh` keeps hold
+    labels and the one-way class itself."""
+    _pr_owner(world["repo"], "worker")
+    decision, reason = hook(world, command)
     assert decision == "allow", reason
 
 
 needs_jq = pytest.mark.skipif(not shutil.which("jq"), reason="the fake gh delegates --jq to jq")
 GREEN = [["Tests", "COMPLETED", "SUCCESS", True], ["Claude Review", "COMPLETED", "SUCCESS", True]]
+MERGE_LINE = "gh pr merge 7 --merge --match-head-commit {sha}"
 
 
-def _merge_line(world, read=None, required=("Tests", "Claude Review"), repo=None, **env):
-    """The worker's own merge line on its HEAD, with the PR read and the base's required names
-    `arm_pr.sh --check` sees."""
+def _merge_line(
+    world, read=None, required=("Tests", "Claude Review"), repo=None, line=None, **env
+):
+    """The worker's own merge line on its HEAD (or `line` with `{sha}` for it), with the PR read
+    and the base's required names `arm_pr.sh --check` sees."""
     repo = repo or world["repo"]
     (world["tmp"] / "read.json").write_text(json.dumps(read if read is not None else {}))
     (world["tmp"] / "required.json").write_text(json.dumps(list(required)))
     return hook(
         world,
-        f"gh pr merge 7 --merge --match-head-commit {_head(repo)}",
+        (line or MERGE_LINE).replace("{sha}", _head(repo)),
         cwd=repo,
         FAKE_GH_READ=str(world["tmp"] / "read.json"),
         FAKE_GH_REQUIRED=str(world["tmp"] / "required.json"),
@@ -1054,12 +917,15 @@ def _merge_line(world, read=None, required=("Tests", "Claude Review"), repo=None
 
 
 @needs_jq
-def test_under_worker_the_ready_merge_line_on_the_own_head_is_allowed(world):
-    _pr_owner(world["repo"], "worker")
+@pytest.mark.parametrize("owner", ["master", "worker"])
+def test_the_ready_merge_line_on_the_own_head_is_allowed_for_every_owner(world, owner):
+    """R8 holds for every worker (N24 is gone): the merge line's own check holds the PROD facts."""
+    _pr_owner(world["repo"], owner)
     decision, reason = _merge_line(world, {"checks": GREEN})  # every required name green
     assert decision == "allow", reason
 
 
+@pytest.mark.parametrize("owner", ["master", "worker"])
 @pytest.mark.parametrize(
     ("command", "why"),
     [
@@ -1068,22 +934,13 @@ def test_under_worker_the_ready_merge_line_on_the_own_head_is_allowed(world):
         ("gh pr merge 7 --admin --match-head-commit {sha}", "gh pr merge --admin"),
         ("gh pr merge 7 --auto --match-head-commit {sha}", "gh pr merge --auto"),
         ("gh pr merge 7 --disable-auto --merge", "takes no other flag"),
-        ("gh pr merge 7 --disable-auto && gh pr merge 7 --squash", "a command of its own"),
+        ("gh pr merge 7 --disable-auto && gh pr merge 7 --squash", "without --match-head-commit"),
         ("gh pr merge 8 --disable-auto", "not this branch's PR"),
-        ("bash arm_pr.sh 8", "not this branch's PR"),
-        ("arm_pr.sh --repo other/app 7", "another repo"),
-        ("git push origin HEAD:feat/ABC-99-other", "pushes only branches carrying ABC-12"),
-        ("gh pr create --head feat/ABC-99-other", "its own branch"),
-        ("gh pr edit 8 --title x", "not this branch's PR"),
-        (
-            "gh api graphql -f query='mutation{a:mergePullRequest(input:{}){x} "
-            "b:resolveReviewThread(input:{}){y}}'",
-            "resolveReviewThread as the only mutation",
-        ),
+        ("gh pr merge 7 -R acme/other --disable-auto", "another repo"),
     ],
 )
-def test_under_worker_the_pr_owner_rights_are_denied_outside_their_conditions(world, command, why):
-    _pr_owner(world["repo"], "worker")
+def test_the_merge_line_is_denied_outside_its_conditions(world, owner, command, why):
+    _pr_owner(world["repo"], owner)
     decision, reason = hook(world, command.replace("{sha}", _head(world["repo"])))
     assert decision == "deny" and why in reason, reason
 
@@ -1093,7 +950,7 @@ def test_under_worker_the_pr_owner_rights_are_denied_outside_their_conditions(wo
     [
         ("git push origin main", "main (git push to main)"),
         ("gh pr merge 7 --delete-branch --match-head-commit abc1234", "delete (--delete-branch)"),
-        ("git push --no-verify", "guard bypass"),
+        ("git commit --no-verify -m x", "guard bypass"),
     ],
 )
 def test_under_worker_the_never_list_still_holds(world, command, item):
@@ -1102,38 +959,24 @@ def test_under_worker_the_never_list_still_holds(world, command, item):
     assert decision == "deny" and item in reason
 
 
-@pytest.mark.parametrize(
-    ("command", "right"),
-    [
-        ("env gh pr merge 7 --match-head-commit {sha}", "merge behind env"),
-        ("bash -c 'gh pr merge 7 --match-head-commit {sha}'", "merge in bash -c"),
-        ("GIT_X=1 git push -u origin feat/ABC-12-hook", "push behind an assignment"),
-    ],
-)
-def test_under_worker_a_pr_owner_right_behind_a_wrapper_is_refused(world, command, right):
-    _pr_owner(world["repo"], "worker")
-    decision, reason = hook(world, command.replace("{sha}", _head(world["repo"])))
-    assert decision == "deny" and right in reason, reason
-
-
 def test_the_worktrees_own_switch_grants_nothing(world):
     _pr_owner(world["repo"], "worker", publish=False)
-    assert hook(world, "gh pr merge 7 --merge")[1].startswith(MERGE_DENY)
     assert hook(world, "gh pr edit 7 --title x") == (None, "")
+    assert hook(world, "arm_pr.sh 7") == (None, "")
 
 
 def test_another_switch_value_opens_nothing(world):
     _pr_owner(world["repo"], "everyone")
-    assert hook(world, "gh pr merge 7 --merge")[1].startswith(MERGE_DENY)
+    assert hook(world, "gh pr edit 7 --title x") == (None, "")
 
 
 def test_settings_add_the_pr_owner_rules_only_under_worker(world):
     plain = make_repo(world["tmp"], name="plain", rights=None)
     _pr_owner(plain, "master")
-    assert wr.settings(plain, KEY)["permissions"]["allow"] == []
+    assert wr.settings(plain, KEY)["permissions"]["allow"] == _base_allow()
     _pr_owner(plain, "worker")
-    assert wr.settings(plain, KEY)["permissions"]["allow"] == list(wr.PR_OWNER_ALLOW)
-    allow = wr.settings(world["repo"], KEY)["permissions"]["allow"]
+    allow = wr.settings(plain, KEY)["permissions"]["allow"]
+    assert allow == _base_allow() + [r for r in wr.PR_OWNER_ALLOW if r not in _base_allow()]
     assert allow.count("Bash(gh pr comment*)") == 1
 
 
@@ -1294,56 +1137,13 @@ def test_a_worker_known_by_its_marker_only_arms_nothing(world):
     assert decision == "deny" and "arm_pr.sh without WE_ROLE=worker" in reason, reason
 
 
-ROLE_CHANGES = [
-    "unset WE_ROLE; arm_pr.sh 7",
-    "export WE_ROLE=master && arm_pr.sh 7",
-    "export WE_ROLE=master\narm_pr.sh 7 --method squash",
-    "WE_ROLE= bash /plugin/scripts/arm_pr.sh 7",
-    "env -u WE_ROLE arm_pr.sh 7",
-    "env -i PATH=/usr/bin arm_pr.sh 7",
-    "bash -c 'unset WE_\"ROLE\"; arm_pr.sh 7'",
-    "declare +x WE_ROLE; eval arm_pr.sh 7",
-    "sudo -u x arm_pr.sh 7",
-]
-
-
-@pytest.mark.parametrize("owner", ["master", "worker"])
-@pytest.mark.parametrize("command", ROLE_CHANGES)
-def test_arm_pr_beside_a_change_of_we_role_is_denied(world, owner, command):
-    """Red arm: the gate reads `WE_ROLE` of its own process, `arm_pr.sh` that of the shell the chain
-    leaves it; a segment that unsets or exports the variable before the arm passed the gate and
-    armed a one-way PR as a session's."""
-    _pr_owner(world["repo"], owner)
-    decision, reason = hook(world, command)
-    assert decision == "deny", reason
-    assert "never for a worker (merge (arm_pr.sh beside a change of WE_ROLE))" in reason, reason
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "grep -n WE_ROLE we/scripts/arm_pr.sh",
-        "sed -n 1,9p we/scripts/arm_pr.sh; echo $WE_ROLE",
-        "unset WE_ROLE; echo arm_pr.sh",
-    ],
-)
-def test_reading_arm_pr_beside_we_role_passes(world, command):
-    assert hook(world, command) == (None, "")
-
-
-def test_a_spent_hook_deadline_refuses_every_gated_gh_read(world, monkeypatch):
-    """The hook passes one deadline to every command of a call: a second `gh pr edit` after the
+def test_a_spent_hook_deadline_refuses_every_gated_gh_read(world):
+    """The hook passes one deadline to every command of a call: a second merge part after the
     first spent the budget refuses instead of running past the hook's timeout (which lets it by)."""
-    monkeypatch.setenv("WE_ROLE", "worker")  # the arm right holds only with it
-    repo = str(world["repo"])
-    _pr_owner(world["repo"], "worker")
-    rights = wr.crew_rights(repo)
-    argv = ["gh", "pr", "edit", "7", "--title", "x"]
     spent = time.monotonic() - 1
-    reason = wr.right_refusal(argv, "pr_edit", rights, KEY, repo, "worker", spent)
+    argv = ["gh", "pr", "merge", "7", "--disable-auto"]
+    reason = wr.right_refusal(argv, "merge", str(world["repo"]), spent)
     assert reason and "ran past the worker gate's" in reason, reason
-    arm = wr.right_refusal(["arm_pr.sh", "7"], "arm", rights, KEY, repo, "worker", spent)
-    assert arm and "ran past the worker gate's" in arm, arm
 
 
 def test_the_sourced_devbox_env_passes_and_a_never_item_behind_it_does_not(world):
@@ -1355,3 +1155,159 @@ def test_the_sourced_devbox_env_passes_and_a_never_item_behind_it_does_not(world
     decision, reason = hook(world, source + " && cat /dev/shm/" + "vault-1000/x.json")
     assert decision == "deny", reason
     assert reason.startswith("never for a worker (crew deny_text (/dev/shm/vault-)")
+
+
+# ---------------------------------------------------------------- the deletion test (WA plan rows)
+
+# one denied command per staying `NEVER` row, keyed by its item template: a row added without a
+# case here fails `test_every_staying_row_has_a_red_arm`
+RED_ARMS = {
+    "secrets (gh {0})": "gh secret set X",
+    "secrets (gh api write on /{0})": "gh api -X PUT repos/acme/app/actions/secrets/X",
+    "delete (gh {0} {1})": "gh release delete v1",
+    "delete (gh api with method DELETE)": "gh api -X DELETE repos/acme/app/hooks/1",
+    "delete (--delete-branch)": "gh pr close 7 --delete-branch",
+    "delete (gh pr close -d)": "gh pr close 7 -d",
+    "delete (git push --delete)": "git push origin --delete feat/x",
+    "delete (git push {0})": "git push origin :feat/x",
+    "main (git push to {0})": "git push origin main",
+    "main (git push of a ref pattern)": "git push origin 'refs/heads/*:refs/heads/*'",
+    "main (git push {0})": "git push --mirror origin",
+    "guard bypass (git push of a tag)": "git push --follow-tags",
+    "guard bypass (git commit --no-verify)": "git commit --no-verify -m x",
+    "guard bypass (git commit -n)": "git commit -n -m x",
+    "guard bypass (core.hooksPath on a commit)": "git -c core.hooksPath=/dev/null commit -m x",
+    "guard bypass (SKIP=gitleaks)": "SKIP=gitleaks git commit -m x",
+    "merge (gh pr merge {0})": "gh pr merge 7 --admin",
+}
+# the staying checks outside `NEVER`, each with a command and the start of its denial
+EXTRA_ARMS = [
+    ("git push", "never for a worker (main (a git push from main:"),  # on main
+    ("git push origin v9.9.9", "never for a worker (guard bypass (git push of the tag v9.9.9)"),
+    ("cat /dev/shm/vault-1/x", "never for a worker (crew deny_text (/dev/shm/vault-)"),
+    ("secret-pipe.sh NAME", "never for a worker (secrets (crew deny_commands: secret-pipe.sh)"),
+    (
+        "bash -c 'gh pr merge 7 --squash'",
+        "never for a worker (merge (gh pr merge only as a visible",
+    ),
+    ("env arm_pr.sh 7", "not a worker right (arm behind env"),
+    ("gh pr merge 7 --squash", "not a worker right (gh pr merge without --match-head-commit"),
+    ("gh pr edit 7 --remove-label hold", "not a worker right (gh pr edit --remove-label hold"),
+]
+
+
+def test_every_staying_row_has_a_red_arm(world):
+    """AC 1: every staying row of the deletion test denies its command, and a `NEVER` row added
+    later without a case here fails."""
+    assert {item for item, _pattern in wr.NEVER} == set(RED_ARMS)
+    for template, command in RED_ARMS.items():
+        found = wr.never(command, str(world["repo"]), {})
+        prefix = template.split("{", 1)[0]
+        assert found and found.startswith(prefix), (command, found)
+    _hold_crew(world["repo"])
+    _pr_owner(world["repo"], "worker")
+    _git(world["repo"], "tag", "v9.9.9")
+    for command, denial in EXTRA_ARMS:
+        cwd = world["repo"]
+        if command == "git push":
+            cwd = make_repo(world["tmp"], name="on-main", branch="main")
+        decision, reason = hook(world, command, cwd=cwd)
+        assert decision == "deny" and reason.startswith(denial), (command, reason)
+    # R9b: an arm by a worker known by its marker only, without the variable `arm_pr.sh` reads
+    _marker_worker(world)
+    decision, reason = hook(world, "arm_pr.sh 7", session="s-w", WE_ROLE=None, WE_STORY_KEY=None)
+    assert decision == "deny" and "arm_pr.sh without WE_ROLE=worker" in reason, reason
+
+
+# what each deleted row or refusal branch said: none of it is left in the code
+REMOVED = [
+    "ALLOW_COMMIT_TO_MAIN",
+    "ALLOW_PUSH_WITHOUT_MAIN",
+    "--delete-last",
+    "beside a change of WE_ROLE",
+    "merges only under build.pr_owner",
+    "only as a command of its own)",
+    "grants no worker rights",
+    "is not granted in",
+    "without a story key",
+    "does not carry the key",
+    "is the default branch, not the worker's own",
+    "pushes only branches carrying",
+    "opens the PR of its own branch",
+    "resolveReviewThread as the only mutation",
+    "a comment in another repo",
+    "pr_ready.sh without a PR",
+    "and its default branch does not set build.pr_owner",
+    "def opted_in",
+    "RIGHT_NAMES",
+]
+
+
+def test_every_removed_row_is_gone(world):
+    """AC 1: the rows that go are absent from the gate's code, and their commands pass."""
+    code = (SCRIPTS / "worker_rights.py").read_text() + HOOK.read_text()
+    assert [r for r in REMOVED if r in code] == []
+    for command in (
+        "gh pr comment 7 --delete-last --yes",  # N7
+        "ALLOW_COMMIT_TO_MAIN=1 git commit -m x",  # N13
+        "ALLOW_PUSH_WITHOUT_MAIN=1 git push origin HEAD",  # N15
+        "git push --no-verify origin HEAD",  # N16 off a commit
+        "git -c core.hooksPath=/dev/null diff",  # N17 off a commit
+        "unset WE_ROLE; echo arm_pr.sh 7",  # N20
+    ):
+        assert hook(world, command) == (None, ""), command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "SKIP=backend-lock git commit -m x -- a.py",
+        "SKIP=ruff-format,mypy git commit -m x",
+        "git -c core.hooksPath=/dev/null status",
+        "git config --get core.hooksPath",
+        f"git push --no-verify origin {BRANCH}",
+        "git -c core.hooksPath=/dev/null worktree add ../t -b feat/ABC-12-t",
+    ],
+)
+def test_a_local_hook_skip_is_no_refusal(world, command):
+    """AC 2: a skip of a local hook other than the secret scan, a read or a push hurts nothing: no
+    decision and no line in the brake log."""
+    state = world["tmp"] / "state"
+    assert hook(world, command, WE_STATE_DIR=str(state)) == (None, "")
+    assert not (state / "brakes.jsonl").exists()
+
+
+@needs_jq
+def test_the_three_brakes_of_the_walk(world):
+    """AC 4: the three brakes of the value-stream walk, replayed for a worker whose crew grants
+    nothing: the skip reply and the chained push pass, the merge line in its chain is judged by the
+    merge line (passes on `ready`, denied on `failed`)."""
+    repo = make_repo(world["tmp"], name="infra", rights=None)
+    prs = json.loads((world["tmp"] / "prs.json").read_text())
+    prs["7"]["headRepository"]["name"] = "infra"
+    (world["tmp"] / "prs.json").write_text(json.dumps(prs))
+    reply = "gh pr comment 31 -R acme/infra --body 'Codex finding skipped: covered by the test'"
+    assert hook(world, reply, cwd=repo) == (None, "")
+    assert hook(world, f"git push origin {BRANCH} && {reply}", cwd=repo) == (None, "")
+    chain = "gh pr merge 7 --merge --match-head-commit {sha} 2>&1 | tail -2; gh pr view 7"
+    assert _merge_line(world, {"checks": GREEN}, repo=repo, line=chain) == (None, "")
+    failed = [GREEN[0], ["Claude Review", "COMPLETED", "FAILURE", True]]
+    decision, reason = _merge_line(world, {"checks": failed}, repo=repo, line=chain)
+    assert decision == "deny" and "arm_pr.sh --check: red: Claude Review" in reason, reason
+
+
+@needs_jq
+def test_a_merge_part_in_a_chain_is_judged_on_its_part(world):
+    chain = "gh pr merge 7 --merge --match-head-commit {sha} 2>&1 | tail -2; gh pr view 7"
+    assert _merge_line(world, {"checks": GREEN}, line=chain) == (None, "")
+    decision, reason = _merge_line(world, {"fail": "HTTP 502"}, line=chain)
+    assert decision == "deny" and "gh failed: HTTP 502" in reason, reason
+    # red arm: a disarm, then a commit whose message opens a quote on one line and closes it on a
+    # later one; read line by line, the disarm's `2>&1` lost its part and the chain was "never"
+    commit = (
+        'cd . && gh pr merge 7 --disable-auto 2>&1 | tail -1; git commit -q -m "fix: the '
+        "member's row\n\nthe body\" > /tmp/c.txt 2>&1 && git log --oneline -1"
+    )
+    assert hook(world, commit) == (None, "")
+    decision, reason = hook(world, "bash -c 'gh pr merge 7 --squash'")
+    assert decision == "deny" and "only as a visible part" in reason, reason

@@ -712,7 +712,10 @@ class TestSettings:
         )
         assert out.returncode == 0, out.stderr
         doc = json.loads(out_file.read_text())
-        assert doc["permissions"]["allow"] == []  # no crew, no rights
+        # no crew: only the unconditional allow rules (ready and comment), no branch_rc
+        assert doc["permissions"]["allow"][0] == "Bash(gh pr ready*)"
+        assert doc["permissions"]["allow"][-1] == "Bash(gh pr comment*)"
+        assert len(doc["permissions"]["allow"]) == 4
         assert "Bash(*gh secret *)" in doc["permissions"]["deny"]
         assert doc["env"] == {
             "WE_ROLE": "worker",

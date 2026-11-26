@@ -182,9 +182,9 @@ drops `CLAUDE_CONFIG_DIR`, so a pinned master sees the global login's sessions.
 `Account: uncritical`) and puts its `env` and its `token_command` as `apiKeyHelper` into that settings
 file (mode 0600), never a secret on a command line and never a `CLAUDE*` (but the CLI's `CLAUDE_CODE_*`), `WE_*` or `WESIDE_*` variable; a critical worker on a non-Claude account refuses (`worker_launch.py choose_account`).
 The brake is the PreToolUse hook `hooks/worker_rights_gate.py`, which holds under `bypassPermissions`:
-in a repo the crew's `worker_rights.repos` names, a worker on its own keyed branch runs `gh pr ready` (or `pr_ready.sh`),
-`gh pr comment` on its own PR and the crew's `branch_rc` without asking; every worker is denied the
-never-list (secrets, delete, `main`, guard bypasses). Rules and limits: `scripts/worker_rights.py`
+a worker runs `gh pr ready` (or `pr_ready.sh`), `gh pr comment` and the crew's `branch_rc` without
+asking; a `gh pr merge` is judged by the merge line; every worker is denied the never-list (secrets,
+delete, `main`, a commit past the secret scan). Rules and limits: `scripts/worker_rights.py`
 (its docstring). A denial names the Lead; the worker reports it and the Lead acts. It catches a slip, it is no
 boundary: a script file passes it.
 
