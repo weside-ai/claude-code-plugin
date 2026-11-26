@@ -285,8 +285,8 @@ The hooks treat a session as the worker only when the marker names its session i
 working in the worker's tree is never one.
 
 The worker reports by one `SendMessage` to its `Lead:`; its plain text never reaches the Lead. The
-Stop hook `worker_report_gate.py` blocks a turn without that message. A worker never merges or
-arms (the worker card).
+Stop hook `worker_report_gate.py` blocks a turn without that message. A worker never
+arms; it may run the ready merge line `arm_pr.sh` prints (the worker card).
 
 ## Dev-only worker contract
 

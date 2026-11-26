@@ -21,8 +21,9 @@ judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` coun
 cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tree <p>]… push`
 (`simple_push`, `_push_dirs`), so an environment prefix (`GIT_DIR=…`), a second segment, `eval` or
 a path `git` keeps it); guard bypass on a commit (`--no-verify`, `-n`, `core.hooksPath` or a `SKIP=`
-list naming the secret scan `gitleaks`, each with a `git … commit` in the same span) and a `git push`
-of a tag; merge (`gh pr merge --admin` or `--auto`; a `gh pr merge` the text holds but no chain part
+list naming the secret scan `gitleaks`, each with a `git … commit` in the same span), a `git config`
+write of `core.hooksPath` on its own (any scope; it persists in the `.git/config` every worktree
+shares; reads and `--unset` pass) and a `git push` of a tag; merge (`gh pr merge --admin` or `--auto`; a `gh pr merge` the text holds but no chain part
 shows as `gh pr merge`: in a nested shell, `eval`, a substitution or behind a wrapper); the crew's
 `deny_text` anywhere in the command.
 
@@ -406,6 +407,11 @@ _GH_PR_MERGE = rf"\bgh\b(?:\s+(?:-R|--repo)[\s=]\S+)?{_SEP}pr{_SEP}merge\b"
 # `git [global options] commit` in one span: the guard bypass rows hold only on a commit, the one
 # place the pre-commit secret scan runs
 _GIT_COMMIT = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*{_SEP}commit\b"
+_GIT_CONFIG = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*{_SEP}config\b"
+# a `git config` read or removal: `--get*`, `--list`/`-l`, `--unset*`, `get`, `list`, `unset`
+_CONFIG_READ = (
+    rf"(?:\s--?(?:get[\w-]*|list|l|unset[\w-]*|show-[\w-]+)(?![\w-])|{_SEP}(?:get|list|unset)\b)"
+)
 # (item, pattern): the fixed never-list, searched in the command text as typed. `{main}` is the
 # protected branch names of the repo the command runs in. The comment above each row is the
 # damage it catches; a row without one does not belong here.
@@ -455,6 +461,12 @@ NEVER = (
     (
         "guard bypass (core.hooksPath on a commit)",
         rf"(?i)\bgit\b{_REST}core\.hookspath{_REST}\scommit\b",
+    ),
+    # a written core.hooksPath persists in the shared `.git/config`: every later plain commit of every
+    # worktree skips the scan
+    (
+        "guard bypass (core.hooksPath written to the git config)",
+        rf"(?i){_GIT_CONFIG}(?!{_REST}{_CONFIG_READ})(?={_REST}core\.hookspath[ \t=]+[^\s;|&])",
     ),
     (
         "guard bypass (SKIP=gitleaks)",
@@ -1076,6 +1088,7 @@ def never_rules(protected: set[str]) -> list[str]:
     rules += [
         "Bash(*git*commit*--no-verify*)",
         "Bash(*core.hooksPath*commit*)",
+        "Bash(*git*config*core.hooksPath *)",
         "Bash(*SKIP=*gitleaks*commit*)",
     ]
     return rules
