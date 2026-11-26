@@ -654,6 +654,23 @@ test('deliveryLine: delivered to the asker, else to the coordinator; a refusal o
   expect(line(r('coordinator', 'coord', false, 'not stored after a resubmit'))?.text).toBe('not delivered, with coord (not stored after a resubmit)')
 })
 
+test('deliveryLine: the coordinator\'s own delivery to a woken asker counts as delivered; its routing line does not', () => {
+  const ts = iso(T0)
+  const r = (role: string, to: string, delivered: boolean, reason?: string, at = T0 + 2_000) =>
+    ({ id: 'Q1', answer_ts: ts, to, role, click_ts: ts, ts: iso(at), delivered, ...(reason ? { reason } : {}) })
+  const line = (...rows: ReturnType<typeof r>[]) => deliveryLine({ id: 'Q1', ts }, ledgerState(rows.map(x => `${JSON.stringify(x)}\n`).join('')).rows, 'coord')
+  const gone = r('asker', 'asker', false, 'Failed to send to asker: ended')
+  // the routing line reached the coordinator: the answer stays with it
+  expect(line(gone, r('route', 'coord', true))?.text).toBe('not delivered, with coord (gone)')
+  // the coordinator woke the asker with the answer (`board.py delivered`): its newer route row wins
+  expect(line(gone, r('route', 'coord', true), r('route', 'asker', true, 'by wake', T0 + 60_000))).toEqual({
+    text: '→ delivered to asker 16:01 UTC (by wake)',
+    isDelivered: true,
+  })
+  // a refused route row stays undelivered
+  expect(line(gone, r('route', 'asker', false, 'held', T0 + 60_000))?.text).toBe('not delivered, with coord (gone)')
+})
+
 // Two crews in one HOME: the first keeps board.json with `updated_by` coord; the second
 // crew writes its board only through board.py, which never sets `updated_by`. Its coordinator comes
 // from its crew file.

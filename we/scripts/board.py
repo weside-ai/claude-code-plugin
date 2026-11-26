@@ -5,7 +5,8 @@ Usage:
   board.py [--board FILE] answer <id> <accept|deny|followup|update|withdraw> --session NAME --via chat
            [--quote "<the owner's words>" | --text-file <path or ->]
   board.py [--board FILE] path [--crew-only]
-  board.py [--board FILE] set [--for NAME | --session NAME] <field>=<value> …   fields: waiting_on, state, now, topic, keys, epic, wake
+  board.py [--board FILE] delivered <id> --by HOW [--session NAME]
+  board.py [--board FILE] set [--for NAME | --session NAME] <field>=<value> …   fields: waiting_on, state, now, topic, keys, epic, wake, memory
   board.py [--board FILE] ask [--session NAME] --key KEY --key-title T (--ask Q | --text-file <path or ->)
            --recommendation R
            --cause <merge-go|plan|prod|cut-fence|access-click|window-go|info> [--urgent]
@@ -60,6 +61,12 @@ answer   writes back an answer the owner gave in a session's chat: one line in
          in board-questions.jsonl, says so and exits 0. It opens board.json read-only. An Accept
          on a one-way question with a Codex finding posts the go comment (docs/board.md § Answers
          given in a chat); a failed post exits 3, and the same Accept again posts it.
+delivered records that the coordinator carried a question's newest answer itself (`--by wake`: it
+         woke the asker with the answer in its start brief): one `route` row
+         `{to: <--session, default the asker>, delivered: true, reason: "by <HOW>"}` in
+         board-deliveries.jsonl through hooks/board/deliveries.py, which the pane shows as
+         delivered (docs/board.md § Delivery). It refuses an id the board never had and one
+         without an answer line.
 set      writes the caller's own session line (found by `name` through `claude agents --json`
          and CLAUDE_CODE_SESSION_ID; appended with `name` and `session_id` when absent; its `cwd`
          follows the session's; `_session_line` keeps one line per session). `--for`
@@ -1356,6 +1363,45 @@ def cmd_answer(state, args, crew, now):
     line = state.append_answer(args.id, args.kind, args.session, via=args.via, quote=args.quote)
     print(json.dumps(line, ensure_ascii=False))
     return _go_comment(state, line, now)
+
+
+def _deliveries_module():
+    """deliveries.py, by path: the one writer of the delivery ledger's rows."""
+    path = Path(__file__).resolve().parent.parent / "hooks" / "board" / "deliveries.py"
+    spec = importlib.util.spec_from_file_location("we_board_deliveries", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def cmd_delivered(state, args, _crew, now):
+    """One delivered `route` row for the newest answer of `args.id` (module docstring § delivered)."""
+    status, item, lines, answers = question_status(state, args.id)
+    if status is None:
+        raise BoardError(f"board.py delivered: {args.id} is unknown to {state.board_path}")
+    if not answers:
+        raise BoardError(f"board.py delivered: {args.id} has no answer to deliver")
+    posted = next((q for q in lines if q.get("outcome") == "posted"), None) or {}
+    to = args.session or (item or {}).get("session") or posted.get("session")
+    if not to:
+        raise BoardError(f"board.py delivered: {args.id} names no asker; pass --session NAME")
+    answer_ts = str(answers[-1].get("ts") or "")
+    row = {
+        "id": args.id,
+        "answer_ts": answer_ts,
+        "to": to,
+        "role": "route",
+        "click_ts": answer_ts,
+        "ts": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "delivered": True,
+        "reason": f"by {args.by}",
+    }
+    try:
+        _deliveries_module().append(str(state.deliveries_path), [row])
+    except ValueError as exc:
+        raise BoardError(f"board.py delivered: {exc}") from None
+    print(json.dumps(row, ensure_ascii=False))
+    return 0
 
 
 def cmd_path(state, args, _crew, _now):
@@ -4446,6 +4492,16 @@ def _add_flow_verbs(verbs):
     bl.set_defaults(run=cmd_blocked)
 
 
+def _add_delivered_verb(verbs):
+    dv = verbs.add_parser(
+        "delivered", help="record that the coordinator carried an answer itself (a wake)"
+    )
+    dv.add_argument("id")
+    dv.add_argument("--by", required=True, help="how it carried it, e.g. wake")
+    dv.add_argument("--session", help="the session that got it (default: the asker)")
+    dv.set_defaults(run=cmd_delivered)
+
+
 def _add_read_verbs(verbs):
     sh = verbs.add_parser(
         "show", help="one question with its answers and status, or a session's line (read-only)"
@@ -4479,6 +4535,7 @@ def parser():
         "--text-file", metavar="PATH", help="the owner's words from a file, - for stdin"
     )
     a.set_defaults(run=cmd_answer)
+    _add_delivered_verb(verbs)
     _add_read_verbs(verbs)
 
     s = verbs.add_parser(

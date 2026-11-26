@@ -4379,3 +4379,37 @@ def test_show_line_prints_each_status(crewless, capsys):
     assert capsys.readouterr().out.splitlines()[-1] == "Q404 unknown"
     assert go(crewless, "show", "Q7") == 0
     assert json.loads(capsys.readouterr().out)["status"] == "closed"
+
+
+# The coordinator carried an answer itself (it woke the asker with the answer in its start brief).
+
+
+def test_delivered_appends_one_route_row_for_the_newest_answer(crewless):
+    assert go(crewless, "answer", "Q7", "followup", "--session", "lead-12", "--via", "chat") == 0
+    assert go(crewless, "answer", "Q7", "accept", "--session", "lead-12", "--via", "chat") == 0
+    newest = jsonl(crewless / "board-answers.jsonl")[-1]["ts"]
+    assert go(crewless, "delivered", "Q7", "--by", "wake") == 0
+    assert jsonl(crewless / "board-deliveries.jsonl") == [
+        {
+            "id": "Q7",
+            "answer_ts": newest,
+            "to": "asker",  # the question's asker
+            "role": "route",
+            "click_ts": newest,
+            "ts": "2026-11-03T10:00:00.000Z",
+            "delivered": True,
+            "reason": "by wake",
+        }
+    ]
+    assert go(crewless, "delivered", "Q7", "--by", "wake", "--session", "starter-9") == 0
+    assert jsonl(crewless / "board-deliveries.jsonl")[-1]["to"] == "starter-9"
+
+
+@pytest.mark.parametrize(
+    ("qid", "message"),
+    [("Q99", "Q99 is unknown"), ("Q7", "Q7 has no answer to deliver")],
+)
+def test_delivered_refuses_an_unknown_or_unanswered_question(crewless, capsys, qid, message):
+    assert go(crewless, "delivered", qid, "--by", "wake") == 1
+    assert message in capsys.readouterr().err
+    assert not (crewless / "board-deliveries.jsonl").exists()
