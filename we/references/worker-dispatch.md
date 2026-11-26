@@ -353,9 +353,6 @@ arms (the worker card).
 of a story's single build worker, or of the finisher in a parallel story's integration tree; a
 parallel chunk never gets it, the master integrates its branch as before. The line is the switch a
 worker reads, and its push: without it, it runs the dev-only contract and never guesses from the config.
-A push into another repo than the session's (`git -C`, `--git-dir`, `--work-tree`) needs that repo's
-own `build.pr_owner: worker` on its default branch: the gate reads the switch where git pushes, and the
-session's repo opens nothing in a second one.
 
 With the line, after § Finish sequence the worker carries its PR itself, because a hand-off to the
 master costs a round trip per head and the master's context:
@@ -382,12 +379,11 @@ on its merge (`merged`, `merged-green`) `/we:merged <PR>` (it runs `we-worker cl
 at `/we:master` § Push, PR, CI step 5 or the one-way row; `parked` → resume per the line. The Stop
 hook `worker_report_gate.py` sends a report with any other last line back once.
 
-Rights: under `worker` the rights gate opens, read from the default branch, `git push` of a branch
-carrying the key, `gh pr create`, `gh pr edit` and `gh pr comment` on the own PR, `arm_pr.sh` on it,
-`gh pr merge` only as `--disable-auto` or as the `--match-head-commit <checkout HEAD>` line while
-`arm_pr.sh --check` answers `ready` on that HEAD, and
-`gh api graphql` with `resolveReviewThread` alone (`scripts/worker_rights.py`, its docstring); any
-other `gh pr merge` and the whole never-list stay denied. A worker started in the main checkout pushes only as one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment, because only that form names the tree the gate checks.
+Rights: under `worker` the settings allow the push, `gh pr create`, `gh pr edit` and `arm_pr.sh`
+without a prompt; the gate judges only `arm_pr.sh` (with `WE_ROLE=worker`), a `gh pr edit` removing a
+hold label, and for every owner `gh pr merge` as `--disable-auto` or the `--match-head-commit <checkout
+HEAD>` line while `arm_pr.sh --check` answers `ready` (`scripts/worker_rights.py`, its docstring); the
+never-list stays denied. A worker started in the main checkout pushes only as one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment, because only that form names the tree the gate checks.
 
 ## Finish sequence (the last writer, before the first push)
 
