@@ -12,7 +12,7 @@ For a worker it
   1. denies a never-list item (`worker_rights.never`, a fixed list of patterns searched in the
      command text as typed and with its quotes and backslashes removed, no shell parser):
      `never for a worker (<item>): ask …`;
-  2. refuses an arm (under `build.pr_owner: worker`) that does not stand as a command of its own:
+  2. refuses an arm or a `gh pr edit` (under `build.pr_owner: worker`) that does not stand as a command of its own:
      behind a wrapper or an assignment, in `bash -c`, `eval`, `$( … )` or backticks
      (`worker_rights.hidden_right`): `not a worker right (<right> behind env: a right only as a
      command of its own, without env/eval/bash -c): ask …`;

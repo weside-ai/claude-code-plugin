@@ -35,7 +35,7 @@ read, `arm_pr.sh --check` in its own process group) shares one deadline under th
 running past it denies. Under `build.pr_owner: worker` (`.weside/config.json`, read from the
 default branch of origin; `pr_owner_on_default`) also `arm_pr.sh` (`arm`: only with `WE_ROLE=worker`
 in the environment, the variable `arm_pr.sh` refuses a one-way class by) and `gh pr edit`
-(`pr_edit`: never removing a hold label). An arm behind a wrapper or an assignment (`env`,
+(`pr_edit`: never removing a hold label). An arm or an edit behind a wrapper or an assignment (`env`,
 `timeout 9`, `GH_X=1`), in a `bash|sh|… -c` string, in `eval` or in a `$( … )` or backtick body is
 refused, not judged (`hidden_right`). Otherwise each part of a chain of simple commands
 (`segments`, split on `&&`, `||`, `;`, `|`, `&`, parentheses and newlines outside quotes; leading
