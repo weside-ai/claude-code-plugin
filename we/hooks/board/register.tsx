@@ -660,7 +660,14 @@ function refreshPressed($: $, file: string) {
 }
 
 // /board's work, also the flow pane's Board button: a plugin's own $.command.run does not reach its own hook.
+// The Flow pane opens first as the Board's neighbour tab, so the Board lands in front; a Flow pane
+// that fails to open never keeps the Board shut.
 export async function openBoard($: $, options: PluginOptions): Promise<string> {
+  try {
+    await openFlow($, '')
+  } catch {
+    // the Board opens alone
+  }
   await update($, isOpen, () => true)
   const opened = await $.ui.open({ id: PANE, title: 'Board' })
   refreshAll($, fileOf(options))
@@ -1153,13 +1160,11 @@ export const registerBoard = (on: On, options: PluginOptions) => {
         )}
         {l?.error && <Text color="warning">{`Live column: ${l.error}`}</Text>}
 
-        {pack([{ key: 'refresh', width: 11 }, { key: 'flow', width: 8 }, { key: 'zentrale', width: 12 }, { key: 'stamp', width: stampText.length }], b => b.width, width).map((line, i) => (
+        {pack([{ key: 'refresh', width: 11 }, { key: 'zentrale', width: 12 }, { key: 'stamp', width: stampText.length }], b => b.width, width).map((line, i) => (
           <Box key={`foot-${i}`} flexDirection="row" gap={2} marginTop={i ? 0 : 1}>
             {line.map(b =>
               b.key === 'refresh' ? (
                 <Button key="refresh" hotkey="r" label="Refresh" onPress={() => refreshPressed($, file)} />
-              ) : b.key === 'flow' ? (
-                <Button key="flow" label="Flow" onPress={() => void openFlow($, '')} />
               ) : b.key === 'zentrale' ? (
                 <Button key="zentrale" label="Zentrale" onPress={() => void openZentrale($, v?.path)} />
               ) : (

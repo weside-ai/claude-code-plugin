@@ -31,6 +31,9 @@ const PROBE = JSON.stringify({
   ],
 })
 
+// the board's own reads: /board also opens the Flow pane, whose reads (focus file, its repo's files) are its own
+const boardReads = (reads: string[]) => reads.filter(r => r.startsWith('/home/me/') && !r.includes('/we-focus/'))
+
 const RUN = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
 test('/board draws the queue oldest first, masters with workers, live and start-mode lamps', { options: { masterProfile: 'me_example.com' } }, async ($, on) => {
@@ -44,7 +47,7 @@ test('/board draws the queue oldest first, masters with workers, live and start-
     reads.push(String((e as { path?: unknown }).path))
     return { value: BOARD }
   })
-  // The Flow button opens the flow pane for the branch's key; its git and gh reads answer empty.
+  // /board opens the flow pane for the branch's key too; its git and gh reads answer empty.
   on('process.run', (_$, e) => RUN(e.argv[0] === 'python3' ? PROBE : e.argv.join(' ') === 'git branch --show-current' ? 'feat/PROJ-9-x' : ''))
   on('session.id', () => ({ value: 's1' }))
   on('ui.status', () => ({ value: undefined }))
@@ -58,7 +61,7 @@ test('/board draws the queue oldest first, masters with workers, live and start-
   const answer = await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   expect(answer.text).toBe('Board pane opened.')
   await clock.settle()
-  expect(reads).toEqual([
+  expect(boardReads(reads)).toEqual([
     '/home/me/.claude/we-state/board.json',
     '/home/me/.claude/we-state/board-answers.jsonl',
     '/home/me/.claude/we-state/board-deliveries.jsonl',
@@ -75,11 +78,12 @@ test('/board draws the queue oldest first, masters with workers, live and start-
     expect(await ui.find({ type: 'Text', text: /⚠ Live, not on the board: stray/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /#5560/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /⚠ WE_ROLE missing/ })).toBeDefined()
-    await ui.press({ key: 'flow' })
+    expect(await ui.find({ type: 'Button', text: /^Flow$/ })).toBeUndefined()
     await ui.unmount()
   }
   await clock.settle()
-  expect(opened).toEqual(['we-board', 'we-flow', 'we-flow'])
+  // The Flow pane is the Board's neighbour tab: /board opens it, the Board last so it lands in front.
+  expect(opened).toEqual(['we-flow', 'we-board'])
 })
 
 test('without masterProfile no master is red; boardFile moves the file', { options: { boardFile: '~/boards/team.json' } }, async ($, on) => {
@@ -98,7 +102,7 @@ test('without masterProfile no master is red; boardFile moves the file', { optio
 
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
-  expect(reads).toEqual(['/home/me/boards/team.json', '/home/me/boards/team-answers.jsonl', '/home/me/boards/team-deliveries.jsonl'])
+  expect(boardReads(reads)).toEqual(['/home/me/boards/team.json', '/home/me/boards/team-answers.jsonl', '/home/me/boards/team-deliveries.jsonl'])
   const ui = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-board', props: { bodyColumns: 80 } as never })
   expect(await ui.find({ type: 'Text', text: /restart it as a master/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Waiting for you \(2\)/ })).toBeDefined()
@@ -133,7 +137,7 @@ test('the crew file of the session\'s repo names the board, ahead of boardFile',
   await $.command.run({ command: 'board', args: '', origin: { kind: 'composer' } } as never)
   await clock.settle()
   const dir = '/home/me/.claude/we-state'
-  expect([...new Set(reads)].sort()).toEqual([`${dir}/acme-board-answers.jsonl`, `${dir}/acme-board-deliveries.jsonl`, `${dir}/acme-board.json`])
+  expect([...new Set(boardReads(reads))].sort()).toEqual([`${dir}/acme-board-answers.jsonl`, `${dir}/acme-board-deliveries.jsonl`, `${dir}/acme-board.json`])
 })
 
 // two crews, AC4/AC5: in a repo with a crew the board is what `board.py path` resolves (never the option
