@@ -661,12 +661,15 @@ function refreshPressed($: $, file: string) {
 
 // /board's work, also the flow pane's Board button: a plugin's own $.command.run does not reach its own hook.
 // The Flow pane opens first as the Board's neighbour tab, so the Board lands in front; a Flow pane
-// that fails to open never keeps the Board shut.
-export async function openBoard($: $, options: PluginOptions): Promise<string> {
-  try {
-    await openFlow($, '')
-  } catch {
-    // the Board opens alone
+// that fails to open never keeps the Board shut. The Flow pane's own Board button passes
+// withFlow false, so the keys that pane shows stay.
+export async function openBoard($: $, options: PluginOptions, withFlow = true): Promise<string> {
+  if (withFlow) {
+    try {
+      await openFlow($, '')
+    } catch {
+      // the Board opens alone
+    }
   }
   await update($, isOpen, () => true)
   const opened = await $.ui.open({ id: PANE, title: 'Board' })
