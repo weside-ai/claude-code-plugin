@@ -12,16 +12,16 @@ For a worker it
   1. denies a never-list item (`worker_rights.never`, a fixed list of patterns searched in the
      command text as typed and with its quotes and backslashes removed, no shell parser):
      `never for a worker (<item>): ask …`;
-  2. refuses a right (`gh pr ready`, `gh pr comment`, the crew's `branch_rc`; under
-     `build.pr_owner: worker` also the PR owner rights, the merge line among them) that does not
-     stand as a command of its own: behind a wrapper or an assignment, in `bash -c`, `eval`, `$( … )`
-     or backticks (`worker_rights.hidden_right`): `not a worker right (<right> behind env: a right
-     only as a command of its own, without env/eval/bash -c): ask …`;
+  2. refuses an arm or a `gh pr edit` (under `build.pr_owner: worker`) that does not stand as a command of its own:
+     behind a wrapper or an assignment, in `bash -c`, `eval`, `$( … )` or backticks
+     (`worker_rights.hidden_right`): `not a worker right (<right> behind env: a right only as a
+     command of its own, without env/eval/bash -c): ask …`;
   3. on each part of a chain (`worker_rights.segments`: `&&`, `||`, `;`, `|`, `&`, parentheses,
-     newlines), denies a right whose conditions fail: `not a worker right (<reason>): ask …`, all
-     parts sharing one deadline; it allows a held right without a prompt only on a command of its
-     own (`worker_rights.simple_argv`). A held right in a chain only passes this gate; a
-     `gh pr merge` there is a never-list item.
+     newlines outside quotes), judges a `gh pr merge` by the merge line for every owner, and under
+     `build.pr_owner: worker` an arm and a `gh pr edit`; it denies one whose conditions fail:
+     `not a worker right (<reason>): ask …`, all parts sharing one deadline. It allows a held right
+     without a prompt only on a command of its own (`worker_rights.simple_argv`); in a chain a held
+     right only passes this gate.
 `ask …` names the marker's Lead (`ask your Lead <name>`), else `ask your starter`. A crash is a
 defect, not a brake: an exception while judging fails open (`crashed`: one stderr line, one
 `crash` line in the brake log naming the exception's class, never its message; the call goes to
@@ -77,18 +77,16 @@ def decide(payload: dict, env: dict) -> tuple[str, str] | None:  # noqa: PLR0911
     cwd = payload.get("cwd")
     lead = (marker or {}).get("lead")
     ask = f"ask your Lead {lead}" if lead else "ask your starter"
-    rights = wr.crew_rights(cwd)
-    owner = wr.pr_owner_on_default(cwd)
-    item = wr.never(command, cwd, rights, owner)
+    item = wr.never(command, cwd, wr.crew_rights(cwd))
     if item:
         return "deny", f"never for a worker ({item}): {ask}"
-    hidden = wr.hidden_right(command, rights, owner)
+    owner = wr.pr_owner_on_default(cwd)
+    hidden = wr.hidden_right(command, owner)
     if hidden:
         return "deny", (
             f"not a worker right ({hidden}: a right only as a command of its own, "
             f"without env/eval/bash -c): {ask}"
         )
-    key = env.get("WE_STORY_KEY") or (marker or {}).get("key")
     deadline = time.monotonic() + wr.MERGE_LINE_BUDGET_S  # one budget across every part
     argv = wr.simple_argv(command)
     held = None
@@ -96,10 +94,10 @@ def decide(payload: dict, env: dict) -> tuple[str, str] | None:  # noqa: PLR0911
         part = wr.strip_keywords(part)  # noqa: PLW2901
         if not part:
             continue
-        right = wr.right_of(part, rights, owner)
+        right = wr.right_of(part, owner)
         if right is None:
             continue
-        reason = wr.right_refusal(part, right, rights, key, cwd, owner, deadline)
+        reason = wr.right_refusal(part, right, cwd, deadline)
         if reason:
             return "deny", f"not a worker right ({reason}): {ask}"
         held = right

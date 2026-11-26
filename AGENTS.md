@@ -58,7 +58,7 @@ we/                               plugin root
                                   plugin_install.py (loaded and installed version, the compact handover)
     launch                        wclaude, we-worker, install_launcher.py, worker_launch.py, worker_rights.py,
                                   worker_supervisor.py (a worker's end and gc), worker_close.py (the one closing step after a
-                                  merge), pin.sh, identity_cache.py,
+                                  merge), brake_replay.py (the gate's logged denials judged anew, offline), pin.sh, identity_cache.py,
                                   wake_poller.py, gh_anchor.sh
     watch                         watch-pr-checks.sh (CI to the merge), watch-pr-conflicts.sh, watch-worker.sh
     flow                          flow_log.py (the flow log's one owner), sampler_age.py, flow_report.py (the

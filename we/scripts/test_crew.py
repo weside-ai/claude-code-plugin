@@ -1249,6 +1249,9 @@ def test_a_member_with_a_role_addendum_gets_the_pointer_skill(tmp_path):
         ({"release": {"rc_job": "rc.yml"}}, "release.rc_job"),
         ({"oracles": {"receipt_schema": "x.json"}}, "oracles.receipt_schema"),
         ({"coldstart": {"suite": "tests/coldstart"}}, "coldstart"),
+        ({"worker_rights": {"repos": ["app"]}}, "worker_rights.repos"),
+        ({"worker_rights": {"pr_ready": True}}, "worker_rights.pr_ready"),
+        ({"worker_rights": {"pr_comment": True}}, "worker_rights.pr_comment"),
     ],
 )
 def test_a_retired_nested_key_loads_with_one_stderr_line(tmp_path, extra, dotted):

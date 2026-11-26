@@ -182,9 +182,9 @@ drops `CLAUDE_CONFIG_DIR`, so a pinned master sees the global login's sessions.
 `Account: uncritical`) and puts its `env` and its `token_command` as `apiKeyHelper` into that settings
 file (mode 0600), never a secret on a command line and never a `CLAUDE*` (but the CLI's `CLAUDE_CODE_*`), `WE_*` or `WESIDE_*` variable; a critical worker on a non-Claude account refuses (`worker_launch.py choose_account`).
 The brake is the PreToolUse hook `hooks/worker_rights_gate.py`, which holds under `bypassPermissions`:
-in a repo the crew's `worker_rights.repos` names, a worker on its own keyed branch runs `gh pr ready` (or `pr_ready.sh`),
-`gh pr comment` on its own PR and the crew's `branch_rc` without asking; every worker is denied the
-never-list (secrets, delete, `main`, guard bypasses). Rules and limits: `scripts/worker_rights.py`
+a worker runs `gh pr ready` (or `pr_ready.sh`), `gh pr comment` and the crew's `branch_rc` without
+asking; a `gh pr merge` is judged by the merge line; every worker is denied the never-list (secrets,
+delete, `main`, a commit past the secret scan). Rules and limits: `scripts/worker_rights.py`
 (its docstring). A denial names the Lead; the worker reports it and the Lead acts. It catches a slip, it is no
 boundary: a script file passes it.
 
@@ -290,8 +290,8 @@ The hooks treat a session as the worker only when the marker names its session i
 working in the worker's tree is never one.
 
 The worker reports by one `SendMessage` to its `Lead:`; its plain text never reaches the Lead. The
-Stop hook `worker_report_gate.py` blocks a turn without that message. A worker never merges or
-arms (the worker card).
+Stop hook `worker_report_gate.py` blocks a turn without that message. A worker never
+arms; it may run the ready merge line `arm_pr.sh` prints (the worker card).
 
 ## Dev-only worker contract
 
@@ -358,9 +358,6 @@ arms (the worker card).
 of a story's single build worker, or of the finisher in a parallel story's integration tree; a
 parallel chunk never gets it, the master integrates its branch as before. The line is the switch a
 worker reads, and its push: without it, it runs the dev-only contract and never guesses from the config.
-A push into another repo than the session's (`git -C`, `--git-dir`, `--work-tree`) needs that repo's
-own `build.pr_owner: worker` on its default branch: the gate reads the switch where git pushes, and the
-session's repo opens nothing in a second one.
 
 With the line, after § Finish sequence the worker carries its PR itself, because a hand-off to the
 master costs a round trip per head and the master's context:
@@ -387,12 +384,11 @@ on its merge (`merged`, `merged-green`) `/we:merged <PR>` (it runs `we-worker cl
 at `/we:master` § Push, PR, CI step 5 or the one-way row; `parked` → resume per the line. The Stop
 hook `worker_report_gate.py` sends a report with any other last line back once.
 
-Rights: under `worker` the rights gate opens, read from the default branch, `git push` of a branch
-carrying the key, `gh pr create`, `gh pr edit` and `gh pr comment` on the own PR, `arm_pr.sh` on it,
-`gh pr merge` only as `--disable-auto` or as the `--match-head-commit <checkout HEAD>` line while
-`arm_pr.sh --check` answers `ready` on that HEAD, and
-`gh api graphql` with `resolveReviewThread` alone (`scripts/worker_rights.py`, its docstring); any
-other `gh pr merge` and the whole never-list stay denied. A worker started in the main checkout pushes only as one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment, because only that form names the tree the gate checks.
+Rights: under `worker` the settings allow the push, `gh pr create`, `gh pr edit` and `arm_pr.sh`
+without a prompt; the gate judges only `arm_pr.sh` (with `WE_ROLE=worker`), a `gh pr edit` removing a
+hold label, and for every owner `gh pr merge` as `--disable-auto` or the `--match-head-commit <checkout
+HEAD>` line while `arm_pr.sh --check` answers `ready` (`scripts/worker_rights.py`, its docstring); the
+never-list stays denied. A worker started in the main checkout pushes only as one `git -C <own worktree> push …`, without `2>&1`, `&&` or a second segment, because only that form names the tree the gate checks.
 
 ## Finish sequence (the last writer, before the first push)
 

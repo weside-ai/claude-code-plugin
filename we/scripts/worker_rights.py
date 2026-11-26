@@ -5,12 +5,13 @@
 No boundary. This catches a worker's mistake before an action that hurts (secrets, deletion, prod),
 not a barrier against one that goes around it on purpose (L0 § Flow first): a script file it writes and runs,
 another `gh` binary, `curl` with the token all pass every text check. The boundaries are server-side
-(branch rules, the merge gate, the app rights of the token).
+(branch rules, the merge gate, the app rights of the token). A row stays only for a PROD, secret,
+deletion or one-way accident; its damage is the comment above it.
 
 Never (every process worker, whatever its key; `never` names the item) is a fixed list of patterns
 matched on the command text (`NEVER`), not a shell parser: what a pattern finds anywhere in
 the text is denied, inside `bash -c '…'`, `$( … )`, a heredoc or inline `python -c` code alike, and
-data that only names an item (a commit message quoting `git push --delete`) is denied too, as the
+data that only names an item (a heredoc quoting `git push --delete`) is denied too, as the
 `--settings` deny rules already deny it. The list: secrets (`gh secret`, `gh variable`, a `gh api`
 write on a `/secrets`, `/variables` or `/environments` path, the crew's `deny_commands`); delete
 (`gh <noun> delete…`, `--delete-branch`, `gh pr close -d`, `gh api` with method DELETE, `git push
@@ -19,50 +20,30 @@ a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout
 judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` count, and the session's
 cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tree <p>]… push`
 (`simple_push`, `_push_dirs`), so an environment prefix (`GIT_DIR=…`), a second segment, `eval` or
-a path `git` keeps it; `ALLOW_COMMIT_TO_MAIN`); guard bypass (a `git push` of a tag,
-`ALLOW_PUSH_WITHOUT_MAIN`, `--no-verify`, `git commit -n`, `core.hooksPath`); merge (`gh pr merge --admin` or `--auto`; any
-other `gh pr merge` than `--disable-auto` unless it is the merge line below, typed as a command of
-its own under `build.pr_owner: worker`; any `gh pr merge` in a compound command but a part that is
-`--disable-auto` alone (a fix round's `cd <tree> && … --disable-auto` stops a merge, opens none); `arm_pr.sh` run anywhere in a command that names `WE_ROLE` or clears the environment
-(`env -i`, `exec -c`, `sudo`): the script refuses a worker's one-way class by that variable, and the
-gate cannot tell which value the script will see); the crew's `deny_text` anywhere in the command.
+a path `git` keeps it); guard bypass on a commit (`--no-verify`, `-n`, `core.hooksPath` or a `SKIP=`
+list naming the secret scan `gitleaks`, each with a `git … commit` in the same span), a `git config`
+write of `core.hooksPath` on its own (any scope; it persists in the `.git/config` every worktree
+shares; reads and `--unset` pass) and a `git push` of a tag; merge (`gh pr merge --admin` or `--auto`; a `gh pr merge` the text holds but no chain part
+shows as `gh pr merge`: in a nested shell, `eval`, a substitution or behind a wrapper); the crew's
+`deny_text` anywhere in the command.
 
-Rights (crew `worker_rights`, read from the default branch of origin, never from the worktree; opt-in
-per repo, all off by default): in a repo whose `origin` is one
-of `worker_rights.repos`, a worker with a story key, on a branch that is not the default branch and
-carries that key, may run without asking
-  `gh pr ready` (`pr_ready`) and `gh pr comment` (`pr_comment`), with no selector or one naming the PR
-  whose head is its branch in its repo (`gh pr view --json` resolves it; a `gh` failure denies);
-  `gh pr comment` with `-R <another repo>` names a PR there whose head branch carries its key (the
-  other half of a two-repo story);
-  `pr_ready.sh <PR> ready|undo` is a form of `pr_ready` and must name that own PR (its `gh pr edit`
-  of the `**Draft:**` line rides along);
-  the crew's `branch_rc` command prefix (a branch RC: the repo's pre-push guard holds the receipt).
-PR owner rights (`build.pr_owner: worker` of `.weside/config.json`, read from the default branch of
-origin like the crew; `pr_owner_on_default`): the worker carries its own PR, so under the same key and
-branch conditions it may also run `git push` (`push`: every destination branch carries its key;
-key, branch and repo are read where git runs the push, and a push into another repo than the
-session's needs that repo's own switch on its default branch),
-`gh pr create` (`pr_create`: no argument, `--head` only its branch), `gh pr edit` and `gh pr comment`
-(`pr_edit`, `pr_comment`: its own PR), `arm_pr.sh` (`arm`: its own PR, and only with `WE_ROLE=worker` in
-the environment, the variable `arm_pr.sh` refuses a one-way class by), `gh pr merge` (`merge`: its
-own PR, either `--disable-auto` alone or `--match-head-commit <its checkout's HEAD>`, the line
-`arm_pr.sh` prints as `ready`, and only when `arm_pr.sh --check` answers
+Rights: the merge path alone. Every `gh pr merge` part, for every `build.pr_owner`, is judged on its
+own (`right_refusal`): its own PR, either `--disable-auto` alone or `--match-head-commit <its
+checkout's HEAD>`, the line `arm_pr.sh` prints as `ready`, and only when `arm_pr.sh --check` answers
 `ready` on that HEAD, the one owner of those facts (hold labels, one-way class, every required name
 green with absent as pending, merge state, review decision); the whole merge-line check (own-PR
 read, `arm_pr.sh --check` in its own process group) shares one deadline under the hook's 60 s, and
-running past it denies; `gh pr edit` never removes a hold label) and
-`gh api graphql` with `resolveReviewThread` as its only mutation (`resolve_thread`). The switch is the
-opt-in: `worker_rights.repos` is not needed for these. Under `master` (the default) none of them is
-judged here.
-A right holds only as a simple command of its own. Behind a wrapper or an assignment (`env`,
-`timeout 9`, `xargs`, `GH_X=1`), in a `bash|sh|… -c` string, in `eval` or in a `$( … )` or backtick
-body it is refused, not judged (`hidden_right`). Otherwise it is judged on each part of a chain of
-simple commands (`segments`, split on `&&`, `||`, `;`, `|`, `&`, parentheses and newlines; leading
-shell keywords stripped): its conditions failing in any part, the whole call is denied. Held, it is
-allowed outright only on a command of its own (`simple_argv`); in a chain a held right only passes
-this gate. A heredoc's lines are judged as parts; a right run from a script file or an alias
-is not seen.
+running past it denies. Under `build.pr_owner: worker` (`.weside/config.json`, read from the
+default branch of origin; `pr_owner_on_default`) also `arm_pr.sh` (`arm`: only with `WE_ROLE=worker`
+in the environment, the variable `arm_pr.sh` refuses a one-way class by) and `gh pr edit`
+(`pr_edit`: never removing a hold label). An arm or an edit behind a wrapper or an assignment (`env`,
+`timeout 9`, `GH_X=1`), in a `bash|sh|… -c` string, in `eval` or in a `$( … )` or backtick body is
+refused, not judged (`hidden_right`). Otherwise each part of a chain of simple commands
+(`segments`, split on `&&`, `||`, `;`, `|`, `&`, parentheses and newlines outside quotes; leading
+shell keywords stripped) is judged; a held right is allowed outright only on a command of its own
+(`simple_argv`), in a chain it only passes this gate. `gh pr ready`, `gh pr comment`, `pr_ready.sh`,
+the crew's `branch_rc`, a push and `gh pr create` are no rights: the gate stays out, `settings`
+allows them.
 The never patterns run on the text as typed and on it `normalised` (quotes and backslashes removed),
 so `git push origin +m"ain"` is denied; a branch named in a variable, an alias or `-c` config is not.
 """
@@ -89,7 +70,6 @@ GH_TIMEOUT_S = 30
 MERGE_LINE_BUDGET_S = 50
 ARM_PR = Path(__file__).with_name("arm_pr.sh")
 MAIN_NAMES = ("main", "master")
-WRITE_FIELDS = ("-f", "-F", "--field", "--raw-field", "--input")
 
 
 def _tokens(text: str) -> list[str]:
@@ -116,26 +96,40 @@ def simple_argv(command: str) -> list[str] | None:
 _SEPARATORS = re.compile(r"&&|\|\||[;|&\n()]")
 
 
+def _split(tokens: list[str]) -> list[list[str]]:
+    parts: list[list[str]] = []
+    part: list[str] = []
+    for token in [*tokens, ";"]:
+        if token and all(c in "();|&\n" for c in token):
+            if part:
+                parts.append(part)
+            part = []
+        else:
+            part.append(token)
+    return parts
+
+
 def segments(command: str) -> list[list[str]]:
     """The argv of each simple command in `command`, split on `&&`, `||`, `;`, `|`, `&`, a
-    parenthesis and newlines (outside quotes where the text tokenizes; on the raw text where it does
-    not, each raw part as `simple_argv` reads it). No descent: a `bash -c` string, an `eval`
+    parenthesis and newlines outside quotes, so a commit message whose quote spans lines is one
+    word. Where the whole text does not tokenize, each line on its own; where a line does not
+    either, each raw part as `simple_argv` reads it. No descent: a `bash -c` string, an `eval`
     argument or a backtick body stays one word of its part (`hidden_right` looks there)."""
+    text = command.replace("\\\n", " ")
+    lexer = shlex.shlex(text, posix=True, punctuation_chars="();<>|&\n")
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        return _split(list(lexer))
+    except ValueError:
+        pass
     parts: list[list[str]] = []
-    for line in command.replace("\\\n", " ").split("\n"):
+    for line in text.split("\n"):
         try:
-            tokens = _tokens(line)
+            parts += _split(_tokens(line))
         except ValueError:
             parts += [a for a in map(simple_argv, _SEPARATORS.split(line)) if a]
-            continue
-        part: list[str] = []
-        for token in [*tokens, ";"]:
-            if token and all(c in "();|&" for c in token):
-                if part:
-                    parts.append(part)
-                part = []
-            else:
-                part.append(token)
     return parts
 
 
@@ -201,31 +195,31 @@ def _substitutions(text: str) -> list[str]:
     return out
 
 
-def _rights_inside(text: str, rights: dict, owner: str, depth: int) -> str | None:
+def _rights_inside(text: str, owner: str, depth: int) -> str | None:
     """The first right anywhere in `text` (a command of its own or hidden), for a text that runs
     nested: every right found there is refused."""
     if depth > MAX_DEPTH:
         return f"nested deeper than {MAX_DEPTH} levels"
     for part in segments(text):
         argv = strip_keywords(part)
-        right = argv and right_of(argv, rights, owner)
+        right = argv and right_of(argv, owner)
         if right:
             return right
-    return hidden_right(text, rights, owner, depth)
+    return hidden_right(text, owner, depth)
 
 
-def hidden_right(command: str, rights: dict, owner: str = "master", depth: int = 0) -> str | None:
+def hidden_right(command: str, owner: str = "master", depth: int = 0) -> str | None:
     """A right (`right_of`) that `command` runs other than as a simple command of its own, as
-    `<right> <how>`, else None: behind a wrapper (`WRAPPERS`) or an assignment (`env gh pr ready`,
-    `GH_X=1 gh pr ready`), in the string of `bash|sh|… -c`, in the arguments of `eval`, or in a
-    `$( … )` or backtick body. The gate refuses it instead of judging it: a right holds only as a
-    command of its own. A heredoc's lines are judged as chain parts; a script file, a variable or
-    an alias stay unseen."""
+    `<right> <how>`, else None: behind a wrapper (`WRAPPERS`) or an assignment (`env arm_pr.sh 7`,
+    `X=1 arm_pr.sh 7`), in the string of `bash|sh|… -c`, in the arguments of `eval`, or in a
+    `$( … )` or backtick body. The gate refuses it instead of judging it (damage: a merge or an arm
+    there skips the merge-line check). A heredoc's lines are judged as chain parts; a script file,
+    a variable or an alias stay unseen."""
     if depth > MAX_DEPTH:
         return f"nested deeper than {MAX_DEPTH} levels"
     text = _QUOTED_HEREDOC.sub(lambda m: f"<<{m[1]}{m[2]}{m[1]}{m[3]}{m[5]}", command)
     for inner in _substitutions(text):
-        found = _rights_inside(inner, rights, owner, depth + 1)
+        found = _rights_inside(inner, owner, depth + 1)
         if found:
             return f"{found} in a command substitution"
     for part in segments(text):
@@ -237,25 +231,25 @@ def hidden_right(command: str, rights: dict, owner: str = "master", depth: int =
         # behind a wrapper its flags and values come first (`timeout 9`, `xargs -I{}`): every
         # later word may start the command it runs
         for k in range(len(argv) if wrapped else 1):
-            right = k and right_of(argv[k:], rights, owner)
+            right = k and right_of(argv[k:], owner)
             if right:
                 return f"{right} behind {'an assignment' if head not in WRAPPERS else head}"
-            found = _nested(argv[k:], rights, owner, depth)
+            found = _nested(argv[k:], owner, depth)
             if found:
                 return found
     return None
 
 
-def _nested(argv: list[str], rights: dict, owner: str, depth: int) -> str | None:
+def _nested(argv: list[str], owner: str, depth: int) -> str | None:
     """A right in the `-c` string of a shell or in the arguments of `eval` that `argv` runs."""
     name = os.path.basename(argv[0])
     if name in SHELLS:
         for j in range(1, len(argv) - 1):
             if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", argv[j]):
-                found = _rights_inside(argv[j + 1], rights, owner, depth + 1)
+                found = _rights_inside(argv[j + 1], owner, depth + 1)
                 return f"{found} in {name} -c" if found else None
     elif name == "eval":
-        found = _rights_inside(" ".join(argv[1:]), rights, owner, depth + 1)
+        found = _rights_inside(" ".join(argv[1:]), owner, depth + 1)
         return f"{found} in eval" if found else None
     return None
 
@@ -410,26 +404,40 @@ _SEP = r"""[\s"',\[\]]+"""
 _REST = r"[^\n;|&]*"
 _GIT_PUSH = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--(?:git-dir|work-tree)(?:=|\s+)\S+))*{_SEP}push\b"
 _GH_PR_MERGE = rf"\bgh\b(?:\s+(?:-R|--repo)[\s=]\S+)?{_SEP}pr{_SEP}merge\b"
+# `git [global options] commit` in one span: the guard bypass rows hold only on a commit, the one
+# place the pre-commit secret scan runs
+_GIT_COMMIT = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*{_SEP}commit\b"
+_GIT_CONFIG = rf"\bgit\b(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*{_SEP}config\b"
+# a `git config` read or removal: `--get*`, `--list`/`-l`, `--unset*`, `get`, `list`, `unset`
+_CONFIG_READ = (
+    rf"(?:\s--?(?:get[\w-]*|list|l|unset[\w-]*|show-[\w-]+)(?![\w-])|{_SEP}(?:get|list|unset)\b)"
+)
 # (item, pattern): the fixed never-list, searched in the command text as typed. `{main}` is the
-# protected branch names of the repo the command runs in.
+# protected branch names of the repo the command runs in. The comment above each row is the
+# damage it catches; a row without one does not belong here.
 NEVER = (
+    # an overwritten or printed GitHub secret or variable breaks or leaks the prod credentials
     ("secrets (gh {0})", rf"\bgh\b(?:\s+(?:-R|--repo)[\s=]\S+)?{_SEP}(secret|variable)\b"),
+    # the same through the raw API; an environment write changes who may deploy to prod
     (
         "secrets (gh api write on /{0})",
         rf"\bgh{_SEP}api\b(?={_REST}/(secrets|variables|environments)\b)"
         rf"(?={_REST}(?:\s(?:-X\s*|--method[\s=]+)(?!GET\b)\w|\s(?:-f|-F|--field|--raw-field|--input)\b))",
     ),
+    # a deleted repo, release, ruleset or workflow is lost for good
     ("delete (gh {0} {1})", rf"\bgh{_SEP}([\w-]+){_SEP}(delete[\w-]*)"),
     ("delete (gh api with method DELETE)", r"(?:-X\s*|--method[\s=]+)DELETE\b"),
+    # an unmerged remote branch whose worktree is gone is the only copy of its work
     ("delete (--delete-branch)", r"--delete-branch\b"),
     ("delete (gh pr close -d)", rf"\bgh{_SEP}pr{_SEP}close\b{_REST}\s-d\b"),
-    ("delete (gh pr comment --delete-last)", r"--delete-last\b"),
     (
         "delete (git push --delete)",
         rf"{_GIT_PUSH}{_REST}\s(?:--de(?:l(?:e(?:te?)?)?)?|-[a-zA-Z]*d[a-zA-Z]*)(?=[\s=]|$)",
     ),
     ("delete (git push {0})", rf"{_GIT_PUSH}{_REST}\s(\+?:[^\s'\"]+)"),
-    # a quote or a leading `+` may stand before the name (`+main`, `"main"`, `HEAD:"main"`)
+    # the app's bypass on the default branch lands the push unchecked, and a GitOps repo's default
+    # branch is what the cluster applies. A quote or a leading `+` may stand before the name
+    # (`+main`, `"main"`, `HEAD:"main"`)
     (
         "main (git push to {0})",
         rf"""{_GIT_PUSH}{_REST}[\s:'"][+'"]*(?:refs/heads/)?({{main}})(?![\w/-])""",
@@ -439,18 +447,34 @@ NEVER = (
         "main (git push {0})",
         rf"{_GIT_PUSH}{_REST}\s(--al(?:l)?|--mi(?:r(?:r(?:or?)?)?)?|--br(?:a(?:n(?:c(?:h(?:es?)?)?)?)?)?)(?=[\s=]|$)",
     ),
-    ("main (ALLOW_COMMIT_TO_MAIN)", r"ALLOW_COMMIT_TO_MAIN"),
+    # a pushed release tag starts a staging or prod release, which only the release CLI may cut
     (
         "guard bypass (git push of a tag)",
         rf"{_GIT_PUSH}{_REST}(?:--tags|--follow-tags|refs/tags/|\stag\s)",
     ),
-    ("guard bypass (ALLOW_PUSH_WITHOUT_MAIN)", r"ALLOW_PUSH_WITHOUT_MAIN"),
-    ("guard bypass (--no-verify)", r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])"),
-    ("guard bypass (core.hooksPath)", r"(?i)core\.hookspath"),
+    # a commit past the pre-commit secret scan leaks the secret the moment it is pushed
     (
-        "guard bypass (git commit -n)",
-        rf"\bgit{_SEP}commit\b{_REST}\s-[a-mo-zA-Z]*n[a-zA-Z]*(?![\w-])",
+        "guard bypass (git commit --no-verify)",
+        rf"{_GIT_COMMIT}{_REST}\s--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])",
     ),
+    ("guard bypass (git commit -n)", rf"{_GIT_COMMIT}{_REST}\s-[a-mo-zA-Z]*n[a-zA-Z]*(?![\w-])"),
+    (
+        "guard bypass (core.hooksPath on a commit)",
+        rf"(?i)\bgit\b{_REST}core\.hookspath{_REST}\scommit\b",
+    ),
+    # a written core.hooksPath persists in the shared `.git/config`: every later plain commit of every
+    # worktree skips the scan. A read or removal counts only between `config` and the key: a value
+    # spelled `unset` or `list` is still a write
+    (
+        "guard bypass (core.hooksPath written to the git config)",
+        rf"""(?i){_GIT_CONFIG}(?:(?!{_CONFIG_READ})[^;|&\n])*?core\.hookspath['"]?[ \t=]+[^\s;|&]""",
+    ),
+    (
+        "guard bypass (SKIP=gitleaks)",
+        rf"""(?<![\w-])SKIP=['"]?(?:[\w.-]+,)*gitleaks(?![\w-])(?=[\s\S]*{_GIT_COMMIT})""",
+    ),
+    # `--admin` merges past red required checks, `--auto` right after a push past them by the
+    # app's bypass
     ("merge (gh pr merge {0})", rf"{_GH_PR_MERGE}{_REST}(?<![\w-])(--admin|--auto)\b"),
 )
 
@@ -549,53 +573,7 @@ def normalised(text: str) -> str:
     return re.sub(r"""\$(?=['"])|['"\\]""", "", text)
 
 
-# a text that names WE_ROLE (unset, export, env -u, an assignment) or clears the environment of what
-# it runs: beside `arm_pr.sh` the gate cannot know the role the script reads its one-way refusal by
-_ROLE_CHANGE = re.compile(
-    r"WE_ROLE|\benv\b[^\n;|&]*\s(?:-[a-zA-Z]*i[a-zA-Z]*|--ignore-environment|-)(?=\s|$)"
-    r"|\bexec\s+-[a-zA-Z]*c|(?<![\w-])(?:sudo|doas|su)(?![\w-])"
-)
-
-
-def _role_touched(text: str) -> bool:
-    return bool(_ROLE_CHANGE.search(text) or _ROLE_CHANGE.search(normalised(text)))
-
-
-def _runs_arm(text: str, depth: int = 0) -> bool:
-    """Whether `text` runs `arm_pr.sh` anywhere: as a chain part, behind a wrapper or an assignment,
-    in a `bash -c` string, an `eval` or a substitution body (`hidden_right`'s reach, for every
-    owner). Nested past `MAX_DEPTH` counts as running it."""
-    if depth > MAX_DEPTH:
-        return True
-    text = _QUOTED_HEREDOC.sub(lambda m: f"<<{m[1]}{m[2]}{m[1]}{m[3]}{m[5]}", text)
-    if any(_runs_arm(inner, depth + 1) for inner in _substitutions(text)):
-        return True
-    for part in segments(text):
-        argv = strip_keywords(part)
-        wrapped = bool(argv) and (
-            os.path.basename(argv[0]) in WRAPPERS or bool(ASSIGNMENT.fullmatch(argv[0]))
-        )
-        for k in range(len(argv) if wrapped else min(len(argv), 1)):
-            if _arm_argv(argv[k:]) or _nested_arm(argv[k:], depth):
-                return True
-    return False
-
-
-def _nested_arm(argv: list[str], depth: int) -> bool:
-    """`arm_pr.sh` in the `-c` string of a shell or in the arguments of `eval` that `argv` runs."""
-    name = os.path.basename(argv[0])
-    if name in SHELLS:
-        for j in range(1, len(argv) - 1):
-            if re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", argv[j]):
-                return _runs_arm(argv[j + 1], depth + 1)
-    elif name == "eval":
-        return _runs_arm(" ".join(argv[1:]), depth + 1)
-    return False
-
-
-def never(  # noqa: PLR0911, PLR0912
-    command: str, cwd: str | None, rights: dict | None = None, owner: str = "master"
-) -> str | None:
+def never(command: str, cwd: str | None, rights: dict | None = None) -> str | None:  # noqa: PLR0911
     """The never-list item `command` hits for a worker in `cwd`, else None."""
     rights = rights or {}
     text = command.replace("\\\n", " ")
@@ -605,8 +583,8 @@ def never(  # noqa: PLR0911, PLR0912
         found = compiled.search(text) or compiled.search(normalised(text))
         if found:
             return item.format(*(found.groups() or ("",)))
-    if _runs_arm(text) and _role_touched(text):
-        return "merge (arm_pr.sh beside a change of WE_ROLE)"
+    # in the shared main checkout a push sends the default branch with whatever another session
+    # committed there, unchecked by the app's bypass; a pushed release tag cuts a release
     if re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text)):
         places = _push_dirs(text, cwd)
         for where in places:
@@ -620,42 +598,25 @@ def never(  # noqa: PLR0911, PLR0912
             tag = _tags_pushed(text, where)
             if tag:
                 return f"guard bypass (git push of the tag {tag})"
+    # the crew's values name secret files and secret tools whose output leaks a secret
     for entry in rights.get("deny_text") or []:
         if entry and entry in text:
             return f"crew deny_text ({entry})"
     for entry in rights.get("deny_commands") or []:
         if entry and _word_hit(text, entry):
             return f"secrets (crew deny_commands: {entry})"
-    if re.search(_GH_PR_MERGE, text):
-        # judged on the one command, never on the text: a `--disable-auto` beside a second merge
-        # (`… --disable-auto && gh pr merge 7 --squash`) must not open the second one
-        argv = simple_argv(command)
-        if argv is None:
-            if not _only_disarms(command, text):
-                return "merge (gh pr merge only as a command of its own)"
-        elif "--disable-auto" not in argv and owner != "worker":
-            return "merge (a worker merges only under build.pr_owner: worker)"
+    # a merge the text holds but no part shows skips the merge-line check `decide` runs per part
+    if re.search(_GH_PR_MERGE, text) and not _merges_visible(command, text):
+        return "merge (gh pr merge only as a visible part of the command)"
     return None
 
 
-def _disarm(argv: list[str]) -> bool:
-    """`argv` is a `gh pr merge <sel> --disable-auto` with no other flag than a repo."""
-    if not argv or os.path.basename(argv[0]) != "gh":
-        return False
-    args, _repo = _gh_split(argv)
-    if args[:2] != ["pr", "merge"]:
-        return False
-    flags = [t.split("=", 1)[0] for t in args[2:] if t.startswith("-")]
-    return "--disable-auto" in flags and not set(flags) - {"--disable-auto", "-R", "--repo"}
-
-
-def _only_disarms(command: str, text: str) -> bool:
-    """Every merge call the text holds is a disarm in a part of its own (`cd <tree> && <disarm>`):
-    a fix round's first step stops a merge and opens none. One hidden in a `bash -c` string or a
-    substitution counts in the text but in no part, so the chain still refuses."""
+def _merges_visible(command: str, text: str) -> bool:
+    """Every merge call the text holds is a chain part of its own (`cd <tree> && gh pr merge …`),
+    which `decide` judges like any right. One hidden in a `bash -c` string, behind a wrapper or in
+    a substitution counts in the text but in no part."""
     merges = [p for p in map(strip_keywords, segments(command)) if p and _merge_part(p)]
-    found = len(re.findall(_GH_PR_MERGE, text))
-    return bool(merges) and len(merges) == found and all(_disarm(p) for p in merges)
+    return len(merges) == len(re.findall(_GH_PR_MERGE, text))
 
 
 def _merge_part(argv: list[str]) -> bool:
@@ -665,12 +626,9 @@ def _merge_part(argv: list[str]) -> bool:
 # ---------------------------------------------------------------- the rights
 
 
-RIGHT_NAMES = ("pr_ready", "pr_comment", "branch_rc")
-
-
 def _on_default(root: Where, rel: str) -> dict | None:
     """The JSON object at `rel` on the default branch of the repo at `root` (origin's), else None.
-    `rel` is a path from the repo's top; `root` may be a target tuple (`git_target`)."""
+    `rel` is a path from the repo's top."""
     text = _git(
         root,
         "show",
@@ -705,7 +663,7 @@ def _crew_on_default(cwd: str | Path | None) -> dict | None:
 
 def crew_rights(cwd: str | Path | None) -> dict:
     """The crew's `worker_rights` for `cwd` from the default branch, over the defaults; a block of
-    the wrong shape counts as the defaults (no rights; the built-in never-list still holds)."""
+    the wrong shape counts as the defaults (the built-in never-list still holds)."""
     import crew as crew_mod  # noqa: PLC0415
 
     defaults = crew_mod.DEFAULTS["worker_rights"]
@@ -718,67 +676,28 @@ def crew_rights(cwd: str | Path | None) -> dict:
         ok = (
             isinstance(value, list) and all(isinstance(v, str) for v in value)
             if isinstance(default, list)
-            else isinstance(value, bool)
-            if isinstance(default, bool)
             else value is None or isinstance(value, str)
         )
         if not ok:
             print(
-                f"worker_rights: crew worker_rights.{key} has the wrong type; no rights",
+                f"worker_rights: crew worker_rights.{key} has the wrong type; the defaults hold",
                 file=sys.stderr,
             )
             return dict(defaults)
     return merged
 
 
-def opted_in(rights: dict, slug: str | None) -> bool:
-    return bool(slug) and slug.lower() in {str(r).lower() for r in rights.get("repos") or []}
-
-
-def right_of(argv: list[str], rights: dict, owner: str = "master") -> str | None:  # noqa: PLR0911
-    """Which right a simple command asks for, else None; the PR owner rights only under `owner`
-    `worker`, so under `master` a push, `gh pr create` or `gh pr merge` stays out of this gate."""
-    name = os.path.basename(argv[0])
-    if name == "gh":
+def right_of(argv: list[str], owner: str = "master") -> str | None:
+    """Which right a simple command asks for, else None: `merge` for a `gh pr merge` under every
+    owner; under `owner` `worker` also `arm` (`arm_pr.sh`) and `pr_edit` (`gh pr edit`)."""
+    if os.path.basename(argv[0]) == "gh":
         args, _repo = _gh_split(argv)
-        if args[:2] == ["pr", "ready"]:
-            return "pr_ready"
-        if args[:2] == ["pr", "comment"]:
-            return "pr_comment"
-        if owner == "worker" and args[:1] == ["pr"] and args[1:2] and args[1] in PR_VERBS:
-            return PR_VERBS[args[1]]
-        if (
-            owner == "worker"
-            and args[:2] == ["api", "graphql"]
-            and "resolveReviewThread" in " ".join(args)
-        ):
-            return "resolve_thread"
-    if _script_argv(argv, "pr_ready.sh"):
-        return "pr_ready"
-    if owner == "worker":
-        if name == "git" and _git_split(argv)[0][:1] == ["push"]:
-            return "push"
-        if _arm_argv(argv):
-            return "arm"
-    rc = rights.get("branch_rc")
-    if rc and _starts_with(argv, rc):
-        return "branch_rc"
-    return None
-
-
-PR_VALUE_FLAGS = ("-b", "--body", "-F", "--body-file", "-R", "--repo")
-
-
-def _selector(args: list[str]) -> str | None:
-    k = 2
-    while k < len(args):
-        tok = args[k]
-        if tok in PR_VALUE_FLAGS:
-            k += 2
-            continue
-        if not tok.startswith("-"):
-            return tok
-        k += 1
+        if args[:2] == ["pr", "merge"]:
+            return "merge"
+        if owner == "worker" and args[:2] == ["pr", "edit"]:
+            return "pr_edit"
+    if owner == "worker" and _arm_argv(argv):
+        return "arm"
     return None
 
 
@@ -810,47 +729,13 @@ def _gh_pr_head(selector: str, slug: str, cwd: str | None, timeout: float = GH_T
     return data
 
 
-# ---------------------------------------------------------------- the PR owner's rights
-
-PR_OWNER_RIGHTS = ("push", "pr_create", "pr_edit", "pr_comment", "arm", "merge", "resolve_thread")
-PR_VERBS = {"create": "pr_create", "edit": "pr_edit", "merge": "merge"}
-# the value-taking flags per verb: a value read as the PR selector resolves to no own PR and is
-# denied, so a flag missing here fails closed
-VALUE_FLAGS = {
-    "pr_create": (
-        *("-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head"),
-        *("-l", "--label", "-a", "--assignee", "-r", "--reviewer", "-m", "--milestone"),
-        *("-p", "--project", "-T", "--template", "-R", "--repo"),
-    ),
-    "pr_edit": (
-        *(
-            "-t",
-            "--title",
-            "-b",
-            "--body",
-            "-F",
-            "--body-file",
-            "-B",
-            "--base",
-            "-m",
-            "--milestone",
-        ),
-        *("--add-label", "--remove-label", "--add-reviewer", "--remove-reviewer"),
-        *(
-            "--add-assignee",
-            "--remove-assignee",
-            "--add-project",
-            "--remove-project",
-            "-R",
-            "--repo",
-        ),
-    ),
-    "merge": (
-        *("-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email"),
-        *("--match-head-commit", "-R", "--repo"),
-    ),
-}
-MERGE_FLAGS = ("--merge", "--squash", "--rebase", "-m", "-s", "-r", *VALUE_FLAGS["merge"])
+# the value-taking flags of `gh pr merge`: a value read as the PR selector resolves to no own PR
+# and is denied, so a flag missing here fails closed
+MERGE_VALUE_FLAGS = (
+    *("-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email"),
+    *("--match-head-commit", "-R", "--repo"),
+)
+MERGE_FLAGS = ("--merge", "--squash", "--rebase", "-m", "-s", "-r", *MERGE_VALUE_FLAGS)
 SHA = re.compile(r"[0-9a-f]{7,40}")
 
 
@@ -860,12 +745,7 @@ def pr_owner_on_default(cwd: Where) -> str:
     another value: `master`, so no PR owner right opens."""
     import worker_launch  # noqa: PLC0415
 
-    # a target tuple keeps git's own `--git-dir`/`--work-tree`: rooted anew by `--show-toplevel`,
-    # a `--git-dir` alone would read the cwd's repo as the top level and its switch
-    if isinstance(cwd, tuple):
-        root: Where = cwd if _git(cwd, "rev-parse", "--git-dir") else None
-    else:
-        root = _git(cwd, "rev-parse", "--show-toplevel")
+    root = _git(cwd, "rev-parse", "--show-toplevel")
     if not root:
         return "master"
     try:
@@ -893,39 +773,6 @@ def _pr_selector(args: list[str], value_flags: tuple[str, ...]) -> str | None:
         if not tok.startswith("-"):
             return tok
         k += 1
-    return None
-
-
-def _push_refusal(argv: list[str], key: str, where: Where) -> str | None:
-    """A worker pushes only branches that carry its key: its own branch or its `wip/` checkpoint.
-    `where` is the place the push runs (`git_target`, else the hook's cwd)."""
-    args = _git_globals(argv)[0]
-    positional: list[str] = []
-    k = 1
-    while k < len(args):
-        if args[k] in PUSH_VALUE_FLAGS:
-            k += 2
-            continue
-        if not args[k].startswith("-"):
-            positional.append(args[k])
-        k += 1
-    branch = current_branch(where)
-    for raw in positional[1:] or [branch]:
-        src, _, dst = raw.lstrip("+").partition(":")
-        name = (dst or src).removeprefix("refs/heads/")
-        name = branch if name == "HEAD" else name
-        if not name or not _carries(name, key):
-            return f"git push to {name or 'a detached HEAD'}: a worker pushes only branches carrying {key}"
-    return None
-
-
-def _create_refusal(args: list[str], branch: str) -> str | None:
-    head = _flag_value(args, "-H", "--head")
-    if head is not None and head.rsplit(":", 1)[-1] != branch:
-        return f"gh pr create --head {head}: a worker opens the PR of its own branch {branch}"
-    extra = _pr_selector(args, VALUE_FLAGS["pr_create"])
-    if extra is not None:
-        return f"gh pr create takes no argument ({extra})"
     return None
 
 
@@ -963,169 +810,46 @@ def _arm_argv(argv: list[str]) -> list[str]:
     return _script_argv(argv, "arm_pr.sh")
 
 
-def _ready_script_refusal(
-    run: list[str], slug: str | None, branch: str, cwd: str | None, deadline: float | None = None
-) -> str | None:
-    """Why `pr_ready.sh <PR> …` (`run`) does not name this branch's own PR in `slug`, else None."""
-    repo = _flag_value(run[1:], "--repo", "-R")
-    if repo and slug_of(repo) != slug:
-        return f"{repo} is another repo than {slug}"
-    selector, k = None, 1
-    while k < len(run):
-        if run[k] in ("--sha", "--repo", "-R"):
-            k += 2
-            continue
-        if not run[k].startswith("-"):
-            selector = run[k]
-            break
-        k += 1
-    if selector is None:
-        return "pr_ready.sh without a PR"
-    return _own_pr_refusal(selector, slug, branch, cwd, deadline)
-
-
-def _arm_refusal(
-    argv: list[str], slug: str | None, branch: str, cwd: str | None, deadline: float | None = None
-) -> str | None:
-    run = _arm_argv(argv)
-    if os.environ.get("WE_ROLE") != "worker":  # a worker known by its marker only
-        return "arm_pr.sh without WE_ROLE=worker: arm_pr.sh refuses a worker's one-way class by it"
-    repo = _flag_value(run[1:], "--repo", "-R")
-    if repo and slug_of(repo) != slug:
-        return f"{repo} is another repo than {slug}"
-    selector, k = None, 1
-    while k < len(run):
-        if run[k] in ("--method", "--repo", "-R"):
-            k += 2
-            continue
-        if not run[k].startswith("-"):
-            selector = run[k]
-        k += 1
-    if selector is None:
-        return "arm_pr.sh without a PR"
-    return _own_pr_refusal(selector, slug, branch, cwd, deadline)
-
-
-def _thread_refusal(args: list[str]) -> str | None:
-    if any(t.split("=", 1)[0] == "--input" for t in args):
-        return "gh api graphql --input: a worker resolves review threads by a query field only"
-    queries = [
-        v.split("=", 1)[1]
-        for k, t in enumerate(args)
-        if t in WRITE_FIELDS and k + 1 < len(args)
-        for v in [args[k + 1]]
-        if v.startswith("query=")
-    ]
-    mutations = {m for q in queries for m in re.findall(r"(\w+)\s*\(\s*input\s*:", q)}
-    if len(queries) == 1 and mutations == {"resolveReviewThread"}:
-        return None
-    return "gh api graphql: a worker runs resolveReviewThread as the only mutation"
-
-
-def _key_pr_refusal(
-    selector: str | None, repo: str | None, key: str, cwd: Where, deadline: float | None
-) -> str | None:
-    """Why PR `selector` in the other repo `repo` is not this worker's (its head branch does not
-    carry `key`), else None; a `gh` failure refuses."""
-    if not selector or not repo:
-        return "a comment in another repo names its PR"
-    timeout = GH_TIMEOUT_S if deadline is None else min(GH_TIMEOUT_S, _left(deadline))
-    try:
-        head = _gh_pr_head(selector, repo, cwd if isinstance(cwd, (str, Path)) else None, timeout)
-    except Exception as exc:  # fail closed
-        return f"PR {selector} in {repo} could not be resolved ({exc})"
-    branch = str(head.get("headRefName") or "")
-    if not _carries(branch, key):
-        return f"PR {selector} in {repo}: its head {branch or '?'} does not carry the key {key}"
-    return None
-
-
-def _carries(name: str, key: str) -> bool:
-    return re.search(rf"(?<![\w-]){re.escape(key)}(?![\d])", name) is not None
-
-
-def right_refusal(  # noqa: PLR0911, PLR0912
-    argv: list[str],
-    right: str,
-    rights: dict,
-    key: str | None,
-    cwd: Where,
-    owner: str = "master",
-    deadline: float | None = None,
+def right_refusal(  # noqa: PLR0911
+    argv: list[str], right: str, cwd: Where, deadline: float | None = None
 ) -> str | None:
     """Why a worker may not use `right` with this command here, else None (it holds). `deadline`
     (a `time.monotonic()` value) is the hook's one budget across every command of a call; alone,
     the merge line gets its own."""
+    if right == "arm":
+        # without the marker variable `arm_pr.sh` arms a one-way class for a worker, which only
+        # the human's go may merge
+        if os.environ.get("WE_ROLE") != "worker":
+            return "arm_pr.sh without WE_ROLE=worker: arm_pr.sh refuses a worker's one-way class by it"
+        return None
+    args, global_repo = _gh_split(argv)
+    if right == "pr_edit":
+        # a hold label keeps a merge for the human; removing it lets the merge line land a diff
+        # the human was to see
+        removed = _hold_removed(args, cwd)
+        return (
+            f"gh pr edit --remove-label {removed}: a hold label keeps the merge for the human"
+            if removed
+            else None
+        )
+    # the merge line: a merge with a red or pending required check, a hold label or a one-way
+    # class lands past the checks by the app's bypass
     if deadline is None:
         deadline = time.monotonic() + MERGE_LINE_BUDGET_S
-    target = git_target(argv, cwd) if right == "push" else None
-    if target is not None:
-        # the push is judged where git runs it; another repo there needs its own switch on its own
-        # default branch, the session's repo opens nothing in it
-        here, there = origin_slug(cwd), origin_slug(target)
-        if there != here and pr_owner_on_default(target) != "worker":
-            return (
-                f"git push in {there or 'a directory without an origin'}: another repo than "
-                f"{here}, and its default branch does not set build.pr_owner: worker"
-            )
-        cwd = target
     slug = origin_slug(cwd)
-    if not (owner == "worker" and right in PR_OWNER_RIGHTS):
-        if not opted_in(rights, slug):
-            return f"{slug or 'this repo'} grants no worker rights (crew worker_rights.repos)"
-        if not rights.get(right):
-            return f"{right} is not granted in {slug} (crew worker_rights.{right})"
-    if not key:
-        return "this worker was started without a story key"
-    branch = current_branch(cwd)
-    if not branch or branch in protected_branches(cwd):
-        return f"{branch or 'a detached HEAD'} is the default branch, not the worker's own"
-    if not _carries(branch, key):
-        return f"branch {branch} does not carry the key {key}"
-    if right == "branch_rc":
-        return None
-    if right == "push":
-        return _push_refusal(argv, key, cwd)
-    if right == "arm":
-        return _arm_refusal(argv, slug, branch, cwd, deadline)
-    ready_run = _script_argv(argv, "pr_ready.sh")
-    if right == "pr_ready" and ready_run:
-        return _ready_script_refusal(ready_run, slug, branch, cwd, deadline)
-    args, global_repo = _gh_split(argv)
     named = global_repo or _repo_flag(args)
-    if right == "pr_comment" and named and slug_of(named) != slug:
-        # a two-repo story: the worker answers the reviews on its PR in the other repo, whose
-        # head branch carries its key; a comment changes no code there
-        return _key_pr_refusal(_selector(args), slug_of(named), key, cwd, deadline)
     if named and slug_of(named) != slug:
         return f"{named} is another repo than {slug}"
-    if right == "resolve_thread":
-        return _thread_refusal(args)
-    if right == "pr_create":
-        return _create_refusal(args, branch)
-    if right == "merge":
-        problem = _merge_refusal(args, cwd)
-        if problem:
-            return problem
-    if right == "pr_edit":
-        removed = _hold_removed(args, cwd)
-        if removed:
-            return (
-                f"gh pr edit --remove-label {removed}: a hold label keeps the merge for the human"
-            )
-    if right in ("pr_edit", "merge"):
-        selector = _pr_selector(args, VALUE_FLAGS[right])
-    else:
-        selector = _selector(args)
-    if right == "merge" and "--disable-auto" not in args:
-        # the merge line: one own-PR read gives the number `arm_pr.sh --check` judges
-        problem, pr = _own_pr(selector or branch, slug, branch, cwd, deadline)
-        return problem or _merge_facts_refusal(pr.get("number"), slug, cwd, deadline)
-    if selector is not None:
-        problem = _own_pr_refusal(selector, slug, branch, cwd, deadline)
-        if problem:
-            return problem
-    return None
+    problem = _merge_refusal(args, cwd)
+    if problem:
+        return problem
+    branch = current_branch(cwd)
+    selector = _pr_selector(args, MERGE_VALUE_FLAGS)
+    if "--disable-auto" in args:
+        return _own_pr(selector, slug, branch, cwd, deadline)[0] if selector else None
+    # one own-PR read gives the number `arm_pr.sh --check` judges
+    problem, pr = _own_pr(selector or branch, slug, branch, cwd, deadline)
+    return problem or _merge_facts_refusal(pr.get("number"), slug, cwd, deadline)
 
 
 def _hold_labels(cwd: str | None) -> set[str]:
@@ -1232,13 +956,6 @@ def _own_pr(
     if owner and repo and f"{owner}/{repo}" != slug:
         return f"PR {selector} comes from {owner}/{repo}", head
     return None, head
-
-
-def _own_pr_refusal(
-    selector: str, slug: str | None, branch: str, cwd: str | None, deadline: float | None = None
-) -> str | None:
-    """Why PR `selector` is not the PR whose head is `branch` in `slug`, else None."""
-    return _own_pr(selector, slug, branch, cwd, deadline)[0]
 
 
 # ---------------------------------------------------------------- the brake log
@@ -1368,17 +1085,18 @@ def never_rules(protected: set[str]) -> list[str]:
         "Bash(*git push*--all*)",
         "Bash(*git push*--mirror*)",
     ]
+    # a deny rule cannot see a chain's parts: the narrow glob is the closest form, the hook judges
     rules += [
-        "Bash(*ALLOW_PUSH_WITHOUT_MAIN*)",
-        "Bash(*ALLOW_COMMIT_TO_MAIN*)",
-        "Bash(*--no-verify*)",
-        "Bash(*core.hooksPath*)",
+        "Bash(*git*commit*--no-verify*)",
+        "Bash(*core.hooksPath*commit*)",
+        "Bash(*git*config*core.hooksPath *)",
+        "Bash(*SKIP=*gitleaks*commit*)",
     ]
     return rules
 
 
-# the PR owner rights as allow rules, so a worker in the default mode is not asked; the gate's
-# conditions (key, own PR, the merge line) still decide each call
+# the PR owner's commands as allow rules, so a worker in the default mode is not asked; the gate
+# still judges the merge line, the arm's role and a hold label
 PR_OWNER_ALLOW = (
     "Bash(git push*)",
     "Bash(gh pr create*)",
@@ -1398,20 +1116,21 @@ def settings(
     name: str | None = None,
     lane: str | None = None,
 ) -> dict:
-    """The `--settings` document of a worker with `key` in `repo`: allow = the granted rights
-    (with `build.pr_owner: worker` also `PR_OWNER_ALLOW`), deny = the never-list (and the crew's `deny_commands`, `deny_text`; a `deny_text` path also as a
-    Read rule)."""
+    """The `--settings` document of a worker with `key` in `repo`: allow = `gh pr ready`,
+    `pr_ready.sh`, `gh pr comment` and the crew's `branch_rc` (a comment or a ready flag changes no
+    code and no prod; in the background nobody answers a prompt), with `build.pr_owner: worker`
+    also `PR_OWNER_ALLOW`; deny = the never-list (and the crew's `deny_commands`, `deny_text`; a
+    `deny_text` path also as a Read rule)."""
     rights = crew_rights(repo)
-    allow: list[str] = []
-    if opted_in(rights, origin_slug(repo)):
-        if rights.get("pr_ready"):
-            allow.append("Bash(gh pr ready*)")
-            script = Path(__file__).resolve().with_name("pr_ready.sh")
-            allow += [f"Bash({script} *)", f"Bash(bash {script} *)"]
-        if rights.get("pr_comment"):
-            allow.append("Bash(gh pr comment*)")
-        if rights.get("branch_rc"):
-            allow.append(f"Bash({rights['branch_rc']}*)")
+    script = Path(__file__).resolve().with_name("pr_ready.sh")
+    allow = [
+        "Bash(gh pr ready*)",
+        f"Bash({script} *)",
+        f"Bash(bash {script} *)",
+        "Bash(gh pr comment*)",
+    ]
+    if rights.get("branch_rc"):
+        allow.append(f"Bash({rights['branch_rc']}*)")
     if pr_owner_on_default(repo) == "worker":
         allow += [rule for rule in PR_OWNER_ALLOW if rule not in allow]
     deny = never_rules(protected_branches(repo))

@@ -17,7 +17,7 @@ Your brief is your whole job: its chunk, its branch, its gates, its report.
 
 - Never push unless the brief says so; leave the branch for your starter.
 - A found defect: the repo's finish-first rule, else fix a small one on the touched seam, report a larger one.
-- Never merge or arm a PR; your starter does (unless the brief says `PR owner: worker`).
+- Never arm a PR unless the brief says `PR owner: worker`; the ready merge line `arm_pr.sh` prints you may run.
 - No wait loops or `sleep` in the foreground: the auto mode holds them.
   Wait on CI with `watch-pr-checks.sh` in the background or a Monitor; never poll a task file.
 
