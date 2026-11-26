@@ -4059,6 +4059,16 @@ def test_set_writes_topic_and_keys_and_clears_them(crewless):
     assert "topic" not in line and "keys" not in line
 
 
+def test_set_writes_the_sessions_memory_notes_one_line(crewless, capsys):
+    """A session without a companion names its own memory notes; a fresh start's brief reads them."""
+    assert go(crewless, "set", "memory=MEMORY.md § lead-12") == 0
+    assert line_of(crewless, "lead-12")["memory"] == "MEMORY.md § lead-12"
+    assert go(crewless, "set", "memory=a\nb") == 1
+    assert "memory is one line" in capsys.readouterr().err
+    assert go(crewless, "set", "memory=") == 0
+    assert "memory" not in line_of(crewless, "lead-12")
+
+
 def test_set_writes_a_parked_sessions_wake_trigger(crewless):
     """Red arm: the wake triggers of parked sessions lived only in the coordinator's memory file."""
     assert go(crewless, "set", "state=parked", "wake=plan of PROJ-12 on main") == 0

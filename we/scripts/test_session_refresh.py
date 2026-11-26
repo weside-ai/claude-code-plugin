@@ -232,10 +232,47 @@ def test_plan_without_a_crew_role_starts_plain_claude(tmp_path):
         "scratch", [rec("scratch", role="?", kind="background", id="ab12", cwd=str(tmp_path))]
     )
     assert "claude stop ab12" in text
-    assert (
-        f'cd {tmp_path} && claude --name scratch "Fresh start: before anything else, read your state'
-        in text
+    assert f"cd {tmp_path} && claude --name scratch 'You are the session scratch" in text
+    assert "Fresh start: before anything else, read your state" in text
+
+
+def test_the_fresh_brief_without_a_companion_names_the_session_and_its_memory(tmp_path):
+    """Two masters without a companion took themselves for another companion after a restart:
+    the brief names the session, its board line and the memory notes its line records."""
+    board = tmp_path / "board.json"
+    board.write_text(
+        json.dumps(
+            {
+                "sessions": [
+                    {"name": "plugin-7", "session_id": "old", "memory": "MEMORY.md § plugin-7"},
+                    {"name": "Kim", "session_id": "sid-plugin-7", "memory": "kim.md"},
+                ]
+            }
+        )
     )
+    record = rec("plugin-7", role="master", cwd=str(tmp_path))
+    text = sr.plan("plugin-7", [record], board=board)
+    step1 = next(x for x in text.splitlines() if x.startswith("1. "))
+    assert "`board.py set memory=<your memory file or heading>`" in step1
+    # the line with the session's id wins over the one with its name
+    assert (
+        "'You are the session plugin-7, no companion; your board line: plugin-7; "
+        "your memory notes: kim.md. Fresh start:" in text
+    )
+    record["session_id"] = "sid-other"
+    assert "your memory notes: MEMORY.md § plugin-7." in sr.plan("plugin-7", [record], board=board)
+    board.write_text("{}")
+    unknown = sr.plan("plugin-7", [record], board=board)
+    assert "memory notes: the `memory` of your board line, else only notes that name plugin-7" in (
+        unknown
+    )
+
+
+def test_a_companion_keeps_its_brief(tmp_path):
+    root = crew_repo(tmp_path)
+    text = sr.plan("Ada", [rec("Ada", cwd=str(root))])
+    assert "You are the session" not in text and "memory=" not in text
+    assert "start.py launch product --fresh" in text
 
 
 @pytest.mark.parametrize(

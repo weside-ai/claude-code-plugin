@@ -299,7 +299,7 @@ PR_DONE = {"MERGED": "pr_merged", "CLOSED": "pr_closed"}
 CLOSING = ("accept", "deny", "withdraw", *PR_DONE.values())
 # The one owner of the session state values; docs/board.md's `sessions[].state` row mirrors it.
 SESSION_STATES = ("build", "ci", "active", "wait-owner", "idle", "parked", "done")
-SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys", "epic", "wake")
+SET_FIELDS = ("waiting_on", "state", "now", "topic", "keys", "epic", "wake", "memory")
 CAUSES = ("merge-go", "plan", "prod", "cut-fence", "access-click", "window-go", "info")
 DECISION_KINDS = ("cut", "fence", "process")
 ASK_FIELDS = ("session", "key", "key_title", "ask", "recommendation", "cause")
@@ -915,7 +915,7 @@ def _parse_assignments(items, crew):
                 f"board.py set: epic {value!r} is neither a ticket key of the crew's naming.key "
                 "nor an epic number"
             )
-        elif key in ("now", "topic", "wake") and "\n" in value:
+        elif key in ("now", "topic", "wake", "memory") and "\n" in value:
             failures.append(f"board.py set: {key} is one line")
             fix = f"{key}={' '.join(value.split())}"
         elif key == "keys":
@@ -1042,7 +1042,7 @@ def cmd_set(state, args, crew, now):
             # the session set its own wait: a `blocked` mark of the old wait is over
             if ended[-1] is not None:
                 line.pop("blocked", None)
-        for key in ("state", "now", "topic", "keys", "epic", "wake"):
+        for key in ("state", "now", "topic", "keys", "epic", "wake", "memory"):
             if key in fields:
                 if fields[key] in ("", []):
                     line.pop(key, None)  # `topic=` / `keys=` clears it

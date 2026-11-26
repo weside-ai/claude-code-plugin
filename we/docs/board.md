@@ -464,7 +464,8 @@ writes the line whose `name` is the caller's, as `claude agents --json` lists it
 with that `session_id` takes the new name, else one is appended with both; a session without
 a name is told to `/rename` first; `--session <name>` is only checked against that name). Only `waiting_on`, `state`, `now`, `topic` (one line), `keys` (comma-separated, each a match of
 `naming.key`; an empty value clears it) and `epic` (a ticket key or an epic number, read by
-`scripts/epic_state.py`) and `wake` (one line: the checkable trigger that wakes a parked session) are settable; `state` takes
+`scripts/epic_state.py`), `wake` (one line: the checkable trigger that wakes a parked session) and `memory`
+(one line: the session's own memory file or heading, which a fresh start without a companion is told) are settable; `state` takes
 the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--for <name>` writes
 another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
 `since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting
