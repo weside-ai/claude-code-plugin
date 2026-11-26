@@ -15,7 +15,9 @@ data that only names an item (a heredoc quoting `git push --delete`) is denied t
 `--settings` deny rules already deny it. The list: secrets (`gh secret`, `gh variable`, a `gh api`
 write on a `/secrets`, `/variables` or `/environments` path, the crew's `deny_commands`); delete
 (`gh <noun> delete…`, `--delete-branch`, `gh pr close -d`, `gh api` with method DELETE, `git push
---delete|-d`, a `:<ref>` refspec); main (a `git push` naming the default branch, `main` or `master`,
+--delete|-d` and a `:<ref>` refspec unless the branches are merged: one plain `git push origin
+--delete <branch>…` whose branches are not protected, have their head on origin in
+`origin/<default>` and head no open PR, `merged_delete_refusal`); main (a `git push` naming the default branch, `main` or `master`,
 a ref pattern, `--all`, `--mirror`, `--branches`, any `git push` from a checkout on one of them,
 judged where git runs it: `git -C`, `--git-dir`, `--work-tree` and any `cd` count, and the session's
 cwd stays in unless the whole command is one simple `git [-C|--git-dir|--work-tree <p>]… push`
@@ -573,19 +575,38 @@ def normalised(text: str) -> str:
     return re.sub(r"""\$(?=['"])|['"\\]""", "", text)
 
 
+def _never_row(text: str, cwd: str | None) -> tuple[str | None, bool]:
+    """(the `NEVER` item `text` hits in `cwd`, else None; whether it is a merged-branch deletion
+    that held, `merged_delete_refusal`)."""
+    main = "|".join(re.escape(b) for b in sorted(protected_branches(cwd)))
+    deletion: str | None = None  # "" once the text is a merged-branch deletion that holds
+    for item, pattern in NEVER:
+        compiled = re.compile(pattern.replace("{main}", main))
+        found = compiled.search(text) or compiled.search(normalised(text))
+        if not found:
+            continue
+        hit = item.format(*(found.groups() or ("",)))
+        if item not in BRANCH_DELETE_ITEMS:
+            return hit, False
+        if deletion is None:
+            deletion = merged_delete_refusal(text, cwd) or ""
+        if deletion:
+            return f"{hit}: {deletion}", False
+    return None, deletion == ""
+
+
 def never(command: str, cwd: str | None, rights: dict | None = None) -> str | None:  # noqa: PLR0911
     """The never-list item `command` hits for a worker in `cwd`, else None."""
     rights = rights or {}
     text = command.replace("\\\n", " ")
-    main = "|".join(re.escape(b) for b in sorted(protected_branches(cwd)))
-    for item, pattern in NEVER:
-        compiled = re.compile(pattern.replace("{main}", main))
-        found = compiled.search(text) or compiled.search(normalised(text))
-        if found:
-            return item.format(*(found.groups() or ("",)))
+    hit, deletion_held = _never_row(text, cwd)
+    if hit:
+        return hit
     # in the shared main checkout a push sends the default branch with whatever another session
-    # committed there, unchecked by the app's bypass; a pushed release tag cuts a release
-    if re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text)):
+    # committed there, unchecked by the app's bypass; a pushed release tag cuts a release. A
+    # merged-branch deletion that held sends no ref, from any checkout
+    pushes = re.search(_GIT_PUSH, text) or re.search(_GIT_PUSH, normalised(text))
+    if pushes and not deletion_held:
         places = _push_dirs(text, cwd)
         for where in places:
             branch = current_branch(where)
@@ -608,6 +629,127 @@ def never(command: str, cwd: str | None, rights: dict | None = None) -> str | No
     # a merge the text holds but no part shows skips the merge-line check `decide` runs per part
     if re.search(_GH_PR_MERGE, text) and not _merges_visible(command, text):
         return "merge (gh pr merge only as a visible part of the command)"
+    return None
+
+
+# the two `NEVER` rows a merged branch passes: a branch whose head is in the default branch and
+# that no open PR has as head is no longer the only copy of any work
+BRANCH_DELETE_ITEMS = ("delete (git push --delete)", "delete (git push {0})")
+DELETE_FLAG = re.compile(r"--de(?:l(?:e(?:te?)?)?)?|-d")
+DELETE_ONLY = (
+    "a remote branch is deleted only as one `git push origin --delete <branch>…` of its own"
+)
+
+
+def _delete_targets(text: str, cwd: str | None) -> tuple[str | None, Where, list[str]]:
+    """(why `text` is not one plain deletion of branches on origin, else None; where git runs it;
+    the branch names). The form: one simple `git push` (`simple_push`) with `--delete`/`-d` and
+    branch names, or with only `:<branch>` refspecs, `-q`/`-v` beside them."""
+    argv = simple_push(text)
+    if argv is None:
+        return DELETE_ONLY, None, []
+    args = _git_globals(argv)[0][1:]
+    flagged, words = False, []
+    for k, word in enumerate(args):
+        if word == "--":
+            words += args[k + 1 :]
+            break
+        if DELETE_FLAG.fullmatch(word):
+            flagged = True
+        elif word.startswith("-") and word not in ("-q", "--quiet", "-v", "--verbose"):
+            return f"{DELETE_ONLY}, without {word}", None, []
+        elif not word.startswith("-"):
+            words.append(word)
+    if len(words) < 2 or words[0] != "origin":
+        return f"{DELETE_ONLY} (remote origin, then the branches)", None, []
+    branches = []
+    for ref in words[1:]:
+        if not flagged and not ref.startswith(":"):
+            return f"{ref} is no deletion: {DELETE_ONLY}", None, []
+        name = ref[0 if flagged else 1 :]
+        name = name[len("refs/heads/") :] if name.startswith("refs/heads/") else name
+        if not name or name.startswith("-") or re.search(r"[:+*?\[\s]", name):
+            return f"{ref} names no branch", None, []
+        branches.append(name)
+    base = cwd or "."
+    return None, git_target(argv, base) or base, branches
+
+
+def _remote_heads(where: Where, branches: list[str], deadline: float) -> dict[str, str] | None:
+    """{branch: head sha} of `branches` on origin as `git ls-remote` reads it now, None when it
+    fails: a remote-tracking ref may be older than the branch, and the newer commits would go."""
+    out = _git(
+        where,
+        "ls-remote",
+        "origin",
+        *(f"refs/heads/{b}" for b in branches),
+        timeout=max(min(GIT_TIMEOUT_S, _left(deadline)), 0.1),
+    )
+    if out is None:
+        return None
+    heads = {}
+    for line in out.splitlines():
+        sha, _, ref = line.partition("\t")
+        if ref.startswith("refs/heads/"):
+            heads[ref[len("refs/heads/") :]] = sha
+    return heads
+
+
+def _open_pr_refusal(branch: str, slug: str | None, cwd: Where, deadline: float) -> str | None:
+    """Why `branch` may be the head of an open PR (one is, or `gh pr list` failed), else None."""
+    argv = ["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number"]
+    if slug:
+        argv += ["--repo", slug]
+    try:
+        out = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(min(GH_TIMEOUT_S, _left(deadline)), 0.1),
+            cwd=str(cwd) if isinstance(cwd, (str, Path)) else None,
+        )
+        prs = json.loads(out.stdout) if out.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return f"{branch}: its open PRs could not be read ({exc.__class__.__name__})"
+    if not isinstance(prs, list):
+        return f"{branch}: its open PRs could not be read (gh exited {out.returncode})"
+    if prs:
+        return f"{branch} is the head of open PR #{prs[0].get('number')}"
+    return None
+
+
+def merged_delete_refusal(text: str, cwd: str | None) -> str | None:  # noqa: PLR0911
+    """Why the branch deletion `text` does not hold, else None. It holds only as one plain deletion
+    on origin (`_delete_targets`) where every branch (a) is no protected branch, (b) has a head on
+    origin (`git ls-remote`) that is an ancestor of `origin/<default>` (an unknown ref or object
+    refuses) and (c) heads no open PR (`gh pr list --head`; gh failing refuses)."""
+    deadline = time.monotonic() + MERGE_LINE_BUDGET_S
+    problem, where, branches = _delete_targets(text, cwd)
+    if problem:
+        return problem
+    protected = protected_branches(where)
+    for branch in branches:
+        if branch in protected:
+            return f"{branch} is a protected branch"
+        if not _git(where, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"):
+            return f"{branch}: origin/{branch} is unknown here (fetch first)"
+    heads = _remote_heads(where, branches, deadline)
+    if heads is None:
+        return "git ls-remote origin failed: the branch heads on origin are unknown"
+    default = f"origin/{default_branch(where)}"
+    slug = origin_slug(where)
+    for branch in branches:
+        if branch not in heads:
+            return f"{branch} is not on origin"
+        if (
+            _git(where, "merge-base", "--is-ancestor", heads[branch], f"refs/remotes/{default}")
+            is None
+        ):
+            return f"{branch} ({heads[branch][:12]}) is not merged into {default}"
+        problem = _open_pr_refusal(branch, slug, where, deadline)
+        if problem:
+            return problem
     return None
 
 
@@ -1068,7 +1210,7 @@ def never_rules(protected: set[str]) -> list[str]:
         "Bash(*gh api*--method DELETE*)",
         "Bash(*gh api*--method=DELETE*)",
     ]
-    rules += ["Bash(*git push*--delete*)", "Bash(*git push* -d *)", "Bash(*git push* :*)"]
+    # a branch deletion has no deny rule: a merged branch passes, and only the gate can tell
     for name in sorted(protected):
         rules += [
             f"Bash(*git push* {name})",
