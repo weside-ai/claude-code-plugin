@@ -251,7 +251,9 @@ the steps: the message that makes it save its state and reply with the crew's `l
 it stops (a background session `claude stop`; the human's own window `/exit` by the human), how it
 starts fresh (`start.py launch <role> --fresh`; the coordinator `wclaude --start --fresh` in the
 human's terminal; a session outside the crew `claude --name <name>` with a "read your state"
-brief). A worker is never refreshed: it ends. The script sends, stops and starts nothing; the
+brief that names it: the session, no companion, its board line, and its memory notes from the
+line's `memory`, because the memory directory is shared per repo and a window title can carry
+another companion's name). A worker is never refreshed: it ends. The script sends, stops and starts nothing; the
 coordinator carries the plan out, never mid-story.
 
 After a compaction, `process_on_start.py` and `role_on_start.py` print the L0 and the role card of

@@ -433,7 +433,9 @@ export type DeliveryLine = { text: string; isDelivered: boolean }
 const hhmm = (ts: string) => `${ts.slice(11, 16)} UTC`
 
 // The line under a question's answer stamp: where its newest answer went, or with whom it stays.
-// A refusal of either recipient wins over a delivery; a resubmit still waits and shows nothing.
+// A refusal of either recipient wins over a delivery; a resubmit still waits and shows nothing. A
+// delivered `route` row to another session than the coordinator is the coordinator's own delivery
+// (`board.py delivered`: it woke the asker with the answer in its start brief) and wins over all.
 export const deliveryLine = (
   answer: { id: string; ts: string } | undefined,
   rows: Record<string, BoardDelivery>,
@@ -441,7 +443,10 @@ export const deliveryLine = (
 ): DeliveryLine | undefined => {
   if (!answer) return undefined
   const row = (role: BoardDeliveryRole) => rows[keyOf(answer.id, answer.ts, role)]
-  const [asker, own, starter] = [row('asker'), row('coordinator'), row('starter')]
+  const [asker, own, starter, route] = [row('asker'), row('coordinator'), row('starter'), row('route')]
+  if (route?.delivered && coordinator && route.to !== coordinator) {
+    return { text: `→ delivered to ${route.to} ${hhmm(route.ts)} (${shortReason(route.reason ?? 'routed')})`, isDelivered: true }
+  }
   const withCoordinator = (reason: string | undefined) => ({ text: `not delivered, with ${coordinator ?? 'the orchestrator'} (${shortReason(reason)})`, isDelivered: false })
   if (asker && !asker.delivered && isFinal(asker) && starter?.delivered) return { text: `→ delivered to ${starter.to} ${hhmm(starter.ts)} (${asker.to} gone)`, isDelivered: true }
   if (asker && !asker.delivered && isFinal(asker)) return withCoordinator(starter && isFinal(starter) ? starter.reason : asker.reason)

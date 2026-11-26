@@ -11,9 +11,10 @@ Usage:
       role, loaded and installed plugin version, state, ``behind``, ``at_rest`` (with the live
       workers it started and its queued starts), and ``due: <reason>`` when a refresh is due;
       ``--due`` keeps only those; ``--json`` the same rows as a JSON list
-  session_refresh.py plan <name> [--from DIR]
+  session_refresh.py plan <name> [--from DIR] [--board FILE]
       the steps for one session that is behind and at rest: the message that makes it save its
-      state, how it stops, how it starts fresh; exit 1 (reason on stderr) for a session that is
+      state, how it stops, how it starts fresh (a session without a companion with a brief that
+      names it, its board line and the line's ``memory``); exit 1 (reason on stderr) for a session that is
       not live, not behind, not at rest, or a worker (a worker ends, it is not refreshed)
 
 Fields:
@@ -47,6 +48,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -331,7 +333,35 @@ def _crew_member(r: dict, start: str | None) -> tuple[str, dict] | None:
     return role, crew
 
 
-def plan(name: str, rows: list[dict], start: str | None = None) -> str:
+def board_line(r: dict, board: Path | None = None) -> dict:
+    """The board line of session `r`: the one with its `session_id`, else its `name`; {} when the
+    board is unreadable or holds none. `board` defaults to the crew's board for its cwd."""
+    import board as boardlib  # noqa: PLC0415
+
+    path = Path(board) if board is not None else Path(boardlib.default_board(r["cwd"] or None))
+    try:
+        doc = json.loads(path.expanduser().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    lines = doc.get("sessions") if isinstance(doc, dict) else None
+    lines = [x for x in lines if isinstance(x, dict)] if isinstance(lines, list) else []
+    sid = r.get("session_id")
+    return next((x for x in lines if sid and x.get("session_id") == sid), None) or next(
+        (x for x in lines if x.get("name") == r["name"]), {}
+    )
+
+
+def fresh_brief(name: str, memory: str | None) -> str:
+    """The first message of a fresh start without a companion: it names the session, because the
+    memory directory is shared per repo and the window title may carry another companion's name."""
+    notes = memory or f"the `memory` of your board line, else only notes that name {name}"
+    return (
+        f"You are the session {name}, no companion; your board line: {name}; your memory notes: "
+        f"{notes}. {startlib.READ_STATE}"
+    )
+
+
+def plan(name: str, rows: list[dict], start: str | None = None, board: Path | None = None) -> str:
     r = next((x for x in rows if x["name"] == name), None)
     if r is None:
         raise PlanError(f"{name} is no live session (session_refresh.py list)")
@@ -346,10 +376,13 @@ def plan(name: str, rows: list[dict], start: str | None = None) -> str:
     ready = "ready"
     if member:
         ready = str((member[1].get("labels") or {}).get("ready") or ready)
+    line_set = (
+        "`board.py set`" if member else "`board.py set memory=<your memory file or heading>`"
+    )
     message = (
         f"Plugin refresh: you run we {r['loaded']}, {r['installed']} is installed. At this break, "
         "save your state: your own memory file with every open commitment, your board line "
-        f"(`board.py set`), unfinished work committed in git. Then reply `{ready}` and start "
+        f"({line_set}), unfinished work committed in git. Then reply `{ready}` and start "
         "nothing new; you are started fresh and read that state."
     )
     if r["kind"] == "background":
@@ -377,9 +410,11 @@ def plan(name: str, rows: list[dict], start: str | None = None) -> str:
             f"`wclaude --start --role {role} --fresh`."
         )
     else:
+        memory = board_line(r, board).get("memory")
+        brief = shlex.quote(fresh_brief(name, memory if isinstance(memory, str) else None))
         out.append(
-            f"4. Start it fresh in its folder: `cd {r['cwd']} && claude --name {name} "
-            f'"{startlib.READ_STATE}"`.'
+            f"4. Start it fresh in its folder: `cd {r['cwd']} && claude --name {name} {brief}` "
+            "(after its reply, run this plan again: the brief then carries the `memory` it saved)."
         )
     return "\n".join(out)
 
@@ -393,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     pl = sub.add_parser("plan")
     pl.add_argument("name")
     pl.add_argument("--from", dest="start")
+    pl.add_argument("--board", type=Path, help="the board file (default: the crew's)")
     args = parser.parse_args(argv)
     try:
         rows = roll_call()
@@ -401,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.verb == "plan":
         try:
-            print(plan(args.name, rows, args.start))
+            print(plan(args.name, rows, args.start, args.board))
         except PlanError as exc:
             print(f"session_refresh: {exc}", file=sys.stderr)
             return 1

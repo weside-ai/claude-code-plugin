@@ -401,6 +401,7 @@ Outcomes, each a row (readers fold the rows of one `id`, `answer_ts` and `role` 
 | the asker is unknown by that name, carried by two sessions, or stopped | asker `delivered: false` with the engine's reason; the routing prompt | `not delivered, with <orchestrator> (not reachable)`, `(name not unique)` or `(gone)` |
 | the asker's session holds the message (a `[Cross-session delivery notice]` naming it, usually another permission mode) | asker `delivered: false, reason: held`; the routing prompt | `not delivered, with <orchestrator> (held)` |
 | the orchestrator's prompt is never stored (30 s idle after it; a turn that ends meanwhile is no miss, the prompt may be queued behind it) | `reason: resubmitted`, the prompt once more; still none after another 30 s idle: `delivered: false` and a toast there | `not delivered, with <orchestrator> (not stored after a resubmit)` |
+| the coordinator carried the answer itself (it woke the asker with the answer in its start brief) | `board.py delivered <id> --by wake [--session <name>]`: one `route` row `delivered: true` to that session (default the asker), `reason: by wake`, through `deliveries.py`; it refuses an unknown id and one without an answer | `→ delivered to <asker> 16:08 UTC (by wake)`: a delivered `route` row to another session than the coordinator wins over every refusal; the routing line itself (`to` the coordinator) still shows `not delivered, with <orchestrator>` |
 | the orchestrator's session is not running | a pane whose live column names it gone writes `delivered: false, reason: coordinator not running` for an answer a minute old with no row; the deliverer delivers it once it runs, its newer row replacing the marker | `not delivered, with <orchestrator> (not running)` |
 
 On start the deliverer reads the ledger first: a key with a verdict is never sent again, a key with
@@ -464,7 +465,8 @@ writes the line whose `name` is the caller's, as `claude agents --json` lists it
 with that `session_id` takes the new name, else one is appended with both; a session without
 a name is told to `/rename` first; `--session <name>` is only checked against that name). Only `waiting_on`, `state`, `now`, `topic` (one line), `keys` (comma-separated, each a match of
 `naming.key`; an empty value clears it) and `epic` (a ticket key or an epic number, read by
-`scripts/epic_state.py`) and `wake` (one line: the checkable trigger that wakes a parked session) are settable; `state` takes
+`scripts/epic_state.py`), `wake` (one line: the checkable trigger that wakes a parked session) and `memory`
+(one line: the session's own memory file or heading, which a fresh start without a companion is told) are settable; `state` takes
 the values of `sessions[].state` above, `waiting_on` a role key or `human`. `--for <name>` writes
 another session's line and is the coordinator's (`roles.coordinator`). A new `waiting_on` stamps
 `since` and `sla_due`; the same role keeps both; another role resets them; `waiting_on=` on a waiting

@@ -184,7 +184,9 @@ file (mode 0600), never a secret on a command line and never a `CLAUDE*` (but th
 The brake is the PreToolUse hook `hooks/worker_rights_gate.py`, which holds under `bypassPermissions`:
 a worker runs `gh pr ready` (or `pr_ready.sh`), `gh pr comment` and the crew's `branch_rc` without
 asking; a `gh pr merge` is judged by the merge line; every worker is denied the never-list (secrets,
-delete, `main`, a commit past the secret scan). Rules and limits: `scripts/worker_rights.py`
+delete, `main`, a commit past the secret scan). A merged remote branch is the one deletion a worker
+may run: one plain push deleting branches on origin, each unprotected, its head on origin inside the
+default branch and the head of no open PR (an unknown ref or a failing `gh` refuses). Rules and limits: `scripts/worker_rights.py`
 (its docstring). A denial names the Lead; the worker reports it and the Lead acts. It catches a slip, it is no
 boundary: a script file passes it.
 

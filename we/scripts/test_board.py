@@ -4059,6 +4059,16 @@ def test_set_writes_topic_and_keys_and_clears_them(crewless):
     assert "topic" not in line and "keys" not in line
 
 
+def test_set_writes_the_sessions_memory_notes_one_line(crewless, capsys):
+    """A session without a companion names its own memory notes; a fresh start's brief reads them."""
+    assert go(crewless, "set", "memory=MEMORY.md § lead-12") == 0
+    assert line_of(crewless, "lead-12")["memory"] == "MEMORY.md § lead-12"
+    assert go(crewless, "set", "memory=a\nb") == 1
+    assert "memory is one line" in capsys.readouterr().err
+    assert go(crewless, "set", "memory=") == 0
+    assert "memory" not in line_of(crewless, "lead-12")
+
+
 def test_set_writes_a_parked_sessions_wake_trigger(crewless):
     """Red arm: the wake triggers of parked sessions lived only in the coordinator's memory file."""
     assert go(crewless, "set", "state=parked", "wake=plan of PROJ-12 on main") == 0
@@ -4369,3 +4379,37 @@ def test_show_line_prints_each_status(crewless, capsys):
     assert capsys.readouterr().out.splitlines()[-1] == "Q404 unknown"
     assert go(crewless, "show", "Q7") == 0
     assert json.loads(capsys.readouterr().out)["status"] == "closed"
+
+
+# The coordinator carried an answer itself (it woke the asker with the answer in its start brief).
+
+
+def test_delivered_appends_one_route_row_for_the_newest_answer(crewless):
+    assert go(crewless, "answer", "Q7", "followup", "--session", "lead-12", "--via", "chat") == 0
+    assert go(crewless, "answer", "Q7", "accept", "--session", "lead-12", "--via", "chat") == 0
+    newest = jsonl(crewless / "board-answers.jsonl")[-1]["ts"]
+    assert go(crewless, "delivered", "Q7", "--by", "wake") == 0
+    assert jsonl(crewless / "board-deliveries.jsonl") == [
+        {
+            "id": "Q7",
+            "answer_ts": newest,
+            "to": "asker",  # the question's asker
+            "role": "route",
+            "click_ts": newest,
+            "ts": "2026-11-03T10:00:00.000Z",
+            "delivered": True,
+            "reason": "by wake",
+        }
+    ]
+    assert go(crewless, "delivered", "Q7", "--by", "wake", "--session", "starter-9") == 0
+    assert jsonl(crewless / "board-deliveries.jsonl")[-1]["to"] == "starter-9"
+
+
+@pytest.mark.parametrize(
+    ("qid", "message"),
+    [("Q99", "Q99 is unknown"), ("Q7", "Q7 has no answer to deliver")],
+)
+def test_delivered_refuses_an_unknown_or_unanswered_question(crewless, capsys, qid, message):
+    assert go(crewless, "delivered", qid, "--by", "wake") == 1
+    assert message in capsys.readouterr().err
+    assert not (crewless / "board-deliveries.jsonl").exists()
