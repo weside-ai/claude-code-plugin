@@ -246,7 +246,8 @@ version, state, `behind`, and `at_rest` (idle, no live worker it started, no que
 its docstring owns the fields and their sources. `list --due` keeps the sessions the coordinator
 refreshes at `/we:start` and on each sweep: behind, at rest, no worker, and either the release
 between the two versions changed `process/`, `roles/` or `hooks/`, or the session started
-`sessions.refresh_after_days` (crew, default 3) days ago. `session_refresh.py plan <name>` prints
+`sessions.refresh_after_days` (crew, default 3) days ago; or, at rest and no worker, its Claude Code
+is older than the installed one. `session_refresh.py plan <name>` prints
 the steps: the message that makes it save its state and reply with the crew's `labels.ready`, how
 it stops (a background session `claude stop`; the human's own window `/exit` by the human), how it
 starts fresh (`start.py launch <role> --fresh`; the coordinator `wclaude --start --fresh` in the
