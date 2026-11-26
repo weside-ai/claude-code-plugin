@@ -76,14 +76,14 @@ def run(repo, home, capsys, *extra):
     return capsys.readouterr()
 
 
-def test_worker_table_sums_the_gate_count_plus_memory_and_transcript_sizes(
+def test_worker_table_sums_the_gate_count_and_transcript_sizes_without_memory(
     tmp_path, monkeypatch, capsys
 ):
     repo, home = world(tmp_path, monkeypatch)
     out = run(repo, home, capsys).out
     crew_path, crew = crewlib.find_and_load(repo)
     [total] = render_process.total_rows(crew_path, crew, "worker", home)
-    memory = len(f"MEMORY-TEXT\n{FROM_MEMORY}\n")
+    memory = 0  # a worker starts with auto memory off
     shape = next(e for e in TRANSCRIPT if e["type"] == "api-request-shape")["shape"]
     system = len(shape["system"][0]["text"])
     tools = len(json.dumps(shape["tools"][0]))
@@ -98,17 +98,9 @@ def test_worker_table_sums_the_gate_count_plus_memory_and_transcript_sizes(
         assert text not in out, text
 
 
-@pytest.mark.parametrize(
-    "context, cells",
-    [
-        ({"auto_memory": "off"}, [cl.MEMORY_OFF, "0"]),
-        ({}, [cl.MEMORY_OFF, "0"]),  # the launcher's default inside the block
-        ({"auto_memory": "own"}, [cl.MEMORY_OWN, "n/a"]),
-        (None, ["disk", f"{len('MEMORY-TEXT') + len(FROM_MEMORY) + 2:,}"]),
-    ],
-)
-def test_worker_memory_row_follows_workers_context(tmp_path, monkeypatch, capsys, context, cells):
-    """A worker started with auto-memory off loads no MEMORY.md: the row must not count its size."""
+@pytest.mark.parametrize("context", [None, {}, {"auto_memory": "shared"}])
+def test_a_worker_memory_row_is_always_off(tmp_path, monkeypatch, capsys, context):
+    """Every worker starts with auto memory off: the row must not count MEMORY.md's size."""
     repo, home = world(tmp_path, monkeypatch)
     if context is not None:
         (repo / ".weside" / "config.json").write_text(
@@ -116,7 +108,7 @@ def test_worker_memory_row_follows_workers_context(tmp_path, monkeypatch, capsys
         )
     out = run(repo, home, capsys).out
     [row] = [x for x in out.splitlines() if x.startswith("MEMORY.md ")]
-    assert [c.strip() for c in row.split("  ") if c.strip()][1:3] == cells, row
+    assert [c.strip() for c in row.split("  ") if c.strip()][1:3] == [cl.MEMORY_OFF, "0"], row
     assert out.rstrip().endswith(cl.FOOTER)
 
 
@@ -178,7 +170,7 @@ def test_a_repo_pointing_at_a_foreign_crew_measures_itself(tmp_path, monkeypatch
     out = captured.out
     assert "| instructions AGENTS.md | disk | 83 |" in out  # B's own, not A's
     assert "| rules without paths (1) | disk | 44 |" in out
-    assert "| MEMORY.md | disk | 9 |" in out
+    assert "| MEMORY.md | off (worker settings) | 0 |" in out  # a worker loads none
     assert "transcript: b1.jsonl" in out
     assert "product Ada: works in repo, measured there" in out
     assert "no optimization store" in captured.err

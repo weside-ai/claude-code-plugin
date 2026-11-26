@@ -2,7 +2,8 @@
 """The one renderer of the crew process (L0): the templates under ``process/`` filled from a crew.
 
 Usage:
-  render_process.py --role R [--from DIR]      what a session of role R sees at start: the text
+  render_process.py --role R [--from DIR]      what a session of role R (a role key or the name of
+                                               a member who holds it) sees at start: the text
                                                ``process_on_start.py`` prints (``worker`` → the
                                                short form, every other role → the L0), then the
                                                text ``role_on_start.py`` prints (role card,
@@ -946,6 +947,16 @@ def _print_role(crew_path: Path, crew: dict[str, Any], role: str) -> None:
     sys.stdout.write("\n\n" + session_text(crew_path, crew, role, slug, hook_input) + "\n")
 
 
+def role_key(crew: dict[str, Any], value: str) -> str | None:
+    """``value`` as a role key: a key of ``all_roles`` stays, a member's slug or name
+    (``crew.member``) becomes the role ``roles`` gives that member, anything else None."""
+    if value in all_roles():
+        return value
+    found = crewlib.member(crew, value) if value else None
+    roles = crew.get("roles") or {}
+    return next((r for r in crewlib.ROLE_KEYS if found and roles.get(r) == found[0]), None)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--role")
@@ -961,9 +972,15 @@ def main(argv: list[str]) -> int:
     if loaded is None:
         return 1
     crew_path, crew = loaded
-    if not args.all_roles and args.role not in all_roles():
-        print(f"render_process: --role takes one of {', '.join(all_roles())}", file=sys.stderr)
-        return 2
+    if not args.all_roles:
+        args.role = role_key(crew, args.role or "")
+        if args.role is None:
+            print(
+                f"render_process: --role takes one of {', '.join(all_roles())}"
+                " or the name of a crew member who holds one",
+                file=sys.stderr,
+            )
+            return 2
     try:
         if args.all_roles:
             _print_sizes(crew_path, crew)

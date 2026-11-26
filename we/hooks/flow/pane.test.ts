@@ -81,6 +81,10 @@ test('/flow PROJ-10 fills the pane after the command returned', async ($, on) =>
   await clock.settle()
   expect(toasts).toEqual([])
   expect(opened).toEqual(['we-flow', 'we-board', 'we-board'])
+  // The Board button keeps the keys this pane shows: it opens the Board alone.
+  const after = await $.ui.mount({ plugin: 'we', surface: 'terminal', component: 'Pane', requestId: 'we-flow', props: { bodyColumns: 70 } as never })
+  expect(await after.find({ type: 'Text', text: /PROJ-10/ })).toBeDefined()
+  await after.unmount()
 })
 
 // flow_intervals.py --snapshot's document, as far as Crew flow reads it.
