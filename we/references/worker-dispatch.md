@@ -206,12 +206,13 @@ every start through `worker_launch.py launch` (its cwd is the Lead's worktree). 
 the tree; a created or named tree gets the marker `we-worker.json` with name, key, role, starter,
 tree and mode, which `/board` shows on the worker's line.
 
+Every worker's settings carry `autoMemoryEnabled: false`: a worker reads and writes no auto memory,
+its lessons go into its report (`worker_launch.py write_settings`).
 `workers.context` in `.weside/config.json` makes the worker's settings lean; without the block the
-file stays rights and `env` only. Keys (`worker_launch.py apply_context` owns them):
+file stays rights, `env` and that line. Keys (`worker_launch.py apply_context` owns them):
 
 | Key | Settings |
 |---|---|
-| `auto_memory`: `off` (default) · `own` · `shared` | `env.CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` · `autoMemoryDirectory` `<state dir>/<name>.memory` · the repo's memory |
 | `disable_plugins: ["<plugin>@<marketplace>"]` | `enabledPlugins: {<id>: false}` |
 | `deny_mcp_servers: ["<server>"]` | `deniedMcpServers: [{"serverName": <server>}]` |
 | `auto_compact_window: <tokens>` | `autoCompactWindow` (100000–1000000) |

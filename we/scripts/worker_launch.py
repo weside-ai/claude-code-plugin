@@ -1352,7 +1352,6 @@ def _starter_verbs(args: argparse.Namespace) -> int:
     return 0
 
 
-AUTO_MEMORY = ("off", "own", "shared")
 COMPACT_RANGE = (100_000, 1_000_000)
 
 
@@ -1363,11 +1362,9 @@ def _names(ctx: dict, key: str) -> list[str]:
     return value
 
 
-def apply_context(doc: dict, repo: Path, name: str | None, state: Path) -> dict:
+def apply_context(doc: dict, repo: Path) -> dict:
     """Lean settings from `workers.context` of the repo's `.weside/config.json`; without the block
-    the document stays as it is. `auto_memory` `off` (default) sets
-    `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, `own` points `autoMemoryDirectory` at
-    `<state>/<name>.memory`, `shared` leaves memory alone; `disable_plugins` → `enabledPlugins`
+    the document stays as it is. `disable_plugins` → `enabledPlugins`
     false, `deny_mcp_servers` → `deniedMcpServers` by `serverName`, `auto_compact_window` →
     `autoCompactWindow`, `deny_tools` → bare tool names appended to `permissions.deny` after the
     never-list (a bare-name deny drops the tool's schema from the context), `skills_off` →
@@ -1378,17 +1375,6 @@ def apply_context(doc: dict, repo: Path, name: str | None, state: Path) -> dict:
         return doc
     if not isinstance(ctx, dict):
         raise LaunchError("workers.context: needs an object", 2)
-    memory = ctx.get("auto_memory", "off")
-    if memory not in AUTO_MEMORY:
-        raise LaunchError(f"workers.context.auto_memory: one of {', '.join(AUTO_MEMORY)}", 2)
-    if memory == "off":
-        doc.setdefault("env", {})["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
-    elif memory == "own":
-        if not name:
-            raise LaunchError("workers.context.auto_memory own: the settings need --name", 2)
-        own = state / f"{name}.memory"
-        own.mkdir(parents=True, exist_ok=True)
-        doc["autoMemoryDirectory"] = str(own)
     plugins = _names(ctx, "disable_plugins")
     if plugins:
         doc["enabledPlugins"] = dict.fromkeys(plugins, False)
@@ -1808,8 +1794,11 @@ def write_settings(
     import worker_rights  # noqa: PLC0415
 
     doc = worker_rights.settings(repo, key, starter, name, lane)
+    # A worker writes and reads no auto memory: its index of the repo's memory cost a cold start
+    # about 8k tokens (measured 26.11. on 2.1.332), and a worker's lessons go into its report.
+    doc["autoMemoryEnabled"] = False
     never = list(doc.get("permissions", {}).get("deny", []))
-    doc = apply_context(doc, repo, name, out.parent)
+    doc = apply_context(doc, repo)
     if account:
         apply_account(doc, account)
     if brief:

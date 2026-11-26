@@ -731,24 +731,21 @@ class TestSettings:
     @pytest.mark.parametrize(
         "context, keys",
         [
-            ({}, {"env.CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}),
+            ({}, {}),
             (
                 {
-                    "auto_memory": "own",
+                    "auto_memory": "shared",
                     "disable_plugins": ["sentry@market"],
                     "deny_mcp_servers": ["vault"],
                     "auto_compact_window": 200000,
                 },
                 {
-                    "autoMemoryDirectory": "<state>/KEY-1-w1.memory",
                     "enabledPlugins": {"sentry@market": False},
                     "deniedMcpServers": [{"serverName": "vault"}],
                     "autoCompactWindow": 200000,
                 },
             ),
-            ({"auto_memory": "shared"}, {}),
             ({"auto_compact_window": 5000}, None),
-            ({"auto_memory": "all"}, None),
         ],
     )
     def test_workers_context_makes_the_settings_lean(self, env, tmp_path, context, keys):
@@ -764,14 +761,12 @@ class TestSettings:
             return
         assert out.returncode == 0, out.stderr
         doc = json.loads(out_file.read_text())
-        flat = {**doc, **{f"env.{k}": v for k, v in doc["env"].items()}}
-        want = {
-            k: str(v).replace("<state>", str(out_file.parent)) if k == "autoMemoryDirectory" else v
-            for k, v in keys.items()
-        }
-        assert {k: flat.get(k) for k in want} == want
-        if context.get("auto_memory") == "shared":
-            assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in doc["env"]
+        assert doc["autoMemoryEnabled"] is False  # every worker, whatever the context says
+        assert {k: doc.get(k) for k in keys} == keys
+        assert (
+            "autoMemoryDirectory" not in doc
+            and "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in doc["env"]
+        )
 
     def _settings(self, env, tmp_path, context, *brief):
         if context is not None:
@@ -817,8 +812,7 @@ class TestSettings:
         proc, doc = self._settings(env, tmp_path, context, "Needs: Artifact, dataviz\n")
         assert proc.returncode == 0, proc.stderr
         want = worker_rights.settings(env["wt"], "KEY-1", None, None, None)
-        if context is not None:
-            want["env"]["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+        want["autoMemoryEnabled"] = False
         assert doc == want
 
     def test_a_needs_line_gives_a_denied_tool_and_skill_back(self, env, tmp_path):

@@ -143,7 +143,8 @@ plan's Updates Log and a ticket comment, and the session rewrites that pinned me
 and copies no content, or the companion's other surfaces know nothing of weeks of work. Sessions
 started in one repo share Claude Code's one auto-memory index there: each keeps its lines under a
 heading with its name, and a parking master moves its files out, so no session loads the others'
-open strands. What the companion carries per turn on both surfaces, and how it is
+open strands. The index keeps only dated running state (open strands, waits); a behaviour rule
+goes by `/we:retro` into a rule file or an AGENTS.md, where the human sees it. What the companion carries per turn on both surfaces, and how it is
 kept lean: `references/context-engineering.md`.
 
 ## Catch-up
