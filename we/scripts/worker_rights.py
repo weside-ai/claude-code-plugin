@@ -463,10 +463,11 @@ NEVER = (
         rf"(?i)\bgit\b{_REST}core\.hookspath{_REST}\scommit\b",
     ),
     # a written core.hooksPath persists in the shared `.git/config`: every later plain commit of every
-    # worktree skips the scan
+    # worktree skips the scan. A read or removal counts only between `config` and the key: a value
+    # spelled `unset` or `list` is still a write
     (
         "guard bypass (core.hooksPath written to the git config)",
-        rf"(?i){_GIT_CONFIG}(?!{_REST}{_CONFIG_READ})(?={_REST}core\.hookspath[ \t=]+[^\s;|&])",
+        rf"""(?i){_GIT_CONFIG}(?:(?!{_CONFIG_READ})[^;|&\n])*?core\.hookspath['"]?[ \t=]+[^\s;|&]""",
     ),
     (
         "guard bypass (SKIP=gitleaks)",

@@ -363,6 +363,10 @@ NEVER = [
         'git -C ../t config set --local core.hooksPath "/tmp/h"',
         "guard bypass (core.hooksPath written to the git config)",
     ),
+    (  # a value spelled like a read verb is still a write
+        "git config core.hooksPath unset",
+        "guard bypass (core.hooksPath written to the git config)",
+    ),
     ("SKIP=gitleaks git commit -m x", "guard bypass (SKIP=gitleaks)"),
     ("SKIP=ruff-format,gitleaks git commit -m x", "guard bypass (SKIP=gitleaks)"),
     ('SKIP="gitleaks" git commit -m x', "guard bypass (SKIP=gitleaks)"),
