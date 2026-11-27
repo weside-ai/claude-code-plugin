@@ -1,6 +1,6 @@
 """plan_tier.py: the plan-only tier in a scratch no-checkout tree at `risk.rules_from`, never in the
-caller's checkout; the fake risk command keeps the classifier contract (plan from HEAD, diff
-base...HEAD)."""
+caller's checkout; the fake risk command keeps the classifier contract (`--plan KEY`: the plan's
+Files on origin/main; the old `base KEY`: plan from HEAD, diff base...HEAD)."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def tier_repo(tmp_path: Path, plans: dict | None = None, extra: dict | None = No
 def risk_log(tmp_path, monkeypatch):
     log = tmp_path / "risk-calls.jsonl"
     monkeypatch.setenv("FAKE_RISK_LOG", str(log))
-    for var in ("FAKE_RISK_EXIT", "FAKE_RISK_LINE"):
+    for var in ("FAKE_RISK_EXIT", "FAKE_RISK_LINE", "FAKE_RISK_NO_PLAN_MODE"):
         monkeypatch.delenv(var, raising=False)
     return log
 
@@ -84,22 +84,48 @@ def tier(root: Path, key: str, crew: dict = CREW, **kw) -> plan_tier.TierResult:
 
 
 class TestPlanTier:
-    def test_a_one_way_plan_with_no_diff_is_t2(self, tmp_path):
+    def test_a_money_plan_is_t2_by_its_files_list(self, tmp_path, risk_log):
+        """WA-3386: the command is called `--plan KEY`, so the plan's Files list decides; line 1
+        carries no one-way class (only a diff decides one)."""
         root = tier_repo(tmp_path)
-        assert tier(root, "PROJ-12") == ("T2 one-way money", None, [])
+        assert tier(root, "PROJ-12") == ("T2", None, [])
+        [call] = calls(risk_log)
+        assert call["argv"] == ["--plan", "PROJ-12"]
+
+    def test_a_classifier_without_plan_mode_runs_the_old_way_with_a_warning(
+        self, tmp_path, monkeypatch, risk_log
+    ):
+        """The compatibility arm: origin/main's classifier refuses `--plan`."""
+        root = tier_repo(tmp_path)
+        monkeypatch.setenv("FAKE_RISK_NO_PLAN_MODE", "1")
+        assert tier(root, "PROJ-12") == (
+            "T2 one-way money",
+            None,
+            [plan_tier.NO_PLAN_MODE.format(ref="origin/main")],
+        )
+        assert [c["argv"] for c in calls(risk_log)] == [
+            ["--plan", "PROJ-12"],
+            ["origin/main", "PROJ-12"],
+        ]
+
+    def test_a_plan_mode_failure_is_no_fallback(self, tmp_path, monkeypatch, risk_log):
+        root = tier_repo(tmp_path)
+        monkeypatch.setenv("FAKE_RISK_EXIT", "2")
+        assert tier(root, "PROJ-12").failure == "risk.command exit 2: risk: refused"
+        assert len(calls(risk_log)) == 1
 
     def test_a_docs_plan_stays_t0_on_a_one_way_branch(self, tmp_path, risk_log):
         """The red arm of AC4: run in the caller's checkout, this case reads `T2 one-way money`."""
         root = tier_repo(tmp_path)
         assert tier(root, "PROJ-13") == ("T0", None, [])
         [call] = calls(risk_log)
-        assert call["argv"] == ["origin/main", "PROJ-13"]
+        assert call["argv"] == ["--plan", "PROJ-13"]
         assert Path(call["cwd"]).resolve() != root.resolve()
 
     def test_the_command_runs_as_the_blob_of_rules_from(self, tmp_path, risk_log):
         root = tier_repo(tmp_path)
         (root / "scripts" / "risk").write_text("#!/bin/sh\necho T0\n")  # the checkout's copy
-        assert tier(root, "PROJ-12").line == "T2 one-way money"
+        assert tier(root, "PROJ-12").line == "T2"
         [call] = calls(risk_log)
         assert call["self_hash"] == git(root, "rev-parse", "origin/main:scripts/risk")
 
@@ -164,7 +190,7 @@ class TestPlanTier:
     def test_fetch_without_origin_warns_once_and_goes_on(self, tmp_path):
         root = tier_repo(tmp_path)
         result = tier(root, "PROJ-12", fetch=True)
-        assert result.line == "T2 one-way money"
+        assert result.line == "T2"
         [warning] = result.warnings
         assert warning.startswith("warning: git fetch origin failed (") and warning.endswith(
             "the tier reads the local origin/main"
@@ -192,7 +218,7 @@ class TestGitTimeout:
         root = tier_repo(tmp_path)
         hang_on(monkeypatch, "fetch")
         result = tier(root, "PROJ-12", fetch=True)
-        assert result.line == "T2 one-way money"
+        assert result.line == "T2"
         assert result.warnings == [
             f"warning: git fetch origin failed (timed out after {plan_tier.RUN_TIMEOUT} s); "
             "the tier reads the local origin/main"
