@@ -70,7 +70,8 @@ Sources, per session lane (``who`` = the sampler's ``name``):
 - ``<board stem>-questions.jsonl`` ``posted`` lines joined with ``-answers.jsonl``
   (``question_waits``): the asker waits on ``human`` from the post to the first answer that is not
   ``read``; without one, to the question's first closing line (``board.QUESTION_CLOSED``), else
-  the window end.
+  the window end while the board's ``owner_queue`` holds it; one that left the queue without either
+  draws no wait, and one gap line counts it (a board without ``owner_queue``: the window end).
 - worker markers ``<name>.json``: the lane is a worker, its ``starter`` and ``started_at``
   (optional: without it the worker starts at its first probe); a lane without a sampled role that
   starts workers is a master. A marker goes when its worker ends, so an ended worker is known by
@@ -243,20 +244,31 @@ def resolve_project(board: Path | None, crew_path: Path | None) -> str | None:
 
 def board_sessions(src, board: Path | None) -> list:
     """The `sessions` lines of the board file; a missing or unreadable board is a gap."""
+    return read_board(src, board)[0]
+
+
+def read_board(src, board: Path | None) -> tuple:
+    """`(sessions lines, owner_queue ids or None)` of one read of the board file; a missing or
+    unreadable board is a gap, and a board without an `owner_queue` list gives None."""
     if board is None:
-        return []
+        return [], None
     try:
         doc = json.loads(Path(board).read_text(encoding="utf-8"))
     except FileNotFoundError:
         src.gap(
             "project", f"no data: board file {Path(board).name} (no session can be attributed)"
         )
-        return []
+        return [], None
     except (OSError, ValueError, UnicodeDecodeError):
         src.gap("project", f"source unreadable: board file {Path(board).name}")
-        return []
-    lines = doc.get("sessions") if isinstance(doc, dict) else None
-    return [x for x in lines or [] if isinstance(x, dict)]
+        return [], None
+    if not isinstance(doc, dict):
+        return [], None
+    lines = [x for x in doc.get("sessions") or [] if isinstance(x, dict)]
+    queue = doc.get("owner_queue")
+    if not isinstance(queue, list):
+        return lines, None
+    return lines, {x["id"] for x in queue if isinstance(x, dict) and isinstance(x.get("id"), str)}
 
 
 class Attribution:
@@ -630,12 +642,12 @@ def _runs(probes: list, gapmax: float) -> list:
     return runs
 
 
-def _explicit_waits(src, waits, events, questions, answers) -> dict:
+def _explicit_waits(src, waits, events, questions, answers, queue=None) -> dict:
     """`{who: [(start, end, prio, kind, raw target, source, key)]}` of every recorded wait."""
     out: dict = defaultdict(list)
     _waits_rows(src, waits, out)
     _blocked_events(src, events, out)
-    _question_rows(src, questions, answers, out)
+    _question_rows(src, questions, answers, out, queue)
     return out
 
 
@@ -676,8 +688,11 @@ def _blocked_events(src, events, out) -> None:
             )
 
 
-def _question_rows(src, questions, answers, out) -> None:
+def _question_rows(src, questions, answers, out, queue=None) -> None:
+    """The asker's `waiting:human` rows; with `queue` (the board's `owner_queue` ids) a question
+    without answer or closing line that left the queue draws none, and one gap line counts them."""
     closed: dict = {}
+    orphaned = 0
     for q in questions:
         ts = parse_ts(q.get("ts"))
         shuts = q.get("outcome") in board_mod.QUESTION_CLOSED
@@ -691,8 +706,16 @@ def _question_rows(src, questions, answers, out) -> None:
             src.counts["answers"]["intervals"] += 1
         if end is None:
             shut = closed.get(q.get("id"))
+            if shut is None and queue is not None and q.get("id") not in queue:
+                orphaned += 1
+                continue
             end = shut if shut is not None and shut >= ts else src.until
         out[q["session"]].append((ts, end, 0, "waiting:human", "human", "questions", q.get("key")))
+    if orphaned:
+        src.gap(
+            "questions",
+            f"questions: {orphaned} left the queue without an answer or closing line",
+        )
 
 
 def _stage_rows(src, transitions, since, until, lanes: dict) -> list:
@@ -909,12 +932,12 @@ def build(
     markers = read_markers(src, state_dir)
     launched = read_launched(src, state_dir)
     rows_from = read_foreign(src, list(foreign))
-    lines = board_sessions(src, board)
+    lines, queue = read_board(src, board)
     samples, events, markers, keep, attribution = attribute(
         src, board, crew, samples, events, markers, transitions, launched, lines
     )
     rows_from, foreign_dropped = _drop_foreign(rows_from, project, attribution)
-    explicit = _explicit_waits(src, waits, events, questions, answers)
+    explicit = _explicit_waits(src, waits, events, questions, answers, queue)
     _drop_logs(explicit, keep, attribution)
     _drop_gaps(src, attribution, foreign_dropped, project)
     # a marker goes when its worker ends; the launcher's line, else the flow log's `blocked`
