@@ -707,10 +707,14 @@ for or records an approval: the gate, the tier and the lenses decide. Every sele
 plan on `risk.rules_from` (`plan on main`), and with `humans` the product role and the state's
 owner (§ Several humans).
 
-**Tier.** The repo's `risk.command` (called `<command> <base> <KEY>`; it reads the plan from
-`HEAD`'s tree and the diff `<base>...HEAD`, prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs
-as its blob on `risk.rules_from` in a scratch `git worktree add --no-checkout --detach` tree at that
-ref, with base that ref: the caller's branch never reaches the plan's tier. `select` fetches
+**Tier.** The repo's `risk.command` (called `<command> --plan <KEY>`; it classifies the Files list
+of the plan on `risk.rules_from` and prints line 1 `T<0-3>` or `T<n> one-way <class>`) runs as its
+blob on `risk.rules_from` in a scratch `git worktree add --no-checkout --detach` tree at that ref:
+the caller's branch never reaches the plan's tier. A classifier that refuses `--plan` with
+`unknown argument --plan` or `unrecognized arguments: --plan` on stderr is called the old way,
+`<command> <ref> <KEY>` (plan from `HEAD`'s tree, empty diff `<ref>...HEAD`), with one warning
+`risk.command on <ref> has no --plan mode`; any other failure of the `--plan` call refuses. Contract
+owner: `scripts/plan_tier.py`. `select` fetches
 `origin` first (a failed fetch is one warning). Line 1 outside `^T[0-3]( one-way \S+)?$`, a class
 outside `risk.one_way`, a non-zero exit or a plan missing on the ref refuses with `tier not
 computed: <reason>`. Without `risk.command` the gate warns `tier check off` and the row says

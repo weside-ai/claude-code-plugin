@@ -8,7 +8,7 @@ classifies the Files list of the plan `docs/plans/<KEY>-story.md` on `risk.rules
 tier as line 1 (`T<0-3>` or `T<n> one-way <class>`) and exits 0; any failure exits non-zero. A
 classifier without the plan mode (non-zero exit, stderr `unknown argument --plan`) is called the old way,
 `<command> <base> <KEY>`, with one warning: it reads the plan from `HEAD`'s tree and the empty diff
-`<base>...HEAD`, so a classifier that judges only the diff prints T0 for every plan (WA-3386).
+`<base>...HEAD`, so a classifier that judges only the diff prints T0 for every plan.
 
 To keep the caller's checkout out of the plan's tier, the command never runs there:
 

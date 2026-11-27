@@ -85,7 +85,7 @@ def tier(root: Path, key: str, crew: dict = CREW, **kw) -> plan_tier.TierResult:
 
 class TestPlanTier:
     def test_a_money_plan_is_t2_by_its_files_list(self, tmp_path, risk_log):
-        """WA-3386: the command is called `--plan KEY`, so the plan's Files list decides; line 1
+        """The command is called `--plan KEY`, so the plan's Files list decides; line 1
         carries no one-way class (only a diff decides one)."""
         root = tier_repo(tmp_path)
         assert tier(root, "PROJ-12") == ("T2", None, [])

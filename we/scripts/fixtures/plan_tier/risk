@@ -3,7 +3,7 @@
 
 Called `risk --plan <KEY>`: reads the plan docs/plans/<KEY>-story.md from origin/main; prints `T2`
 (never a one-way class) when its Files name a `money/` path, else `T0`. $FAKE_RISK_NO_PLAN_MODE
-refuses `--plan` as an unknown argument, as a classifier before WA-3386 does.
+refuses `--plan` as an unknown argument, as a classifier without the plan mode does.
 Called `risk <base> <KEY>`: reads the plan from HEAD's tree and the diff <base>...HEAD; prints
 `T2 one-way money` when either names a `money/` path, else `T0`. Appends
 {argv, cwd, self_hash} to $FAKE_RISK_LOG; $FAKE_RISK_EXIT exits with that code, $FAKE_RISK_LINE
