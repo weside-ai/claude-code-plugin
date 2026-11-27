@@ -120,20 +120,23 @@ merge_block() {  # once, after the first read names the base: the armer refusal,
 }
 
 # Line 1: id, state, isDraft, head, base, mergeStateStatus, reviewDecision (NONE when the repo
-# requires no review), the PR's labels joined by a comma. Then one line per check on the head:
-# <pending|pass|fail>\t<required by the PR: true|false>\t<name>. Checks of another commit (the
-# last commit lagging behind the head) are not listed.
+# requires no review), the PR's labels joined by a comma. Then one line per check name on the head:
+# <pending|pass|fail>\t<required by the PR: true|false>\t<name>, judged by that name's newest run
+# (latest startedAt, a run not started yet counts newest): a rerun or a second workflow run of the
+# same check replaces the older one, green or red. Checks of another commit (the last commit
+# lagging behind the head) are not listed.
 READ='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
   id state isDraft headRefOid baseRefName mergeStateStatus reviewDecision labels(first:100){nodes{name}}
   commits(last:1){nodes{commit{oid statusCheckRollup{contexts(first:100){nodes{__typename
-    ... on CheckRun{name status conclusion isRequired(pullRequestNumber:$number)}
-    ... on StatusContext{context state isRequired(pullRequestNumber:$number)}}}}}}}}}}'
+    ... on CheckRun{name status conclusion startedAt isRequired(pullRequestNumber:$number)}
+    ... on StatusContext{context state createdAt isRequired(pullRequestNumber:$number)}}}}}}}}}}'
 JQ='.data.repository.pullRequest as $p
   | ([$p.id, $p.state, ($p.isDraft|tostring), $p.headRefOid, $p.baseRefName,
       ($p.mergeStateStatus // "UNKNOWN"), ($p.reviewDecision // "NONE"),
       ([($p.labels.nodes // [])[].name] | join(","))] | @tsv),
     ($p.commits.nodes[0].commit // {} | select(.oid == $p.headRefOid)
-     | (.statusCheckRollup.contexts.nodes // [])[]
+     | (.statusCheckRollup.contexts.nodes // [])
+     | group_by(.name // .context) | map(max_by(.startedAt // .createdAt // "~"))[]
      | [(if .__typename == "StatusContext" then
            (if .state == "SUCCESS" then "pass" elif (.state == "PENDING" or .state == "EXPECTED") then "pending" else "fail" end)
          elif (.conclusion == "SUCCESS" or .conclusion == "NEUTRAL" or .conclusion == "SKIPPED") then "pass"
@@ -285,8 +288,12 @@ fi
 
 read_pr
 one_way
-arm  # returns only on a clean answer
 required_names
+# A red required check on the head is no arm: GitHub would hold the PR, but `armed` would read as
+# fine to whoever reads the line. Checks of an older head are no verdict yet (empty CHECKS).
+v=$(verdict)
+case "$v" in fail:*) echo "red: ${v#fail:} on $SHA — not armed"; exit 7 ;; esac
+arm  # returns only on a clean answer
 start=$(date +%s)
 while :; do
   if [ $(($(date +%s) - start)) -ge "$TIMEOUT" ]; then
