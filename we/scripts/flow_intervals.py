@@ -892,7 +892,7 @@ def build(
     board, state_dir, log_dir, tz, crew, since, until, foreign=(), project=None, ci=None
 ) -> dict:
     """The one builder both readers call: `{intervals, gaps, counts, lanes, transitions, markers,
-    interval_s, missing_started, project, attribution}`; only rows of `project` (module docstring
+    interval_s, missing_started, project, attribution, board_lines}`; only rows of `project` (module docstring
     § Project)."""
     crew = crew or crew_mod.DEFAULTS
     src = Sources(since, until)
@@ -909,8 +909,9 @@ def build(
     markers = read_markers(src, state_dir)
     launched = read_launched(src, state_dir)
     rows_from = read_foreign(src, list(foreign))
+    lines = board_sessions(src, board)
     samples, events, markers, keep, attribution = attribute(
-        src, board, crew, samples, events, markers, transitions, launched
+        src, board, crew, samples, events, markers, transitions, launched, lines
     )
     rows_from, foreign_dropped = _drop_foreign(rows_from, project, attribution)
     explicit = _explicit_waits(src, waits, events, questions, answers)
@@ -993,14 +994,19 @@ def build(
         "attribution": attribution,
         "ci": ci,
         "ci_line": ci_line,
+        "board_lines": lines,
     }
 
 
-def attribute(src, board, crew, samples, events, markers, transitions, launched=None) -> tuple:
+def attribute(
+    src, board, crew, samples, events, markers, transitions, launched=None, lines=None
+) -> tuple:
     """`(samples, events, markers, keep, counts)` with every sampled row of another
     project or of none dropped (module docstring § Project); `keep(name, keys)` judges the lanes
-    of the board logs."""
-    att = Attribution(board_sessions(src, board), crew, markers, events, transitions, launched)
+    of the board logs. `lines` are the board's session lines when the caller read them already."""
+    if lines is None:
+        lines = board_sessions(src, board)
+    att = Attribution(lines, crew, markers, events, transitions, launched)
     for _ts, s in samples:
         for e in s.get("sessions") or []:
             if isinstance(e, dict) and isinstance(e.get("name"), str) and e["name"]:
@@ -1439,10 +1445,24 @@ def page_data(built: dict, notes=()) -> dict:
     }
 
 
+def _text(value) -> str | None:
+    """A board line's free-text field as one stripped line, None when absent or empty."""
+    return " ".join(value.split()) or None if isinstance(value, str) else None
+
+
 def now_rows(built: dict) -> list:
     """Per lane its last interval when it reaches the window's end (within two probe periods):
     who works and who waits now, since when and on whom; story lanes give their stage. Overlays
-    and lanes gone before the end are left out."""
+    and lanes gone before the end are left out. A lane with a board line (by name, else by
+    `session_id`) carries that line's `topic` and its `now` as `board_now` (the document's own
+    `now` is this list); without one both are None."""
+    by_name: dict = {}
+    by_sid: dict = {}
+    for x in built.get("board_lines") or []:
+        if isinstance(x.get("name"), str):
+            by_name.setdefault(x["name"].casefold(), x)
+        if isinstance(x.get("session_id"), str):
+            by_sid.setdefault(x["session_id"], x)
     edge = iso(built["until"] - timedelta(seconds=2 * built["interval_s"]))
     last: dict = {}
     for r in sorted(built["intervals"], key=lambda r: r["end"]):
@@ -1453,6 +1473,7 @@ def now_rows(built: dict) -> list:
         if r["end"] < edge:
             continue
         lane = built["lanes"].get(r["who"]) or {}
+        line = by_name.get(r["who"].casefold()) or by_sid.get(lane.get("session_id")) or {}
         out.append(
             {
                 "who": r["who"],
@@ -1463,6 +1484,8 @@ def now_rows(built: dict) -> list:
                 "waiting_on": r.get("waiting_on"),
                 "key": r.get("key"),
                 "label": r.get("label"),
+                "topic": _text(line.get("topic")),
+                "board_now": _text(line.get("now")),
             }
         )
     return sorted(out, key=lambda x: (str(x["group"]), x["since"], x["who"]))
