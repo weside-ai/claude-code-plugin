@@ -476,10 +476,20 @@ def head_contexts(pr: dict) -> list:
     commit = (((pr.get("commits") or {}).get("nodes") or [{}])[0] or {}).get("commit") or {}
     if commit.get("oid") != pr.get("headRefOid"):
         return []
-    out = []
+    # One context per name, its newest run (`JQ`'s group_by and max_by: a rerun or a second
+    # workflow run replaces the older one, a run not started yet counts newest; a tie keeps the
+    # last listed), in name order.
+    newest: dict = {}
     for node in ((commit.get("statusCheckRollup") or {}).get("contexts") or {}).get("nodes") or []:
         if not node:
             continue
+        name = node.get("name") or node.get("context")
+        at = node.get("startedAt") or node.get("createdAt") or "~"
+        if name not in newest or at >= newest[name][0]:
+            newest[name] = (at, node)
+    out = []
+    for name in sorted(newest, key=lambda n: (n is not None, n or "")):
+        node = newest[name][1]
         since = node.get("createdAt") or node.get("startedAt")
         if node.get("__typename") != "StatusContext" and not node.get("startedAt"):
             since = (node.get("checkSuite") or {}).get("createdAt")

@@ -52,8 +52,9 @@ if args[:2] == ["api", "graphql"]:
             out({"data": {"enablePullRequestAutoMerge": {"pullRequest": {"autoMergeRequest": {}}}}})
         sys.stderr.write(answer + "\n"); sys.exit(1)
     s = pop("reads")
-    nodes = [{"__typename": "CheckRun", "name": n, "status": st, "conclusion": c, "isRequired": r}
-             for n, st, c, r in s.get("checks", [])]
+    nodes = [{"__typename": "CheckRun", "name": n, "status": st, "conclusion": c, "isRequired": r,
+              "startedAt": at[0] if at else None}
+             for n, st, c, r, *at in s.get("checks", [])]
     out({"data": {"repository": {"pullRequest": {
         "id": "PR_1", "state": s.get("state", "OPEN"), "isDraft": s.get("draft", False),
         "headRefOid": s["head"], "baseRefName": "main",
@@ -78,8 +79,8 @@ sys.exit(0)  # anything else, `gh pr merge` included, "succeeds": the log is the
 """
 
 
-def check(name, status="COMPLETED", conclusion="SUCCESS", required=True):
-    return [name, status, conclusion, required]
+def check(name, status="COMPLETED", conclusion="SUCCESS", required=True, started=None):
+    return [name, status, conclusion, required, *([started] if started else [])]
 
 
 GREEN = [check("lint"), check("Claude Review")]
@@ -212,6 +213,43 @@ def test_a_clean_answer_never_merges(tmp_path, later, arms, code, line):
         ]
     if code == 7:
         assert out == [f"red: Claude Review on {NEW} — not armed"]
+
+
+# A green rerun of a review after a red run on the same head (a real PR: red 21:41Z, green
+# 22:15Z). Each name is judged by its newest run, whatever order GitHub lists them in.
+RERUN_GREEN = [
+    check("lint"),
+    check("Claude Review", conclusion="FAILURE", started="2026-11-27T21:41:00Z"),
+    check("Claude Review", started="2026-11-27T22:15:00Z"),
+]
+
+
+@pytest.mark.parametrize("order", [1, -1], ids=["red-listed-first", "green-listed-first"])
+def test_a_green_rerun_replaces_an_older_red_run(tmp_path, order):
+    checks = [RERUN_GREEN[0], *RERUN_GREEN[1:][::order]]
+    code, out, _ = run(tmp_path, [{"head": NEW, "checks": checks}], [CLEAN])
+    assert code == 3, out
+    assert out[0].startswith(f"ready: all required checks green on {NEW}")
+
+
+@pytest.mark.parametrize(
+    "checks",
+    [
+        [check("lint"), check("Claude Review", conclusion="FAILURE")],
+        # A red rerun after a green run on the same head: the newest run decides.
+        [
+            check("lint"),
+            check("Claude Review", started="2026-11-27T21:41:00Z"),
+            check("Claude Review", conclusion="FAILURE", started="2026-11-27T22:15:00Z"),
+        ],
+    ],
+    ids=["red", "red-rerun"],
+)
+def test_a_red_required_check_is_never_armed(tmp_path, checks):
+    # The PR is BLOCKED by its red review, so GitHub would accept the arm: the helper must not ask.
+    code, out, calls = run(tmp_path, [{"head": NEW, "checks": checks, "merge": "BLOCKED"}], ["ok"])
+    assert (code, out) == (7, [f"red: Claude Review on {NEW} — not armed"])
+    assert arm_calls(calls) == []
 
 
 @pytest.mark.parametrize(
