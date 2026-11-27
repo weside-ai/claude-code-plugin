@@ -16,6 +16,8 @@ const PATH_TIMEOUT_MS = 10_000
 const REFRESH_TIMEOUT_MS = 180_000
 const MAX_NOW = 14
 const MAX_STORIES = 8
+// A board line's topic or now is free text; one pane line each, cut here.
+export const BOARD_TEXT_MAX = 96
 
 export const crewFlow = atom({ plugin: 'we', key: 'flowCrew' } as const, null)
 
@@ -129,6 +131,12 @@ export const nowLine = (n: CrewFlowNow, now: number) => {
   return `${n.who}  ${what}${n.key && n.key !== n.who ? ` (${n.key})` : ''} · ${since(n.since, now)}`
 }
 
+// A board line's `topic` or `now` under its session: one indented line, cut with `…`.
+export const boardText = (text: string) => {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return `    ${flat.length > BOARD_TEXT_MAX ? `${flat.slice(0, BOARD_TEXT_MAX - 1)}…` : flat}`
+}
+
 export const ciLine = (number: number, h: CrewFlowHead) =>
   `#${number}  queue ${mins(h.queue_s)} · run ${mins(h.run_s)}${h.open ? ' · still waiting' : ''}`
 
@@ -147,6 +155,8 @@ export function crewFlowLines(v: CrewFlowView, now: number): { text: string; col
   const waiting = sessions.filter(n => n.kind !== 'working')
   for (const n of [...waiting, ...working].slice(0, MAX_NOW)) {
     out.push({ text: nowLine(n, now), ...(n.kind === 'working' ? { color: 'success' } : n.kind.startsWith('waiting:human') ? { color: 'warning' } : {}) })
+    // Where the session stands, from its board line: topic, then its own `now`.
+    for (const text of [n.topic, n.board_now]) if (text && text.trim()) out.push({ text: boardText(text), dim: true })
   }
   if (sessions.length > MAX_NOW) out.push({ text: `… ${sessions.length - MAX_NOW} more on the page`, dim: true })
   // Stories: the ones waiting on acceptance by name, the other stages counted.

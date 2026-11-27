@@ -1054,17 +1054,47 @@ def test_flow_intervals_json_snapshot(tmp_path, monkeypatch, capsys):
     assert doc["schema_version"] == 1 and re.fullmatch(r"\d{4}-.*Z", doc["generated_at"])
     assert doc["ci"] == {"state": "off", "gap": "ci: off (--no-ci)", "fetched_at": None, "prs": []}
     assert sorted(doc["now"][0]) == [
+        "board_now",
         "group",
         "key",
         "kind",
         "label",
         "since",
         "starter",
+        "topic",
         "waiting_on",
         "who",
     ]
     assert sorted(doc["sources"]["transitions"]) == ["bad", "intervals", "rows"]
     assert any(n["who"] == "m-1" and n["kind"] == "idle" for n in doc["now"])
+
+
+def test_now_rows_carry_board_topic_and_now(tmp_path, monkeypatch):
+    """A lane with a board line carries its `topic` and `now` (as `board_now`, matched
+    by name, else by `session_id`, whitespace folded); a lane without one carries None."""
+    lines = (
+        {"name": "M-1", "session_id": "sid-m-1", "topic": "ABC-9 tune", "now": "step 1\n  home"},
+        {"name": "other", "session_id": "sid-w-2", "topic": "by sid", "now": ""},
+        {"name": "w-3", "session_id": "sid-x"},
+    )
+    root, board, log_dir, mdir = make_state(
+        tmp_path,
+        monkeypatch=monkeypatch,
+        first=at(1, 0, 0, 4),
+        last=at(1, 23, 55, 4),
+        sessions_at=lambda _t: [
+            s("m-1", "busy", role="master"),
+            s("w-2", "busy"),
+            s("w-3", "busy"),
+        ],
+        board_lines=lines,
+    )
+    crew = json.loads((root / ".weside" / "crew.json").read_text())
+    built = fi.build(board, mdir, log_dir, "UTC", crew, H_SINCE, H_UNTIL)
+    rows = {n["who"]: n for n in fi.now_rows(built)}
+    assert (rows["m-1"]["topic"], rows["m-1"]["board_now"]) == ("ABC-9 tune", "step 1 home")
+    assert (rows["w-2"]["topic"], rows["w-2"]["board_now"]) == ("by sid", None)
+    assert (rows["w-3"]["topic"], rows["w-3"]["board_now"]) == (None, None)
 
 
 def _tree(path: Path) -> dict:

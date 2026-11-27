@@ -46,6 +46,9 @@ export type CrewFlowNow = {
   waiting_on?: string | null
   key?: string | null
   label?: string | null
+  // The session's board line: its `topic` and its `now` (renamed: the snapshot's `now` is this list).
+  topic?: string | null
+  board_now?: string | null
 }
 
 export type CrewFlowHead = {
