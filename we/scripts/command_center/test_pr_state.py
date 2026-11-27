@@ -146,6 +146,22 @@ def test_parity_with_arm_pr_jq():
     assert jq_lines(lagging)[1:] == [] and fr.head_contexts(lagging) == []
 
 
+@needs_jq
+@pytest.mark.parametrize("order", [1, -1], ids=["old-first", "new-first"])
+def test_parity_on_reruns_keeps_the_newest_run_per_name(order):
+    runs = [
+        run_ctx("review", conclusion="FAILURE", started="2026-11-27T21:41:00Z"),
+        run_ctx("review", started="2026-11-27T22:15:00Z"),
+        run_ctx("gate", started="2026-11-27T21:00:00Z"),
+        run_ctx("gate", status="QUEUED", conclusion=None),  # a rerun not started yet: newest
+    ][::order]
+    node = pr_node(runs)
+    mine = [
+        "\t".join([c["v"], str(c["required"]).lower(), c["name"]]) for c in fr.head_contexts(node)
+    ]
+    assert jq_lines(node)[1:] == mine == ["pending\tfalse\tgate", "pass\tfalse\treview"]
+
+
 def test_parity_with_arm_pr_read():
     """Every field `READ` asks for is asked by `PR_STATE_FIELDS` too (the copy reads no less)."""
     words = set(re.findall(r"[A-Za-z_]+", _quoted("READ")))
