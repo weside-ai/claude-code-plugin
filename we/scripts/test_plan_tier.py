@@ -1,6 +1,6 @@
 """plan_tier.py: the plan-only tier in a scratch no-checkout tree at `risk.rules_from`, never in the
 caller's checkout; the fake risk command keeps the classifier contract (`--plan KEY`: the plan's
-Files on origin/main; the old `base KEY`: plan from HEAD, diff base...HEAD)."""
+Files on origin/main)."""
 
 from __future__ import annotations
 
@@ -92,21 +92,18 @@ class TestPlanTier:
         [call] = calls(risk_log)
         assert call["argv"] == ["--plan", "PROJ-12"]
 
-    def test_a_classifier_without_plan_mode_runs_the_old_way_with_a_warning(
+    def test_a_classifier_without_plan_mode_is_a_named_failure(
         self, tmp_path, monkeypatch, risk_log
     ):
-        """The compatibility arm: origin/main's classifier refuses `--plan`."""
+        """No call on the empty diff: that is where every plan read T0."""
         root = tier_repo(tmp_path)
         monkeypatch.setenv("FAKE_RISK_NO_PLAN_MODE", "1")
         assert tier(root, "PROJ-12") == (
-            "T2 one-way money",
             None,
-            [plan_tier.NO_PLAN_MODE.format(ref="origin/main")],
+            "risk.command on origin/main has no --plan mode (update the classifier on origin/main)",
+            [],
         )
-        assert [c["argv"] for c in calls(risk_log)] == [
-            ["--plan", "PROJ-12"],
-            ["origin/main", "PROJ-12"],
-        ]
+        assert [c["argv"] for c in calls(risk_log)] == [["--plan", "PROJ-12"]]
 
     def test_a_plan_mode_failure_is_no_fallback(self, tmp_path, monkeypatch, risk_log):
         root = tier_repo(tmp_path)
@@ -115,7 +112,7 @@ class TestPlanTier:
         assert len(calls(risk_log)) == 1
 
     def test_a_docs_plan_stays_t0_on_a_one_way_branch(self, tmp_path, risk_log):
-        """The red arm of AC4: run in the caller's checkout, this case reads `T2 one-way money`."""
+        """The command runs outside the caller's checkout, whose branch carries a `money/` diff."""
         root = tier_repo(tmp_path)
         assert tier(root, "PROJ-13") == ("T0", None, [])
         [call] = calls(risk_log)

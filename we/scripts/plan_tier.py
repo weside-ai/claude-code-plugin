@@ -6,9 +6,9 @@
 The contract with `risk.command` (the crew's classifier): called `<command> --plan <KEY>`, it
 classifies the Files list of the plan `docs/plans/<KEY>-story.md` on `risk.rules_from`, prints the
 tier as line 1 (`T<0-3>` or `T<n> one-way <class>`) and exits 0; any failure exits non-zero. A
-classifier without the plan mode (non-zero exit, stderr `unknown argument --plan`) is called the old way,
-`<command> <base> <KEY>`, with one warning: it reads the plan from `HEAD`'s tree and the empty diff
-`<base>...HEAD`, so a classifier that judges only the diff prints T0 for every plan.
+classifier that refuses `--plan` (stderr `unknown argument --plan` or `unrecognized arguments:
+--plan`) is a failure that says so: called on an empty diff instead, a classifier that judges only
+the diff prints T0 for every plan.
 
 To keep the caller's checkout out of the plan's tier, the command never runs there:
 
@@ -20,8 +20,7 @@ To keep the caller's checkout out of the plan's tier, the command never runs the
 4. The blob (`git cat-file blob`, the stored bytes) is written to a temp file, and a
    `git worktree add --no-checkout --detach` tree at `ref` is made: there `HEAD = base = ref`,
    so the diff is empty and the plan comes from `ref`'s tree.
-5. The command runs in that tree with a 60 s timeout, `--plan <KEY>` first, `<ref> <KEY>` as the
-   fallback above.
+5. The command runs in that tree as `<command> --plan <KEY>` with a 60 s timeout.
 6. Line 1 must match `^T[0-3]( one-way \\S+)?$`, and a one-way class must be in `risk.one_way`.
 7. The temp dir goes and `git worktree prune` drops the scratch tree's entry, always.
 
@@ -43,10 +42,7 @@ UNKNOWN_PLAN = re.compile(r"(unknown|unrecognized) arguments?:? --plan\b")
 RUN_TIMEOUT = 60
 NO_COMMAND = "warning: tier check off: crew.json names no risk.command"
 NOT_ON_REF = "plan not on "  # the one failure a plan branch always has before its merge
-NO_PLAN_MODE = (
-    "warning: risk.command on {ref} has no --plan mode; it classified the empty diff "
-    "(a diff-only classifier prints T0 for every plan)"
-)
+NO_PLAN_MODE = "risk.command on {ref} has no --plan mode (update the classifier on {ref})"
 
 
 class TierResult(NamedTuple):
@@ -102,8 +98,7 @@ def plan_tier(
     ref = str(risk.get("rules_from") or "origin/main")
     warnings = fetch_origin(repo_root, ref) if fetch else []
     try:
-        line = _run(risk, repo_root, ref, key, plan_rel, str(command), warnings)
-        return TierResult(line, None, warnings)
+        return TierResult(_run(risk, repo_root, ref, key, plan_rel, str(command)), None, warnings)
     except TierError as exc:
         return TierResult(None, str(exc), warnings)
 
@@ -119,15 +114,7 @@ def _call(argv: list[str], tree: Path) -> subprocess.CompletedProcess:
         raise TierError(f"risk.command not runnable: {exc.strerror}") from None
 
 
-def _run(
-    risk: dict[str, Any],
-    root: Path,
-    ref: str,
-    key: str,
-    plan_rel: str,
-    command: str,
-    warnings: list[str],
-) -> str:
+def _run(risk: dict[str, Any], root: Path, ref: str, key: str, plan_rel: str, command: str) -> str:
     words = shlex.split(command)
     if not words:
         raise TierError("risk.command is empty")
@@ -145,14 +132,12 @@ def _run(
             os.chmod(script, 0o700)
             tree = Path(tmp) / "wt"
             _git(root, "worktree", "add", "--no-checkout", "--detach", str(tree), ref)
-            argv = [str(script), *words[1:]]
-            done = _call([*argv, "--plan", key], tree)
-            if done.returncode != 0 and UNKNOWN_PLAN.search(done.stderr):
-                warnings.append(NO_PLAN_MODE.format(ref=ref))
-                done = _call([*argv, ref, key], tree)
+            done = _call([str(script), *words[1:], "--plan", key], tree)
     finally:
         # the temp dir is gone; prune drops the scratch tree's entry (never `remove --force`)
         _git(root, "worktree", "prune", check=False)
+    if done.returncode != 0 and UNKNOWN_PLAN.search(done.stderr):
+        raise TierError(NO_PLAN_MODE.format(ref=ref))
     if done.returncode != 0:
         last = (done.stderr or done.stdout).strip().splitlines()
         raise TierError(f"risk.command exit {done.returncode}" + (f": {last[-1]}" if last else ""))
