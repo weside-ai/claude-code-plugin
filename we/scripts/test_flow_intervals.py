@@ -756,6 +756,60 @@ def test_question_wait_ends_at_the_boards_closing_outcomes():
     assert [(r[0], r[1]) for r in out["m-1"]] == [(at(1, 9, 0), until)]
 
 
+def _with_queue(board, queue):
+    doc = json.loads(board.read_text(encoding="utf-8"))
+    board.write_text(json.dumps({**doc, "owner_queue": queue}), encoding="utf-8")
+
+
+def _rebuild(root, board):
+    crew = json.loads((root / ".weside" / "crew.json").read_text())
+    mdir = Path(os.environ["WE_WORKER_STATE_DIR"])
+    return fi.build(board, mdir, root.parent / "flow", "UTC", crew, SINCE, UNTIL)
+
+
+def test_question_that_left_the_queue_draws_no_wait(tmp_path, monkeypatch):
+    """AC 1 and 2: an unanswered question without a closing line waits on human only while the
+    board's `owner_queue` holds it; one that left the queue draws no wait and one gap line counts it."""
+    _built, root, board = build_main(tmp_path, monkeypatch)
+    _with_queue(board, [{"id": "Q9", "kind": "question"}])
+    built = _rebuild(root, board)
+    assert of(built["intervals"], "Coord", "waiting:human") == []
+    reasons = [g["reason"] for g in built["gaps"]]
+    assert "questions: 1 left the queue without an answer or closing line" in reasons
+    # the answered question stays as it was
+    assert of(built["intervals"], "alpha-7", "waiting:human")
+
+    _with_queue(board, [{"id": "Q1", "kind": "question"}])
+    built = _rebuild(root, board)
+    q1 = of(built["intervals"], "Coord", "waiting:human")
+    assert [(r["start"], r["end"]) for r in q1] == [(zt(at(2, 20, 0)), zt(at(2, 23, 58)))]
+    assert not [g for g in built["gaps"] if g["reason"].startswith("questions:")]
+
+
+def test_question_wait_without_a_readable_queue_runs_to_the_window_end(tmp_path):
+    """AC 3: a board that is unreadable, missing or without `owner_queue` keeps the wait open to
+    the window end and names no orphan gap."""
+    until = at(1, 12, 0)
+    questions = [{"id": "Q1", "ts": zt(at(1, 9, 0)), "outcome": "posted", "session": "m-1"}]
+    bad = tmp_path / "board.json"
+    bad.write_text("{not json", encoding="utf-8")
+    plain = tmp_path / "plain.json"
+    plain.write_text(json.dumps({"sessions": []}), encoding="utf-8")
+    for path in (bad, tmp_path / "missing.json", plain, None):
+        src = fi.Sources(at(1, 0, 0), until)
+        _lines, queue = fi.read_board(src, path)
+        assert queue is None, path
+        out: dict = defaultdict(list)
+        fi._question_rows(src, questions, [], out, queue)
+        assert [(r[0], r[1]) for r in out["m-1"]] == [(at(1, 9, 0), until)], path
+        assert not [g for g in src.gaps if g["reason"].startswith("questions:")], path
+    # control: the same question with a readable empty queue draws none
+    src = fi.Sources(at(1, 0, 0), until)
+    out = defaultdict(list)
+    fi._question_rows(src, questions, [], out, set())
+    assert out["m-1"] == []
+
+
 def test_ended_worker_without_marker_and_span_in_the_window(tmp_path, monkeypatch):
     """A marker goes when its worker ends: the probe's role and a `blocked` event keep the worker
     and its starter. A span that started before the window is clipped to it."""
