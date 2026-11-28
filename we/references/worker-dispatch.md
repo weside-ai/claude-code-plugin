@@ -28,8 +28,14 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   27.09.2026). The Lead writes the reason as one line in `description`; no reason, no `dev-high`
   (01.10.2026: 9 of 121 dispatches named none). A clearly bounded single fix stays medium: the bench
   (n = 27) found no difference there, and high costs about a third more time and money.
-- Implementation never runs on Sonnet (owner 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
-  chunk the Lead names mechanical (a rename, a generated file, a gate run).
+- **Model of a worker a master starts** (owner 28.11.2026): Sonnet 5.5 for a normal chunk, Opus 5.5
+  for a demanding one; demanding is a chunk with a `dev-high` reason from the list above. The master
+  picks it at the start: `we-worker <name> --bg "<brief>" --model sonnet` or `--model opus`. The rule
+  covers only those workers: the master itself, companion sessions and lens agents stay on Opus. The
+  choice is the master's, no gate checks it; what the worker really ran on is read from its
+  transcript, never from the brief: `model=` in `we-worker status`, the model in the Zentrale's
+  section Working (`crew_view.py`) and the PR body's `Model:` line (`/we:pr`). `haiku` only for a
+  chunk the master names mechanical (a rename, a generated file, a gate run).
 - Codex is not a dispatch backend; it reviews advisory only (owner 30.09.2026).
 - One implementer per phase group by default. Measured over 18 runs (16.10.2026): an integrate merge
   costs ~15–20 min; the real cost of parallel work is the loop after the push (main merges, a second
@@ -218,6 +224,7 @@ file stays rights, `env` and that line. Keys (`worker_launch.py apply_context` o
 | `disable_plugins: ["<plugin>@<marketplace>"]` | `enabledPlugins: {<id>: false}` |
 | `deny_mcp_servers: ["<server>"]` | `deniedMcpServers: [{"serverName": <server>}]` |
 | `auto_compact_window: <tokens>` | `autoCompactWindow` (100000–1000000) |
+| `advisor_model: "<model>"` | `advisorModel`: the workers' advisor apart from the one in the user settings; the model a worker works on stays `--model` |
 | `deny_tools: ["<tool>"]` | the bare names appended to `permissions.deny` after the never-list: the tool's schema leaves the context |
 | `skills_off: ["<skill>"]` | `skillOverrides: {<skill>: "off"}`: built-in, user and project skills; a plugin skill goes only with its plugin |
 
@@ -326,6 +333,8 @@ arms; it may run the ready merge line `arm_pr.sh` prints (the worker card).
   trailers above.
   - Bad: `Co-Authored-By: …` alone: three workers on one story read the same.
   - Good: `Worker: AB-12-fix · 0f3c9a1e-… · started-by ab-master`.
+  Above it the PR body carries `Model: <id>`, printed by
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/command_center/transcript.py model` from the worker's own transcript.
 - Tests: only the ones `references/test-economy.md` asks for (which defect does this test catch
   that no existing test catches?); no test per endpoint, page or review round by default.
 - Local gates: the repo's linter, formatter and type-checker on the changed files, plus only the

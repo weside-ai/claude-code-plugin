@@ -175,9 +175,9 @@ def test_waiting_first_oldest_first_workers_under_their_starter(board):
 def test_json_carries_schema_version_and_the_frozen_field_list(board):
     doc = doc_of(board)
     # Changing a field without raising SCHEMA_VERSION turns this red: the pane and the web read it.
-    assert crew_view.SCHEMA_VERSION == 1
+    assert crew_view.SCHEMA_VERSION == 2
     assert sorted(doc) == ["board", "generated_at", "schema_version", "sessions"]
-    assert doc["schema_version"] == 1
+    assert doc["schema_version"] == 2
     assert crew_view.FIELDS == (
         "name",
         "session_id",
@@ -191,6 +191,7 @@ def test_json_carries_schema_version_and_the_frozen_field_list(board):
         "since",
         "age_s",
         "plugin",
+        "model",
         "starter",
         "group",
         "waits",
@@ -203,7 +204,7 @@ def test_the_view_has_no_verb_and_writes_nothing(board, tmp_path, monkeypatch, c
     monkeypatch.setattr(crew_view.session_refresh, "roll_call", lambda *_a, **_k: ROLL)
     before = {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*")}
     assert crew_view.main(["--json", "--board", str(board)]) == 0
-    assert json.loads(capsys.readouterr().out)["schema_version"] == 1
+    assert json.loads(capsys.readouterr().out)["schema_version"] == 2
     assert {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*")} == before
     with pytest.raises(SystemExit):
         crew_view.main(["set", "x"])  # no verb exists, a writing one least of all

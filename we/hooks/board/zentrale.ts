@@ -35,6 +35,7 @@ export const crewLine = (e: CrewEntry) =>
     `since ${e.age ?? '?'}`,
     ...(e.waits ? [`waits: ${e.waiting_on ?? '?'}${e.blocked_kind ? ` (${e.blocked_kind})` : ''}`] : []),
     e.plugin,
+    ...(e.model ? [e.model] : []),
   ].join(' · ')
 
 const pct = (v: number | null) => (v === null ? '?' : `${Math.round(v)} %`)

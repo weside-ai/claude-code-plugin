@@ -1366,7 +1366,8 @@ def apply_context(doc: dict, repo: Path) -> dict:
     """Lean settings from `workers.context` of the repo's `.weside/config.json`; without the block
     the document stays as it is. `disable_plugins` → `enabledPlugins`
     false, `deny_mcp_servers` → `deniedMcpServers` by `serverName`, `auto_compact_window` →
-    `autoCompactWindow`, `deny_tools` → bare tool names appended to `permissions.deny` after the
+    `autoCompactWindow`, `advisor_model` → `advisorModel` (the worker's advisor apart from the
+    session-wide one; the model the worker works on stays `--model`), `deny_tools` → bare tool names appended to `permissions.deny` after the
     never-list (a bare-name deny drops the tool's schema from the context), `skills_off` →
     `skillOverrides` `off` (built-in, user and project skills; a plugin skill goes only with its
     plugin). A brief's `Needs:` line gives an entry of the last two back (`give_back`)."""
@@ -1389,6 +1390,11 @@ def apply_context(doc: dict, repo: Path) -> dict:
                 f"workers.context.auto_compact_window: a number of tokens {low}-{high}", 2
             )
         doc["autoCompactWindow"] = window
+    advisor = ctx.get("advisor_model")
+    if advisor is not None:
+        if not isinstance(advisor, str) or not advisor.strip():
+            raise LaunchError("workers.context.advisor_model: needs a model name", 2)
+        doc["advisorModel"] = advisor.strip()
     tools = _names(ctx, "deny_tools")
     if tools:
         deny = doc.setdefault("permissions", {}).setdefault("deny", [])

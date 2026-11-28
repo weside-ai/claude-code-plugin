@@ -741,14 +741,17 @@ class TestSettings:
                     "disable_plugins": ["sentry@market"],
                     "deny_mcp_servers": ["vault"],
                     "auto_compact_window": 200000,
+                    "advisor_model": "opus",
                 },
                 {
                     "enabledPlugins": {"sentry@market": False},
                     "deniedMcpServers": [{"serverName": "vault"}],
                     "autoCompactWindow": 200000,
+                    "advisorModel": "opus",
                 },
             ),
             ({"auto_compact_window": 5000}, None),
+            ({"advisor_model": ""}, None),
         ],
     )
     def test_workers_context_makes_the_settings_lean(self, env, tmp_path, context, keys):

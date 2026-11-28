@@ -96,7 +96,7 @@ from typing import Callable
 import worker_launch as wl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "command_center"))
-from transcript import pending_tool_use
+from transcript import pending_tool_use, session_model
 
 POLL_S = 30
 APPEAR_S = 300
@@ -679,11 +679,12 @@ def status_records(
     rows: list[dict], key: str | None, projects: Path, state: Path, now: float
 ) -> list[dict]:
     """The loop of `we-worker status` as objects: one per worker (background, or a window worker)
-    `{name, id, pid, state, alive, last, end, time_limit, window, resume, waits, lane}`; `state` is the
+    `{name, id, pid, state, alive, last, end, time_limit, window, resume, waits, lane, model}`; `state` is the
     row's state, `exited(<state>)` when the process is gone; `end` the `api_mark`; `resume` the
     resume command of an exited worker with a resumable end, else null; `waits` is `test-slot`
     while a process of the worker is blocked on the host's test slot (it counts as busy and does
-    no work), else null."""
+    no work), else null; `model` the model id the transcript shows (`transcript.session_model`),
+    else null."""
     out = []
     slot_waits = _slot_waiting(rows)
     for row in rows:
@@ -722,6 +723,7 @@ def status_records(
                 "resume": resume,
                 "waits": "test-slot" if not gone and pid in slot_waits else None,
                 "lane": wl.lane_of(state, row.get("name"), row.get("cwd")),
+                "model": session_model(projects, row.get("sessionId")),
             }
         )
     return out
@@ -739,7 +741,7 @@ def _slot_waiting(rows: list[dict]) -> set[str]:
 def status_lines(
     rows: list[dict], key: str | None, projects: Path, state: Path, now: float
 ) -> list[str]:
-    """`we-worker status`: one line per worker of `status_records`, its end mark, the timer's
+    """`we-worker status`: one line per worker of `status_records`, its `model=` (`?` unknown), its end mark, the timer's
     `time_limit` and `waits: test-slot`; an exited worker with a resumable mark gets its resume command; then one line
     per queued start (`queued`)."""
     out = []
@@ -752,6 +754,7 @@ def status_lines(
             if x
         ]
         head = [r["id"], r["name"], f"pid={r['pid']}", r["state"], f"last={r['last']}"]
+        head.append(f"model={r['model'] or '?'}")
         out.append(" ".join([*head, *extra]))
         if r["resume"]:
             when = "the reset" if r["end"] == "usage-limit" else "the login is back"

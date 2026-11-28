@@ -289,8 +289,8 @@ def test_status_lists_a_window_worker_and_leaves_a_master_out(tmp_path):
         for pid in (worker, master, started_as):
             subprocess.run(["kill", str(pid)], capture_output=True, check=False)
     assert out[:-1] == [
-        f"s-w PROJ-12-impl pid={worker} idle last=- window",
-        f"s-x PROJ-13-impl pid={started_as} busy last=- window",
+        f"s-w PROJ-12-impl pid={worker} idle last=- model=? window",
+        f"s-x PROJ-13-impl pid={started_as} busy last=- model=? window",
     ]
     assert out[-1].startswith("room for both lanes: ")  # the machine's room, last
 
@@ -561,11 +561,11 @@ def _transcript(tmp_path, sid, entries):
     (folder / f"{sid}.jsonl").write_text("\n".join(json.dumps(e) for e in entries) + "\n")
 
 
-def _say(text, ts="2026-11-09T10:15:00Z", **extra):
+def _say(text, ts="2026-11-09T10:15:00Z", model="claude-sonnet-5-5", **extra):
     return {
         "type": "assistant",
         "timestamp": ts,
-        "message": {"content": [{"type": "text", "text": text}]},
+        "message": {"model": model, "content": [{"type": "text", "text": text}]},
         **extra,
     }
 
@@ -590,6 +590,7 @@ def test_status_marks_the_usage_limit_apart_from_the_time_limit_and_prints_the_r
             _say(
                 "You've hit your limit",
                 ts="2026-11-09T11:40:00Z",
+                model="<synthetic>",
                 isApiErrorMessage=True,
                 error="rate_limit",
             ),
@@ -601,7 +602,7 @@ def test_status_marks_the_usage_limit_apart_from_the_time_limit_and_prints_the_r
     out = run(project, env, "status").stdout.splitlines()
     assert (
         out[0]
-        == "ab12 AC-12-impl pid=999999999 exited(blocked) last=11:40 usage-limit time-limit=reached"
+        == "ab12 AC-12-impl pid=999999999 exited(blocked) last=11:40 model=claude-sonnet-5-5 usage-limit time-limit=reached"
     )
     assert out[1] == "  resume after the reset: we-worker AC-12-impl --bg --resume s-1"
 
@@ -646,8 +647,8 @@ def test_status_shows_a_worker_that_waits_on_the_test_slot(tmp_path):
                 break
             time.sleep(0.1)
         out = run(project, env, "status").stdout.splitlines()
-        assert out[0] == f"w1 AC-12-impl pid={worker.pid} working last=- waits: test-slot"
-        assert out[1] == f"w2 AC-13-impl pid={other.pid} working last=-"
+        assert out[0] == f"w1 AC-12-impl pid={worker.pid} working last=- model=? waits: test-slot"
+        assert out[1] == f"w2 AC-13-impl pid={other.pid} working last=- model=?"
     finally:
         worker.kill()
         other.kill()

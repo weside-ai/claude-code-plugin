@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A session's transcript, read for the tool call a permission prompt waits on.
+"""A session's transcript, read for the tool call a permission prompt waits on and the model it runs on.
 
 The one reader of "the tool call a session waits on": ``worker_supervisor.prompt_id`` (a worker's
 prompt held for 15 min) and ``event_sources.Round.session_waiting`` (an open prompt in any
@@ -12,6 +12,16 @@ The pending call is the first ``tool_use`` of the newest assistant message that 
 result, so each prompt gets its own id. While the main transcript waits on a subagent (an
 ``Agent`` call without result), the newest subagent transcript (``<session id>/subagents/``) is
 read the same way: its prompt is the one shown.
+
+The one reader of "the model a session runs on" (``session_model``): the ``message.model`` of the
+newest assistant entry of the main transcript that names a real model (``<synthetic>``, the entry
+of a usage limit or an API error, is skipped). The brief or the launch flags only say what was
+asked for; the transcript says what answered. Read by ``worker_supervisor.status_records``
+(``we-worker status``), ``crew_view`` (the Zentrale's section Working) and, as the PR body's
+``Model:`` line, by this file's command line:
+
+    transcript.py model     prints `Model: <id>` for $CLAUDE_CODE_SESSION_ID, or
+                            `Model: absent (<reason>)`; exit 0 either way
 """
 
 from __future__ import annotations
@@ -20,11 +30,13 @@ import glob
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 _SESSION = re.compile(r"^[A-Za-z0-9-]{1,80}$")
 CHUNK = 256 * 1024
 SUBAGENT_TOOLS = ("Agent", "Task")
+NOT_A_MODEL = {"", "<synthetic>"}
 
 
 def transcript_file(projects: Path, session_id: str | None) -> str | None:
@@ -112,3 +124,69 @@ def pending_tool_use(projects: Path, session_id: str | None) -> tuple[str, str] 
         if inner:
             return inner
     return hit
+
+
+def _model_in(lines: list[str]) -> str | None:
+    for line in reversed(lines):
+        if '"model"' not in line or '"assistant"' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "assistant":
+            continue
+        model = str((entry.get("message") or {}).get("model") or "")
+        if model not in NOT_A_MODEL:
+            return model
+    return None
+
+
+def session_model(projects: Path, session_id: str | None) -> str | None:
+    """The model id the session's newest real assistant entry ran on, None when unknown."""
+    path = transcript_file(projects, session_id)
+    if path is None:
+        return None
+    try:
+        with open(path, "rb") as fh:
+            size = fh.seek(0, os.SEEK_END)
+            span = CHUNK
+            while True:
+                start = max(0, size - span)
+                fh.seek(start)
+                lines = fh.read(size - start).decode("utf-8", "replace").splitlines()
+                if start > 0:
+                    lines = lines[1:]  # the first line is cut
+                model = _model_in(lines)
+                if model or start == 0:
+                    return model
+                span *= 4
+    except OSError:
+        return None
+
+
+def model_line(projects: Path, session_id: str | None) -> str:
+    """`Model: <id>`, or `Model: absent (<reason>)`: a value nobody read is never guessed."""
+    if not session_id:
+        return "Model: absent (no CLAUDE_CODE_SESSION_ID)"
+    if transcript_file(projects, session_id) is None:
+        return "Model: absent (no transcript)"
+    model = session_model(projects, session_id)
+    return f"Model: {model}" if model else "Model: absent (no assistant entry with a model)"
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if args != ["model"]:
+        print("usage: transcript.py model", file=sys.stderr)
+        return 2
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import claude_home  # noqa: PLC0415
+
+    projects = claude_home.config_dir() / "projects"
+    print(model_line(projects, os.environ.get("CLAUDE_CODE_SESSION_ID")))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

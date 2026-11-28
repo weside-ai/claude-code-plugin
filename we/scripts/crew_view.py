@@ -22,6 +22,7 @@ Per session (`sessions[]`, flat, in display order):
 - `since`: when the current state began (`blocked.since`, else the line's `since` while it waits,
   else its `updated_at`, else the process start), ISO UTC; `age_s` seconds from then to `generated_at`
 - `plugin`: the version the process loaded (`?` unknown)
+- `model`: the model id the session's transcript shows (`transcript.session_model`), null unknown
 - `starter`: the starter's name for a worker, null otherwise; `group`: the name of the session it
   is listed under: its own for a non-worker, its starter's for a worker whose starter is live,
   `NO_STARTER` for a worker without a live starter (never hidden, never guessed)
@@ -53,7 +54,7 @@ import session_refresh  # noqa: E402
 import worker_launch  # noqa: E402
 import worker_supervisor  # noqa: E402
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 NO_STARTER = "(no starter)"
 FIELDS = (
     "name",
@@ -68,6 +69,7 @@ FIELDS = (
     "since",
     "age_s",
     "plugin",
+    "model",
     "starter",
     "group",
     "waits",
@@ -166,6 +168,7 @@ def entries(rows: list[dict], roll: list[dict], lines: list[dict], now: float) -
                 "since": _iso(at) if at is not None else None,
                 "age_s": int(now - at) if at is not None else None,
                 "plugin": rc.get("loaded") or "?",
+                "model": worker_supervisor.session_model(worker_supervisor.projects_dir(), sid),
                 "starter": starter,
                 "group": None,
                 "waits": waits,
@@ -219,12 +222,14 @@ def age_text(seconds: int | None) -> str:
 
 
 def text_line(e: dict) -> str:
-    """`samu · coordinator · Q-Triage PROJ-31 · since 0h12 · waits: human · 9.14.0`."""
+    """`samu · coordinator · Q-Triage PROJ-31 · since 0h12 · waits: human · 9.14.0 · claude-opus-5-5`."""
     parts = [e["name"], e["role"], e["doing"] or "-", f"since {age_text(e['age_s'])}"]
     if e["waits"]:
         why = e["waiting_on"] or "?"
         parts.append(f"waits: {why}" + (f" ({e['blocked_kind']})" if e["blocked_kind"] else ""))
     parts.append(e["plugin"])
+    if e["model"]:
+        parts.append(e["model"])
     return ("  " if e["role"] == "worker" else "") + " · ".join(parts)
 
 
